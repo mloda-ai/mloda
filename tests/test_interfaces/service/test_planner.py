@@ -2,6 +2,7 @@
 
 import dataclasses
 import json
+import logging
 import threading
 from collections.abc import Iterator, Mapping
 from datetime import datetime, timezone
@@ -30,7 +31,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG
 from tests.helpers.plugin_stubs import StubFeatureGroup
-from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS
+from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS, PLAN_RAISE, PLAN_RAISE_SECRET, PlanRaiseMcp5
 
 # Planning resolves real FeatureGroups and reads source files; a cold cache under xdist load can exceed 10s.
 pytestmark = pytest.mark.timeout(30)
@@ -143,7 +144,7 @@ class PlannerDeniedMcp4(StubFeatureGroup):
 
 def _base() -> PluginCollector:
     return PluginCollector.enabled_feature_groups(
-        {*FILE_SOURCE_GROUPS, PlannerDoubleMcp4, PlannerDeniedMcp4, ApiInputDataFeature}
+        {*FILE_SOURCE_GROUPS, PlannerDoubleMcp4, PlannerDeniedMcp4, PlanRaiseMcp5, ApiInputDataFeature}
     )
 
 
@@ -228,6 +229,30 @@ def lock_probes() -> Iterator[list[bool]]:
     yield LOCK_PROBES
     PlannerDoubleMcp4.PROBE_LOCK = False
     LOCK_PROBES.clear()
+
+
+class TestPlanningFailure:
+    def test_planning_exception_is_an_internal_error_without_its_text(self, tmp_path: Path) -> None:
+        result = _explain(tmp_path, {"features": [PLAN_RAISE]})
+
+        error = _error(result, "internal")
+        assert "ValueError" in error["message"]
+        assert "planning" in error["message"].lower()
+        assert PLAN_RAISE_SECRET not in json.dumps(result)
+
+    def test_planning_failure_is_logged_once_without_the_message(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.ERROR, logger="mloda.interfaces.service"):
+            result = _explain(tmp_path, {"features": [PLAN_RAISE]})
+
+        audit_id = _error(result, "internal")["audit_id"]
+        records = [r for r in caplog.records if r.name == "mloda.interfaces.service" and r.levelno == logging.ERROR]
+        assert len(records) == 1
+        message = records[0].getMessage()
+        assert audit_id in message
+        assert PLAN_RAISE_SECRET not in message
+        assert records[0].exc_info is None
 
 
 class TestRequestChecks:

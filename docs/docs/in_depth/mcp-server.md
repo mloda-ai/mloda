@@ -116,4 +116,4 @@ cat request.json | mloda explain -
 
 `mloda run` executes regardless of `mode`, since you started it yourself, but applies the same limits and preview
 rules. Exit codes: `0` success, `2` an error result or nothing could run (bad config, bad request, policy, limit, or a
-FeatureGroup that failed while running, reported as `internal`), `1` any other failure.
+FeatureGroup that failed while planning or running, reported as `internal`), `1` any other failure.

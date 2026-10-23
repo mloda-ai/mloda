@@ -28,7 +28,15 @@ from mloda.interfaces.service.runner import Runner
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.user import PluginCollector, PluginLoader
 from tests.helpers.docs_scope import shipped_feature_group_walk
-from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS, RAISE, RAISE_SECRET, RunnerRaiseMcp5
+from tests.test_interfaces.source_groups import (
+    FILE_SOURCE_GROUPS,
+    PLAN_RAISE,
+    PLAN_RAISE_SECRET,
+    RAISE,
+    RAISE_SECRET,
+    PlanRaiseMcp5,
+    RunnerRaiseMcp5,
+)
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -516,6 +524,20 @@ class TestRunFeatureGroupFailure:
         assert outcome.code == 2
         assert _error_code(outcome) == "internal"
         assert RAISE_SECRET not in outcome.out
+
+    @pytest.mark.parametrize("command", ["explain", "run"])
+    def test_planning_failure_is_an_internal_result_with_exit_2(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        request = _request_file(tmp_path, {"features": [PLAN_RAISE]})
+
+        outcome = _cli([command, str(request), "--config", str(config)], extra_groups=[PlanRaiseMcp5])
+
+        assert outcome.code == 2
+        assert _error_code(outcome) == "internal"
+        assert PLAN_RAISE_SECRET not in outcome.out
 
 
 class TestRunFormats:

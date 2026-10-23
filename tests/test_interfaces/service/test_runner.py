@@ -33,7 +33,13 @@ from mloda.provider import FeatureSet
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.plugin_stubs import StubFeatureGroup
-from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS, RAISE, RAISE_SECRET, RunnerRaiseMcp5
+from tests.test_interfaces.source_groups import (
+    FILE_SOURCE_GROUPS,
+    PLAN_RAISE_SECRET,
+    RAISE,
+    RAISE_SECRET,
+    RunnerRaiseMcp5,
+)
 
 # Running resolves real FeatureGroups and reads source files; a cold cache under xdist load can exceed 10s.
 pytestmark = pytest.mark.timeout(30)
@@ -425,7 +431,7 @@ class TestFeatureGroupFailure:
         assert "ValueError" in error["message"]
         assert RAISE_SECRET not in json.dumps(result)
 
-    def test_failure_is_logged_once_with_audit_id_and_traceback(
+    def test_failure_is_logged_once_with_audit_id_and_traceback_without_the_message(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         with caplog.at_level(logging.ERROR, logger="mloda.interfaces.service"):
@@ -434,8 +440,28 @@ class TestFeatureGroupFailure:
         audit_id = _error(result, "internal")["audit_id"]
         records = [r for r in caplog.records if r.name == "mloda.interfaces.service" and r.levelno == logging.ERROR]
         assert len(records) == 1
-        assert audit_id in records[0].getMessage()
-        assert records[0].exc_info is not None
+        message = records[0].getMessage()
+        assert audit_id in message
+        assert "ValueError" in message
+        assert "Traceback" in message
+        assert RAISE_SECRET not in message
+        assert records[0].exc_info is None
+
+    def test_planning_failure_during_run_is_an_internal_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        planner = _planner(_settings(tmp_path))
+        plan_id = _plan_id(planner)
+
+        def boom(*args: Any, **kwargs: Any) -> Any:
+            raise ValueError(PLAN_RAISE_SECRET)
+
+        monkeypatch.setattr("mloda.interfaces.service.planner.mloda.diagnose", boom)
+        result = Runner(planner).run(plan_id)
+
+        error = _error(result, "internal")
+        assert "ValueError" in error["message"]
+        assert PLAN_RAISE_SECRET not in json.dumps(result)
 
 
 class TestSuccessShape:

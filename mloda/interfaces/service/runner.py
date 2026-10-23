@@ -3,18 +3,15 @@
 The request is planned again first, so policy, data-access rules, filters and row limits hold at run time.
 """
 
-import logging
 import math
 import secrets
 from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Any
 
-from mloda.interfaces.service.errors import error_result, is_error
+from mloda.interfaces.service.errors import error_result, failure_result, is_error
 from mloda.interfaces.service.planner import Planner
 from mloda.user import PlanStep
-
-_LOGGER = logging.getLogger("mloda.interfaces.service")
 
 
 def _json_safe(value: Any) -> Any:
@@ -48,10 +45,8 @@ class Runner:
             return error_result("plan_stale", message)
         try:
             result = self._planner.execute(planned)
-        except Exception as error:  # adapter boundary: the exception text may hold data, so only the type is reported
-            failure = error_result("internal", f"The run failed with {type(error).__name__}.")
-            _LOGGER.error("run failed audit_id=%s", failure["error"]["audit_id"], exc_info=error)
-            return failure
+        except Exception as error:  # plugin boundary: the exception text may hold data, so only the type is reported
+            return failure_result("The run", error)
         tables = [self._table(frame, planned.names, result.plan) for frame in result]
         max_rows = self._planner.settings.max_rows
         over = [table["row_count"] for table in tables if max_rows is not None and table["row_count"] > max_rows]

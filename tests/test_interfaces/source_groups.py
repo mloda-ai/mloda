@@ -44,3 +44,31 @@ class RunnerRaiseMcp5(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         raise ValueError(RAISE_SECRET)
+
+
+PLAN_RAISE = "mcp5_plan_raise"
+PLAN_RAISE_SECRET = "SECRET_plan_raise_9e2b"  # nosec B105
+
+
+class PlanRaiseMcp5(FeatureGroup):
+    """Fails while planning, with a message that holds data."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == PLAN_RAISE
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        raise ValueError(PLAN_RAISE_SECRET)
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data

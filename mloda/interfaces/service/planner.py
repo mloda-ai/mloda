@@ -23,7 +23,7 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data_featur
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.interfaces.service.catalog import MAX_DESCRIPTION_LENGTH, Catalog, plugin_collector_for, sanitize_text
 from mloda.interfaces.service.config import Settings, SourceConfig
-from mloda.interfaces.service.errors import error_result, problems_to_details
+from mloda.interfaces.service.errors import error_result, failure_result, problems_to_details
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.request import (
     MAX_NAME_LENGTH,
@@ -227,10 +227,15 @@ class Planner:
         if denied is not None:
             return denied
         sources = self._sources(parsed.restrict_sources)
-        with verified_context(principal=self._principal), MLODA_LOCK:
-            PluginLoader.all()
-            diagnosis = mloda.diagnose(parsed.features, **self._plan_kwargs(parsed, sources))
-            steps = mloda.explain(parsed.features, **self._plan_kwargs(parsed, sources)) if diagnosis.complete else []
+        try:  # plugin boundary: plugin code runs during planning and its exception text may hold data
+            with verified_context(principal=self._principal), MLODA_LOCK:
+                PluginLoader.all()
+                diagnosis = mloda.diagnose(parsed.features, **self._plan_kwargs(parsed, sources))
+                steps = (
+                    mloda.explain(parsed.features, **self._plan_kwargs(parsed, sources)) if diagnosis.complete else []
+                )
+        except Exception as error:
+            return failure_result("Planning", error)
         if not diagnosis.complete:
             return self._unresolved(diagnosis, request_names, sources)
         filters = request.get("filters", [])

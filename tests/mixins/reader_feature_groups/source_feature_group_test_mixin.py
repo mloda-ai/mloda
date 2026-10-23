@@ -21,7 +21,7 @@ from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
 from mloda.core.prepare.resolution_types import EvaluationResult
-from mloda.provider import CHAIN_SEPARATOR, COLUMN_SEPARATOR, ComputeFramework, SourceFeatureGroup, NamePolicy
+from mloda.provider import CHAIN_SEPARATOR, COLUMN_SEPARATOR, ComputeFramework, NamePolicy, SourceFeatureGroup
 from mloda.steward import ReaderProbeScope, reader_probe_scope
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable

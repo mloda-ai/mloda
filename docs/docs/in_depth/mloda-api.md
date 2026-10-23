@@ -179,7 +179,7 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 - **specialized_from** (`tuple[type[FeatureGroup], ...]`): the parent FeatureGroup classes a compute step's FeatureGroup replaced through subclass preference for at least one of its features, sorted by class name; empty when nothing was replaced and for join and transform steps.
 - **feature_group** (`type[FeatureGroup] | None`): Resolved FeatureGroup; the destination for a transform step; the link's declared left side for a join.
 - **compute_framework** (`type[ComputeFramework] | None`): Selected ComputeFramework; the destination for a transform step; the merge destination for a join.
-- **source_feature_group** / **source_compute_framework**: Origin of a transform step. For a join: the link's declared right side, and the framework merged in.
+- **source_feature_group** / **source_compute_framework**: Origin of a transform or join step (unrelated to `SourceFeatureGroup`). For a join: the link's declared right side, and the framework merged in.
 - **join_type** (`str | None`): The link's join type (`"inner"`, `"left"`, ...) for a join step, None otherwise.
 - **join_destination_side** (`Literal["left", "right"] | None`): the declared side that holds the merge destination, for a join step; None otherwise.
 - **join_inverted** (`bool | None`, property): `join_destination_side == "right"`, None without a side.

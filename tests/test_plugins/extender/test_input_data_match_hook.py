@@ -59,7 +59,7 @@ def _fmt_in_scope(cls: type[SourceFeatureGroup], options: Options, data_access_c
     )
 
 
-class _ImdFmtBase(ToySourceBase):
+class _ImdSourceBase(ToySourceBase):
     """Toy source group serving only `served` columns; reacts only to in-scope sources; counts source touches."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("imdmatch", NamePolicy.CHECKED, True),)
@@ -98,7 +98,7 @@ class _ImdFmtBase(ToySourceBase):
         return pa.table({c: v for c, v in match.access.items() if c in cls.served})
 
 
-class ImdMatchGateFormat(_ImdFmtBase):
+class ImdMatchGateSource(_ImdSourceBase):
     served = frozenset({_COL_A, _COL_F, _COL_G})
 
     @classmethod
@@ -106,19 +106,19 @@ class ImdMatchGateFormat(_ImdFmtBase):
         return {"classification": "restricted", "level": 3}
 
 
-class ImdMatchGateSubFormat(ImdMatchGateFormat):
+class ImdMatchGateSubSource(ImdMatchGateSource):
     pass
 
 
-class _ImdKeyFmt(_ImdFmtBase):
+class _ImdKeyFmt(_ImdSourceBase):
     served = frozenset({_COL_A, _COL_B, _COL_G})
 
 
-class ImdMatchSiblingFormat(_ImdFmtBase):
+class ImdMatchSiblingSource(_ImdSourceBase):
     served = frozenset({_COL_B})
 
 
-class ImdMatchBrokenDeclFormat(_ImdFmtBase):
+class ImdMatchBrokenDeclSource(_ImdSourceBase):
     served = frozenset({_COL_C})
 
     @classmethod
@@ -126,20 +126,20 @@ class ImdMatchBrokenDeclFormat(_ImdFmtBase):
         raise RuntimeError("imdmatch declared_attributes boom")
 
 
-class ImdMatchRaisingFindFormat(_ImdFmtBase):
+class ImdMatchRaisingFindSource(_ImdSourceBase):
     served = frozenset({_COL_D})
     raises = True
 
 
-class ImdMatchAaTwinFormat(_ImdFmtBase):
+class ImdMatchAaTwinSource(_ImdSourceBase):
     served = frozenset({_COL_A})
 
 
-class ImdMatchZzTwinFormat(_ImdFmtBase):
+class ImdMatchZzTwinSource(_ImdSourceBase):
     served = frozenset({_COL_A})
 
 
-class ImdMatchRefusedThenRaisingFormat(ImdMatchGateFormat):
+class ImdMatchRefusedThenRaisingSource(ImdMatchGateSource):
     """Probes its source (refused by the extender), then raises an ordinary matcher error."""
 
     @classmethod
@@ -156,7 +156,7 @@ class ImdMatchRefusedThenRaisingFormat(ImdMatchGateFormat):
 _PROBE_TEXT = "imdmatch own probe rejection"
 
 
-class ImdMatchRejectingFormat(_ImdFmtBase):
+class ImdMatchRejectingSource(_ImdSourceBase):
     """Records its own rejection while probing and finds nothing."""
 
     served = frozenset({_COL_A})
@@ -173,7 +173,7 @@ class ImdMatchRejectingFormat(_ImdFmtBase):
         return []
 
 
-class ImdMatchOverrideFormat(_ImdFmtBase):
+class ImdMatchOverrideSource(_ImdSourceBase):
     """Overrides the matcher and does its own catalog I/O behind the INPUT_DATA_MATCH gate."""
 
     served = frozenset({_COL_A})
@@ -197,7 +197,7 @@ class ImdMatchOverrideFormat(_ImdFmtBase):
         return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 
 
-class _ImdAbstractFmt(_ImdFmtBase):
+class _ImdAbstractFmt(_ImdSourceBase):
     """Abstract through one extra abstract hook."""
 
     @classmethod
@@ -236,21 +236,21 @@ class ImdMatchPlainGroup(FeatureGroup):
 
 
 _ALL_FORMATS = (
-    ImdMatchGateFormat,
-    ImdMatchGateSubFormat,
-    ImdMatchSiblingFormat,
-    ImdMatchBrokenDeclFormat,
-    ImdMatchRaisingFindFormat,
-    ImdMatchAaTwinFormat,
-    ImdMatchZzTwinFormat,
-    ImdMatchRefusedThenRaisingFormat,
-    ImdMatchOverrideFormat,
+    ImdMatchGateSource,
+    ImdMatchGateSubSource,
+    ImdMatchSiblingSource,
+    ImdMatchBrokenDeclSource,
+    ImdMatchRaisingFindSource,
+    ImdMatchAaTwinSource,
+    ImdMatchZzTwinSource,
+    ImdMatchRefusedThenRaisingSource,
+    ImdMatchOverrideSource,
     _ImdKeyFmt,
     _ImdAbstractFmt,
 )
 
 _ENABLED_FMT = PluginCollector.enabled_feature_groups(
-    {ImdMatchGateFormat, ImdMatchSiblingFormat, ImdMatchBrokenDeclFormat, ImdMatchRaisingFindFormat}
+    {ImdMatchGateSource, ImdMatchSiblingSource, ImdMatchBrokenDeclSource, ImdMatchRaisingFindSource}
 )
 
 
@@ -259,11 +259,11 @@ class _Kind(NamedTuple):
     sibling: Any
     broken: Any
     raising: Any
-    is_format: bool
+    is_source: bool
 
 
 _FORMAT_KIND = _Kind(
-    ImdMatchGateFormat, ImdMatchSiblingFormat, ImdMatchBrokenDeclFormat, ImdMatchRaisingFindFormat, True
+    ImdMatchGateSource, ImdMatchSiblingSource, ImdMatchBrokenDeclSource, ImdMatchRaisingFindSource, True
 )
 _BY_KIND = pytest.mark.parametrize("kind", [_FORMAT_KIND], ids=["format"])
 
@@ -345,7 +345,7 @@ def _reset_probe_counters() -> None:
     for fmt in _ALL_FORMATS:
         fmt.probes = 0
         fmt.column_reads = 0
-    ImdMatchOverrideFormat.catalog_reads = 0
+    ImdMatchOverrideSource.catalog_reads = 0
 
 
 def _global_access() -> DataAccessCollection:
@@ -389,7 +389,7 @@ def _plan(
 
 def _refusal_error(kind: _Kind, scope: str) -> tuple[type[Exception], str]:
     """The exception type and message expected when the extender refuses this kind in this scope."""
-    if kind.is_format and scope == "pinned":
+    if kind.is_source and scope == "pinned":
         return FeatureResolutionError, _REFUSED
     return FeatureResolutionError, "no clearance"
 
@@ -464,7 +464,7 @@ class TestRefusal:
         _plan(scope, _COL_A, kind.gate, None)
         assert kind.gate.probes >= 1
         kind.gate.probes = 0
-        if kind.is_format:
+        if kind.is_source:
             kind.gate.column_reads = 0
         error_type, text = _refusal_error(kind, scope)
 
@@ -489,20 +489,20 @@ class TestRefusal:
             assert isinstance(excinfo.value.__cause__, PermissionError)
             assert any(excinfo.value.__cause__ is raised for raised in extender.raised)
         assert kind.gate.probes == 0
-        if kind.is_format:
+        if kind.is_source:
             assert kind.gate.column_reads == 0
 
     def test_two_refused_candidates_are_both_carried_in_order(self) -> None:
-        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateFormat, ImdMatchAaTwinFormat})
-        extender = _ImdRefusingExtender((ImdMatchGateFormat, ImdMatchAaTwinFormat), never_fall_back=True)
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateSource, ImdMatchAaTwinSource})
+        extender = _ImdRefusingExtender((ImdMatchGateSource, ImdMatchAaTwinSource), never_fall_back=True)
 
         with pytest.raises(FeatureResolutionError) as excinfo:
             _prepare(Feature(_COL_A), enabled, _global_access(), extender)
 
         refusals = excinfo.value.refusals
         assert [str(r) for r in refusals] == [
-            "no clearance for ImdMatchAaTwinFormat",
-            "no clearance for ImdMatchGateFormat",
+            "no clearance for ImdMatchAaTwinSource",
+            "no clearance for ImdMatchGateSource",
         ]
         assert all(any(r is raised for raised in extender.raised) for r in refusals)
         assert excinfo.value.__cause__ is refusals[0]
@@ -510,9 +510,9 @@ class TestRefusal:
 
     def test_ambiguity_failure_carries_no_refusals(self) -> None:
         enabled = PluginCollector.enabled_feature_groups(
-            {ImdMatchGateFormat, ImdMatchAaTwinFormat, ImdMatchZzTwinFormat}
+            {ImdMatchGateSource, ImdMatchAaTwinSource, ImdMatchZzTwinSource}
         )
-        extender = _gate(ImdMatchGateFormat)
+        extender = _gate(ImdMatchGateSource)
 
         with pytest.raises(FeatureResolutionError) as excinfo:
             _prepare(Feature(_COL_A), enabled, _global_access(), extender)
@@ -523,10 +523,10 @@ class TestRefusal:
         assert excinfo.value.__cause__ is None
 
     def test_chained_refusal_and_its_chain_are_stripped_of_tracebacks(self) -> None:
-        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateFormat})
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateSource})
 
         with pytest.raises(FeatureResolutionError) as excinfo:
-            _prepare(Feature(_COL_A), enabled, _global_access(), _ImdChainedRefusingExtender(ImdMatchGateFormat))
+            _prepare(Feature(_COL_A), enabled, _global_access(), _ImdChainedRefusingExtender(ImdMatchGateSource))
 
         refusal = excinfo.value.refusals[0]
         assert type(refusal) is PermissionError
@@ -542,8 +542,8 @@ class TestRefusal:
         assert all(e.__traceback__ is None for e in chain)
 
     def test_matcher_error_eliminates_the_group_and_drops_its_refusal(self) -> None:
-        enabled = PluginCollector.enabled_feature_groups({ImdMatchRefusedThenRaisingFormat})
-        extender = _gate(ImdMatchRefusedThenRaisingFormat)
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchRefusedThenRaisingSource})
+        extender = _gate(ImdMatchRefusedThenRaisingSource)
 
         with pytest.raises(FeatureResolutionError) as excinfo:
             _prepare(Feature(_COL_A), enabled, _global_access(), extender)
@@ -630,7 +630,7 @@ class TestContext:
 
         contexts = extender.for_reader(kind.gate)
         assert contexts
-        if kind.is_format:
+        if kind.is_source:
             assert len(contexts) == 1
         context = contexts[0]
         assert context.hook is ExtenderHook.INPUT_DATA_MATCH
@@ -701,7 +701,7 @@ class TestScopeAndFilter:
     @pytest.mark.parametrize("case", ["refused", "refused_multi_column", "allowed", "observer_key_in_two_sources"])
     def test_a_link_index_column_cannot_bypass_the_refusing_gate(self, case: str) -> None:
         observer = case == "observer_key_in_two_sources"
-        fmt = _ImdKeyFmt if observer else ImdMatchGateFormat
+        fmt = _ImdKeyFmt if observer else ImdMatchGateSource
         left_index = {"refused": (_COL_F,), "refused_multi_column": (_COL_G, _COL_F)}.get(case, (_COL_G,))
         link = Link.inner(
             left=JoinSpec(fmt, Index(left_index)),
@@ -773,20 +773,20 @@ class TestProbeRaise:
 class TestSourceGroupHook:
     def test_a_group_excluded_by_a_foreign_pointer_does_not_fire_the_hook(self) -> None:
         extender = _ImdRecordingExtender()
-        feature = Feature(_COL_B, options={ImdMatchSiblingFormat.__name__: dict(_FMT_COLUMNS)})
+        feature = Feature(_COL_B, options={ImdMatchSiblingSource.__name__: dict(_FMT_COLUMNS)})
 
         _prepare(feature, _ENABLED_FMT, _global_access(), extender)
 
-        assert extender.for_reader(ImdMatchSiblingFormat)
-        assert extender.for_reader(ImdMatchGateFormat) == []
-        assert ImdMatchGateFormat.probes == 0
+        assert extender.for_reader(ImdMatchSiblingSource)
+        assert extender.for_reader(ImdMatchGateSource) == []
+        assert ImdMatchGateSource.probes == 0
 
     @pytest.mark.parametrize("scope", ["pinned", "global"])
     def test_an_extender_that_returns_without_running_the_probe_declines_the_group(self, scope: str) -> None:
         error_type, _ = _refusal_error(_FORMAT_KIND, scope)
 
         with pytest.raises(error_type) as excinfo:
-            _plan(scope, _COL_A, ImdMatchGateFormat, _ImdSkippingExtender(ImdMatchGateFormat))
+            _plan(scope, _COL_A, ImdMatchGateSource, _ImdSkippingExtender(ImdMatchGateSource))
 
         assert type(excinfo.value) is error_type
         assert "the extender did not run the probe" in str(excinfo.value)
@@ -794,15 +794,15 @@ class TestSourceGroupHook:
             assert isinstance(excinfo.value, FeatureResolutionError)
             assert excinfo.value.refusals == ()
             assert excinfo.value.__cause__ is None
-        assert ImdMatchGateFormat.probes == 0
-        assert ImdMatchGateFormat.column_reads == 0
+        assert ImdMatchGateSource.probes == 0
+        assert ImdMatchGateSource.column_reads == 0
 
     @pytest.mark.parametrize(
         ("refused", "server", "pointed"),
         [
-            (ImdMatchGateSubFormat, ImdMatchGateFormat, False),
-            (ImdMatchGateFormat, ImdMatchGateSubFormat, False),
-            (ImdMatchGateFormat, ImdMatchGateSubFormat, True),
+            (ImdMatchGateSubSource, ImdMatchGateSource, False),
+            (ImdMatchGateSource, ImdMatchGateSubSource, False),
+            (ImdMatchGateSource, ImdMatchGateSubSource, True),
         ],
         ids=[
             "subclass_refused_parent_serves",
@@ -811,12 +811,12 @@ class TestSourceGroupHook:
         ],
     )
     def test_a_refusal_binds_only_the_refused_class(
-        self, refused: type[ImdMatchGateFormat], server: type[ImdMatchGateFormat], pointed: bool
+        self, refused: type[ImdMatchGateSource], server: type[ImdMatchGateSource], pointed: bool
     ) -> None:
         """The refusal is per class, never reaching a parent or a subclass."""
-        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateFormat, ImdMatchGateSubFormat})
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateSource, ImdMatchGateSubSource})
         feature = (
-            Feature(_COL_A, options={ImdMatchGateFormat.__name__: dict(_FMT_COLUMNS)}) if pointed else Feature(_COL_A)
+            Feature(_COL_A, options={ImdMatchGateSource.__name__: dict(_FMT_COLUMNS)}) if pointed else Feature(_COL_A)
         )
 
         session = _prepare(feature, enabled, None if pointed else _global_access(), _gate(refused))
@@ -827,33 +827,33 @@ class TestSourceGroupHook:
         assert server.probes >= 1
 
     def test_a_refusing_gate_leaves_an_unrelated_computing_group_planning_and_running(self) -> None:
-        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateFormat, ImdMatchPlainGroup})
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateSource, ImdMatchPlainGroup})
 
-        session = _prepare(Feature(_COL_P), enabled, _global_access(), _gate(ImdMatchGateFormat))
+        session = _prepare(Feature(_COL_P), enabled, _global_access(), _gate(ImdMatchGateSource))
         result = session.run(parallelization_modes={ParallelizationMode.SYNC})
 
         assert result[0].column_names == [_COL_P]
-        assert ImdMatchGateFormat.probes == 0
-        assert ImdMatchGateFormat.column_reads == 0
+        assert ImdMatchGateSource.probes == 0
+        assert ImdMatchGateSource.column_reads == 0
 
     def test_a_refused_pointed_group_is_masked_by_a_computing_candidate(self) -> None:
-        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateFormat, ImdMatchComputingGroup})
-        feature = Feature(_COL_A, options={ImdMatchGateFormat.__name__: dict(_FMT_COLUMNS)})
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateSource, ImdMatchComputingGroup})
+        feature = Feature(_COL_A, options={ImdMatchGateSource.__name__: dict(_FMT_COLUMNS)})
 
-        session = _prepare(feature, enabled, None, _gate(ImdMatchGateFormat))
+        session = _prepare(feature, enabled, None, _gate(ImdMatchGateSource))
 
         assert session is not None
-        assert ImdMatchGateFormat.probes == 0
+        assert ImdMatchGateSource.probes == 0
 
     def test_a_post_probe_refusal_replaces_the_probes_own_rejection_for_an_unpointed_group(self) -> None:
-        enabled = PluginCollector.enabled_feature_groups({ImdMatchRejectingFormat})
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchRejectingSource})
 
         with pytest.raises(FeatureResolutionError) as excinfo:
             _prepare(
                 Feature(_COL_A),
                 enabled,
                 _global_access(),
-                _ImdPostProbeRefusingExtender(ImdMatchRejectingFormat),
+                _ImdPostProbeRefusingExtender(ImdMatchRejectingSource),
             )
 
         assert _REFUSED in str(excinfo.value)
@@ -861,10 +861,10 @@ class TestSourceGroupHook:
 
     @staticmethod
     def _plan_override(scope: str, extender: Extender | None) -> Any:
-        options = {ImdMatchOverrideFormat.__name__: dict(_FMT_COLUMNS)} if scope == "pinned" else None
+        options = {ImdMatchOverrideSource.__name__: dict(_FMT_COLUMNS)} if scope == "pinned" else None
         return _prepare(
             Feature(_COL_A, options=options),
-            PluginCollector.enabled_feature_groups({ImdMatchOverrideFormat}),
+            PluginCollector.enabled_feature_groups({ImdMatchOverrideSource}),
             _global_access() if scope == "global" else None,
             extender,
         )
@@ -874,18 +874,18 @@ class TestSourceGroupHook:
         session = self._plan_override(scope, None)
 
         assert session is not None
-        assert ImdMatchOverrideFormat.catalog_reads == 1
+        assert ImdMatchOverrideSource.catalog_reads == 1
 
     @pytest.mark.parametrize("scope", ["pinned", "global"])
     def test_a_matcher_override_probe_refused_by_the_gate_never_reads_its_catalog(self, scope: str) -> None:
-        extender = _ImdFirstCallRefusingExtender(ImdMatchOverrideFormat)
+        extender = _ImdFirstCallRefusingExtender(ImdMatchOverrideSource)
         error_type, text = _refusal_error(_FORMAT_KIND, scope)
 
         with pytest.raises(error_type) as excinfo:
             self._plan_override(scope, extender)
 
         assert type(excinfo.value) is error_type
-        assert ImdMatchOverrideFormat.catalog_reads == 0
+        assert ImdMatchOverrideSource.catalog_reads == 0
         assert text in str(excinfo.value)
         assert "no clearance" in str(excinfo.value)
         assert len(extender.raised) == 1
@@ -899,10 +899,10 @@ class TestSourceGroupHook:
 
         self._plan_override(scope, extender)
 
-        contexts = extender.for_reader(ImdMatchOverrideFormat)
+        contexts = extender.for_reader(ImdMatchOverrideSource)
         assert len(contexts) == 2
         assert len(extender.contexts) == 2
-        assert all(c.reader_class is ImdMatchOverrideFormat for c in contexts)
+        assert all(c.reader_class is ImdMatchOverrideSource for c in contexts)
         assert all(c.feature_names == (_COL_A,) for c in contexts)
 
     def test_gated_probe_returns_the_probe_value_in_the_outcome(self) -> None:
@@ -914,12 +914,12 @@ class TestSourceGroupHook:
             return "probed"
 
         with reader_probe_scope(ReaderProbeScope(recorder, None, None, None, None)):
-            outcome = ImdMatchOverrideFormat.gated_probe(_COL_A, Options(), None, probe)
+            outcome = ImdMatchOverrideSource.gated_probe(_COL_A, Options(), None, probe)
 
         assert outcome.refused is None
         assert outcome.result == "probed"
         assert calls == [1]
-        assert recorder.for_reader(ImdMatchOverrideFormat)
+        assert recorder.for_reader(ImdMatchOverrideSource)
 
     def test_gated_probe_on_an_abstract_class_declines_without_probing_or_firing_the_hook(self) -> None:
         recorder = _ImdRecordingExtender()

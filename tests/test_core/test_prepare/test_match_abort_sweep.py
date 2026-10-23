@@ -2604,7 +2604,7 @@ def test_reader_match_handlers_escalate_or_declare_a_swallow(module: str) -> Non
     assert escalating != [], f"expected at least one escalating handler among {module}'s match helpers"
 
 
-_FILE_FORMAT_MODULES = [
+_SOURCE_GROUP_MODULES = [
     pytest.param(f"mloda_plugins/feature_group/input_data/file_formats/{name}_fg.py", id=f"{name}_fg")
     for name in ("csv", "parquet", "json", "feather", "orc")
 ] + [
@@ -2618,8 +2618,8 @@ _FILE_FORMAT_MODULES = [
 ]
 
 
-@pytest.mark.parametrize("module", _FILE_FORMAT_MODULES)
-def test_file_format_handlers_escalate_or_declare_a_swallow(module: str) -> None:
+@pytest.mark.parametrize("module", _SOURCE_GROUP_MODULES)
+def test_source_group_handlers_escalate_or_declare_a_swallow(module: str) -> None:
     """The stock file, database and document source groups hook into the match path, so none may hold an unannotated broad handler."""
     source = (_REPO_ROOT / module).read_text(encoding="utf-8")
 

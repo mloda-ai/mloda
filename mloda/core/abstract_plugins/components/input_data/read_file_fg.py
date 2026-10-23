@@ -23,7 +23,7 @@ from mloda.core.abstract_plugins.components.utils import is_match_abort
 
 
 class ReadFileFG(_FileSourceFG):
-    """Abstract file source group: claims features found as columns of owned files and folder entries."""
+    """Abstract tabular file group: claims features found as columns of owned files and folder entries."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
         ClaimRoute("file", NamePolicy.CHECKED, True),

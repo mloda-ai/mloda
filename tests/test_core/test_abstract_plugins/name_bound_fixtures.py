@@ -64,7 +64,7 @@ def make_name_bound_fg(
     return type(f"{prefix}NameBoundFeatureGroup", (FeatureChainParserMixin, FeatureGroup), namespace)
 
 
-def make_source_fg(
+def make_root_fg(
     prefix: str,
     module: str,
     column: str,

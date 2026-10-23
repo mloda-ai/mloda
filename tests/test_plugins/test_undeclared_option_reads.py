@@ -710,7 +710,7 @@ def test_scanner_resolves_constants_across_constant_roots(tmp_path: Path) -> Non
     assert any(v.startswith("a/user.py") and "'cross_root_key'" in v for v in violations), violations
 
 
-def test_core_format_constant_reads_resolve() -> None:
-    """The core format bases' module-level constant reads resolve to their keys, not to dynamic reads."""
+def test_core_source_constant_reads_resolve() -> None:
+    """The core source bases' module-level constant reads resolve to their keys, not to dynamic reads."""
     keys = _resolved_read_keys(CORE_SCAN_ROOT, base=_REPO_ROOT, constant_roots=SCAN_ROOTS)
     assert {"data_access_handle", "query_text", "document_suffixes"} <= keys

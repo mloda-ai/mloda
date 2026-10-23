@@ -20,7 +20,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import DataCreator, PropertySpec
 from mloda.user import FeatureName, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_source_fg
+from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
 
 
 # PROPERTY_MAPPING keys for the throwaway probes; the idc_ prefix keeps them unique to this module.
@@ -500,7 +500,7 @@ def _run_bound(bound_context: bool = True) -> dict[str, Any]:
         input_column=IDC_BOUND_CHILD,
         bound_context=bound_context,
     )
-    child = make_source_fg("IdcBound", __name__, IDC_BOUND_CHILD, [1], seen=seen, observe_key=IDC_BOUND_A)
+    child = make_root_fg("IdcBound", __name__, IDC_BOUND_CHILD, [1], seen=seen, observe_key=IDC_BOUND_A)
     mloda.run_all(
         [Feature(f"{IDC_BOUND_CHILD}__idcop_q")],
         compute_frameworks=[PythonDictFramework],
@@ -548,7 +548,7 @@ def _run_converted(converter: Callable[[str], Any], requests: list[Options | Non
         converters={IDC_CONV_KEY: converter},
         capture=r"\d",
     )
-    child = make_source_fg("IdcConv", __name__, IDC_CONV_COLUMN, [1])
+    child = make_root_fg("IdcConv", __name__, IDC_CONV_COLUMN, [1])
     features = [Feature(f"{IDC_CONV_COLUMN}__idcvt_5", options) for options in requests]
     mloda.run_all(
         features,

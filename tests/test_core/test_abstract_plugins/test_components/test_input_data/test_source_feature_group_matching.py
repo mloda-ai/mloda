@@ -257,7 +257,7 @@ class _ValueCheckedFG(ToySourceFG):
 
 
 class _PlainRootColFG(FeatureGroup):
-    """Plain root (non-format) group claiming COL by its own rules."""
+    """Plain root (non-source) group claiming COL by its own rules."""
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -695,7 +695,7 @@ _DERIVED = "toyfmt_col__sum_aggr"
 
 
 class _PlainClaimsDerived(FeatureGroup):
-    """Non-format survivor claiming the derived name."""
+    """Non-source survivor claiming the derived name."""
 
     @classmethod
     def match_feature_group_criteria(
@@ -1036,7 +1036,7 @@ class _OpenUnderAbstract(_AbstractOpenMid):
 
 
 class TestPointerKeysFollowTheMro:
-    def test_own_name_first_then_concrete_format_ancestors(self) -> None:
+    def test_own_name_first_then_concrete_source_ancestors(self) -> None:
         keys = ToySourceSubFG.pointer_keys()
 
         assert keys[:2] == ("ToySourceSubFG", "ToySourceFG")

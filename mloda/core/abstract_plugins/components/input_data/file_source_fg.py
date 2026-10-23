@@ -1,4 +1,4 @@
-"""Abstract base shared by file source groups and document groups: pointers, pins, owned files and folders."""
+"""Abstract base shared by ReadFileFG and ReadDocumentFG groups: pointers, pins, owned files and folders."""
 
 import inspect
 import os

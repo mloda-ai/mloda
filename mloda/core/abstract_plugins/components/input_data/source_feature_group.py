@@ -1,4 +1,4 @@
-"""Shared base of one-FeatureGroup-per-format: claim routes decide matching, hooks discover and load sources."""
+"""Shared base of one FeatureGroup per kind of source: claim routes decide matching, hooks discover and load sources."""
 
 import difflib
 import inspect
@@ -107,7 +107,7 @@ def concrete_source_groups() -> dict[str, type["SourceFeatureGroup"]]:
 
 
 class SourceFeatureGroup(FeatureGroup):
-    """A FeatureGroup that claims features of one source format through its CLAIM_ROUTES."""
+    """A FeatureGroup that claims features of one kind of source through its CLAIM_ROUTES."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = ()
     _DECLARED_PROPERTY_MAPPING: ClassVar[Mapping[Any, Any] | None] = None  # raw own declaration, pre-merge
@@ -227,7 +227,7 @@ class SourceFeatureGroup(FeatureGroup):
 
     @classmethod
     def pointer_keys(cls) -> tuple[str, ...]:
-        """Own class name, then concrete format ancestors, most-derived first."""
+        """Own class name, then concrete source group ancestors, most-derived first."""
         return tuple(
             klass.__name__
             for klass in cls.__mro__
@@ -248,7 +248,7 @@ class SourceFeatureGroup(FeatureGroup):
 
     @classmethod
     def _scope_points_here(cls, scope: Any) -> bool:
-        """A scope points at this group when it names the group or a non-abstract format ancestor."""
+        """A scope points at this group when it names the group or a non-abstract source group ancestor."""
         if scope is None:
             return False
         for klass in cls.__mro__:

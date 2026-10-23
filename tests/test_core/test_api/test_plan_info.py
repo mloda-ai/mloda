@@ -947,7 +947,7 @@ class TestPlanStepImplementation:
         assert step.feature_group_hash == "unavailable"
         assert step.implementation_hash != "unavailable"
 
-    def test_a_format_step_without_an_implementation_is_neutral(self, tmp_path: Path) -> None:
+    def test_a_source_step_without_an_implementation_is_neutral(self, tmp_path: Path) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
         step = _explain_toy_group(group)
 
@@ -1295,7 +1295,7 @@ class TestPlanStepFeatureSetOptions:
 # ---------------------------------------------------------------------------
 
 
-class PlanInfoTypeNameIdentityFormat(ToySourceBase):
+class PlanInfoTypeNameIdentitySource(ToySourceBase):
     """Source group serving only its unique name whose identity is the type name of the match."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("plan_info_type_name", NamePolicy.CHECKED, True),)
@@ -1519,11 +1519,11 @@ class TestPlanStepDataAccessIdentity:
             assert all(db not in str(step.feature_set_options) for db in dbs)
 
     def test_a_source_group_identity_naming_no_source_is_flagged_as_fallback(self) -> None:
-        pointer = {PlanInfoTypeNameIdentityFormat.__name__: {"plan_info_type_name_col": [1]}}
+        pointer = {PlanInfoTypeNameIdentitySource.__name__: {"plan_info_type_name_col": [1]}}
         explained = mloda.explain(
             [Feature("plan_info_type_name_col", options=pointer)],
             compute_frameworks=[PythonDictFramework],
-            plugin_collector=PluginCollector.enabled_feature_groups({PlanInfoTypeNameIdentityFormat}),
+            plugin_collector=PluginCollector.enabled_feature_groups({PlanInfoTypeNameIdentitySource}),
         )
         step = next(s for s in explained if s.step_kind == "compute")
         assert step.data_access_identity == "SourceMatch"

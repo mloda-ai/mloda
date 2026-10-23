@@ -341,7 +341,7 @@ class TestImplementationDefinition:
             type("_Missing", (Implementation,), attributes)
 
     @pytest.mark.parametrize("kind", ["plain", "source", "operation"])
-    def test_feature_group_must_be_a_format_or_operation_feature_group(
+    def test_feature_group_must_be_a_source_or_operation_feature_group(
         self, kind: str, make_implementation: Any
     ) -> None:
         if kind == "plain":

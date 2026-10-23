@@ -54,7 +54,8 @@ class PlanStep:
     fills from the same FeatureSet attribute.
     ``source_*`` and ``join_type`` are None.
 
-    transform: ``feature_group``/``compute_framework`` are the destination, ``source_*`` the origin.
+    transform: ``feature_group``/``compute_framework`` are the destination, ``source_*`` the origin
+    (unrelated to ``SourceFeatureGroup``).
 
     join: ``feature_group``/``source_feature_group`` are the link's declared left/right sides, and
     ``join_type`` its join type. ``compute_framework`` is the merge destination and

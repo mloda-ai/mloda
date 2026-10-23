@@ -1,4 +1,4 @@
-"""Implementation: a plugin that serves one (Format or Operation FeatureGroup, ComputeFramework) pair."""
+"""Implementation: a plugin that serves one (Source or Operation FeatureGroup, ComputeFramework) pair."""
 
 import inspect
 import types

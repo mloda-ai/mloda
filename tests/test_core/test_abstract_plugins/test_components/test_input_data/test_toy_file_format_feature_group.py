@@ -17,7 +17,7 @@ from mloda.core.abstract_plugins.components.input_data.file_source import FileSo
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
-from mloda.provider import SourceFeatureGroup, ReadFileFG
+from mloda.provider import ReadFileFG, SourceFeatureGroup
 from mloda.steward import ReaderProbeScope, reader_probe_scope
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import (
@@ -45,7 +45,7 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_f
 )
 
 
-class TestToyFileSourceFeatureGroup(ReadFileFGTestMixin):
+class TestToyFileFormatFeatureGroup(ReadFileFGTestMixin):
     feature_group_class = ToyFileFormatFG
     present_column = "toyfmt_filecol"
     missing_column = "toyfmt_filemissing"

@@ -8,11 +8,11 @@ For practical examples of data access methods, see [Data Access Overview](access
 
 ## Data Sources
 
-- **Source FeatureGroups**: one FeatureGroup per source format, claiming features through `CLAIM_ROUTES` instead of `input_data()`:
+- **Source FeatureGroups**: one FeatureGroup per kind of source, claiming features through `CLAIM_ROUTES` instead of `input_data()`:
     - `ReadFileFG` with `CsvFG`, `ParquetFG`, `JsonFG`, `FeatherFG`, `OrcFG` (see [access-feature-data](access-feature-data.md#global-scope-data-access))
     - `ReadDBFG` with `SqliteFG`
     - `DuckdbFG`: reads the tables and views of a DuckDB connection in the DataAccessCollection, only when the feature's `connection_handle` names it (`Feature("amount", connection=conn)` sets one). On DuckDB it hands over a lazy relation on your connection, so later DuckDB steps run as SQL; elsewhere it loads a `pa.Table`. It reads the `main` schema of the connection's current database; a `connection_handle` forwarded from a consumer counts too. A feature tied to a DuckDB connection whose table has a column of that name is read from the table, so if another group also serves that name, resolution reports both groups (leave `DuckdbFG` out of the plugin collector, or rename). Off DuckDB it reads through a separate cursor, which sees committed rows only. mloda never closes the connection.
-    - `ReadDocumentFG` with `TextFG`, `PyFG`, `MarkdownFG`, `YamlFG`, `JsonDocumentFG`; documents skip suffixes owned by file source groups by default
+    - `ReadDocumentFG` with `TextFG`, `PyFG`, `MarkdownFG`, `YamlFG`, `JsonDocumentFG`; documents skip suffixes owned by ReadFileFG groups by default
 - **DataCreator**: For generating synthetic data (see [access-feature-data](access-feature-data.md#data-creator))
 - **ApiInputData**: For runtime data injection (see [access-feature-data](access-feature-data.md#apidata))
 
@@ -92,7 +92,7 @@ Source selection runs inside [feature-group resolution](feature-group-matching.m
 
 ### Declining with an attributable reason
 
-A source group that owns a source but cannot serve the requested feature records why it declined; the reason then appears in the near-miss block of the "No feature groups found" error message, labeled `(input data)`. `record_match_rejection` is exported via `mloda.provider`. A custom file source group owns its own suffix and lists its columns; a `ValueError` from `column_names` declines the file with a recorded reason, for example a required schema marker in the header:
+A source group that owns a source but cannot serve the requested feature records why it declined; the reason then appears in the near-miss block of the "No feature groups found" error message, labeled `(input data)`. `record_match_rejection` is exported via `mloda.provider`. A custom ReadFileFG group owns its own suffix and lists its columns; a `ValueError` from `column_names` declines the file with a recorded reason, for example a required schema marker in the header:
 
 ```python
 from typing import Any

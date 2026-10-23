@@ -34,7 +34,7 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.provider import DataCreator, PropertySpec
 from mloda.user import PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_source_fg
+from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
 
 
 # PROPERTY_MAPPING keys for the throwaway probes; the mdb_ prefix keeps them unique to this module.
@@ -182,7 +182,7 @@ def _run_two_keys(
 ) -> dict[str, Any]:
     seen: dict[str, Any] = {}
     fg = _make_two_keys_fg(with_defaults, seen)
-    source = make_source_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
+    source = make_root_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
     mloda.run_all(
         [Feature(name, options if options is not None else Options())],
         compute_frameworks=[PythonDictFramework],
@@ -267,7 +267,7 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         name = "mdb_src__mdbop_q_b"
         seen: dict[str, Any] = {}
         fg = _make_two_keys_fg(with_defaults, seen)
-        source = make_source_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
+        source = make_root_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
         results = mloda.run_all(
             [Feature(name), Feature(name, Options(context={MDB_FIRST: "q"}))],
             compute_frameworks=[PythonDictFramework],

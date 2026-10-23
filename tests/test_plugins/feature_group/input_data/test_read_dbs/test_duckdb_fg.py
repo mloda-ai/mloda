@@ -1,4 +1,4 @@
-"""DuckdbFG: the shared format contract plus its connection-sourced, opt-in, in-place DuckDB behaviour."""
+"""DuckdbFG: the shared source contract plus its connection-sourced, opt-in, in-place DuckDB behaviour."""
 
 from __future__ import annotations
 

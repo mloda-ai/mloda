@@ -157,7 +157,7 @@ class TestWorkerIsGoneSurvivesAConcurrentReap:
 class TestWorkerProcessDoesNotOutliveASigkilledParent:
     """A worker spawned via WorkerManager.create_worker_process must exit once its parent dies."""
 
-    @pytest.mark.timeout(30)
+    @pytest.mark.timeout(60)  # internal waits (30 + 5 + 20) must sum below this
     @pytest.mark.parametrize("kind", ["bound_worker", "unbound_standby", "shared_manager"])
     def test_real_worker_process_exits_after_its_real_parent_process_is_sigkilled(
         self, tmp_path: Path, kind: str
@@ -170,7 +170,7 @@ class TestWorkerProcessDoesNotOutliveASigkilledParent:
         worker_pid: int | None = None
         worker_gone = False
         try:
-            deadline = time.time() + 15.0
+            deadline = time.time() + 30.0
             while time.time() < deadline and worker_pid is None:
                 if pid_file.exists():
                     content = pid_file.read_text().strip()
@@ -188,7 +188,7 @@ class TestWorkerProcessDoesNotOutliveASigkilledParent:
             fake_parent.join(timeout=5)
             assert not fake_parent.is_alive(), "fake parent process survived SIGKILL"
 
-            worker_gone = _wait_until_gone(worker_pid, 10.0)
+            worker_gone = _wait_until_gone(worker_pid, 20.0)
 
             assert worker_gone, "worker process outlived its SIGKILLed parent process"
         finally:

@@ -11,8 +11,8 @@ The check is deliberately GLOBAL: a key passes when SOME shipped FeatureGroup de
 
 Scope notes:
 
-* ``SCAN_ROOT`` is the whole ``mloda_plugins/feature_group`` tree, ``input_data`` format groups included;
-  the allowlist paths below are written relative to it.
+* ``SCAN_ROOTS`` are the ``mloda_plugins/feature_group`` tree and the core ``input_data`` format group
+  bases; allowlist paths are relative to the repo root, constants are collected over both roots.
 * ``reference_time`` is a ``DefaultOptionKeys`` member yet is NOT treated as framework-reserved here.
   The time-based groups expose it as a user-overridable column option, so os-004 reclassifies it as a
   key those groups must DECLARE. The remaining ``DefaultOptionKeys`` values stay framework-reserved.
@@ -21,7 +21,7 @@ Scope notes:
 from __future__ import annotations
 
 import ast
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import NamedTuple
 
@@ -42,6 +42,9 @@ from mloda_plugins.feature_group.experimental.time_window.base import TimeWindow
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 SCAN_ROOT = _REPO_ROOT / "mloda_plugins" / "feature_group"
 assert SCAN_ROOT.exists(), f"scan root not found; check the parents index for the repo root: {SCAN_ROOT}"
+CORE_SCAN_ROOT = _REPO_ROOT / "mloda" / "core" / "abstract_plugins" / "components" / "input_data"
+assert CORE_SCAN_ROOT.exists(), f"core scan root not found: {CORE_SCAN_ROOT}"
+SCAN_ROOTS = (SCAN_ROOT, CORE_SCAN_ROOT)
 
 # Accessor calls whose result is an Options-like object: cls.get_singular_option_from_options(...).get(...),
 # get_options(...).get(...) and cls.options_with_defaults(...).get(...). Anything else (arbitrary methods
@@ -65,18 +68,56 @@ FRAMEWORK_KEYS: frozenset[str] = frozenset(_DEFAULT_OPTION_KEY_MEMBERS.values())
 }
 
 # Literal keys that are engine-internal signals rather than user-facing options, scoped to their owning
-# source file (relative to SCAN_ROOT): a read of the same literal from any other file is still flagged.
-ALLOWED_LITERAL_KEYS: dict[str, tuple[str, str, str]] = {
+# source files (relative to the repo root): a read of the same literal from any other file is still flagged.
+_FORMAT_BASES = "mloda/core/abstract_plugins/components/input_data/"
+ALLOWED_LITERAL_KEYS: dict[str, tuple[tuple[str, ...], str, str]] = {
     "initial_requested_data": (
-        "experimental/source_input_feature.py",
+        ("mloda_plugins/feature_group/experimental/source_input_feature.py",),
         "SourceInputFeatureComposite",
         "engine-internal request-scoping signal set as a Feature attribute; not a user-facing option",
     ),
+    "query_text": (
+        (_FORMAT_BASES + "format_feature_group.py", _FORMAT_BASES + "read_db_fg.py"),
+        "ReadDBFG",
+        "declared by ReadDBFG subclasses that serve query text; the bases read it to route or decline",
+    ),
 }
 
-# Reads whose key is computed at runtime, keyed by (path relative to SCAN_ROOT, enclosing function).
+# Reads whose key is computed at runtime, keyed by (path relative to the repo root, enclosing function).
 ALLOWED_DYNAMIC_READS: dict[tuple[str, str], tuple[str, str]] = {
-    ("experimental/forecasting/forecasting_artifact.py", "custom_loader"): (
+    (_FORMAT_BASES + "file_source_fg.py", "find_sources"): (
+        "FileSourceFG",
+        "key is one of the group's pointer keys, resolved at runtime",
+    ),
+    (_FORMAT_BASES + "file_source_fg.py", "_pointer_key"): (
+        "FileSourceFG",
+        "key is one of the group's pointer keys, resolved at runtime",
+    ),
+    (_FORMAT_BASES + "file_source_fg.py", "_pointer_value"): (
+        "FileSourceFG",
+        "key is one of the group's pointer keys, resolved at runtime",
+    ),
+    (_FORMAT_BASES + "format_feature_group.py", "is_pointed"): (
+        "FormatFeatureGroup",
+        "key is one of the group's pointer keys, resolved at runtime",
+    ),
+    (_FORMAT_BASES + "format_feature_group.py", "_matches_by_default_rules"): (
+        "FormatFeatureGroup",
+        "key is one of the group's pointer keys, resolved at runtime",
+    ),
+    (_FORMAT_BASES + "read_db_fg.py", "_matches_by_default_rules"): (
+        "ReadDBFG",
+        "key is one of the group's pointer keys, or a claim route's required key, resolved at runtime",
+    ),
+    (_FORMAT_BASES + "read_db_fg.py", "_candidates"): (
+        "ReadDBFG",
+        "key is one of the group's pointer keys, or a claim route's required key, resolved at runtime",
+    ),
+    (_FORMAT_BASES + "api/api_input_data.py", "matches"): (
+        "ApiInputData",
+        "key is the subclass's data access name",
+    ),
+    ("mloda_plugins/feature_group/experimental/forecasting/forecasting_artifact.py", "custom_loader"): (
         "ForecastingArtifact",
         "artifact is keyed by the runtime feature name, not a fixed option key",
     ),
@@ -145,6 +186,41 @@ def _collect_class_constants(root: Path) -> tuple[dict[tuple[str, str], str], di
     return by_class, by_name
 
 
+def _module_name(path: Path, base: Path) -> str:
+    """Dotted module name of ``path`` relative to ``base``; ``pkg/__init__.py`` maps to ``pkg``."""
+    parts = list(path.relative_to(base).with_suffix("").parts)
+    if parts[-1] == "__init__":
+        parts.pop()
+    return ".".join(parts)
+
+
+def _collect_module_constants(constant_roots: Sequence[Path], base: Path) -> dict[str, dict[str, str]]:
+    """Map each module's dotted name to its top-level ``NAME = "literal"`` constants."""
+    out: dict[str, dict[str, str]] = {}
+    for root in constant_roots:
+        for path in sorted(root.rglob("*.py")):
+            consts: dict[str, str] = {}
+            for stmt in ast.parse(path.read_text(encoding="utf-8"), filename=str(path)).body:
+                if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+                    value = stmt.value
+                    if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                        consts[stmt.targets[0].id] = value.value
+            out[_module_name(path, base)] = consts
+    return out
+
+
+def _file_constants(tree: ast.Module, module: str, module_consts: dict[str, dict[str, str]]) -> dict[str, str]:
+    """Constants a bare name can resolve to in one file: its own plus absolute ``from X import NAME [as ALIAS]``."""
+    out = dict(module_consts.get(module, {}))
+    for stmt in tree.body:
+        if isinstance(stmt, ast.ImportFrom) and stmt.level == 0 and stmt.module is not None:
+            source = module_consts.get(stmt.module, {})
+            for alias in stmt.names:
+                if alias.name in source:
+                    out[alias.asname or alias.name] = source[alias.name]
+    return out
+
+
 def _func_assignments(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> dict[str, ast.expr]:
     """Top-level ``name = expr`` statements assigned exactly once in a function body."""
     counts: dict[str, int] = {}
@@ -163,6 +239,7 @@ def _resolve_key(
     by_class: dict[tuple[str, str], str],
     by_name: dict[str, set[str]],
     func_assignments: dict[str, ast.expr],
+    file_consts: dict[str, str],
 ) -> str | None:
     """Resolve a key expression to its string, or None when it is computed dynamically."""
     if isinstance(node, ast.Constant):
@@ -184,7 +261,8 @@ def _resolve_key(
     if isinstance(node, ast.Name):
         expr = func_assignments.get(node.id)
         if expr is not None:
-            return _resolve_key(expr, cls_name, by_class, by_name, func_assignments)
+            return _resolve_key(expr, cls_name, by_class, by_name, func_assignments, file_consts)
+        return file_consts.get(node.id)
     return None
 
 
@@ -218,6 +296,7 @@ def _reads_in_tree(
     tree: ast.Module,
     by_class: dict[tuple[str, str], str],
     by_name: dict[str, set[str]],
+    file_consts: dict[str, str],
 ) -> list[_Read]:
     """Collect every Options read in a module, threading the enclosing class and function for context."""
     out: list[_Read] = []
@@ -231,7 +310,7 @@ def _reads_in_tree(
         key_node = _key_node(node, func_assignments)
         if key_node is not None:
             assert isinstance(node, ast.expr)
-            key = _resolve_key(key_node, cls_name, by_class, by_name, func_assignments)
+            key = _resolve_key(key_node, cls_name, by_class, by_name, func_assignments, file_consts)
             func_name = func_node.name if func_node is not None else None
             out.append(_Read(key, node.lineno, cls_name, func_name))
         for child in ast.iter_child_nodes(node):
@@ -246,14 +325,29 @@ def _reads_in_tree(
     return out
 
 
-def _count_reads(root: Path) -> int:
-    """Total Options reads found under ``root``; a nonzero floor guards against a vacuous scan."""
+def _iter_reads(root: Path, base: Path | None, constant_roots: Sequence[Path] | None) -> Iterator[tuple[str, _Read]]:
+    """Every Options read under ``root`` with its path relative to ``base`` (default ``root``)."""
+    base = base if base is not None else root
+    roots = constant_roots if constant_roots is not None else (root,)
     by_class, by_name = _collect_class_constants(root)
-    total = 0
+    module_consts = _collect_module_constants(roots, base)
     for path in sorted(root.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        total += len(_reads_in_tree(tree, by_class, by_name))
-    return total
+        file_consts = _file_constants(tree, _module_name(path, base), module_consts)
+        for read in _reads_in_tree(tree, by_class, by_name, file_consts):
+            yield path.relative_to(base).as_posix(), read
+
+
+def _count_reads(root: Path, *, base: Path | None = None, constant_roots: Sequence[Path] | None = None) -> int:
+    """Total Options reads found under ``root``; a nonzero floor guards against a vacuous scan."""
+    return sum(1 for _ in _iter_reads(root, base, constant_roots))
+
+
+def _resolved_read_keys(
+    root: Path, *, base: Path | None = None, constant_roots: Sequence[Path] | None = None
+) -> set[str]:
+    """The non-None resolved keys of all reads under ``root``."""
+    return {read.key for _, read in _iter_reads(root, base, constant_roots) if read.key is not None}
 
 
 def _dynamic_allowed(rel: str, func_name: str | None, dynamic_allow: dict[tuple[str, str], tuple[str, str]]) -> bool:
@@ -268,28 +362,27 @@ def find_violations(
     root: Path,
     declared: frozenset[str],
     framework_keys: frozenset[str],
-    literal_allow: dict[str, tuple[str, str, str]],
+    literal_allow: dict[str, tuple[tuple[str, ...], str, str]],
     dynamic_allow: dict[tuple[str, str], tuple[str, str]],
+    *,
+    base: Path | None = None,
+    constant_roots: Sequence[Path] | None = None,
 ) -> list[str]:
     """Every Options read under ``root`` whose key is neither declared, framework-reserved, nor allowlisted."""
-    by_class, by_name = _collect_class_constants(root)
     violations: list[str] = []
-    for path in sorted(root.rglob("*.py")):
-        rel = path.relative_to(root).as_posix()
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for read in _reads_in_tree(tree, by_class, by_name):
-            plugin = read.cls_name if read.cls_name is not None else "<module>"
-            if read.key is not None:
-                if read.key in declared or read.key in framework_keys:
-                    continue
-                allow_entry = literal_allow.get(read.key)
-                if allow_entry is not None and allow_entry[0] == rel:
-                    continue
-                violations.append(f"{rel}:{read.lineno}: undeclared option read of key {read.key!r} (plugin {plugin})")
-            elif not _dynamic_allowed(rel, read.func_name, dynamic_allow):
-                violations.append(
-                    f"{rel}:{read.lineno}: undocumented dynamic option read (plugin {plugin}, function {read.func_name})"
-                )
+    for rel, read in _iter_reads(root, base, constant_roots):
+        plugin = read.cls_name if read.cls_name is not None else "<module>"
+        if read.key is not None:
+            if read.key in declared or read.key in framework_keys:
+                continue
+            allow_entry = literal_allow.get(read.key)
+            if allow_entry is not None and rel in allow_entry[0]:
+                continue
+            violations.append(f"{rel}:{read.lineno}: undeclared option read of key {read.key!r} (plugin {plugin})")
+        elif not _dynamic_allowed(rel, read.func_name, dynamic_allow):
+            violations.append(
+                f"{rel}:{read.lineno}: undocumented dynamic option read (plugin {plugin}, function {read.func_name})"
+            )
     return violations
 
 
@@ -308,18 +401,24 @@ def property_mapping_declared_union() -> frozenset[str]:
 
 def test_no_undeclared_static_option_reads() -> None:
     """No shipped feature_group plugin reads an Options key that nothing declares (outside the narrow allowlist)."""
-    assert SCAN_ROOT.exists(), SCAN_ROOT
-    # Vacuity floor, NOT a target: its only job is to prove the rglob loops really walked the tree
-    # instead of finding nothing. Keep it around half the measured total (35 today) so that removing a
-    # read site stays a legitimate change; pinning it to the exact count made deleting reads fail here.
-    assert _count_reads(SCAN_ROOT) >= 17, "scan found too few reads; SCAN_ROOT is likely misconfigured"
-    violations = find_violations(
-        SCAN_ROOT,
-        property_mapping_declared_union(),
-        FRAMEWORK_KEYS,
-        ALLOWED_LITERAL_KEYS,
-        ALLOWED_DYNAMIC_READS,
-    )
+    # Vacuity floors, NOT targets: their only job is to prove the rglob loops really walked each tree
+    # instead of finding nothing. Each is about half the measured count (30 plugins, 18 core today) so that
+    # removing a read site stays a legitimate change; pinning the exact count made deleting reads fail here.
+    floors = {SCAN_ROOT: 15, CORE_SCAN_ROOT: 9}
+    violations: list[str] = []
+    for root in SCAN_ROOTS:
+        assert root.exists(), root
+        count = _count_reads(root, base=_REPO_ROOT, constant_roots=SCAN_ROOTS)
+        assert count >= floors[root], f"scan found too few reads under {root}; the root is likely misconfigured"
+        violations += find_violations(
+            root,
+            property_mapping_declared_union(),
+            FRAMEWORK_KEYS,
+            ALLOWED_LITERAL_KEYS,
+            ALLOWED_DYNAMIC_READS,
+            base=_REPO_ROOT,
+            constant_roots=SCAN_ROOTS,
+        )
     assert violations == [], (
         "Undeclared option reads (declare the key in the plugin's PROPERTY_MAPPING):\n" + "\n".join(violations)
     )
@@ -339,18 +438,27 @@ def test_artifact_storage_path_declared_by_sklearn_groups() -> None:
 
 
 def test_allowlist_paths_are_relative_to_the_scan_root() -> None:
-    """Every allowlist path resolves under SCAN_ROOT; a stale path silently stops matching and flags nothing."""
-    for path_rel, _, _ in ALLOWED_LITERAL_KEYS.values():
-        assert (SCAN_ROOT / path_rel).exists(), path_rel
+    """Every allowlist path resolves under _REPO_ROOT; a stale path silently stops matching and flags nothing."""
+    for paths_rel, _, _ in ALLOWED_LITERAL_KEYS.values():
+        for path_rel in paths_rel:
+            assert (_REPO_ROOT / path_rel).exists(), path_rel
     for path_rel, _ in ALLOWED_DYNAMIC_READS:
-        assert (SCAN_ROOT / path_rel).exists(), path_rel
+        assert (_REPO_ROOT / path_rel).exists(), path_rel
 
 
 def test_literal_allowlist_is_load_bearing() -> None:
     """Drop the literal allowlist and its one key is flagged, so the entry (and its path) really matches."""
-    violations = find_violations(
-        SCAN_ROOT, property_mapping_declared_union(), FRAMEWORK_KEYS, {}, ALLOWED_DYNAMIC_READS
-    )
+    violations: list[str] = []
+    for root in SCAN_ROOTS:
+        violations += find_violations(
+            root,
+            property_mapping_declared_union(),
+            FRAMEWORK_KEYS,
+            {},
+            ALLOWED_DYNAMIC_READS,
+            base=_REPO_ROOT,
+            constant_roots=SCAN_ROOTS,
+        )
 
     assert any("'initial_requested_data'" in v for v in violations), violations
 
@@ -490,9 +598,75 @@ def test_scanner_flags_keyword_arg_key(tmp_path: Path) -> None:
 
 def test_scanner_scopes_literal_allowlist_to_owner(tmp_path: Path) -> None:
     """A literal-allowlisted key passes only in its owning file; the same read elsewhere is flagged."""
-    allow: dict[str, tuple[str, str, str]] = {"scoped_key": ("owner.py", "Owner", "engine-internal")}
+    allow: dict[str, tuple[tuple[str, ...], str, str]] = {"scoped_key": (("owner.py",), "Owner", "engine-internal")}
     (tmp_path / "owner.py").write_text("def f(options):\n    return options.get('scoped_key')\n")
     (tmp_path / "other.py").write_text("def g(options):\n    return options.get('scoped_key')\n")
     violations = find_violations(tmp_path, frozenset(), frozenset(), allow, {})
     assert any(v.startswith("other.py") for v in violations), violations
     assert not any(v.startswith("owner.py") for v in violations), violations
+
+
+def test_scanner_allows_a_literal_key_in_every_owning_path(tmp_path: Path) -> None:
+    """A literal allowlist entry with two owning paths passes in both files and still flags a third."""
+    allow: dict[str, tuple[tuple[str, ...], str, str]] = {"shared_key": (("one.py", "two.py"), "Owner", "internal")}
+    for name in ("one.py", "two.py", "three.py"):
+        (tmp_path / name).write_text("def f(options):\n    return options.get('shared_key')\n")
+    violations = find_violations(tmp_path, frozenset(), frozenset(), allow, {})
+    assert [v.split(":")[0] for v in violations] == ["three.py"], violations
+
+
+def test_scanner_resolves_a_module_level_constant(tmp_path: Path) -> None:
+    """A module-level ``NAME = 'literal'`` resolves for a bare NAME read in the same file."""
+    (tmp_path / "mod.py").write_text("KEY = 'module_key'\n\n\ndef f(options):\n    return options.get(KEY)\n")
+    assert find_violations(tmp_path, frozenset({"module_key"}), frozenset(), {}, {}) == []
+    violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {})
+    assert any("'module_key'" in v and "dynamic" not in v for v in violations), violations
+
+
+def test_scanner_resolves_a_constant_imported_by_module_path(tmp_path: Path) -> None:
+    """``from consts import KEY`` resolves through consts.py under the constant roots."""
+    (tmp_path / "consts.py").write_text("KEY = 'imported_key'\n")
+    (tmp_path / "user.py").write_text("from consts import KEY\n\n\ndef f(options):\n    return options.get(KEY)\n")
+    assert find_violations(tmp_path, frozenset({"imported_key"}), frozenset(), {}, {}, base=tmp_path) == []
+    violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {}, base=tmp_path)
+    assert any("'imported_key'" in v for v in violations), violations
+
+
+def test_scanner_resolves_an_aliased_import(tmp_path: Path) -> None:
+    """``from consts import KEY as OTHER`` resolves the alias to the constant's value."""
+    (tmp_path / "consts.py").write_text("KEY = 'aliased_key'\n")
+    (tmp_path / "user.py").write_text(
+        "from consts import KEY as OTHER\n\n\ndef f(options):\n    return options.get(OTHER)\n"
+    )
+    assert find_violations(tmp_path, frozenset({"aliased_key"}), frozenset(), {}, {}, base=tmp_path) == []
+    violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {}, base=tmp_path)
+    assert any("'aliased_key'" in v for v in violations), violations
+
+
+def test_scanner_keeps_an_import_from_an_unknown_module_dynamic(tmp_path: Path) -> None:
+    """No name-only fallback: an import from a module outside the constant roots stays a dynamic read."""
+    (tmp_path / "other_consts.py").write_text("KEY = 'wrong_module_key'\n")
+    (tmp_path / "user.py").write_text("from elsewhere import KEY\n\n\ndef f(options):\n    return options.get(KEY)\n")
+    violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {}, base=tmp_path)
+    assert any(v.startswith("user.py") and "dynamic" in v for v in violations), violations
+
+
+def test_scanner_resolves_constants_across_constant_roots(tmp_path: Path) -> None:
+    """``constant_roots`` lets a file under one root resolve a constant defined under another."""
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "consts.py").write_text("KEY = 'cross_root_key'\n")
+    (tmp_path / "a" / "user.py").write_text(
+        "from b.consts import KEY\n\n\ndef f(options):\n    return options.get(KEY)\n"
+    )
+    roots = (tmp_path / "a", tmp_path / "b")
+    declared = frozenset({"cross_root_key"})
+    assert find_violations(tmp_path / "a", declared, frozenset(), {}, {}, base=tmp_path, constant_roots=roots) == []
+    violations = find_violations(tmp_path / "a", frozenset(), frozenset(), {}, {}, base=tmp_path, constant_roots=roots)
+    assert any(v.startswith("a/user.py") and "'cross_root_key'" in v for v in violations), violations
+
+
+def test_core_format_constant_reads_resolve() -> None:
+    """The core format bases' module-level constant reads resolve to their keys, not to dynamic reads."""
+    keys = _resolved_read_keys(CORE_SCAN_ROOT, base=_REPO_ROOT, constant_roots=SCAN_ROOTS)
+    assert {"data_access_handle", "query_text", "document_suffixes"} <= keys

@@ -682,17 +682,43 @@ class TestResolveFeatureWithOptions:
         assert "PandasDataFrame" in result.error
         assert "PythonDictFramework" in result.error
 
-    def test_all_implementations_disabled_reports_disabled_or_denied(self) -> None:
+    @pytest.mark.parametrize(
+        ("disabled", "frameworks", "reason"),
+        [
+            pytest.param(
+                ("OpToyPandas", "OpToyPyArrow"),
+                None,
+                "its implementations are all disabled or denied for this run",
+                id="all_disabled",
+            ),
+            pytest.param(
+                ("OpToyPyArrow",),
+                "pyarrow",
+                "its OpToyPyArrow implementation for PyArrowTable is disabled or denied for this run; "
+                "re-enable it on the PluginCollector",
+                id="partially_disabled",
+            ),
+        ],
+    )
+    def test_all_implementations_disabled_reports_disabled_or_denied(
+        self, disabled: tuple[str, ...], frameworks: str | None, reason: str
+    ) -> None:
+        from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
         from tests.test_core.test_abstract_plugins.test_components.test_input_data import toy_operation_group as toy
 
         collector = PluginCollector.enabled_feature_groups({toy.OpToyFG})
-        collector.add_disabled_implementation_classes({toy.OpToyPandas, toy.OpToyPyArrow})
+        collector.add_disabled_implementation_classes({getattr(toy, name) for name in disabled})
 
-        result = resolve_feature(toy.OPTOY_FEATURE, options=Options({toy.OPTOY_KEY: "sum"}), plugin_collector=collector)
+        result = resolve_feature(
+            toy.OPTOY_FEATURE,
+            options=Options({toy.OPTOY_KEY: "sum"}),
+            plugin_collector=collector,
+            compute_frameworks={PyArrowTable} if frameworks else None,
+        )
 
         assert result.feature_group is None
         assert result.error is not None
-        assert "its implementations are all disabled or denied for this run" in result.error
+        assert reason in result.error
 
 
 class TestResolveFeatureIsNonThrowing:

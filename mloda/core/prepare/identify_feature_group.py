@@ -255,8 +255,10 @@ class IdentifyFeatureGroupClass:
     _open_claims: set[type[FeatureGroup]]
     _reported_pins: set[str]
     _partial_records: Sequence[ResolutionRecord]
+    _excluded: Mapping[type[FeatureGroup], str]
 
     def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
+        self._excluded = {}
         self._criteria_matched_feature_groups = set()
         self._abstract_matched_feature_groups = set()
         self._candidate_frameworks = {}
@@ -314,6 +316,7 @@ class IdentifyFeatureGroupClass:
         validate_format_pointers(feature, accessible_plugins, excluded, data_access_collection)
         self = cls(data_access_collection)
         self._partial_records = partial_records
+        self._excluded = excluded or {}
         try:
             identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
             # A single survivor means every dropped candidate is its ancestor (issubclass is transitive).
@@ -742,7 +745,8 @@ class IdentifyFeatureGroupClass:
                 else:
                     if get_all_subclasses(ComputeFramework):
                         not_enabled_reason = (
-                            _operation_implementation_reason(feature_group)
+                            self._excluded.get(feature_group)
+                            or _operation_implementation_reason(feature_group)
                             or "none of its compute frameworks are enabled for this run"
                         )
                     else:

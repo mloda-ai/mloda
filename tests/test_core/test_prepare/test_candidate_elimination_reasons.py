@@ -33,7 +33,9 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import accessible_implementations
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
+from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
+from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda.core.prepare.identify_feature_group import (
     FeatureResolutionError,
     IdentifyFeatureGroupClass,
@@ -570,10 +572,11 @@ def _fail(
     feature: Feature,
     accessible_plugins: FeatureGroupEnvironmentMapping,
     links: set[Link] | None = None,
+    excluded: Mapping[type[FeatureGroup], str] | None = None,
 ) -> FeatureResolutionError:
     """Drive the engine seam and return the raised typed error (carrying ``.result`` and message)."""
     with pytest.raises(FeatureResolutionError) as excinfo:
-        evaluate_or_raise(feature, accessible_plugins, links=links)
+        evaluate_or_raise(feature, accessible_plugins, links=links, excluded=excluded)
     return excinfo.value
 
 
@@ -668,6 +671,24 @@ class TestEliminationStages:
         assert err.result.eliminations[group] == Elimination(stage="frameworks_not_enabled", reason=reason)
         if rendered:
             assert f"{group.__name__} (compute framework): {reason}" in str(err)
+
+    def test_frameworks_not_enabled_stage_for_a_partially_disabled_operation_group(self) -> None:
+        toy = _op_toy()
+        collector = PluginCollector.enabled_feature_groups({toy.OpToyFG})
+        collector.add_disabled_implementation_classes({toy.OpToyPyArrow})
+        pre = PreFilterPlugins({PyArrowTable}, collector)
+        assert pre.accessible_plugins[toy.OpToyFG] == set()
+        feature = Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"})
+        reason = (
+            "its OpToyPyArrow implementation for PyArrowTable is disabled or denied for this run; "
+            "re-enable it on the PluginCollector"
+        )
+
+        with accessible_implementations(pre.implementations):
+            err = _fail(feature, pre.accessible_plugins, excluded=pre.excluded_feature_groups)
+
+        assert err.result.eliminations[toy.OpToyFG] == Elimination(stage="frameworks_not_enabled", reason=reason)
+        assert f"OpToyFG (compute framework): {reason}" in str(err)
 
     def test_frameworks_not_enabled_stage_when_no_compute_framework_is_loaded(
         self, monkeypatch: pytest.MonkeyPatch

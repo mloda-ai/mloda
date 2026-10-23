@@ -218,7 +218,7 @@ Caveats:
 - The root `FeatureGroup` base is rejected in either form: it names no family.
 - The scope is read by feature resolution and by filter matching, and stays excluded from Feature identity, so two requests for the same column name scoped to different sources compare equal. Requesting both in one features list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one, so you are told, not surprised. Inside a single `input_features()` returning a set literal, a second same-name feature with a different scope is silently deduplicated by the Python set itself before the engine ever sees it, so never scope the same name twice within one feature group. To read the same column from two sources side by side, give them distinct derived feature names.
 
-## Source group source errors
+## Source feature group errors
 
 A source group (`CsvFG`, `SqliteFG`, `TextFG`, ...) claims a feature when one of its sources has the column. Two errors come from inside one group, before any feature-group ambiguity.
 

@@ -116,6 +116,7 @@ MODULE_EXTRA: dict[str, str] = {
     f"{_INPUT_DATA}.file_formats.orc_fg": "pyarrow",
     f"{_INPUT_DATA}.file_formats.parquet_fg": "pyarrow",
     f"{_INPUT_DATA}.file_formats.stock_formats": "pyarrow",
+    f"{_INPUT_DATA}.db_formats.duckdb_fg": "duckdb",
     f"{_INPUT_DATA}.db_formats.sqlite_fg": "sqlite",
     f"{_INPUT_DATA}.document_formats.yaml_fg": "yaml",
 }

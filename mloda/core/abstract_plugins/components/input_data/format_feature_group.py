@@ -176,6 +176,11 @@ class FormatFeatureGroup(FeatureGroup):
         return None
 
     @classmethod
+    def match_connection(cls, match: SourceMatch) -> Any | None:
+        """The connection object the match reads from, None when the source is not a live connection."""
+        return None
+
+    @classmethod
     def unknown_columns_reason(cls, match: SourceMatch) -> str | None:
         """Why the source cannot enumerate its columns, None when no reason is known."""
         return None

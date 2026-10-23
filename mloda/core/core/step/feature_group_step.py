@@ -11,6 +11,7 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 
 
 class FeatureGroupStep(Step):
+    source_connection_handle: str | None = None
     reads_join_result: bool = True
 
     def __init__(

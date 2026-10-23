@@ -130,6 +130,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import ParquetFG
 
@@ -2349,6 +2350,40 @@ class TestLeavesConnectionOnResult:
         requested = [s for s in plan if s.step_kind == "compute" and s.requested_feature_names]
         assert [s.feature_group for s in requested] == [LeaveSqliteChain]
         assert [s.leaves_connection for s in requested] == ["mine"]
+
+
+class TestLeavesConnectionOnDuckdbSource:
+    """A requested DuckdbFG column records its handle where its rows leave the connection."""
+
+    @staticmethod
+    def _computes(pinned: str | None) -> list[PlanStep]:
+        from mloda_plugins.feature_group.input_data.db_formats.duckdb_fg import DuckdbFG
+
+        duckdb = pytest.importorskip("duckdb")
+        conn = duckdb.connect()
+        try:
+            conn.execute("CREATE TABLE plan_duck (plan_duck_col INTEGER)")
+            plan = requested_plan(
+                Feature("plan_duck_col", options={"connection_handle": "mine"}, compute_framework=pinned),
+                {DuckdbFG},
+                [DuckDBFramework, PyArrowTable],
+                DataAccessCollection(connections={"mine": conn}),
+            )
+        finally:
+            conn.close()
+        return [s for s in plan if s.step_kind == "compute"]
+
+    def test_on_duckdb_the_final_conversion_records_the_handle(self) -> None:
+        computes = self._computes(None)
+
+        assert [(s.compute_framework, s.result_framework) for s in computes] == [(DuckDBFramework, PyArrowTable)]
+        assert [s.leaves_connection for s in computes] == ["mine"]
+
+    def test_pinned_to_pyarrow_the_read_records_the_handle(self) -> None:
+        computes = self._computes("PyArrowTable")
+
+        assert [s.compute_framework for s in computes] == [PyArrowTable]
+        assert [s.leaves_connection for s in computes] == ["mine"]
 
 
 class TestAutoHandleContentHash:

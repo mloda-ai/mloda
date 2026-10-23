@@ -239,6 +239,7 @@ def build_plan_steps(
             lives_memo[key] = False
             lives_memo[key] = step.connection_handle is not None and (
                 step.connection_explicit
+                or (isinstance(step, FeatureGroupStep) and step.source_connection_handle == step.connection_handle)
                 or any(
                     dep is not step
                     and isinstance(dep, FeatureGroupStep | JoinStep)
@@ -280,6 +281,12 @@ def build_plan_steps(
                 if named is not None and declared_here and not declared and step.connection_handle != named
                 else None
             )
+            if (
+                leaves_handle is None
+                and step.source_connection_handle is not None
+                and step.source_connection_handle != step.connection_handle
+            ):
+                leaves_handle = step.source_connection_handle
             result_cf = (output_framework or step.compute_framework.result_framework()) if requested else None
             if (
                 leaves_handle is None

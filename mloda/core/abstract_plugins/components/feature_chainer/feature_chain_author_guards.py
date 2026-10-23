@@ -31,6 +31,7 @@ from mloda.core.abstract_plugins.components.utils import (
     contained_raise_log_level,
     contained_raise_reason,
     escalate_match_abort,
+    is_match_abort,
     safe_field,
 )
 
@@ -362,16 +363,25 @@ def check_required_when(
             continue
         try:
             is_required = bool(predicate(effective_options))
-        # Swallows: a predicate that raises cannot judge, so this is a non-match, not the run.
         except Exception as exc:
-            logger.log(
-                contained_raise_log_level(exc),
+            if is_match_abort(exc):
+                raise
+            predicate_label = getattr(predicate, "__name__", repr(predicate))
+            logger.debug(
                 "required_when predicate %s for '%s' %s; treating feature group %s as a non-match.",
-                getattr(predicate, "__name__", repr(predicate)),
+                predicate_label,
                 key,
                 contained_raise_reason(exc),
                 owner_name,
             )
+            if contained_raise_log_level(exc) != logging.DEBUG:
+                logger.warning(
+                    "required_when predicate %s for '%s' raised %s; treating feature group %s as a non-match.",
+                    predicate_label,
+                    key,
+                    type(exc).__name__,
+                    owner_name,
+                )
             return False
         # An opted-in key present as an explicit None counts as present, so the requirement is met (#768).
         if is_required and not option_key_is_present(spec, key, effective_options):

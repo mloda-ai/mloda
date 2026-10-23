@@ -280,6 +280,15 @@ class TestSecretHygiene:
             validate_property_values({"k": "a"}, _strict(element_validator=validator), closed_world=True)
         assert not isinstance(exc.value, PropertyValidationError)
 
+    def test_marked_abort_from_required_when_propagates(self) -> None:
+        def predicate(_: Any) -> bool:
+            raise escalate_match_abort(ValueError("marked"))
+
+        mapping = {"k": PropertySpec("k", default=None, required_when=predicate)}
+        with pytest.raises(ValueError, match="marked") as exc:
+            validate_property_values({"other": "a"}, mapping, closed_world=False)
+        assert not isinstance(exc.value, PropertyValidationError)
+
     def test_raising_required_when_predicate_does_not_leak(self, caplog: pytest.LogCaptureFixture) -> None:
         def predicate(_: Any) -> bool:
             raise RuntimeError(f"leak {SECRET}")

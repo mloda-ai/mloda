@@ -56,7 +56,7 @@ def _catalog(connection: Any) -> tuple[str, dict[str, list[str]], str]:
 def _select(access: DuckdbTable, features: Any) -> str:
     names = ", ".join(quote_ident(name) for name in sorted(features.get_all_names()))
     database = quote_ident(_catalog(access.connection)[2])
-    return f'select {names} from {database}."main".{quote_ident(access.table)}'  # nosec B608 - identifiers quoted
+    return f'select {names} from {database}."main".{quote_ident(access.table)}'  # nosec B608  # identifiers quoted
 
 
 class DuckdbFG(SourceFeatureGroup):

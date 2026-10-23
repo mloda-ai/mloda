@@ -132,7 +132,7 @@ class SqliteFG(ReadDBFG):
         """Column names, rows and, for a pushed filter, the full-table arrow type of each untyped column."""
         where, params, arrow_types = cls._pushdown(connection, table, features)
         names = ", ".join(quote_ident(name) for name in sorted(features.get_all_names()))
-        query = f"select {names} from {quote_ident(table)}{where};"  # nosec B608 - identifiers quoted, values bound
+        query = f"select {names} from {quote_ident(table)}{where};"  # nosec B608  # identifiers quoted, values bound
         cursor = connection.execute(query, params)
         return [description[0] for description in cursor.description], cursor.fetchall(), arrow_types
 

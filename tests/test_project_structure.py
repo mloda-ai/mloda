@@ -304,6 +304,11 @@ class TestToxConfig:
         for tool in ("ruff", "mypy", "bandit", "pip-licenses"):
             assert not re.search(rf"(?<![\w-]){tool}(?![\w-])", base), f"[testenv] commands must not run {tool}"
         assert "pytest" not in lint, "[testenv:lint] commands must not run pytest"
+        bandit = [line.strip() for line in lint.splitlines() if line.strip().startswith("bandit")]
+        assert bandit == [
+            "bandit -c pyproject.toml -r -q -x ./tests .",
+            "bandit -c pyproject.toml -r -q -s B105,B106 tests",
+        ], f"bandit must run all rules outside tests and skip only B105/B106 in tests: {bandit}"
         overridden = [
             key
             for key in ("extras", "deps", "skip_install", "runner", "package", "basepython")

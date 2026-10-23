@@ -39,7 +39,7 @@ def _database(opened: list[Any], rows: dict[str, list[int]], path: str = ":memor
     connection = duckdb.connect(path)
     opened.append(connection)
     columns = ", ".join(f"{name} INTEGER" for name in rows)
-    connection.execute(f"CREATE TABLE {table} ({columns})")  # nosec B608 - test-local names
+    connection.execute(f"CREATE TABLE {table} ({columns})")
     marks = ", ".join("?" for _ in rows)
     connection.executemany(f"INSERT INTO {table} VALUES ({marks})", list(zip(*rows.values())))  # nosec B608
     return connection
@@ -209,7 +209,7 @@ class TestDuckdbFGInPlace:
         self, opened: list[Any], framework: type[ComputeFramework]
     ) -> None:
         connection = _database(opened, {"shadow_col": [1, 2]})
-        connection.execute(f"CREATE TEMP TABLE {TABLE} (shadow_col INTEGER)")  # nosec B608
+        connection.execute(f"CREATE TEMP TABLE {TABLE} (shadow_col INTEGER)")
         connection.execute(f"INSERT INTO {TABLE} VALUES (9)")  # nosec B608
         dac = DataAccessCollection(connections={HANDLE: connection})
 

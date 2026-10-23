@@ -100,7 +100,7 @@ class TestSqliteQueryRouteContract(ReadDBFGTestMixin):
         write_sqlite(path, tables)
 
     def query_for(self, table: str, columns: list[str]) -> str:
-        return f"SELECT {', '.join(quote_ident(c) for c in columns)} FROM {quote_ident(table)}"  # nosec B608 - quoted names
+        return f"SELECT {', '.join(quote_ident(c) for c in columns)} FROM {quote_ident(table)}"  # nosec B608  # quoted names
 
 
 class TestSqliteLoadsIntoPyArrowTable(PyArrowTableAdapter, DatabaseLoadsIntoFrameworkMixin):

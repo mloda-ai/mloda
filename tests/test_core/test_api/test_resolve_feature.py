@@ -1043,7 +1043,8 @@ def _exec_conflict_fg(class_name: str, body: str, cell_label: str) -> type[Featu
     src = textwrap.dedent(body)
     filename = f"<{cell_label}>"
     linecache.cache[filename] = (len(src), None, src.splitlines(keepends=True), filename)
-    exec(compile(src, filename, "exec"), main_mod.__dict__)  # nosec B102
+    code = compile(src, filename, "exec")
+    exec(code, main_mod.__dict__)  # nosec B102
     return main_mod.__dict__[class_name]  # type: ignore[no-any-return]
 
 

@@ -1,6 +1,6 @@
 """Tests that strict_validation ValueError is caught and returns False."""
 
-from typing import Any
+from typing import Any, NoReturn
 
 import pytest
 
@@ -151,6 +151,19 @@ class MarkedVerdictMode(BaseMode):
     }
 
 
+_RESOLVE_MARKER = escalate_match_abort(ValueError("marked resolve_feature_name abort"))
+
+
+class MarkedResolveMode(BaseMode):
+    """Mode whose resolve_feature_name raises a marked match abort."""
+
+    PREFIX_PATTERN = r"^marked_resolve__(?P<mode>\w+)$"
+
+    @classmethod
+    def resolve_feature_name(cls, feature_name: Any) -> NoReturn:
+        raise _RESOLVE_MARKER
+
+
 class TestStrictValidationRejectionReason:
     """Tests that _strict_validation_rejection_reason surfaces the discarded ValueError message."""
 
@@ -205,6 +218,18 @@ class TestStrictValidationRejectionReason:
             )
 
         assert exc_info.value is marker
+
+    def test_marked_abort_from_resolve_feature_name_propagates(self) -> None:
+        feature_name = FeatureName("any_feature")
+        options = Options(group={"mode": "mode_a"})
+
+        with pytest.raises(ValueError) as diagnostic_info:
+            MarkedResolveMode._strict_validation_rejection_reason(feature_name, options)
+        with pytest.raises(ValueError) as match_info:
+            MarkedResolveMode.match_feature_group_criteria(feature_name, options)
+
+        assert diagnostic_info.value is _RESOLVE_MARKER
+        assert match_info.value is _RESOLVE_MARKER
 
     def test_unrelated_candidate_returns_none(self) -> None:
         """When the relevant property is entirely absent, this is a non-match, not a rejection."""

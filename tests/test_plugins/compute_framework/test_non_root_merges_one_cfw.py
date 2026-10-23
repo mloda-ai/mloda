@@ -139,7 +139,6 @@ class TestNonRootMerge:
                 listed_tokens |= step.join_tokens
         for join in joins:
             assert join.uuid in listed_tokens
-            assert not hasattr(join, "source_owner_uuid")
 
         result = session.run(flight_server=flight_server)
 

@@ -578,29 +578,8 @@ class TestGetExecutionFunction:
 class TestPrepareExecuteStep:
     """Tests for prepare_execute_step method."""
 
-    def test_handles_feature_group_step_with_existing_cfw(self) -> None:
-        """Should return existing CFW UUID for FeatureGroupStep."""
-        cfw_register = Mock(spec=CfwManager)
-        worker_manager = Mock(spec=WorkerManager)
-        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
-
-        step = Mock(spec=FeatureGroupStep)
-        tfs_id = uuid4()
-        step.tfs_ids = [tfs_id]
-        step.compute_framework = Mock()
-        step.compute_framework.get_class_name.return_value = "TestCFW"
-        step.features = Mock()
-        step.features.any_uuid = uuid4()
-        step.join_tokens = frozenset()
-
-        existing_uuid = uuid4()
-        cfw_register.resolve_cfw_uuid_by_tfs_ids.return_value = existing_uuid
-
-        result = executor.prepare_execute_step(step, ParallelizationMode.SYNC)
-
-        assert result == existing_uuid
-
-    def test_reused_frame_registers_the_steps_join_tokens(self) -> None:
+    @pytest.mark.parametrize("join_tokens", [frozenset(), frozenset({uuid4()})])
+    def test_handles_feature_group_step_with_existing_cfw(self, join_tokens: frozenset[UUID]) -> None:
         cfw_register = Mock(spec=CfwManager)
         executor = ComputeFrameworkExecutor(cfw_register, Mock(spec=WorkerManager))
         step = Mock(spec=FeatureGroupStep)
@@ -609,30 +588,17 @@ class TestPrepareExecuteStep:
         step.compute_framework.get_class_name.return_value = "TestCFW"
         step.features = Mock()
         step.features.any_uuid = uuid4()
-        step.join_tokens = frozenset({uuid4()})
+        step.join_tokens = join_tokens
         existing_uuid = uuid4()
         cfw_register.resolve_cfw_uuid_by_tfs_ids.return_value = existing_uuid
 
         result = executor.prepare_execute_step(step, ParallelizationMode.SYNC)
 
         assert result == existing_uuid
-        cfw_register.add_join_tokens.assert_called_once_with(existing_uuid, step.join_tokens)
-
-    def test_reused_frame_without_join_tokens_registers_nothing(self) -> None:
-        cfw_register = Mock(spec=CfwManager)
-        executor = ComputeFrameworkExecutor(cfw_register, Mock(spec=WorkerManager))
-        step = Mock(spec=FeatureGroupStep)
-        step.tfs_ids = [uuid4()]
-        step.compute_framework = Mock()
-        step.compute_framework.get_class_name.return_value = "TestCFW"
-        step.features = Mock()
-        step.features.any_uuid = uuid4()
-        step.join_tokens = frozenset()
-        cfw_register.resolve_cfw_uuid_by_tfs_ids.return_value = uuid4()
-
-        executor.prepare_execute_step(step, ParallelizationMode.SYNC)
-
-        cfw_register.add_join_tokens.assert_not_called()
+        if join_tokens:
+            cfw_register.add_join_tokens.assert_called_once_with(existing_uuid, step.join_tokens)
+        else:
+            cfw_register.add_join_tokens.assert_not_called()
 
     def test_join_resolves_to_a_frame_reused_by_the_source_step_with_a_real_register(self) -> None:
         cfw_register = CfwManager({ParallelizationMode.SYNC})

@@ -347,7 +347,7 @@ class TestImplementationDefinition:
         assert all(impl.__name__ != "_RejectedImpl" for impl in loaded_implementations())
         assert PreFilterPlugins({PythonDictFramework}).implementations is not None
 
-    @pytest.mark.parametrize("case", ["inherited", "other_generic_base", "walk_past_orig_bases", "typevar"])
+    @pytest.mark.parametrize("case", ["inherited", "other_generic_base", "walk_past_orig_bases"])
     def test_feature_group_must_match_the_parameterized_group(self, case: str) -> None:
         class _Mixin(Generic[_T]):
             pass
@@ -378,7 +378,7 @@ class TestImplementationDefinition:
                     def calculate(cls, *args: Any) -> Any:
                         return None
 
-        elif case == "walk_past_orig_bases":
+        else:
 
             class _Mid(Implementation[OpToyFG], _Mixin[int]):
                 pass
@@ -394,19 +394,20 @@ class TestImplementationDefinition:
                         return None
 
             del _Mid
-        else:
-
-            class _Free(Implementation[_G]):
-                feature_group = ToySourceFG
-                compute_framework = PythonDictFramework
-
-                @classmethod
-                def calculate(cls, *args: Any) -> Any:
-                    return None
-
-            assert _Free in loaded_implementations()
-            del _Free
         del _BaseImpl
+        gc.collect()
+
+    def test_a_typevar_parameter_skips_the_group_check(self) -> None:
+        class _Free(Implementation[_G]):
+            feature_group = ToySourceFG
+            compute_framework = PythonDictFramework
+
+            @classmethod
+            def calculate(cls, *args: Any) -> Any:
+                return None
+
+        assert _Free in loaded_implementations()
+        del _Free
         gc.collect()
 
     @pytest.mark.parametrize("missing", ["feature_group", "compute_framework", "both"])

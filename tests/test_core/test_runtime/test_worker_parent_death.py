@@ -157,7 +157,7 @@ class TestWorkerIsGoneSurvivesAConcurrentReap:
 class TestWorkerProcessDoesNotOutliveASigkilledParent:
     """A worker spawned via WorkerManager.create_worker_process must exit once its parent dies."""
 
-    @pytest.mark.timeout(60)  # internal waits (30 + 5 + 20) must sum below this
+    @pytest.mark.timeout(60)  # must exceed the sum of the internal waits
     @pytest.mark.parametrize("kind", ["bound_worker", "unbound_standby", "shared_manager"])
     def test_real_worker_process_exits_after_its_real_parent_process_is_sigkilled(
         self, tmp_path: Path, kind: str

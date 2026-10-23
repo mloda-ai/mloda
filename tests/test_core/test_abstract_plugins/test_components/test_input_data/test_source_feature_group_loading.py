@@ -6,7 +6,7 @@ import typing
 from abc import abstractmethod
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, NamedTuple, TypeVar
 
 import pandas as pd
 import pytest
@@ -54,6 +54,7 @@ SENTINEL = [{"toyfmt_ld": 111}, {"toyfmt_ld": 222}]
 
 _T = TypeVar("_T")
 _G = TypeVar("_G", bound=FeatureGroup)
+_G2 = TypeVar("_G2", bound=FeatureGroup)
 
 
 def _release_subscripted_generics() -> None:
@@ -356,7 +357,15 @@ class TestImplementationDefinition:
         assert PreFilterPlugins({PythonDictFramework}).implementations is not None
 
     @pytest.mark.parametrize(
-        "case", ["inherited", "other_generic_base", "walk_past_orig_bases", "generic_intermediate", "reparameterized"]
+        "case",
+        [
+            "inherited",
+            "other_generic_base",
+            "walk_past_orig_bases",
+            "generic_intermediate",
+            "reparameterized",
+            "two_level_generic",
+        ],
     )
     def test_feature_group_must_match_the_parameterized_group(self, case: str) -> None:
         class _Mixin(Generic[_T]):
@@ -412,6 +421,27 @@ class TestImplementationDefinition:
                     feature_group = ToySourceFG  # type: ignore[assignment]
 
             assert "OpToyFG" in str(excinfo.value)
+        elif case == "two_level_generic":
+
+            class _Outer(Implementation[_G]):
+                pass
+
+            class _Inner(_Outer[_G2]):
+                pass
+
+            with pytest.raises(TypeError, match="feature_group") as excinfo:
+
+                class _Deep(_Inner[OpToyFG]):
+                    feature_group = ToySourceFG
+                    compute_framework = PythonDictFramework
+
+                    @classmethod
+                    def calculate(cls, *args: Any) -> Any:
+                        return None
+
+            assert "OpToyFG" in str(excinfo.value)
+            del _Outer
+            del _Inner
         else:
 
             class _Mid(Implementation[OpToyFG], _Mixin[int]):
@@ -431,7 +461,18 @@ class TestImplementationDefinition:
         del _BaseImpl
         _release_subscripted_generics()
 
-    @pytest.mark.parametrize("case", ["free_typevar", "unsubscripted_generic", "bare", "resolved_match", "narrowing"])
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "free_typevar",
+            "unsubscripted_generic",
+            "bare",
+            "resolved_match",
+            "narrowing",
+            "namedtuple_mixin",
+            "generic_alias_argument",
+        ],
+    )
     def test_unresolved_or_matching_parameter_is_accepted(self, case: str) -> None:
         created: Any
         helper: Any = None
@@ -490,7 +531,7 @@ class TestImplementationDefinition:
 
             helper = _GenericBase
             created = _Leaf
-        else:
+        elif case == "narrowing":
 
             class _SubFG(OpToyFG):
                 pass
@@ -508,6 +549,35 @@ class TestImplementationDefinition:
 
             helper = _BaseImpl
             created = _Narrow
+        elif case == "namedtuple_mixin":
+
+            class _Point(NamedTuple):
+                x: int
+
+            class _PointMixin(_Point):
+                pass
+
+            class _WithTuple(_PointMixin, Implementation[OpToyFG]):
+                feature_group = OpToyFG
+                compute_framework = PythonDictFramework
+
+                @classmethod
+                def calculate(cls, *args: Any) -> Any:
+                    return None
+
+            helper = (_Point, _PointMixin)
+            created = _WithTuple
+        else:
+
+            class _Listed(Implementation[list[OpToyFG]]):  # type: ignore[type-var]
+                feature_group = OpToyFG
+                compute_framework = PythonDictFramework
+
+                @classmethod
+                def calculate(cls, *args: Any) -> Any:
+                    return None
+
+            created = _Listed
 
         assert created in loaded_implementations()
         del created

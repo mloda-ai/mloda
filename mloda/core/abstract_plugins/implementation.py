@@ -38,7 +38,10 @@ def _declared_groups(node: Any, subst: Mapping[Any, Any]) -> list[type]:
     origin = typing.get_origin(node) or node
     args = [subst.get(a, a) if isinstance(a, TypeVar) else a for a in typing.get_args(node)]
     if origin is Implementation:
-        return [args[0]] if args and isinstance(args[0], type) and args[0] is not Any else []
+        group = args[0] if args else None
+        return [group] if isinstance(group, type) and group is not Any and typing.get_origin(group) is None else []
+    if not (isinstance(origin, type) and issubclass(origin, Implementation)):
+        return []
     mapping = dict(zip(getattr(origin, "__parameters__", ()), args))
     declared: list[type] = []
     for base in origin.__dict__.get("__orig_bases__", origin.__bases__):

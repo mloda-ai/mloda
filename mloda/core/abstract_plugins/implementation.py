@@ -33,19 +33,21 @@ def _serves_groups(group: Any) -> bool:
     return isinstance(group, type) and issubclass(group, (SourceFeatureGroup, OperationFeatureGroup))
 
 
-def _declared_group(cls: Any) -> type | None:
-    """The concrete G of the nearest Implementation[G] base, else None (a TypeVar is not resolved through a generic subclass)."""
-    for klass in cls.__mro__:
-        for alias in klass.__dict__.get("__orig_bases__", ()):
-            if typing.get_origin(alias) is Implementation:
-                arg = typing.get_args(alias)[0]
-                return arg if isinstance(arg, type) and arg is not Any else None
-    return None
+def _declared_groups(node: Any, subst: Mapping[Any, Any]) -> list[type]:
+    """Every concrete G bound by an Implementation[G] reachable from node, resolving TypeVars through generic bases."""
+    origin = typing.get_origin(node) or node
+    args = [subst.get(a, a) if isinstance(a, TypeVar) else a for a in typing.get_args(node)]
+    if origin is Implementation:
+        return [args[0]] if args and isinstance(args[0], type) and args[0] is not Any else []
+    mapping = dict(zip(getattr(origin, "__parameters__", ()), args))
+    declared: list[type] = []
+    for base in origin.__dict__.get("__orig_bases__", origin.__bases__):
+        declared.extend(_declared_groups(base, mapping))
+    return declared
 
 
-def _matches_declared_group(cls: Any, group: Any) -> bool:
-    declared = _declared_group(cls)
-    return declared is None or issubclass(group, declared)
+def _mismatched_group(cls: Any, group: Any) -> type | None:
+    return next((g for g in _declared_groups(cls, {}) if not issubclass(group, g)), None)
 
 
 def _names_a_pair(cls: Any) -> bool:
@@ -53,7 +55,7 @@ def _names_a_pair(cls: Any) -> bool:
     framework = getattr(cls, "compute_framework", None)
     return (
         _serves_groups(group)
-        and _matches_declared_group(cls, group)
+        and _mismatched_group(cls, group) is None
         and isinstance(framework, type)
         and issubclass(framework, ComputeFramework)
     )
@@ -77,8 +79,8 @@ class Implementation(ABC, Generic[G]):
             raise TypeError(
                 f"{cls.__name__} must set feature_group to a SourceFeatureGroup or OperationFeatureGroup subclass."
             )
-        declared = _declared_group(cls)
-        if declared is not None and not issubclass(group, declared):
+        declared = _mismatched_group(cls, group)
+        if declared is not None:
             raise TypeError(
                 f"{cls.__name__}.feature_group must be {declared.__name__} or a subclass "
                 f"(Implementation[{declared.__name__}]), got {group.__name__}."

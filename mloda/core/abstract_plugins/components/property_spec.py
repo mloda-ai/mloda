@@ -92,6 +92,8 @@ class PropertySpec:
     deferred_binding: bool = False
     # Names what the match_guard accepts, for the rejection reason.
     expected: str | None = None
+    # Converts the captured text of a named capture bound to this key, before validation.
+    name_converter: Callable[[str], Any] | None = None
 
     def __post_init__(self) -> None:
         prefix = f"PropertySpec({self.explanation!r})"
@@ -137,6 +139,9 @@ class PropertySpec:
 
         if self.match_guard is not None and not callable(self.match_guard):
             raise ValueError(f"{prefix}: match_guard must be callable.")
+
+        if self.name_converter is not None and not callable(self.name_converter):
+            raise ValueError(f"{prefix}: name_converter must be callable.")
 
         if self.expected is not None:
             if not isinstance(self.expected, str) or not self.expected.strip():
@@ -240,6 +245,7 @@ def property_spec(
     expected: str | None = None,
     allow_explicit_none: bool = False,
     deferred_binding: bool = False,
+    name_converter: Callable[[str], Any] | None = None,
 ) -> PropertySpec:
     """Build a ``PropertySpec``; the ``strict=`` keyword sets the ``strict_validation`` field."""
     return PropertySpec(
@@ -254,4 +260,5 @@ def property_spec(
         required_when=required_when,
         allow_explicit_none=allow_explicit_none,
         deferred_binding=deferred_binding,
+        name_converter=name_converter,
     )

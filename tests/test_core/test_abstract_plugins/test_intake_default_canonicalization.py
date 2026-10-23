@@ -530,3 +530,48 @@ def test_non_default_equivalent_twins_do_not_merge(caplog: pytest.LogCaptureFixt
     )
     warnings = _default_equivalent_warnings(caplog)
     assert not warnings, f"non-default-equivalent twins must not trigger a warning, got: {warnings!r}"
+
+
+IDC_CONV_KEY = "idc_conv_k"
+IDC_CONV_COLUMN = "idc_conv_child"
+
+
+def _run_converted(converter: Callable[[str], Any], requests: list[Options | None]) -> dict[str, Any]:
+    seen: dict[str, Any] = {}
+    parent = make_name_bound_fg(
+        "IdcConv",
+        __name__,
+        "idcvt",
+        (IDC_CONV_KEY,),
+        seen=seen,
+        input_column=IDC_CONV_COLUMN,
+        converters={IDC_CONV_KEY: converter},
+        capture=r"\d",
+    )
+    child = make_source_fg("IdcConv", __name__, IDC_CONV_COLUMN, [1])
+    features = [Feature(f"{IDC_CONV_COLUMN}__idcvt_5", options) for options in requests]
+    mloda.run_all(
+        features,
+        compute_frameworks=[PythonDictFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({parent, child}),
+    )
+    return seen
+
+
+def test_name_converter_gives_calculate_feature_a_typed_value() -> None:
+    seen = _run_converted(int, [None])
+    assert seen[f"{IDC_CONV_COLUMN}__idcvt_5"] == (5,)
+    assert type(seen[f"{IDC_CONV_COLUMN}__idcvt_5"][0]) is int
+
+
+@pytest.mark.parametrize("name_only_first", [True, False])
+def test_name_only_and_typed_context_request_merge_to_the_int_in_both_orders(name_only_first: bool) -> None:
+    requests: list[Options | None] = [None, Options(context={IDC_CONV_KEY: 5})]
+    seen = _run_converted(int, requests if name_only_first else requests[::-1])
+    assert seen[f"{IDC_CONV_COLUMN}__idcvt_5"] == (5,)
+    assert type(seen[f"{IDC_CONV_COLUMN}__idcvt_5"][0]) is int
+
+
+def test_name_converter_returning_an_unhashable_value_works_through_intake() -> None:
+    seen = _run_converted(lambda text: [int(text)], [None])
+    assert seen[f"{IDC_CONV_COLUMN}__idcvt_5"] == ([5],)

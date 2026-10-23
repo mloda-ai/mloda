@@ -443,3 +443,49 @@ class TestDeclaredNameMismatch:
         assert len(records) == 1
         assert "sum" in records[0].getMessage()
         assert "max" in records[0].getMessage()
+
+
+FLOAT_KEY = "operation_cvmis"
+FLOAT_FEATURE_NAME = "sales__fl_1.0_cvmis"
+
+
+def _float_converter_group() -> type[FeatureChainParserMixin]:
+    """Group key bound from the name through a float name_converter (captured `1.0` binds `1.0`)."""
+    namespace = {
+        "__module__": __name__,
+        "PREFIX_PATTERN": rf".*__fl_(?P<{FLOAT_KEY}>[0-9.]+)_cvmis$",
+        "MIN_IN_FEATURES": 0,
+        "PROPERTY_MAPPING": {FLOAT_KEY: PropertySpec("Float key", context=False, name_converter=float)},
+    }
+    return type("FloatConverterCvmisGroup", (FeatureChainParserMixin,), namespace)
+
+
+class TestNameConverterAgreement:
+    """A declared or forwarded typed value agrees with a converted bound value; a contradiction still aborts."""
+
+    def test_declared_typed_value_equal_to_the_bound_value_matches(self) -> None:
+        options = Options(group={FLOAT_KEY: 1})
+
+        assert _float_converter_group().match_feature_group_criteria(FLOAT_FEATURE_NAME, options) is True
+
+    def test_declared_text_equal_to_the_bound_value_matches(self) -> None:
+        options = Options(group={FLOAT_KEY: "1.0"})
+
+        assert _float_converter_group().match_feature_group_criteria(FLOAT_FEATURE_NAME, options) is True
+
+    def test_declared_contradicting_value_raises(self) -> None:
+        options = Options(group={FLOAT_KEY: 2})
+
+        with pytest.raises(ValueError):
+            _float_converter_group().match_feature_group_criteria(FLOAT_FEATURE_NAME, options)
+
+    def test_forwarded_typed_value_equal_to_the_bound_value_matches(self) -> None:
+        child_options = _inherited_child_options({FLOAT_KEY: 1})
+
+        assert _float_converter_group().match_feature_group_criteria(FLOAT_FEATURE_NAME, child_options) is True
+
+    def test_forwarded_contradicting_value_raises(self) -> None:
+        child_options = _inherited_child_options({FLOAT_KEY: 2})
+
+        with pytest.raises(ValueError, match="forward_group_exclude"):
+            _float_converter_group().match_feature_group_criteria(FLOAT_FEATURE_NAME, child_options)

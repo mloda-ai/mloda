@@ -61,6 +61,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards import (
@@ -422,7 +423,9 @@ class FeatureChainParserMixin:
 
         try:
             if name_matched:
-                FeatureChainParser.validate_name_bindings(resolution.bindings, property_mapping)
+                FeatureChainParser.validate_name_bindings(
+                    resolution.bindings, property_mapping, resolution.rejected_bindings
+                )
                 # The name relates the feature group to the feature, so the values of the present
                 # options (name-derived bindings included) are judged here; the name-path presence
                 # reason follows below. Judging the effective options keeps the diagnostic in step with the match.
@@ -465,7 +468,7 @@ class FeatureChainParserMixin:
     def _validate_forwarded_name_mismatch(
         cls,
         feature_name: str | FeatureName,
-        bindings: dict[str, str],
+        bindings: dict[str, Any],
         options: Options,
     ) -> None:
         """Reject a value forwarded via either the group or the context path that contradicts a
@@ -487,7 +490,7 @@ class FeatureChainParserMixin:
             # A singleton collection equals its sole element, exactly as _unpack_property_value treats it
             # everywhere else; only a differing or multi-value forward is a real mismatch.
             unpacked = FeatureChainParser._unpack_property_value(inherited_value)
-            if len(unpacked) == 1 and str(unpacked[0]) == name_value:
+            if len(unpacked) == 1 and cls._agrees_with_binding(unpacked[0], name_value):
                 continue
             if prop_key in options.inherited_group_keys:
                 remedy = (
@@ -515,6 +518,11 @@ class FeatureChainParserMixin:
             # Marked: user misconfiguration; containing it would let a rival group win with the value ignored (#845).
             raise escalate_match_abort(ValueError(message))
 
+    @staticmethod
+    def _agrees_with_binding(declared: Any, bound: Any) -> bool:
+        """A declared value agrees with a bound one when typed-equal or equal as text."""
+        return _deep_equal(declared, bound) or str(declared) == str(bound)
+
     @classmethod
     def _name_mismatch_downgraded(cls, message: str) -> bool:
         """Warn and return True when MLODA_ALLOW_FORWARDED_NAME_MISMATCH downgrades the mismatch error."""
@@ -527,7 +535,7 @@ class FeatureChainParserMixin:
     def _validate_name_agreement(
         cls,
         feature_name: str | FeatureName,
-        bindings: dict[str, str],
+        bindings: dict[str, Any],
         name_sources: list[str] | None,
         options: Options,
     ) -> None:
@@ -539,7 +547,7 @@ class FeatureChainParserMixin:
             if declared is None or key in inherited_keys or not options.is_own(key):
                 continue
             unpacked = FeatureChainParser._unpack_property_value(declared)
-            if len(unpacked) == 1 and str(unpacked[0]) == name_value:
+            if len(unpacked) == 1 and cls._agrees_with_binding(unpacked[0], name_value):
                 continue
             message = (
                 f"Feature '{feature_name}': option '{key}' is {safe_value_text(declared)}, but the feature name encodes "

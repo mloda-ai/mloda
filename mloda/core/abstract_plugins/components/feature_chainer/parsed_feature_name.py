@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -34,8 +35,10 @@ class NameResolution:
 
     parsed: ParsedFeatureName
     owned: bool = False
-    bindings: Mapping[str, str] = field(default_factory=dict)
+    bindings: Mapping[str, Any] = field(default_factory=dict)
     sources: tuple[str, ...] = ()
+    # Keys whose name_converter raised, mapped to the captured text; absent from bindings.
+    rejected_bindings: Mapping[str, str] = field(default_factory=dict)
 
     def value_for(self, key: str) -> str | None:
         """The name-carried value for ``key``: its own capture when named, the first capture when positional."""

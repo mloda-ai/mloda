@@ -527,6 +527,7 @@ class TestPropertySpecPassthroughOmission:
         assert plain.element_validator is None
         assert plain.required_when is None
         assert plain.match_guard is None
+        assert plain.name_converter is None
         assert plain.expected is None
 
         with_required_when = property_spec("d", required_when=_always_required)
@@ -736,3 +737,27 @@ class TestPropertySpecDeferredBinding:
         not_a_bool: Any = "yes"
         with pytest.raises(ValueError, match=r"PropertySpec\('d'\)"):
             property_spec("d", deferred_binding=not_a_bool)
+
+
+class TestPropertySpecNameConverter:
+    """``name_converter`` passthrough: an opt-in per-key converter for name-captured text."""
+
+    def test_name_converter_emitted_through_builder(self) -> None:
+        assert property_spec("d", name_converter=int).name_converter is int
+        assert property_spec("d").name_converter is None
+
+    def test_name_converter_spec_equals_direct_construction(self) -> None:
+        built = property_spec("d", name_converter=int)
+
+        hand_constructed = PropertySpec("d", context=True, strict_validation=False, name_converter=int)
+        assert built == hand_constructed
+
+    def test_non_callable_name_converter_raises(self) -> None:
+        not_callable: Any = "not callable"
+        with pytest.raises(ValueError):
+            property_spec("d", name_converter=not_callable)
+
+    def test_non_callable_name_converter_raises_on_direct_construction(self) -> None:
+        not_callable: Any = 5
+        with pytest.raises(ValueError):
+            PropertySpec("d", name_converter=not_callable)

@@ -4,6 +4,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.validators.feature_set_validator import FeatureSetValidator
 from mloda.core.abstract_plugins.input_data_load_marker import InputDataLoadMarker, current_input_data_load_marker
@@ -165,13 +166,13 @@ class FeatureSet:
         """Rebind every feature's options through options_with_defaults plus the values its name binds,
         keeping aliased Options aliased. Same-named twins that collapse once a default fills one raise."""
         # The memo holds a strong reference to each source Options so its id cannot be recycled mid-loop.
-        memo: dict[tuple[int, tuple[tuple[str, str], ...]], tuple[Options, Options]] = {}
+        memo: dict[tuple[int, Any], tuple[Options, Options]] = {}
         entries_by_source: dict[int, list[Options]] = {}
         rebound = False
         for feature in self.features:
             source = feature.options
             bindings = feature_group.name_bindings(feature.name)
-            key = (id(source), tuple(sorted(bindings.items())))
+            key = (id(source), _deep_hashable(bindings))
             entry = memo.get(key)
             if entry is None:
                 entry = (source, feature_group.options_with_defaults(source, bindings))

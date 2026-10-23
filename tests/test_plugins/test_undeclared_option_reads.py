@@ -37,6 +37,8 @@ from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import Sklea
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 
+pytestmark = pytest.mark.timeout(30)
+
 # Anchor the scan root to the repo layout via __file__, not the cwd: a cwd-relative root makes the
 # rglob loops empty and the sweep pass vacuously. This file sits two parents below the repo root.
 _REPO_ROOT = Path(__file__).resolve().parents[2]

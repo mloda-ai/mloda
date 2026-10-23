@@ -46,6 +46,8 @@ from typing import Literal, NamedTuple, TypeGuard, cast
 
 import pytest
 
+pytestmark = pytest.mark.timeout(30)
+
 # Anchored via __file__, not the cwd: a cwd-relative root makes every lookup empty and the sweep vacuous.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _CORE_ROOT = _REPO_ROOT / "mloda"

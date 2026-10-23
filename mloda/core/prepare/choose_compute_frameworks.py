@@ -13,6 +13,7 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
@@ -70,6 +71,7 @@ RULES = "rules exclude preferred frameworks"
 LIST_ORDER = "your list order"
 DEFAULT_ORDER = "default order"
 CONVERTS_LATER = "converts later"
+READS_IN_PLACE = "reads in place"
 PREFERS_MATCHING = "prefers a matching version"
 DIFFERS = "runs a version that differs"
 
@@ -217,6 +219,9 @@ class ChooseComputeFrameworks:
         self._differs: list[dict[Framework, tuple[str, ...]]] = []
         self._penalty: list[dict[Framework, int]] = []
         self._free: dict[int, Framework] = {}
+        self._home: list[frozenset[Framework] | None] = []
+        self._homed = True
+        self._unhomed: dict[int, Framework] = {}
         self.pin_frameworks = pin_frameworks or {}
         self.pinned = pinned or set()
         self.output_framework = output_framework
@@ -245,6 +250,7 @@ class ChooseComputeFrameworks:
             {} if self._is_pinned(block) else {fw: 1 for fw, found in differs.items() if found}
             for block, differs in zip(blocks, self._differs)
         ]
+        self._home = [self._block_home(block) for block in blocks]
         rules = self._rules(blocks, owner) + borrowed
         groups = self._cost_groups(blocks, owner)
         depth = self._feature_depths()
@@ -260,10 +266,16 @@ class ChooseComputeFrameworks:
         for order in self._search_orders(len(blocks), linked):
             assignment, _ = self._solve(blocks, order, rules, linked, domains, touching, steps)
             self._free = {}
+            self._unhomed = {}
+            if any(self._home[i] is not None for i in assignment):
+                self._homed = False
+                self._unhomed, _ = self._solve(blocks, order, rules, linked, domains, touching, steps)
+                self._homed = True
             if any(self._penalty[i] for i in assignment):
                 penalty, self._penalty = self._penalty, [{} for _ in self._penalty]
                 self._free, _ = self._solve(blocks, order, rules, linked, domains, touching, steps)
                 self._penalty = penalty
+            self._homed = False  # reasons never count the home charge as a saved conversion
             for index, framework in assignment.items():
                 reason = self._reason(blocks, touching, steps, assignment, index)
                 lost_why = self._lost_reasons(blocks[index], framework)
@@ -272,6 +284,7 @@ class ChooseComputeFrameworks:
                 for feature in blocks[index].features:
                     feature.chosen_compute_framework = framework
                     feature.chosen_compute_framework_reason = reason
+            self._homed = True
         self._require_all_chosen()
 
     def _split_by_pin(self, group: Iterable[Feature]) -> list[list[Feature]]:
@@ -294,6 +307,21 @@ class ChooseComputeFrameworks:
             if found:
                 result[framework] = tuple(sorted(r for r in found if r is not None))
         return result
+
+    def _block_home(self, block: _Block) -> frozenset[Framework] | None:
+        """Frameworks that accept the connection the block's source is read from and can serve its format group."""
+        match = block.features[0].input_data_match
+        if match is None or not issubclass(block.fg, FormatFeatureGroup):
+            return None
+        conn = block.fg.match_connection(match[1])
+        if conn is None:
+            return None
+        return frozenset(
+            fw
+            for fw in block.domain
+            if fw._connection_matches(conn)
+            and serving_implementation(block.fg, fw, self.implementations, stop_after="load_neutral")
+        )
 
     def _is_pinned(self, block: _Block) -> bool:
         return any(f.framework_pinned or f.uuid in self.pinned for f in block.features)
@@ -531,12 +559,14 @@ class ChooseComputeFrameworks:
     def _final_cost(self, block: _Block, framework: Framework, index: int) -> Cost:
         output = self.output_framework
         divergent = self._penalty[index].get(framework, 0)
+        home = self._home[index]
+        away = (0, 1, self._horizon + 1) if self._homed and home is not None and framework not in home else (0, 0, 0)
         if output is None or not self._requested(block) or framework is output:
-            return (divergent, 0, 0)
+            return (divergent, away[1], away[2])
         if framework.expected_data_framework() is output.expected_data_framework():
-            return (divergent, 0, 0)
+            return (divergent, away[1], away[2])
         cost = conversion_cost(framework, output)
-        return (divergent, cost, cost * (self._horizon - self._final_depth[index] - 1))
+        return (divergent, cost + away[1], cost * (self._horizon - self._final_depth[index] - 1) + away[2])
 
     def _step_depths(
         self, blocks: list[_Block], owner: dict[UUID, int], depth: dict[UUID, int]
@@ -952,6 +982,8 @@ class ChooseComputeFrameworks:
         chosen_rank = self.rank(chosen)
         earlier = [fw for fw in alternatives if self.rank(fw) < chosen_rank]
         base = step_cost(None)
+        if self._unhomed.get(index, chosen) is not chosen:
+            return READS_IN_PLACE + suffix
         free = self._free.get(index)
         if free is not None and free is not chosen and not found and self._differs[index].get(free):
             return PREFERS_MATCHING

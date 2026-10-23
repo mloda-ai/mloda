@@ -256,6 +256,7 @@ Operation implementations subclass `OperationImplementation` (a plain `Implement
 When several frameworks can run a step, the choice order is: frameworks the step must run on (pins, a single allowed framework), then an implementation that matches the reference contract before one that differs, then fewer conversions, then converting later, then the run's `compute_frameworks` list order, then the default order. The recorded reason says what happened:
 
 - `prefers a matching version`: a divergent implementation was skipped although it would otherwise have won.
+- `reads in place`: a source read from a connection in the collection costs one conversion when served off a framework that accepts that connection, so the work stays in the database ahead of list order.
 - `<reason>; runs a version that differs: skips NaN in sum`: the step runs a divergent implementation (only option, pinned, or no matching alternative).
 
 ### Pinning an implementation

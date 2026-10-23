@@ -87,6 +87,8 @@ from mloda.provider import (
     FeatureSet,
     Implementation,
     NamePolicy,
+    OperationFeatureGroup,
+    OperationImplementation,
     SourceMatch,
 )
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation import ToyWorkerFG
@@ -2352,8 +2354,68 @@ class TestLeavesConnectionOnResult:
         assert [s.leaves_connection for s in requested] == ["mine"]
 
 
+class DuckSourceOpFG(OperationFeatureGroup):
+    """Reads plan_duck_col; served by identical DuckDB and PyArrow implementations."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == "plan_duck_col__duckop"
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("plan_duck_col", options={"connection_handle": "mine"})}
+
+
+class DuckSourceOpDuckDB(OperationImplementation[DuckSourceOpFG]):
+    feature_group = DuckSourceOpFG
+    compute_framework = DuckDBFramework
+
+    @classmethod
+    def calculate(
+        cls, group: type[DuckSourceOpFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        return data
+
+
+class DuckSourceOpPyArrow(OperationImplementation[DuckSourceOpFG]):
+    feature_group = DuckSourceOpFG
+    compute_framework = PyArrowTable
+
+    @classmethod
+    def calculate(
+        cls, group: type[DuckSourceOpFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        return data
+
+
 class TestLeavesConnectionOnDuckdbSource:
     """A requested DuckdbFG column records its handle where its rows leave the connection."""
+
+    def test_a_consumer_with_matching_implementations_stays_on_duckdb_ahead_of_list_order(self) -> None:
+        from mloda_plugins.feature_group.input_data.db_formats.duckdb_fg import DuckdbFG
+
+        duckdb = pytest.importorskip("duckdb")
+        conn = duckdb.connect()
+        try:
+            conn.execute("CREATE TABLE plan_duck (plan_duck_col INTEGER)")
+            plan = requested_plan(
+                Feature("plan_duck_col__duckop", options={"connection_handle": "mine"}),
+                {DuckdbFG, DuckSourceOpFG},
+                [PyArrowTable, DuckDBFramework],
+                DataAccessCollection(connections={"mine": conn}),
+            )
+        finally:
+            conn.close()
+        steps = {s.feature_group: s for s in plan if s.step_kind == "compute"}
+
+        assert steps[DuckSourceOpFG].compute_framework is DuckDBFramework
+        assert "reads in place" in (steps[DuckSourceOpFG].compute_framework_reason or "")
+        assert steps[DuckSourceOpFG].leaves_connection == "mine"
+        assert steps[DuckdbFG].leaves_connection is None
 
     @staticmethod
     def _computes(pinned: str | None) -> list[PlanStep]:

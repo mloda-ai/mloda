@@ -289,6 +289,17 @@ def redact_exception(exc: BaseException, literals: frozenset[str]) -> BaseExcept
     return exc
 
 
+class redact_escaping_exception:  # noqa: N801
+    """Mask the current registered literals in any exception leaving the block (a class: see registered_secrets_scope)."""
+
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
+        if exc is not None:
+            redact_exception(exc, current_registered_secrets())
+
+
 def redact_mapping(mapping: Mapping[Any, Any]) -> dict[Any, str]:
     """Keep every key (scrubbing a credential-shaped str key), replace every value with ``'***'``."""
     result: dict[Any, str] = {}

@@ -28,6 +28,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet, SourceMatch
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 
@@ -763,3 +764,35 @@ def test_stream_start_enters_the_redaction_scope_once(monkeypatch: pytest.Monkey
     stream.close()
 
     assert deepest == 1
+
+
+class _RecordingExtender(Extender):
+    """Records the text of every exception the wrapped call raises, as an OTel span would."""
+
+    def __init__(self, hook: ExtenderHook) -> None:
+        self.hook = hook
+        self.seen: list[str] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {self.hook}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(*args, **kwargs)
+        except Exception as exc:
+            self.seen.append(f"{exc} {exc.args!r} {exc.__cause__!r}")
+            raise
+
+
+@pytest.mark.parametrize("hook", [ExtenderHook.INPUT_DATA_LOAD, ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE])
+def test_extender_never_sees_the_registered_token(hook: ExtenderHook) -> None:
+    recorder = _RecordingExtender(hook)
+    with pytest.raises(ValueError):
+        mloda.run_all(
+            [Feature(name=_TOKEN_COLUMN)],
+            function_extender={recorder},
+            **toy_token_request(TokenValueErrorFG, _TOKEN_COLUMN),
+        )
+
+    assert recorder.seen
+    assert all(TOY_TOKEN not in text for text in recorder.seen)

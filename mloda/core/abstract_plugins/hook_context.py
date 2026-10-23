@@ -14,6 +14,7 @@ from dataclasses import FrozenInstanceError, dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.credential_scrub import redact_escaping_exception
 from mloda.core.abstract_plugins.components.declared_attributes import scalar_attributes
 from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.utils import safe_field
@@ -196,7 +197,9 @@ def instrument(
         succeeded = False
         start = time.perf_counter()
         try:
-            result = func(*args, **kwargs)
+            # Mask here, the innermost wrap, so no extender sees a registered credential in the exception.
+            with redact_escaping_exception():
+                result = func(*args, **kwargs)
             succeeded = True
         finally:
             context.duration_seconds = time.perf_counter() - start

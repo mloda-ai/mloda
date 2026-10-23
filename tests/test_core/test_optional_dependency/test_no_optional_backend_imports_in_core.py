@@ -116,6 +116,7 @@ def _backends(violations: list[str]) -> list[str]:
     return sorted(violation.rsplit("imports ", 1)[1] for violation in violations)
 
 
+@pytest.mark.timeout(30)
 def test_core_does_not_import_optional_backends() -> None:
     """Every module under mloda/ must be importable without any optional backend installed."""
     assert CORE_ROOTS, "could not locate the mloda package directory"

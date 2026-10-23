@@ -907,6 +907,7 @@ _REQUIRE_EXTRA_HINT = (
 )
 
 
+@pytest.mark.timeout(30)
 def test_every_require_call_names_an_existing_extra() -> None:
     extras = _load_optional_deps()
     messages: list[str] = []

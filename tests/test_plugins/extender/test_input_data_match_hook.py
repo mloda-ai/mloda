@@ -864,12 +864,13 @@ class TestSourceGroupHook:
         assert contexts
         assert all(c.feature_names == (_COL_A,) for c in contexts)
 
-    def test_a_gate_refuses_only_the_input_column_of_a_computed_name(self) -> None:
+    @pytest.mark.parametrize("options", [None, {"data_access_handle": "imdmatch_handle"}], ids=["plain", "handle"])
+    def test_a_gate_refuses_only_the_input_column_of_a_computed_name(self, options: dict[str, Any] | None) -> None:
         enabled = PluginCollector.enabled_feature_groups({ImdMatchGateSource, ImdMatchDerivedGroup})
         extender = _gate(ImdMatchGateSource)
 
         with pytest.raises(FeatureResolutionError):
-            _prepare(Feature(_DERIVED_IMD), enabled, _global_access(), extender)
+            _prepare(Feature(_DERIVED_IMD, options=options or {}), enabled, _global_access(), extender)
 
         assert len(extender.raised) == 1
 

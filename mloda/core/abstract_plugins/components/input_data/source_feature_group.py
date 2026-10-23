@@ -460,7 +460,7 @@ class SourceFeatureGroup(FeatureGroup):
             if foreign is not None:
                 skipped = True
                 continue
-            if not unlocked and computed_elsewhere():
+            if not unlocked and computed_elsewhere(name):
                 continue
             selected.append(route)
         fitting: dict[str, SourceMatch] = {}

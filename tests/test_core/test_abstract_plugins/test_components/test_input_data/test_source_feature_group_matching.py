@@ -832,6 +832,27 @@ class TestOpenClaimDefersToAComputingCandidate:
         assert set(result.identified) == {ToyOpenFG}
 
 
+_PART_BASE = "toyfmt_pbase"
+_PART_NAME = _PART_BASE + "~value"
+
+
+class _PartOnlyFG(FeatureGroup):
+    """Matches only the base name; the whole name is read as an output part."""
+
+    OUTPUT_PARTS = ("value",)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {_PART_BASE}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return set()
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+
 class TestSearchedRouteDefersToAComputingCandidate:
     @staticmethod
     def _dac() -> DataAccessCollection:
@@ -852,16 +873,17 @@ class TestSearchedRouteDefersToAComputingCandidate:
         assert set(result.identified) == {ToySourceFG}
         assert result.eliminations[AggregatedFeatureGroup].stage == "capability"
 
-    def test_pointed_request_is_unchanged(self) -> None:
-        feature = Feature(_DERIVED, feature_group=ToySourceFG)
+    def test_a_data_access_handle_does_not_keep_the_source_in_play(self) -> None:
+        feature = Feature(_DERIVED, Options({"data_access_handle": "h1"}))
         result = evaluate_or_raise(feature, _plugins(ToySourceFG, AggregatedFeatureGroup), None, self._dac())
 
-        assert set(result.identified) == {ToySourceFG}
+        assert set(result.identified) == {AggregatedFeatureGroup}
 
-    def test_data_access_handle_keeps_the_source_in_play(self) -> None:
-        feature = Feature(_DERIVED, Options({"data_access_handle": "h1"}))
-        with pytest.raises(ValueError, match="Multiple feature groups found"):
-            evaluate_or_raise(feature, _plugins(ToySourceFG, AggregatedFeatureGroup), None, self._dac())
+    def test_a_group_matching_only_an_output_part_does_not_make_the_source_step_aside(self) -> None:
+        dac = toy_dac(h1={_PART_NAME: [1]})
+        result = evaluate_or_raise(Feature(_PART_NAME), _plugins(ToySourceFG, _PartOnlyFG), None, dac)
+
+        assert set(result.identified) == {ToySourceFG}
 
 
 class TestPointedRoutesDeclineWithReason:

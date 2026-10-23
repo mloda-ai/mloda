@@ -1,6 +1,6 @@
 import inspect
 import os
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from difflib import get_close_matches
 from dataclasses import replace
@@ -41,7 +41,6 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
 )
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import (
     SourceFeatureGroup,
-    HANDLE_OPTION,
     SourcePointerError,
     concrete_source_groups,
 )
@@ -663,13 +662,12 @@ class IdentifyFeatureGroupClass:
     def _collect_candidates(
         self,
         feature: Feature,
-        accessible_plugins: FeatureGroupEnvironmentMapping,
+        candidates: list[tuple[type[FeatureGroup], set[type[ComputeFramework]]]],
         links: set[Link] | None,
         data_access_collection: DataAccessCollection | None,
-        _identified_feature_groups: FeatureGroupEnvironmentMapping,
-    ) -> FeatureGroupEnvironmentMapping:
-        ordered = sorted(accessible_plugins.items(), key=lambda item: issubclass(item[0], SourceFeatureGroup))
-        for feature_group, compute_frameworks in ordered:
+        identified: FeatureGroupEnvironmentMapping,
+    ) -> None:
+        for feature_group, compute_frameworks in candidates:
             # An out-of-scope candidate is skipped silently: never probed, no elimination recorded.
             if not self._filter_feature_group_by_scope(feature_group, feature):
                 continue
@@ -779,25 +777,7 @@ class IdentifyFeatureGroupClass:
                     self._record_elimination(feature_group, "declarations", unmet)
                     continue
 
-            _identified_feature_groups[feature_group] = supported_frameworks
-        return _identified_feature_groups
-
-    def _computed_elsewhere_check(
-        self, feature: Feature, data_access_collection: DataAccessCollection | None, identified: Mapping[Any, Any]
-    ) -> Callable[[], bool]:
-        """A memoized check: does a surviving non-source candidate compute this name, absent a pin or handle."""
-        result: list[bool] = []
-
-        def check() -> bool:
-            if not result:
-                if _pinned_path(feature, data_access_collection) is not None or HANDLE_OPTION in feature.options:
-                    result.append(False)
-                else:
-                    computing = [fg for fg in identified if not issubclass(fg, SourceFeatureGroup)]
-                    result.append(any(self._computes(fg, feature) for fg in sorted(computing, key=_candidate_sort_key)))
-            return result[0]
-
-        return check
+            identified[feature_group] = supported_frameworks
 
     def _filter_loop(
         self,
@@ -807,11 +787,17 @@ class IdentifyFeatureGroupClass:
         data_access_collection: DataAccessCollection | None = None,
     ) -> FeatureGroupEnvironmentMapping:
         identified: FeatureGroupEnvironmentMapping = {}
-        check = self._computed_elsewhere_check(feature, data_access_collection, identified)
-        with computed_elsewhere_scope(check):
-            _identified_feature_groups = self._collect_candidates(
-                feature, accessible_plugins, links, data_access_collection, identified
-            )
+        items = list(accessible_plugins.items())
+        others = [item for item in items if not issubclass(item[0], SourceFeatureGroup)]
+        sources = [item for item in items if issubclass(item[0], SourceFeatureGroup)]
+        # Non-source candidates go first so a searched source route can step aside for a name one of them computes.
+        self._collect_candidates(feature, others, links, data_access_collection, identified)
+        if sources:
+            computing = [fg for fg in identified if fg not in self._output_parts]
+            computed = any(self._computes(fg, feature) for fg in sorted(computing, key=_candidate_sort_key))
+            with computed_elsewhere_scope(str(feature.name) if computed else None):
+                self._collect_candidates(feature, sources, links, data_access_collection, identified)
+        _identified_feature_groups = identified
 
         candidates = set(_identified_feature_groups)
         _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)

@@ -33,8 +33,8 @@ DOUBLING_MARKER = "overwritten_csv_doubling_marker"
 
 
 @pytest.fixture(autouse=True)
-def _stock_formats_loaded() -> None:
-    importlib.import_module("mloda_plugins.feature_group.input_data.file_formats.stock_formats")
+def _stock_sources_loaded() -> None:
+    importlib.import_module("mloda_plugins.feature_group.input_data.stock_sources")
 
 
 def _overwritten_group() -> Any:

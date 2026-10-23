@@ -40,7 +40,7 @@ from typing import Any
 
 import pytest
 
-import mloda_plugins.feature_group.input_data.file_formats.stock_formats  # noqa: F401
+import mloda_plugins.feature_group.input_data.stock_sources  # noqa: F401
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.user import DataAccessCollection, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_file_source_transformer import (

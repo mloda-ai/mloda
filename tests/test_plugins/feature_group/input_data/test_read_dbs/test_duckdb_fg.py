@@ -20,6 +20,7 @@ from mloda.user import DataAccessCollection, Feature, FilterType, GlobalFilter, 
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation  # noqa: F401
 from mloda_plugins.feature_group.input_data.db_sources import duckdb_fg as duckdb_fg_module
@@ -154,6 +155,22 @@ class TestDuckdbFGContract(SourceFeatureGroupTestMixin):
 
 
 class TestDuckdbFGInPlace:
+    def test_the_reason_names_the_framework_that_lost_the_connection(self, opened: list[Any]) -> None:
+        connection = _database(opened, {"reason_col": [1, 2]})
+
+        # DuckDB last, so the reason is "reads in place" rather than the list order
+        steps = mloda.explain(
+            [Feature("reason_col", connection=connection)],
+            compute_frameworks=[PyArrowTable, SqliteFramework, DuckDBFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({DuckdbFG}),
+        )
+
+        (step,) = [s for s in steps if s.step_kind == "compute"]
+        assert step.compute_framework_reason == (
+            "reads in place; SqliteFramework: Connection handle '<unnamed>' holds a connection "
+            "this framework does not accept."
+        )
+
     def test_under_duckdb_the_data_is_a_lazy_relation_on_the_users_connection_and_stays_open(
         self, opened: list[Any]
     ) -> None:

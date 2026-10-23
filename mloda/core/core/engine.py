@@ -1090,7 +1090,7 @@ class Engine:
             if handle is not None:
                 kept.add(cfw)
             elif reason is not None:
-                self.connection_reasons.setdefault(feature.uuid, {})[cfw] = reason
+                self.connection_reasons.setdefault(feature.uuid, {})[cfw] = f"{cfw.get_class_name()}: {reason}"
         return kept or compute_frameworks
 
     def set_data_type(self, feature: Feature, feature_group_class: type[FeatureGroup]) -> DataType | None:

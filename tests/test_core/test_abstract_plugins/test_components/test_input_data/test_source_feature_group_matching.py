@@ -832,6 +832,38 @@ class TestOpenClaimDefersToAComputingCandidate:
         assert set(result.identified) == {ToyOpenFG}
 
 
+class TestSearchedRouteDefersToAComputingCandidate:
+    @staticmethod
+    def _dac() -> DataAccessCollection:
+        return toy_dac(h1={_DERIVED: [1], COL: [1, 2]})
+
+    def test_unpointed_searched_route_steps_aside_for_the_computing_group(self) -> None:
+        result = evaluate_or_raise(Feature(_DERIVED), _plugins(ToySourceFG, AggregatedFeatureGroup), None, self._dac())
+
+        assert set(result.identified) == {AggregatedFeatureGroup}
+
+    def test_source_still_serves_the_name_when_the_computing_group_is_eliminated(self) -> None:
+        plugins: FeatureGroupEnvironmentMapping = {
+            ToySourceFG: {PyArrowTable},
+            AggregatedFeatureGroup: {_ToyUnservedFramework},
+        }
+        result = evaluate_or_raise(Feature(_DERIVED), plugins, None, self._dac())
+
+        assert set(result.identified) == {ToySourceFG}
+        assert result.eliminations[AggregatedFeatureGroup].stage == "capability"
+
+    def test_pointed_request_is_unchanged(self) -> None:
+        feature = Feature(_DERIVED, feature_group=ToySourceFG)
+        result = evaluate_or_raise(feature, _plugins(ToySourceFG, AggregatedFeatureGroup), None, self._dac())
+
+        assert set(result.identified) == {ToySourceFG}
+
+    def test_data_access_handle_keeps_the_source_in_play(self) -> None:
+        feature = Feature(_DERIVED, Options({"data_access_handle": "h1"}))
+        with pytest.raises(ValueError, match="Multiple feature groups found"):
+            evaluate_or_raise(feature, _plugins(ToySourceFG, AggregatedFeatureGroup), None, self._dac())
+
+
 class TestPointedRoutesDeclineWithReason:
     def test_pointed_route_without_a_source_records_an_input_data_rejection(self) -> None:
         result = _identify(Feature(COL, feature_group=ToySourceFG), None, ToySourceFG)

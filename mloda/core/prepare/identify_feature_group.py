@@ -1,6 +1,6 @@
 import inspect
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from difflib import get_close_matches
 from dataclasses import replace
@@ -34,12 +34,14 @@ from mloda.core.abstract_plugins.components.data_access_collection import (
 from mloda.core.abstract_plugins.components.declared_attributes import DeclarationRequirement
 from mloda.core.abstract_plugins.components.input_data.claim_route import (
     DataAccessReader,
+    computed_elsewhere_scope,
     feature_group_scope,
     open_claim_scope,
     pin_report_scope,
 )
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import (
     SourceFeatureGroup,
+    HANDLE_OPTION,
     SourcePointerError,
     concrete_source_groups,
 )
@@ -658,16 +660,16 @@ class IdentifyFeatureGroupClass:
                 live_prefixes.add(prefix)
         return frozenset(name for name in dead - live if not any(name.startswith(prefix) for prefix in live_prefixes))
 
-    def _filter_loop(
+    def _collect_candidates(
         self,
         feature: Feature,
         accessible_plugins: FeatureGroupEnvironmentMapping,
         links: set[Link] | None,
-        data_access_collection: DataAccessCollection | None = None,
+        data_access_collection: DataAccessCollection | None,
+        _identified_feature_groups: FeatureGroupEnvironmentMapping,
     ) -> FeatureGroupEnvironmentMapping:
-        _identified_feature_groups: FeatureGroupEnvironmentMapping = {}
-
-        for feature_group, compute_frameworks in accessible_plugins.items():
+        ordered = sorted(accessible_plugins.items(), key=lambda item: issubclass(item[0], SourceFeatureGroup))
+        for feature_group, compute_frameworks in ordered:
             # An out-of-scope candidate is skipped silently: never probed, no elimination recorded.
             if not self._filter_feature_group_by_scope(feature_group, feature):
                 continue
@@ -778,6 +780,38 @@ class IdentifyFeatureGroupClass:
                     continue
 
             _identified_feature_groups[feature_group] = supported_frameworks
+        return _identified_feature_groups
+
+    def _computed_elsewhere_check(
+        self, feature: Feature, data_access_collection: DataAccessCollection | None, identified: Mapping[Any, Any]
+    ) -> Callable[[], bool]:
+        """A memoized check: does a surviving non-source candidate compute this name, absent a pin or handle."""
+        result: list[bool] = []
+
+        def check() -> bool:
+            if not result:
+                if _pinned_path(feature, data_access_collection) is not None or HANDLE_OPTION in feature.options:
+                    result.append(False)
+                else:
+                    computing = [fg for fg in identified if not issubclass(fg, SourceFeatureGroup)]
+                    result.append(any(self._computes(fg, feature) for fg in sorted(computing, key=_candidate_sort_key)))
+            return result[0]
+
+        return check
+
+    def _filter_loop(
+        self,
+        feature: Feature,
+        accessible_plugins: FeatureGroupEnvironmentMapping,
+        links: set[Link] | None,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> FeatureGroupEnvironmentMapping:
+        identified: FeatureGroupEnvironmentMapping = {}
+        check = self._computed_elsewhere_check(feature, data_access_collection, identified)
+        with computed_elsewhere_scope(check):
+            _identified_feature_groups = self._collect_candidates(
+                feature, accessible_plugins, links, data_access_collection, identified
+            )
 
         candidates = set(_identified_feature_groups)
         _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)

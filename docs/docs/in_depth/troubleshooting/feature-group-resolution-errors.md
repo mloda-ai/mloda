@@ -265,6 +265,8 @@ return {
 
 A pointer (or `query_text`) on a derived name such as `price__sum_aggr` does not make an open-route group claim it: the group that computes the feature wins, and the open group is eliminated at stage `input_data` with a reason naming the computing group. The open group steps aside even when the computing group is filtered out later (for example by a framework pin or links). To read the derived name straight from the source, pass `feature_group=<OpenGroup>`, which reads the name from the source.
 
+An unpointed searched route steps aside the same way, but only for a computing group that survives its own filters; point the request at the group to read the name from the source.
+
 ### Global filters on a pointed-only group
 
 A group with an open, pointed-only route claims a leaf name once it is pointed at (a derived name goes to the group that computes it, see above). A global filter on such a group is dropped when the feature was pointed only by `feature_group=`: filter probes run unscoped, so the group does not see itself pointed. Point the group with a class-name pointer in the feature's options as well.

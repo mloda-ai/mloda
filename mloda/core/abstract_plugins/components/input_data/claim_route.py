@@ -1,6 +1,6 @@
 """Value objects a SourceFeatureGroup uses to declare what it claims, plus the match-time scope variable."""
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -81,6 +81,25 @@ def open_claim_scope() -> Iterator[list[bool]]:
         yield flag
     finally:
         _OPEN_CLAIM.reset(token)
+
+
+_COMPUTED_ELSEWHERE: ContextVar[Callable[[], bool] | None] = ContextVar("mloda_computed_elsewhere", default=None)
+
+
+def computed_elsewhere() -> bool:
+    """True when a surviving non-source candidate computes the feature being matched."""
+    check = _COMPUTED_ELSEWHERE.get()
+    return check is not None and check()
+
+
+@contextmanager
+def computed_elsewhere_scope(check: Callable[[], bool]) -> Iterator[None]:
+    """Make check the current computed-elsewhere test inside the block."""
+    token = _COMPUTED_ELSEWHERE.set(check)
+    try:
+        yield
+    finally:
+        _COMPUTED_ELSEWHERE.reset(token)
 
 
 _PIN_SCOPE: ContextVar[tuple[set[str], list[tuple[str, Any]]] | None] = ContextVar("mloda_pin_scope", default=None)

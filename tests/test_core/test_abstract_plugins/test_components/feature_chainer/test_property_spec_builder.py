@@ -18,7 +18,7 @@ PROPERTY_MAPPING key. See ``test_property_mapping_spec_shape.py``.
 from __future__ import annotations
 
 import copy
-import pickle
+import pickle  # nosec B403
 from typing import Any
 
 import pytest
@@ -351,7 +351,7 @@ class TestNoDefaultSentinelIdentity:
 
     def test_pickle_round_trip_returns_the_same_sentinel(self) -> None:
         """A pickle round trip must resolve back to the one sentinel object."""
-        assert pickle.loads(pickle.dumps(NO_DEFAULT)) is NO_DEFAULT
+        assert pickle.loads(pickle.dumps(NO_DEFAULT)) is NO_DEFAULT  # nosec B301
 
     def test_deepcopied_sentinel_behaves_like_omission(self) -> None:
         """A deepcopied sentinel declares no default and leaves the property REQUIRED."""
@@ -363,7 +363,7 @@ class TestNoDefaultSentinelIdentity:
 
     def test_pickled_sentinel_behaves_like_omission(self) -> None:
         """A pickle round-tripped sentinel declares no default and stays REQUIRED."""
-        spec = property_spec("d", default=pickle.loads(pickle.dumps(NO_DEFAULT)))
+        spec = property_spec("d", default=pickle.loads(pickle.dumps(NO_DEFAULT)))  # nosec B301
 
         assert is_no_default(spec.default)
         assert FeatureChainParser._can_skip_required_check(spec) is False

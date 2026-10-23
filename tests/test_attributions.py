@@ -1,6 +1,6 @@
 import importlib
 import os
-import subprocess
+import subprocess  # nosec B404
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch

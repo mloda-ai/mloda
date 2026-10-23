@@ -495,6 +495,13 @@ class TestBoundary:
             assert LEAK_PATH not in text
         (record,) = _audit_records(caplog)
         assert audit_id in record.getMessage()
+        assert record.exc_info is None
+        assert record.exc_text is None
+        message = record.getMessage()
+        assert "Traceback" in message
+        assert "RuntimeError" in message
+        assert "secret" not in message
+        assert LEAK_PATH not in message
 
 
 class TestAuditLog:

@@ -102,7 +102,7 @@ the request by JSON pointer, with a suggestion when a close name exists.
 - A filter on a column the preview withholds is refused as `policy_denied`: row counts would reveal its values.
 - Descriptions and previewed values come from plugins and data: the server marks them untrusted.
 - Each call writes one audit line to the `mloda.interfaces.mcp` logger, without argument values. The principal is the
-  local OS user.
+  local OS user. Unexpected failures log a traceback without exception messages.
 
 Not yet: paging through full results, approvals, cancellation, and remote HTTP with OAuth.
 

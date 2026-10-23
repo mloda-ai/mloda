@@ -130,19 +130,20 @@ namespaces = true
 include-package-data = true
 
 [tool.bandit]
+# Bandit matches entries as substrings of scanned paths, so anchor each to the repo root.
 exclude_dirs = [
-    "venv",
-    ".venv",
-    "migrations",
-    "__pycache__",
-    "build",
-    "dist",
-    ".devcontainer",
-    ".tox",
-    ".vscode",
-    "attribution",
-    "*.egg-info",
-    "site-packages"
+    "./venv/",
+    "./.venv/",
+    "./build/",
+    "./dist/",
+    "./.devcontainer/",
+    "./.tox/",
+    "./.vscode/",
+    "./attribution/",
+    "./.cache/",
+    "./.claude/",
+    "*.egg-info/*",
+    "/site-packages/"
 ]
 skips = [
     "B101", # Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.

@@ -13,6 +13,7 @@ from mcp.server.mcpserver.tools import Tool
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
 
+from mloda.core.abstract_plugins.components.utils import failure_report
 from mloda.interfaces.service.catalog import DEFAULT_SEARCH_LIMIT, Catalog
 from mloda.interfaces.service.errors import error_result
 from mloda.interfaces.service.planner import Planner
@@ -68,12 +69,14 @@ def _envelope(tool: str, result: dict[str, Any]) -> CallToolResult:
 
 def _respond(tool: str, call: Callable[[], dict[str, Any]]) -> CallToolResult:
     """Call a service, audit the call with one log record that never holds argument values, and wrap the result."""
-    # The adapter boundary: an unexpected failure must not leak its text to the client, only an audit id.
+    # Adapter boundary: the client gets only an audit id; the log gets a traceback without messages.
     try:
         result = call()
-    except Exception:
+    except Exception as exc:
         result = error_result("internal", "Internal error; see the server log (audit_id).")
-        _LOGGER.exception("tool=%s outcome=internal audit_id=%s", tool, result["error"]["audit_id"])
+        _LOGGER.error(
+            "tool=%s outcome=internal audit_id=%s\n%s", tool, result["error"]["audit_id"], failure_report(exc)[1]
+        )
         return _envelope(tool, result)
     if "error" in result:
         _LOGGER.info("tool=%s outcome=%s audit_id=%s", tool, result["error"]["code"], result["error"]["audit_id"])

@@ -1328,7 +1328,7 @@ class TestRedactException:
         from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
 
         exc = OSError(2, f"bad {_LITERAL}", f"/x/{_LITERAL}")
-        exc.add_note(f"note {_LITERAL}")
+        object.__setattr__(exc, "__notes__", [f"note {_LITERAL}"])
 
         redact_exception(exc, frozenset({_LITERAL}))
 
@@ -1336,7 +1336,7 @@ class TestRedactException:
         assert _LITERAL not in str(exc)
         assert _LITERAL not in str(exc.strerror)
         assert _LITERAL not in str(exc.filename)
-        assert all(_LITERAL not in note for note in exc.__notes__)
+        assert all(_LITERAL not in note for note in getattr(exc, "__notes__"))
 
     def test_a_frozen_dataclass_exception_is_rewritten(self) -> None:
         from dataclasses import dataclass
@@ -1382,7 +1382,7 @@ class TestRedactException:
         redact_exception(exc, frozenset({_LITERAL}))
 
         assert _LITERAL not in str(exc)
-        assert all(_LITERAL not in note for note in exc.__notes__)
+        assert all(_LITERAL not in note for note in getattr(exc, "__notes__"))
 
     @pytest.mark.parametrize("attributes", [{"exceptions": 3}, {"exceptions": ["a", "b"]}, {"refusals": None}])
     def test_unrelated_exceptions_or_refusals_attributes_are_ignored(self, attributes: dict[str, Any]) -> None:

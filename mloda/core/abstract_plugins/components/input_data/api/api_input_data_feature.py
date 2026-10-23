@@ -1,130 +1,29 @@
 from typing import Any
 
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 
 class ApiInputDataFeature(FeatureGroup):
     """
-    Base class for mloda-based input data feature groups.
+    Pass-through feature group for in-memory data supplied at runtime.
 
-    This feature group enables data input through mloda calls, allowing features to be
-    sourced from external APIs rather than static files or databases. It provides a
-    flexible mechanism for real-time data integration and dynamic feature retrieval.
+    Returns columns provided via the ``api_data`` parameter of ``mloda.run_all(...)``
+    or ``session.run(...)`` unchanged as requested features.
 
-    ## Supported Operations
+    Example:
+        ```python
+        from mloda.user import PluginLoader, mloda
 
-    - `api_data_access`: Access data through mloda endpoints with configurable parameters
-    - `dynamic_feature_mapping`: Map mloda response fields to feature names
-    - `real_time_retrieval`: Fetch data on-demand during feature calculation
-
-    ## Feature Creation Methods
-
-    ### 1. String-Based Creation
-
-    Features can reference mloda-sourced data columns directly by name:
-
-    Examples:
-    ```python
-    features = [
-        "user_profile",          # Direct reference to mloda column
-        "transaction_history",   # Reference to transaction data from mloda
-        "real_time_metrics"      # Real-time metrics from mloda endpoint
-    ]
-    ```
-
-    ### 2. Configuration-Based Creation
-
-    Uses Options to specify mloda data access configuration:
-
-    ```python
-    from mloda.user import Feature
-    from mloda.user import Options
-    from mloda.provider import ApiInputData
-
-    feature = Feature(
-        name="user_profile",
-        options=Options(
-            context={
-                ApiInputData.data_access_name(): {
-                    "endpoint_name": ["user_profile", "account_info"],
-                }
-            }
+        PluginLoader().all()
+        result = mloda.run_all(
+            ["query"],
+            api_data={"UserQuery": {"query": ["hello"]}},
+            compute_frameworks=["PythonDictFramework"],
         )
-    )
-    ```
-
-    ## Usage Examples
-
-    ### Basic mloda Data Access
-
-    ```python
-    from mloda.user import Feature
-    from mloda.user import Options
-
-    # Simple mloda feature reference
-    feature = Feature(name="api_user_score")
-    ```
-
-    ### Configuration-Based with Endpoint Mapping
-
-    ```python
-    # Map multiple mloda response fields
-    feature = Feature(
-        name="customer_data",
-        options=Options(
-            context={
-                "ApiInputData": {
-                    "customer_api": ["name", "email", "customer_id"],
-                    "preferences_api": ["theme", "language"]
-                }
-            }
-        )
-    )
-    ```
-
-    ### Real-Time Data Integration
-
-    ```python
-    # Feature accessing real-time market data
-    feature = Feature(
-        name="stock_price",
-        options=Options(
-            context={
-                "ApiInputData": {
-                    "market_data_api": ["current_price", "volume", "change_percent"]
-                }
-            }
-        )
-    )
-    ```
-
-    ## Parameter Classification
-
-    ### Context Parameters (Default)
-    These parameters don't affect Feature Group resolution/splitting:
-    - `ApiInputData`: Dictionary mapping mloda endpoint names to lists of column names
-    - mloda endpoint configuration is passed through the options context
-
-    ### Group Parameters
-    Currently none for ApiInputDataFeature. Parameters that affect Feature Group
-    resolution/splitting would be placed here.
-
-    ## Requirements
-
-    - mloda endpoints must be configured in the DataAccessCollection
-    - mloda responses must be in a format compatible with the data processing pipeline
-    - Feature names must match column names in the mloda response data
-    - Authentication credentials (if required) must be configured for mloda access
-
-    ## Additional Notes
-
-    - This feature group acts as a pass-through, returning data as-is from the mloda
-    - mloda data is matched against feature names using the ApiInputData.matches() method
-    - Supports both feature-scoped and global-scoped mloda data access
-    - mloda calls are typically made during the data loading phase, not feature calculation
+        ```
     """
 
     @classmethod

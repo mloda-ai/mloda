@@ -184,8 +184,12 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
         """
         # Create groups based on group_by_features
         groups: dict[tuple[Any, ...], list[int]] = {}
+        keyless: list[int] = []
         for i in range(row_count(data)):
             group_key = tuple(data[feature][i] if feature in data else None for feature in group_by_features)
+            if any(v is None or (isinstance(v, float) and math.isnan(v)) for v in group_key):
+                keyless.append(i)
+                continue
             if group_key not in groups:
                 groups[group_key] = []
             groups[group_key].append(i)
@@ -262,6 +266,12 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
                         next_valid = result[i]
                     elif next_valid is not None:
                         result[i] = next_valid
+
+        fallback = {"mean": overall_mean, "median": overall_median, "mode": overall_mode}
+        if imputation_method in fallback:
+            for i in keyless:
+                if result[i] is None:
+                    result[i] = fallback[imputation_method]
 
         return result
 

@@ -355,15 +355,18 @@ def _reference_multi(method: str, columns: _Columns, constant: Any) -> _Cells:
     return [_statistic(method, [columns[name][row] for name in names]) for row in rows]
 
 
-def _reference_grouped(method: str, columns: _Columns, constant: Any) -> _Cells:
-    """Per group fill; a constant fills everywhere; a group without a statistic falls back to the overall one."""
+def _reference_grouped(method: str, columns: _Columns, constant: Any, group_by: list[str] | None = None) -> _Cells:
+    """Per group fill; rows with a missing key part join no group; no group statistic falls back to the overall one."""
     values = columns["a"]
     if method == "constant":
         return _reference_fill(method, values, constant)
     result = list(values)
-    keys = columns["g"]
-    for key in dict.fromkeys(keys):
-        indices = [i for i, k in enumerate(keys) if k == key]
+    keys = list(zip(*(columns[name] for name in group_by or ["g"])))
+    groups: dict[tuple[Any, ...], list[int]] = {}
+    for i, key in enumerate(keys):
+        if not any(_missing(part) for part in key):
+            groups.setdefault(key, []).append(i)
+    for key, indices in groups.items():
         group = [values[i] for i in indices]
         if method in ("mean", "median", "mode") and _statistic(method, group) is None:
             filled = _reference_fill(method, group, constant)
@@ -373,6 +376,15 @@ def _reference_grouped(method: str, columns: _Columns, constant: Any) -> _Cells:
             filled = _reference_fill(method, group, constant)
         for i, cell in zip(indices, filled):
             result[i] = cell
+    if method in ("mean", "median", "mode"):
+        overall = _statistic(method, values)
+        grouped_rows = {i for indices in groups.values() for i in indices}
+        for i, cell in enumerate(values):
+            if i not in grouped_rows and _missing(cell):
+                result[i] = overall
+    if method in ("ffill", "bfill"):
+        grouped_rows = {i for indices in groups.values() for i in indices}
+        result = [None if i not in grouped_rows and _missing(cell) else cell for i, cell in enumerate(result)]
     return result
 
 
@@ -424,17 +436,36 @@ def _differences(implementation: Any, actual: _Cells, expected: _Cells) -> list[
 
 
 # Methods are chosen so the filled values differ between a NaN-skipping and a NaN-keeping implementation.
-_SINGLE: _Columns = {"a": [3.0, _NAN, 1.0, 3.0, None, 1.0, 5.0]}
+_SINGLE: _Columns = {"a": [_NAN, 3.0, _NAN, 1.0, 3.0, None, 1.0, 5.0, None]}
 _STRINGS: _Columns = {"a": ["b", None, "a", "b", "a"]}
 _MULTI: _Columns = {
-    "a": [3.0, _NAN, None, 2.0, 4.0],
-    "b": [3.0, 2.0, 6.0, 1.0, None],
-    "c": [_NAN, 8.0, None, None, 4.0],
+    "a": [3.0, _NAN, None, 2.0, 4.0, _NAN],
+    "b": [3.0, 2.0, 6.0, 1.0, None, None],
+    "c": [_NAN, 8.0, None, None, 4.0, _NAN],
 }
 _GROUPED: _Columns = {
     "a": [4.0, _NAN, 7.0, 2.0, None, 4.0, 2.0, _NAN, 9.0, 5.0, None, _NAN, None],
     "g": ["x", "x", "y", "x", "y", "x", "x", "x", "y", "x", "z", "z", "w"],
 }
+_MISSING_KEYS: _Columns = {
+    "a": [10.0, None, None, 100.0, None, 20.0, None, _NAN, 60.0, None, 100.0],
+    "g": [1.0, 1.0, float("nan"), float("nan"), float("nan"), 2.0, None, None, None, 2.0, float("nan")],
+}
+_ALL_KEYS_MISSING: _Columns = {
+    "a": [1.0, None, 3.0, None, 5.0, 3.0],
+    "g": [float("nan"), None, float("nan"), None, float("nan"), None],
+}
+_TWO_KEYS: _Columns = {
+    "a": [4.0, None, 8.0, None, 30.0, None, 5.0, 30.0, None, None],
+    "g": [1.0, 1.0, 1.0, 1.0, _NAN, 2.0, 2.0, 1.0, _NAN, 3.0],
+    "h": ["p", "p", "p", None, "q", "q", "q", None, "q", "r"],
+}
+_GROUPING_CASES = [
+    pytest.param(_GROUPED, ["g"], id="grouped"),
+    pytest.param(_MISSING_KEYS, ["g"], id="missing_keys"),
+    pytest.param(_ALL_KEYS_MISSING, ["g"], id="all_keys_missing"),
+    pytest.param(_TWO_KEYS, ["g", "h"], id="two_keys"),
+]
 _CONSTANT = 0.5
 _ALL_METHODS = sorted(METHOD_UNIVERSE)
 _MULTI_METHODS = [method for method in _ALL_METHODS if method not in ("ffill", "bfill")]
@@ -492,11 +523,12 @@ class TestImplementationsConformToTheReferenceContract:
         with pytest.raises(ValueError):
             _impute(implementation, _MULTI, method, ["a", "b", "c"], _CONSTANT, None)
 
+    @pytest.mark.parametrize(("columns", "group_by"), _GROUPING_CASES)
     @pytest.mark.parametrize("method", _ALL_METHODS)
     @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
-    def test_grouped_imputation(self, implementation: Any, method: str) -> None:
-        actual = _impute(implementation, _GROUPED, method, ["a"], _CONSTANT, ["g"])
-        assert not _differences(implementation, actual, _reference_grouped(method, _GROUPED, _CONSTANT))
+    def test_grouped_imputation(self, implementation: Any, method: str, columns: _Columns, group_by: list[str]) -> None:
+        actual = _impute(implementation, columns, method, ["a"], _CONSTANT, group_by)
+        assert not _differences(implementation, actual, _reference_grouped(method, columns, _CONSTANT, group_by))
 
 
 class TestNanNormalizationIsLimitedToFloatColumns:
@@ -523,7 +555,7 @@ class TestNanNormalizationIsLimitedToFloatColumns:
         assert actual == ["nan", "nan", "NaN", "nan"]
 
     @pytest.mark.parametrize("method", ["mean", "mode", "ffill"])
-    @pytest.mark.parametrize("implementation", [PyArrowMissingValueImputation, PythonDictMissingValueImputation])
+    @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
     def test_float_group_keys_are_never_altered(self, implementation: Any, method: str) -> None:
         values: _Cells = [1.0, None, 3.0, 4.0, 5.0, 6.0, 7.0, None]
         float_keys: _Columns = {"a": values, "g": [1.0, 1.0, float("nan"), float("nan"), None, None, 2.0, 2.0]}

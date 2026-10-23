@@ -30,7 +30,9 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
 
     Reference contract: null and float NaN are missing; mean/median/mode skip them; missing cells are
     filled; mode ties take the smallest value; single-column, multi-column and grouped paths;
-    a group with no value falls back to the column statistic.
+    a group with no value falls back to the column statistic. A row with a null or NaN group key part
+    joins no group (statistics fill it from the column, ffill/bfill leave it). A cell no method fills
+    stays missing (null, NaN in a pandas float column).
 
     ## Supported Imputation Methods
 

@@ -188,9 +188,9 @@ class PandasMissingValueImputation(Implementation[MissingValueFeatureGroup]):
             return result.fillna(overall_mode.iloc[0]) if not overall_mode.empty else result
         elif imputation_method == "ffill":
             # Forward fill within groups
-            return grouped[in_features].transform(lambda x: x.ffill())
+            return result.fillna(grouped[in_features].ffill())
         elif imputation_method == "bfill":
             # Backward fill within groups
-            return grouped[in_features].transform(lambda x: x.bfill())
+            return result.fillna(grouped[in_features].bfill())
         else:
             raise ValueError(f"Unsupported imputation method: {imputation_method}")

@@ -258,7 +258,7 @@ class FeatureGroup(ABC):
     @final
     @classmethod
     def name_bindings(cls, feature_name: FeatureName | str) -> dict[str, Any]:
-        """Option values the feature name binds (captured text, or its name_converter output); empty without prefix patterns."""
+        """Option values the feature name binds (after any name_converter); empty without prefix patterns."""
         patterns = FeatureChainParser.prefix_patterns_of(cls)
         if not patterns:
             return {}

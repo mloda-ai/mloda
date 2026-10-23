@@ -450,16 +450,13 @@ owned name that is a PROPERTY_MAPPING key binds to that key and is validated lik
 when the option is also present; an unsupported value is a recorded match-time rejection. This
 covers a secondary capture and an `element_validator`-only spec (one with no `allowed_values`).
 
-A key may declare `name_converter` (e.g. `int`): the captured text is converted once per resolution,
-then validated (`allowed_values`, `element_validator`), seen by `match_guard` / `required_when`, and
-filled into `feature.options` as the converted value. A name-only request and an agreeing typed
-explicit option then carry the same type. A name agrees with a declared or forwarded value when it is
-numerically equal or equal as text. A raising converter is a rejected value (a recorded non-match, never a
-crash; a marked match abort still escapes). Decision: an opt-in per-key converter on named captures
-only; `element_validator` / `allowed_values` are not reused because a validator returns a verdict, not
-a value. The converter must be pure, deterministic and cheap (it runs on every resolution and intake
-memoizes on its output). The positional fallback, `NameResolution.value_for` and `_resolve_operation`
-stay text; an explicit group option still stays its own feature.
+A key may declare `name_converter` (e.g. `int`): the captured text is converted, then validated
+(`allowed_values`, `element_validator`), seen by `match_guard` / `required_when`, and filled into
+`feature.options` as the converted value. A name agrees with a declared or forwarded value when it is
+numerically equal or equal as text. A raising converter is a rejected value (a recorded non-match). The
+converter must be pure and deterministic. The positional fallback, `NameResolution.value_for` and
+`_resolve_operation` stay text. `element_validator` / `allowed_values` are not reused because a validator
+returns a verdict, not a value.
 
 A pattern with only positional groups falls back to the legacy rule: the first capture binds only
 to the single key whose `allowed_values` already contain it. A positional pattern whose keys share

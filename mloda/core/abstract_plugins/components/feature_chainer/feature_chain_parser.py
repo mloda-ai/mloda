@@ -366,10 +366,7 @@ class FeatureChainParser:
         property_mapping: dict[str, PropertySpec],
         rejected_bindings: Mapping[str, str] | None = None,
     ) -> None:
-        """Validate each name-bound value like an option value; raises PropertyValueRejection on the first invalid.
-
-        A rejected conversion (key -> captured text) is rejected the same way.
-        """
+        """Validate each name-bound value like an option value; raises PropertyValueRejection on the first invalid."""
         if rejected_bindings:
             key, text = next(iter(rejected_bindings.items()))
             # Contained: a rejected name conversion is this candidate's own verdict, recorded as its reason.

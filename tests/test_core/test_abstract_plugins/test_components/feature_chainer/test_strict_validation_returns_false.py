@@ -533,3 +533,73 @@ class TestPlainGroupMatchGuard:
 
         assert DelegatingGuardChild.match_feature_group_criteria(name, Options(context={"limit_pgv": 0})) is False
         assert calls == [0]
+
+
+_NOM_DIAG_MAPPING = {
+    "mode_nomdiag": PropertySpec(
+        "Mode of the name-only diagnostic fixtures",
+        allowed_values={"a_nomdiag": "A"},
+        context=True,
+        strict_validation=True,
+    ),
+}
+
+
+class ConfigPathDiagNom(FeatureChainParserMixin):
+    """Flag-off twin: reports a rejected option value on the config path."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_nomdiag$"
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = _NOM_DIAG_MAPPING
+
+
+class NameOnlyDiagNom(ConfigPathDiagNom):
+    """Name-only: a config-path feature is declined and never reported."""
+
+    NAME_ONLY_MATCH = True
+
+
+class NameOnlyMalformedPrefixNom(FeatureChainParserMixin):
+    """Name-only group whose pattern matches a name that carries no source."""
+
+    NAME_ONLY_MATCH = True
+    PREFIX_PATTERN = r"^malformed_nom_(\w+)$"
+
+
+class NameOnlyMarkedResolveNom(NameOnlyDiagNom):
+    """Name-only group whose resolve_feature_name raises a marked match abort."""
+
+    @classmethod
+    def resolve_feature_name(cls, feature_name: Any) -> NoReturn:
+        raise _RESOLVE_MARKER
+
+
+class TestNameOnlyRejectionReason:
+    """NAME_ONLY_MATCH silences the diagnostic for a declined config-path feature only."""
+
+    def test_flag_off_twin_reports_config_path_rejection(self) -> None:
+        options = Options(context={"mode_nomdiag": "bogus_nomdiag"})
+
+        assert ConfigPathDiagNom._strict_validation_rejection_reason("plain_nom_feature", options) is not None
+
+    def test_declined_config_path_feature_returns_none(self) -> None:
+        options = Options(context={"mode_nomdiag": "bogus_nomdiag"})
+
+        assert NameOnlyDiagNom.match_feature_group_criteria("plain_nom_feature", options) is False
+        assert NameOnlyDiagNom._strict_validation_rejection_reason("plain_nom_feature", options) is None
+
+    def test_owned_name_with_rejected_value_still_reports(self) -> None:
+        reason = NameOnlyDiagNom._strict_validation_rejection_reason("src__bogus_nomdiag", Options())
+
+        assert reason is not None
+        assert "mode_nomdiag" in reason
+
+    def test_marked_abort_still_propagates(self) -> None:
+        with pytest.raises(ValueError) as diagnostic_info:
+            NameOnlyMarkedResolveNom._strict_validation_rejection_reason("any_feature", Options())
+
+        assert diagnostic_info.value is _RESOLVE_MARKER
+
+    def test_no_source_name_is_a_silent_non_match_and_no_reason(self) -> None:
+        assert NameOnlyMalformedPrefixNom.match_feature_group_criteria("malformed_nom_test", Options()) is False
+        assert NameOnlyMalformedPrefixNom._strict_validation_rejection_reason("malformed_nom_test", Options()) is None

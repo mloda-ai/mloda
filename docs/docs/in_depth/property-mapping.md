@@ -633,7 +633,8 @@ delegates to the base still is.
 
 Set `ALLOW_UNIVERSAL_MATCHER = True` on the class to declare the universal match intentional and
 silence the warning. Otherwise give one key no `default` (making it unconditionally required), or a
-`required_when` predicate that fires when the option is absent.
+`required_when` predicate that fires when the option is absent. A group with no discriminator option
+can instead set `NAME_ONLY_MATCH = True` to claim only names its patterns own.
 
 ## Declaring the source contract
 
@@ -702,6 +703,7 @@ if it really is a whole-value check.
 | `property_spec` builder surface | `tests/.../feature_chainer/test_property_spec_builder.py` |
 | Rejection reasons surfaced to the end user | `tests/test_core/test_prepare/test_identify_feature_group_error_message.py` |
 | The all-optional universal-matcher diagnostic and its `ALLOW_UNIVERSAL_MATCHER` escape hatch | `tests/.../feature_chainer/test_universal_optional_matcher.py` |
+| `NAME_ONLY_MATCH` (name-owned match only, no configuration path) | `tests/.../feature_chainer/test_feature_chain_parser_mixin.py` (`TestNameOnlyMatch`) |
 | The missing-`in_features` definition-time diagnostic and its zero-source rejection | `tests/.../feature_chainer/test_missing_in_features_declaration.py` (the diagnostic), `tests/.../feature_chainer/test_in_feature_count_gate_name_sources.py` (the option-path zero-source non-match records no rejection) |
 | `expected` reports a `match_guard` rejection on a non-strict spec, with the capped value echo | `tests/test_core/test_prepare/test_first_pass_rejection_recording.py` |
 

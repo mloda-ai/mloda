@@ -303,6 +303,28 @@ class SubclassFilterResolveChild(SubclassFilterResolveParent):
     """Child inheriting the parent's matching."""
 
 
+NAME_ONLY_ENGINE_OPTION = "op_engnom"
+NAME_ONLY_ENGINE_FEATURE = "plain_feature_engnom"
+
+
+class ConfigPathEngineNomFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    """Claims a config-path feature; the required op_engnom key keeps it inert for other tests."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_engnom$"
+    PROPERTY_MAPPING = {
+        NAME_ONLY_ENGINE_OPTION: property_spec("Operation", strict=True, allowed_values=("sum",), context=True),
+        "in_features": property_spec("Source feature", context=True),
+    }
+
+
+class NameOnlyEngineNomFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    """Same patterns and mapping as its sibling but name-only."""
+
+    NAME_ONLY_MATCH = True
+    PREFIX_PATTERN = ConfigPathEngineNomFeatureGroup.PREFIX_PATTERN
+    PROPERTY_MAPPING = ConfigPathEngineNomFeatureGroup.PROPERTY_MAPPING
+
+
 @pytest.fixture(scope="module", autouse=True)
 def load_plugins() -> None:
     """Load all plugins before running tests in this module."""
@@ -1255,3 +1277,27 @@ class TestResolveFeatureAdapterIsThin:
     def test_redefinition_conflict_error_carries_no_conflicts_payload(self) -> None:
         """RedefinitionConflictError has the plain ValueError __init__, no conflicts parameter."""
         assert "conflicts" not in inspect.signature(RedefinitionConflictError.__init__).parameters
+
+
+class TestResolveFeatureNameOnlyMatch:
+    """A name-only group leaves a config-path feature to the sibling that claims it."""
+
+    def test_config_path_feature_resolves_to_the_non_name_only_sibling(self) -> None:
+        collector = PluginCollector.enabled_feature_groups(
+            {ConfigPathEngineNomFeatureGroup, NameOnlyEngineNomFeatureGroup}
+        )
+        options = Options(context={NAME_ONLY_ENGINE_OPTION: "sum", "in_features": "src_engnom"})
+
+        result = resolve_feature(NAME_ONLY_ENGINE_FEATURE, options=options, plugin_collector=collector)
+
+        assert result.error is None
+        assert result.feature_group is ConfigPathEngineNomFeatureGroup
+        assert result.candidates == [ConfigPathEngineNomFeatureGroup]
+
+    def test_owned_name_still_reaches_the_name_only_group(self) -> None:
+        collector = PluginCollector.enabled_feature_groups({NameOnlyEngineNomFeatureGroup})
+
+        result = resolve_feature("src_engnom__sum_engnom", plugin_collector=collector)
+
+        assert result.error is None
+        assert result.feature_group is NameOnlyEngineNomFeatureGroup

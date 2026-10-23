@@ -117,6 +117,8 @@ class FeatureChainParserMixin:
       from the name (all values come from options); default False (#772)
     - ALLOW_UNIVERSAL_MATCHER: Optional opt-in marking an all-optional PROPERTY_MAPPING as an
       intentional universal configuration matcher; default False (#771)
+    - NAME_ONLY_MATCH: Optional opt-in; the group claims only a name its patterns own and never a
+      configuration-path feature; default False
 
     PROPERTY_MAPPING supports conditional requirements via ``PropertySpec.required_when``.
     Attach a predicate ``(Options) -> bool`` to any spec. When the predicate returns
@@ -152,6 +154,8 @@ class FeatureChainParserMixin:
     # An all-optional PROPERTY_MAPPING that inherits the config matcher matches any feature name once
     # in_features supplies a source; set True to declare that universal match intentional and silence the #771 warning.
     ALLOW_UNIVERSAL_MATCHER: bool = False
+    # True: configuration-path matching is off.
+    NAME_ONLY_MATCH: bool = False
     # The column-wise hooks a family's calculate_feature calls; a family base declares it so its
     # framework implementations can be checked against it with missing_columnwise_hooks below.
     REQUIRED_COLUMNWISE_HOOKS: frozenset[str] = frozenset()
@@ -285,6 +289,8 @@ class FeatureChainParserMixin:
         in_features option value the matcher cannot resolve is a silent non-match. An
         absent in_features counts as zero on the configuration path. This gate runs before ``match_guard``.
 
+        ``NAME_ONLY_MATCH`` turns the configuration path off: only a name the patterns own matches.
+
         ``required_when`` is NOT evaluated here. The guard installed at class definition
         runs the predicates after this method (or any override of it) returns True.
 
@@ -362,6 +368,7 @@ class FeatureChainParserMixin:
                 property_mapping=cls._get_property_mapping(),
                 prefix_patterns=cls._get_prefix_patterns(),
                 owner_name=cls.__name__,
+                config_path=not cls.NAME_ONLY_MATCH,
             )
         # PropertyValueRejection subclasses ValueError, so this handler sits above the abort check and must
         # run it: an unmarked rejection is the parser's non-match verdict, recorded as the candidate's reason.
@@ -398,6 +405,7 @@ class FeatureChainParserMixin:
         parsing a PREFIX_PATTERN match (malformed feature name, no chain separator) is a parse
         error, not an option-value rejection, and is likewise nothing to report. Returns None
         when nothing was rejected (the match succeeded, or the candidate is unrelated).
+        ``NAME_ONLY_MATCH`` turns the configuration path off, so an unowned name returns None.
         Diagnostic-only: does not affect match_feature_group_criteria's behavior; a marked match abort propagates.
         """
         property_mapping = cls._get_property_mapping()
@@ -423,6 +431,9 @@ class FeatureChainParserMixin:
                 effective_options = FeatureChainParser._merge_bindings(
                     options, dict(resolution.bindings), property_mapping
                 )
+
+        if not name_matched and cls.NAME_ONLY_MATCH:
+            return None
 
         try:
             if name_matched:

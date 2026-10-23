@@ -1,4 +1,4 @@
-"""DuckDB connection format group: opt-in by connection_handle, lazy on DuckDB, Arrow elsewhere, never closes your connection."""
+"""DuckDB connection source group: opt-in by connection_handle, lazy on DuckDB, Arrow elsewhere, never closes your connection."""
 
 from collections.abc import Collection
 from dataclasses import dataclass, field
@@ -8,7 +8,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimR
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.optional_dependency import require
-from mloda.provider import ComputeFramework, FeatureSet, FormatFeatureGroup, Implementation, PropertySpec
+from mloda.provider import ComputeFramework, FeatureSet, Implementation, PropertySpec, SourceFeatureGroup
 from mloda.user import DataAccessCollection, Options
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
@@ -59,7 +59,7 @@ def _select(access: DuckdbTable, features: Any) -> str:
     return f'select {names} from {database}."main".{quote_ident(access.table)}'  # nosec B608 - identifiers quoted
 
 
-class DuckdbFG(FormatFeatureGroup):
+class DuckdbFG(SourceFeatureGroup):
     """Reads tables of a DuckDB connection in the DataAccessCollection, selected with ``connection_handle``."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (

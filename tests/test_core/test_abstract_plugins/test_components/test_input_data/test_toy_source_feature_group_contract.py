@@ -1,4 +1,4 @@
-"""ToyFormatFG against the shared FormatFeatureGroup contract."""
+"""ToySourceFG against the shared SourceFeatureGroup contract."""
 
 from typing import Any
 
@@ -6,23 +6,23 @@ import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
-from mloda.provider import FormatFeatureGroup
-from tests.mixins.reader_feature_groups.format_feature_group_test_mixin import FormatFeatureGroupTestMixin
-from tests.test_core.test_abstract_plugins.test_components.test_input_data import toy_format_group
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatFG
+from mloda.provider import SourceFeatureGroup
+from tests.mixins.reader_feature_groups.source_feature_group_test_mixin import SourceFeatureGroupTestMixin
+from tests.test_core.test_abstract_plugins.test_components.test_input_data import toy_source_group
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
 
 
-class TestToyFormatFeatureGroupContract(FormatFeatureGroupTestMixin):
-    feature_group_class: type[FormatFeatureGroup] = ToyFormatFG
+class TestToySourceFeatureGroupContract(SourceFeatureGroupTestMixin):
+    feature_group_class: type[SourceFeatureGroup] = ToySourceFG
     present_column = "toyfmt_col"
     missing_column = "toyfmt_missing"
     expected_source = "h1:toy"
 
     def own_dac(self) -> DataAccessCollection:
-        return toy_format_group.toy_dac(h1={"toyfmt_col": [1, 2]})
+        return toy_source_group.toy_dac(h1={"toyfmt_col": [1, 2]})
 
     def foreign_dac(self) -> DataAccessCollection:
-        return toy_format_group.foreign_dac()
+        return toy_source_group.foreign_dac()
 
     def own_pointer(self) -> Any:
         return {"toyfmt_col": [1, 2]}
@@ -31,7 +31,7 @@ class TestToyFormatFeatureGroupContract(FormatFeatureGroupTestMixin):
         return {"toyfmt_col": [9]}, "scoped:toy"
 
     def foreign_handle_dac(self) -> tuple[DataAccessCollection, str]:
-        return toy_format_group.foreign_dac(), "toyfmt_foreign"
+        return toy_source_group.foreign_dac(), "toyfmt_foreign"
 
     def test_an_unknown_handle_records_a_rejection_listing_the_known_handles(
         self, rejection_window: dict[str, MatchRejection]

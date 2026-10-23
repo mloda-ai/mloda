@@ -1,4 +1,4 @@
-"""SQLite database format group: read-only connections, quoted queries, a pyarrow neutral and a stdlib dict implementation."""
+"""SQLite database source group: read-only connections, quoted queries, a pyarrow neutral and a stdlib dict implementation."""
 
 import math
 import os

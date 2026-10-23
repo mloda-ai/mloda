@@ -1,5 +1,5 @@
 """Per-candidate match-rejection window shared by feature-group matching and input-data source selection.
-Neutral home so format group code does not depend on the feature-chainer module."""
+Neutral home so source group code does not depend on the feature-chainer module."""
 
 from __future__ import annotations
 

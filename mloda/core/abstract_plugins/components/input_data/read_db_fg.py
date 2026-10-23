@@ -1,4 +1,4 @@
-"""Abstract database format group: finds credentials, lists table catalogs per run, loads one table or query.
+"""Abstract database source group: finds credentials, lists table catalogs per run, loads one table or query.
 
 A subclass writes ``is_valid_credentials``, ``database_identity``, ``connect``, ``list_tables``, ``table_columns``
 and ``produce_rows``; the opt-in ``QUERY_ROUTE`` adds ``produce_query_rows``.
@@ -16,13 +16,13 @@ from mloda.core.abstract_plugins.components.credential import Credential, Regist
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import (
     HANDLE_OPTION,
     HANDLE_SPEC,
     QUERY_OPTION as QUERY_OPTION,
     REASON_DETAIL,
     _MAX_DESCRIBED,
-    FormatFeatureGroup,
+    SourceFeatureGroup,
 )
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
@@ -97,11 +97,11 @@ class DBQuery:
     query_text: str
 
 
-class ReadDBFG(FormatFeatureGroup):
-    """Abstract database format group: claims features found as columns of tables in matching credentials.
+class ReadDBFG(SourceFeatureGroup):
+    """Abstract database source group: claims features found as columns of tables in matching credentials.
 
     The base serves table catalogs; QUERY_ROUTE opts in to query text. Third-party groups should reuse the contract
-    mixin database_format_feature_group_test_mixin from tests/mixins/reader_feature_groups in mloda's repository; it
+    mixin read_db_fg_test_mixin from tests/mixins/reader_feature_groups in mloda's repository; it
     needs the rejection_window fixture from mloda's tests/conftest.py.
     """
 

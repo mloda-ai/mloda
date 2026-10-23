@@ -11,7 +11,7 @@ The check is deliberately GLOBAL: a key passes when SOME shipped FeatureGroup de
 
 Scope notes:
 
-* ``SCAN_ROOTS`` are the ``mloda_plugins/feature_group`` tree and the core ``input_data`` format group
+* ``SCAN_ROOTS`` are the ``mloda_plugins/feature_group`` tree and the core ``input_data`` source group
   bases; allowlist paths are relative to the repo root, constants are collected over both roots.
 * ``reference_time`` is a ``DefaultOptionKeys`` member yet is NOT treated as framework-reserved here.
   The time-based groups expose it as a user-overridable column option, so os-004 reclassifies it as a
@@ -71,7 +71,7 @@ FRAMEWORK_KEYS: frozenset[str] = frozenset(_DEFAULT_OPTION_KEY_MEMBERS.values())
 
 # Literal keys that are engine-internal signals rather than user-facing options, scoped to their owning
 # source files (relative to the repo root): a read of the same literal from any other file is still flagged.
-_FORMAT_BASES = "mloda/core/abstract_plugins/components/input_data/"
+_SOURCE_BASES = "mloda/core/abstract_plugins/components/input_data/"
 ALLOWED_LITERAL_KEYS: dict[str, tuple[tuple[str, ...], str, str]] = {
     "initial_requested_data": (
         ("mloda_plugins/feature_group/experimental/source_input_feature.py",),
@@ -79,7 +79,7 @@ ALLOWED_LITERAL_KEYS: dict[str, tuple[tuple[str, ...], str, str]] = {
         "engine-internal request-scoping signal set as a Feature attribute; not a user-facing option",
     ),
     "query_text": (
-        (_FORMAT_BASES + "format_feature_group.py", _FORMAT_BASES + "read_db_fg.py"),
+        (_SOURCE_BASES + "source_feature_group.py", _SOURCE_BASES + "read_db_fg.py"),
         "ReadDBFG",
         "declared by ReadDBFG subclasses that serve query text; the bases read it to route or decline",
     ),
@@ -87,35 +87,35 @@ ALLOWED_LITERAL_KEYS: dict[str, tuple[tuple[str, ...], str, str]] = {
 
 # Reads whose key is computed at runtime, keyed by (path relative to the repo root, enclosing function).
 ALLOWED_DYNAMIC_READS: dict[tuple[str, str], tuple[str, str]] = {
-    (_FORMAT_BASES + "file_source_fg.py", "find_sources"): (
+    (_SOURCE_BASES + "file_source_fg.py", "find_sources"): (
         "FileSourceFG",
         "key is one of the group's pointer keys, resolved at runtime",
     ),
-    (_FORMAT_BASES + "file_source_fg.py", "_pointer_key"): (
+    (_SOURCE_BASES + "file_source_fg.py", "_pointer_key"): (
         "FileSourceFG",
         "key is one of the group's pointer keys, resolved at runtime",
     ),
-    (_FORMAT_BASES + "file_source_fg.py", "_pointer_value"): (
+    (_SOURCE_BASES + "file_source_fg.py", "_pointer_value"): (
         "FileSourceFG",
         "key is one of the group's pointer keys, resolved at runtime",
     ),
-    (_FORMAT_BASES + "format_feature_group.py", "is_pointed"): (
-        "FormatFeatureGroup",
+    (_SOURCE_BASES + "source_feature_group.py", "is_pointed"): (
+        "SourceFeatureGroup",
         "key is one of the group's pointer keys, resolved at runtime",
     ),
-    (_FORMAT_BASES + "format_feature_group.py", "_matches_by_default_rules"): (
-        "FormatFeatureGroup",
+    (_SOURCE_BASES + "source_feature_group.py", "_matches_by_default_rules"): (
+        "SourceFeatureGroup",
         "key is one of the group's pointer keys, resolved at runtime",
     ),
-    (_FORMAT_BASES + "read_db_fg.py", "_matches_by_default_rules"): (
+    (_SOURCE_BASES + "read_db_fg.py", "_matches_by_default_rules"): (
         "ReadDBFG",
         "key is one of the group's pointer keys, or a claim route's required key, resolved at runtime",
     ),
-    (_FORMAT_BASES + "read_db_fg.py", "_candidates"): (
+    (_SOURCE_BASES + "read_db_fg.py", "_candidates"): (
         "ReadDBFG",
         "key is one of the group's pointer keys, or a claim route's required key, resolved at runtime",
     ),
-    (_FORMAT_BASES + "api/api_input_data.py", "matches"): (
+    (_SOURCE_BASES + "api/api_input_data.py", "matches"): (
         "ApiInputData",
         "key is the subclass's data access name",
     ),
@@ -484,8 +484,8 @@ def test_literal_allowlist_is_load_bearing(key: str) -> None:
     assert any(f"'{key}'" in v for v in violations), violations
 
 
-def test_the_format_groups_declare_the_match_time_keys() -> None:
-    """The handle and document_suffixes keys now come from the shipped format groups' PROPERTY_MAPPING."""
+def test_the_source_groups_declare_the_match_time_keys() -> None:
+    """The handle and document_suffixes keys now come from the shipped source groups' PROPERTY_MAPPING."""
     assert {"data_access_handle", "document_suffixes"} <= property_mapping_declared_union()
 
 
@@ -710,7 +710,7 @@ def test_scanner_resolves_constants_across_constant_roots(tmp_path: Path) -> Non
     assert any(v.startswith("a/user.py") and "'cross_root_key'" in v for v in violations), violations
 
 
-def test_core_format_constant_reads_resolve() -> None:
-    """The core format bases' module-level constant reads resolve to their keys, not to dynamic reads."""
+def test_core_source_constant_reads_resolve() -> None:
+    """The core source bases' module-level constant reads resolve to their keys, not to dynamic reads."""
     keys = _resolved_read_keys(CORE_SCAN_ROOT, base=_REPO_ROOT, constant_roots=SCAN_ROOTS)
     assert {"data_access_handle", "query_text", "document_suffixes"} <= keys

@@ -156,7 +156,7 @@ Not every backend's native type system can distinguish every precision mloda dec
 
 ## Decimal Columns
 
-`DataType.DECIMAL` means a decimal of any precision and scale: a `Feature` cannot declare precision or scale, and validation checks only the family. `to_arrow_type` maps `DECIMAL` to `decimal128(38, 18)` only when mloda must build an Arrow schema without data (the SQLite format group). `DECIMAL` never coerces to or from the float or integer family, in strict and lenient mode alike: exactness is the reason to declare it.
+`DataType.DECIMAL` means a decimal of any precision and scale: a `Feature` cannot declare precision or scale, and validation checks only the family. `to_arrow_type` maps `DECIMAL` to `decimal128(38, 18)` only when mloda must build an Arrow schema without data (the SQLite source group). `DECIMAL` never coerces to or from the float or integer family, in strict and lenient mode alike: exactness is the reason to declare it.
 
 | Framework | Extraction | Filter, mask, merge | PyArrow transformer |
 |---|---|---|---|

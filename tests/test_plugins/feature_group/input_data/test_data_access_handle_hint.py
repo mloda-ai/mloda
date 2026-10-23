@@ -19,7 +19,7 @@ from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass,
 from mloda.user import Feature, Options
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
-from tests.mixins.reader_feature_groups.lazy_format_group import load_document_group
+from tests.mixins.reader_feature_groups.lazy_source_group import load_document_group
 
 
 # ----------------------------------------------------------------------------

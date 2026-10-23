@@ -1,6 +1,6 @@
-"""Consumer declaration requirements against format groups that declare, or lack, the required key.
+"""Consumer declaration requirements against source groups that declare, or lack, the required key.
 
-Format groups serve only their own columns, so they stay inert for other suites. Load order is logged so
+Source groups serve only their own columns, so they stay inert for other suites. Load order is logged so
 plan-time refusal can be proven (nothing loaded).
 """
 
@@ -28,8 +28,8 @@ from mloda.user import (
     resolve_feature,
 )
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
-    ToyFormatBase,
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+    ToySourceBase,
     toy_dac,
 )
 
@@ -47,7 +47,7 @@ LOAD_LOG: list[str] = []
 SHARED_LONELY_INPUT: list[Feature] = []
 
 
-class _DeclServingFormat(ToyFormatBase):
+class _DeclServingSource(ToySourceBase):
     """Serves only the names in `served`; logs every load."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("declfmt", NamePolicy.CHECKED, True),)
@@ -63,7 +63,7 @@ class _DeclServingFormat(ToyFormatBase):
         return pa.table({column: values for column, values in match.access.items() if column in cls.served})
 
 
-class DeclScaledDepthFormat(_DeclServingFormat):
+class DeclScaledDepthSource(_DeclServingSource):
     """Declares a scale."""
 
     served = frozenset({DEPTH, JOIN_KEY})
@@ -73,7 +73,7 @@ class DeclScaledDepthFormat(_DeclServingFormat):
         return {"scale": 0.001}
 
 
-class DeclLonelyFormat(_DeclServingFormat):
+class DeclLonelySource(_DeclServingSource):
     """The only provider of the lonely depth; declares nothing."""
 
     served = frozenset({LONELY_DEPTH})
@@ -150,18 +150,18 @@ class DeclDepthToMetresGlobal(_DeclConsumer):
 
 
 class DeclDepthToMetresScoped(_DeclConsumer):
-    """Requires scale of its depth input, addressed per feature through the format group's option key."""
+    """Requires scale of its depth input, addressed per feature through the source group's option key."""
 
     OUT = OUT_SCOPED
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        addressed = {DeclScaledDepthFormat.__name__: {DEPTH: [1], JOIN_KEY: [1]}}
+        addressed = {DeclScaledDepthSource.__name__: {DEPTH: [1], JOIN_KEY: [1]}}
         depth = Feature(DEPTH, options=addressed, required_declarations=self.depth_requirement())
         return {depth, Feature(FRAME)}
 
 
 class DeclLonelyRequiringConsumer(_DeclConsumer):
-    """Requires scale of an input only the declaration-less lonely format group can provide."""
+    """Requires scale of an input only the declaration-less lonely source group can provide."""
 
     OUT = OUT_LONELY_REQUIRING
 
@@ -195,8 +195,8 @@ class DeclSharedInstanceSecondConsumer(DeclLonelyRequiringConsumer):
 
 
 ALL_GROUPS: set[type[FeatureGroup]] = {
-    DeclScaledDepthFormat,
-    DeclLonelyFormat,
+    DeclScaledDepthSource,
+    DeclLonelySource,
     DeclFrameFG,
     DeclDepthToMetresGlobal,
     DeclDepthToMetresScoped,
@@ -208,7 +208,7 @@ ALL_GROUPS: set[type[FeatureGroup]] = {
 ENABLED = PluginCollector.enabled_feature_groups(ALL_GROUPS)
 DEPTH_DAC: DataAccessCollection = toy_dac(declfmt_depth_handle={DEPTH: [1], JOIN_KEY: [1]})
 LONELY_DAC: DataAccessCollection = toy_dac(declfmt_lonely_handle={LONELY_DEPTH: [1]})
-DEPTH_FRAME_LINK = Link.inner(JoinSpec(DeclScaledDepthFormat, JOIN_KEY), JoinSpec(DeclFrameFG, JOIN_KEY))
+DEPTH_FRAME_LINK = Link.inner(JoinSpec(DeclScaledDepthSource, JOIN_KEY), JoinSpec(DeclFrameFG, JOIN_KEY))
 
 
 @pytest.fixture(autouse=True)
@@ -231,17 +231,17 @@ def _run(names: list[Feature | str], dac: DataAccessCollection | None, links: se
 class TestDeclarationRequirementsEndToEnd:
     """A consumer's Feature carries the requirement per input and resolution honours it."""
 
-    def test_global_format_group_supplies_the_depth(self) -> None:
+    def test_global_source_group_supplies_the_depth(self) -> None:
         result = _run([OUT_GLOBAL], DEPTH_DAC, {DEPTH_FRAME_LINK})
 
         assert result[0][OUT_GLOBAL].to_pylist() == [1]
-        assert LOAD_LOG == [DeclScaledDepthFormat.__name__]
+        assert LOAD_LOG == [DeclScaledDepthSource.__name__]
 
-    def test_scoped_format_group_supplies_the_depth(self) -> None:
+    def test_scoped_source_group_supplies_the_depth(self) -> None:
         result = _run([OUT_SCOPED], None, {DEPTH_FRAME_LINK})
 
         assert result[0][OUT_SCOPED].to_pylist() == [1]
-        assert LOAD_LOG == [DeclScaledDepthFormat.__name__]
+        assert LOAD_LOG == [DeclScaledDepthSource.__name__]
 
     def test_unmet_requirement_fails_at_plan_time_before_any_load(self) -> None:
         with pytest.raises(FeatureResolutionError) as excinfo:
@@ -265,7 +265,7 @@ class TestDeclarationRequirementsEndToEnd:
         result = _run([OUT_LONELY_PLAIN], LONELY_DAC)
 
         assert result[0][OUT_LONELY_PLAIN].to_pylist() == [1]
-        assert LOAD_LOG == [DeclLonelyFormat.__name__]
+        assert LOAD_LOG == [DeclLonelySource.__name__]
 
     @pytest.mark.parametrize(
         "consumers",
@@ -317,23 +317,23 @@ class TestDeclarationRequirementsEndToEnd:
         assert DeclSharedInstanceRequiringConsumer.get_class_name() not in resolved.error
 
 
-FORMAT_FIRST_MAPPING: FeatureGroupEnvironmentMapping = {
-    DeclScaledDepthFormat: {PyArrowTable},
+SOURCE_FIRST_MAPPING: FeatureGroupEnvironmentMapping = {
+    DeclScaledDepthSource: {PyArrowTable},
     DeclDerivedDepthFG: {PyArrowTable},
 }
 DERIVED_FIRST_MAPPING: FeatureGroupEnvironmentMapping = {
     DeclDerivedDepthFG: {PyArrowTable},
-    DeclScaledDepthFormat: {PyArrowTable},
+    DeclScaledDepthSource: {PyArrowTable},
 }
 
 
 class TestWrittenPairIsPerCandidate:
-    """A format group's written pair does not satisfy a sibling candidate's declaration requirement."""
+    """A source group's written pair does not satisfy a sibling candidate's declaration requirement."""
 
     @pytest.mark.parametrize(
-        "mapping", [FORMAT_FIRST_MAPPING, DERIVED_FIRST_MAPPING], ids=["format_first", "derived_first"]
+        "mapping", [SOURCE_FIRST_MAPPING, DERIVED_FIRST_MAPPING], ids=["source_first", "derived_first"]
     )
-    def test_format_group_written_by_one_candidate_does_not_satisfy_another(
+    def test_source_group_written_by_one_candidate_does_not_satisfy_another(
         self, mapping: FeatureGroupEnvironmentMapping
     ) -> None:
         requesting = Feature(DEPTH, required_declarations={"scale": None})
@@ -341,21 +341,21 @@ class TestWrittenPairIsPerCandidate:
 
         result = IdentifyFeatureGroupClass.evaluate(requesting, mapping, None, DEPTH_DAC)
 
-        assert set(result.identified) == {DeclScaledDepthFormat}
+        assert set(result.identified) == {DeclScaledDepthSource}
         assert result.eliminations[DeclDerivedDepthFG].stage == "declarations"
 
 
-class TestNonOwnerFormatGroupIsEliminatedAtInputData:
-    """A sibling format group lacking the column is eliminated by its source, not by the declaration."""
+class TestNonOwnerSourceGroupIsEliminatedAtInputData:
+    """A sibling source group lacking the column is eliminated by its source, not by the declaration."""
 
     @pytest.mark.parametrize(
         ("options", "dac", "reason"),
         [
             (None, DEPTH_DAC, "is in none of the sources"),
             (
-                {DeclScaledDepthFormat.__name__: {DEPTH: [1], JOIN_KEY: [1]}},
+                {DeclScaledDepthSource.__name__: {DEPTH: [1], JOIN_KEY: [1]}},
                 None,
-                f"options point at {DeclScaledDepthFormat.__name__}",
+                f"options point at {DeclScaledDepthSource.__name__}",
             ),
         ],
         ids=["global", "pointed"],
@@ -365,14 +365,14 @@ class TestNonOwnerFormatGroupIsEliminatedAtInputData:
     ) -> None:
         requesting = Feature(DEPTH, options=options, required_declarations={"scale": None})
         mapping: FeatureGroupEnvironmentMapping = {
-            DeclScaledDepthFormat: {PyArrowTable},
-            DeclLonelyFormat: {PyArrowTable},
+            DeclScaledDepthSource: {PyArrowTable},
+            DeclLonelySource: {PyArrowTable},
         }
 
         result = IdentifyFeatureGroupClass.evaluate(requesting, mapping, None, dac)
 
-        assert set(result.identified) == {DeclScaledDepthFormat}
-        elimination = result.eliminations[DeclLonelyFormat]
+        assert set(result.identified) == {DeclScaledDepthSource}
+        elimination = result.eliminations[DeclLonelySource]
         assert elimination.stage == "input_data"
         assert reason in elimination.reason
 
@@ -391,10 +391,10 @@ class TestTopLevelRequestRequirement:
         assert "'scale'" in message
         assert LOAD_LOG == []
 
-    def test_met_requirement_resolves_through_the_declaring_format_group(self) -> None:
+    def test_met_requirement_resolves_through_the_declaring_source_group(self) -> None:
         request = Feature(DEPTH, required_declarations={"scale": None})
 
         result = _run([request], DEPTH_DAC)
 
         assert result[0][DEPTH].to_pylist() == [1]
-        assert LOAD_LOG == [DeclScaledDepthFormat.__name__]
+        assert LOAD_LOG == [DeclScaledDepthSource.__name__]

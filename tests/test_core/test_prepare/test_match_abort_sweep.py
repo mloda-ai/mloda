@@ -24,7 +24,7 @@ through a return, break or continue or by raising a replacement, undoes every es
 re-raises of its own clauses, and the marked raises in the arms those clauses never catch.
 
 Not covered: plugin code under ``mloda_plugins``, except the match helpers of ReadFileFG and ReadDBFG (core), the
-file, database and document format groups, checked by the parametrized tests below; dynamic dispatch, which is
+file, database and document source groups, checked by the parametrized tests below; dynamic dispatch, which is
 why SEEDS is hand-written; decorators; ``except*`` groups, which neither pass over a ``try`` reads, as their clauses split an exception
 group between them instead of racing for it, so the third pass's first-match reasoning does not hold there
 and the fourth drops them with it; a raise in the body of a nested try that has handlers, assumed caught there, and
@@ -64,7 +64,7 @@ MATCH_PATH_MODULES: dict[str, str] = {
     "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_author_guards.py": "the required_when guard",
     "mloda/core/abstract_plugins/components/property_spec.py": "the matcher reads the spec sentinel",
     "mloda/core/abstract_plugins/components/input_data/base_input_data.py": "the input-data matches hook",
-    "mloda/core/abstract_plugins/components/input_data/reader_probe.py": "the extender-wrapped format group probe",
+    "mloda/core/abstract_plugins/components/input_data/reader_probe.py": "the extender-wrapped source group probe",
     "mloda/core/abstract_plugins/components/input_data/api/api_input_data.py": "the api input data match hook",
     "mloda/core/abstract_plugins/components/input_data/creator/data_creator.py": "the data-creator match hook",
     "mloda/core/abstract_plugins/components/match_data/match_data.py": "match data selection during matching",
@@ -79,7 +79,7 @@ SEEDS: dict[str, str] = {
     "_filter_feature_group_by_criteria": "the seam that contains a raising hook",
     "check_required_when": "runs inside the wrapper install_required_when_guard installs",
     "guarded": "the installed closure IS a guarded class's matcher; the setattr is no call edge",
-    "probe_format_group": "the format group's extender-wrapped probe, called from outside the declared modules",
+    "probe_source_group": "the source group's extender-wrapped probe, called from outside the declared modules",
 }
 
 # Raising functions OUTSIDE the declared modules that the match path calls; the decision is recorded here
@@ -106,16 +106,16 @@ _VALIDATE_PROPERTY_SPEC_RAISES = (
 )
 
 RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
-    ("mloda/core/abstract_plugins/components/input_data/format_feature_group.py", "_matches_by_default_rules"): (
-        "real edge, collided verdict: the format group override of the default rules; its raises are marked aborts, "
+    ("mloda/core/abstract_plugins/components/input_data/source_feature_group.py", "_matches_by_default_rules"): (
+        "real edge, collided verdict: the source group override of the default rules; its raises are marked aborts, "
         "except the reader pair conflict, a plain ValueError the seam contains"
     ),
     ("mloda/core/abstract_plugins/components/input_data/read_db_fg.py", "_matches_by_default_rules"): (
-        "real edge: the database group override delegates to the format group default rules, whose raises are "
+        "real edge: the database group override delegates to the source group default rules, whose raises are "
         "marked aborts, except the contained reader pair conflict"
     ),
     ("mloda/core/abstract_plugins/function_extender.py", "_invoke_extender"): (
-        "the INPUT_DATA_MATCH extender seam; an extender raise refuses one candidate in probe_format_group"
+        "the INPUT_DATA_MATCH extender seam; an extender raise refuses one candidate in probe_source_group"
     ),
     ("mloda/core/abstract_plugins/hook_context.py", "__post_init__"): (
         "validates the framework-built HookContext fields; raises only on a framework bug"
@@ -145,12 +145,12 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
 # Swallowing functions OUTSIDE the declared modules that the match path calls; the containment there is decided
 # here. The closure is transitive and resolves by name, so an entry can be a name COLLISION, not a call edge.
 SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
-    ("mloda/core/abstract_plugins/components/input_data/format_feature_group.py", "_matches_by_default_rules"): (
-        "real edge: the format group override of the default rules reaches probe_format_group's contained "
+    ("mloda/core/abstract_plugins/components/input_data/source_feature_group.py", "_matches_by_default_rules"): (
+        "real edge: the source group override of the default rules reaches probe_source_group's contained "
         "extender raise, which declines one candidate and re-raises probe and match aborts"
     ),
     ("mloda/core/abstract_plugins/components/input_data/read_db_fg.py", "_matches_by_default_rules"): (
-        "real edge: the database group override delegates through super() to the format group default rules, "
+        "real edge: the database group override delegates through super() to the source group default rules, "
         "whose contained probe declines one candidate and re-raises aborts"
     ),
     ("mloda/core/abstract_plugins/function_extender.py", "_invoke_extender"): (
@@ -2604,11 +2604,11 @@ def test_reader_match_handlers_escalate_or_declare_a_swallow(module: str) -> Non
     assert escalating != [], f"expected at least one escalating handler among {module}'s match helpers"
 
 
-_FILE_FORMAT_MODULES = [
+_SOURCE_GROUP_MODULES = [
     pytest.param(f"mloda_plugins/feature_group/input_data/file_formats/{name}_fg.py", id=f"{name}_fg")
     for name in ("csv", "parquet", "json", "feather", "orc")
 ] + [
-    pytest.param("mloda_plugins/feature_group/input_data/db_formats/sqlite_fg.py", id="sqlite_fg"),
+    pytest.param("mloda_plugins/feature_group/input_data/db_sources/sqlite_fg.py", id="sqlite_fg"),
     pytest.param("mloda/core/abstract_plugins/components/input_data/read_document_fg.py", id="read_document_fg"),
     pytest.param("mloda/core/abstract_plugins/components/input_data/file_source_fg.py", id="file_source_fg"),
     *(
@@ -2618,9 +2618,9 @@ _FILE_FORMAT_MODULES = [
 ]
 
 
-@pytest.mark.parametrize("module", _FILE_FORMAT_MODULES)
-def test_file_format_handlers_escalate_or_declare_a_swallow(module: str) -> None:
-    """The stock file, database and document format groups hook into the match path, so none may hold an unannotated broad handler."""
+@pytest.mark.parametrize("module", _SOURCE_GROUP_MODULES)
+def test_source_group_handlers_escalate_or_declare_a_swallow(module: str) -> None:
+    """The stock file, database and document source groups hook into the match path, so none may hold an unannotated broad handler."""
     source = (_REPO_ROOT / module).read_text(encoding="utf-8")
 
     handlers = classify_handlers(source, module, functions=None)

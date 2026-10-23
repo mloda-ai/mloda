@@ -6,7 +6,6 @@ import pytest
 
 import mloda.provider as provider
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
 
 
 def test_claim_route_is_hashable_and_compares_by_value() -> None:
@@ -34,10 +33,9 @@ def test_provider_exports_are_the_core_objects() -> None:
     assert provider.ClaimRoute is ClaimRoute
     assert provider.NamePolicy is NamePolicy
     assert provider.SourceMatch is SourceMatch
-    assert provider.FormatFeatureGroup is FormatFeatureGroup
     assert provider.QUERY_OPTION == "query_text"
     assert provider.HANDLE_OPTION == "data_access_handle"
-    for name in ("ClaimRoute", "NamePolicy", "SourceMatch", "FormatFeatureGroup", "QUERY_OPTION", "HANDLE_OPTION"):
+    for name in ("ClaimRoute", "NamePolicy", "SourceMatch", "SourceFeatureGroup", "QUERY_OPTION", "HANDLE_OPTION"):
         assert name in provider.__all__
 
 

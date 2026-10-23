@@ -46,7 +46,7 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
 )
 from mloda.user import PluginLoader
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatFG
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
 
 
 class _PolicyEnfFGA(FeatureGroup):
@@ -350,7 +350,7 @@ class TestImplementationPolicyDenial:
     def _implementation(
         make: Callable[..., type[Implementation[Any]]], module: str, name: str
     ) -> type[Implementation[Any]]:
-        class _PolicyGroup(ToyFormatFG):
+        class _PolicyGroup(ToySourceFG):
             pass
 
         implementation = make(_PolicyGroup, PythonDictFramework, name=name)

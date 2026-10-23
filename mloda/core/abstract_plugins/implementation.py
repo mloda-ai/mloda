@@ -1,4 +1,4 @@
-"""Implementation: a plugin that serves one (Format or Operation FeatureGroup, ComputeFramework) pair."""
+"""Implementation: a plugin that serves one (Source or Operation FeatureGroup, ComputeFramework) pair."""
 
 import inspect
 import types
@@ -15,7 +15,7 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import (
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
@@ -29,7 +29,7 @@ def _is_concrete(cls: Any) -> bool:
 
 
 def _serves_groups(group: Any) -> bool:
-    return isinstance(group, type) and issubclass(group, (FormatFeatureGroup, OperationFeatureGroup))
+    return isinstance(group, type) and issubclass(group, (SourceFeatureGroup, OperationFeatureGroup))
 
 
 def _names_a_pair(cls: Any) -> bool:
@@ -54,7 +54,7 @@ class Implementation(ABC, Generic[G]):
         framework = getattr(cls, "compute_framework", None)
         if not _serves_groups(group):
             raise TypeError(
-                f"{cls.__name__} must set feature_group to a FormatFeatureGroup or OperationFeatureGroup subclass."
+                f"{cls.__name__} must set feature_group to a SourceFeatureGroup or OperationFeatureGroup subclass."
             )
         if not (isinstance(framework, type) and issubclass(framework, ComputeFramework)):
             raise TypeError(f"{cls.__name__} must set compute_framework to a ComputeFramework subclass.")
@@ -92,7 +92,7 @@ class Implementation(ABC, Generic[G]):
     @classmethod
     @abstractmethod
     def calculate(cls, group: type[G], data: Any, features: FeatureSet, framework: ComputeFramework | None) -> Any:
-        """Compute the features; data is the input frame for an operation group, the SourceMatch for a format group."""
+        """Compute the features; data is the input frame for an operation group, the SourceMatch for a source group."""
 
 
 def serving_implementation(

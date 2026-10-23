@@ -24,7 +24,7 @@ from mloda_plugins.feature_group.experimental.time_window.base import TimeWindow
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow as PandasTimeWindow
 from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow as PyArrowTimeWindow
 
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import column_values
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import column_values
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.test_time_window_utils import (
     PandasTimeWindowTestDataCreator,

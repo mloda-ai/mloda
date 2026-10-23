@@ -1,6 +1,6 @@
-"""Importing this module loads every stock format group."""
+"""Importing this module loads every stock source group."""
 
-from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.document_formats.json_document_fg import JsonDocumentFG
 from mloda_plugins.feature_group.input_data.document_formats.markdown_fg import MarkdownFG
 from mloda_plugins.feature_group.input_data.document_formats.text_fg import PyFG, TextFG

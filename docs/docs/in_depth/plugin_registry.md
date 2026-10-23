@@ -122,7 +122,7 @@ Recommended rollout for deployments: stay on `"off"`, switch CI or staging to `"
 
 ## Governance
 
-Stewards can install a `PluginPolicy` on a registry to control what may register. All governance symbols (`PluginPolicy`, `ApprovalStatus`, `PluginPolicyViolationError`, `PluginRegistry`) are exported from `mloda.steward`. Data sources are format FeatureGroups, so plugin policy enforcement for them holds under strict mode with an allowlist policy; outside strict mode a policy-denied group can still serve. Implementations are governed by module like other plugins. Under strict mode with a policy, a denied plugin never serves data; importing a denied package still runs its module code, because the loader imports before the policy check.
+Stewards can install a `PluginPolicy` on a registry to control what may register. All governance symbols (`PluginPolicy`, `ApprovalStatus`, `PluginPolicyViolationError`, `PluginRegistry`) are exported from `mloda.steward`. Data sources are source FeatureGroups, so plugin policy enforcement for them holds under strict mode with an allowlist policy; outside strict mode a policy-denied group can still serve. Implementations are governed by module like other plugins. Under strict mode with a policy, a denied plugin never serves data; importing a denied package still runs its module code, because the loader imports before the policy check.
 
 ### Plugin Policy
 

@@ -64,7 +64,7 @@ argument to `resolve_feature`:
   string form, `options=` and `feature_group=`).
 - `links`: a set of `Link` objects, threaded to the matcher so link-gated groups
   resolve.
-- `data_access_collection`: threaded to the matcher so format FeatureGroups
+- `data_access_collection`: threaded to the matcher so source FeatureGroups
   resolve.
 - `plugin_collector`: restricts the FeatureGroups considered and threads its
   `allow_redefinition` flag into deduplication.
@@ -299,4 +299,4 @@ entry), because the catalog's job is to list a degraded class, not hide it.
 - [Plugin Loader](plugin-loader.md)
 - [Feature Group Matching](feature-group-matching.md)
 - [Feature Group Resolution Errors](troubleshooting/feature-group-resolution-errors.md)
-- [Column discovery on a format group](data-access-patterns.md#column-discovery-and-row-counts)
+- [Column discovery on a source group](data-access-patterns.md#column-discovery-and-row-counts)

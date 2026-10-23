@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import concrete_format_groups
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import QUERY_OPTION
 from mloda.provider import ApiInputData, DataCreator
 from mloda.user import PluginLoader
@@ -37,15 +37,15 @@ def test_option_keys_contain_builtin_file_reader() -> None:
 
 
 @pytest.mark.parametrize("key", ["CsvFG", "JsonFG", "ParquetFG"])
-def test_option_keys_contain_stock_format_group_pointers(key: str) -> None:
+def test_option_keys_contain_stock_source_group_pointers(key: str) -> None:
     PluginLoader.all()
     assert key in data_access_option_keys()
 
 
-def test_option_keys_contain_every_loaded_format_group_pointer_key() -> None:
+def test_option_keys_contain_every_loaded_source_group_pointer_key() -> None:
     PluginLoader.all()
     keys = data_access_option_keys()
-    groups = concrete_format_groups()
+    groups = concrete_source_groups()
     assert groups
     missing = sorted({pointer for group in groups.values() for pointer in group.pointer_keys()} - keys)
     assert missing == []

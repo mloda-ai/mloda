@@ -42,9 +42,9 @@ from mloda.user import (
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
-from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     neutral_csv_group,
     toy_dac,
 )
@@ -477,8 +477,8 @@ class TestSqliteFGSources:
         assert "alice" not in repr(sources[0])
 
 
-class TestFormatGroupIdentityNeverEchoesTheAccess:
-    """A format group publishes the match's source, never a credential-shaped access value."""
+class TestSourceGroupIdentityNeverEchoesTheAccess:
+    """A source group publishes the match's source, never a credential-shaped access value."""
 
     def test_identity_is_the_source_not_the_access(self) -> None:
         match = SourceMatch(source="/data/key.csv", access=PurePosixPath("s3://alice:hunter2@bucket/key.csv"))
@@ -1052,7 +1052,7 @@ class TestInputDataLoadHookCarriesReaderClassAndDeclaredAttributes:
         assert cast(Any, context.reader_class) is _RaisingDeclarationReader
         assert context.declared_attributes is None
 
-    def test_end_to_end_format_group_declarations_reach_both_load_and_calculate(
+    def test_end_to_end_source_group_declarations_reach_both_load_and_calculate(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         column = f"{_MARKER}_col_decl"
@@ -1212,8 +1212,8 @@ class TestThreadHopInASpawnedWorkerReachesTheGate:
         assert output_path.read_text(encoding="utf-8").splitlines() == ["gate"]
 
 
-class TestInputDataLoadAuditForFormatGroups:
-    """A format group fires INPUT_DATA_LOAD naming itself, its source and the loader that ran."""
+class TestInputDataLoadAuditForSourceGroups:
+    """A source group fires INPUT_DATA_LOAD naming itself, its source and the loader that ran."""
 
     def _fire(
         self, group: type, framework: Any, extender: _InputDataLoadCapturingExtender | None = None

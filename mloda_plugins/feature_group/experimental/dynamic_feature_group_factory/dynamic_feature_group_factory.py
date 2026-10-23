@@ -79,7 +79,7 @@ class DynamicFeatureGroupCreator:
     # The class is now registered and can match "double_value" features
     ```
 
-    ### Dynamic Feature Group Over a Document Format Group
+    ### Dynamic Feature Group Over a Document Source Group
 
     ```python
     from mloda.user import Feature

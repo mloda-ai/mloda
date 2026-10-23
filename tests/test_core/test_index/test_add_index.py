@@ -5,7 +5,7 @@ import sqlite3
 import tempfile
 from typing import Any
 
-from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 import pyarrow as pa
 import pyarrow.compute as pc

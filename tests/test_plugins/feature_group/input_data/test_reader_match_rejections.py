@@ -24,8 +24,8 @@ from mloda.provider import (
 )
 from mloda.user import DataAccessCollection, Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
-    ToyFormatBase,
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+    ToySourceBase,
     toy_dac,
 )
 
@@ -35,8 +35,8 @@ BOGUS_STAGE_FEATURE_REJ727 = "rej727_bogus_stage_column"
 BOGUS_STAGE_REASON_REJ727 = "custom decline"
 
 
-class Rej727ToyFormatFG(ToyFormatBase):
-    """Format group serving only rej727_column from toy sources; inert for every other name."""
+class Rej727ToySourceFG(ToySourceBase):
+    """Source group serving only rej727_column from toy sources; inert for every other name."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("rej727", NamePolicy.CHECKED, True),)
 
@@ -101,7 +101,7 @@ class TestEngineHarvestsRejection:
                 ["rej727_net_spend"],
                 compute_frameworks=[PandasDataFrame],
                 plugin_collector=PluginCollector.enabled_feature_groups(
-                    {Rej727ToyFormatFG, Rej727NetSpend, Rej727LineValue}
+                    {Rej727ToySourceFG, Rej727NetSpend, Rej727LineValue}
                 ),
                 data_access_collection=toy_dac(rej727_handle={"other_a": [1]}),
             )
@@ -111,7 +111,7 @@ class TestEngineHarvestsRejection:
             f"No feature groups found for feature name: '{FEATURE_NAME_REJ727}' "
             "(needed by rej727_net_spend -> rej727_line_value)."
         )
-        assert any(line.startswith(f"  - {Rej727ToyFormatFG.__name__} (input data):") for line in lines)
+        assert any(line.startswith(f"  - {Rej727ToySourceFG.__name__} (input data):") for line in lines)
         assert not any(line.startswith("Did you mean") for line in lines)
 
 

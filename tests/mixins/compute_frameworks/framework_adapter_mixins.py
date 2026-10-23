@@ -1,4 +1,4 @@
-"""Compute-framework adapters and loads-into-framework checks for file, database and document format groups.
+"""Compute-framework adapters and loads-into-framework checks for file, database and document source groups.
 
 Adapters resolve the framework class lazily (after importorskip), never at import, class or parametrize time.
 Combine one adapter with FileLoadsIntoFrameworkMixin or DatabaseLoadsIntoFrameworkMixin in a concrete Test class.
@@ -14,7 +14,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.user import DataAccessCollection, Feature, GlobalFilter, Options, PluginCollector, mloda
-from tests.mixins.reader_feature_groups.format_feature_group_test_mixin import expected_implementation_version
+from tests.mixins.reader_feature_groups.source_feature_group_test_mixin import expected_implementation_version
 
 
 class FrameworkAdapterMixin:

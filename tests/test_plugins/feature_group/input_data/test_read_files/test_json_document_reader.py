@@ -15,17 +15,17 @@ from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     PyArrowTableAdapter,
     PythonDictAdapter,
 )
-from tests.mixins.reader_feature_groups.document_format_feature_group_test_mixin import (
-    DocumentFormatFeatureGroupTestMixin,
+from tests.mixins.reader_feature_groups.read_document_fg_test_mixin import (
+    ReadDocumentFGTestMixin,
 )
-from tests.mixins.reader_feature_groups.lazy_format_group import lazy_document_group, load_document_group
+from tests.mixins.reader_feature_groups.lazy_source_group import lazy_document_group, load_document_group
 
 HANDOVER = {"document_suffixes": frozenset({".json", ".JSON"})}
 PRETTY = '{\n  "a": 1,\n  "b": [true, null]\n}\n'
 CANONICAL = json.dumps({"a": 1, "b": [True, None]})
 
 
-class TestJsonDocumentFG(DocumentFormatFeatureGroupTestMixin):
+class TestJsonDocumentFG(ReadDocumentFGTestMixin):
     feature_group_class = lazy_document_group("json_document_fg", "JsonDocumentFG")
     present_column = "JsonDocumentFG"
     missing_column = "docfmt_json_missing"

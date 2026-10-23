@@ -1,4 +1,4 @@
-"""Feather file format group: typed schema from the IPC footer, row counts and a PyArrow read."""
+"""Feather file source group: typed schema from the IPC footer, row counts and a PyArrow read."""
 
 from collections.abc import Collection
 from typing import Any

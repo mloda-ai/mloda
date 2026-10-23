@@ -963,15 +963,15 @@ class TestGetExtenderDocs:
 
 
 class TestFeatureGroupInfoClaimRoutes:
-    def test_format_group_lists_its_claim_routes(self) -> None:
-        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatFG
+    def test_source_group_lists_its_claim_routes(self) -> None:
+        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
 
-        infos = {info.name: info for info in get_feature_group_docs(name="ToyFormatFG")}
+        infos = {info.name: info for info in get_feature_group_docs(name="ToySourceFG")}
 
-        assert tuple(infos["ToyFormatFG"].claim_routes) == ToyFormatFG.CLAIM_ROUTES
-        assert len(infos["ToyFormatFG"].claim_routes) == 1
+        assert tuple(infos["ToySourceFG"].claim_routes) == ToySourceFG.CLAIM_ROUTES
+        assert len(infos["ToySourceFG"].claim_routes) == 1
 
-    def test_non_format_group_has_no_claim_routes(self) -> None:
+    def test_non_source_group_has_no_claim_routes(self) -> None:
         infos = get_feature_group_docs(name="AggregatedFeatureGroup")
 
         assert infos

@@ -21,7 +21,7 @@ from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation  # noqa: F401
-from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature
 
 

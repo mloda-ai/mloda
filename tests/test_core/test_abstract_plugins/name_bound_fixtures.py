@@ -64,7 +64,7 @@ def make_name_bound_fg(
     return type(f"{prefix}NameBoundFeatureGroup", (FeatureChainParserMixin, FeatureGroup), namespace)
 
 
-def make_source_fg(
+def make_root_fg(
     prefix: str,
     module: str,
     column: str,
@@ -88,4 +88,4 @@ def make_source_fg(
         "input_data": classmethod(input_data),
         "calculate_feature": classmethod(calculate_feature),
     }
-    return type(f"{prefix}SourceFeatureGroup", (FeatureGroup,), namespace)
+    return type(f"{prefix}RootFeatureGroup", (FeatureGroup,), namespace)

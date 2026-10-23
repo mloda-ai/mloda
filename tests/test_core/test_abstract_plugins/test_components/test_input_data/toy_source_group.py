@@ -1,4 +1,4 @@
-"""Test-only toy format groups over in-memory dict-of-columns sources (no optional dependency).
+"""Test-only toy source groups over in-memory dict-of-columns sources (no optional dependency).
 
 A source is a credential value ``{TOY_KEY: {column: values}}`` keyed by handle, or the dict-of-columns under
 the group's class-name option key. Names carry a ``toyfmt`` marker so the groups stay inert for other tests.
@@ -15,7 +15,7 @@ import pyarrow as pa
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.provider import ClaimRoute, FormatFeatureGroup, NamePolicy, SourceMatch
+from mloda.provider import ClaimRoute, SourceFeatureGroup, NamePolicy, SourceMatch
 from mloda.user import PluginCollector
 
 TOY_KEY = "toyfmt_columns"
@@ -37,7 +37,7 @@ def toy_token_dac(**sources: dict[str, list[Any]]) -> DataAccessCollection:
     )
 
 
-def toy_token_request(group: type[ToyFormatFG], column: str) -> dict[str, Any]:
+def toy_token_request(group: type[ToySourceFG], column: str) -> dict[str, Any]:
     """Keyword arguments that run or plan `column` through only `group` over a token-bearing toy source."""
     return {
         "compute_frameworks": ["PythonDictFramework"],
@@ -50,10 +50,10 @@ def foreign_dac() -> DataAccessCollection:
     return DataAccessCollection(credentials={"toyfmt_foreign": {"unrelated_key": {"toyfmt_col": [1]}}})
 
 
-def neutral_csv_group(path: Path) -> type[ToyFormatFG]:
-    """A fresh ToyFormatFG subclass whose neutral form is a csv FileSource written to path (no loaders)."""
+def neutral_csv_group(path: Path) -> type[ToySourceFG]:
+    """A fresh ToySourceFG subclass whose neutral form is a csv FileSource written to path (no loaders)."""
 
-    class _NeutralCsvFG(ToyFormatFG):
+    class _NeutralCsvFG(ToySourceFG):
         @classmethod
         def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
             names = sorted(features.get_all_names())
@@ -74,7 +74,7 @@ def column_values(result: list[Any], column: str) -> list[Any]:
     return list(first[column].to_pylist() if hasattr(first[column], "to_pylist") else first[column])
 
 
-class ToyFormatBase(FormatFeatureGroup):
+class ToySourceBase(SourceFeatureGroup):
     """Implements the hooks over in-memory sources; declares no routes, so it never claims."""
 
     @classmethod
@@ -108,29 +108,29 @@ class ToyFormatBase(FormatFeatureGroup):
         return pa.table(dict(match.access))
 
 
-class ToyFormatFG(ToyFormatBase):
+class ToySourceFG(ToySourceBase):
     """Checked columns, searched on its own."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.CHECKED, True),)
 
 
-class ToyFormatSubFG(ToyFormatFG):
-    """Subclass of a format group; takes over its claims."""
+class ToySourceSubFG(ToySourceFG):
+    """Subclass of a source group; takes over its claims."""
 
 
-class ToyOtherFormatFG(ToyFormatBase):
+class ToyOtherSourceFG(ToySourceBase):
     """A second checked, searched group over the same toy sources."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.CHECKED, True),)
 
 
-class ToyOpenFG(ToyFormatBase):
+class ToyOpenFG(ToySourceBase):
     """Open names, only when pointed at."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.OPEN, False),)
 
 
-class ToyRequiredOptionFG(ToyFormatBase):
+class ToyRequiredOptionFG(ToySourceBase):
     """Checked names; the route applies only when the toyfmt_required option is present."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
@@ -138,7 +138,7 @@ class ToyRequiredOptionFG(ToyFormatBase):
     )
 
 
-class ToyDeclaredFG(ToyFormatBase):
+class ToyDeclaredFG(ToySourceBase):
     """Declared names: one fixed name and one prefix; the class name shortcut is a declared name too."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.DECLARED, True),)

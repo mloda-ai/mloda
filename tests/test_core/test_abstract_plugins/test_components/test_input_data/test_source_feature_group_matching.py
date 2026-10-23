@@ -1,4 +1,4 @@
-"""FormatFeatureGroup class-definition rule, claim-route matching, pointing, ambiguity and plan identity."""
+"""SourceFeatureGroup class-definition rule, claim-route matching, pointing, ambiguity and plan identity."""
 
 import gc
 import logging
@@ -14,27 +14,27 @@ from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.core.abstract_plugins.components.input_data.claim_route import feature_group_scope
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
-    FormatPointerError,
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import (
+    SourcePointerError,
 )
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.provider import ClaimRoute, FormatFeatureGroup, NamePolicy, ReadFileFG, SourceMatch
+from mloda.provider import ClaimRoute, SourceFeatureGroup, NamePolicy, ReadFileFG, SourceMatch
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 from tests.mixins.reader_feature_groups.format_file_writers import write_csv, write_parquet
-from tests.mixins.reader_feature_groups.lazy_format_group import load_group
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+from tests.mixins.reader_feature_groups.lazy_source_group import load_group
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     ToyDeclaredFG,
-    ToyFormatBase,
-    ToyFormatFG,
-    ToyFormatSubFG,
+    ToySourceBase,
+    ToySourceFG,
+    ToySourceSubFG,
     ToyOpenFG,
-    ToyOtherFormatFG,
+    ToyOtherSourceFG,
     ToyRequiredOptionFG,
     column_values,
     foreign_dac,
@@ -68,20 +68,20 @@ class TestClassDefinitionRule:
     def test_open_searched_route_raises(self) -> None:
         with pytest.raises(TypeError):
 
-            class _Bad(ToyFormatBase):
+            class _Bad(ToySourceBase):
                 CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.OPEN, True),)
 
     def test_open_searched_route_among_valid_routes_raises(self) -> None:
         with pytest.raises(TypeError):
 
-            class _BadMixed(ToyFormatBase):
+            class _BadMixed(ToySourceBase):
                 CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
                     ClaimRoute("toy", NamePolicy.CHECKED, True),
                     ClaimRoute("toy2", NamePolicy.OPEN, True),
                 )
 
     def test_group_without_routes_never_claims(self) -> None:
-        assert not _claims(Feature(COL), toy_dac(h1={COL: [1]}), ToyFormatBase)
+        assert not _claims(Feature(COL), toy_dac(h1={COL: [1]}), ToySourceBase)
 
     @pytest.mark.parametrize("own_mapping", [False, True], ids=["inherited_only", "own_mapping_merged"])
     def test_a_non_spec_value_from_a_plain_mixin_raises_at_definition(self, own_mapping: bool) -> None:
@@ -98,25 +98,25 @@ class TestClassDefinitionRule:
 class TestCheckedNames:
     def test_present_column_matches_and_records_pair(self) -> None:
         feature = Feature(COL)
-        result = _identify(feature, toy_dac(h1={COL: [1]}), ToyFormatFG)
+        result = _identify(feature, toy_dac(h1={COL: [1]}), ToySourceFG)
 
-        assert ToyFormatFG in result.identified
+        assert ToySourceFG in result.identified
         pair = feature.input_data_match
         assert pair is not None
-        assert pair[0] is ToyFormatFG
+        assert pair[0] is ToySourceFG
         assert pair[1] == SourceMatch(source="h1:toy", access=None)
         assert pair[1].access == {COL: [1]}
 
     def test_missing_column_declines_with_input_data_rejection(self) -> None:
-        result = _identify(Feature(COL), toy_dac(h1={"other": [1]}), ToyFormatFG)
+        result = _identify(Feature(COL), toy_dac(h1={"other": [1]}), ToySourceFG)
 
         assert result.identified == {}
-        elimination = result.eliminations[ToyFormatFG]
+        elimination = result.eliminations[ToySourceFG]
         assert elimination.stage == "input_data"
         assert "h1:toy" in elimination.reason
 
     def test_no_collection_declines(self) -> None:
-        assert not _claims(Feature(COL), None, ToyFormatFG)
+        assert not _claims(Feature(COL), None, ToySourceFG)
 
 
 class TestDeclaredNames:
@@ -155,8 +155,8 @@ class TestOpenNames:
 
     def test_scope_does_not_point_other_groups_candidates_when_out_of_scope(self) -> None:
         feature = Feature("toyfmt_any", feature_group=ToyOpenFG)
-        result = _identify(feature, toy_dac(h1={COL: [1]}), ToyFormatFG, ToyOpenFG)
-        assert ToyFormatFG not in result.identified
+        result = _identify(feature, toy_dac(h1={COL: [1]}), ToySourceFG, ToyOpenFG)
+        assert ToySourceFG not in result.identified
 
 
 class TestRequiredOptionRoute:
@@ -168,8 +168,8 @@ class TestRequiredOptionRoute:
         assert _claims(feature, toy_dac(h1={COL: [1]}), ToyRequiredOptionFG)
 
 
-class _ToyAliasFG(ToyFormatFG):
-    """Format group whose data_access_name() is an alias distinct from its class name."""
+class _ToyAliasFG(ToySourceFG):
+    """Source group whose data_access_name() is an alias distinct from its class name."""
 
     @classmethod
     def data_access_name(cls) -> str:
@@ -191,11 +191,11 @@ class TestAliasedGroupPointing:
 
 class TestPointedButMissingAborts:
     def test_class_name_key_source_lacking_the_column_raises(self) -> None:
-        feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))
+        feature = Feature(COL, Options({"ToySourceFG": {"other": [1]}}))
         with pytest.raises(FeatureResolutionError) as exc_info:
-            evaluate_or_raise(feature, _plugins(ToyFormatFG), None, None)
+            evaluate_or_raise(feature, _plugins(ToySourceFG), None, None)
         message = str(exc_info.value)
-        assert "ToyFormatFG" in message
+        assert "ToySourceFG" in message
         assert "scoped:toy" in message
         assert COL in message
         assert "other" in message
@@ -203,53 +203,53 @@ class TestPointedButMissingAborts:
         assert isinstance(error, ValueError)
         assert error.feature_name == COL
         assert error.result.identified == {}
-        elimination = error.result.eliminations[ToyFormatFG]
+        elimination = error.result.eliminations[ToySourceFG]
         assert elimination.stage == "input_data"
         assert elimination.reason in message
 
     def test_pointed_missing_column_through_run_all_raises_feature_resolution_error(self) -> None:
-        feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))
-        with pytest.raises(FeatureResolutionError, match="ToyFormatFG"):
+        feature = Feature(COL, Options({"ToySourceFG": {"other": [1]}}))
+        with pytest.raises(FeatureResolutionError, match="ToySourceFG"):
             mloda.run_all(
                 [feature],
                 compute_frameworks=[PyArrowTable],
-                plugin_collector=PluginCollector.enabled_feature_groups({ToyFormatFG}),
+                plugin_collector=PluginCollector.enabled_feature_groups({ToySourceFG}),
             )
 
     def test_pointed_missing_column_is_projected_by_diagnose(self) -> None:
-        feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))
+        feature = Feature(COL, Options({"ToySourceFG": {"other": [1]}}))
         diagnosis = mloda.diagnose(
             [feature],
             compute_frameworks=[PyArrowTable],
-            plugin_collector=PluginCollector.enabled_feature_groups({ToyFormatFG}),
+            plugin_collector=PluginCollector.enabled_feature_groups({ToySourceFG}),
         )
         assert diagnosis.complete is False
         assert diagnosis.feature_name == COL
         assert diagnosis.message is not None
-        assert "ToyFormatFG" in diagnosis.message
+        assert "ToySourceFG" in diagnosis.message
         assert "other" in diagnosis.message
 
     def test_handle_alone_narrows_but_does_not_escalate_a_missing_column(self) -> None:
         feature = Feature(COL, Options({"data_access_handle": "h1"}))
         dac = toy_dac(h1={"other": [1]}, h2={COL: [1]})
-        result = _identify(feature, dac, ToyFormatFG)
+        result = _identify(feature, dac, ToySourceFG)
         assert result.identified == {}
-        assert "h1:toy" in result.eliminations[ToyFormatFG].reason
+        assert "h1:toy" in result.eliminations[ToySourceFG].reason
 
     def test_abort_does_not_fall_through_to_the_other_candidate(self) -> None:
-        feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))
+        feature = Feature(COL, Options({"ToySourceFG": {"other": [1]}}))
         dac = toy_dac(h1={COL: [1]})
-        assert _claims(Feature(COL), dac, ToyOtherFormatFG)
-        with pytest.raises(FeatureResolutionError, match="ToyFormatFG"):
-            evaluate_or_raise(feature, _plugins(ToyFormatFG, ToyOtherFormatFG), None, dac)
+        assert _claims(Feature(COL), dac, ToyOtherSourceFG)
+        with pytest.raises(FeatureResolutionError, match="ToySourceFG"):
+            evaluate_or_raise(feature, _plugins(ToySourceFG, ToyOtherSourceFG), None, dac)
 
 
 _VALUE_KEY = "toyfmt_mode"
 _BAD_VALUE = "toyfmt_bad_mode"
 
 
-class _ValueCheckedFG(ToyFormatFG):
-    """A pointed-at format group whose later PROPERTY_MAPPING value check can fail."""
+class _ValueCheckedFG(ToySourceFG):
+    """A pointed-at source group whose later PROPERTY_MAPPING value check can fail."""
 
     PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         _VALUE_KEY: PropertySpec("Mode", allowed_values={"good": "Good mode"}, context=True, strict_validation=True),
@@ -257,7 +257,7 @@ class _ValueCheckedFG(ToyFormatFG):
 
 
 class _PlainRootColFG(FeatureGroup):
-    """Plain root (non-format) group claiming COL by its own rules."""
+    """Plain root (non-source) group claiming COL by its own rules."""
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -312,13 +312,13 @@ class _ReqMixin:
     }
 
 
-class _ReqViaMixinFG(_ReqMixin, ToyFormatFG):
+class _ReqViaMixinFG(_ReqMixin, ToySourceFG):
     """Declares its own mapping, so the mixin keys reach it through the merge."""
 
     PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {"toyfmt_opt": PropertySpec("Optional", default=None)}
 
 
-class _ElementValidatedFG(ToyFormatFG):
+class _ElementValidatedFG(ToySourceFG):
     PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         _VALUE_KEY: PropertySpec(
             "Mode",
@@ -345,7 +345,7 @@ class _RaisingEqValue:
 
 def _eq_group(name: str, allowed: tuple[Any, ...]) -> type:
     spec = PropertySpec("Eq", allowed_values=allowed, context=True, strict_validation=True)
-    return type(name, (ToyFormatFG,), {"PROPERTY_MAPPING": {_EQ_KEY: spec}})
+    return type(name, (ToySourceFG,), {"PROPERTY_MAPPING": {_EQ_KEY: spec}})
 
 
 _EQ_ELEMENT_GROUPS: dict[type[Exception], type] = {
@@ -406,11 +406,11 @@ class TestPropertyMappingMatching:
 
 
 class TestTwoPointedGroups:
-    OPTIONS = {"_ValueCheckedFG": {COL: [1]}, "ToyOtherFormatFG": {COL: [2]}}
+    OPTIONS = {"_ValueCheckedFG": {COL: [1]}, "ToyOtherSourceFG": {COL: [2]}}
 
     @pytest.mark.parametrize(
         "order",
-        [(_ValueCheckedFG, ToyOtherFormatFG), (ToyOtherFormatFG, _ValueCheckedFG)],
+        [(_ValueCheckedFG, ToyOtherSourceFG), (ToyOtherSourceFG, _ValueCheckedFG)],
         ids=["vetoed_first", "vetoed_last"],
     )
     def test_the_vetoed_group_leaves_the_other_groups_pair_recorded(self, order: tuple[type, type]) -> None:
@@ -418,35 +418,35 @@ class TestTwoPointedGroups:
 
         result = _identify(feature, None, *order)
 
-        assert set(result.identified) == {ToyOtherFormatFG}
+        assert set(result.identified) == {ToyOtherSourceFG}
         pair = feature.input_data_match
         assert pair is not None
-        assert pair[0] is ToyOtherFormatFG
+        assert pair[0] is ToyOtherSourceFG
         assert pair[1].access == {COL: [2]}
 
     def test_two_valid_pointed_groups_are_ambiguous(self) -> None:
         feature = Feature(COL, Options({**self.OPTIONS, _VALUE_KEY: "good"}))
 
         with pytest.raises(ValueError, match="Multiple feature groups") as exc_info:
-            evaluate_or_raise(feature, _plugins(_ValueCheckedFG, ToyOtherFormatFG), None, None)
+            evaluate_or_raise(feature, _plugins(_ValueCheckedFG, ToyOtherSourceFG), None, None)
         assert "_ValueCheckedFG" in str(exc_info.value)
-        assert "ToyOtherFormatFG" in str(exc_info.value)
+        assert "ToyOtherSourceFG" in str(exc_info.value)
 
 
 class TestPointedMissingColumnText:
     def test_fix_text_is_one_sentence_without_the_ambiguity_fix(self) -> None:
-        feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))
+        feature = Feature(COL, Options({"ToySourceFG": {"other": [1]}}))
         with pytest.raises(FeatureResolutionError) as exc_info:
-            evaluate_or_raise(feature, _plugins(ToyFormatFG), None, None)
+            evaluate_or_raise(feature, _plugins(ToySourceFG), None, None)
         message = str(exc_info.value)
         assert "column_to_file" not in message
         assert message.count(" or ") == 1
 
     def test_long_column_list_is_truncated_to_twenty_names(self) -> None:
         columns = {f"toyfmt_c{i:02d}": [i] for i in range(25)}
-        feature = Feature(COL, Options({"ToyFormatFG": columns}))
+        feature = Feature(COL, Options({"ToySourceFG": columns}))
         with pytest.raises(FeatureResolutionError) as exc_info:
-            evaluate_or_raise(feature, _plugins(ToyFormatFG), None, None)
+            evaluate_or_raise(feature, _plugins(ToySourceFG), None, None)
         message = str(exc_info.value)
         assert "toyfmt_c00" in message
         assert "toyfmt_c19" in message
@@ -457,23 +457,23 @@ class TestPointedMissingColumnText:
 class TestBoundedScrubbedMissingColumnText:
     def test_unpointed_sources_beyond_five_are_counted_not_named(self) -> None:
         dac = toy_dac(**{f"h{i}": {"other": [i]} for i in range(1, 8)})
-        reason = _identify(Feature(COL), dac, ToyFormatFG).eliminations[ToyFormatFG].reason
+        reason = _identify(Feature(COL), dac, ToySourceFG).eliminations[ToySourceFG].reason
         assert "h5:toy" in reason
         assert "h6:toy" not in reason
         assert "h7:toy" not in reason
         assert "and 2 more" in reason
 
     def test_pointed_column_names_are_scrubbed_before_they_are_listed(self) -> None:
-        feature = Feature(COL, Options({"ToyFormatFG": {"token=toyfmt-secret-1234": [1]}}))
+        feature = Feature(COL, Options({"ToySourceFG": {"token=toyfmt-secret-1234": [1]}}))
         with pytest.raises(FeatureResolutionError) as exc_info:
-            evaluate_or_raise(feature, _plugins(ToyFormatFG), None, None)
+            evaluate_or_raise(feature, _plugins(ToySourceFG), None, None)
         assert "toyfmt-secret-1234" not in str(exc_info.value)
 
     def test_pointed_column_names_are_clipped(self) -> None:
         long_name = "toyfmt_long_" + "x" * 100
-        feature = Feature(COL, Options({"ToyFormatFG": {long_name: [1]}}))
+        feature = Feature(COL, Options({"ToySourceFG": {long_name: [1]}}))
         with pytest.raises(FeatureResolutionError) as exc_info:
-            evaluate_or_raise(feature, _plugins(ToyFormatFG), None, None)
+            evaluate_or_raise(feature, _plugins(ToySourceFG), None, None)
         assert long_name not in str(exc_info.value)
         assert long_name[:40] in str(exc_info.value)
 
@@ -486,7 +486,7 @@ class TestBoundedScrubbedMissingColumnText:
         assert "toyfmt-secret-1234" not in message
 
 
-class _SecretFixTextFG(ToyFormatFG):
+class _SecretFixTextFG(ToySourceFG):
     @classmethod
     def ambiguity_fix(
         cls, feature_name: str, matches: list[SourceMatch], data_access_collection: DataAccessCollection | None
@@ -498,9 +498,9 @@ class TestAmbiguousSources:
     def test_two_fitting_sources_raise_naming_both_and_the_fix(self) -> None:
         dac = toy_dac(h1={COL: [1]}, h2={COL: [2]})
         with pytest.raises(ValueError) as exc_info:
-            evaluate_or_raise(Feature(COL), _plugins(ToyFormatFG), None, dac)
+            evaluate_or_raise(Feature(COL), _plugins(ToySourceFG), None, dac)
         message = str(exc_info.value)
-        assert "ToyFormatFG" in message
+        assert "ToySourceFG" in message
         assert "h1:toy" in message
         assert "h2:toy" in message
         assert "feature_group=" not in message
@@ -509,7 +509,7 @@ class TestAmbiguousSources:
 
     def test_data_access_handle_resolves_the_ambiguity(self) -> None:
         feature = Feature(COL, Options({"data_access_handle": "h2"}))
-        evaluate_or_raise(feature, _plugins(ToyFormatFG), None, toy_dac(h1={COL: [1]}, h2={COL: [2]}))
+        evaluate_or_raise(feature, _plugins(ToySourceFG), None, toy_dac(h1={COL: [1]}, h2={COL: [2]}))
         pair = feature.input_data_match
         assert pair is not None
         assert pair[1] == SourceMatch(source="h2:toy", access=None)
@@ -517,14 +517,14 @@ class TestAmbiguousSources:
 
 class TestSubclassTakeover:
     def test_subclass_wins_and_records_its_own_pair(self) -> None:
-        feature = Feature(COL, feature_group=ToyFormatFG)
-        result = evaluate_or_raise(feature, _plugins(ToyFormatFG, ToyFormatSubFG), None, toy_dac(h1={COL: [1]}))
+        feature = Feature(COL, feature_group=ToySourceFG)
+        result = evaluate_or_raise(feature, _plugins(ToySourceFG, ToySourceSubFG), None, toy_dac(h1={COL: [1]}))
 
-        assert next(iter(result.identified)) is ToyFormatSubFG
-        assert result.specialized_from == (ToyFormatFG,)
+        assert next(iter(result.identified)) is ToySourceSubFG
+        assert result.specialized_from == (ToySourceFG,)
         pair = feature.input_data_match
         assert pair is not None
-        assert pair[0] is ToyFormatSubFG
+        assert pair[0] is ToySourceSubFG
         assert pair[1] == SourceMatch(source="h1:toy", access=None)
 
 
@@ -534,14 +534,14 @@ class TestPlanIdentity:
         session = mloda.prepare(
             [Feature("toyfmt_a"), Feature("toyfmt_b")],
             compute_frameworks=[PyArrowTable],
-            plugin_collector=PluginCollector.enabled_feature_groups({ToyFormatFG}),
+            plugin_collector=PluginCollector.enabled_feature_groups({ToySourceFG}),
             data_access_collection=dac,
         )
 
         steps = [s for s in session.resolved_plan() if s.step_kind == "compute"]
 
         assert len(steps) == 2
-        assert {s.feature_group for s in steps} == {ToyFormatFG}
+        assert {s.feature_group for s in steps} == {ToySourceFG}
         assert {s.data_access_identity for s in steps} == {"h1:toy", "h2:toy"}
         assert {s.feature_names for s in steps} == {("toyfmt_a",), ("toyfmt_b",)}
 
@@ -550,7 +550,7 @@ class TestPlanIdentity:
         session = mloda.prepare(
             [Feature("toyfmt_a"), Feature("toyfmt_b")],
             compute_frameworks=[PyArrowTable],
-            plugin_collector=PluginCollector.enabled_feature_groups({ToyFormatFG}),
+            plugin_collector=PluginCollector.enabled_feature_groups({ToySourceFG}),
             data_access_collection=dac,
         )
 
@@ -564,7 +564,7 @@ class _ToyUnservedFramework(ComputeFramework):
     """Uniquely named framework no candidate serves, so a pin on it eliminates every candidate."""
 
 
-class _TakeoverChildFG(ToyFormatFG):
+class _TakeoverChildFG(ToySourceFG):
     """Reads its source through the parent's pointer key and finds the column that source lacks."""
 
     @classmethod
@@ -620,7 +620,7 @@ class _ComputingColFG(FeatureGroup):
         return data
 
 
-class _AbstractToyMid(ToyFormatBase):
+class _AbstractToyMid(ToySourceBase):
     """Abstract shared base: naming it as a scope must not point at its subclasses."""
 
     @classmethod
@@ -657,9 +657,9 @@ class TestScopePointingRefinement:
         assert set(result.identified) == {_MidHasColumn}
 
     def test_concrete_ancestor_scope_still_points_and_aborts_on_missing_column(self) -> None:
-        feature = Feature(COL, feature_group=ToyFormatFG)
+        feature = Feature(COL, feature_group=ToySourceFG)
         with pytest.raises(FeatureResolutionError, match="h1:toy"):
-            evaluate_or_raise(feature, _plugins(ToyFormatSubFG), None, toy_dac(h1={"other": [1]}))
+            evaluate_or_raise(feature, _plugins(ToySourceSubFG), None, toy_dac(h1={"other": [1]}))
 
     def test_scope_naming_the_candidate_itself_points(self) -> None:
         feature = Feature(COL, feature_group=_MidLacksColumn)
@@ -672,7 +672,7 @@ class TestPointingIsExplicitOnly:
 
     DERIVED = "toyfmt_col__sum_aggr"
 
-    @pytest.mark.parametrize("fg", [ToyFormatFG, ToyOpenFG])
+    @pytest.mark.parametrize("fg", [ToySourceFG, ToyOpenFG])
     def test_handle_on_a_derived_feature_resolves_to_the_aggregation(self, fg: type) -> None:
         feature = Feature(self.DERIVED, Options(group={"data_access_handle": "h1"}))
         result = evaluate_or_raise(feature, _plugins(fg, AggregatedFeatureGroup), None, toy_dac(h1={COL: [1, 2]}))
@@ -695,7 +695,7 @@ _DERIVED = "toyfmt_col__sum_aggr"
 
 
 class _PlainClaimsDerived(FeatureGroup):
-    """Non-format survivor claiming the derived name."""
+    """Non-source survivor claiming the derived name."""
 
     @classmethod
     def match_feature_group_criteria(
@@ -711,7 +711,7 @@ class _PlainClaimsDerived(FeatureGroup):
 class TestPointedGroupDefersToAComputingCandidate:
     DERIVED = _DERIVED
 
-    @pytest.mark.parametrize("fg", [ToyFormatFG, ToyRequiredOptionFG])
+    @pytest.mark.parametrize("fg", [ToySourceFG, ToyRequiredOptionFG])
     def test_class_name_key_on_a_derived_feature_resolves_to_the_aggregation(self, fg: type) -> None:
         feature = Feature(self.DERIVED, Options({fg.__name__: {COL: [1, 2]}, "toyfmt_required": "yes"}))
         result = evaluate_or_raise(feature, _plugins(fg, AggregatedFeatureGroup), None, None)
@@ -724,56 +724,56 @@ class TestPointedGroupDefersToAComputingCandidate:
     @pytest.mark.parametrize(
         ("name", "groups", "dac"),
         [
-            ("toyfmt_unclaimed", (ToyFormatFG, AggregatedFeatureGroup), None),
-            (_DERIVED, (ToyFormatFG, _PlainClaimsDerived, AggregatedFeatureGroup), None),
+            ("toyfmt_unclaimed", (ToySourceFG, AggregatedFeatureGroup), None),
+            (_DERIVED, (ToySourceFG, _PlainClaimsDerived, AggregatedFeatureGroup), None),
         ],
         ids=["no_other_claimant", "another_reader_survives"],
     )
     def test_pointed_reader_still_aborts(
         self, name: str, groups: tuple[type, ...], dac: DataAccessCollection | None
     ) -> None:
-        feature = Feature(name, Options({"ToyFormatFG": {COL: [1]}, "toyfmt_required": "yes"}))
-        with pytest.raises(FeatureResolutionError, match=rf"column '{name}' is in none of the sources of ToyFormatFG"):
+        feature = Feature(name, Options({"ToySourceFG": {COL: [1]}, "toyfmt_required": "yes"}))
+        with pytest.raises(FeatureResolutionError, match=rf"column '{name}' is in none of the sources of ToySourceFG"):
             evaluate_or_raise(feature, _plugins(*groups), None, dac)
 
     def test_computing_candidate_eliminated_later_still_counts_as_computed(self) -> None:
         feature = Feature(
             self.DERIVED,
-            Options({"ToyFormatFG": {COL: [1, 2]}}),
+            Options({"ToySourceFG": {COL: [1, 2]}}),
             compute_framework=_ToyUnservedFramework.get_class_name(),
         )
         with pytest.raises(FeatureResolutionError) as exc_info:
-            evaluate_or_raise(feature, _plugins(ToyFormatFG, AggregatedFeatureGroup), None, None)
+            evaluate_or_raise(feature, _plugins(ToySourceFG, AggregatedFeatureGroup), None, None)
 
         result = exc_info.value.result
         assert result.identified == {}
         assert result.eliminations[AggregatedFeatureGroup].stage == "framework_pin"
 
     def test_pointed_reader_aborts_when_the_other_claimant_input_features_raises(self) -> None:
-        feature = Feature("toyfmt_typo_probe", Options({"ToyFormatFG": {COL: [1]}}))
+        feature = Feature("toyfmt_typo_probe", Options({"ToySourceFG": {COL: [1]}}))
         with pytest.raises(
-            FeatureResolutionError, match="column 'toyfmt_typo_probe' is in none of the sources of ToyFormatFG"
+            FeatureResolutionError, match="column 'toyfmt_typo_probe' is in none of the sources of ToySourceFG"
         ):
-            evaluate_or_raise(feature, _plugins(ToyFormatFG, _RaisingInputsFG), None, None)
+            evaluate_or_raise(feature, _plugins(ToySourceFG, _RaisingInputsFG), None, None)
 
     def test_strictness_holds_per_deferring_group_despite_another_groups_takeover(self) -> None:
-        options = Options({"ToyFormatFG": {"other": [1]}, "ToyOtherFormatFG": {"other": [1]}})
+        options = Options({"ToySourceFG": {"other": [1]}, "ToyOtherSourceFG": {"other": [1]}})
         feature = Feature(COL, options, compute_framework=PyArrowTable.get_class_name())
         plugins: FeatureGroupEnvironmentMapping = {
-            ToyFormatFG: {PyArrowTable},
-            ToyOtherFormatFG: {PyArrowTable},
+            ToySourceFG: {PyArrowTable},
+            ToyOtherSourceFG: {PyArrowTable},
             _TakeoverChildFG: {PyArrowTable},
             _ComputingColFG: {_ToyUnservedFramework},
         }
-        with pytest.raises(FeatureResolutionError, match="is in none of the sources of ToyOtherFormatFG"):
+        with pytest.raises(FeatureResolutionError, match="is in none of the sources of ToyOtherSourceFG"):
             evaluate_or_raise(feature, plugins, None, None)
 
     def test_pointed_parent_defers_to_its_surviving_subclass(self) -> None:
-        feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))
-        result = evaluate_or_raise(feature, _plugins(ToyFormatFG, _TakeoverChildFG), None, None)
+        feature = Feature(COL, Options({"ToySourceFG": {"other": [1]}}))
+        result = evaluate_or_raise(feature, _plugins(ToySourceFG, _TakeoverChildFG), None, None)
 
         assert set(result.identified) == {_TakeoverChildFG}
-        assert result.eliminations[ToyFormatFG].stage == "input_data"
+        assert result.eliminations[ToySourceFG].stage == "input_data"
 
 
 class _OpenDeclaringDerivedFG(ToyOpenFG):
@@ -834,12 +834,12 @@ class TestOpenClaimDefersToAComputingCandidate:
 
 class TestPointedRoutesDeclineWithReason:
     def test_pointed_route_without_a_source_records_an_input_data_rejection(self) -> None:
-        result = _identify(Feature(COL, feature_group=ToyFormatFG), None, ToyFormatFG)
+        result = _identify(Feature(COL, feature_group=ToySourceFG), None, ToySourceFG)
 
         assert result.identified == {}
-        elimination = result.eliminations[ToyFormatFG]
+        elimination = result.eliminations[ToySourceFG]
         assert elimination.stage == "input_data"
-        assert "ToyFormatFG was pointed at but found no source for 'toyfmt_col'" in elimination.reason
+        assert "ToySourceFG was pointed at but found no source for 'toyfmt_col'" in elimination.reason
 
     def test_pointed_declared_route_with_an_undeclared_name_records_a_rejection(self) -> None:
         feature = Feature("toyfmt_undeclared", feature_group=ToyDeclaredFG)
@@ -851,7 +851,7 @@ class TestPointedRoutesDeclineWithReason:
         assert "toyfmt_undeclared" in elimination.reason
 
 
-class _AbstractRouted(FormatFeatureGroup):
+class _AbstractRouted(SourceFeatureGroup):
     """Abstract group that inherits routes but implements no hooks."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.CHECKED, True),)
@@ -891,7 +891,7 @@ class TestAbstractGroupsNeverClaim:
         assert str(sorted(_AbstractRouted.__abstractmethods__)) in reason
 
 
-class _VirtualColumnFG(ToyFormatFG):
+class _VirtualColumnFG(ToySourceFG):
     """has_column answers for a column that columns() does not list."""
 
     @classmethod
@@ -899,7 +899,7 @@ class _VirtualColumnFG(ToyFormatFG):
         return column == "toyfmt_virtual"
 
 
-class _NoColumnsFG(ToyFormatBase):
+class _NoColumnsFG(ToySourceBase):
     @classmethod
     def columns(cls, match: SourceMatch) -> None:
         return None
@@ -908,7 +908,7 @@ class _NoColumnsFG(ToyFormatBase):
 COLUMNS_CALLS: list[str] = []
 
 
-class _SpyColumnsFG(ToyFormatFG):
+class _SpyColumnsFG(ToySourceFG):
     @classmethod
     def has_column(cls, match: SourceMatch, column: str) -> bool | None:
         return column == COL
@@ -923,8 +923,8 @@ class TestHasColumnHook:
     def test_default_derives_from_columns(self) -> None:
         match = SourceMatch(source="h1:toy", access={COL: [1]})
 
-        assert ToyFormatFG.has_column(match, COL) is True
-        assert ToyFormatFG.has_column(match, "toyfmt_absent") is False
+        assert ToySourceFG.has_column(match, COL) is True
+        assert ToySourceFG.has_column(match, "toyfmt_absent") is False
 
     def test_default_is_none_when_columns_is_unknown(self) -> None:
         assert _NoColumnsFG.has_column(SourceMatch(source="h1:toy", access={}), COL) is None
@@ -959,7 +959,7 @@ class TestHasColumnHook:
 FIX_TEXT = "toyfmt-specific: remove one of the duplicate sources."
 
 
-class _FixTextFG(ToyFormatFG):
+class _FixTextFG(ToySourceFG):
     @classmethod
     def ambiguity_fix(
         cls, feature_name: str, matches: list[SourceMatch], data_access_collection: DataAccessCollection | None
@@ -969,7 +969,7 @@ class _FixTextFG(ToyFormatFG):
 
 class TestAmbiguityFixHook:
     def test_default_keeps_todays_text(self) -> None:
-        text = ToyFormatFG.ambiguity_fix(COL, [], None)
+        text = ToySourceFG.ambiguity_fix(COL, [], None)
 
         assert "data_access_handle" in text
         assert "column_to_file" in text
@@ -986,7 +986,7 @@ class TestAmbiguityFixHook:
         assert "column_to_file" not in message
 
 
-class _PointedParent(ToyFormatBase):
+class _PointedParent(ToySourceBase):
     """Open, pointed-only; sources come from its own class-name key."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.OPEN, False),)
@@ -1007,10 +1007,10 @@ class _PointedParent(ToyFormatBase):
 
 
 class _PointedChild(_PointedParent):
-    """Concrete subclass of a concrete format group."""
+    """Concrete subclass of a concrete source group."""
 
 
-class _AbstractOpenMid(ToyFormatBase):
+class _AbstractOpenMid(ToySourceBase):
     @classmethod
     @abstractmethod
     def marker(cls) -> str: ...
@@ -1036,11 +1036,11 @@ class _OpenUnderAbstract(_AbstractOpenMid):
 
 
 class TestPointerKeysFollowTheMro:
-    def test_own_name_first_then_concrete_format_ancestors(self) -> None:
-        keys = ToyFormatSubFG.pointer_keys()
+    def test_own_name_first_then_concrete_source_ancestors(self) -> None:
+        keys = ToySourceSubFG.pointer_keys()
 
-        assert keys[:2] == ("ToyFormatSubFG", "ToyFormatFG")
-        assert "FormatFeatureGroup" not in keys
+        assert keys[:2] == ("ToySourceSubFG", "ToySourceFG")
+        assert "SourceFeatureGroup" not in keys
 
     def test_abstract_ancestor_is_not_a_pointer_key(self) -> None:
         keys = _OpenUnderAbstract.pointer_keys()
@@ -1084,7 +1084,7 @@ class TestPointerKeysFollowTheMro:
 CACHED_CALLS: list[str] = []
 
 
-class _CachedColumnsFG(ToyFormatFG):
+class _CachedColumnsFG(ToySourceFG):
     @classmethod
     def columns(cls, match: SourceMatch) -> Collection[str] | None:
         from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
@@ -1130,10 +1130,10 @@ def _write_csv_and_parquet(folder: Path) -> tuple[str, str]:
 
 
 class TestForeignPointerMakesSearchedRoutesDecline:
-    def test_an_option_key_naming_no_format_group_is_ignored(self) -> None:
+    def test_an_option_key_naming_no_source_group_is_ignored(self) -> None:
         feature = Feature(COL, Options({"toyfmt_not_a_group": 1}))
 
-        assert _claims(feature, toy_dac(h1={COL: [1]}), ToyFormatFG)
+        assert _claims(feature, toy_dac(h1={COL: [1]}), ToySourceFG)
 
     @pytest.mark.parametrize(
         ("key", "feature_group"),
@@ -1179,12 +1179,12 @@ class TestForeignPointerMakesSearchedRoutesDecline:
 
     def test_a_group_without_a_query_route_keeps_the_foreign_pointer_reason_on_query_text(self) -> None:
         route = ClaimRoute("toy", NamePolicy.CHECKED, False, required_options=("query_text",))
-        pointed = type("_QueryToyFG", (ToyFormatBase,), {"CLAIM_ROUTES": (route,)})
+        pointed = type("_QueryToyFG", (ToySourceBase,), {"CLAIM_ROUTES": (route,)})
         feature = Feature(COL, Options({"query_text": "SELECT 1", "_QueryToyFG": {COL: [1]}}))
-        result = _identify(feature, toy_dac(h1={COL: [1]}), pointed, ToyFormatFG)
+        result = _identify(feature, toy_dac(h1={COL: [1]}), pointed, ToySourceFG)
 
         assert set(result.identified) == {pointed}
-        reason = result.eliminations[ToyFormatFG].reason
+        reason = result.eliminations[ToySourceFG].reason
         assert "options point at _QueryToyFG" in reason
         assert "query_text" not in reason
         del pointed, result, feature
@@ -1214,7 +1214,7 @@ class TestUnreachablePointerRaises:
     ) -> None:
         collector = PluginCollector.disabled_feature_groups({_stock("json_fg", "JsonFG")})
         options = None if scope else Options({"JsonFG": str(tmp_path / "b.json")})
-        with pytest.raises(FormatPointerError) as exc_info:
+        with pytest.raises(SourcePointerError) as exc_info:
             self._run(options, "JsonFG" if scope else None, collector, tmp_path)
 
         message = str(exc_info.value)
@@ -1229,7 +1229,7 @@ class TestUnreachablePointerRaises:
         PluginRegistry.default().clear()
         register_plugin(csv_fg, replace=True)
         collector = PluginCollector.enabled_feature_groups({csv_fg, json_fg}).set_strict_mode("strict")
-        with pytest.raises(FormatPointerError) as exc_info:
+        with pytest.raises(SourcePointerError) as exc_info:
             self._run(Options({"JsonFG": str(tmp_path / "b.json")}), None, collector, tmp_path)
 
         assert "dropped by strict mode" in str(exc_info.value)
@@ -1238,7 +1238,7 @@ class TestUnreachablePointerRaises:
         csv_fg = _stock("csv_fg", "CsvFG")
         json_fg = _stock("json_fg", "JsonFG")
         feature = Feature("fpg_x", Options({"JsonFG": str(tmp_path / "b.json")}), feature_group="CsvFG")
-        with pytest.raises(FormatPointerError) as exc_info:
+        with pytest.raises(SourcePointerError) as exc_info:
             IdentifyFeatureGroupClass.evaluate(feature, _plugins(csv_fg, json_fg), None, None)
 
         assert "CsvFG" in str(exc_info.value)
@@ -1249,7 +1249,7 @@ class TestUnreachablePointerRaises:
         csv_fg = _stock("csv_fg", "CsvFG")
         json_fg = _stock("json_fg", "JsonFG")
         feature = Feature("fpg_x", Options({key: "x.json"}))
-        with pytest.raises(FormatPointerError) as exc_info:
+        with pytest.raises(SourcePointerError) as exc_info:
             IdentifyFeatureGroupClass.evaluate(feature, _plugins(csv_fg, json_fg), None, None)
 
         assert key in str(exc_info.value)

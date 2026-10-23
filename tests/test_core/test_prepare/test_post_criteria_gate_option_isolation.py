@@ -23,7 +23,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatBase
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceBase
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
@@ -175,11 +175,11 @@ ORDER_KEY = "order_shared_key_winner_iso"
 ORIGINAL_KEY = "original_key_winner_iso"
 
 
-class ReaderParent_winner_iso(ToyFormatBase):
+class ReaderParent_winner_iso(ToySourceBase):
     """Reader class of the parent candidate."""
 
 
-class ReaderSub_winner_iso(ToyFormatBase):
+class ReaderSub_winner_iso(ToySourceBase):
     """Reader class of the subclass candidate."""
 
 
@@ -188,7 +188,7 @@ class _Writes:
     group: dict[str, Any]
     context: dict[str, Any]
     non_forwarded: frozenset[str]
-    reader: tuple[type[ToyFormatBase], str] | None = None
+    reader: tuple[type[ToySourceBase], str] | None = None
     matches: bool = True
     api_group: dict[str, Any] | None = None
     abort: bool = False
@@ -389,7 +389,7 @@ class TestReplayStartsFromTheOriginalOptions:
         assert resolved.own_group_keys == _requested_own_keys()
 
 
-class ReaderGrand_winner_iso(ToyFormatBase):
+class ReaderGrand_winner_iso(ToySourceBase):
     """Reader class of the grandparent candidate."""
 
 

@@ -1,6 +1,6 @@
 """Shared contract tests for ReadDBFG implementations (one database kind per group).
 
-A concrete test class sets the FormatFeatureGroup attributes, ``credential_key`` and ``write_database``. Not
+A concrete test class sets the SourceFeatureGroup attributes, ``credential_key`` and ``write_database``. Not
 collected on its own. Every test-local subclass of the group is gated by an explicit plugin mapping.
 """
 
@@ -27,8 +27,8 @@ from mloda.provider import CHAIN_SEPARATOR
 from mloda.user import Credential, Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-from tests.mixins.reader_feature_groups.format_feature_group_test_mixin import (
-    FormatFeatureGroupTestMixin,
+from tests.mixins.reader_feature_groups.source_feature_group_test_mixin import (
+    SourceFeatureGroupTestMixin,
     _LoadCapture,
 )
 
@@ -54,7 +54,7 @@ class _Spy:
         return all(any(conn is closed for closed in self.closed) for conn in self.opened)
 
 
-class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
+class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
     """Contract of every ReadDBFG; adds credential, catalog, handle, cache, lifecycle and failure checks."""
 
     feature_group_class: type[ReadDBFG]

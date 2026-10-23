@@ -1,7 +1,7 @@
-"""Option-write conflicts: MatchData selection escalates; a format group's conflict is contained as a non-match.
+"""Option-write conflicts: MatchData selection escalates; a source group's conflict is contained as a non-match.
 
 ``MatchData.add_base_input_data_to_options`` decides on presence, and reports class and type names only.
-A format group's conflicting reader pair names classes, never the value.
+A source group's conflicting reader pair names classes, never the value.
 A user-supplied reserved reader key is rejected at Feature construction and at resolution.
 """
 
@@ -25,9 +25,9 @@ from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.user import FilterType, GlobalFilter, SingleFilter
 from mloda.provider import SourceMatch
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
-    ToyFormatFG,
-    ToyOtherFormatFG,
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+    ToySourceFG,
+    ToyOtherSourceFG,
     toy_dac,
 )
 
@@ -246,15 +246,15 @@ class TestUserSuppliedReservedReaderKeyIsRejected:
 _PAIR_MARKER = "toyfmt_pair_conflict_marker_path"
 
 
-class TestFormatGroupReaderPairConflictIsContained:
+class TestSourceGroupReaderPairConflictIsContained:
     KEY = "BaseInputData"
 
     def _probe(self, options: Options) -> Any:
-        return probe_match_criteria(ToyFormatFG, "toyfmt_pair_col", options, toy_dac(h={"toyfmt_pair_col": [1]}))
+        return probe_match_criteria(ToySourceFG, "toyfmt_pair_col", options, toy_dac(h={"toyfmt_pair_col": [1]}))
 
     @pytest.mark.parametrize(
         "existing",
-        [(ToyOtherFormatFG, SourceMatch(source="x", access=_PAIR_MARKER)), _PAIR_MARKER],
+        [(ToyOtherSourceFG, SourceMatch(source="x", access=_PAIR_MARKER)), _PAIR_MARKER],
         ids=["different_pair", "non_pair_value"],
     )
     @pytest.mark.parametrize("where", ["group", "context"])
@@ -269,18 +269,18 @@ class TestFormatGroupReaderPairConflictIsContained:
         message = str(outcome.matcher_error)
         assert _PAIR_MARKER not in message
         assert "SourceMatch(" not in message
-        assert "ToyFormatFG" in message
+        assert "ToySourceFG" in message
         if isinstance(existing, tuple):
-            assert "ToyOtherFormatFG" in message
+            assert "ToyOtherSourceFG" in message
         else:
             assert "str" in message
 
     def test_an_equal_existing_pair_still_matches(self) -> None:
-        match = ToyFormatFG.find_sources(
-            ToyFormatFG.CLAIM_ROUTES[0], "toyfmt_pair_col", Options(), toy_dac(h={"toyfmt_pair_col": [1]})
+        match = ToySourceFG.find_sources(
+            ToySourceFG.CLAIM_ROUTES[0], "toyfmt_pair_col", Options(), toy_dac(h={"toyfmt_pair_col": [1]})
         )[0]
 
-        outcome = self._probe(Options(group={self.KEY: (ToyFormatFG, match)}))
+        outcome = self._probe(Options(group={self.KEY: (ToySourceFG, match)}))
 
         assert outcome.matched
         assert outcome.matcher_error is None

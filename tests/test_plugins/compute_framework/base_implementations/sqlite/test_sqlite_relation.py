@@ -18,7 +18,7 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation
     _infer_sqlite_type_from_values,
     _sqlite_affinity_to_arrow_type,
 )
-from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from tests.test_plugins.compute_framework.base_implementations.relation_test_mixin import (
     RelationTestMixin,
 )

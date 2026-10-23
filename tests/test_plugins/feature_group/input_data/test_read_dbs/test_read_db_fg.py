@@ -29,7 +29,7 @@ from mloda.core.prepare.identify_feature_group import (
 )
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, MatchRejection
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.provider import FormatFeatureGroup, ReadDBFG
+from mloda.provider import SourceFeatureGroup, ReadDBFG
 from mloda.user import Credential, DataAccessCollection, Feature, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
@@ -150,10 +150,10 @@ def _match(credentials: Any, table: str | None = "toy_table") -> SourceMatch:
 
 
 class TestReadDBFGBase:
-    def test_it_is_an_abstract_format_group_exported_from_the_provider_with_its_access_carriers(self) -> None:
+    def test_it_is_an_abstract_source_group_exported_from_the_provider_with_its_access_carriers(self) -> None:
         assert provider.ReadDBFG is ReadDBFG
         assert "ReadDBFG" in provider.__all__
-        assert issubclass(ReadDBFG, FormatFeatureGroup)
+        assert issubclass(ReadDBFG, SourceFeatureGroup)
         assert inspect.isabstract(ReadDBFG)
         assert provider.DBTable is DBTable
         assert provider.DBQuery is DBQuery
@@ -207,7 +207,7 @@ class TestReadDBFGBase:
     def test_the_docstring_points_third_party_groups_at_the_contract_mixins_and_states_the_scope(self) -> None:
         doc = ReadDBFG.__doc__ or ""
         assert "tests/mixins/reader_feature_groups" in doc
-        assert "database_format_feature_group_test_mixin" in doc
+        assert "read_db_fg_test_mixin" in doc
         assert "catalog" in doc.lower()
 
     def test_the_catalog_is_not_versioned_by_file_stat(self) -> None:

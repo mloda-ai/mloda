@@ -14,8 +14,8 @@ from mloda.provider import ReadDBFG, ReadDocumentFG, ReadFileFG
 from mloda.user import DataAccessCollection, Feature, Options
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG
-from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
-from tests.mixins.reader_feature_groups.lazy_format_group import load_document_group
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
+from tests.mixins.reader_feature_groups.lazy_source_group import load_document_group
 
 
 class _RodRecordingOptions(Options):
@@ -112,7 +112,7 @@ class TestDuckdbFGDeclarations:
     """DuckdbFG selects its connection with connection_handle and declares exactly that key."""
 
     def test_declares_exactly_connection_handle(self) -> None:
-        from mloda_plugins.feature_group.input_data.db_formats.duckdb_fg import DuckdbFG
+        from mloda_plugins.feature_group.input_data.db_sources.duckdb_fg import DuckdbFG
 
         assert DuckdbFG.declared_option_keys() == {"connection_handle"}
 
@@ -263,7 +263,7 @@ class TestOwnPropertyMappingIsMergedOverTheBase:
         assert child.declared_option_keys() == parent.declared_option_keys() | {"rod_extra"}
 
 
-class TestFormatGroupPropertyMappingMustBeAMappingOfSpecs:
+class TestSourceGroupPropertyMappingMustBeAMappingOfSpecs:
     @pytest.mark.parametrize("bad", [None, ["k"]], ids=["none", "list"])
     @pytest.mark.parametrize("base", [ReadFileFG, ReadDocumentFG, ReadDBFG])
     def test_a_non_mapping_own_value_raises_a_type_error_naming_the_class(self, base: Any, bad: Any) -> None:

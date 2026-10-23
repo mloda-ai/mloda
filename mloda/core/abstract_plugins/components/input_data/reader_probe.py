@@ -39,7 +39,7 @@ def reader_probe_scope(scope: ReaderProbeScope | None) -> Iterator[None]:
 
 
 @dataclass(frozen=True)
-class FormatProbeOutcome:
+class SourceProbeOutcome:
     """refused is the refusal reason, None when the probe ran and result holds its value."""
 
     refused: str | None
@@ -90,13 +90,13 @@ def _log_refusal(scope: ReaderProbeScope, reader: Any, reason: str, label: str =
     )
 
 
-def probe_format_group(
+def probe_source_group(
     group: Any, probe: Callable[[], Any], data_access_collection: Any, base_name: str, options: Any
-) -> FormatProbeOutcome:
-    """Run a format group's source probe through the INPUT_DATA_MATCH extender when one is in scope."""
+) -> SourceProbeOutcome:
+    """Run a source group's source probe through the INPUT_DATA_MATCH extender when one is in scope."""
     scope = _CURRENT.get()
     if scope is None:
-        return FormatProbeOutcome(None, probe())
+        return SourceProbeOutcome(None, probe())
 
     names = [base_name]
     finished = False
@@ -123,10 +123,10 @@ def probe_format_group(
             if probe_raised or is_match_abort(exc):
                 raise
             reason = contained_raise_reason(exc)
-            _log_refusal(scope, group, reason, "Format group")
-            return FormatProbeOutcome(reason, None, _strip_tracebacks(exc))
+            _log_refusal(scope, group, reason, "Source group")
+            return SourceProbeOutcome(reason, None, _strip_tracebacks(exc))
     if not finished:
         reason = "the extender did not run the probe"
-        _log_refusal(scope, group, reason, "Format group")
-        return FormatProbeOutcome(reason, None)
-    return FormatProbeOutcome(None, result)
+        _log_refusal(scope, group, reason, "Source group")
+        return SourceProbeOutcome(reason, None)
+    return SourceProbeOutcome(None, result)

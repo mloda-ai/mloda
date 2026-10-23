@@ -440,7 +440,7 @@ class TestReadOption:
         value = _make_two_keys_fg().read_option("owd_first", Options(), "x__op_q_b")
         assert value == "q"
 
-    def test_format_group_inherited_key_is_declared(self) -> None:
-        """A key inherited through a FormatFeatureGroup's merged PROPERTY_MAPPING reads without raising."""
+    def test_source_group_inherited_key_is_declared(self) -> None:
+        """A key inherited through a SourceFeatureGroup's merged PROPERTY_MAPPING reads without raising."""
         value = CsvFG.read_option("data_access_handle", Options({"data_access_handle": "h"}))
         assert value == "h"

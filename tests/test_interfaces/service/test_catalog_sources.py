@@ -13,7 +13,7 @@ from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import is_error
 from mloda.user import PluginCollector, PluginLoader
 from tests.helpers.docs_scope import small_feature_group_walk
-from tests.test_interfaces.format_groups import FILE_FORMAT_GROUPS
+from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS
 
 # Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
 pytestmark = pytest.mark.timeout(30)
@@ -50,14 +50,14 @@ def _settings(tmp_path: Path) -> Settings:
 
 @pytest.fixture
 def catalog(tmp_path: Path) -> Catalog:
-    return Catalog.build(_settings(tmp_path), PluginCollector.enabled_feature_groups(set(FILE_FORMAT_GROUPS)))
+    return Catalog.build(_settings(tmp_path), PluginCollector.enabled_feature_groups(set(FILE_SOURCE_GROUPS)))
 
 
 class TestBuildLoadsPlugins:
     def test_plugins_are_loaded_before_feature_groups_are_enumerated(
         self, calls: list[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        walk = small_feature_group_walk(*FILE_FORMAT_GROUPS)
+        walk = small_feature_group_walk(*FILE_SOURCE_GROUPS)
         monkeypatch.setattr("mloda.core.api.plugin_docs.get_all_subclasses", walk)
         Catalog.build(Settings())
 

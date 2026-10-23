@@ -154,7 +154,7 @@ _REMOVED_MODULE_SYMBOLS = [
 
 
 class TestBaseInputDataIsOnlyAMarker:
-    """BaseInputData keeps no reader path: data comes from a FormatFeatureGroup, a DataCreator or ApiInputData."""
+    """BaseInputData keeps no reader path: data comes from a SourceFeatureGroup, a DataCreator or ApiInputData."""
 
     @pytest.mark.parametrize("member", _REMOVED_BASE_INPUT_DATA_MEMBERS)
     def test_the_legacy_reader_member_is_gone(self, member: str) -> None:
@@ -196,8 +196,8 @@ class TestBaseInputDataIsOnlyAMarker:
             ("READER_OPTIONS", {}),
         ],
     )
-    def test_defining_a_legacy_hook_raises_naming_the_format_feature_group(self, hook: str, value: Any) -> None:
-        with pytest.raises(TypeError, match="FormatFeatureGroup") as excinfo:
+    def test_defining_a_legacy_hook_raises_naming_the_source_feature_group(self, hook: str, value: Any) -> None:
+        with pytest.raises(TypeError, match="SourceFeatureGroup") as excinfo:
             type("LegacyHookInputData", (BaseInputData,), {hook: value})
 
         assert hook in str(excinfo.value)
@@ -210,7 +210,7 @@ class TestBaseInputDataIsOnlyAMarker:
         ],
     )
     def test_defining_init_reader_or_match_data_access_raises(self, hook: str, value: Any) -> None:
-        with pytest.raises(TypeError, match="FormatFeatureGroup") as excinfo:
+        with pytest.raises(TypeError, match="SourceFeatureGroup") as excinfo:
             type("LegacyHookInputData2", (BaseInputData,), {hook: value})
 
         assert hook in str(excinfo.value)
@@ -221,7 +221,7 @@ class TestBaseInputDataIsOnlyAMarker:
             def load_data(cls, data_access: Any, features: Any) -> None:
                 return None
 
-        with pytest.raises(TypeError, match="FormatFeatureGroup") as excinfo:
+        with pytest.raises(TypeError, match="SourceFeatureGroup") as excinfo:
             type("MixedInputData", (LoadMixin, BaseInputData), {})
 
         assert "load_data" in str(excinfo.value)

@@ -1,7 +1,7 @@
 """Abstract base of one-FeatureGroup-per-document-format: one file in, three outputs (text, source, file_type).
 
 A subclass declares ``suffixes()``. Third-party groups should run the contract mixins in mloda's
-``tests/mixins/reader_feature_groups/`` (``document_format_feature_group_test_mixin``); the mixins need the ``rejection_window`` fixture from mloda's
+``tests/mixins/reader_feature_groups/`` (``read_document_fg_test_mixin``); the mixins need the ``rejection_window`` fixture from mloda's
 ``tests/conftest.py``.
 """
 
@@ -12,7 +12,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import scrub_creden
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import HANDLE_OPTION
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
 from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG, not_a_file_reason
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
@@ -23,7 +23,7 @@ FILE_TYPE_SUFFIX = "~file_type"
 
 
 class ReadDocumentFG(_FileSourceFG):
-    """Document format group; run tests/mixins/reader_feature_groups/document_format_feature_group_test_mixin.py.
+    """Document source group; run tests/mixins/reader_feature_groups/read_document_fg_test_mixin.py.
 
     The mixin needs the rejection_window fixture from tests/conftest.py.
     """

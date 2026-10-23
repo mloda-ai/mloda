@@ -19,12 +19,12 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimR
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
-from mloda.provider import CHAIN_SEPARATOR, FormatFeatureGroup
+from mloda.provider import CHAIN_SEPARATOR, SourceFeatureGroup
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.mixins.reader_feature_groups.format_feature_group_test_mixin import (
-    FormatFeatureGroupTestMixin,
+from tests.mixins.reader_feature_groups.source_feature_group_test_mixin import (
+    SourceFeatureGroupTestMixin,
     _LoadCapture,
 )
 
@@ -38,7 +38,7 @@ SOURCE = "~source"
 FILE_TYPE = "~file_type"
 
 
-class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
+class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin):
     """Contract of every ReadDocumentFG: file, folder and pointer routes, exact names, the three outputs."""
 
     feature_group_class: type[ReadDocumentFG]
@@ -234,7 +234,7 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
     def test_doc_a_userinfo_uri_never_leaks_the_password_in_a_handed_over_reason(self) -> None:
         sub = self._gated_subclass()
         sub.handover_suffixes = classmethod(lambda cls: cls.suffixes())
-        mapping: FeatureGroupEnvironmentMapping = {cast(type[FormatFeatureGroup], sub): {PyArrowTable}}
+        mapping: FeatureGroupEnvironmentMapping = {cast(type[SourceFeatureGroup], sub): {PyArrowTable}}
         uri = f"s3://alice:hunter2@bucket/x{self._suffix()}"  # nosec B105
         feature = Feature(self._group_name(), Options({self._group_name(): uri}))
         result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, None)
@@ -245,7 +245,7 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
     def test_doc_a_pointer_to_a_handed_over_suffix_names_document_suffixes(self) -> None:
         sub = self._gated_subclass()
         sub.handover_suffixes = classmethod(lambda cls: cls.suffixes())
-        mapping: FeatureGroupEnvironmentMapping = {cast(type[FormatFeatureGroup], sub): {PyArrowTable}}
+        mapping: FeatureGroupEnvironmentMapping = {cast(type[SourceFeatureGroup], sub): {PyArrowTable}}
         feature = Feature(self._group_name(), Options({self._group_name(): str(self.own_path)}))
         result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, None)
         assert sub not in result.identified
@@ -445,7 +445,7 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
 
     def test_doc_a_subclass_takes_over_the_other_declared_names_keyed_on_its_parent(self) -> None:
         sub = self._gated_subclass()
-        mapping: FeatureGroupEnvironmentMapping = {cast(type[FormatFeatureGroup], sub): {PyArrowTable}}
+        mapping: FeatureGroupEnvironmentMapping = {cast(type[SourceFeatureGroup], sub): {PyArrowTable}}
         for name in self._declared()[1:]:
             feature = self._feature(name, {self._group_name(): str(self.own_path)})
             result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, None)
@@ -462,7 +462,7 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
             result = mloda.run_all(
                 [self._feature(requested, pointer) for requested in names],
                 compute_frameworks=[PythonDictFramework],
-                plugin_collector=PluginCollector.enabled_feature_groups({cast(type[FormatFeatureGroup], sub)}),
+                plugin_collector=PluginCollector.enabled_feature_groups({cast(type[SourceFeatureGroup], sub)}),
             )
             full = self._record(self.own_path)
             assert result == [{requested: full[requested] for requested in names}], names

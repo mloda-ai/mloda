@@ -1332,10 +1332,10 @@ _IMPL_LEAF_TMPL = """\
 from {top}.helper import load
 from mloda.provider import Implementation
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatBase
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceBase
 
 
-class VersionImplFG(ToyFormatBase):
+class VersionImplFG(ToySourceBase):
     pass
 
 

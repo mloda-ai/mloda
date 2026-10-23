@@ -10,7 +10,7 @@ from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.interfaces.service.config import SourceConfig
 from mloda.provider import ReadFileFG, get_all_subclasses
 
-# A file format group signals "cannot tell" by raising one of these.
+# A ReadFileFG group signals "cannot tell" by raising one of these.
 READER_ERRORS: tuple[type[Exception], ...] = (ImportError, OSError, ValueError)
 
 

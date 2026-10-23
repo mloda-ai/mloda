@@ -14,7 +14,7 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import concrete_format_groups
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import QUERY_OPTION
 from mloda.core.api.feature_config.loader import load_features_from_config
 from mloda.core.api.feature_config.models import feature_config_schema
@@ -249,8 +249,8 @@ def validate_request(request: Any, settings: Settings) -> list[Problem]:
 
 
 def data_access_option_keys() -> frozenset[str]:
-    """Option keys that configure data access: reserved and query keys, format pointers and input data names."""
-    pointers = {key for group in concrete_format_groups().values() for key in group.pointer_keys()}
+    """Option keys that configure data access: reserved and query keys, source pointers and input data names."""
+    pointers = {key for group in concrete_source_groups().values() for key in group.pointer_keys()}
     names = {reader.data_access_name() for reader in get_all_subclasses(BaseInputData)}
     return frozenset({RESERVED_READER_OPTION_KEY, QUERY_OPTION, *pointers, *names})
 

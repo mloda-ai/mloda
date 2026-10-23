@@ -1,4 +1,4 @@
-"""Abstract base shared by file format groups and document groups: pointers, pins, owned files and folders."""
+"""Abstract base shared by ReadFileFG and ReadDocumentFG groups: pointers, pins, owned files and folders."""
 
 import inspect
 import os
@@ -13,11 +13,11 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
     note_pending_pin,
     pin_is_unreported,
 )
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import (
     FOLDER_ESCAPE_MARK,
     HANDLE_OPTION,
     HANDLE_SPEC,
-    FormatFeatureGroup,
+    SourceFeatureGroup,
 )
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
@@ -42,7 +42,7 @@ def not_a_file_reason(path: str) -> str:
     return "it is not a regular file" if os.path.exists(path) else "it does not exist"
 
 
-class _FileSourceFG(FormatFeatureGroup):
+class _FileSourceFG(SourceFeatureGroup):
     """Abstract plumbing for groups whose sources are files and folders of files."""
 
     PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {

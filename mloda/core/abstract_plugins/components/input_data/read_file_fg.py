@@ -2,7 +2,7 @@
 
 A subclass declares ``suffixes()`` and ``column_names(path)``; the base claims a feature when a file has the column.
 Third-party groups should run the contract mixins in mloda's ``tests/mixins/reader_feature_groups/``
-(``file_format_feature_group_test_mixin``); the mixins need the ``rejection_window`` fixture from mloda's
+(``read_file_fg_test_mixin``); the mixins need the ``rejection_window`` fixture from mloda's
 ``tests/conftest.py``.
 """
 
@@ -16,14 +16,14 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG, not_a_file_reason
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import REASON_DETAIL
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import REASON_DETAIL
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.components.utils import is_match_abort
 
 
 class ReadFileFG(_FileSourceFG):
-    """Abstract file format group: claims features found as columns of owned files and folder entries."""
+    """Abstract tabular file group: claims features found as columns of owned files and folder entries."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
         ClaimRoute("file", NamePolicy.CHECKED, True),

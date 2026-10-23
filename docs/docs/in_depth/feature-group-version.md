@@ -96,7 +96,7 @@ class ScaledValue(FeatureGroup):
         return data
 ```
 
-Editing `Scaler.apply` now changes `ScaledValue.version()`. A third-party class referenced this way records only its package name and version, and nothing under `ThirdPartyVersionMode.EXCLUDE`. The format groups shipped with mloda (`CsvFG`, `TextFG`, ...) are covered by the version prefix. To version a custom format group, subclass it and reference it in your feature group.
+Editing `Scaler.apply` now changes `ScaledValue.version()`. A third-party class referenced this way records only its package name and version, and nothing under `ThirdPartyVersionMode.EXCLUDE`. The source groups shipped with mloda (`CsvFG`, `TextFG`, ...) are covered by the version prefix. To version a custom source group, subclass it and reference it in your feature group.
 
 ## When it is computed
 

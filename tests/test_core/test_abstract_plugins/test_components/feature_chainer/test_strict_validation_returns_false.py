@@ -107,6 +107,50 @@ class TestStrictValidationReturnsFalse:
         assert result is False
 
 
+class _RaisingVerdict:
+    """A verdict whose truthiness raises the given exception."""
+
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    def __bool__(self) -> bool:
+        raise escalate_match_abort(self._exc)
+
+
+def _raise_value_as_marked_abort(value: Any) -> bool:
+    raise escalate_match_abort(value)
+
+
+def _verdict_raising_on_truthiness(value: Any) -> Any:
+    return _RaisingVerdict(value)
+
+
+class MarkedElementValidatorMode(BaseMode):
+    """Mode whose element_validator raises the marked abort held in the value."""
+
+    PROPERTY_MAPPING = {
+        "mode": PropertySpec(
+            "Mode of operation",
+            context=False,
+            strict_validation=True,
+            element_validator=_raise_value_as_marked_abort,
+        )
+    }
+
+
+class MarkedVerdictMode(BaseMode):
+    """Mode whose element_validator returns a verdict that raises on truthiness."""
+
+    PROPERTY_MAPPING = {
+        "mode": PropertySpec(
+            "Mode of operation",
+            context=False,
+            strict_validation=True,
+            element_validator=_verdict_raising_on_truthiness,
+        )
+    }
+
+
 class TestStrictValidationRejectionReason:
     """Tests that _strict_validation_rejection_reason surfaces the discarded ValueError message."""
 
@@ -142,6 +186,25 @@ class TestStrictValidationRejectionReason:
         assert reason is not None
         assert "invalid_prefix" in reason
         assert "mode" in reason
+
+    @pytest.mark.parametrize(
+        ("group", "make_value"),
+        [
+            (MarkedElementValidatorMode, lambda marker: marker),
+            (SubGroupA, lambda marker: _MarkedAbortEqValue(marker)),
+            (MarkedVerdictMode, lambda marker: marker),
+        ],
+        ids=["element_validator", "membership_eq", "verdict_bool"],
+    )
+    def test_marked_abort_from_value_check_propagates(self, group: Any, make_value: Any) -> None:
+        marker = escalate_match_abort(ValueError("marked diagnostic abort"))
+
+        with pytest.raises(ValueError) as exc_info:
+            group._strict_validation_rejection_reason(
+                FeatureName("any_feature"), Options(group={"mode": make_value(marker)})
+            )
+
+        assert exc_info.value is marker
 
     def test_unrelated_candidate_returns_none(self) -> None:
         """When the relevant property is entirely absent, this is a non-match, not a rejection."""

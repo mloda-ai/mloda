@@ -567,8 +567,6 @@ class TestNameConverterAgreement:
 
 
 class TestHandParsedBindings:
-    """validate_hand_parsed_bindings checks caller-supplied bindings against forwarded and declared options."""
-
     def test_forwarded_contradicting_binding_raises(self) -> None:
         child_options = _inherited_child_options({OPERATION_KEY: "max"})
 

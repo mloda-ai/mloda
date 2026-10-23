@@ -471,10 +471,7 @@ class FeatureChainParserMixin:
     def validate_hand_parsed_bindings(
         cls, feature_name: str | FeatureName, bindings: Mapping[str, Any], options: Options
     ) -> None:
-        """Abort when a forwarded or declared option contradicts bindings parsed from the name by hand.
-
-        MLODA_ALLOW_FORWARDED_NAME_MISMATCH downgrades it; in_features is not checked.
-        """
+        """Abort when a forwarded or declared option contradicts hand-parsed bindings (in_features is not checked)."""
         resolution = NameResolution.miss()
         cls._validate_forwarded_name_mismatch(feature_name, dict(bindings), options, resolution)
         cls._validate_name_agreement(feature_name, dict(bindings), None, options, resolution)

@@ -89,3 +89,7 @@ class TestDuckDBSiblingDictRunAll(SiblingDictRunAllTestBase):
         self, mode: ParallelizationMode, flight_server: Any
     ) -> None:
         self._run_siblings_with_final_filter(mode, flight_server)
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
+    def test_group_missing_a_requested_feature_raises(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self._run_partial_result(mode, flight_server)

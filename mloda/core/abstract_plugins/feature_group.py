@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import logging
 from collections.abc import Collection, Mapping
-from typing import Any, ClassVar, Callable, final
+from typing import Any, ClassVar, Callable, cast, final
 from abc import ABC
 
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
@@ -46,6 +46,21 @@ from mloda.core.abstract_plugins.components.utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+_INSTANCE_SHELLS: dict[type, type] = {}
+
+
+def _instance_shell(cls: type) -> type:
+    """A non-FeatureGroup class whose instances can take cls as their __class__."""
+    # __class__ assignment needs the same base below the first class adding __dict__ (ABC or object in practice).
+    layout = cls
+    while layout.__base__ is not None and not (layout.__dictoffset__ and not layout.__base__.__dictoffset__):
+        layout = layout.__base__
+    root = layout.__base__ or object
+    if root not in _INSTANCE_SHELLS:
+        _INSTANCE_SHELLS[root] = type("_InstanceShell", (root,), {})
+    return _INSTANCE_SHELLS[root]
 
 
 class FeatureGroup(ABC):
@@ -605,6 +620,17 @@ class FeatureGroup(ABC):
         """
         # Contained: this is the root-feature protocol signal, which is_root reads as "this IS a root" (#845).
         raise NotImplementedError
+
+    @final
+    @classmethod
+    def declared_input_features(cls, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        """`input_features` resolved from the class, usable on an abstract base without subclassing."""
+        if not inspect.isabstract(cls):
+            return cls().input_features(options, feature_name)
+        instance = cast(FeatureGroup, object.__new__(_instance_shell(cls)))
+        instance.__class__ = cls
+        cls.__init__(instance)
+        return instance.input_features(options, feature_name)
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:

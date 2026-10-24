@@ -1,3 +1,6 @@
+from abc import ABC, abstractmethod
+from typing import Any, ClassVar, Generic, TypeVar
+
 import numpy as np
 import pytest
 from mloda.user import DataAccessCollection
@@ -6,6 +9,8 @@ from mloda.user import FeatureName
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.user import Options
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
+from mloda.core.abstract_plugins.components.property_spec import property_spec
 
 
 class BaseTestFeatureGroup1(FeatureGroup):
@@ -175,3 +180,134 @@ def test_resolve_multi_column_feature_discovers_tilde_columns() -> None:
     assert isinstance(result, list), "Output should be a list"
     assert len(result) == 3, "Should find all 3 columns"
     assert result == ["my_feature~0", "my_feature~1", "my_feature~2"], "Should return columns in sorted order"
+
+
+_DI_KEY = "declared_inputs_probe_key"
+
+
+class _DeclaredInputsProbeBase(FeatureChainParserMixin, FeatureGroup):
+    PREFIX_PATTERN = r".*__([\w]+)_declared_inputs_probe$"
+    PROPERTY_MAPPING = {
+        _DI_KEY: property_spec("Probe op.", strict=True, allowed_values={"sum": "Sum"}, context=True),
+    }
+
+    @classmethod
+    @abstractmethod
+    def declared_inputs_probe_hook(cls) -> str: ...
+
+
+class _DeclaredInputsProbeConcrete(_DeclaredInputsProbeBase):
+    @classmethod
+    def declared_inputs_probe_hook(cls) -> str:
+        return "x"
+
+
+class _DeclaredInputsProbeInstanceOverride(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.str_of("declared_inputs_probe_src")}
+
+
+class _DeclaredInputsProbeRoot(FeatureGroup):
+    pass
+
+
+_DI_NAME = FeatureName("declared_inputs_probe_src__sum_declared_inputs_probe")
+
+
+def _names(features: set[Feature] | None) -> set[str]:
+    assert features is not None
+    return {f.name for f in features}
+
+
+def test_declared_input_features_on_abstract_base_matches_concrete() -> None:
+    expected = _names(_DeclaredInputsProbeConcrete().input_features(Options(), _DI_NAME))
+    assert expected == {"declared_inputs_probe_src"}
+    assert _names(_DeclaredInputsProbeBase.declared_input_features(Options(), _DI_NAME)) == expected
+
+
+def test_declared_input_features_with_instance_method_override() -> None:
+    result = _DeclaredInputsProbeInstanceOverride.declared_input_features(
+        Options(), FeatureName("declared_inputs_probe_x")
+    )
+    assert _names(result) == {"declared_inputs_probe_src"}
+
+
+def test_declared_input_features_leaves_base_untouched() -> None:
+    subclasses_before = list(FeatureGroup.__subclasses__())
+    base_subclasses_before = list(_DeclaredInputsProbeBase.__subclasses__())
+    abstract_before = _DeclaredInputsProbeBase.__abstractmethods__
+
+    _DeclaredInputsProbeBase.declared_input_features(Options(), _DI_NAME)
+
+    assert list(FeatureGroup.__subclasses__()) == subclasses_before
+    assert list(_DeclaredInputsProbeBase.__subclasses__()) == base_subclasses_before
+    assert _DeclaredInputsProbeBase.__abstractmethods__ == abstract_before
+    with pytest.raises(TypeError):
+        _DeclaredInputsProbeBase()  # type: ignore[abstract]
+
+
+def test_declared_input_features_propagates_not_implemented_for_root_group() -> None:
+    with pytest.raises(NotImplementedError):
+        _DeclaredInputsProbeRoot.declared_input_features(Options(), FeatureName("declared_inputs_probe_root"))
+
+
+_DI_T = TypeVar("_DI_T")
+_DI_FIXED = {"declared_inputs_probe_fixed"}
+
+
+def _di_fixed_inputs(self: Any, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+    return {Feature.str_of(n) for n in _DI_FIXED}
+
+
+class _DeclaredInputsProbeAbcMixin(ABC):
+    @abstractmethod
+    def m(self) -> None: ...
+
+
+class _DeclaredInputsProbeAbcGroup(_DeclaredInputsProbeAbcMixin, FeatureGroup):
+    input_features = _di_fixed_inputs
+
+
+class _DeclaredInputsProbeGenericGroup(FeatureGroup, Generic[_DI_T]):
+    input_features = _di_fixed_inputs
+
+
+class _DeclaredInputsProbeRecording:
+    seen: ClassVar[list[str]] = []
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        _DeclaredInputsProbeRecording.seen.append(cls.__name__)
+
+
+class _DeclaredInputsProbeRecordingGroup(_DeclaredInputsProbeRecording, FeatureGroup):
+    input_features = _di_fixed_inputs
+
+    @classmethod
+    @abstractmethod
+    def declared_inputs_probe_rec_hook(cls) -> str: ...
+
+
+@pytest.mark.parametrize(
+    "group",
+    [_DeclaredInputsProbeAbcGroup, _DeclaredInputsProbeGenericGroup, _DeclaredInputsProbeRecordingGroup],
+    ids=["abc_mixin_with_abstractmethod", "generic", "recording_mixin"],
+)
+def test_declared_input_features_on_special_abstract_bases(group: Any) -> None:
+    result = group.declared_input_features(Options(), FeatureName("declared_inputs_probe_x"))
+    assert _names(result) == _DI_FIXED
+
+
+def test_declared_input_features_does_not_trigger_mixin_init_subclass() -> None:
+    before = list(_DeclaredInputsProbeRecording.seen)
+    _DeclaredInputsProbeRecordingGroup.declared_input_features(Options(), FeatureName("declared_inputs_probe_x"))
+    assert _DeclaredInputsProbeRecording.seen == before
+
+
+def test_declared_input_features_does_not_grow_mixin_subclasses() -> None:
+    name = FeatureName("declared_inputs_probe_x")
+    _DeclaredInputsProbeRecordingGroup.declared_input_features(Options(), name)
+    after_first = len(_DeclaredInputsProbeRecording.__subclasses__())
+    for _ in range(50):
+        _DeclaredInputsProbeRecordingGroup.declared_input_features(Options(), name)
+    assert len(_DeclaredInputsProbeRecording.__subclasses__()) == after_first

@@ -10,7 +10,9 @@ import pytest
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda.provider import FeatureGroup
+from mloda.provider import FeatureChainParserMixin
 from mloda.provider import FeatureSet
+from mloda.provider import property_spec
 from mloda.user import Feature
 from mloda.user import GlobalFilter
 from mloda.user import Options
@@ -19,6 +21,7 @@ from mloda.user import PluginCollector
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 
 from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import (
+    PolicyRaises,
     PolicyRunAllTestBase,
     PolicySuccess,
     records_from_frame,
@@ -100,6 +103,23 @@ class SiblingDictCaseFold(_SiblingDictConsumer):
         return {"SD_A": [v * cls.FACTOR for v in _column(data, "sd_a")]}
 
 
+class PartialResultProbeFirstOnly(FeatureChainParserMixin, FeatureGroup):
+    """Serves two requested features in one FeatureSet but returns a column for only the first."""
+
+    PREFIX_PATTERN = r".*__partial_result_probe_first_(?P<n>\d+)$"
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1
+    PROPERTY_MAPPING = {
+        "n": property_spec("n", name_converter=int),
+        "in_features": property_spec("src"),
+    }
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        feature = features.get_sorted_features()[0]
+        return {feature.name: [0, 0, 0]}
+
+
 _ALL_FGS = {
     SiblingDictRoot,
     SiblingDictCaseFold,
@@ -178,6 +198,27 @@ class SiblingDictRunAllTestBase(PolicyRunAllTestBase):
 
     def _run_case_fold(self, mode: ParallelizationMode, flight_server: Any) -> None:
         self._run(["SD_A"], _assert_column_values({"SD_A": [2, 4, 6]}), mode, flight_server)
+
+    def _run_partial_result(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self.assert_policy_case(
+            feature_name=[
+                "sd_a__partial_result_probe_first_1",
+                "sd_a__partial_result_probe_first_2",
+            ],
+            plugin_collector=PluginCollector.enabled_feature_groups({SiblingDictRoot, PartialResultProbeFirstOnly}),
+            expectation=PolicyRaises(
+                match_substring=(
+                    "PartialResultProbeFirstOnly did not produce the requested feature(s) "
+                    "['sd_a__partial_result_probe_first_2']"
+                )
+            ),
+            mode=mode,
+            flight_server=flight_server,
+        )
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    def test_group_missing_a_requested_feature_raises(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self._run_partial_result(mode, flight_server)
 
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
     def test_case_differing_dict_key_succeeds(self, mode: ParallelizationMode, flight_server: Any) -> None:

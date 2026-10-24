@@ -874,6 +874,22 @@ class ComputeFramework(ABC):
                         f"produced columns: {produced}."
                     )
 
+    def _validate_requested_features(self, feature_group: Any, features: Any) -> None:
+        """Every requested feature must resolve to a produced column."""
+        from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+        columns = set(self.column_names)
+        missing = sorted(
+            str(name)
+            for name in features.get_initial_requested_features()
+            if not any(c in columns for c in FeatureGroup.resolve_multi_column_feature(str(name), columns))
+        )
+        if missing:
+            raise ValueError(
+                f"Feature group {feature_group.get_class_name()} did not produce the requested feature(s) {missing}: "
+                "calculate_feature must return a column for every feature in the FeatureSet."
+            )
+
     @final
     def run_validate_output_features(self, feature_group: Any, features: Any) -> None:
         if self.data is None:
@@ -890,6 +906,7 @@ class ComputeFramework(ABC):
             )
 
         self._validate_requested_parts(features)
+        self._validate_requested_features(feature_group, features)
 
         from mloda.core.abstract_plugins.components.validators.datatype_validator import DataTypeValidator
 

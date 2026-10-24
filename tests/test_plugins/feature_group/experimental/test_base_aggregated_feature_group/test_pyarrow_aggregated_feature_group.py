@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 
 import pyarrow as pa
@@ -390,6 +391,37 @@ class TestPyArrowAggregationDdofAndNullSkip:
         table = pa.table({"v": values})
         result = PyArrowAggregation._perform_aggregation(table, agg_type, ["v"])
         assert result.as_py() == (min(values) if agg_type == "min" else max(values))
+
+    @pytest.mark.parametrize(
+        "agg_type, columns, expected",
+        [
+            (
+                "sum",
+                {
+                    "a": pa.array([Decimal("1.5"), Decimal("2.5")], type=pa.decimal128(5, 1)),
+                    "b": pa.array([Decimal("1.0"), Decimal("2.0")], type=pa.decimal128(5, 1)),
+                },
+                [2.5, 4.5],
+            ),
+            (
+                "count",
+                {
+                    "a": pa.array([Decimal("1.5"), Decimal("2.5")], type=pa.decimal128(5, 1)),
+                    "b": pa.array([Decimal("1.0"), Decimal("2.0")], type=pa.decimal128(5, 1)),
+                },
+                [2, 2],
+            ),
+            ("count", {"a": pa.array(["x", "y"]), "b": pa.array(["p", "q"])}, [2, 2]),
+            ("count", {"a": pa.array([1.0, 2.0]), "b": pa.array(["p", "q"])}, [2, 2]),
+        ],
+        ids=["decimal_sum", "decimal_count", "string_count", "float_string_count"],
+    )
+    def test_perform_aggregation_multi_column_object_valued_columns_without_nulls(
+        self, agg_type: str, columns: dict[str, pa.Array], expected: list[float]
+    ) -> None:
+        table = pa.table(columns)
+        result = PyArrowAggregation._perform_aggregation(table, agg_type, list(columns))
+        assert [float(v) for v in result] == pytest.approx(expected)
 
     def test_perform_aggregation_count_multi_column_excludes_null_without_crashing(
         self, multi_source_table_with_null: pa.Table

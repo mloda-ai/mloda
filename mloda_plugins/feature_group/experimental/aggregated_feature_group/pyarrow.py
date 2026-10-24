@@ -94,8 +94,13 @@ class PyArrowAggregation(Implementation[AggregatedFeatureGroup]):
 
             # Reducers run on the null mask below; degenerate rows are patched so numpy never warns.
             # Null and NaN are both missing: the mask covers Arrow nulls and float NaN.
-            null_mask = np.column_stack([col.is_null().to_numpy(zero_copy_only=False) for col in columns])
-            null_mask = null_mask | np.isnan(stacked)
+            missing = [
+                pc.or_(pc.is_null(col), pc.fill_null(pc.is_nan(col), False))
+                if pa.types.is_floating(col.type)
+                else pc.is_null(col)
+                for col in columns
+            ]
+            null_mask = np.column_stack([m.to_numpy(zero_copy_only=False) for m in missing])
             valid_counts = np.sum(~null_mask, axis=1)
             zeroed = np.where(null_mask, 0, stacked)
 

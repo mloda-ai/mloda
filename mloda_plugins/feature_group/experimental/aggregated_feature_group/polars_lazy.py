@@ -93,7 +93,7 @@ class PolarsLazyAggregation(Implementation[AggregatedFeatureGroup]):
             elif aggregation_type in ["avg", "mean"]:
                 return pl.mean_horizontal(*columns)
             elif aggregation_type == "count":
-                # Count non-null values across columns
+                # Count non-missing values across columns
                 return pl.sum_horizontal(*[col.is_not_null().cast(pl.Int64) for col in columns])
             elif aggregation_type == "std":
                 # Polars doesn't have horizontal std, compute manually (ddof=1, null-skipping)

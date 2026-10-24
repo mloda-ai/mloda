@@ -279,7 +279,7 @@ An unknown name, a name shared by two loaded classes, an implementation that is 
 - An allow or deny list that names an old class must name the group or the implementation instead.
 - Plan locks recorded before the move no longer match.
 - A subclass of an old per-framework class must subclass the group (or the implementation) instead.
-- Aggregations and time windows treat NaN like null on every framework: skipped, and not counted by `count` (first and last keep it).
+- Aggregations and time windows treat NaN like null on every framework: skipped, and not counted by `count`; time window first and last keep it.
 - Time window: Pandas gives 0 for a multi-column sum row with no value, so with Pandas and PyArrow both enabled sum windows run on PyArrow; pin `implementation="PandasTimeWindow"` to keep the Pandas result.
 - PythonDict text cleaning turns NaN into an empty string, like Pandas.
 - PyArrow and PythonDict imputation treat NaN as missing (skipped in statistics and filled) and break `mode` ties by the smallest value, like Pandas; string ties change too.

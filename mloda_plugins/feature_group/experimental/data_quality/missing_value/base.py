@@ -28,12 +28,12 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     the specified imputation method. They support both string-based feature creation
     and configuration-based creation with proper group/context parameter separation.
 
-    Reference contract: null and NaN-like scalars (float NaN, NaT, pd.NA) are missing; mean/median/mode
-    skip them; missing cells are filled; mode ties take the smallest value; single-column, multi-column
-    and grouped paths; a group with no value falls back to the column statistic. A row with a missing
-    group key part joins no group (statistics fill it from the column, ffill/bfill leave it). A cell no
-    method fills stays missing (null, NaN in pandas), e.g. a multi-column row with no value or an
-    ffill/bfill edge.
+    Reference contract: null and NaN-like scalars (float and Decimal NaN, NaT, pd.NA) are missing;
+    mean/median/mode skip them; missing cells are filled; mode ties take the smallest value;
+    single-column, multi-column and grouped paths; a group with no value falls back to the column
+    statistic. A row with a missing group key part joins no group (statistics fill it from the column,
+    ffill/bfill leave it). A cell no method fills stays missing (null, NaN in pandas), e.g. a
+    multi-column row with no value or an ffill/bfill edge.
 
     ## Supported Imputation Methods
 

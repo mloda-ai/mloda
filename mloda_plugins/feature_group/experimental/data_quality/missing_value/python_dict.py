@@ -5,13 +5,16 @@ from __future__ import annotations
 import numbers
 import statistics
 from collections import Counter
-from collections.abc import Hashable
+from decimal import Decimal
 from typing import Any
 
 from mloda.provider import ComputeFramework, FeatureSet, Implementation
 
 from mloda.user.python_dict import PythonDictFramework, row_count
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
+
+_PLAIN_TYPES = frozenset({str, int, bool, bytes})
+_NAT_TYPES = frozenset({("pandas", "NaTType"), ("numpy", "datetime64"), ("numpy", "timedelta64")})
 
 
 class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup]):
@@ -57,7 +60,22 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
 
     @staticmethod
     def _is_missing(v: Any) -> bool:
-        return v is None or type(v).__name__ == "NAType" or (isinstance(v, Hashable) and bool(v != v))
+        """Type-based check that never calls a user-defined comparison."""
+        t = type(v)
+        if v is None:
+            return True
+        if t in _PLAIN_TYPES:
+            return False
+        if t is float:
+            return bool(v != v)
+        module = t.__module__.split(".")[0]
+        if module == "pandas" and t.__name__ == "NAType":
+            return True
+        if (module, t.__name__) in _NAT_TYPES:
+            return bool(v != v)
+        if isinstance(v, Decimal):
+            return v.is_nan()
+        return module in ("builtins", "numpy") and isinstance(v, numbers.Complex) and bool(v != v)
 
     @classmethod
     def _mode_of(cls, values: list[Any]) -> Any:

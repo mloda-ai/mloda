@@ -1,6 +1,7 @@
 import datetime
+from decimal import Decimal
 import statistics
-from collections.abc import Callable, Hashable
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import Mock
 
@@ -308,7 +309,7 @@ _Columns = dict[str, _Cells]
 
 
 def _missing(cell: Any) -> bool:
-    return cell is None or type(cell).__name__ == "NAType" or (isinstance(cell, Hashable) and bool(cell != cell))
+    return cell is None or (np.ndim(cell) == 0 and bool(pd.isna(cell)))
 
 
 def _statistic(method: str, cells: _Cells) -> Any:
@@ -588,8 +589,49 @@ class TestImplementationsConformToTheReferenceContract:
         assert not _differences(implementation, actual, baseline)
 
 
+class NAType:
+    """A user class that only shares its name with the pandas NA type."""
+
+
+class _ArrayNe:
+    def __eq__(self, other: object) -> np.ndarray:  # type: ignore[override]
+        return np.array([True, False])
+
+    def __ne__(self, other: object) -> np.ndarray:  # type: ignore[override]
+        return np.array([False, True])
+
+    def __hash__(self) -> int:
+        return 1
+
+
+class _RaisingNe:
+    def __ne__(self, other: object) -> bool:
+        raise RuntimeError("no comparison")
+
+    def __hash__(self) -> int:
+        return 2
+
+
+class _NeverEqual:
+    def __eq__(self, other: object) -> bool:
+        return False
+
+    def __hash__(self) -> int:
+        return 3
+
+
+_NEVER_EQUAL_KEY = _NeverEqual()
+_ODD_CELL_KINDS = [
+    pytest.param(lambda i: np.array([float(i), 2.0]), id="numpy_array"),
+    pytest.param(lambda i: _ArrayNe(), id="array_ne"),
+    pytest.param(lambda i: _RaisingNe(), id="raising_ne"),
+    pytest.param(lambda i: _NeverEqual(), id="never_equal"),
+    pytest.param(lambda i: NAType(), id="user_class_named_natype"),
+]
+
+
 class TestNanNormalizationIsLimitedToFloatColumns:
-    """Only floating source columns have NaN treated as missing; ints, strings and group keys are untouched."""
+    """NaN-like cells are missing; strings such as "nan", ints and other present values are untouched."""
 
     @pytest.mark.parametrize("method", ["mean", "ffill"])
     @pytest.mark.parametrize("scalar", _NAN_LIKE_VALUES)
@@ -604,14 +646,34 @@ class TestNanNormalizationIsLimitedToFloatColumns:
         assert not _differences(PythonDictMissingValueImputation, actual, baseline)
 
     @pytest.mark.parametrize(("method", "constant"), [("ffill", None), ("constant", 0.0)])
-    def test_python_dict_array_cells_are_left_alone(self, method: str, constant: Any) -> None:
-        columns: _Columns = {"a": list(_ARRAY_CELLS)}
-        actual = _impute(PythonDictMissingValueImputation, columns, method, ["a"], constant, None)
-        fill = _ARRAY_CELLS[0] if method == "ffill" else constant
-        expected = [_ARRAY_CELLS[0], fill, _ARRAY_CELLS[2], fill if method == "constant" else _ARRAY_CELLS[2]]
+    @pytest.mark.parametrize("make", _ODD_CELL_KINDS)
+    def test_python_dict_odd_cells_are_left_alone(self, method: str, constant: Any, make: Callable[[int], Any]) -> None:
+        first, second = make(1), make(3)
+        actual = _impute(
+            PythonDictMissingValueImputation, {"a": [first, None, second, None]}, method, ["a"], constant, None
+        )
+        fill = first if method == "ffill" else constant
+        expected = [first, fill, second, fill if method == "constant" else second]
         assert len(actual) == 4
         for a, e in zip(actual, expected):
-            assert np.array_equal(a, e)
+            assert a is e
+
+    @pytest.mark.parametrize("method", ["mean", "mode", "ffill"])
+    def test_python_dict_never_equal_group_key_groups_like_a_plain_key(self, method: str) -> None:
+        values: _Cells = [1.0, None, 3.0, None, 5.0, None, 9.0, 2.0]
+        plain: _Columns = {"a": values, "g": ["x", "x", "y", "y", "x", "x", "y", "x"]}
+        odd: _Columns = {"a": values, "g": [_NEVER_EQUAL_KEY if k == "x" else k for k in plain["g"]]}
+        expected = _impute(PythonDictMissingValueImputation, plain, method, ["a"], None, ["g"])
+        actual = _impute(PythonDictMissingValueImputation, odd, method, ["a"], None, ["g"])
+        assert not _differences(PythonDictMissingValueImputation, actual, expected)
+
+    @pytest.mark.parametrize("method", ["constant", "ffill"])
+    @pytest.mark.parametrize("scalar", [Decimal("sNaN"), Decimal("NaN")], ids=["snan", "nan"])
+    def test_python_dict_decimal_nan_cells_are_missing(self, method: str, scalar: Decimal) -> None:
+        cells: _Cells = [Decimal("1.5"), scalar, Decimal("3"), scalar]
+        actual = _impute(PythonDictMissingValueImputation, {"a": cells}, method, ["a"], Decimal("0"), None)
+        fill = Decimal("1.5") if method == "ffill" else Decimal("0")
+        assert actual == [Decimal("1.5"), fill, Decimal("3"), Decimal("3") if method == "ffill" else fill]
 
     @pytest.mark.parametrize("method", ["mode", "constant"])
     @pytest.mark.parametrize("implementation", [PyArrowMissingValueImputation, PythonDictMissingValueImputation])

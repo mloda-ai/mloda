@@ -22,22 +22,10 @@ def same(actual: Any, expected: Any) -> bool:
     return bool(actual == expected)
 
 
-def is_missing(value: Any) -> bool:
-    """None, NaN and pd.NA all count as missing."""
-    return value is None or _is_nan(value) or value is pd.NA
-
-
-def same_missing_agnostic(actual: Any, expected: Any) -> bool:
-    """A missing expected value matches any missing representation; otherwise strict `same`."""
-    if is_missing(expected):
-        return is_missing(actual)
-    return not is_missing(actual) and same(actual, expected)
-
-
 def same_on_pandas(actual: Any, expected: Any) -> bool:
-    """Like same, but None and NaN are interchangeable (a pandas float column cannot hold null)."""
-    missing_actual = actual is None or _is_nan(actual)
-    missing_expected = expected is None or _is_nan(expected)
+    """Like same, but None, NaN and pd.NA are interchangeable (a pandas float column cannot hold null)."""
+    missing_actual = actual is None or _is_nan(actual) or actual is pd.NA
+    missing_expected = expected is None or _is_nan(expected) or expected is pd.NA
     if missing_actual or missing_expected:
         return missing_actual and missing_expected
     return same(actual, expected)

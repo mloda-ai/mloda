@@ -678,48 +678,42 @@ def _idx_link(left: str, right: str, discriminated: bool = True) -> Link:
     return Link.inner(JoinSpec(ApiDataFG, Index((left,))), JoinSpec(ApiDataFG, Index((right,))), **kw)
 
 
-class IdxJoinedFG(FeatureGroup):
-    """Joins idx_a_val (via the class-level link) with idx_b_val."""
+def _joined_fg(link: Link | None) -> type[FeatureGroup]:
+    """Build a FeatureGroup joining idx_a_val (through link) with idx_b_val."""
 
-    link: Link | None = None
+    class IdxJoinedFG(FeatureGroup):
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+            return {
+                Feature("idx_a_val", link=link, options=dict(_IDX_A)),
+                Feature("idx_b_val", options=dict(_IDX_B)),
+            }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {
-            Feature("idx_a_val", link=type(self).link, options=dict(_IDX_A)),
-            Feature("idx_b_val", options=dict(_IDX_B)),
-        }
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return {"IdxJoinedFG": data["idx_a_val"].astype(str) + "_" + data["idx_b_val"].astype(str)}
 
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {"IdxJoinedFG": data["idx_a_val"].astype(str) + "_" + data["idx_b_val"].astype(str)}
+    return IdxJoinedFG
 
 
-class TestApiDataLinkIndexColumns:
+class TestApiDataIndexColumnsAcrossSets:
     """Link and keep_index columns must exist in the api_data set that the side or request selects."""
 
     @staticmethod
-    def _prepare(features: list[Any], link: Link | None = None, **kwargs: Any) -> Any:
-        IdxJoinedFG.link = link
-        return mloda.prepare(
+    def _call(fn: Any, features: list[Any], link: Link | None, **kwargs: Any) -> Any:
+        joined = _joined_fg(link)
+        return fn(
             features,
             compute_frameworks=[PandasDataFrame],
             api_data=_IDX_API,
-            plugin_collector=PluginCollector.enabled_feature_groups({ApiDataFG, IdxJoinedFG}),
+            plugin_collector=PluginCollector.enabled_feature_groups({ApiDataFG, joined}),
             **kwargs,
         )
 
-    @staticmethod
-    def _run(features: list[Any], link: Link | None = None, **kwargs: Any) -> list[Any]:
-        IdxJoinedFG.link = link
-        return list(
-            mloda.run_all(
-                features,
-                compute_frameworks=[PandasDataFrame],
-                api_data=_IDX_API,
-                plugin_collector=PluginCollector.enabled_feature_groups({ApiDataFG, IdxJoinedFG}),
-                **kwargs,
-            )
-        )
+    def _prepare(self, features: list[Any], link: Link | None = None, **kwargs: Any) -> Any:
+        return self._call(mloda.prepare, features, link, **kwargs)
+
+    def _run(self, features: list[Any], link: Link | None = None, **kwargs: Any) -> list[Any]:
+        return list(self._call(mloda.run_all, features, link, **kwargs))
 
     def test_swapped_index_on_discriminated_link_raises_at_prepare(self) -> None:
         with pytest.raises(ValueError, match=r"(?s)idx_b_id.*api_data:A|api_data:A.*idx_b_id"):
@@ -740,3 +734,16 @@ class TestApiDataLinkIndexColumns:
         res = self._run(["IdxJoinedFG"], _idx_link("idx_a_id", "idx_b_id"))
         assert len(res) == 1
         assert sorted(res[0]["IdxJoinedFG"].tolist()) == ["10_100", "20_200", "30_300"]
+
+    def test_keep_index_from_the_other_joined_api_data_set(self) -> None:
+        res = self._run(
+            [Feature("IdxJoinedFG", keep_index=True, index=Index(("idx_b_id",)))],
+            _idx_link("idx_a_id", "idx_b_id"),
+        )
+        assert len(res) == 1
+        rows = sorted(zip(res[0]["idx_b_id"].tolist(), res[0]["IdxJoinedFG"].tolist()))
+        assert rows == [(1, "10_100"), (2, "20_200"), (3, "30_300")]
+
+    def test_keep_index_missing_from_the_requested_api_data_set_raises_at_prepare(self) -> None:
+        with pytest.raises(ValueError, match="no input feature group provides it"):
+            self._prepare([Feature("idx_a_val", keep_index=True, index=Index(("idx_b_id",)))])

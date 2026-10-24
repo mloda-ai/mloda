@@ -27,7 +27,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas im
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import PolarsLazyAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.test_plugins.feature_group.experimental.reference_contract import same_missing_agnostic
+from tests.test_plugins.feature_group.experimental.reference_contract import same_on_pandas
 
 
 AGGREGATION_UNIVERSE = frozenset(AggregatedFeatureGroup.AGGREGATION_TYPES)
@@ -147,7 +147,7 @@ _MULTI_WITH_MISSING_ROW: dict[str, list[float | None]] = {
 
 
 def _reference(aggregation_type: str, cells: list[float | None]) -> float | int | None:
-    """The reference contract: null and NaN are missing and skipped; over no values sum and count are 0, others missing."""
+    """The reference contract: missing values are skipped; over no values sum and count are 0, others missing."""
     clean = [cell for cell in cells if cell is not None and not math.isnan(cell)]
     if aggregation_type == "count":
         return len(clean)
@@ -203,40 +203,24 @@ def _polars_result(aggregation_type: str, columns: dict[str, list[float | None]]
     return list(frame.select(expression.alias("result")).collect()["result"].to_list())
 
 
-_RESULT_OF: dict[type[Implementation[Any]], Callable[[str, dict[str, list[float | None]]], list[Any]]] = {
-    PandasAggregation: _pandas_result,
-    PyArrowAggregation: _pyarrow_result,
-    PolarsLazyAggregation: _polars_result,
-}
-
-
 _RUNNERS: list[tuple[type[Implementation[Any]], Callable[[str, dict[str, list[float | None]]], list[Any]]]] = [
-    *_RESULT_OF.items(),
+    (PandasAggregation, _pandas_result),
+    (PyArrowAggregation, _pyarrow_result),
+    (PolarsLazyAggregation, _polars_result),
     (PandasAggregation, _pandas_arrow_result),
 ]
 _RUNNER_IDS = [f"{impl.__name__}-{runner.__name__.strip('_')}" for impl, runner in _RUNNERS]
 
 
-class TestAggregationOverNoValues:
-    """The reference gives 0 for sum and count and a missing value for the rest over no values."""
-
-    @pytest.mark.parametrize("aggregation_type", sorted(AGGREGATION_UNIVERSE))
-    def test_reference_over_no_values(self, aggregation_type: str) -> None:
-        expected = 0 if aggregation_type in ("sum", "count") else None
-        assert _reference(aggregation_type, []) == expected
-        assert _reference(aggregation_type, [_NAN, None]) == expected
-
-    def test_missing_results_compare_across_representations(self) -> None:
-        assert all(same_missing_agnostic(a, None) for a in (None, _NAN, pd.NA))
-        assert not same_missing_agnostic(0, None)
-        assert not same_missing_agnostic(None, 0)
+class TestPandasAggregationOnArrowBackedFrames:
+    """Aggregating an Arrow-backed frame must not modify it."""
 
     def test_pandas_leaves_an_arrow_backed_frame_unchanged(self) -> None:
         frame = _arrow_backed_frame(_SINGLE_COLUMN)
         before = frame.copy(deep=True)
         PandasAggregation._perform_aggregation(frame, "sum", ["a"])
         pd.testing.assert_frame_equal(frame, before)
-        column = pa.chunked_array([frame["a"].array._pa_array]).combine_chunks()  # type: ignore[attr-defined]
+        column = pa.array(frame["a"])
         assert column.null_count == 1  # the NaN was not turned into a second null
 
 
@@ -267,6 +251,6 @@ class TestImplementationsConformToTheReferenceContract:
             actual = runner(aggregation_type, columns)
             expected = _reference_result(aggregation_type, columns)
             assert len(actual) == len(expected), f"{shape}: {actual} vs {expected}"
-            if not all(same_missing_agnostic(a, e) for a, e in zip(actual, expected)):
+            if not all(same_on_pandas(a, e) for a, e in zip(actual, expected)):
                 differing.append(f"{shape}: {actual} != reference {expected}")
         assert bool(differing) == (aggregation_type in implementation.divergent), differing

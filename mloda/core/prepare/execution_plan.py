@@ -255,7 +255,10 @@ class ExecutionPlan:
         handle, explicit, reason = resolve_connection_handle(framework, self.data_access_collection, options)
         needs = not explicit or framework.connection_requirement() is ConnectionRequirement.REQUIRED
         if hop and handle is None and reason is not None and needs:
-            raise ValueError(reason if explicit else f"Ambiguous resolve for kind 'connection': {reason}")
+            raise ValueError(
+                f"{framework.get_class_name()}: "
+                + (reason if explicit else f"Ambiguous resolve for kind 'connection': {reason}")
+            )
         return handle, explicit
 
     def _source_handle(self, step: FeatureGroupStep) -> str | None:

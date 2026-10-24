@@ -63,8 +63,9 @@ class TfsConnectionInitMixin:
     ) -> None:
         assert valid_connection is not second_valid_connection
         dac = DataAccessCollection(connections={valid_connection, second_valid_connection})
-        with pytest.raises(ValueError, match="Ambiguous resolve"):
+        with pytest.raises(ValueError, match="Ambiguous resolve") as exc:
             framework_class.pick_connection_from_dac(dac)
+        assert f"{framework_class.get_class_name()}: Ambiguous resolve" in str(exc.value)
 
     def test_hint_resolves_ambiguity(
         self, framework_class: Any, valid_connection: Any, second_valid_connection: Any

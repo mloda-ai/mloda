@@ -243,6 +243,9 @@ class TestDuckDBRootConnectionBinding:
                 dac,
             )
         assert "'s'" in str(raised.value)
+        assert "DuckDBFramework: Connection handle 's' holds a connection this framework does not accept." in str(
+            raised.value
+        )
 
     def test_consumers_on_different_handles_never_share_one_transform_hop(self) -> None:
         a, b = duckdb.connect(), duckdb.connect()

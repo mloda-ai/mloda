@@ -13,13 +13,13 @@ from typing import TYPE_CHECKING, Any, Callable
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     ANY_OUTPUT_PART,
-    COLUMN_SEPARATOR,
     PropertyValueRejection,
 )
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,
+    NAME_STAGE,
     MatchRejection,
     record_match_rejection,
 )
@@ -118,12 +118,12 @@ def call_match_hook(
             )
             if not base_matched:
                 return full
-        if ANY_OUTPUT_PART in declared or part.split(COLUMN_SEPARATOR)[0] in declared:
+        if ANY_OUTPUT_PART in declared or part in declared:
             if not matched:
                 options._adopt(base_options)
             return MatchHookOutcome(True, True, None, split)
         reason = f"'{part}' is not an output part of '{base}'; declared parts: {list(declared)}"
-        priority.append({feature_group.get_class_name(): MatchRejection(reason)})
+        priority.append({feature_group.get_class_name(): MatchRejection(reason, stage=NAME_STAGE)})
         return MatchHookOutcome(False, False, None)
     except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not poison the whole run)
         if is_match_abort(exc):

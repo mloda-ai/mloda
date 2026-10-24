@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess  # nosec
 import sys
+import tomllib
 from typing import Any
 from urllib.request import urlopen
 
@@ -19,11 +20,6 @@ def download_files(base_url: str, files: list[str], output_dir: str = ".") -> No
 
 def get_version(path: str = "pyproject.toml") -> Any:
     """Extracts the version from a pyproject.toml file."""
-    if sys.version_info >= (3, 11):
-        import tomllib
-    else:
-        import tomli as tomllib
-
     with open(path, "rb") as f:
         return tomllib.load(f)["project"]["version"]
 

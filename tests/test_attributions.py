@@ -1,13 +1,10 @@
-import importlib
 import os
 import subprocess  # nosec B404
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-import attribution.attributions as attributions_module
 from attribution.attributions import (
     add_file_to_git,
     download_files,
@@ -35,18 +32,6 @@ class TestGetVersion:
         pyproject.write_text("[project]\n")
         with pytest.raises(KeyError):
             get_version(str(pyproject))
-
-
-class TestLazyTomlImport:
-    def test_module_imports_without_tomli_available(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Importing the module must not require tomli/tomllib (release Python 3.10 lacks tomli outside tox)."""
-        monkeypatch.setitem(sys.modules, "tomli", None)
-        monkeypatch.setitem(sys.modules, "tomllib", None)
-        try:
-            importlib.reload(attributions_module)
-        finally:
-            monkeypatch.undo()
-            importlib.reload(attributions_module)
 
 
 class TestDownloadFiles:

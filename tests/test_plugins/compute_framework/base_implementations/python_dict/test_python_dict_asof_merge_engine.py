@@ -99,10 +99,7 @@ class TestPythonDictAsofMergeEngine(AsofMergeEngineTestBase):
         assert result_b["rv"][0] == 2
 
     def test_coerce_z_suffix_utc_strings_join(self) -> None:
-        """datetime.fromisoformat on Python 3.10 rejects a trailing 'Z'. The engine must
-        normalize 'Z' to '+00:00' before parsing so Z-suffixed UTC strings coerce on every
-        supported interpreter. All values are tz-aware, so no mixed-tz error: the join
-        succeeds with one row matching the earlier right row (rv == 1.0)."""
+        """Z-suffixed UTC strings coerce as tz-aware and join."""
         left = {"k": ["a"], "t": ["2025-06-03T00:00:00Z"], "lv": [1]}
         right = {
             "k": ["a", "a"],
@@ -121,6 +118,21 @@ class TestPythonDictAsofMergeEngine(AsofMergeEngineTestBase):
 
         assert len(result["rv"]) == 1
         assert result["rv"][0] == 1.0
+
+    def test_coerce_date_only_z_value_raises(self) -> None:
+        """A date-only 'Z' value must raise ValueError, not be read as naive midnight."""
+        left = {"k": ["a"], "t": ["2025-06-03Z"], "lv": [1]}
+        right = {"k": ["a"], "t": ["2025-06-01Z"], "rv": [1.0]}
+
+        engine = PythonDictMergeEngine()
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            coerce_time_columns=True,
+        )
+        with pytest.raises(ValueError, match="Invalid isoformat"):
+            engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
 
     def test_coerce_mixed_tz_naive_and_aware_raises(self) -> None:
         """Coercion of a column mixing tz-aware and tz-naive ISO strings must raise ValueError:

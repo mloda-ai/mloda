@@ -5,7 +5,7 @@ import json
 import logging
 import threading
 from collections.abc import Iterator, Mapping
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar
 from uuid import uuid4
@@ -556,7 +556,7 @@ class TestSuccess:
         expires_at = result["expires_at"]
         assert isinstance(expires_at, str)
         assert expires_at.endswith("Z")
-        parsed = datetime.fromisoformat(expires_at[:-1]).replace(tzinfo=timezone.utc)
+        parsed = datetime.fromisoformat(expires_at)
         assert parsed.timestamp() == CLOCK_START + settings.plan_ttl_seconds
 
     def test_normalized_request_and_policy(self, tmp_path: Path) -> None:

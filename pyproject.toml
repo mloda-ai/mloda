@@ -14,7 +14,7 @@ authors = [
 ]
 dependencies = []
 
-requires-python = ">=3.10,<3.15"
+requires-python = ">=3.11,<3.15"
 keywords = ["ai-agents", "data-access", "feature-engineering", "data-pipeline", "mlops", "llmops", "rag", "lineage", "plugin-framework"]
 classifiers = [
     "Intended Audience :: Developers",
@@ -22,7 +22,6 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -53,7 +52,6 @@ test = [
     "scikit-learn>=1.0.0",
     "pip-audit<2.11.0",
     "pip-licenses-cli",
-    "tomli>=1.0.0; python_version < '3.11'",
 ]
 # Every group that pulls in pyarrow needs >=14.0.1 (CVE-2023-47248).
 pyarrow = ["pyarrow>=14.0.1"]
@@ -76,7 +74,6 @@ nopyarrow_test = [
     "pytest-xdist",
     "pytest-order",
     "pytest-timeout",
-    "tomli>=1.0.0; python_version < '3.11'",
 ]
 docs = [
     "mkdocs",
@@ -187,7 +184,7 @@ follow_imports = "skip"
 line-length = 120
 
 [tool.ruff.lint]
-extend-select = ["UP006", "UP007", "UP045"]
+extend-select = ["UP006", "UP007", "UP036", "UP045"]
 
 [tool.ruff.lint.per-file-ignores]
 # marimo notebook idioms static linting can't follow (cell imports, re-exports, cross-cell names).

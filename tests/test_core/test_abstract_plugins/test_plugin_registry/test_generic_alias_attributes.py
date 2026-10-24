@@ -1,5 +1,4 @@
-"""On Python 3.10 alone, isinstance(tuple[str, ...], type) is True for a types.GenericAlias, so the
-plugin registry must skip a module-level type alias attribute rather than call issubclass() on it."""
+"""Regression guard: a module-level ``tuple[str, ...]`` alias attribute must not break plugin registration."""
 
 import gc
 import sys

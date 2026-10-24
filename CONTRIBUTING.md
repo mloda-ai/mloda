@@ -12,7 +12,7 @@ The simplest way to support mloda is to star the repository on GitHub. It costs 
 
 ### Prerequisites
 
-- Python 3.10 or higher (tested on 3.10, 3.11, 3.12, 3.13, 3.14)
+- Python 3.11 or higher (tested on 3.11, 3.12, 3.13, 3.14)
 - [uv](https://docs.astral.sh/uv/) for dependency management
 - [tox](https://tox.wiki/) as the test runner (installed via uv)
 
@@ -132,7 +132,7 @@ git checkout -b fix/short-description
 3. Make your changes and ensure `tox` passes locally.
 4. Commit using [Conventional Commits](https://www.conventionalcommits.org/) format.
 5. Push your branch to your fork and open a pull request targeting `main`.
-6. CI runs the tests on Python 3.10, 3.11, 3.12, 3.13, and 3.14 and the lint checks on 3.10 and 3.14. All checks must pass before merge.
+6. CI runs the tests on Python 3.11, 3.12, 3.13, and 3.14 and the lint checks on 3.11 and 3.14. All checks must pass before merge.
 
 ## License
 

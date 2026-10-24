@@ -106,7 +106,7 @@ Cross-backend caveats to be aware of:
     `AsOfJoinConfig`, default `False`). With the default, the strict `ValueError` above applies.
     When `True`, ISO-8601 string time columns are coerced per backend: `pandas`, `polars`,
     `pyarrow`, and `spark` cast to native timestamps, `python_dict` to `datetime` (a trailing `Z`
-    is accepted as `+00:00`), and `sqlite` to `julianday` NUMERIC (so a numeric `tolerance` is in
+    on a datetime is accepted as UTC), and `sqlite` to `julianday` NUMERIC (so a numeric `tolerance` is in
     days). `duckdb` rejects strings carrying a UTC offset or trailing `Z` (cast manually), and
     `sqlite` additionally rejects one-sided string-vs-numeric coercion (cast manually). Coercion
     fails hard on unparseable or non-ISO values and never produces silent null matches; mixed

@@ -265,7 +265,7 @@ def call_run_complete_hook(extenders: Iterable[Extender], run: "RunContext", out
 
 def note_mloda_id(error: BaseException, name: str, value: str | None) -> None:
     """Append a ``mloda <name>`` PEP 678 note to the exception."""
-    setattr(error, "__notes__", [*getattr(error, "__notes__", []), f"mloda {name}: {value}"])  # noqa: B010
+    error.add_note(f"mloda {name}: {value}")
 
 
 def call_run_start_hook(extenders: Iterable[Extender], run: "RunContext", plan: "PlanContext", steps: Any) -> None:

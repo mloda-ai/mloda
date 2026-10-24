@@ -5,18 +5,12 @@ These tests parse pyproject.toml directly (no subprocess needed).
 
 from __future__ import annotations
 
-import sys
+import tomllib
 from pathlib import Path
 from typing import Any
 
 import pytest
 from packaging.requirements import Requirement
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
-
 
 _PYPROJECT = Path(__file__).parent.parent.parent.parent / "pyproject.toml"
 

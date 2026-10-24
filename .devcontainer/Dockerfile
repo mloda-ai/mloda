@@ -1,5 +1,5 @@
 # Use the same VS Code Dev Container base image
-FROM mcr.microsoft.com/vscode/devcontainers/python:3.10
+FROM mcr.microsoft.com/vscode/devcontainers/python:3.11
 
 # Set up a non-root user (matches `remoteUser: vscode` in devcontainer.json)
 USER root
@@ -37,7 +37,7 @@ RUN echo 'cd /workspace' >> /home/vscode/.bashrc
 
 # Set tox work directory in user's home to avoid volume mount conflicts
 ENV TOX_WORK_DIR=/home/vscode/.tox-cache
-ENV UV_PROJECT_ENVIRONMENT=/home/vscode/.tox-cache/python310
+ENV UV_PROJECT_ENVIRONMENT=/home/vscode/.tox-cache/python311
 
 # Create tox cache directory with proper ownership
 RUN mkdir -p $TOX_WORK_DIR && chown -R vscode:vscode $TOX_WORK_DIR
@@ -46,12 +46,12 @@ RUN mkdir -p $TOX_WORK_DIR && chown -R vscode:vscode $TOX_WORK_DIR
 RUN uv tool install tox --with tox-uv
 
 # Pre-build the tox environment and install dev deps
-RUN tox --workdir $TOX_WORK_DIR -e python310 --notest -vv
-RUN . $TOX_WORK_DIR/python310/bin/activate && \
+RUN tox --workdir $TOX_WORK_DIR -e python311 --notest -vv
+RUN . $TOX_WORK_DIR/python311/bin/activate && \
     uv sync --extra all
 
 # Auto-activate the shared tox env in interactive shells
-RUN echo '[ -f /home/vscode/.tox-cache/python310/bin/activate ] && source /home/vscode/.tox-cache/python310/bin/activate' \
+RUN echo '[ -f /home/vscode/.tox-cache/python311/bin/activate ] && source /home/vscode/.tox-cache/python311/bin/activate' \
       >> /home/vscode/.bashrc
 
 # Default shell

@@ -18,7 +18,7 @@ _RAND_B_MASK = (1 << _RAND_B_BITS) - 1
 
 
 def generate_run_id() -> str:
-    """Mint a UUIDv7 id (RFC 9562): stdlib on Python 3.14+, hand-rolled below (this repo supports >=3.10)."""
+    """Mint a UUIDv7 id (RFC 9562): stdlib on Python 3.14+, hand-rolled below."""
     if sys.version_info >= (3, 14):
         return str(uuid.uuid7())  # type: ignore[attr-defined,unused-ignore]
 

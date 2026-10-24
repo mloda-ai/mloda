@@ -36,7 +36,6 @@ from __future__ import annotations
 import ast
 import builtins
 import io
-import sys
 import tokenize
 from collections import deque
 from collections.abc import Sequence
@@ -332,14 +331,10 @@ def _keeps_the_mark(node: ast.Raise, bound: str | None) -> bool:
 
 
 # A nested def or lambda runs later or never, and a nested try may catch the raise it holds.
-# ast.TryStar is 3.11+, so the name is read off the module instead of written.
 _DEFERRED: tuple[type[ast.AST], ...] = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
-_NESTED_TRY: tuple[type[ast.AST], ...] = (ast.Try, getattr(ast, "TryStar", ast.Try))
+_NESTED_TRY: tuple[type[ast.AST], ...] = (ast.Try, ast.TryStar)
 # A break or continue binds to the innermost loop around it, so one opened here leaves that loop and nothing else.
 _LOOPS: tuple[type[ast.AST], ...] = (ast.For, ast.AsyncFor, ast.While)
-
-# A typo in that attribute name would fall back to ast.Try on every version and disable the boundary in silence.
-assert sys.version_info < (3, 11) or _NESTED_TRY[1] is not ast.Try, "ast.TryStar no longer resolves off ast"
 
 
 def _is_suppress(expr: ast.expr) -> bool:
@@ -419,7 +414,7 @@ def _reraises(body: Sequence[ast.AST], bound: str | None, bare_counts: bool, *, 
                 return True
             continue
         if isinstance(node, _NESTED_TRY):
-            # The arms are read off ast.Try: TryStar carries the same ones, and 3.10 cannot name the type.
+            # The arms are read off ast.Try: TryStar carries the same ones; cast keeps mypy on ast.Try.
             if _nested_try_reraises(cast(ast.Try, node), bound, bare_counts, in_loops=in_loops):
                 return True
             continue

@@ -12,7 +12,7 @@ from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
-from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
+from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistance as PandasGeoDistance
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
@@ -91,7 +91,7 @@ class TestGeoDistancePandasIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {PandasGeoDistanceTestDataCreator, PandasGeoDistanceFeatureGroup}
+            {PandasGeoDistanceTestDataCreator, GeoDistanceFeatureGroup}
         )
 
         # Run the mloda with multiple geo distance features
@@ -129,7 +129,7 @@ class TestGeoDistancePandasIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {PandasGeoDistanceTestDataCreator, PandasGeoDistanceFeatureGroup}
+            {PandasGeoDistanceTestDataCreator, GeoDistanceFeatureGroup}
         )
 
         # Create features using configuration-based approach

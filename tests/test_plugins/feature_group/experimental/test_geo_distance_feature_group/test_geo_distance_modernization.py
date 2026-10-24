@@ -17,7 +17,7 @@ from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
-from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
+from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistance as PandasGeoDistance
 from mloda.provider import DefaultOptionKeys
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
@@ -54,7 +54,7 @@ class TestGeoDistanceModernization:
         """Test that string-based feature creation still works (legacy approach)."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {GeoDistanceModernizationTestDataCreator, PandasGeoDistanceFeatureGroup}
+            {GeoDistanceModernizationTestDataCreator, GeoDistanceFeatureGroup}
         )
 
         # Create string-based features
@@ -91,7 +91,7 @@ class TestGeoDistanceModernization:
         """Test that configuration-based feature creation works (modern approach)."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {GeoDistanceModernizationTestDataCreator, PandasGeoDistanceFeatureGroup}
+            {GeoDistanceModernizationTestDataCreator, GeoDistanceFeatureGroup}
         )
 
         # Create configuration-based features
@@ -153,7 +153,7 @@ class TestGeoDistanceModernization:
         """Test that both string-based and configuration-based approaches produce equivalent functionality."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {GeoDistanceModernizationTestDataCreator, PandasGeoDistanceFeatureGroup}
+            {GeoDistanceModernizationTestDataCreator, GeoDistanceFeatureGroup}
         )
 
         # Create string-based feature
@@ -195,7 +195,7 @@ class TestGeoDistanceModernization:
         """Test that parameter validation works correctly for configuration-based features."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {GeoDistanceModernizationTestDataCreator, PandasGeoDistanceFeatureGroup}
+            {GeoDistanceModernizationTestDataCreator, GeoDistanceFeatureGroup}
         )
 
         # Test invalid distance type
@@ -244,7 +244,7 @@ class TestGeoDistanceModernization:
         """Test multiple distance types using configuration-based approach."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {GeoDistanceModernizationTestDataCreator, PandasGeoDistanceFeatureGroup}
+            {GeoDistanceModernizationTestDataCreator, GeoDistanceFeatureGroup}
         )
 
         distance_types = ["haversine", "euclidean", "manhattan"]
@@ -287,7 +287,7 @@ class TestGeoDistanceModernization:
         """Test that context parameters don't affect Feature Group resolution/splitting."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {GeoDistanceModernizationTestDataCreator, PandasGeoDistanceFeatureGroup}
+            {GeoDistanceModernizationTestDataCreator, GeoDistanceFeatureGroup}
         )
 
         # Create two features with different context parameters (distance types)
@@ -370,7 +370,7 @@ class TestGeoDistanceModernization:
         """Test that both string-based and configuration-based features can be used together in a single run."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {GeoDistanceModernizationTestDataCreator, PandasGeoDistanceFeatureGroup}
+            {GeoDistanceModernizationTestDataCreator, GeoDistanceFeatureGroup}
         )
 
         # Mix string-based and configuration-based features
@@ -418,7 +418,7 @@ class TestGeoDistanceModernization:
 
     def test_input_features_dual_approach(self) -> None:
         """Test that input_features method works correctly for both approaches."""
-        feature_group = PandasGeoDistanceFeatureGroup()
+        feature_group = GeoDistanceFeatureGroup()
 
         # Test string-based approach
         from mloda.user import FeatureName

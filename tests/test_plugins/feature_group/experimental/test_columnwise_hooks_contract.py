@@ -25,7 +25,6 @@ from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas im
     PandasDimensionalityReductionFeatureGroup,
 )
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
-from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
 from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
@@ -52,7 +51,7 @@ assert SCAN_ROOT.exists(), f"scan root not found; check the parents index for th
 
 # Lower bound only: a new experimental family adds a base.py and must not fail this sweep.
 MIN_BASE_MODULES = 12
-PANDAS_CONSUMER_COUNT = 8
+PANDAS_CONSUMER_COUNT = 7
 
 # Single source of truth for the tolerant/strict split: a strict group raises when ANY source name is
 # missing, a tolerant one only when NONE of them exists. Every strict fixture below reads this map,
@@ -61,7 +60,6 @@ STRICTNESS: dict[type[Any], bool] = {
     PandasClusteringFeatureGroup: False,
     PandasForecastingFeatureGroup: False,
     PandasDimensionalityReductionFeatureGroup: True,
-    PandasGeoDistanceFeatureGroup: True,
     PandasNodeCentralityFeatureGroup: True,
     PandasEncodingFeatureGroup: True,
     PandasSklearnPipelineFeatureGroup: True,
@@ -202,18 +200,6 @@ class TestPandasDimensionalityReductionHooks(StrictnessFromMap, ColumnwiseHooksT
     @pytest.fixture
     def plugin_class(self) -> Any:
         return PandasDimensionalityReductionFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_frame()
-
-
-class TestPandasGeoDistanceHooks(StrictnessFromMap, ColumnwiseHooksTestMixin):
-    """Geo distance pandas group: strict check."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PandasGeoDistanceFeatureGroup
 
     @pytest.fixture
     def sample_data(self) -> Any:

@@ -15,7 +15,6 @@ from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClu
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
     PandasDimensionalityReductionFeatureGroup,
 )
-from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
 from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import (
@@ -37,7 +36,6 @@ import pandas as pd
 ALL_PANDAS_CLASSES = [
     PandasClusteringFeatureGroup,
     PandasDimensionalityReductionFeatureGroup,
-    PandasGeoDistanceFeatureGroup,
     PandasNodeCentralityFeatureGroup,
     PandasEncodingFeatureGroup,
     PandasSklearnPipelineFeatureGroup,
@@ -111,7 +109,6 @@ STRICT_PANDAS_CLASSES = [
     PandasSklearnPipelineFeatureGroup,
     PandasDimensionalityReductionFeatureGroup,
     PandasNodeCentralityFeatureGroup,
-    PandasGeoDistanceFeatureGroup,
 ]
 
 

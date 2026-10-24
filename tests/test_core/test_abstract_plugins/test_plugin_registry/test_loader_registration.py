@@ -8,7 +8,7 @@ infrastructure, never plugins, and stay out. Registration is idempotent, happens
 the sys.modules cache path too (import-order and import-history independent), and
 never picks up ad-hoc subclasses defined outside loaded plugin modules.
 
-The scopes used here (python_dict, sqlite, geo_distance) need no optional dependency beyond pandas and numpy.
+The scopes used here (python_dict, sqlite, node_centrality) need no optional dependency beyond pandas and numpy.
 The autouse conftest fixture restores the default registry around every test, so clearing it inside a test is safe.
 """
 
@@ -275,25 +275,25 @@ class TestLoaderRegistrationSkipsAbstractClasses:
             gc.collect()
 
     def test_loaded_scope_registers_concrete_classes_but_not_abstract_bases(self) -> None:
-        """End to end through PluginLoader: the geo_distance scope needs only pandas and numpy and its
+        """End to end through PluginLoader: the node_centrality scope needs only pandas and numpy and its
         base module defines an inspect.isabstract helper base."""
         registry = PluginRegistry.default()
         registry.clear()
 
         loader = PluginLoader()
-        loader.load_matching("feature_group", "geo_distance/*")
+        loader.load_matching("feature_group", "node_centrality/*")
 
-        from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
-        from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
+        from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
+        from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
 
-        assert inspect.isabstract(GeoDistanceFeatureGroup), "sanity: the scope's base class is abstract"
-        assert not inspect.isabstract(PandasGeoDistanceFeatureGroup), "sanity: the scope has a concrete class"
+        assert inspect.isabstract(NodeCentralityFeatureGroup), "sanity: the scope's base class is abstract"
+        assert not inspect.isabstract(PandasNodeCentralityFeatureGroup), "sanity: the scope has a concrete class"
 
         registered_feature_groups = registry.list_registered(FeatureGroup)
-        assert PandasGeoDistanceFeatureGroup in registered_feature_groups, (
+        assert PandasNodeCentralityFeatureGroup in registered_feature_groups, (
             "loading a scope must register its concrete plugin classes"
         )
-        assert GeoDistanceFeatureGroup not in registered_feature_groups, (
+        assert NodeCentralityFeatureGroup not in registered_feature_groups, (
             "loading a scope must not register its abstract helper base class; abstract classes "
             "pollute list_registered(), registered-only docs, and strict resolution"
         )

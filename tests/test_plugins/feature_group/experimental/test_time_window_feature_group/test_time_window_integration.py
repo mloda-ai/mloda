@@ -202,27 +202,21 @@ _WINDOW_PLUGINS_OF = {
         {TimeWindowNanPandasOnlySourceCreator, TimeWindowFeatureGroup}
     ),
 }
-_PANDAS_DIVERGENT = "pinned; runs a version that differs: gives 0 for a multi-column row with no value"
 
 
 class TestTimeWindowImplementationChoice:
-    """With Pandas and PyArrow both enabled the matching implementation wins unless one is pinned."""
+    """Without divergence, an unpinned window takes the first listed framework; a pin selects its own."""
 
     @pytest.mark.parametrize(
         ("name", "pin", "framework", "reason"),
         [
+            pytest.param(_NAN_WINDOW, {}, "PandasDataFrame", "your list order", id="unpinned"),
+            pytest.param(_PANDAS_ONLY_WINDOW, {}, "PandasDataFrame", "your list order", id="pandas_only_unpinned"),
             pytest.param(
-                _NAN_WINDOW, {}, "PyArrowTable", "prefers a matching version", id="matching_implementation_wins"
+                _NAN_WINDOW, {"implementation": "PandasTimeWindow"}, "PandasDataFrame", "pinned", id="pin_pandas"
             ),
             pytest.param(
-                _NAN_WINDOW,
-                {"implementation": "PandasTimeWindow"},
-                "PandasDataFrame",
-                _PANDAS_DIVERGENT,
-                id="implementation_pin",
-            ),
-            pytest.param(
-                _PANDAS_ONLY_WINDOW, {}, "PyArrowTable", "prefers a matching version", id="pandas_only_source_unpinned"
+                _NAN_WINDOW, {"implementation": "PyArrowTimeWindow"}, "PyArrowTable", "pinned", id="pin_pyarrow"
             ),
         ],
     )
@@ -236,11 +230,7 @@ class TestTimeWindowImplementationChoice:
         steps = mloda.explain([feature], compute_frameworks=frameworks, plugin_collector=plugins)
         step = next(s for s in steps if s.step_kind == "compute" and s.feature_group is TimeWindowFeatureGroup)
         assert step.compute_framework_name == framework
-        assert step.compute_framework_reason is not None
-        if reason == _PANDAS_DIVERGENT:
-            assert step.compute_framework_reason.startswith(reason)
-        else:
-            assert step.compute_framework_reason == reason
+        assert step.compute_framework_reason == reason
 
         results = mloda.run_all([feature], compute_frameworks=frameworks, plugin_collector=plugins)
         # NaN is missing and skipped: 3-day sums of [1, NaN, 3, 4, 5].

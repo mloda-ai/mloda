@@ -59,7 +59,8 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
     Reference contract: null and NaN are both missing and skipped; count counts non-missing values; first and
     last take the window's first and last value as is. A multi-column feature reduces the per-column results
     across columns with the same function, skipping missing values (first and last use mean, count gives the
-    number of columns); a row with no value gives NaN.
+    number of columns). Over no values (an empty or all-missing window or row), sum and count are 0 and the
+    other functions give a missing value.
 
     ## Supported Time Units
 

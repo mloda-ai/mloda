@@ -435,16 +435,16 @@ _DAY = datetime.timedelta(days=1)
 _START = datetime.datetime(2024, 1, 1)
 
 _DIVERGENT_DECLARATIONS: dict[type[Implementation[Any]], dict[str, str]] = {
-    PandasTimeWindow: {"sum": "gives 0 for a multi-column row with no value"},
+    PandasTimeWindow: {},
     PyArrowTimeWindow: {},
 }
 
-# (columns, span in days): NaN and null inside windows; a NaN next to values inside one column's window;
-# rows with no value in any column.
+# (columns, span in days): NaN and null inside windows; a NaN next to values; windows and rows with no value.
 _SHAPES: dict[str, tuple[dict[str, list[float | None]], int]] = {
     "single": ({"a": [1.0, 2.0, _NAN, None, 3.0, 4.0, None]}, 3),
     "multi_nan_beside_values": ({"a": [1.0, _NAN, 2.0, 3.0], "b": [10.0, 20.0, 30.0, 40.0]}, 2),
     "multi_rows_without_value": ({"a": [None, 1.0, None, 2.0], "b": [None, 3.0, None, None]}, 1),
+    "single_windows_without_value": ({"a": [None, _NAN, 1.0, None]}, 1),
 }
 
 
@@ -466,10 +466,10 @@ def _column_window_result(window_function: str, window: list[float | None]) -> f
             return None
         reducers: dict[str, Callable[[list[float]], float]] = {"min": min, "max": max, "median": statistics.median}
         return reducers[window_function](clean)
-    if not clean:
-        return None
     if window_function == "sum":
         return sum(clean)
+    if not clean:
+        return None
     if window_function in ("avg", "mean"):
         return statistics.fmean(clean)
     if len(clean) < 2:
@@ -482,10 +482,10 @@ def _across_columns(window_function: str, results: list[float | int | None]) -> 
     values = [float(r) for r in results if r is not None and not math.isnan(r)]
     if window_function == "count":
         return len(values)
-    if not values:
-        return _NAN
     if window_function == "sum":
         return sum(values)
+    if not values:
+        return _NAN
     if window_function in ("avg", "mean", "first", "last"):
         return statistics.fmean(values)
     if window_function in ("min", "max", "median"):

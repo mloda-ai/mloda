@@ -15,7 +15,9 @@ from mloda.provider import DefaultOptionKeys
 from mloda.user import Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
-from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import (
+    PandasSklearnPipeline as PandasSklearnPipeline,
+)
 
 
 # "custom" is deliberately NOT a member of PIPELINE_TYPES.
@@ -90,7 +92,7 @@ class TestBogusPipelineNameAtEngineLevel:
     def test_engine_reports_no_feature_groups_found_with_the_reason(self) -> None:
         feature = Feature(BOGUS_FEATURE, Options(context={SklearnPipelineFeatureGroup.PIPELINE_NAME: "custom"}))
         accessible_plugins: FeatureGroupEnvironmentMapping = {
-            PandasSklearnPipelineFeatureGroup: {PandasDataFrame},
+            SklearnPipelineFeatureGroup: {PandasDataFrame},
         }
 
         with pytest.raises(ValueError) as exc_info:

@@ -26,9 +26,6 @@ from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas im
 )
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
-from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
-from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
-from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
 from tests.test_plugins.feature_group.experimental.columnwise_hooks_test_mixin import (
     ADD_HOOK,
     CHECK_HOOK,
@@ -51,7 +48,7 @@ assert SCAN_ROOT.exists(), f"scan root not found; check the parents index for th
 
 # Lower bound only: a new experimental family adds a base.py and must not fail this sweep.
 MIN_BASE_MODULES = 12
-PANDAS_CONSUMER_COUNT = 7
+PANDAS_CONSUMER_COUNT = 4
 
 # Single source of truth for the tolerant/strict split: a strict group raises when ANY source name is
 # missing, a tolerant one only when NONE of them exists. Every strict fixture below reads this map,
@@ -61,9 +58,6 @@ STRICTNESS: dict[type[Any], bool] = {
     PandasForecastingFeatureGroup: False,
     PandasDimensionalityReductionFeatureGroup: True,
     PandasNodeCentralityFeatureGroup: True,
-    PandasEncodingFeatureGroup: True,
-    PandasSklearnPipelineFeatureGroup: True,
-    PandasScalingFeatureGroup: True,
 }
 
 
@@ -212,42 +206,6 @@ class TestPandasNodeCentralityHooks(StrictnessFromMap, ColumnwiseHooksTestMixin)
     @pytest.fixture
     def plugin_class(self) -> Any:
         return PandasNodeCentralityFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_frame()
-
-
-class TestPandasEncodingHooks(StrictnessFromMap, ColumnwiseHooksTestMixin):
-    """Encoding pandas group: strict check."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PandasEncodingFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_frame()
-
-
-class TestPandasSklearnPipelineHooks(StrictnessFromMap, ColumnwiseHooksTestMixin):
-    """Sklearn pipeline pandas group: strict check."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PandasSklearnPipelineFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_frame()
-
-
-class TestPandasScalingHooks(StrictnessFromMap, ColumnwiseHooksTestMixin):
-    """Scaling pandas group: strict check."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PandasScalingFeatureGroup
 
     @pytest.fixture
     def sample_data(self) -> Any:

@@ -12,7 +12,7 @@ from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding as PandasEncoding
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda.provider import DefaultOptionKeys
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
@@ -49,7 +49,7 @@ class TestEncodingFeatureGroupIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {EncodingIntegrationTestDataCreator, PandasEncodingFeatureGroup}
+            {EncodingIntegrationTestDataCreator, EncodingFeatureGroup}
         )
 
         # Create label encoding feature with unique artifact storage path
@@ -116,7 +116,7 @@ class TestEncodingFeatureGroupIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {EncodingIntegrationTestDataCreator, PandasEncodingFeatureGroup}
+            {EncodingIntegrationTestDataCreator, EncodingFeatureGroup}
         )
 
         # Create one-hot encoding feature with unique artifact storage path
@@ -161,7 +161,7 @@ class TestEncodingFeatureGroupIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {EncodingIntegrationTestDataCreator, PandasEncodingFeatureGroup}
+            {EncodingIntegrationTestDataCreator, EncodingFeatureGroup}
         )
 
         # Create specific one-hot encoding features for individual columns
@@ -236,7 +236,7 @@ class TestEncodingFeatureGroupIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {EncodingIntegrationTestDataCreator, PandasEncodingFeatureGroup}
+            {EncodingIntegrationTestDataCreator, EncodingFeatureGroup}
         )
 
         # Create configuration-based OneHot encoding features with specific column access
@@ -318,7 +318,7 @@ class TestEncodingOutputParts:
         pytest.importorskip("sklearn")
         PluginLoader().all()
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {EncodingIntegrationTestDataCreator, PandasEncodingFeatureGroup}
+            {EncodingIntegrationTestDataCreator, EncodingFeatureGroup}
         )
         results = mloda(list(names), [PandasDataFrame], plugin_collector=plugin_collector).run()
         assert len(results) == 1
@@ -348,7 +348,7 @@ class TestEncodingOutputParts:
         pytest.importorskip("sklearn")
         PluginLoader().all()
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {EncodingIntegrationTestDataCreator, PandasEncodingFeatureGroup}
+            {EncodingIntegrationTestDataCreator, EncodingFeatureGroup}
         )
         feature = Feature(
             "enc~v2",

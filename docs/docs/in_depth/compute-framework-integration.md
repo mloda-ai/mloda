@@ -225,7 +225,7 @@ since ordered time columns are intrinsic to the operation.
 
 ### Operation Groups: one group, one Implementation per framework
 
-An operation is written once as an `OperationFeatureGroup` (naming, options, input features) and served by one `Implementation` per compute framework. Both come from `mloda.provider`. `AggregatedFeatureGroup`, `TimeWindowFeatureGroup`, `MissingValueFeatureGroup`, `TextCleaningFeatureGroup` and `GeoDistanceFeatureGroup` are built this way.
+An operation is written once as an `OperationFeatureGroup` (naming, options, input features) and served by one `Implementation` per compute framework. Both come from `mloda.provider`. `AggregatedFeatureGroup`, `TimeWindowFeatureGroup`, `MissingValueFeatureGroup`, `TextCleaningFeatureGroup`, `GeoDistanceFeatureGroup`, `ScalingFeatureGroup`, `EncodingFeatureGroup` and `SklearnPipelineFeatureGroup` are built this way.
 
 ```py
 class MyOperation(OperationFeatureGroup):
@@ -249,7 +249,7 @@ An `Implementation[G]` serves both operation groups (`data` is the input frame) 
 - **Capability**: `supported` (a frozenset of subtypes, `None` means all) and the classmethod `accepts(feature_name, options)` (default `True`) decide whether an implementation can run a feature. A framework whose implementation rejects it is not a candidate for that feature.
 - **Divergence**: `divergent` maps a subtype to a short reason when the implementation's result differs from the group's reference contract (for example `{"sum": "gives 0 for a multi-column row with no value"}`). The contract is documented on the group; implementations that follow it declare nothing. Divergence is declared per operation, not detected from the data: data without the affected case still prefers the matching implementation.
 - **Loading**: an operation group's implementations are found by import, so call `PluginLoader.all()` (or import the implementation modules) before running.
-- **Hooks**: an operation group declares no column-wise hooks; the loop's keyword-only callables are its contract and mypy checks the `aggregate`, `window`, `impute`, `clean` or `measure` call inside each implementation's `calculate`.
+- **Hooks**: an operation group declares no column-wise hooks; the loop's keyword-only callables are its contract and mypy checks the `aggregate`, `window`, `impute`, `clean`, `measure`, `scale`, `encode` or `run_pipeline` call inside each implementation's `calculate`.
 
 ### Choosing among implementations
 
@@ -274,7 +274,7 @@ An unknown name, a name shared by two loaded classes, an implementation that is 
 ### Migrating from per-framework classes
 
 - `PandasAggregatedFeatureGroup`, `PyArrowAggregatedFeatureGroup` and `PolarsLazyAggregatedFeatureGroup` are replaced by `AggregatedFeatureGroup` with `PandasAggregation`, `PyArrowAggregation` and `PolarsLazyAggregation`.
-- The per-framework time window, missing value, text cleaning and geo distance classes are replaced by `TimeWindowFeatureGroup` (`PandasTimeWindow`, `PyArrowTimeWindow`), `MissingValueFeatureGroup` (`PandasMissingValueImputation`, `PyArrowMissingValueImputation`, `PythonDictMissingValueImputation`), `TextCleaningFeatureGroup` (`PandasTextCleaning`, `PythonDictTextCleaning`) and `GeoDistanceFeatureGroup` (`PandasGeoDistance`).
+- The per-framework time window, missing value, text cleaning, geo distance and sklearn scaling, encoding and pipeline classes are replaced by `TimeWindowFeatureGroup` (`PandasTimeWindow`, `PyArrowTimeWindow`), `MissingValueFeatureGroup` (`PandasMissingValueImputation`, `PyArrowMissingValueImputation`, `PythonDictMissingValueImputation`), `TextCleaningFeatureGroup` (`PandasTextCleaning`, `PythonDictTextCleaning`) `GeoDistanceFeatureGroup` (`PandasGeoDistance`), `ScalingFeatureGroup` (`PandasScaling`), `EncodingFeatureGroup` (`PandasEncoding`) and `SklearnPipelineFeatureGroup` (`PandasSklearnPipeline`). The old names are `PandasScalingFeatureGroup`, `PandasEncodingFeatureGroup` and `PandasSklearnPipelineFeatureGroup`. A group's artifact stays on the group.
 - Implementations are found by import: import the implementation modules or call `PluginLoader.all()`.
 - An allow or deny list that names an old class must name the group or the implementation instead.
 - Plan locks recorded before the move no longer match.
@@ -287,7 +287,7 @@ An unknown name, a name shared by two loaded classes, an implementation that is 
 - PyArrow `std` and `var` windows use the sample statistic like Pandas, so a one-row window is null for a single column and NaN for a multi-column feature.
 - `feature_group="<old per-framework class>"` becomes `implementation="<implementation>"`, or `compute_framework=...`, for every moved family.
 - A steward disables one implementation with `PluginCollector.add_disabled_implementation_classes`.
-- A provider customizes an implementation by overriding its methods (for example `_perform_aggregation`, `_perform_window_operation`, `_perform_imputation`, `_apply_operation`, `_calculate_distance`) on an implementation subclass, and the loop by overriding the group's loop (`aggregate`, `window`, `impute`, `clean`, `measure`) on a group subclass.
+- A provider customizes an implementation by overriding its methods (for example `_perform_aggregation`, `_perform_window_operation`, `_perform_imputation`, `_apply_operation`, `_calculate_distance`, `_extract_training_data`, `_apply_scaler`, `_apply_encoder`, `_apply_pipeline`) on an implementation subclass, and the loop by overriding the group's loop (`aggregate`, `window`, `impute`, `clean`, `measure`, `scale`, `encode`, `run_pipeline`) on a group subclass.
 
 ## Framework Selection Process
 

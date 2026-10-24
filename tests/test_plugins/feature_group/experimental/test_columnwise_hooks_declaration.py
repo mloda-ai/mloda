@@ -55,8 +55,11 @@ from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistan
 from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistance
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipeline
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScaling
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 from mloda_plugins.feature_group.experimental.text_cleaning.pandas import PandasTextCleaning
 from mloda_plugins.feature_group.experimental.text_cleaning.python_dict import PythonDictTextCleaning
@@ -90,7 +93,7 @@ CONTRACT_SYMBOLS = (
 
 # Lower bounds only, so a broken glob or a wrong root cannot make the widened sweeps pass vacuously.
 MIN_EXPERIMENTAL_MODULES = 40
-MIN_HOOK_CALLING_MODULES = 9
+MIN_HOOK_CALLING_MODULES = 6
 
 # The expected declaration per family base, kept as a table so a changed declaration is a visible diff.
 # A family that resolves column names against the data needs the discovery hook on top of the pair.
@@ -99,9 +102,6 @@ FAMILY_REQUIREMENTS: dict[type[Any], frozenset[str]] = {
     ForecastingFeatureGroup: COLUMN_DISCOVERY_HOOKS,
     DimensionalityReductionFeatureGroup: COLUMNWISE_HOOKS,
     NodeCentralityFeatureGroup: COLUMNWISE_HOOKS,
-    EncodingFeatureGroup: COLUMNWISE_HOOKS,
-    SklearnPipelineFeatureGroup: COLUMNWISE_HOOKS,
-    ScalingFeatureGroup: COLUMNWISE_HOOKS,
 }
 
 FAMILY_IDS = [family.__name__ for family in FAMILY_REQUIREMENTS]
@@ -286,6 +286,27 @@ OPERATION_FAMILIES: dict[str, tuple[type[Any], list[type[Any]], str, str, list[d
         "measure",
         "a&b__haversine_distance",
         [_kwargs(distance=_perform("_calculate_distance"))],
+    ),
+    "scaling": (
+        ScalingFeatureGroup,
+        [PandasScaling],
+        "scale",
+        "income__standard_scaled",
+        [_kwargs(training_data=_perform("_extract_training_data"), apply=_perform("_apply_scaler"))],
+    ),
+    "encoding": (
+        EncodingFeatureGroup,
+        [PandasEncoding],
+        "encode",
+        "category__onehot_encoded",
+        [_kwargs(training_data=_perform("_extract_training_data"), apply=_perform("_apply_encoder"))],
+    ),
+    "sklearn_pipeline": (
+        SklearnPipelineFeatureGroup,
+        [PandasSklearnPipeline],
+        "run_pipeline",
+        "a,b__sklearn_pipeline_scaling",
+        [_kwargs(training_data=_perform("_extract_training_data"), apply=_perform("_apply_pipeline"))],
     ),
 }
 

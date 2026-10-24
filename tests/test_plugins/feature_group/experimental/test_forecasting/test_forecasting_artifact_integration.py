@@ -16,7 +16,8 @@ from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding as PandasEncoding
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
 from mloda.provider import DefaultOptionKeys
@@ -60,7 +61,7 @@ class TestForecastingArtifactIntegration:
     def test_forecast_chained_onehot_source_per_category(self) -> None:
         """A chained one-hot source yields one forecast column per category."""
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {ForecastingCategoryTestDataCreator, PandasEncodingFeatureGroup, PandasForecastingFeatureGroup}
+            {ForecastingCategoryTestDataCreator, EncodingFeatureGroup, PandasForecastingFeatureGroup}
         )
         feature_name = "category__onehot_encoded__linear_forecast_7day"
         options = Options({DefaultOptionKeys.reference_time: "time_filter"})
@@ -90,7 +91,7 @@ class TestForecastingArtifactIntegration:
     def test_forecast_chained_onehot_source_selects_one_category(self) -> None:
         """Requesting `name~1` on a chained one-hot source returns only the `~1` forecast."""
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {ForecastingCategoryTestDataCreator, PandasEncodingFeatureGroup, PandasForecastingFeatureGroup}
+            {ForecastingCategoryTestDataCreator, EncodingFeatureGroup, PandasForecastingFeatureGroup}
         )
         base_name = "category__onehot_encoded__linear_forecast_7day"
         options = Options({DefaultOptionKeys.reference_time: "time_filter"})
@@ -106,7 +107,7 @@ class TestForecastingArtifactIntegration:
     def test_forecast_multi_and_selected_together_artifact_reload(self) -> None:
         """Requesting `name` and `name~1` together saves the nested artifact under `name` and reloads."""
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {ForecastingCategoryTestDataCreator, PandasEncodingFeatureGroup, PandasForecastingFeatureGroup}
+            {ForecastingCategoryTestDataCreator, EncodingFeatureGroup, PandasForecastingFeatureGroup}
         )
         base_name = "category__onehot_encoded__linear_forecast_7day"
         options = Options({DefaultOptionKeys.reference_time: "time_filter"})
@@ -131,9 +132,7 @@ class TestForecastingArtifactIntegration:
     SINGLE = "sales__linear_forecast_7day"
 
     def _collector(self, creator: type[ATestDataCreator]) -> PluginCollector:
-        return PluginCollector.enabled_feature_groups(
-            {creator, PandasEncodingFeatureGroup, PandasForecastingFeatureGroup}
-        )
+        return PluginCollector.enabled_feature_groups({creator, EncodingFeatureGroup, PandasForecastingFeatureGroup})
 
     def _options(self, confidence_intervals: bool = False) -> Options:
         options = Options({DefaultOptionKeys.reference_time: "time_filter"})

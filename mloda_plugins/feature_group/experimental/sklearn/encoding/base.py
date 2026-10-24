@@ -5,23 +5,22 @@ Base implementation for scikit-learn encoding feature groups.
 from __future__ import annotations
 
 import datetime
-from abc import abstractmethod
+from collections.abc import Callable
 from typing import Any
 
-from mloda.provider import ANY_OUTPUT_PART, FeatureGroup
+from mloda.provider import ANY_OUTPUT_PART, OperationFeatureGroup
 from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda.provider import COLUMNWISE_HOOKS
 from mloda.provider import BaseArtifact
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
 
-class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class EncodingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     """
     Base class for scikit-learn encoding feature groups.
 
@@ -177,9 +176,6 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = 1
 
-    # Hooks calculate_feature calls: _check_source_features_exist, _add_result_to_data.
-    REQUIRED_COLUMNWISE_HOOKS = COLUMNWISE_HOOKS
-
     # Property mapping for new configuration-based approach
     PROPERTY_MAPPING = {
         ENCODER_TYPE: PropertySpec(
@@ -220,15 +216,17 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return encoder_type
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Apply scikit-learn encoders to features.
-
-        Processes all requested features, determining the encoder type
-        and source feature from either string parsing or configuration-based options.
-
-        Adds the encoding results directly to the input data structure.
-        """
+    def encode(
+        cls,
+        data: Any,
+        features: FeatureSet,
+        *,
+        training_data: Callable[[Any, str], Any],
+        apply: Callable[[Any, str, Any], Any],
+        add_column: Callable[[Any, str, Any], Any],
+        columns: Callable[[Any], set[str]],
+    ) -> Any:
+        """Shared loop: check the source, load or fit the encoder, apply it, add the result."""
         # Process each requested feature
         for feature in features.get_sorted_features():
             encoder_type, source_feature = cls._extract_encoder_type_and_source_feature(feature)
@@ -236,8 +234,12 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             # Remove ~suffix if present (for OneHot column patterns like category~1)
             base_source_feature = cls.get_column_base_feature(source_feature)
 
-            # Check that source feature exists
-            cls._check_source_features_exist(data, [base_source_feature])
+            available = columns(data)
+            missing = [f for f in [base_source_feature] if f not in available]
+            if missing:
+                raise ValueError(
+                    f"Source features not found in data: {missing}. Available columns: {sorted(available, key=str)}"
+                )
 
             # Create unique artifact key that includes encoder type and source feature
             # This ensures different encoders on different features get separate artifacts
@@ -252,7 +254,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
             # If no fitted encoder available, create and fit new one
             if fitted_encoder is None:
-                fitted_encoder = cls._create_and_fit_encoder(data, base_source_feature, encoder_type)
+                fitted_encoder = cls._create_and_fit_encoder(data, base_source_feature, encoder_type, training_data)
 
                 # Save the fitted encoder as artifact using helper method
                 artifact_data = {
@@ -264,10 +266,10 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                 SklearnArtifact.save_sklearn_artifact(features, artifact_key, artifact_data)
 
             # Apply the fitted encoder to get results
-            result = cls._apply_encoder(data, base_source_feature, fitted_encoder)
+            result = apply(data, base_source_feature, fitted_encoder)
 
             # Add result to data (handling multiple columns for OneHotEncoder)
-            data = cls._add_result_to_data(data, feature.name, result)
+            data = add_column(data, feature.name, result)
 
         return data
 
@@ -408,7 +410,9 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return True
 
     @classmethod
-    def _create_and_fit_encoder(cls, data: Any, source_feature: str, encoder_type: str) -> Any:
+    def _create_and_fit_encoder(
+        cls, data: Any, source_feature: str, encoder_type: str, training_data: Callable[[Any, str], Any]
+    ) -> Any:
         """
         Create and fit a new encoder.
 
@@ -416,6 +420,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             data: The input data
             source_feature: Name of the source feature
             encoder_type: Type of encoder to create
+            training_data: Callable extracting the training data
 
         Returns:
             Fitted encoder
@@ -424,7 +429,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         encoder = cls._create_encoder_instance(encoder_type)
 
         # Extract training data
-        X_train = cls._extract_training_data(data, source_feature)
+        X_train = training_data(data, source_feature)
 
         # Reshape data based on encoder type
         import numpy as np
@@ -442,34 +447,3 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         encoder.fit(X_train)
 
         return encoder
-
-    @classmethod
-    @abstractmethod
-    def _extract_training_data(cls, data: Any, source_feature: str) -> Any:
-        """
-        Extract training data for the specified feature.
-
-        Args:
-            data: The input data
-            source_feature: Name of the source feature
-
-        Returns:
-            Training data for the feature
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _apply_encoder(cls, data: Any, source_feature: str, fitted_encoder: Any) -> Any:
-        """
-        Apply the fitted encoder to the data.
-
-        Args:
-            data: The input data
-            source_feature: Name of the source feature
-            fitted_encoder: The fitted encoder
-
-        Returns:
-            Encoded data
-        """
-        ...

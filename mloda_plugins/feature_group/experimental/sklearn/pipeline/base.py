@@ -5,10 +5,10 @@ Base implementation for scikit-learn pipeline feature groups.
 from __future__ import annotations
 
 import datetime
-from abc import abstractmethod
+from collections.abc import Callable
 from typing import Any
 
-from mloda.provider import FeatureGroup
+from mloda.provider import OperationFeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
@@ -16,14 +16,13 @@ from mloda.user import Options
 from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda.provider import COLUMNWISE_HOOKS
 from mloda.provider import BaseArtifact
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
 
-class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class SklearnPipelineFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     """
     Base class for scikit-learn pipeline feature groups.
 
@@ -130,9 +129,6 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES: int | None = None  # Unlimited
 
-    # Hooks calculate_feature calls: _check_source_features_exist, _add_result_to_data.
-    REQUIRED_COLUMNWISE_HOOKS = COLUMNWISE_HOOKS
-
     @staticmethod
     def artifact() -> type[BaseArtifact] | None:
         """Return the artifact class for sklearn pipeline persistence."""
@@ -166,21 +162,27 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Apply scikit-learn pipelines to features.
-
-        Processes all requested features, determining the pipeline configuration
-        and source features from either string parsing or configuration-based options.
-
-        Adds the pipeline results directly to the input data structure.
-        """
+    def run_pipeline(
+        cls,
+        data: Any,
+        features: FeatureSet,
+        *,
+        training_data: Callable[[Any, list[Any]], Any],
+        apply: Callable[[Any, list[Any], Any], Any],
+        add_column: Callable[[Any, str, Any], Any],
+        columns: Callable[[Any], set[str]],
+    ) -> Any:
+        """Shared loop: check the sources, load or fit the pipeline, apply it, add the result."""
         # Process each requested feature
         for feature in features.get_sorted_features():
             pipeline_name, source_features = cls._extract_pipeline_name_and_source_features(feature)
 
-            # Check that all source features exist
-            cls._check_source_features_exist(data, source_features)
+            available = columns(data)
+            missing = [f for f in source_features if f not in available]
+            if missing:
+                raise ValueError(
+                    f"Source features not found in data: {missing}. Available columns: {sorted(available, key=str)}"
+                )
 
             # Get pipeline configuration from options or create default
             pipeline_config = cls._get_pipeline_config_from_feature(feature, pipeline_name)
@@ -200,7 +202,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
             # If no fitted pipeline available, create and fit new one
             if fitted_pipeline is None:
-                fitted_pipeline = cls._create_and_fit_pipeline(data, source_features, pipeline_config)
+                fitted_pipeline = cls._create_and_fit_pipeline(data, source_features, pipeline_config, training_data)
 
                 # Save the fitted pipeline as artifact using helper method
                 artifact_data = {
@@ -212,10 +214,10 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                 SklearnArtifact.save_sklearn_artifact(features, artifact_key, artifact_data)
 
             # Apply the fitted pipeline to get results
-            result = cls._apply_pipeline(data, source_features, fitted_pipeline)
+            result = apply(data, source_features, fitted_pipeline)
 
             # Add result to data
-            data = cls._add_result_to_data(data, feature.name, result)
+            data = add_column(data, feature.name, result)
 
         return data
 
@@ -520,7 +522,13 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return len(fitted_pipeline.steps) == len(config["steps"])
 
     @classmethod
-    def _create_and_fit_pipeline(cls, data: Any, source_features: list[Any], config: dict[str, Any]) -> Any:
+    def _create_and_fit_pipeline(
+        cls,
+        data: Any,
+        source_features: list[Any],
+        config: dict[str, Any],
+        training_data: Callable[[Any, list[Any]], Any],
+    ) -> Any:
         """
         Create and fit a new pipeline.
 
@@ -528,6 +536,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             data: The input data
             source_features: List of source feature names
             config: Pipeline configuration
+            training_data: Callable extracting the training data
 
         Returns:
             Fitted pipeline
@@ -547,40 +556,9 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             pipeline.set_params(**config["params"])
 
         # Extract training data
-        X_train = cls._extract_training_data(data, source_features)
+        X_train = training_data(data, source_features)
 
         # Fit the pipeline
         pipeline.fit(X_train)
 
         return pipeline
-
-    @classmethod
-    @abstractmethod
-    def _extract_training_data(cls, data: Any, source_features: list[Any]) -> Any:
-        """
-        Extract training data for the specified features.
-
-        Args:
-            data: The input data
-            source_features: List of source feature names
-
-        Returns:
-            Training data for the features
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _apply_pipeline(cls, data: Any, source_features: list[Any], fitted_pipeline: Any) -> Any:
-        """
-        Apply the fitted pipeline to the data.
-
-        Args:
-            data: The input data
-            source_features: List of source feature names
-            fitted_pipeline: The fitted pipeline
-
-        Returns:
-            Transformed data
-        """
-        ...

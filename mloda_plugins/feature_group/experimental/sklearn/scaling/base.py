@@ -5,23 +5,22 @@ Base implementation for scikit-learn scaling feature groups.
 from __future__ import annotations
 
 import datetime
-from abc import abstractmethod
+from collections.abc import Callable
 from typing import Any
 
-from mloda.provider import FeatureGroup
+from mloda.provider import OperationFeatureGroup
 from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda.provider import COLUMNWISE_HOOKS
 from mloda.provider import BaseArtifact
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
 
-class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class ScalingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     """
     Base class for scikit-learn scaling feature groups.
 
@@ -87,9 +86,6 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = 1
 
-    # Hooks calculate_feature calls: _check_source_features_exist, _add_result_to_data.
-    REQUIRED_COLUMNWISE_HOOKS = COLUMNWISE_HOOKS
-
     # Property mapping for new configuration-based approach
     PROPERTY_MAPPING = {
         SCALER_TYPE: PropertySpec(
@@ -126,21 +122,26 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return scaler_type
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Apply scikit-learn scalers to features.
-
-        Processes all requested features, determining the scaler type
-        and source feature from either string parsing or configuration-based options.
-
-        Adds the scaling results directly to the input data structure.
-        """
-        # Process each requested feature
+    def scale(
+        cls,
+        data: Any,
+        features: FeatureSet,
+        *,
+        training_data: Callable[[Any, str], Any],
+        apply: Callable[[Any, str, Any], Any],
+        add_column: Callable[[Any, str, Any], Any],
+        columns: Callable[[Any], set[str]],
+    ) -> Any:
+        """Shared loop: check the source, load or fit the scaler, apply it, add the result."""
         for feature in features.get_sorted_features():
             scaler_type, source_feature = cls._extract_scaler_type_and_source_feature(feature)
 
-            # Check that source feature exists
-            cls._check_source_features_exist(data, [source_feature])
+            available = columns(data)
+            missing = [f for f in [source_feature] if f not in available]
+            if missing:
+                raise ValueError(
+                    f"Source features not found in data: {missing}. Available columns: {sorted(available, key=str)}"
+                )
 
             # Create unique artifact key for this scaler
             artifact_key = f"{source_feature}__{scaler_type}_scaled"
@@ -154,7 +155,7 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
             # If no fitted scaler available, create and fit new one
             if fitted_scaler is None:
-                fitted_scaler = cls._create_and_fit_scaler(data, source_feature, scaler_type)
+                fitted_scaler = cls._create_and_fit_scaler(data, source_feature, scaler_type, training_data)
 
                 # Save the fitted scaler as artifact using helper method
                 artifact_data = {
@@ -166,10 +167,9 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                 SklearnArtifact.save_sklearn_artifact(features, artifact_key, artifact_data)
 
             # Apply the fitted scaler to get results
-            result = cls._apply_scaler(data, source_feature, fitted_scaler)
+            result = apply(data, source_feature, fitted_scaler)
 
-            # Add result to data
-            data = cls._add_result_to_data(data, feature.name, result)
+            data = add_column(data, feature.name, result)
 
         return data
 
@@ -302,7 +302,9 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return True
 
     @classmethod
-    def _create_and_fit_scaler(cls, data: Any, source_feature: str, scaler_type: str) -> Any:
+    def _create_and_fit_scaler(
+        cls, data: Any, source_feature: str, scaler_type: str, training_data: Callable[[Any, str], Any]
+    ) -> Any:
         """
         Create and fit a new scaler.
 
@@ -310,6 +312,7 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             data: The input data
             source_feature: Name of the source feature
             scaler_type: Type of scaler to create
+            training_data: Callable extracting the training data
 
         Returns:
             Fitted scaler
@@ -318,40 +321,9 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         scaler = cls._create_scaler_instance(scaler_type)
 
         # Extract training data
-        X_train = cls._extract_training_data(data, source_feature)
+        X_train = training_data(data, source_feature)
 
         # Fit the scaler
         scaler.fit(X_train)
 
         return scaler
-
-    @classmethod
-    @abstractmethod
-    def _extract_training_data(cls, data: Any, source_feature: str) -> Any:
-        """
-        Extract training data for the specified feature.
-
-        Args:
-            data: The input data
-            source_feature: Name of the source feature
-
-        Returns:
-            Training data for the feature
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _apply_scaler(cls, data: Any, source_feature: str, fitted_scaler: Any) -> Any:
-        """
-        Apply the fitted scaler to the data.
-
-        Args:
-            data: The input data
-            source_feature: Name of the source feature
-            fitted_scaler: The fitted scaler
-
-        Returns:
-            Scaled data
-        """
-        ...

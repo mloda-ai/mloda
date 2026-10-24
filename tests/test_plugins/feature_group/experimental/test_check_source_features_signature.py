@@ -16,11 +16,6 @@ from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas im
     PandasDimensionalityReductionFeatureGroup,
 )
 from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
-from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
-from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import (
-    PandasSklearnPipelineFeatureGroup,
-)
-from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
 
 try:
     from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
@@ -37,9 +32,6 @@ ALL_PANDAS_CLASSES = [
     PandasClusteringFeatureGroup,
     PandasDimensionalityReductionFeatureGroup,
     PandasNodeCentralityFeatureGroup,
-    PandasEncodingFeatureGroup,
-    PandasSklearnPipelineFeatureGroup,
-    PandasScalingFeatureGroup,
 ]
 
 if HAS_FORECASTING_PANDAS:
@@ -104,9 +96,6 @@ if HAS_FORECASTING_PANDAS:
     TOLERANT_PANDAS_CLASSES.append(PandasForecastingFeatureGroup)
 
 STRICT_PANDAS_CLASSES = [
-    PandasEncodingFeatureGroup,
-    PandasScalingFeatureGroup,
-    PandasSklearnPipelineFeatureGroup,
     PandasDimensionalityReductionFeatureGroup,
     PandasNodeCentralityFeatureGroup,
 ]

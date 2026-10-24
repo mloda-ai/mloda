@@ -6,13 +6,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, Implementation
 
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 
 
-class PandasEncodingFeatureGroup(EncodingFeatureGroup):
+class PandasEncoding(Implementation[EncodingFeatureGroup]):
     """
     Pandas implementation for scikit-learn encoding feature groups.
 
@@ -20,19 +20,21 @@ class PandasEncodingFeatureGroup(EncodingFeatureGroup):
     integration between mloda's pandas compute framework and scikit-learn encoders.
     """
 
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        """Specify that this feature group works with Pandas."""
-        return {PandasDataFrame}
+    feature_group = EncodingFeatureGroup
+    compute_framework = PandasDataFrame
 
     @classmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-        """Check if the features exist in the DataFrame."""
-        missing_features = [f for f in feature_names if f not in data.columns]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {list(data.columns)}"
-            )
+    def calculate(
+        cls, group: type[EncodingFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        return group.encode(
+            data,
+            features,
+            training_data=cls._extract_training_data,
+            apply=cls._apply_encoder,
+            add_column=cls._add_result_to_data,
+            columns=cls.compute_framework.extract_column_names,
+        )
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
@@ -45,7 +47,7 @@ class PandasEncodingFeatureGroup(EncodingFeatureGroup):
         if hasattr(result, "shape") and len(result.shape) == 2:
             if result.shape[1] > 1:
                 # Multi-column result (e.g., from OneHotEncoder)
-                named_columns = cls.apply_naming_convention(result, feature_name)
+                named_columns = FeatureGroup.apply_naming_convention(result, feature_name)
                 for col_name, col_data in named_columns.items():
                     data[col_name] = col_data
             else:

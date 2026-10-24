@@ -1,51 +1,59 @@
 """
-Unit tests for the PandasEncodingFeatureGroup class.
+Unit tests for the PandasEncoding class.
 """
 
 from typing import Any
 import pandas as pd
 import numpy as np
+import pytest
 from unittest.mock import Mock, patch
 
 from mloda.provider import FeatureSet
 from mloda.user import Feature
-from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
-class TestPandasEncodingFeatureGroup:
-    """Test cases for the PandasEncodingFeatureGroup class."""
+class TestPandasEncoding:
+    """Test cases for the PandasEncoding class."""
 
-    def test_compute_framework_rule(self) -> None:
-        """Test that the feature group works with PandasDataFrame."""
-        frameworks = PandasEncodingFeatureGroup.compute_framework_rule()
-        assert frameworks == {PandasDataFrame}
+    def test_compute_framework(self) -> None:
+        assert PandasEncoding.compute_framework is PandasDataFrame
 
-    def test_check_source_features_exist_valid(self) -> None:
-        """Test checking for existing source features."""
+    @pytest.mark.parametrize(
+        ("name", "missing", "available"),
+        [
+            ("nonexistent__onehot_encoded", "['nonexistent']", "['category', 'value']"),
+            ("nonexistent~1__onehot_encoded", "['nonexistent']", "['category', 'value']"),
+        ],
+        ids=["missing", "missing_with_part_suffix"],
+    )
+    def test_source_check_is_strict_and_lists_sorted_columns(self, name: str, missing: str, available: str) -> None:
+        data = pd.DataFrame({"value": [1, 2, 3], "category": ["A", "B", "C"]})
+        features = FeatureSet()
+        features.add(Feature(name))
+
+        with pytest.raises(ValueError) as exc_info:
+            PandasEncoding.calculate(EncodingFeatureGroup, data, features, None)
+
+        assert str(exc_info.value) == f"Source features not found in data: {missing}. Available columns: {available}"
+
+    def test_existing_source_passes_the_source_check(self) -> None:
+        pytest.importorskip("sklearn")
         data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
+        features = FeatureSet()
+        features.add(Feature("category__label_encoded"))
 
-        # Should not raise for existing features
-        PandasEncodingFeatureGroup._check_source_features_exist(data, ["category"])
-        PandasEncodingFeatureGroup._check_source_features_exist(data, ["value"])
-        PandasEncodingFeatureGroup._check_source_features_exist(data, ["category", "value"])
+        result = PandasEncoding.calculate(EncodingFeatureGroup, data, features, None)
 
-    def test_check_source_features_exist_invalid(self) -> None:
-        """Test checking for non-existing source features."""
-        data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
-
-        # Should raise for non-existing feature
-        try:
-            PandasEncodingFeatureGroup._check_source_features_exist(data, ["nonexistent"])
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "Source features not found in data:" in str(e)
+        assert "category__label_encoded" in result.columns
 
     def test_extract_training_data_basic(self) -> None:
         """Test extracting training data from pandas DataFrame."""
         data = pd.DataFrame({"category": ["A", "B", "C", "A", "B"], "value": [1, 2, 3, 4, 5]})
 
-        training_data = PandasEncodingFeatureGroup._extract_training_data(data, "category")
+        training_data = PandasEncoding._extract_training_data(data, "category")
 
         # Should return 1D array - base class handles reshaping based on encoder type
         assert training_data.shape == (5,)
@@ -55,14 +63,14 @@ class TestPandasEncodingFeatureGroup:
         """Test extracting training data with missing values."""
         data = pd.DataFrame({"category": ["A", "B", None, "A", "B"], "value": [1, 2, 3, 4, 5]})
 
-        training_data = PandasEncodingFeatureGroup._extract_training_data(data, "category")
+        training_data = PandasEncoding._extract_training_data(data, "category")
 
         # Should fill NaN with "unknown" during training, matching the transform-time policy
         assert training_data.shape == (5,)
         assert list(training_data) == ["A", "B", "unknown", "A", "B"]
 
     @patch(
-        "mloda_plugins.feature_group.experimental.sklearn.encoding.pandas.PandasEncodingFeatureGroup._import_sklearn_components"
+        "mloda_plugins.feature_group.experimental.sklearn.encoding.base.EncodingFeatureGroup._import_sklearn_components"
     )
     def test_apply_encoder_label_encoder(self, mock_import: Any) -> None:
         """Test applying LabelEncoder to pandas DataFrame."""
@@ -73,7 +81,7 @@ class TestPandasEncodingFeatureGroup:
 
         data = pd.DataFrame({"category": ["A", "B", "C", "A", "B"], "value": [1, 2, 3, 4, 5]})
 
-        result = PandasEncodingFeatureGroup._apply_encoder(data, "category", mock_label_encoder)
+        result = PandasEncoding._apply_encoder(data, "category", mock_label_encoder)
 
         # Verify transform was called with correct data
         mock_label_encoder.transform.assert_called_once()
@@ -84,7 +92,7 @@ class TestPandasEncodingFeatureGroup:
         assert list(result) == [0, 1, 2, 0, 1]
 
     @patch(
-        "mloda_plugins.feature_group.experimental.sklearn.encoding.pandas.PandasEncodingFeatureGroup._import_sklearn_components"
+        "mloda_plugins.feature_group.experimental.sklearn.encoding.base.EncodingFeatureGroup._import_sklearn_components"
     )
     def test_apply_encoder_onehot_encoder(self, mock_import: Any) -> None:
         """Test applying OneHotEncoder to pandas DataFrame."""
@@ -96,7 +104,7 @@ class TestPandasEncodingFeatureGroup:
 
         data = pd.DataFrame({"category": ["A", "B", "C", "A", "B"], "value": [1, 2, 3, 4, 5]})
 
-        result = PandasEncodingFeatureGroup._apply_encoder(data, "category", mock_onehot_encoder)
+        result = PandasEncoding._apply_encoder(data, "category", mock_onehot_encoder)
 
         # Verify transform was called with correct data (2D)
         mock_onehot_encoder.transform.assert_called_once()
@@ -116,7 +124,7 @@ class TestPandasEncodingFeatureGroup:
 
         data = pd.DataFrame({"category": ["A", "B", None, "A", "B"], "value": [1, 2, 3, 4, 5]})
 
-        _result = PandasEncodingFeatureGroup._apply_encoder(data, "category", mock_encoder)
+        _result = PandasEncoding._apply_encoder(data, "category", mock_encoder)
 
         # Verify transform was called with filled data
         mock_encoder.transform.assert_called_once()
@@ -129,7 +137,7 @@ class TestPandasEncodingFeatureGroup:
         data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
         result = np.array([0, 1, 2])
 
-        updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "category__label_encoded", result)
+        updated_data = PandasEncoding._add_result_to_data(data, "category__label_encoded", result)
 
         # Check that new column was added
         assert "category__label_encoded" in updated_data.columns
@@ -145,7 +153,7 @@ class TestPandasEncodingFeatureGroup:
         # OneHotEncoder returns 2D array with multiple columns
         result = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
-        updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "category__onehot_encoded", result)
+        updated_data = PandasEncoding._add_result_to_data(data, "category__onehot_encoded", result)
 
         # Check that multiple columns were added with ~ separator
         assert "category__onehot_encoded~0" in updated_data.columns
@@ -167,7 +175,7 @@ class TestPandasEncodingFeatureGroup:
         # OneHotEncoder with only one category
         result = np.array([[1], [1], [1]])
 
-        updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "category__onehot_encoded", result)
+        updated_data = PandasEncoding._add_result_to_data(data, "category__onehot_encoded", result)
 
         # Should add single column without ~ separator
         assert "category__onehot_encoded" in updated_data.columns
@@ -179,7 +187,7 @@ class TestPandasEncodingFeatureGroup:
         # OrdinalEncoder returns 2D array but single column
         result = np.array([[0], [1], [2]])
 
-        updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "category__ordinal_encoded", result)
+        updated_data = PandasEncoding._add_result_to_data(data, "category__ordinal_encoded", result)
 
         # Check that new column was added (flattened from 2D)
         assert "category__ordinal_encoded" in updated_data.columns
@@ -197,9 +205,7 @@ class TestPandasEncodingFeatureGroup:
         mock_sparse_result = Mock()
         mock_sparse_result.toarray.return_value = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
-        updated_data = PandasEncodingFeatureGroup._add_result_to_data(
-            data, "category__onehot_encoded", mock_sparse_result
-        )
+        updated_data = PandasEncoding._add_result_to_data(data, "category__onehot_encoded", mock_sparse_result)
 
         # Verify toarray was called
         mock_sparse_result.toarray.assert_called_once()
@@ -214,13 +220,13 @@ class TestPandasEncodingFeatureGroup:
         data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
         result = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
-        updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "category__onehot_encoded~1", result)
+        updated_data = PandasEncoding._add_result_to_data(data, "category__onehot_encoded~1", result)
 
         assert "category__onehot_encoded~1~0" in updated_data.columns
         assert "category__onehot_encoded~1~2" in updated_data.columns
 
     @patch(
-        "mloda_plugins.feature_group.experimental.sklearn.encoding.pandas.PandasEncodingFeatureGroup._import_sklearn_components"
+        "mloda_plugins.feature_group.experimental.sklearn.encoding.base.EncodingFeatureGroup._import_sklearn_components"
     )
     def test_end_to_end_label_encoding(self, mock_import: Any) -> None:
         """Test end-to-end label encoding workflow."""
@@ -241,7 +247,7 @@ class TestPandasEncodingFeatureGroup:
         features.add(Feature("category__label_encoded"))
 
         # Execute feature calculation
-        result_data = PandasEncodingFeatureGroup.calculate_feature(data, features)
+        result_data = PandasEncoding.calculate(EncodingFeatureGroup, data, features, None)
 
         # Check that encoded column was added
         assert "category__label_encoded" in result_data.columns
@@ -250,7 +256,7 @@ class TestPandasEncodingFeatureGroup:
         assert list(result_data["category__label_encoded"]) == expected_values
 
     @patch(
-        "mloda_plugins.feature_group.experimental.sklearn.encoding.pandas.PandasEncodingFeatureGroup._import_sklearn_components"
+        "mloda_plugins.feature_group.experimental.sklearn.encoding.base.EncodingFeatureGroup._import_sklearn_components"
     )
     def test_end_to_end_label_encoding_with_nan_does_not_crash(self, mock_import: Any) -> None:
         """Fit fills NaN with 'unknown' (same as transform), so LabelEncoder.transform never sees an unseen label."""
@@ -266,7 +272,7 @@ class TestPandasEncodingFeatureGroup:
         features = FeatureSet()
         features.add(Feature("category__label_encoded"))
 
-        result_data = PandasEncodingFeatureGroup.calculate_feature(data, features)
+        result_data = PandasEncoding.calculate(EncodingFeatureGroup, data, features, None)
 
         assert "category__label_encoded" in result_data.columns
 
@@ -282,7 +288,7 @@ class TestPandasEncodingFeatureGroup:
         assert 0 <= nan_row_code < len(set(filled))
 
     @patch(
-        "mloda_plugins.feature_group.experimental.sklearn.encoding.pandas.PandasEncodingFeatureGroup._import_sklearn_components"
+        "mloda_plugins.feature_group.experimental.sklearn.encoding.base.EncodingFeatureGroup._import_sklearn_components"
     )
     def test_end_to_end_label_encoding_with_numeric_nan_does_not_crash(self, mock_import: Any) -> None:
         """FIT's fillna("unknown") on a numeric column mixes floats and a string, crashing LabelEncoder.fit."""
@@ -298,12 +304,12 @@ class TestPandasEncodingFeatureGroup:
         features = FeatureSet()
         features.add(Feature("category__label_encoded"))
 
-        result_data = PandasEncodingFeatureGroup.calculate_feature(data, features)
+        result_data = PandasEncoding.calculate(EncodingFeatureGroup, data, features, None)
 
         assert "category__label_encoded" in result_data.columns
 
     @patch(
-        "mloda_plugins.feature_group.experimental.sklearn.encoding.pandas.PandasEncodingFeatureGroup._import_sklearn_components"
+        "mloda_plugins.feature_group.experimental.sklearn.encoding.base.EncodingFeatureGroup._import_sklearn_components"
     )
     def test_end_to_end_onehot_encoding(self, mock_import: Any) -> None:
         """Test end-to-end one-hot encoding workflow."""
@@ -324,7 +330,7 @@ class TestPandasEncodingFeatureGroup:
         features.add(Feature("category__onehot_encoded"))
 
         # Execute feature calculation
-        result_data = PandasEncodingFeatureGroup.calculate_feature(data, features)
+        result_data = PandasEncoding.calculate(EncodingFeatureGroup, data, features, None)
 
         # Check that multiple encoded columns were added
         onehot_columns = [col for col in result_data.columns if col.startswith("category__onehot_encoded~")]

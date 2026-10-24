@@ -15,6 +15,9 @@ except ImportError:
 
 _JOIN_SUPPORTS_COALESCE = pl is not None and "coalesce" in inspect.signature(pl.DataFrame.join).parameters
 
+# Polars 2.0 no longer preserves row order by default, so pin it per join type.
+_JOIN_MAINTAIN_ORDER = {"inner": "left", "left": "left", "right": "right", "full": "left_right"}
+
 
 class PolarsMergeEngine(BaseMergeEngine):
     provides_column_semantics = True
@@ -192,7 +195,12 @@ class PolarsMergeEngine(BaseMergeEngine):
         # For differing single-key names, keep both keys via coalesce=False (correct null semantics).
         # Only pass coalesce when the installed polars supports it; older versions degrade to legacy behavior.
         different_single_key = isinstance(left_idx, str) and isinstance(right_idx, str) and left_idx != right_idx
-        join_kwargs: dict[str, Any] = {"left_on": left_idx, "right_on": right_idx, "how": join_type}
+        join_kwargs: dict[str, Any] = {
+            "left_on": left_idx,
+            "right_on": right_idx,
+            "how": join_type,
+            "maintain_order": _JOIN_MAINTAIN_ORDER[join_type],
+        }
         if different_single_key and _JOIN_SUPPORTS_COALESCE:
             join_kwargs["coalesce"] = False
 

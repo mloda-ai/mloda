@@ -65,8 +65,8 @@
 | pip-audit                 | 0.0.1           | Apache Software License                            |
 | platformdirs              | 4.9.6           | MIT License                                        |
 | pluggy                    | 1.6.0           | MIT License                                        |
-| polars                    | 1.40.1          | MIT License                                        |
-| polars-runtime-32         | 1.40.1          | MIT License                                        |
+| polars                    | 2.0.0           | MIT License                                        |
+| polars-runtime-32         | 2.0.0           | MIT License                                        |
 | progress                  | 1.6.1           | ISC                                                |
 | prompt_toolkit            | 3.0.52          | BSD License                                        |
 | psutil                    | 7.2.2           | BSD-3-Clause                                       |

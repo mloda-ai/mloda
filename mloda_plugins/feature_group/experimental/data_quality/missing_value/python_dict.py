@@ -203,9 +203,14 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
 
         # Calculate overall statistics for fallback
         non_null_values = [val for val in result if val is not None]
-        overall_mean = statistics.mean(non_null_values) if non_null_values else None
-        overall_median = statistics.median(non_null_values) if non_null_values else None
-        overall_mode = cls._mode_of(non_null_values) if non_null_values else None
+        overall = None
+        if non_null_values:
+            if imputation_method == "mean":
+                overall = statistics.mean(non_null_values)
+            elif imputation_method == "median":
+                overall = statistics.median(non_null_values)
+            elif imputation_method == "mode":
+                overall = cls._mode_of(non_null_values)
 
         # Process each group
         for group_indices in groups.values():
@@ -222,7 +227,7 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
                     # Fall back to overall mean
                     for i in group_indices:
                         if result[i] is None:
-                            result[i] = overall_mean
+                            result[i] = overall
 
             elif imputation_method == "median":
                 if group_non_null:
@@ -234,7 +239,7 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
                     # Fall back to overall median
                     for i in group_indices:
                         if result[i] is None:
-                            result[i] = overall_median
+                            result[i] = overall
 
             elif imputation_method == "mode":
                 if group_non_null:
@@ -246,7 +251,7 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
                     # Fall back to overall mode
                     for i in group_indices:
                         if result[i] is None:
-                            result[i] = overall_mode
+                            result[i] = overall
 
             elif imputation_method == "ffill":
                 # Forward fill within group
@@ -267,11 +272,10 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
                     elif next_valid is not None:
                         result[i] = next_valid
 
-        fallback = {"mean": overall_mean, "median": overall_median, "mode": overall_mode}
-        if imputation_method in fallback:
+        if imputation_method in ("mean", "median", "mode"):
             for i in keyless:
                 if result[i] is None:
-                    result[i] = fallback[imputation_method]
+                    result[i] = overall
 
         return result
 

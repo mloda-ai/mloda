@@ -437,7 +437,7 @@ def _differences(implementation: Any, actual: _Cells, expected: _Cells) -> list[
 
 # Methods are chosen so the filled values differ between a NaN-skipping and a NaN-keeping implementation.
 _SINGLE: _Columns = {"a": [_NAN, 3.0, _NAN, 1.0, 3.0, None, 1.0, 5.0, None]}
-_STRINGS: _Columns = {"a": ["b", None, "a", "b", "a"]}
+_STRINGS: _Columns = {"a": ["b", None, "a", "b", "a"], "g": [1.0, 1.0, 2.0, 2.0, 2.0]}
 _MULTI: _Columns = {
     "a": [3.0, _NAN, None, 2.0, 4.0, _NAN],
     "b": [3.0, 2.0, 6.0, 1.0, None, None],
@@ -507,9 +507,14 @@ class TestImplementationsConformToTheReferenceContract:
 
     @pytest.mark.parametrize("method", ["mode", "constant", "ffill", "bfill"])
     @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
-    def test_string_column_with_a_mode_tie(self, implementation: Any, method: str) -> None:
-        actual = _impute(implementation, _STRINGS, method, ["a"], "z", None)
-        assert not _differences(implementation, actual, _reference_single(method, _STRINGS, "z"))
+    @pytest.mark.parametrize("group_by", [None, ["g"]], ids=["ungrouped", "grouped"])
+    def test_string_column_with_a_mode_tie(self, implementation: Any, method: str, group_by: list[str] | None) -> None:
+        actual = _impute(implementation, _STRINGS, method, ["a"], "z", group_by)
+        if group_by is None:
+            expected = _reference_single(method, _STRINGS, "z")
+        else:
+            expected = _reference_grouped(method, _STRINGS, "z", group_by)
+        assert not _differences(implementation, actual, expected)
 
     @pytest.mark.parametrize("method", _MULTI_METHODS)
     @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
@@ -529,6 +534,17 @@ class TestImplementationsConformToTheReferenceContract:
     def test_grouped_imputation(self, implementation: Any, method: str, columns: _Columns, group_by: list[str]) -> None:
         actual = _impute(implementation, columns, method, ["a"], _CONSTANT, group_by)
         assert not _differences(implementation, actual, _reference_grouped(method, columns, _CONSTANT, group_by))
+
+    @pytest.mark.parametrize(("columns", "group_by"), _GROUPING_CASES)
+    @pytest.mark.parametrize("method", _ALL_METHODS)
+    def test_pandas_grouped_imputation_with_a_duplicate_index(
+        self, method: str, columns: _Columns, group_by: list[str]
+    ) -> None:
+        data = _pandas_data(columns)
+        data.index = pd.Index([i // 2 for i in range(len(data))])
+        result = PandasMissingValueImputation._perform_imputation(data, method, ["a"], _CONSTANT, group_by)
+        expected = _reference_grouped(method, columns, _CONSTANT, group_by)
+        assert not _differences(PandasMissingValueImputation, _to_list(result), expected)
 
 
 class TestNanNormalizationIsLimitedToFloatColumns:

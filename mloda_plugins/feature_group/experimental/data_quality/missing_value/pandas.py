@@ -173,18 +173,9 @@ class PandasMissingValueImputation(Implementation[MissingValueFeatureGroup]):
             overall_median = data[in_features].median()
             return result.fillna(group_medians).fillna(overall_median)
         elif imputation_method == "mode":
-            # Mode is more complex - we need to find the mode for each group
-            # and apply it to the missing values in that group
-            for name, group in grouped:
-                # Get indices for this group
-                group_indices = group.index
-                # Get the mode for this group
-                group_mode = group[in_features].mode()
-                if not group_mode.empty:
-                    mode_value = group_mode.iloc[0]
-                    # Apply the mode to missing values in this group
-                    result.loc[group_indices] = result.loc[group_indices].fillna(mode_value)
+            group_modes = grouped[in_features].transform(lambda s: s.mode().iloc[0] if s.notna().any() else None)
             overall_mode = data[in_features].mode()
+            result = result.fillna(group_modes)
             return result.fillna(overall_mode.iloc[0]) if not overall_mode.empty else result
         elif imputation_method == "ffill":
             # Forward fill within groups

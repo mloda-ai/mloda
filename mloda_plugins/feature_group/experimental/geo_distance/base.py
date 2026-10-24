@@ -1,5 +1,5 @@
 """
-Base implementation for geo distance feature groups.
+Geo distance operation group, served per compute framework by an Implementation.
 """
 
 from __future__ import annotations

@@ -274,7 +274,7 @@ An unknown name, a name shared by two loaded classes, an implementation that is 
 ### Migrating from per-framework classes
 
 - `PandasAggregatedFeatureGroup`, `PyArrowAggregatedFeatureGroup` and `PolarsLazyAggregatedFeatureGroup` are replaced by `AggregatedFeatureGroup` with `PandasAggregation`, `PyArrowAggregation` and `PolarsLazyAggregation`.
-- The per-framework time window, missing value, text cleaning and geo distance classes (for example `PandasGeoDistanceFeatureGroup`) are replaced by `TimeWindowFeatureGroup` (`PandasTimeWindow`, `PyArrowTimeWindow`), `MissingValueFeatureGroup` (`PandasMissingValueImputation`, `PyArrowMissingValueImputation`, `PythonDictMissingValueImputation`), `TextCleaningFeatureGroup` (`PandasTextCleaning`, `PythonDictTextCleaning`) and `GeoDistanceFeatureGroup` (`PandasGeoDistance`).
+- The per-framework time window, missing value, text cleaning and geo distance classes are replaced by `TimeWindowFeatureGroup` (`PandasTimeWindow`, `PyArrowTimeWindow`), `MissingValueFeatureGroup` (`PandasMissingValueImputation`, `PyArrowMissingValueImputation`, `PythonDictMissingValueImputation`), `TextCleaningFeatureGroup` (`PandasTextCleaning`, `PythonDictTextCleaning`) and `GeoDistanceFeatureGroup` (`PandasGeoDistance`).
 - Implementations are found by import: import the implementation modules or call `PluginLoader.all()`.
 - An allow or deny list that names an old class must name the group or the implementation instead.
 - Plan locks recorded before the move no longer match.

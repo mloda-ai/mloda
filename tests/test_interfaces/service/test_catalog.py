@@ -23,6 +23,7 @@ from mloda.interfaces.service.catalog import (
 from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import is_error
 from mloda.provider import FeatureChainParserMixin, property_spec
+from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import VALID_STRICT_MODES
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.docs_scope import small_feature_group_walk
@@ -254,6 +255,45 @@ class TestPluginCollectorFor:
 
         assert collector.applicable_implementation_class(disabled) is False
         assert collector.applicable_implementation_class(kept) is True
+
+    def test_copy_keeps_every_base_attribute_and_isolates_sets(self, make_implementation: Any) -> None:
+        base = PluginCollector()
+        registry_sentinel = object()
+        impl = make_implementation(ToySourceFG, PythonDictFramework, name="CatalogDriftImpl")
+        for name, value in vars(PluginCollector()).items():
+            if name == "disabled_feature_group_classes":
+                base.disabled_feature_group_classes.add(CatalogBetaMcp3)
+            elif name == "enabled_feature_group_classes":
+                base.enabled_feature_group_classes.add(CatalogAlphaMcp3)
+            elif name == "disabled_implementation_classes":
+                base.disabled_implementation_classes.add(impl)
+            elif name == "strict_mode":
+                base.strict_mode = next(m for m in VALID_STRICT_MODES if m != base.strict_mode)
+            elif name == "registry":
+                setattr(base, name, registry_sentinel)
+            elif isinstance(value, bool):
+                setattr(base, name, not value)
+            else:
+                pytest.fail(f"PluginCollector.{name} ({type(value).__name__}) is not handled by the copy drift test")
+        disabled_before = set(base.disabled_feature_group_classes)
+
+        direct = base.copy()
+        collector = plugin_collector_for(Settings(deny_feature_groups=(DENIED,)), base)
+
+        assert base.disabled_feature_group_classes == disabled_before
+        assert collector.registry is base.registry
+        for name, value in vars(base).items():
+            for copy_of in (direct, collector):
+                kept = getattr(copy_of, name)
+                if isinstance(value, set):
+                    assert kept is not value
+                    if copy_of is collector and name == "disabled_feature_group_classes":
+                        continue
+                    assert kept == value
+                else:
+                    assert kept == value
+        assert direct.disabled_feature_group_classes == disabled_before
+        assert collector.disabled_feature_group_classes == disabled_before | {CatalogDeniedMcp3}
 
 
 class TestBuildDoesNotTouchDenied:

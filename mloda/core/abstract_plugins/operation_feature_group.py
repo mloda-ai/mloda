@@ -49,8 +49,17 @@ class OperationFeatureGroup(FeatureGroup):
         for framework in cls.compute_framework_definition():
             impl = serving_implementation(cls, framework, implementations)
             supported = None if impl is None else impl.supported
-            matrix[framework.get_class_name()] = universe if supported is None else universe & supported
+            matrix[framework.get_class_name()] = (
+                universe if supported is None else universe & supported
+            ) & cls.supported_subtypes(framework)
         return matrix
+
+    @classmethod
+    def _overrides(cls, method_name: str) -> bool:
+        """True when cls replaces the OperationFeatureGroup classmethod."""
+        own = getattr(getattr(cls, method_name), "__func__", None)
+        base = getattr(getattr(OperationFeatureGroup, method_name), "__func__", None)
+        return own is not base
 
     @classmethod
     def supports_compute_framework(

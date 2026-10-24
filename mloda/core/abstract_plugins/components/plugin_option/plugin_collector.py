@@ -1,5 +1,6 @@
 import os
 from collections.abc import Iterable
+from copy import copy as shallow_copy
 from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -62,6 +63,14 @@ class PluginCollector:
         self.allow_redefinition: bool = False
         self.strict_mode: str = strict_mode_from_env()
         self.registry: "PluginRegistry | None" = None
+
+    def copy(self) -> "PluginCollector":
+        """Shallow copy whose sets are independent; the registry is shared."""
+        clone = shallow_copy(self)
+        for name, value in vars(clone).items():
+            if isinstance(value, set):
+                setattr(clone, name, set(value))
+        return clone
 
     def set_allow_redefinition(self, allow: bool = True) -> "PluginCollector":
         """Allow keeping the most recently defined class when duplicates differ in source."""

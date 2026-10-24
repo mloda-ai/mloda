@@ -65,6 +65,35 @@ class OpToyChildFG(OpToyFG):
     FEATURE = OPTOY_CHILD_FEATURE
 
 
+class OpToyNarrowFG(OpToyFG):
+    """Group-level support narrows Pandas to sum."""
+
+    FEATURE = "optoy_narrow_value"
+    SUBTYPES = SubtypeDeclaration(key=OPTOY_KEY, supported={"PandasDataFrame": {"sum"}})
+
+
+class OpToyHookFG(OpToyFG):
+    """Group that hand-overrides supports_compute_framework."""
+
+    FEATURE = "optoy_hook_value"
+
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+    ) -> bool:
+        return True
+
+
+class OpToyUnservedFG(OpToyFG):
+    """Group-level support names a framework no implementation serves."""
+
+    FEATURE = "optoy_unserved_value"
+    SUBTYPES = SubtypeDeclaration(key=OPTOY_KEY, supported={"PythonDictFramework": {"sum"}})
+
+
 class OpToyBareFG(_NamedFeatureGroup):
     """Operation group with no implementation."""
 

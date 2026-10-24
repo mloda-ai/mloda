@@ -237,7 +237,10 @@ class TestTimeWindowImplementationChoice:
         step = next(s for s in steps if s.step_kind == "compute" and s.feature_group is TimeWindowFeatureGroup)
         assert step.compute_framework_name == framework
         assert step.compute_framework_reason is not None
-        assert step.compute_framework_reason.startswith(reason)
+        if reason == _PANDAS_DIVERGENT:
+            assert step.compute_framework_reason.startswith(reason)
+        else:
+            assert step.compute_framework_reason == reason
 
         results = mloda.run_all([feature], compute_frameworks=frameworks, plugin_collector=plugins)
         # NaN is missing and skipped: 3-day sums of [1, NaN, 3, 4, 5].

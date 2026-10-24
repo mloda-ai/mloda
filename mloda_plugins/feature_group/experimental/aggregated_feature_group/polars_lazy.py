@@ -73,7 +73,6 @@ class PolarsLazyAggregation(Implementation[AggregatedFeatureGroup]):
         if pl is None:
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
 
-        # NaN is missing like null: turn it into null on floating columns only.
         schema = data.collect_schema()
         floating = {name for name in in_features if schema[name].is_float()}
 

@@ -61,7 +61,7 @@ class AggregatedNanSourceCreator(ATestDataCreator):
         return cls.get_raw_data()
 
 
-class AggregatedNanPandasOnlySourceCreator(ATestDataCreator):
+class AggregatedNanPandasOnlySourceCreator(AggregatedNanSourceCreator):
     """Serves a float column holding a NaN on Pandas only, so PyArrow needs a transfer."""
 
     @classmethod
@@ -71,10 +71,6 @@ class AggregatedNanPandasOnlySourceCreator(ATestDataCreator):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return cls.get_raw_data()
 
 
 _NAN_SUM = "aggr_nan_x__sum_aggr"

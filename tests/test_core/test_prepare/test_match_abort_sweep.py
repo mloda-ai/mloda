@@ -83,7 +83,6 @@ SEEDS: dict[str, str] = {
 # Raising functions OUTSIDE the declared modules that the match path calls; the decision is recorded here
 # instead of at the raise. Resolution is by name, so an entry can be a name COLLISION, not a call edge.
 _CANDIDATE_OWN_DECLARATION = "contained: validates the requesting feature's own declaration during matching"
-_MATCHES_COLLISION = "name collision: the match path calls the input-data hooks named matches, not Link.matches"
 _JOIN_COLLISION = "name collision: str.join, not the runner's join"
 _FORK_COLLISION = (
     "real edge, collided verdict: Options._fork is a raise-free, swallow-free copy; its dict.update name collides with a "
@@ -121,7 +120,6 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/options.py", "_adopt"): _ADOPT_COLLISION,
     ("mloda/core/abstract_plugins/components/options.py", "get_in_features"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/feature.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
-    ("mloda/core/abstract_plugins/components/link.py", "matches"): _MATCHES_COLLISION,
     ("mloda/core/abstract_plugins/components/match_rejection.py", "context_forwarding_remedy"): (
         "real edge, collided verdict: it raises nothing itself; the str.join name collides with the runner's join"
     ),

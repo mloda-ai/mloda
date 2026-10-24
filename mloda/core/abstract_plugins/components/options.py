@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Collection, Iterator, Mapping
 from typing import Any, TYPE_CHECKING, cast
 from copy import deepcopy
 
@@ -326,6 +326,10 @@ class Options:
         Returns a list of all option keys.
         """
         return list(self.group.keys()) + list(self.context.keys())
+
+    def __iter__(self) -> Iterator[str]:
+        """Iterate over all keys, group first, then context."""
+        return iter(self.keys())
 
     def __contains__(self, key: str) -> bool:
         """

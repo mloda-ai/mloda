@@ -22,7 +22,6 @@ except ImportError:
 class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
     feature_group = TimeWindowFeatureGroup
     compute_framework = PandasDataFrame
-    divergent = {"sum": "gives 0 for a multi-column row with no value"}
 
     @classmethod
     def calculate(
@@ -94,7 +93,9 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         # Pass a Timedelta, not an offset string: aliases like "3M"/"3Y" raise
         # "passed window 3M is not compatible with a datetimelike index".
         span_delta = pd.Timedelta(span)
-        rolling_window = selected_data.rolling(window=span_delta, min_periods=1, closed="right")
+        rolling_window = selected_data.rolling(
+            window=span_delta, min_periods=0 if window_function == "sum" else 1, closed="right"
+        )
 
         if window_function == "sum":
             result = rolling_window.sum()

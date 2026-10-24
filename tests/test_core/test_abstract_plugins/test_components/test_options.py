@@ -1,5 +1,6 @@
 import copy
 from copy import deepcopy
+from itertools import islice
 from typing import Any
 
 import pytest
@@ -222,6 +223,13 @@ class TestOptions:
         # But legacy get should still work for both
         assert optimized_options.get("data_source") == "prod"
         assert optimized_options.get("aggregation_type") == "sum"
+
+    @pytest.mark.parametrize(
+        "options, expected",
+        [(Options(group={"g": 1}, context={"c": 2}), ["g", "c"]), (Options(), [])],
+    )
+    def test_iter_yields_keys(self, options: Options, expected: list[str]) -> None:
+        assert list(islice(options, 5)) == expected
 
 
 _KEY_ARGUMENTS = ["propagate_context_keys", "cascade_context_keys"]

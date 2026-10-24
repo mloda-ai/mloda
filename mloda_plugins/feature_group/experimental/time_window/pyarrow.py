@@ -192,7 +192,7 @@ class PyArrowTimeWindow(Implementation[TimeWindowFeatureGroup]):
     def _window_scalar(cls, window_values: pa.ChunkedArray, window_function: str) -> pa.Scalar:
         """Apply the window function to one window of a single column, keeping the pyarrow result type."""
         if window_function == "sum":
-            return pc.sum(window_values)
+            return pc.sum(window_values, min_count=0)
         elif window_function == "min":
             return pc.min(window_values)
         elif window_function == "max":

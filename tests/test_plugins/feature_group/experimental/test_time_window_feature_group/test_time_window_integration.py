@@ -204,27 +204,48 @@ _WINDOW_PLUGINS_OF = {
 }
 
 
+_PANDAS_FIRST: list[type[ComputeFramework]] = [PandasDataFrame, PyArrowTable]
+_PYARROW_FIRST: list[type[ComputeFramework]] = [PyArrowTable, PandasDataFrame]
+
+
 class TestTimeWindowImplementationChoice:
     """Without divergence, an unpinned window takes the first listed framework; a pin selects its own."""
 
     @pytest.mark.parametrize(
-        ("name", "pin", "framework", "reason"),
+        ("name", "pin", "framework", "reason", "order"),
         [
-            pytest.param(_NAN_WINDOW, {}, "PandasDataFrame", "your list order", id="unpinned"),
-            pytest.param(_PANDAS_ONLY_WINDOW, {}, "PandasDataFrame", "your list order", id="pandas_only_unpinned"),
+            pytest.param(_NAN_WINDOW, {}, "PandasDataFrame", "your list order", _PANDAS_FIRST, id="unpinned"),
             pytest.param(
-                _NAN_WINDOW, {"implementation": "PandasTimeWindow"}, "PandasDataFrame", "pinned", id="pin_pandas"
+                _PANDAS_ONLY_WINDOW,
+                {},
+                "PandasDataFrame",
+                "saves 1 conversion",
+                _PYARROW_FIRST,
+                id="pandas_only_unpinned",
             ),
             pytest.param(
-                _NAN_WINDOW, {"implementation": "PyArrowTimeWindow"}, "PyArrowTable", "pinned", id="pin_pyarrow"
+                _NAN_WINDOW,
+                {"implementation": "PandasTimeWindow"},
+                "PandasDataFrame",
+                "pinned",
+                _PANDAS_FIRST,
+                id="pin_pandas",
+            ),
+            pytest.param(
+                _NAN_WINDOW,
+                {"implementation": "PyArrowTimeWindow"},
+                "PyArrowTable",
+                "pinned",
+                _PANDAS_FIRST,
+                id="pin_pyarrow",
             ),
         ],
     )
     def test_sum_over_a_nan_runs_the_chosen_implementation(
-        self, name: str, pin: dict[str, Any], framework: str, reason: str
+        self, name: str, pin: dict[str, Any], framework: str, reason: str, order: list[type[ComputeFramework]]
     ) -> None:
         feature = Feature(name, **pin)
-        frameworks: list[type[ComputeFramework]] = [PandasDataFrame, PyArrowTable]
+        frameworks = order
         plugins = _WINDOW_PLUGINS_OF[name]
 
         steps = mloda.explain([feature], compute_frameworks=frameworks, plugin_collector=plugins)

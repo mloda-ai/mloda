@@ -287,7 +287,7 @@ An unknown name, a name shared by two loaded classes, an implementation that is 
 - Plan locks recorded before the move no longer match.
 - A subclass of an old per-framework class must subclass the group (or the implementation) instead.
 - Aggregations and time windows treat NaN like null on every framework: skipped, and not counted by `count`; time window first and last keep it.
-- Time window: a sum over no values gives 0 on Pandas and PyArrow, like aggregations.
+- Time window: a sum over no values gives 0 on Pandas and PyArrow, like aggregations (single-column windows used to give NaN on Pandas and null on PyArrow, and PyArrow multi-column rows NaN).
 - PythonDict text cleaning turns NaN into an empty string, like Pandas.
 - PyArrow and PythonDict imputation treat NaN as missing (skipped in statistics and filled) and break `mode` ties by the smallest value, like Pandas; string ties change too.
 - Grouped imputation leaves rows with a null or NaN group key out of every group: statistics fill them from the column, `ffill`/`bfill` leave them. PythonDict used to group those keys, and Pandas `ffill`/`bfill` erased their values. PythonDict now also treats NaT, `pd.NA`, numpy and Decimal NaN as missing, in keys and values.

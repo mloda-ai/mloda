@@ -853,7 +853,7 @@ class Engine:
                 match = None
                 for group, root in ordered:
                     rank = self._root_column_rank(group, root, column)
-                    if rank is None:
+                    if rank is None or (rank == 1 and match is not None):
                         continue
                     if not call_match_hook(group, column, root.options._fork(), self.data_access_collection).matched:
                         continue

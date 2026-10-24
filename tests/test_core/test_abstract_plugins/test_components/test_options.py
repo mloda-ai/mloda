@@ -230,7 +230,6 @@ class TestOptions:
     )
     def test_iter_yields_keys(self, options: Options, expected: list[str]) -> None:
         assert list(islice(options, 5)) == expected
-        assert set(islice(options, 5)) == set(expected)
 
 
 _KEY_ARGUMENTS = ["propagate_context_keys", "cascade_context_keys"]

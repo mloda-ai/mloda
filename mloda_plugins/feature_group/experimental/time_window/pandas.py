@@ -93,10 +93,12 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         # Pass a Timedelta, not an offset string: aliases like "3M"/"3Y" raise
         # "passed window 3M is not compatible with a datetimelike index".
         span_delta = pd.Timedelta(span)
-        rolling_window = selected_data.rolling(window=span_delta, min_periods=1, closed="right")
+        rolling_window = selected_data.rolling(
+            window=span_delta, min_periods=0 if window_function == "sum" else 1, closed="right"
+        )
 
         if window_function == "sum":
-            result = selected_data.rolling(window=span_delta, min_periods=0, closed="right").sum()
+            result = rolling_window.sum()
         elif window_function == "min":
             result = rolling_window.min()
         elif window_function == "max":

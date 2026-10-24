@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import math
 import numbers
 import statistics
 from collections import Counter
+from collections.abc import Hashable
 from typing import Any
 
 from mloda.provider import ComputeFramework, FeatureSet, Implementation
@@ -48,12 +48,16 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
 
     @classmethod
     def _nan_to_none(cls, data: dict[str, list[Any]], columns: list[str]) -> dict[str, list[Any]]:
-        """Copy data with float NaN replaced by None in the given columns."""
+        """Copy data with NaN-like cells replaced by None in the given columns."""
         normalized = dict(data)
         for name in columns:
             if name in data:
-                normalized[name] = [None if isinstance(v, float) and math.isnan(v) else v for v in data[name]]
+                normalized[name] = [None if cls._is_missing(v) else v for v in data[name]]
         return normalized
+
+    @staticmethod
+    def _is_missing(v: Any) -> bool:
+        return v is None or type(v).__name__ == "NAType" or (isinstance(v, Hashable) and bool(v != v))
 
     @classmethod
     def _mode_of(cls, values: list[Any]) -> Any:
@@ -187,7 +191,7 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
         keyless: list[int] = []
         for i in range(row_count(data)):
             group_key = tuple(data[feature][i] if feature in data else None for feature in group_by_features)
-            if any(v is None or (isinstance(v, float) and math.isnan(v)) for v in group_key):
+            if any(cls._is_missing(v) for v in group_key):
                 keyless.append(i)
                 continue
             if group_key not in groups:

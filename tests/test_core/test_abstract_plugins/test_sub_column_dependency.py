@@ -14,7 +14,7 @@ Expected Behavior:
 """
 
 import copy
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import pandas as pd
@@ -32,6 +32,7 @@ from mloda.user import FeatureResolutionError
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
+    NAME_STAGE,
     MATCH_REJECTION_REASONS,
     record_match_rejection,
 )
@@ -914,7 +915,7 @@ class WildcardProducer(FeatureGroup):
 class NestedProducer(FeatureGroup):
     """Wildcard producer emitting nested_f~0, nested_f~0~lower, nested_f~0~upper."""
 
-    OUTPUT_PARTS = (ANY_OUTPUT_PART,)
+    OUTPUT_PARTS: ClassVar[tuple[str, ...] | None] = (ANY_OUTPUT_PART,)
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -933,6 +934,12 @@ class NestedProducer(FeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
+
+
+class DeclaredNestedProducer(NestedProducer):
+    """NestedProducer declaring its nested parts in full."""
+
+    OUTPUT_PARTS = ("0", "0~lower")
 
 
 class MeasureConsumer(FeatureGroup):
@@ -998,13 +1005,16 @@ class TestDeclaredOutputParts:
 
         np.testing.assert_array_equal(results[0]["measure_consumer_output"].values, _SOURCE * 2)
 
-    @pytest.mark.parametrize("name, part", [("measure~bogus", "bogus"), ("measure~0", "0")])
+    @pytest.mark.parametrize(
+        "name, part", [("measure~bogus", "bogus"), ("measure~0", "0"), ("measure~value~x", "value~x")]
+    )
     def test_undeclared_part_fails_at_resolution_and_lists_declared(self, name: str, part: str) -> None:
         with pytest.raises(ValueError) as exc_info:
             _run([name], MeasureProducer)
 
         message = str(exc_info.value)
         assert part in message
+        assert f"MeasureProducer (feature name): '{part}' is not an output part" in message
         assert "value" in message and "unit" in message
         assert MeasureProducer.calls == 0
 
@@ -1047,13 +1057,15 @@ class TestDeclaredOutputParts:
         assert "wild~zzz" in message
         assert "wild~a" in message and "wild~b" in message
 
-    def test_nested_parent_part_returns_part_and_nested_columns(self) -> None:
-        results = _run(["nested_f~0"], NestedProducer)
+    @pytest.mark.parametrize("producer", [NestedProducer, DeclaredNestedProducer])
+    def test_nested_parent_part_returns_part_and_nested_columns(self, producer: type[FeatureGroup]) -> None:
+        results = _run(["nested_f~0"], producer)
 
         assert _columns(results) == {"nested_f~0", "nested_f~0~lower", "nested_f~0~upper"}
 
-    def test_nested_exact_part_returns_only_that_column(self) -> None:
-        results = _run(["nested_f~0~lower"], NestedProducer)
+    @pytest.mark.parametrize("producer", [NestedProducer, DeclaredNestedProducer])
+    def test_nested_exact_part_returns_only_that_column(self, producer: type[FeatureGroup]) -> None:
+        results = _run(["nested_f~0~lower"], producer)
 
         assert _columns(results) == {"nested_f~0~lower"}
 
@@ -1506,6 +1518,7 @@ class TestPartProbeIsolation:
         assert outcome.rejection is not None
         assert "not an output part" in outcome.rejection.reason
         assert "value" in outcome.rejection.reason
+        assert outcome.rejection.stage == NAME_STAGE
 
     def test_base_call_reason_is_harvested_when_full_call_records_nothing(self) -> None:
         outcome = probe_match_criteria(_BaseReasonGroup, "gc~value", Options({}), None, resolve_parts=True)

@@ -170,7 +170,7 @@ If the parts depend on the feature name or options, override the classmethod `ou
 - An undeclared part (`measure~bogus`) fails at resolution and lists the declared parts. With `ANY_OUTPUT_PART`, a part that was not produced fails after the computation.
 - A name any group matches as a whole (a literal `a~b` column or a config-based feature) is kept whole and wins over another group's part reading; a base name that itself contains `~` cannot have parts.
 - An artifact saved by a part request covers only the requested parts; a later whole-feature request cannot reuse it.
-- A nested part such as `f~0~lower` is declared by its first level (`0`).
+- A declared part matches only in full: declare `0` and `0~lower` to resolve both `f~0` and `f~0~lower`, or override `output_parts` for variable-width nested parts. A request for `f~0` still returns its nested columns.
 - Groups that declare nothing still resolve `vec~1`, which now returns only `vec~1`; a missing index fails after the computation.
 - `match_feature_group_criteria` matches the base name only; the part rule applies during feature resolution, not in global filters.
 - Artifacts are keyed by the base feature name, not a part column.

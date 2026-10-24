@@ -386,7 +386,7 @@ class ComputeFramework(ABC):
         handle, explicit, reason = resolve_connection_handle(cls, data_access_collection, options)
         if handle is None:
             if reason is not None and not explicit:
-                raise ValueError(f"Ambiguous resolve for kind 'connection': {reason}")
+                raise ValueError(f"{cls.get_class_name()}: Ambiguous resolve for kind 'connection': {reason}")
             return None
         return data_access_collection.connections[handle]
 

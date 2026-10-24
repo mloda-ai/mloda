@@ -141,7 +141,7 @@ class TestIcebergTfsConnectionE2E(TfsConnectionEndToEndMixin):
         for catalog in catalogs.values():
             catalog.load_table = Mock()
 
-        with pytest.raises(ValueError, match="Ambiguous resolve"):
+        with pytest.raises(ValueError, match="Ambiguous resolve") as exc:
             mloda.run_all(
                 [Feature("tfs_handle_doubled")],
                 compute_frameworks=[PyArrowTable, IcebergFramework],
@@ -150,6 +150,7 @@ class TestIcebergTfsConnectionE2E(TfsConnectionEndToEndMixin):
                 ),
                 data_access_collection=DataAccessCollection(catalogs),
             )
+        assert "IcebergFramework: Ambiguous resolve" in str(exc.value)
 
     @pytest.fixture
     def live_connection(self) -> Any:

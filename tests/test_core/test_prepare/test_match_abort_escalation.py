@@ -4,8 +4,8 @@ The provenance marker must preserve the exception object exactly, because caller
 type at the matcher boundary. ``resolve_feature`` keeps its never-raises contract: a marked raise reaches
 ``ResolvedFeature.error`` instead of propagating. Doubles are dropped per test.
 
-A mark is only worth anything if every handler BETWEEN the raise and the seam re-raises it. The two on the
-normal path are covered here: ``match_parser_criteria`` and ``FeatureGroup.is_root``. ``utils.safe_field``
+A mark is only worth anything if every handler BETWEEN the raise and the seam re-raises it. The one on the
+normal path covered here is ``match_parser_criteria``. ``utils.safe_field``
 is the deliberate exception: it degrades one field in a rendering path and swallows a marked exception.
 """
 

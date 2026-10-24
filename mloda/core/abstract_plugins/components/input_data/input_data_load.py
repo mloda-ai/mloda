@@ -1,24 +1,15 @@
 import logging
 import weakref
-from abc import ABC
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
-from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import ExtenderHook, GateBypassError, _invoke_extender
 from mloda.core.abstract_plugins.hook_context import HookContext, input_data_load_gate_scopes_active, instrument
-from mloda.core.abstract_plugins.components.options import (
-    RESERVED_READER_OPTION_KEY as RESERVED_READER_OPTION_KEY,
-    Options,
-)
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
 
 logger = logging.getLogger(__name__)
-
-
-_REMOVED_HOOKS = ("match_subclass_data_access", "load_data", "READER_OPTIONS", "init_reader", "match_data_access")
 
 
 def _format_keys(keys: Iterable[str]) -> str:
@@ -142,41 +133,3 @@ def dispatch_input_data_load(
     )
     with context.activate():
         return _invoke_extender(extender, instrument(context, load, row_count=cfw._row_count), data_access, features)
-
-
-class BaseInputData(ABC):
-    """Marker for what a group's input_data() returns; reading files and sources is a SourceFeatureGroup."""
-
-    def __init__(self) -> None:
-        pass
-
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Reject the removed reader hooks at class definition, naming the replacement."""
-        for klass in cls.__mro__:
-            if klass is object or (klass is not cls and issubclass(klass, BaseInputData)):
-                continue
-            for hook in _REMOVED_HOOKS:
-                if hook in klass.__dict__:
-                    raise TypeError(
-                        f"{cls.__name__} defines {hook}, which BaseInputData no longer supports; "
-                        "subclass SourceFeatureGroup to read a source."
-                    )
-        super().__init_subclass__(**kwargs)
-
-    @classmethod
-    def data_access_name(cls) -> str:
-        """This function should return the name of the data access."""
-        return cls.__name__
-
-    def matches(
-        self,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-    ) -> bool:
-        """A bare BaseInputData claims nothing; override to claim names."""
-        return False
-
-    @classmethod
-    def get_class_name(cls) -> str:
-        return cls.__name__

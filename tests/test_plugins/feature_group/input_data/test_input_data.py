@@ -4,13 +4,10 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components import declaration_surface
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.provider import FeatureGroup
-from mloda.user import Feature, Options
+from mloda.user import Feature
 from mloda.provider import FeatureSet
-from mloda.provider import BaseInputData
 from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import mloda
 
@@ -112,34 +109,6 @@ class TestInputData:
             )
 
 
-class _BareInputData(BaseInputData):
-    """A subclass that adds nothing: no hook of its own."""
-
-
-_REMOVED_BASE_INPUT_DATA_MEMBERS = [
-    "READER_OPTIONS",
-    "load_data",
-    "load",
-    "_load_data_via_hook",
-    "init_reader",
-    "feature_scope_data_access",
-    "global_scope_data_access",
-    "match_data_access",
-    "_record_unowned_pin",
-    "add_base_input_data_to_options",
-    "deal_with_base_input_data_name_as_cls_or_str",
-    "wrap_feature_scoped_access",
-    "_wrap_scoped_access",
-    "reader_option",
-    "reader_option_default",
-    "reader_option_specs",
-    "declared_reader_option_keys",
-    "data_access_identity",
-    "describe_columns",
-    "count_rows",
-    "declared_attributes",
-]
-
 _REMOVED_MODULE_SYMBOLS = [
     ("mloda.core.abstract_plugins.components.input_data.reader_probe", "probe_reader"),
     ("mloda.core.abstract_plugins.components.match_rejection", "INPUT_DATA_OWNED_STAGE"),
@@ -148,15 +117,12 @@ _REMOVED_MODULE_SYMBOLS = [
     ("mloda.core.abstract_plugins.components.declared_attributes", "declaration_requirement_scope"),
     ("mloda.core.abstract_plugins.components.credential_scrub", "_URI_PATTERN"),
     ("mloda.provider", "DataCreator"),
+    ("mloda.provider", "BaseInputData"),
 ]
 
 
-class TestBaseInputDataIsOnlyAMarker:
-    """BaseInputData keeps no reader path: data comes from a SourceFeatureGroup, or a DataCreatorFeatureGroup."""
-
-    @pytest.mark.parametrize("member", _REMOVED_BASE_INPUT_DATA_MEMBERS)
-    def test_the_legacy_reader_member_is_gone(self, member: str) -> None:
-        assert not hasattr(BaseInputData, member)
+class TestInputDataPathIsGone:
+    """BaseInputData and the FeatureGroup input_data matching path are removed."""
 
     @pytest.mark.parametrize(("module", "symbol"), _REMOVED_MODULE_SYMBOLS)
     def test_the_legacy_module_symbol_is_gone(self, module: str, symbol: str) -> None:
@@ -165,66 +131,10 @@ class TestBaseInputDataIsOnlyAMarker:
     def test_the_reader_declaration_surface_is_gone(self) -> None:
         assert not hasattr(declaration_surface, "DeclarationSurface")
 
-    def test_a_bare_subclass_matches_nothing_on_its_own(self) -> None:
-        options = Options({_BareInputData.__name__: "bare_access", "BaseInputData": (_BareInputData, "bare_access")})
-        access = DataAccessCollection(files={"bare_access.csv"}, connections={"bare_handle": "bare_access"})
+    def test_the_base_input_data_module_is_gone(self) -> None:
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("mloda.core.abstract_plugins.components.input_data.base_input_data")
 
-        assert _BareInputData().matches("bare_input_feature", options, access) is False
-        assert _BareInputData().matches("bare_input_feature", Options(), None) is False
-
-    def test_a_group_returning_a_bare_subclass_matches_nothing(self) -> None:
-        class BareInputDataGroup(FeatureGroup):
-            @classmethod
-            def input_data(cls) -> BaseInputData | None:
-                return _BareInputData()
-
-        access = DataAccessCollection(files={"bare_access.csv"})
-
-        result = IdentifyFeatureGroupClass.evaluate(
-            Feature("bare_input_feature"), {BareInputDataGroup: {PyArrowTable}}, None, access
-        )
-
-        assert result.identified == {}
-
-    @pytest.mark.parametrize(
-        ("hook", "value"),
-        [
-            ("match_subclass_data_access", classmethod(lambda cls, data_access, feature_names, options=None: None)),
-            ("load_data", classmethod(lambda cls, data_access, features: None)),
-            ("READER_OPTIONS", {}),
-        ],
-    )
-    def test_defining_a_legacy_hook_raises_naming_the_source_feature_group(self, hook: str, value: Any) -> None:
-        with pytest.raises(TypeError, match="SourceFeatureGroup") as excinfo:
-            type("LegacyHookInputData", (BaseInputData,), {hook: value})
-
-        assert hook in str(excinfo.value)
-
-    @pytest.mark.parametrize(
-        ("hook", "value"),
-        [
-            ("init_reader", classmethod(lambda cls, data_access: None)),
-            ("match_data_access", classmethod(lambda cls, data_access, feature_names, options=None: None)),
-        ],
-    )
-    def test_defining_init_reader_or_match_data_access_raises(self, hook: str, value: Any) -> None:
-        with pytest.raises(TypeError, match="SourceFeatureGroup") as excinfo:
-            type("LegacyHookInputData2", (BaseInputData,), {hook: value})
-
-        assert hook in str(excinfo.value)
-
-    def test_a_mixin_defining_a_legacy_hook_raises(self) -> None:
-        class LoadMixin:
-            @classmethod
-            def load_data(cls, data_access: Any, features: Any) -> None:
-                return None
-
-        with pytest.raises(TypeError, match="SourceFeatureGroup") as excinfo:
-            type("MixedInputData", (LoadMixin, BaseInputData), {})
-
-        assert "load_data" in str(excinfo.value)
-
-    def test_a_subclass_without_a_legacy_hook_still_defines(self) -> None:
-        defined = type("PlainMarkerInputData", (BaseInputData,), {})
-
-        assert issubclass(defined, BaseInputData)
+    @pytest.mark.parametrize("member", ["input_data", "_matches_input_data", "_is_root_and_matches_input_data"])
+    def test_feature_group_has_no_input_data_member(self, member: str) -> None:
+        assert not hasattr(FeatureGroup, member)

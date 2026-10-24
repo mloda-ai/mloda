@@ -48,7 +48,6 @@ from mloda.core.abstract_plugins.components.credential_scrub import scrub_creden
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 
 # Input data classes
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.reader_probe import SourceProbeOutcome
@@ -169,7 +168,6 @@ __all__ = [
     # Feature set
     "FeatureSet",
     # Input data
-    "BaseInputData",
     "FileSource",
     "ClaimRoute",
     "NamePolicy",

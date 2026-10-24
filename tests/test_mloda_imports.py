@@ -131,7 +131,6 @@ def test_import_provider_base_classes() -> None:
         # Feature set
         FeatureSet,
         # Input data
-        BaseInputData,
         ApiDataFG,
         DataCreatorFeatureGroup,
         # Artifact
@@ -172,7 +171,6 @@ def test_import_provider_base_classes() -> None:
     # Feature set
     assert FeatureSet is not None
     # Input data
-    assert BaseInputData is not None
     assert ApiDataFG is not None
     assert DataCreatorFeatureGroup is not None
     assert inspect.isabstract(DataCreatorFeatureGroup)

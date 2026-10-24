@@ -7,7 +7,6 @@ from mloda.provider import FeatureSet
 from mloda.user import DataType
 from mloda.provider import ComputeFramework
 from mloda.user import Index
-from mloda.provider import BaseInputData
 
 
 class DynamicFeatureGroupCreator:
@@ -40,7 +39,6 @@ class DynamicFeatureGroupCreator:
 
     - `set_feature_name`: Customize feature name resolution
     - `match_feature_group_criteria`: Define custom matching logic
-    - `input_data`: Specify input data sources
     - `validate_input_features`: Add input validation logic
     - `calculate_feature`: Define feature calculation logic
     - `validate_output_features`: Add output validation logic
@@ -191,6 +189,11 @@ class DynamicFeatureGroupCreator:
         Returns:
             A new FeatureGroup subclass.
         """
+        if "input_data" in properties:
+            raise ValueError(
+                "'input_data' is no longer supported; subclass DataCreatorFeatureGroup (generated data) "
+                "or SourceFeatureGroup (reading a source)."
+            )
 
         if class_name in DynamicFeatureGroupCreator._created_classes:
             return DynamicFeatureGroupCreator._created_classes[class_name]
@@ -209,11 +212,6 @@ class DynamicFeatureGroupCreator:
             if "match_feature_group_criteria" in properties:
                 return properties["match_feature_group_criteria"](cls, feature_name, options, data_access_collection)  # type: ignore[no-any-return]
             return super(new_class, cls).match_feature_group_criteria(feature_name, options, data_access_collection)  # type: ignore[misc, arg-type, no-any-return]
-
-        def input_data(cls) -> BaseInputData | None:  # type: ignore[no-untyped-def]
-            if "input_data" in properties:
-                return properties["input_data"]()  # type: ignore[no-any-return]
-            return super(new_class, cls).input_data()  # type: ignore[misc, arg-type, no-any-return]
 
         def validate_input_features(cls, data: Any, features: FeatureSet) -> None:  # type: ignore[no-untyped-def]
             if "validate_input_features" in properties:
@@ -268,7 +266,6 @@ class DynamicFeatureGroupCreator:
             {
                 "set_feature_name": set_feature_name,
                 "match_feature_group_criteria": classmethod(match_feature_group_criteria),
-                "input_data": classmethod(input_data),
                 "validate_input_features": classmethod(validate_input_features),
                 "calculate_feature": classmethod(calculate_feature),
                 "validate_output_features": classmethod(validate_output_features),

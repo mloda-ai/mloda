@@ -119,24 +119,22 @@ PROPERTY_MAPPING = {
 
 For feature groups not yet modernized, the default matching criteria still apply:
 
-1. **Root Feature with Matching Input Data**: Applies to a root group whose `input_data()` returns a matching `BaseInputData`. A group that generates its own data subclasses `DataCreatorFeatureGroup` and declares names via rule 4 (Explicitly Supported).
-
-2. **Class Name Match**: The feature name exactly matches the feature group's class name.
+1. **Class Name Match**: The feature name exactly matches the feature group's class name.
    ```py
    feature_name == FeatureGroup.get_class_name()
    ```
 
-3. **Prefix Match**: The feature name starts with the feature group's class name as a prefix.
+2. **Prefix Match**: The feature name starts with the feature group's class name as a prefix.
    ```py
    feature_name.startswith(FeatureGroup.prefix())  # Default prefix is "ClassName_"
    ```
 
-4. **Explicitly Supported**: The feature name is in the set of explicitly supported feature names.
+3. **Explicitly Supported**: The feature name is in the set of explicitly supported feature names. A group that generates its own data subclasses `DataCreatorFeatureGroup` and declares names this way.
    ```py
    feature_name in FeatureGroup.feature_names_supported()
    ```
 
-5. **PROPERTY_MAPPING**: A group matched by rules 1 to 4 must still pass its `PROPERTY_MAPPING`: required options present, present values valid, and every `match_guard` satisfied. See [Property Mapping](property-mapping.md#a-plain-feature-group).
+4. **PROPERTY_MAPPING**: A group matched by rules 1 to 3 must still pass its `PROPERTY_MAPPING`: required options present, present values valid, and every `match_guard` satisfied. See [Property Mapping](property-mapping.md#a-plain-feature-group).
 
 ## Matching Examples
 

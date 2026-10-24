@@ -10,10 +10,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.input_data.base_input_data import (
-    RESERVED_READER_OPTION_KEY,
-    dispatch_input_data_load,
-)
+from mloda.core.abstract_plugins.components.input_data.input_data_load import dispatch_input_data_load
 from mloda.core.abstract_plugins.components.input_data.claim_route import (
     ClaimRoute,
     NamePolicy,
@@ -34,7 +31,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     record_match_rejection,
     replace_probe_match_rejection,
 )
-from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY, Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import defer_match_abort, escalate_match_abort
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework

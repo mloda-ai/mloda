@@ -4,10 +4,10 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import QUERY_OPTION
-from mloda.provider import ApiDataFG, BaseInputData
+from mloda.provider import ApiDataFG
 from mloda.user import PluginLoader
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda.interfaces.service.request import Problem, data_access_option_keys, data_access_violations
@@ -17,10 +17,6 @@ pytestmark = pytest.mark.timeout(30)
 
 SECRET = "s3://user:pw@host/x"  # nosec B105
 KEY = CsvFG.data_access_name()
-
-
-class _StubInputData(BaseInputData):
-    pass
 
 
 def _assert_no_secret(problems: list[Problem]) -> None:
@@ -61,11 +57,6 @@ def test_option_keys_contain_query_option() -> None:
     assert QUERY_OPTION in data_access_option_keys()
 
 
-def test_option_keys_contain_base_input_data_names() -> None:
-    PluginLoader.all()
-    assert _StubInputData.data_access_name() in data_access_option_keys()
-
-
 def test_option_keys_contain_api_data_pointer_key() -> None:
     PluginLoader.all()
     assert ApiDataFG.__name__ in data_access_option_keys()
@@ -73,7 +64,7 @@ def test_option_keys_contain_api_data_pointer_key() -> None:
 
 def test_option_keys_contain_reserved_reader_key() -> None:
     """mloda stores the chosen reader and its data access under this key, so a request must not set it."""
-    assert RESERVED_READER_OPTION_KEY == "BaseInputData"
+    assert RESERVED_READER_OPTION_KEY == "mloda_source_reader"
     assert RESERVED_READER_OPTION_KEY in data_access_option_keys()
 
 

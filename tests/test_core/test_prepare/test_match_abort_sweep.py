@@ -62,9 +62,7 @@ MATCH_PATH_MODULES: dict[str, str] = {
     "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser.py": "the parsing that matcher runs",
     "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_author_guards.py": "the required_when guard",
     "mloda/core/abstract_plugins/components/property_spec.py": "the matcher reads the spec sentinel",
-    "mloda/core/abstract_plugins/components/input_data/base_input_data.py": "the input-data matches hook",
     "mloda/core/abstract_plugins/components/input_data/reader_probe.py": "the extender-wrapped source group probe",
-    "mloda/core/abstract_plugins/data_creator_feature_group.py": "the data creator group's rootness hook",
 }
 
 for _module in MATCH_PATH_MODULES:
@@ -118,7 +116,6 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/options.py", "_fork"): _FORK_COLLISION,
     ("mloda/core/abstract_plugins/components/options.py", "_adopt"): _ADOPT_COLLISION,
     ("mloda/core/abstract_plugins/components/options.py", "get_in_features"): _CANDIDATE_OWN_DECLARATION,
-    ("mloda/core/abstract_plugins/components/feature.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/match_rejection.py", "context_forwarding_remedy"): (
         "real edge, collided verdict: it raises nothing itself; the str.join name collides with the runner's join"
     ),
@@ -171,7 +168,6 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
         "real edge, collided verdict: it swallows nothing itself; its str.__str__ call collides with Link.__str__, "
         "which renders discriminators through safe_field"
     ),
-    ("mloda/core/abstract_plugins/components/feature.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
 }
 
@@ -1009,7 +1005,7 @@ def test_the_reachable_walk_does_not_collapse() -> None:
     """One reached definition per module already satisfies the module canary, so pin the walk's size too."""
     reachable = sweep().reachable
 
-    # Vacuity floor, not a target: 86 definitions today, so pruning a helper stays a legitimate change.
+    # Vacuity floor, not a target, so pruning a helper stays a legitimate change.
     assert len(reachable) >= 70, (
         f"the walk reached only {len(reachable)} definitions; it stopped following calls somewhere"
     )
@@ -1026,7 +1022,7 @@ def test_known_escalations_are_enumerated() -> None:
 
     assert expected <= marked, f"known escalations missing from the sweep: {sorted(expected - marked)}"
     # Vacuity floor, not a target.
-    assert len(sweep().sites) >= 9, f"sweep enumerated only {len(sweep().sites)} raise sites; it is not walking"
+    assert len(sweep().sites) >= 8, f"sweep enumerated only {len(sweep().sites)} raise sites; it is not walking"
 
 
 _RAISE_CASES = [
@@ -1172,7 +1168,6 @@ def test_known_escalating_handlers_are_enumerated() -> None:
     expected = {
         (match_hook, "call_match_hook"),
         (feature_group, "passes_option_declarations"),
-        (feature_group, "is_root"),
         (mixin, "match_parser_criteria"),
         (guards, "check_required_when"),
         (parser, "_first_rejecting_guard"),

@@ -31,7 +31,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.prepare.identify_feature_group import (
     FeatureResolutionError,
     IdentifyFeatureGroupClass,
@@ -1052,7 +1052,6 @@ def test_two_reader_backed_roots_are_ambiguous_and_name_their_sources(tmp_path: 
     assert "ParquetFG" in message
     assert f"CsvFG: {csv_path}" in message
     assert f"ParquetFG: {parquet_path}" in message
-    assert "BaseInputData already set" not in message
 
 
 @pytest.mark.parametrize(

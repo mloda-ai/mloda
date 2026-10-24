@@ -11,7 +11,7 @@ from typing import Any, cast
 import pyarrow as pa
 import pytest
 
-from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass

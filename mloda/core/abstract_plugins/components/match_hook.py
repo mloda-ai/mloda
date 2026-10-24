@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     PropertyValueRejection,
 )
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,
     NAME_STAGE,

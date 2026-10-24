@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import Ba
 from mloda.core.abstract_plugins.components.credential_scrub import _SECRET_KEY, _mask_secret_keys, redact_option_value
 from mloda.core.abstract_plugins.components.credential import Credential
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
-from mloda.core.abstract_plugins.components.input_data.base_input_data import (
+from mloda.core.abstract_plugins.components.input_data.input_data_load import (
     _is_fallback_identity,
 )
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import (

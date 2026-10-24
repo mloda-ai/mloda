@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
-from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.interfaces.cli.main import build_services, main
 from mloda.interfaces.service.catalog import Catalog

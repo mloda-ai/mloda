@@ -4,7 +4,8 @@ from typing import Any
 
 import pytest
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-from mloda.provider import BaseInputData, SourceFeatureGroup
+from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
+from mloda.provider import SourceFeatureGroup
 from mloda.user import Credential, Feature, Options
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
@@ -13,10 +14,6 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_s
 )
 
 IN_FEATURES = DefaultOptionKeys.in_features.value
-
-
-class _StubInputData(BaseInputData):
-    pass
 
 
 class _RaisesOnDeepcopy:
@@ -630,14 +627,14 @@ class TestOptionsWithCredentialValues:
         options = Options(group={"credential_option_key": Credential(sqlite="/secret/path/analytics.db")})
         assert "/secret/path/analytics.db" not in str(options)
 
-    def test_str_redacts_a_reader_tuple_in_base_input_data_context(self) -> None:
-        """Only the reserved BaseInputData reader tuple is masked; a plain non-reader dict stays readable."""
+    def test_str_redacts_a_reader_tuple_in_reserved_key_context(self) -> None:
+        """Only the reserved reader tuple is masked; a plain non-reader dict stays readable."""
         options = Options(
-            context={"BaseInputData": (SqliteFG, {"sqlite": "/raw/reader_tuple_marker.db"})},
+            context={RESERVED_READER_OPTION_KEY: (SqliteFG, {"sqlite": "/raw/reader_tuple_marker.db"})},
         )
         text = str(options)
         assert "/raw/reader_tuple_marker.db" not in text
-        assert "BaseInputData" in text
+        assert RESERVED_READER_OPTION_KEY in text
         assert "sqlite" in text
 
         plain = Options(group={"cfg": {"a": "b"}})
@@ -696,14 +693,14 @@ class TestOptionsWithCredentialValues:
         text = str(Options(context={"cfg": inner}))
         assert "hunter2" not in text
 
-    def test_str_redacts_a_reader_tuple_dsn_string_in_base_input_data_context(self) -> None:
-        """The reserved BaseInputData reader tuple also masks a DSN string second element."""
+    def test_str_redacts_a_reader_tuple_dsn_string_in_reserved_key_context(self) -> None:
+        """The reserved reader tuple also masks a DSN string second element."""
         options = Options(
-            context={"BaseInputData": (SqliteFG, "postgresql://dbuser:cred_marker_q7@dbhost/db")},
+            context={RESERVED_READER_OPTION_KEY: (SqliteFG, "postgresql://dbuser:cred_marker_q7@dbhost/db")},
         )
         text = str(options)
         assert "cred_marker_q7" not in text
-        assert "BaseInputData" in text
+        assert RESERVED_READER_OPTION_KEY in text
 
 
 class TestOptionsClassKeyNormalization:
@@ -723,14 +720,3 @@ class TestOptionsClassKeyNormalization:
         options = Options({key: {"x": 1}})
 
         assert "SourceFeatureGroup" in options.group
-
-    def test_legacy_reader_class_key_still_normalizes_to_data_access_name(self) -> None:
-        reader: Any = type(
-            "_ToyfmtLegacyReader", (_StubInputData,), {"data_access_name": classmethod(lambda cls: "toyfmt_l")}
-        )
-
-        options = Options({reader: {"x": 1}})
-
-        assert "toyfmt_l" in options.group
-        assert "_ToyfmtLegacyReader" not in options.group
-        del reader

@@ -20,7 +20,7 @@ from typing import Any, cast
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.components.input_data.base_input_data import dispatch_input_data_load
+from mloda.core.abstract_plugins.components.input_data.input_data_load import dispatch_input_data_load
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -966,7 +966,7 @@ def _direct_load_context(reader_cls: type[_DirectLoader], data_access: Any = "ac
     return extender.captured
 
 
-_BASE_INPUT_DATA_LOGGER = "mloda.core.abstract_plugins.components.input_data.base_input_data"
+_INPUT_DATA_LOAD_LOGGER = "mloda.core.abstract_plugins.components.input_data.input_data_load"
 
 
 class _NamedIdentityReader(_DirectLoader):
@@ -1014,12 +1014,12 @@ class TestFallbackDataAccessIdentityIsFlagged:
         base_cls = _NamedIdentityReader if kind.startswith("override") else _AccessIdentityLoader
         reader_cls = type("_FreshPublished", (base_cls,), {})
 
-        with caplog.at_level(logging.WARNING, logger=_BASE_INPUT_DATA_LOGGER):
+        with caplog.at_level(logging.WARNING, logger=_INPUT_DATA_LOAD_LOGGER):
             context = _direct_load_context(reader_cls, data_access)
 
         assert context.data_access_identity_is_fallback is False
         assert not [
-            r for r in caplog.records if r.name == _BASE_INPUT_DATA_LOGGER and "data_access_identity" in r.getMessage()
+            r for r in caplog.records if r.name == _INPUT_DATA_LOAD_LOGGER and "data_access_identity" in r.getMessage()
         ]
 
     def test_warns_once_per_reader_class(self, caplog: pytest.LogCaptureFixture) -> None:
@@ -1029,16 +1029,16 @@ class TestFallbackDataAccessIdentityIsFlagged:
         class _FreshB(_DirectLoader):
             pass
 
-        with caplog.at_level(logging.WARNING, logger=_BASE_INPUT_DATA_LOGGER):
+        with caplog.at_level(logging.WARNING, logger=_INPUT_DATA_LOAD_LOGGER):
             _direct_load_context(_FreshA, "missing-a")
             _direct_load_context(_FreshA, "missing-a")
-            records = [r for r in caplog.records if r.name == _BASE_INPUT_DATA_LOGGER]
+            records = [r for r in caplog.records if r.name == _INPUT_DATA_LOAD_LOGGER]
             assert len(records) == 1
             assert _FreshA.__qualname__ in records[0].getMessage()
             assert "data_access_identity" in records[0].getMessage()
 
             _direct_load_context(_FreshB, "missing-b")
-            records = [r for r in caplog.records if r.name == _BASE_INPUT_DATA_LOGGER]
+            records = [r for r in caplog.records if r.name == _INPUT_DATA_LOAD_LOGGER]
             assert len(records) == 2
             assert _FreshB.__qualname__ in records[1].getMessage()
 
@@ -1047,7 +1047,7 @@ class TestFallbackDataAccessIdentityIsFlagged:
             pass
 
         cfw = ComputeFramework(function_extender=set())
-        with caplog.at_level(logging.WARNING, logger=_BASE_INPUT_DATA_LOGGER):
+        with caplog.at_level(logging.WARNING, logger=_INPUT_DATA_LOAD_LOGGER):
             with cfw.activate(), _build_calc_context().activate():
                 _load(_FreshNoExtender, "missing", FeatureSet())
 

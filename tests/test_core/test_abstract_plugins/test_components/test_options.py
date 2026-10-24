@@ -1,5 +1,6 @@
 import copy
 from copy import deepcopy
+from itertools import islice
 from typing import Any
 
 import pytest
@@ -222,6 +223,26 @@ class TestOptions:
         # But legacy get should still work for both
         assert optimized_options.get("data_source") == "prod"
         assert optimized_options.get("aggregation_type") == "sum"
+
+    def test_iter_yields_group_then_context_keys(self) -> None:
+        options = Options(group={"g": 1}, context={"c": 2})
+        assert list(islice(options, 5)) == ["g", "c"]
+
+    def test_iter_as_set_matches_keys(self) -> None:
+        options = Options(group={"g": 1}, context={"c": 2})
+        assert set(islice(options, 5)) == {"g", "c"}
+
+    def test_iter_in_for_loop(self) -> None:
+        options = Options(group={"g": 1}, context={"c": 2})
+        collected = []
+        for key in options:
+            collected.append(key)
+            if len(collected) >= 5:
+                break
+        assert collected == ["g", "c"]
+
+    def test_iter_empty_options(self) -> None:
+        assert list(islice(Options(), 5)) == []
 
 
 _KEY_ARGUMENTS = ["propagate_context_keys", "cascade_context_keys"]

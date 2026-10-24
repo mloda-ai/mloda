@@ -975,3 +975,17 @@ class TestSourceGroupHook:
         assert "abstract" in outcome.refused
         assert calls == []
         assert recorder.for_reader(_ImdAbstractFmt) == []
+
+    @pytest.mark.parametrize("pointed", [False, True], ids=["searched", "class_name_key"])
+    def test_has_source_fires_the_hook_once_and_a_refusal_returns_false(self, pointed: bool) -> None:
+        options = Options({ImdMatchGateSource.get_class_name(): dict(_FMT_COLUMNS)} if pointed else {})
+        recorder = _ImdRecordingExtender()
+        gate = _gate(ImdMatchGateSource)
+
+        with reader_probe_scope(ReaderProbeScope(recorder, None, None, None, None)):
+            assert ImdMatchGateSource.has_source(options, _global_access(), _COL_A) is True
+        with reader_probe_scope(ReaderProbeScope(gate, None, None, None, None)):
+            assert ImdMatchGateSource.has_source(options, _global_access(), _COL_A) is False
+
+        assert len(recorder.for_reader(ImdMatchGateSource)) == 1
+        assert len(gate.raised) == 1

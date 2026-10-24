@@ -13,8 +13,14 @@ context suites). Only context entries recorded in options.inherited_context_keys
 participate.
 """
 
+import itertools
+
+from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.prepare.execution_plan import ExecutionPlan
-from mloda.user import DataType, Feature, Options
+from mloda.provider import BaseArtifact, FeatureGroup
+from mloda.user import DataType, Feature, FeatureName, FilterType, Options, SingleFilter
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
 def _group(features: set[Feature]) -> dict[int, set[Feature]]:
@@ -337,3 +343,160 @@ def test_grouping_is_callable_on_the_class() -> None:
     groups = ExecutionPlan.group_features_by_compute_framework_and_options(features)
 
     assert sum(len(group) for group in groups.values()) == 2
+
+
+class MergeProbeFG(FeatureGroup):
+    """Plain feature group (no artifact) for the same-framework merge helper tests."""
+
+
+class MergeArtifactProbeFG(FeatureGroup):
+    """Feature group with an artifact, which must never merge."""
+
+    @staticmethod
+    def artifact() -> type[BaseArtifact] | None:
+        return BaseArtifact
+
+
+def _chosen(feature: Feature, framework: type = PyArrowTable) -> Feature:
+    feature.chosen_compute_framework = framework
+    return feature
+
+
+def _merge(
+    groups: dict[int, set[Feature]],
+    feature_group: type[FeatureGroup] = MergeProbeFG,
+    global_filter: GlobalFilter | None = None,
+) -> dict[int, set[Feature]]:
+    return ExecutionPlan._merge_same_framework_groups(feature_group, groups, global_filter)
+
+
+def _names_per_group(groups: dict[int, set[Feature]]) -> list[list[str]]:
+    return sorted(sorted(str(f.name) for f in group) for group in groups.values())
+
+
+def test_merge_same_framework_different_data_types() -> None:
+    a = _chosen(Feature("merge_a", data_type=DataType.INT32))
+    b = _chosen(Feature("merge_b", data_type=DataType.INT64))
+    groups = _group({a, b})
+    assert len(groups) == 2
+
+    merged = _merge(groups)
+
+    assert _names_per_group(merged) == [["merge_a", "merge_b"]]
+
+
+def test_merge_same_framework_different_allowed_sets() -> None:
+    pinned = _chosen(Feature("merge_pinned", compute_framework="PyArrowTable"))
+    unpinned = _chosen(Feature("merge_unpinned"))
+    groups = _group({pinned, unpinned})
+    assert len(groups) == 2
+
+    merged = _merge(groups)
+
+    assert _names_per_group(merged) == [["merge_pinned", "merge_unpinned"]]
+
+
+def test_merge_typed_and_untyped_groups() -> None:
+    typed = _chosen(Feature("merge_typed", data_type=DataType.INT32))
+    untyped = _chosen(Feature("merge_untyped", compute_framework="PyArrowTable"))
+    groups = _group({typed, untyped})
+    assert len(groups) == 2
+
+    merged = _merge(groups)
+
+    assert _names_per_group(merged) == [["merge_typed", "merge_untyped"]]
+
+
+def test_merge_keeps_same_name_variants_separate() -> None:
+    as_int32 = _chosen(Feature("merge_same", data_type=DataType.INT32))
+    as_int64 = _chosen(Feature("merge_same", data_type=DataType.INT64))
+    groups = _group({as_int32, as_int64})
+
+    merged = _merge(groups)
+
+    assert _names_per_group(merged) == [["merge_same"], ["merge_same"]]
+
+
+def test_merge_keeps_different_chosen_frameworks_separate() -> None:
+    arrow = _chosen(Feature("merge_arrow", data_type=DataType.INT32), PyArrowTable)
+    pandas = _chosen(Feature("merge_pandas", data_type=DataType.INT64), PandasDataFrame)
+    groups = _group({arrow, pandas})
+
+    merged = _merge(groups)
+
+    assert _names_per_group(merged) == [["merge_arrow"], ["merge_pandas"]]
+
+
+def test_merge_keeps_different_options_separate() -> None:
+    a = _chosen(Feature("merge_opt_a", options={"unit": "x"}, data_type=DataType.INT32))
+    b = _chosen(Feature("merge_opt_b", options={"unit": "y"}, data_type=DataType.INT64))
+    groups = _group({a, b})
+
+    merged = _merge(groups)
+
+    assert _names_per_group(merged) == [["merge_opt_a"], ["merge_opt_b"]]
+
+
+def test_merge_keeps_different_split_context_separate() -> None:
+    acme = _chosen(Feature("merge_ctx_a", options=_options_with_inherited_tenant("acme"), data_type=DataType.INT32))
+    beta = _chosen(Feature("merge_ctx_b", options=_options_with_inherited_tenant("beta"), data_type=DataType.INT64))
+    groups = _group({acme, beta})
+
+    merged = _merge(groups)
+
+    assert _names_per_group(merged) == [["merge_ctx_a"], ["merge_ctx_b"]]
+
+
+def test_merge_keeps_groups_with_differing_filters_separate() -> None:
+    a = _chosen(Feature("merge_f_a", data_type=DataType.INT32))
+    b = _chosen(Feature("merge_f_b", data_type=DataType.INT64))
+    groups = _group({a, b})
+    global_filter = GlobalFilter()
+    global_filter.add_filter_to_collection(
+        MergeProbeFG, FeatureName("merge_f_a"), SingleFilter(Feature("merge_f_col"), FilterType.EQUAL, {"value": 1})
+    )
+
+    merged = _merge(groups, global_filter=global_filter)
+
+    assert _names_per_group(merged) == [["merge_f_a"], ["merge_f_b"]]
+
+
+def test_merge_groups_with_identical_filters() -> None:
+    a = _chosen(Feature("merge_g_a", data_type=DataType.INT32))
+    b = _chosen(Feature("merge_g_b", data_type=DataType.INT64))
+    groups = _group({a, b})
+    global_filter = GlobalFilter()
+    single_filter = SingleFilter(Feature("merge_g_col"), FilterType.EQUAL, {"value": 1})
+    global_filter.add_filter_to_collection(MergeProbeFG, FeatureName("merge_g_a"), single_filter)
+    global_filter.add_filter_to_collection(MergeProbeFG, FeatureName("merge_g_b"), single_filter)
+
+    merged = _merge(groups, global_filter=global_filter)
+
+    assert _names_per_group(merged) == [["merge_g_a", "merge_g_b"]]
+
+
+def test_merge_skips_feature_groups_with_an_artifact() -> None:
+    a = _chosen(Feature("merge_art_a", data_type=DataType.INT32))
+    b = _chosen(Feature("merge_art_b", data_type=DataType.INT64))
+    groups = _group({a, b})
+
+    merged = _merge(groups, feature_group=MergeArtifactProbeFG)
+
+    assert _names_per_group(merged) == [["merge_art_a"], ["merge_art_b"]]
+
+
+def test_merge_three_groups_is_deterministic_across_input_orders() -> None:
+    x32 = _chosen(Feature("merge_x", data_type=DataType.INT32))
+    x64 = _chosen(Feature("merge_x", data_type=DataType.INT64))
+    y = _chosen(Feature("merge_y", compute_framework="PyArrowTable"))
+    items = list(_group({x32, x64, y}).items())
+    assert len(items) == 3
+
+    outcomes = set()
+    for order in itertools.permutations(items):
+        merged = _merge(dict(order))
+        assert len(merged) == 2
+        with_y = next(group for group in merged.values() if y in group)
+        outcomes.add(next(f.data_type for f in with_y if f.name == FeatureName("merge_x")))
+
+    assert len(outcomes) == 1

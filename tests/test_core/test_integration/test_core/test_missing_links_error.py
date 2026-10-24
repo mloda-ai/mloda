@@ -623,24 +623,16 @@ class LinkSideDownstream(FeatureGroup):
 class TestMissingLinksError:
     """Test suite for missing Links validation"""
 
-    def test_data_type_split_raises_at_plan_time(self) -> None:
-        with pytest.raises(ValueError) as exc_info:
-            mloda.prepare(
-                features=[Feature.int32_of("DtypeCombiner")],
-                links=set(),
-                compute_frameworks=[PyArrowTable],
-                plugin_collector=PluginCollector.enabled_feature_groups({SplitSourceDtype, DtypeCombiner}),
-            )
+    def test_distinct_names_with_differing_data_types_run_as_one_step(self) -> None:
+        results = mloda.run_all(
+            features=[Feature.int32_of("DtypeCombiner")],
+            links=set(),
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({SplitSourceDtype, DtypeCombiner}),
+        )
 
-        error_message = str(exc_info.value)
-        assert "DtypeCombiner" in error_message
-        assert "SplitSourceDtype" in error_message
-        assert "missing Links" in error_message
-        assert "separate steps" in error_message
-        assert "Link.inner_on(SplitSourceDtype, SplitSourceDtype)" not in error_message
-        # Discriminators match options only, so they cannot resolve a data-type split.
-        assert "left_discriminator" not in error_message
-        assert "data type" in error_message
+        values = [table.column("DtypeCombiner").to_pylist() for table in results]
+        assert values == [[110, 220, 330]]
 
     def test_direct_option_split_raises_at_plan_time(self) -> None:
         with pytest.raises(ValueError) as exc_info:
@@ -797,28 +789,19 @@ class TestMissingLinksError:
             "Error should not name 'scale': it only differs in an unrelated third bucket MetricCombiner never spans"
         )
 
-    def test_option_split_hint_silent_when_spanned_buckets_differ_only_by_data_type(self) -> None:
-        """Bug 1 (related false positive): DtypeCombiner splits SplitSourceDtype into two buckets
-        that differ only by data type (no option at all). An unrelated third bucket of the same
-        class (DtypeOptionSibling) differs by 'unit' elsewhere in the plan, but DtypeCombiner never
-        spans that bucket, so its error must not claim a differing-option cause."""
-        with pytest.raises(Exception) as exc_info:
-            mloda.run_all(
-                features=[Feature.int32_of("DtypeCombiner"), Feature.int32_of("DtypeOptionSibling")],
-                links=set(),
-                compute_frameworks=[PyArrowTable],
-                plugin_collector=PluginCollector.enabled_feature_groups(
-                    {SplitSourceDtype, DtypeCombiner, DtypeOptionSibling}
-                ),
-            )
-
-        error_message = str(exc_info.value)
-
-        assert "differing option" not in error_message.lower(), (
-            "The two buckets DtypeCombiner spans differ only by data type, not by any option; the "
-            "unrelated 'unit' split elsewhere must not be blamed"
+    def test_unrelated_option_bucket_does_not_block_merged_data_type_step(self) -> None:
+        results = mloda.run_all(
+            features=[Feature.int32_of("DtypeCombiner"), Feature.int32_of("DtypeOptionSibling")],
+            links=set(),
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {SplitSourceDtype, DtypeCombiner, DtypeOptionSibling}
+            ),
         )
-        assert "unlinked sources (missing Links)" in error_message
+
+        by_name = {name: table.column(name).to_pylist() for table in results for name in table.column_names}
+        assert by_name["DtypeCombiner"] == [110, 220, 330]
+        assert by_name["DtypeOptionSibling"] == [10, 20, 30]
 
     def test_option_split_hint_does_not_blame_a_harmless_intermediate_split(self) -> None:
         """Bug 2: X5Intermediate (non-root) splits into two option buckets, but that split causes no

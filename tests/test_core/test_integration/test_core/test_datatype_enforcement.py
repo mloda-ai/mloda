@@ -7,6 +7,9 @@ from mloda.user import Feature
 from mloda.user import Features
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
+from mloda.provider import ComputeFramework
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda.user import DataType
 from mloda.user import Options
 from mloda.user import ParallelizationMode
@@ -59,6 +62,49 @@ class Int64DataSource(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"Int64DataSource"}
+
+
+class ReducerRawSource(DataCreatorFeatureGroup):
+    """Source of raw rows (key, val) for the row-reducing group below."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"raw_key", "raw_val"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        values = {"raw_key": [1, 1, 2], "raw_val": [10, 20, 40]}
+        return {name: values[name] for name in features.get_all_names()}
+
+
+class RowReducer(FeatureGroup):
+    """Groups by raw_key and returns the whole reduced frame, replacing the framework data."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"red_sum", "red_max"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PyArrowTable, PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("raw_key"), Feature("raw_val")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        agg = data.group_by("raw_key").aggregate([("raw_val", "sum"), ("raw_val", "max")]).sort_by("raw_key")
+        columns = {
+            "raw_key": agg.column("raw_key"),
+            "red_sum": agg.column("raw_val_sum"),
+            "red_max": agg.column("raw_val_max"),
+        }
+        names = {str(n) for n in features.get_all_names()}
+        return pa.table({k: v for k, v in columns.items() if k == "raw_key" or k in names})
 
 
 class TestDataTypeEnforcementSeparation:
@@ -382,6 +428,39 @@ class TestEndToEndIntegration:
         result = run_result.results[0]
         assert "StringDataSource" in result.column_names
         assert result.to_pydict()["StringDataSource"] == ["a", "b", "c"]
+
+
+@PARALLELIZATION_MODES_SYNC_THREADING
+class TestRowReducingGroupBatching:
+    """Features of one row-reducing group on the same framework run as one step."""
+
+    @staticmethod
+    def _run(features: list[Feature], modes: set[ParallelizationMode], flight_server: Any) -> dict[str, list[Any]]:
+        run_result = MlodaTestRunner.run_api(
+            Features(features),
+            parallelization_modes=modes,
+            flight_server=flight_server,
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({ReducerRawSource, RowReducer}),
+        )
+        assert len(run_result.results) == 1
+        return {k: list(v) for k, v in run_result.results[0].to_pydict().items()}
+
+    def test_different_data_types_run_as_one_step(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        out = self._run([Feature.int64_of("red_sum"), Feature.int32_of("red_max")], modes, flight_server)
+
+        assert out["red_sum"] == [30, 40]
+        assert out["red_max"] == [20, 40]
+
+    def test_pinned_and_unpinned_framework_run_as_one_step(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        out = self._run(
+            [Feature("red_sum", compute_framework="PyArrowTable"), Feature("red_max")], modes, flight_server
+        )
+
+        assert out["red_sum"] == [30, 40]
+        assert out["red_max"] == [20, 40]
 
 
 class TestValidatorEdgeCases:

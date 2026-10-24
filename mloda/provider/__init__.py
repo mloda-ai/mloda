@@ -34,6 +34,7 @@ from mloda.core.abstract_plugins.implementation_pin_error import ImplementationP
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.abstract_plugins.hook_context import OutputSchema as OutputSchema
 from mloda.core.abstract_plugins.hook_context import HookContext as HookContext
+from mloda.core.abstract_plugins.hook_context import instrument as instrument
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement as ConnectionRequirement
 from mloda.core.abstract_plugins.compute_framework import EmptyResultError as EmptyResultError
 
@@ -170,6 +171,7 @@ __all__ = [
     "ComputeFramework",
     "OutputSchema",
     "HookContext",
+    "instrument",
     "ConnectionRequirement",
     "EmptyResultError",
     # Utilities

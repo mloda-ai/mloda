@@ -137,7 +137,7 @@ def test_subclass_sibling_plain_hops_both_survive_under_every_hash_seed() -> Non
 
 
 # ScRootA and ScRootB(ScRootA) are related only by subclassing for code reuse: each is its own
-# independent generated root with zero shared physical lineage. Since the two parents share no
+# independent data creator root with zero shared physical lineage. Since the two parents share no
 # ancestor, the plan must reject this shape deterministically at plan-build time with a "missing
 # Links" ValueError under every hash seed, for both the cross-framework and same-framework variants,
 # never a crash (from the candidate loop in `prepare_tfs_right_cfw` / `_drop_tfs_source_if_possible`

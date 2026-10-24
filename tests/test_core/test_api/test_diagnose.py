@@ -12,7 +12,7 @@ Contract under test:
       - configuration error: ``complete is False``, ``records == []``, ``message`` equals the raised ValueError text.
 
 All fixture feature-group names carry an ``_812`` suffix and root feature names a ``diagnose_`` prefix: test
-feature groups become global subclasses and a generated-name claim is registry-wide, so a shared name would
+feature groups become global subclasses and a data creator group's name claim is registry-wide, so a shared name would
 leak into another module's candidate universe in the parallel suite.
 """
 

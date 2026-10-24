@@ -15,7 +15,7 @@ Contract under test:
     ``engine.resolution_records``; the failing feature's own record is not appended.
 
 All fixture feature-group names carry an ``_811`` suffix and all root feature names a ``res_report_`` prefix:
-test feature groups become global subclasses and a generated-name claim is registry-wide, so a shared name
+test feature groups become global subclasses and a data creator group's name claim is registry-wide, so a shared name
 would leak into another module's candidate universe in the parallel suite.
 """
 

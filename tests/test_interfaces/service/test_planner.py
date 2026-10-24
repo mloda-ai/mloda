@@ -781,7 +781,7 @@ class TestRowLimits:
 
 
 class PlannerApiSourceMcp4(DataCreatorFeatureGroup):
-    """A generated root: its compute step has no source."""
+    """A data creator root: its compute step has no source."""
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:

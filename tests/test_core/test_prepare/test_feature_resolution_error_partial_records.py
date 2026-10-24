@@ -10,8 +10,8 @@ Contract under test (PR #836):
     setup-phase configuration errors, and the ``_defer_planning`` / ``auto_plan`` / ``Engine.plan`` hack is gone.
 
 All fixture feature-group names carry an ``_836pr`` suffix and root feature names a ``partial_records_`` prefix:
-test feature groups become global subclasses and a data creator group's name claim is registry-wide, so a shared name would
-leak into another module's candidate universe in the parallel suite.
+test feature groups become global subclasses and a data creator group's name claim is registry-wide, so a shared
+name would leak into another module's candidate universe in the parallel suite.
 """
 
 import inspect

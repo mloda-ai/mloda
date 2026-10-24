@@ -444,7 +444,7 @@ PGP_MISSING_PREFIX = f"required option(s) {PGP_KEY} are absent after declared de
 
 
 class PlainRootPgp(DataCreatorFeatureGroup):
-    """Matches through the generated root rule; the required key has no default."""
+    """Matches through the data creator root rule; the required key has no default."""
 
     PROPERTY_MAPPING = {PGP_KEY: property_spec("required, no default")}
 

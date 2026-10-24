@@ -103,7 +103,7 @@ class _NonRootFeatureGroup:
     pass
 
 
-class _GeneratedStub(DataCreatorFeatureGroup):
+class _DataCreatorStub(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: Any) -> Any:
         return {}
@@ -218,7 +218,7 @@ class AppendColumnsFrameworkTestMixin:
         else:
             assert [r["new_col"] for r in records_from_frame(out)] == result["new_col"]
 
-    @pytest.mark.parametrize("group, appends", [(_NonRootFeatureGroup, True), (_GeneratedStub, False)])
+    @pytest.mark.parametrize("group, appends", [(_NonRootFeatureGroup, True), (_DataCreatorStub, False)])
     def test_dict_append_on_pinned_joined_frame(
         self, framework_instance: Any, joined_data: Any, group: Any, appends: bool
     ) -> None:

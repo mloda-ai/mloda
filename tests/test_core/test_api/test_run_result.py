@@ -20,7 +20,7 @@ Contract under test:
     ambiguous name raises ``ValueError``.
 
 The chained ``plan_info_sales__mean_aggr`` request reuses the feature groups registered by
-``tests/test_core/test_api/test_plan_info.py`` so no new registry-wide generated-name claim is made.
+``tests/test_core/test_api/test_plan_info.py`` so no new registry-wide data creator group's name claim is made.
 """
 
 import collections.abc

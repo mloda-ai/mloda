@@ -18,7 +18,7 @@ from mloda_plugins.feature_group.experimental.source_input_feature import (
 )
 
 
-class _InputFeatureGeneratedBase(DataCreatorFeatureGroup):
+class _InputFeatureDataCreatorBase(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"input_feature"}
@@ -37,7 +37,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
 
         # 2. Create the Dynamic Feature Group
         DynamicFeatureGroupCreator.create(
-            properties, class_name="DynamicTestFeatureGroupSimpleCalc", feature_group_cls=_InputFeatureGeneratedBase
+            properties, class_name="DynamicTestFeatureGroupSimpleCalc", feature_group_cls=_InputFeatureDataCreatorBase
         )
 
         # 3. Define the Features
@@ -60,7 +60,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
         where an aggregated feature is created from two source features.
         """
 
-        # 1. Create generated Source Features
+        # 1. Create data creator source features
         class SourceFeature1(DataCreatorFeatureGroup):
             @classmethod
             def feature_names_supported(cls) -> set[str]:

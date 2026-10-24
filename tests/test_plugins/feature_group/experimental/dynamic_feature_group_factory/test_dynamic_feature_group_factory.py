@@ -25,7 +25,7 @@ class _StubInputData(BaseInputData):
     pass
 
 
-class _GeneratedFileFeatureBase(SourceInputFeature, DataCreatorFeatureGroup):
+class _DataCreatorFileFeatureBase(SourceInputFeature, DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"test_file_feature"}
@@ -82,7 +82,7 @@ class TestDynamicFeatureGroupFactory:
 
         # Create a dynamic feature group
         DynamicTestFeatureGroup = DynamicFeatureGroupCreator.create(
-            properties, class_name="DynamicTestFileFeatureGroup", feature_group_cls=_GeneratedFileFeatureBase
+            properties, class_name="DynamicTestFileFeatureGroup", feature_group_cls=_DataCreatorFileFeatureBase
         )
 
         # Test match criteria

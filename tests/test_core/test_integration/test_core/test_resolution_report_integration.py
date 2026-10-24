@@ -6,7 +6,7 @@ off raw columns produced by a ``DataCreatorFeatureGroup`` source, so the report 
 aggregations (``requested=True``) and their derived source columns (``requested=False``).
 
 Everything carries an ``_811`` suffix: the source becomes a global FeatureGroup subclass and its
-generated-name claim is registry-wide, so shared names would leak into another module's candidate
+data creator group's name claim is registry-wide, so shared names would leak into another module's candidate
 universe in the parallel suite.
 """
 
@@ -30,7 +30,7 @@ AVG_FEATURE = "avg_res_report_e2e_revenue_811"
 
 
 class ResReportE2ESource_811(ATestDataCreator):
-    """Generated source whose raw columns the shipped aggregations chain off."""
+    """Data creator source whose raw columns the shipped aggregations chain off."""
 
     compute_framework = PandasDataFrame
 
@@ -44,7 +44,7 @@ class ResReportE2ESource_811(ATestDataCreator):
 
 
 def _prepared_session() -> mlodaAPI:
-    """Prepare a real plan for two aggregations chaining off the generated source."""
+    """Prepare a real plan for two aggregations chaining off the data creator source."""
     f_sum = Feature(
         SUM_FEATURE,
         Options(context={AggregatedFeatureGroup.AGGREGATION_TYPE: "sum", DefaultOptionKeys.in_features: SALES_COL}),
@@ -91,7 +91,7 @@ class TestResolutionReportEndToEnd_811:
             assert matches[0].result.failure_kind is None
             assert AggregatedFeatureGroup in matches[0].result.identified
 
-        # Each derived source column resolves (requested=False) to our generated source.
+        # Each derived source column resolves (requested=False) to our data creator source.
         for source_name in (SALES_COL, REVENUE_COL):
             matches = [record for record in report_after if record.feature_name == source_name]
             assert len(matches) == 1, f"expected exactly one record for {source_name}"

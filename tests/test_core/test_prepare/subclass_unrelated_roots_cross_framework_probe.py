@@ -1,5 +1,5 @@
 """Prints one json line with the result a fresh interpreter plans and runs for a consumer
-reading two ROOT generated features whose feature groups are related only by subclassing
+reading two ROOT data creator features whose feature groups are related only by subclassing
 (ScRootB(ScRootA)) for code reuse, share NO physical lineage at all, and sit on two DIFFERENT
 compute frameworks. No test_ prefix, so pytest never collects it; the regression test runs it
 as a script under several PYTHONHASHSEED values.

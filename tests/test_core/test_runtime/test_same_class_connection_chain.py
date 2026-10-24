@@ -48,7 +48,7 @@ class ChainSameClassDuckDBFG(FeatureGroup):
 
 
 class ChainSameClassRootDuckDBFG(ChainSameClassDuckDBFG, DataCreatorFeatureGroup):
-    """Same shape, but chain_a is a generated root, matched by name; the framework binds the collection's connection."""
+    """Same shape, but chain_a is a data creator root, matched by name; the framework binds the connection."""
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed.")
@@ -87,7 +87,7 @@ class TestSameClassChainKeepsConnection:
         assert "connection_handle" in str(raised.value)
 
     def test_global_scope_dac_same_class_chain_resolves(self) -> None:
-        """chain_a is a generated root matched by name; chain_b needs the same bound connection."""
+        """chain_a is a data creator root matched by name; chain_b needs the same bound connection."""
         conn = duckdb.connect()
         plugin_collector = PluginCollector.enabled_feature_groups({ChainSameClassRootDuckDBFG})
 

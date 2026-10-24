@@ -443,7 +443,10 @@ class TestOperationGroupImplementationCapability:
         assert matrix["PandasDataFrame"] == frozenset({"sum"})
         assert matrix["PyArrowTable"] == frozenset({"sum"})
         median = Options({toy.OPTOY_KEY: "median"})
-        assert toy.OpToyNarrowFG.supports_compute_framework(toy.OPTOY_FEATURE, median, toy.PandasDataFrame) is False
+        total = Options({toy.OPTOY_KEY: "sum"})
+        feature = toy.OpToyNarrowFG.FEATURE
+        assert toy.OpToyNarrowFG.supports_compute_framework(feature, median, toy.PandasDataFrame) is False
+        assert toy.OpToyNarrowFG.supports_compute_framework(feature, total, toy.PandasDataFrame) is True
 
     @pytest.mark.parametrize(
         ("group_name", "message"),
@@ -462,6 +465,7 @@ class TestOperationGroupImplementationCapability:
 
         assert len(docs) == 1
         assert docs[0].subtype_error is not None
+        assert "supports_compute_framework" in docs[0].subtype_error
 
     def test_subtype_support_matrix_reads_the_implementations(self, make_implementation: Any) -> None:
         toy = _toy_operation()
@@ -488,7 +492,7 @@ class TestOperationGroupImplementationCapability:
             return bool(toy.OpToyFG.supports_compute_framework(toy.OPTOY_FEATURE, options, toy.PandasDataFrame))
 
         with accessible_implementations({child, toy.OpToyPyArrow}):
-            # The matrix reads only the implementations' supported, so an accepts restriction is not reflected.
+            # The matrix does not reflect accepts.
             assert toy.OpToyFG.subtype_support_matrix()["PandasDataFrame"] == frozenset({"sum", "median"})
             assert probe("median", True) is False
             assert probe("sum", True) is True

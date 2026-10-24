@@ -287,7 +287,9 @@ class TestPluginCollectorFor:
                 kept = getattr(copy_of, name)
                 if isinstance(value, set):
                     assert kept is not value
-                    assert kept >= value
+                    if copy_of is collector and name == "disabled_feature_group_classes":
+                        continue
+                    assert kept == value
                 else:
                     assert kept == value
         assert direct.disabled_feature_group_classes == disabled_before

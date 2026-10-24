@@ -134,7 +134,8 @@ implementations) and `get_feature_group_docs()` (`subtype_key`, `subtypes`,
 hand-overridden `supports_compute_framework` (ordinary or operation group)
 yields no declared matrix and surfaces as `subtype_error`. An operation group's
 matrix is its implementations' `supported` intersected with the group's
-`SUBTYPES.supported`; only `accepts` narrows features at match time without
+`SUBTYPES.supported`, whose keys are checked against the frameworks its loaded
+implementations serve; `accepts` narrows features at match time without
 showing there. `resolve_feature(name, options=...)` gives the exact answer.
 
 **The data user** sees the outcome on `resolve_feature(name, options=...)`:

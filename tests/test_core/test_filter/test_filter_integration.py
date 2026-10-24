@@ -10,8 +10,7 @@ from mloda.user import DataAccessCollection, FeatureName, PluginCollector, mloda
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG  # noqa: F401
-from mloda.provider import BaseInputData, SourceMatch
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup, SourceMatch
 from mloda.user import Options
 from mloda.user import GlobalFilter
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -26,11 +25,7 @@ from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_ALL
 
 
-class GlobalFilterBasicTest(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
-
+class GlobalFilterBasicTest(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         if len(features.filters) != 1:  # type: ignore
@@ -48,8 +43,8 @@ class GlobalFilterBasicTest(FeatureGroup):
 
 class GlobalFilterFromDifferentColumnTest(GlobalFilterBasicTest):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"GlobalFilterFromDifferentColumn1", "GlobalFilterFromDifferentColumn2"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"GlobalFilterFromDifferentColumn1", "GlobalFilterFromDifferentColumn2"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -92,8 +87,8 @@ class GlobalFilterKeepIndexDerivedTest(FeatureGroup):
 
 class GlobalFilterHasDifferentNameTest(GlobalFilterBasicTest):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"GlobalFilterHasDifferentName1", "GlobalFilterHasDifferentName2"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"GlobalFilterHasDifferentName1", "GlobalFilterHasDifferentName2"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

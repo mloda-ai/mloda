@@ -7,10 +7,8 @@ Functions return data/results that can be used in subsequent cells.
 
 from copy import copy
 from typing import Any
-from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -30,11 +28,11 @@ import numpy as np
 import pandas as pd
 
 
-# Create a DataCreator feature group for our sample data
-class SklearnDataCreator(FeatureGroup):
+# Feature group for our sample data
+class SklearnDataCreator(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"age", "weight", "state", "gender"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"age", "weight", "state", "gender"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -129,7 +127,7 @@ def cell2_traditional_sklearn_pipeline(data: Any) -> None:
 
 
 def cell4_mloda_approach() -> Any:
-    """mloda approach - using DataCreator pattern."""
+    """mloda approach."""
     from mloda.user import PluginCollector
     from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
     from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding as PandasEncoding
@@ -222,10 +220,10 @@ def cell5_demonstrate_feature_chaining() -> None:
 def cell6_reusability_demo() -> None:
     """Demonstrate reusability with new data."""
 
-    class SecondSklearnDataCreator(FeatureGroup):
+    class SecondSklearnDataCreator(DataCreatorFeatureGroup):
         @classmethod
-        def input_data(cls) -> BaseInputData | None:
-            return DataCreator({"age", "weight", "state", "gender"})
+        def feature_names_supported(cls) -> set[str]:
+            return {"age", "weight", "state", "gender"}
 
         @classmethod
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

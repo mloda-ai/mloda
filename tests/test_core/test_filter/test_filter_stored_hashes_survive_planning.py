@@ -14,7 +14,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.filter.single_filter import SingleFilter
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, DefaultOptionKeys, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, DefaultOptionKeys, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import (
     Feature,
     FeatureName,
@@ -56,12 +56,12 @@ def _stored_filters(global_filter: GlobalFilter) -> list[SingleFilter]:
     ]
 
 
-class SphrRenamingRoot(FeatureGroup):
+class SphrRenamingRoot(DataCreatorFeatureGroup):
     """Root that renames the filter column via set_feature_name."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({SPHR_VALUE, SPHR_EVENT_TIME})
+    def feature_names_supported(cls) -> set[str]:
+        return {SPHR_VALUE, SPHR_EVENT_TIME}
 
     def set_feature_name(self, config: Options, feature_name: FeatureName) -> FeatureName:
         if str(feature_name) == SPHR_EVENT_TIME:
@@ -99,12 +99,12 @@ def test_a_renaming_run_keeps_every_probed_filter_findable() -> None:
     assert _stranded(global_filter.collection.values()) == [], "a collected filter must be findable in its own set"
 
 
-class SphnRoot(FeatureGroup):
+class SphnRoot(DataCreatorFeatureGroup):
     """Root serving the leaf column the shared nested Feature names."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({SPHN_LEAF})
+    def feature_names_supported(cls) -> set[str]:
+        return {SPHN_LEAF}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

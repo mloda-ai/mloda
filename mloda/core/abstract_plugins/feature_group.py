@@ -31,7 +31,6 @@ from mloda.core.abstract_plugins.components.property_spec import PropertySpec, i
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda.core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -686,9 +685,6 @@ class FeatureGroup(ABC):
 
         if input_data_class is None:
             return False
-
-        if isinstance(input_data_class, DataCreator):
-            return input_data_class.matches(feature_name, options, None)
 
         return input_data_class.matches(feature_name, options, data_access_collection)
 

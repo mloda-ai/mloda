@@ -30,7 +30,7 @@ from mloda.interfaces.service.planner import (
     Planner,
     _inline_alias,
 )
-from mloda.provider import ApiDataFG, BaseInputData, DataCreator, FeatureSet, ResolutionDiagnosis, SourceMatch
+from mloda.provider import ApiDataFG, DataCreatorFeatureGroup, FeatureSet, ResolutionDiagnosis, SourceMatch
 from mloda.user import PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
@@ -780,12 +780,12 @@ class TestRowLimits:
         assert CsvFG.count_rows(SourceMatch(source=path, access=path), PythonDictFramework) == 5
 
 
-class PlannerApiSourceMcp4(FeatureGroup):
-    """A DataCreator root: its compute step has no source."""
+class PlannerApiSourceMcp4(DataCreatorFeatureGroup):
+    """A data creator root: its compute step has no source."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"mcp4_api_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"mcp4_api_value"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

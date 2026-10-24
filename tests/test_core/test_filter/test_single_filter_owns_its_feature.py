@@ -19,7 +19,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import DataCreator, PropertySpec
+from mloda.provider import DataCreatorFeatureGroup, PropertySpec
 from mloda.user import DataType, Feature, FilterType, GlobalFilter, Options, PluginCollector, SingleFilter, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
@@ -44,12 +44,12 @@ SFO_CFW_FEATURE = "sfo_cfw_feature"
 def _make_shared_fg(name: str, property_mapping: dict[str, PropertySpec]) -> type[FeatureGroup]:
     """A throwaway root feature group serving one name and reporting the filters it received."""
 
-    class SfoSharedFeatureGroup(FeatureGroup):
+    class SfoSharedFeatureGroup(DataCreatorFeatureGroup):
         PROPERTY_MAPPING = property_mapping
 
         @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator({name})
+        def feature_names_supported(cls) -> set[str]:
+            return {name}
 
         @classmethod
         def final_filters(cls) -> bool:
@@ -187,10 +187,10 @@ def _make_cached_input_chain() -> tuple[Feature, type[FeatureGroup], type[Featur
     """A consumer whose ``input_features`` hands out one cached ``Feature``, plus the root serving it."""
     cached = Feature(SFO_CACHED_FEATURE)
 
-    class SfoCachedRoot(FeatureGroup):
+    class SfoCachedRoot(DataCreatorFeatureGroup):
         @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator({SFO_CACHED_FEATURE})
+        def feature_names_supported(cls) -> set[str]:
+            return {SFO_CACHED_FEATURE}
 
         @classmethod
         def final_filters(cls) -> bool:

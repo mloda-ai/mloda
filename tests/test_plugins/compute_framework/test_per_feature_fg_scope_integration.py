@@ -10,8 +10,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -24,12 +23,12 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 
 
-class Source508A(FeatureGroup):
+class Source508A(DataCreatorFeatureGroup):
     """Source A: provides the shared "subject_token" plus "scoping_value_a"."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"subject_token", "scoping_value_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"subject_token", "scoping_value_a"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -39,12 +38,12 @@ class Source508A(FeatureGroup):
         }
 
 
-class Source508B(FeatureGroup):
+class Source508B(DataCreatorFeatureGroup):
     """Source B: also provides the shared "subject_token" plus "scoping_value_b"."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"subject_token", "scoping_value_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"subject_token", "scoping_value_b"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -125,14 +124,14 @@ def test_unscoped_derived_feature_is_ambiguous(flight_server: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-class Source508CounterA(FeatureGroup):
+class Source508CounterA(DataCreatorFeatureGroup):
     """Source A with a class-level call counter, providing subject_token + counter_value_a."""
 
     calls = 0
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"subject_token", "counter_value_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"subject_token", "counter_value_a"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -143,12 +142,12 @@ class Source508CounterA(FeatureGroup):
         }
 
 
-class Source508CounterB(FeatureGroup):
+class Source508CounterB(DataCreatorFeatureGroup):
     """Source B, providing the shared subject_token plus counter_value_b (creates ambiguity)."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"subject_token", "counter_value_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"subject_token", "counter_value_b"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -209,12 +208,12 @@ def test_scoped_key_shares_read_with_siblings(flight_server: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-class Source508IndepA(FeatureGroup):
+class Source508IndepA(DataCreatorFeatureGroup):
     """Source A: provides subject_token plus value_a."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"subject_token", "value_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"subject_token", "value_a"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -224,12 +223,12 @@ class Source508IndepA(FeatureGroup):
         }
 
 
-class Source508IndepB(FeatureGroup):
+class Source508IndepB(DataCreatorFeatureGroup):
     """Source B: provides subject_token plus value_b."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"subject_token", "value_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"subject_token", "value_b"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

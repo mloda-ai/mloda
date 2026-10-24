@@ -9,6 +9,7 @@ Structure:
 """
 
 import importlib.util
+import inspect
 import os
 
 
@@ -132,7 +133,7 @@ def test_import_provider_base_classes() -> None:
         # Input data
         BaseInputData,
         ApiDataFG,
-        DataCreator,
+        DataCreatorFeatureGroup,
         # Artifact
         BaseArtifact,
         # Validators
@@ -178,7 +179,8 @@ def test_import_provider_base_classes() -> None:
     # Input data
     assert BaseInputData is not None
     assert ApiDataFG is not None
-    assert DataCreator is not None
+    assert DataCreatorFeatureGroup is not None
+    assert inspect.isabstract(DataCreatorFeatureGroup)
     # Artifact
     assert BaseArtifact is not None
     # Validators

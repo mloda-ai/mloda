@@ -38,9 +38,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
-from mloda.provider import FeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
@@ -54,12 +52,12 @@ from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base 
 )
 
 
-class EmptyResultDefaultFeatureGroup(FeatureGroup):
+class EmptyResultDefaultFeatureGroup(DataCreatorFeatureGroup):
     """Root FeatureGroup that yields a schema-bearing zero-row result under default behavior."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"empty_result_default_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"empty_result_default_col"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -67,29 +65,21 @@ class EmptyResultDefaultFeatureGroup(FeatureGroup):
         # Every framework keeps the column at zero rows (state C), including python_dict.
         return {"empty_result_default_col": []}
 
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"empty_result_default_col"}
 
-
-class EmptyResultAllowedFeatureGroup(FeatureGroup):
+class EmptyResultAllowedFeatureGroup(DataCreatorFeatureGroup):
     """Root FeatureGroup that yields a schema-bearing zero-row result (one empty column)."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"empty_result_allowed_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"empty_result_allowed_col"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         # Columnar dict with one empty column -> zero rows after transform in every framework.
         return {"empty_result_allowed_col": []}
 
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"empty_result_allowed_col"}
 
-
-class EmptyResultSchemalessAllowedFeatureGroup(FeatureGroup):
+class EmptyResultSchemalessAllowedFeatureGroup(DataCreatorFeatureGroup):
     """Root FeatureGroup that yields a ZERO-COLUMN (schema-less) ``{}`` result.
 
     The ``{}`` returned here is schema-less (state B) on EVERY framework: ``transform``
@@ -98,34 +88,26 @@ class EmptyResultSchemalessAllowedFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"empty_result_schemaless_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"empty_result_schemaless_col"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         # Zero columns -> schema-less (state B) in every framework, now always raises.
         return {}
 
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"empty_result_schemaless_col"}
 
-
-class EmptyResultNoneFeatureGroup(FeatureGroup):
+class EmptyResultNoneFeatureGroup(DataCreatorFeatureGroup):
     """Root FeatureGroup whose ``calculate_feature`` returns ``None`` (state A)."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"empty_result_none_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"empty_result_none_col"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         # No result at all -> state A (rejected upstream of the guard, see module docstring).
         return None
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"empty_result_none_col"}
 
 
 _ENABLED_DEFAULT = PluginCollector.enabled_feature_groups({EmptyResultDefaultFeatureGroup})

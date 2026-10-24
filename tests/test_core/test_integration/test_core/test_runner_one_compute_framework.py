@@ -1,8 +1,7 @@
 from typing import Any
 import pyarrow as pa
 import pyarrow.compute as pc
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import DataAccessCollection
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
@@ -14,7 +13,7 @@ from mloda.user import Options
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 
 
-class EngineRunnerTest(FeatureGroup):
+class EngineRunnerTest(DataCreatorFeatureGroup):
     f_name = "EngineRunnerTest1"
 
     @classmethod
@@ -24,8 +23,8 @@ class EngineRunnerTest(FeatureGroup):
         return {cls.f_name: [1, 2, 3]}
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.f_name})
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.f_name}
 
 
 class EngineRunnerTest2(FeatureGroup):
@@ -67,7 +66,7 @@ class EngineRunnerTest3(FeatureGroup):
         return pc.multiply(data.column(cls.feature_2.name), 3)
 
 
-class EngineRunnerTest4(FeatureGroup):
+class EngineRunnerTest4(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         data = {
@@ -82,8 +81,8 @@ class EngineRunnerTest4(FeatureGroup):
         return pa.Table.from_arrays(arrays, schema=schema)
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{cls.get_class_name()}_{cnt}" for cnt in range(4)})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{cls.get_class_name()}_{cnt}" for cnt in range(4)}
 
 
 class SumFeature(FeatureGroup):

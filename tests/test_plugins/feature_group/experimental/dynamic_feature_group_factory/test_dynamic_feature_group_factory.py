@@ -1,5 +1,5 @@
 from typing import Any
-from mloda.provider import DataCreator, FeatureGroup
+from mloda.provider import BaseInputData, FeatureGroup, DataCreatorFeatureGroup
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.user import FeatureName
@@ -19,6 +19,16 @@ from mloda_plugins.feature_group.experimental.source_input_feature import (
     SourceTuple,
 )
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+
+
+class _StubInputData(BaseInputData):
+    pass
+
+
+class _DataCreatorFileFeatureBase(SourceInputFeature, DataCreatorFeatureGroup):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"test_file_feature"}
 
 
 class TestDynamicFeatureGroupFactory:
@@ -63,16 +73,16 @@ class TestDynamicFeatureGroupFactory:
     def test_dynamic_feature_group_creator_with_input_data_feature_group(self) -> None:
         # Example property dictionary
         properties: dict[str, Any] = {
-            "input_data": lambda: DataCreator({"test_file_feature"}),
             "calculate_feature": lambda cls, data, features: f"Calculated with {cls.__name__} and {data}",
             "match_feature_group_criteria": lambda cls, feature_name, options, data_access_collection: (
                 feature_name == FeatureName("test_file_feature")
             ),
+            "input_data": lambda: _StubInputData(),
         }
 
         # Create a dynamic feature group
         DynamicTestFeatureGroup = DynamicFeatureGroupCreator.create(
-            properties, class_name="DynamicTestFileFeatureGroup", feature_group_cls=SourceInputFeature
+            properties, class_name="DynamicTestFileFeatureGroup", feature_group_cls=_DataCreatorFileFeatureBase
         )
 
         # Test match criteria
@@ -80,8 +90,11 @@ class TestDynamicFeatureGroupFactory:
         assert DynamicTestFeatureGroup.match_feature_group_criteria(FeatureName("test_file_feature"), options)
         assert not DynamicTestFeatureGroup.match_feature_group_criteria(FeatureName("other_feature"), options)
 
-        # Test input data
-        assert isinstance(DynamicTestFeatureGroup.input_data(), DataCreator)
+        # Test generated names
+        assert DynamicTestFeatureGroup.feature_names_supported() == {"test_file_feature"}
+
+        # Test input_data property passthrough
+        assert isinstance(DynamicTestFeatureGroup.input_data(), _StubInputData)
 
         # Test calculate feature
         features = FeatureSet()
@@ -93,6 +106,7 @@ class TestDynamicFeatureGroupFactory:
         # Test that the created class is a subclass of FeatureGroup
         assert issubclass(DynamicTestFeatureGroup, FeatureGroup)
         assert issubclass(DynamicTestFeatureGroup, SourceInputFeature)
+        assert issubclass(DynamicTestFeatureGroup, DataCreatorFeatureGroup)
 
     def test_dynamic_feature_group_creator_consuming_a_document_group(self) -> None:
         properties: dict[str, Any] = {

@@ -46,7 +46,7 @@ Contract under test:
 A caller must reach all of this without importing anything from the internal execution-step
 package; ``TestCallerNeedsNoInternalImport`` locks that in for this module itself.
 
-Root feature names in this module carry a ``plan_info_`` prefix on purpose: a ``DataCreator``
+Root feature names in this module carry a ``plan_info_`` prefix on purpose: a ``DataCreatorFeatureGroup``
 claim is registry-wide, so generic names like ``sales`` would leak into every other test.
 """
 
@@ -78,12 +78,11 @@ from mloda.core.api.plan_lock import _lock_text
 from mloda.core.prepare.resolved_join import ResolvedJoinPlan
 from mloda.provider import (
     BaseFeatureGroupVersion,
-    BaseInputData,
     ClaimRoute,
     ComputeFramework,
-    DataCreator,
     FeatureGroup,
     FeatureSet,
+    DataCreatorFeatureGroup,
     Implementation,
     NamePolicy,
     OperationFeatureGroup,
@@ -139,12 +138,12 @@ from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import Parqu
 # ---------------------------------------------------------------------------
 
 
-class PlanInfoPandasSource(FeatureGroup):
+class PlanInfoPandasSource(DataCreatorFeatureGroup):
     """Pandas root source feeding the chained aggregation request."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"plan_info_sales", "plan_info_price"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plan_info_sales", "plan_info_price"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -155,12 +154,12 @@ class PlanInfoPandasSource(FeatureGroup):
         return {PandasDataFrame}
 
 
-class PlanInfoArrowSource(FeatureGroup):
+class PlanInfoArrowSource(DataCreatorFeatureGroup):
     """PyArrow root source: forces a transform step into the pandas aggregation group."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"plan_info_arrow_sales"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plan_info_arrow_sales"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -171,7 +170,7 @@ class PlanInfoArrowSource(FeatureGroup):
         return {PyArrowTable}
 
 
-class PlanInfoNeverExecutes(FeatureGroup):
+class PlanInfoNeverExecutes(DataCreatorFeatureGroup):
     """Plans fine, but blows up if anything actually executes it.
 
     ``explain()`` must never reach ``calculate_feature``, so a successful explain call over this
@@ -179,8 +178,8 @@ class PlanInfoNeverExecutes(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"plan_info_never_executed"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plan_info_never_executed"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -191,12 +190,12 @@ class PlanInfoNeverExecutes(FeatureGroup):
         return {PandasDataFrame}
 
 
-class PlanInfoLeftSource(FeatureGroup):
+class PlanInfoLeftSource(DataCreatorFeatureGroup):
     """Left side of the single-framework join scenario."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"plan_info_jid", "plan_info_left_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plan_info_jid", "plan_info_left_val"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -211,12 +210,12 @@ class PlanInfoLeftSource(FeatureGroup):
         return [Index(("plan_info_jid",))]
 
 
-class PlanInfoRightSource(FeatureGroup):
+class PlanInfoRightSource(DataCreatorFeatureGroup):
     """Right side of the single-framework join scenario."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"plan_info_jid", "plan_info_right_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plan_info_jid", "plan_info_right_val"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -251,12 +250,12 @@ class PlanInfoJoinConsumer(FeatureGroup):
         return {cls.get_class_name()}
 
 
-class PlanInfoCrossLeftPandas(FeatureGroup):
+class PlanInfoCrossLeftPandas(DataCreatorFeatureGroup):
     """Left side of the cross-framework join scenario: pandas."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"plan_info_xjid", "plan_info_xleft_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plan_info_xjid", "plan_info_xleft_val"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -271,7 +270,7 @@ class PlanInfoCrossLeftPandas(FeatureGroup):
         return [Index(("plan_info_xjid",))]
 
 
-class PlanInfoCrossRightArrow(FeatureGroup):
+class PlanInfoCrossRightArrow(DataCreatorFeatureGroup):
     """Right side of the cross-framework join scenario: pyarrow.
 
     Distinct framework from the left side, so a left/right swap in the plan records is
@@ -279,8 +278,8 @@ class PlanInfoCrossRightArrow(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"plan_info_xjid", "plan_info_xright_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plan_info_xjid", "plan_info_xright_val"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -335,12 +334,12 @@ class PlanInfoInvertedConsumer(FeatureGroup):
         return {cls.get_class_name()}
 
 
-class PlanInfoNestedOptionsSource(FeatureGroup):
+class PlanInfoNestedOptionsSource(DataCreatorFeatureGroup):
     """Root source whose values depend on a nested dict inside a group option."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"plan_info_nested_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plan_info_nested_value"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -354,12 +353,12 @@ class PlanInfoNestedOptionsSource(FeatureGroup):
         return {PandasDataFrame}
 
 
-class PlanInfoParentSource(FeatureGroup):
+class PlanInfoParentSource(DataCreatorFeatureGroup):
     """Parent root source; its subclass PlanInfoChildSource replaces it during resolution."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"plan_info_specialized_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plan_info_specialized_value"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -401,12 +400,12 @@ class PlanInfoPlainSpecializedConsumer(PlanInfoScopedSpecializedConsumer):
         return {Feature("plan_info_specialized_value")}
 
 
-class PlanInfoAnyFrameworkSource(FeatureGroup):
+class PlanInfoAnyFrameworkSource(DataCreatorFeatureGroup):
     """Root source without a compute_framework_rule, so the framework choice is the planner's."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"plan_info_any_framework_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plan_info_any_framework_value"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -2023,10 +2022,10 @@ class TestPlanLock:
 # ---------------------------------------------------------------------------
 
 
-class LeaveSqliteRoot(FeatureGroup):
+class LeaveSqliteRoot(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"leave_src"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"leave_src"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -2037,10 +2036,10 @@ class LeaveSqliteRoot(FeatureGroup):
         return {"leave_src": [1, 2, 3]}
 
 
-class LeaveDictRoot(FeatureGroup):
+class LeaveDictRoot(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"leave_dict_src"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"leave_dict_src"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

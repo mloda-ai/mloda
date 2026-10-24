@@ -10,7 +10,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, Index, JoinSpec, Link, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer import *  # noqa: F403
@@ -27,10 +27,10 @@ def _sum_columns(data: Any, name: str, columns: list[str]) -> Any:
     return data.append_column(name, total)
 
 
-class LsRootX(FeatureGroup):
+class LsRootX(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"ls_x"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"ls_x"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -45,10 +45,10 @@ class LsRootX(FeatureGroup):
         return [Index(("ls_xid",))]
 
 
-class LsRootW(FeatureGroup):
+class LsRootW(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"ls_w"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"ls_w"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -130,10 +130,10 @@ LsQ = _sum_group("LsQ", ("ls_p", "ls_w"), "ls_q", PyArrowTable)
 LsPqC = _sum_group("LsPqC", ("ls_p", "ls_q"), "ls_pqc", PandasDataFrame)
 
 
-class HdRootA(FeatureGroup):
+class HdRootA(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"hd_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"hd_a"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -144,10 +144,10 @@ class HdRootA(FeatureGroup):
         return {PyArrowTable}
 
 
-class HdRootB(FeatureGroup):
+class HdRootB(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"hd_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"hd_b"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -168,10 +168,10 @@ HdCTwoPandas = _sum_group("HdCTwoPandas", ("hd_q", "hd_p", "hd_p2"), "hd_c", Pan
 HdCPandas = _sum_group("HdCPandas", ("hd_q", "hd_p"), "hd_c", PandasDataFrame)
 
 
-class RtRoot(FeatureGroup):
+class RtRoot(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"rt_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"rt_a"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

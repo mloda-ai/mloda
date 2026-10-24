@@ -119,7 +119,7 @@ PROPERTY_MAPPING = {
 
 For feature groups not yet modernized, the default matching criteria still apply:
 
-1. **Root Feature with Matching Input Data**: The feature group is a root feature (has no dependencies) and its input data matches the feature.
+1. **Root Feature with Matching Input Data**: Applies to a root group whose `input_data()` returns a matching `BaseInputData`. A group that generates its own data subclasses `DataCreatorFeatureGroup` and declares names via rule 4 (Explicitly Supported).
 
 2. **Class Name Match**: The feature name exactly matches the feature group's class name.
    ```py

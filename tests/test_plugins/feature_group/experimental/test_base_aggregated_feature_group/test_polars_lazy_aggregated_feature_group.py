@@ -301,10 +301,10 @@ class TestPolarsLazyAggregatedZeroRow(PolarsLazyZeroRowAdapter, AggregatedZeroRo
 
 @pytest.mark.skipif(pl is None, reason="Polars not available")
 class TestPolarsLazyAggregationIntegration:
-    """Integration tests for the Polars Lazy aggregated feature group using DataCreator."""
+    """Integration tests for the Polars Lazy aggregated feature group."""
 
     def test_aggregation_with_data_creator(self) -> None:
-        """Test aggregation features with mloda using DataCreator."""
+        """Test aggregation features with mloda."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(

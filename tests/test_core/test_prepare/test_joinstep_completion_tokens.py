@@ -20,9 +20,8 @@ from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.core.prepare.resolve_links import LinkTrekker
-from mloda.provider import BaseInputData
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import ComputeFramework
-from mloda.provider import DataCreator
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -81,12 +80,12 @@ class TokenAppendSource(FeatureGroup):
     pass
 
 
-class TokenSelfSource(FeatureGroup):
+class TokenSelfSource(DataCreatorFeatureGroup):
     """Serves both sides of the self join; the requested feature name picks the side."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={SELF_LEFT_PAYLOAD, SELF_RIGHT_PAYLOAD})
+    def feature_names_supported(cls) -> set[str]:
+        return {SELF_LEFT_PAYLOAD, SELF_RIGHT_PAYLOAD}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

@@ -6,27 +6,28 @@ from typing import Any
 import pandas as pd
 
 from mloda.user import mloda
-from mloda.provider import FeatureGroup, FeatureSet, BaseInputData, DataCreator
-from mloda.user import DataAccessCollection, Domain, Feature, Options
+from mloda.provider import FeatureSet, DataCreatorFeatureGroup
+from mloda.user import DataAccessCollection, Domain, Feature, FeatureName, Options
 
 
-class MlLifeCycleDataCreator(DataCreator):
-    def matches(
-        self, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None = None
+class MlLifeCycleDataCreator(DataCreatorFeatureGroup):
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
-        # This match function is only adjusted as it is part of a larger project. Else this DataCreator might be found by other
-        # functionalities as well, e.g. in the testing framework. This should not be the case in a normal project.
+        # Match only when the MlLifeCycleDataCreator option is set, so other lookups do not find it.
         if options.get(MlLifeCycleDataCreator.__name__) is None:
             return False
-        if feature_name in self.feature_names:
-            return True
-        return False
+        return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 
 
-class OrderSyntheticDataSet(FeatureGroup):
+class OrderSyntheticDataSet(MlLifeCycleDataCreator):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return MlLifeCycleDataCreator({"order_id", "product_id", "quantity", "item_price", "created_at"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"order_id", "product_id", "quantity", "item_price", "created_at"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -48,8 +49,8 @@ class OrderSyntheticDataSet(FeatureGroup):
 
 class PaymentSyntheticDataSet(OrderSyntheticDataSet):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return MlLifeCycleDataCreator({"payment_id", "payment_type", "payment_status", "created_at", "valid_datetime"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"payment_id", "payment_type", "payment_status", "created_at", "valid_datetime"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -71,10 +72,10 @@ class PaymentSyntheticDataSet(OrderSyntheticDataSet):
         )
 
 
-class LocationSyntheticDataSet(FeatureGroup):
+class LocationSyntheticDataSet(MlLifeCycleDataCreator):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return MlLifeCycleDataCreator({"transaction_id", "user_location", "merchant_location", "update_date"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"transaction_id", "user_location", "merchant_location", "update_date"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -94,10 +95,10 @@ class LocationSyntheticDataSet(FeatureGroup):
         return Domain("Location")
 
 
-class CategoricalSyntheticDataSet(FeatureGroup):
+class CategoricalSyntheticDataSet(MlLifeCycleDataCreator):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return MlLifeCycleDataCreator({"transaction_id", "user_age_group", "product_category", "transaction_type"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"transaction_id", "user_age_group", "product_category", "transaction_type"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

@@ -10,7 +10,7 @@ import pandas as pd
 
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -21,17 +21,17 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 # ---------------------------------------------------------------------------
 
 
-class DedupParentsRootFG(FeatureGroup):
+class DedupParentsRootFG(DataCreatorFeatureGroup):
     """Pandas root exposing two distinct columns."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"dedup_col_x", "dedup_col_y"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"dedup_col_x", "dedup_col_y"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         # Return only the requested column(s): a compute framework's data holds what was
-        # asked for, not everything DataCreator could produce.
+        # asked for, not everything the group could produce.
         values = {"dedup_col_x": [1, 2, 3], "dedup_col_y": [100, 200, 300]}
         return pd.DataFrame({name: values[name] for name in features.get_all_names()})
 
@@ -66,8 +66,7 @@ class DedupParentsConsumerFG(FeatureGroup):
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
-        # is_root() is False for both variant requests (input_features declares a parent),
-        # so the DataCreator root-match path does not apply; name it here.
+        # Both variants declare a parent, so it is not a root; name the column here.
         return {"dedup_result"}
 
 

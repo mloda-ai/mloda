@@ -3,7 +3,7 @@ Integration test: api_data sets with Links and Joins.
 
 Three features:
 1. ApiDataFG (existing) - receives mloda data
-2. CreatorDataFeature (custom) - creates own data via DataCreator
+2. CreatorDataFeature (custom) - creates own data via DataCreatorFeatureGroup
 3. JoinedFeature (custom) - depends on both with a join
 """
 
@@ -16,8 +16,7 @@ from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Link, JoinSpec
 from mloda.user import Options
 from mloda.user import PluginCollector
@@ -29,12 +28,8 @@ from mloda.provider import ApiDataFG
 # ============================================================================
 # Feature B: Data Creator Feature
 # ============================================================================
-class CreatorDataFeature(FeatureGroup):
-    """Creates its own data via DataCreator."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"creator_id", "creator_value"})
+class CreatorDataFeature(DataCreatorFeatureGroup):
+    """Creates its own data via DataCreatorFeatureGroup."""
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -126,7 +121,7 @@ class TestApiLinkJoin:
 
     def test_api_creator_left_join(self) -> None:
         """
-        Test LEFT join between mloda data and DataCreator data.
+        Test LEFT join between mloda data and DataCreatorFeatureGroup data.
 
         mloda data (4 rows): ids 1, 2, 3, 4
         Creator data (3 rows): ids 1, 2, 3
@@ -149,7 +144,7 @@ class TestApiLinkJoin:
 
     def test_api_creator_append(self) -> None:
         """
-        Test APPEND between mloda data and DataCreator data.
+        Test APPEND between mloda data and DataCreatorFeatureGroup data.
 
         mloda data (2 rows)
         Creator data (3 rows)
@@ -174,20 +169,20 @@ class TestApiLinkJoin:
 # ============================================================================
 # Planning warning for a declared link that plans no join
 # ============================================================================
-class UnjoinedCustomers(FeatureGroup):
+class UnjoinedCustomers(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"ujc_id", "ujc_name"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"ujc_id", "ujc_name"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {"ujc_id": [1, 2], "ujc_name": ["a", "b"]}
 
 
-class UnjoinedOrders(FeatureGroup):
+class UnjoinedOrders(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"ujo_cust_id", "ujo_amount"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"ujo_cust_id", "ujo_amount"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -203,10 +198,10 @@ class UnjoinedNameAmount(FeatureGroup):
         return {cls.get_class_name(): data["ujc_name"] + data["ujo_amount"].astype(str)}
 
 
-class UnjoinedSelf(FeatureGroup):
+class UnjoinedSelf(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"ujs_id", "ujs_a", "ujs_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"ujs_id", "ujs_a", "ujs_b"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -215,8 +210,8 @@ class UnjoinedSelf(FeatureGroup):
 
 class UnjoinedSubCustomers(UnjoinedCustomers):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"ujsc_id", "ujsc_name"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"ujsc_id", "ujsc_name"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -225,8 +220,8 @@ class UnjoinedSubCustomers(UnjoinedCustomers):
 
 class UnjoinedSubOrders(UnjoinedOrders):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"ujso_cust_id", "ujso_amount"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"ujso_cust_id", "ujso_amount"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

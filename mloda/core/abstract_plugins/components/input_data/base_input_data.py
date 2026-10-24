@@ -174,7 +174,7 @@ class BaseInputData(ABC):
         options: Options,
         data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
-        """A bare BaseInputData claims nothing; DataCreator overrides this."""
+        """A bare BaseInputData claims nothing; override to claim names."""
         return False
 
     @classmethod

@@ -1,5 +1,5 @@
 """Prints one json line with the result a fresh interpreter plans and runs for a consumer
-reading two ROOT DataCreator features whose feature groups are related only by subclassing
+reading two ROOT data creator features whose feature groups are related only by subclassing
 (ScRootB(ScRootA)) for code reuse, share NO physical lineage at all, and sit on the SAME
 compute framework. No test_ prefix, so pytest never collects it; the regression test runs it
 as a script under several PYTHONHASHSEED values.
@@ -10,7 +10,7 @@ from typing import Any
 
 import pyarrow.compute as pc
 
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -18,10 +18,10 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 )
 
 
-class ScRootA(FeatureGroup):
+class ScRootA(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"sc_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"sc_a"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -33,11 +33,11 @@ class ScRootA(FeatureGroup):
 
 
 class ScRootB(ScRootA):
-    """Subclass of ScRootA for code reuse only; independent DataCreator, same framework."""
+    """Subclass of ScRootA for code reuse only; independent data creator group, same framework."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"sc_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"sc_b"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

@@ -7,15 +7,15 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
-class _ChildBootstrapFailureFeatureGroup(FeatureGroup):
+class _ChildBootstrapFailureFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"child_bootstrap_failure_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"child_bootstrap_failure_col"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

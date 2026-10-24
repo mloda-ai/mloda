@@ -4,9 +4,8 @@ resolves through ExecutionPlan.add_tfs's inner_ep.tfs_ids branch and produces co
 
 from typing import Any
 
-from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -26,10 +25,10 @@ RIGHT_VALUES = [100, 200, 300]
 SUMMED_VALUES = [110, 220, 330]
 
 
-class SftfsLeft(FeatureGroup):
+class SftfsLeft(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"sftfs_left_key", "sftfs_left_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"sftfs_left_key", "sftfs_left_value"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -44,10 +43,10 @@ class SftfsLeft(FeatureGroup):
         return {PandasDataFrame}
 
 
-class SftfsRight(FeatureGroup):
+class SftfsRight(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"sftfs_right_key", "sftfs_right_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"sftfs_right_key", "sftfs_right_value"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

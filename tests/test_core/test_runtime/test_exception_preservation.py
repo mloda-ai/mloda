@@ -29,7 +29,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
-from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet, SourceMatch
+from mloda.provider import FeatureSet, DataCreatorFeatureGroup, SourceMatch
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
@@ -49,12 +49,8 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 # --------------------------------------------------------------------------- #
 
 
-class ImportErrorFeatureGroup(FeatureGroup):
+class ImportErrorFeatureGroup(DataCreatorFeatureGroup):
     """Root FG whose ``calculate_feature`` raises a stdlib ``ImportError``."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"exc_import_error_col"})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -69,12 +65,8 @@ class MyDomainError(ValueError):
     """Custom domain error that is also a ``ValueError`` subclass."""
 
 
-class DomainErrorFeatureGroup(FeatureGroup):
+class DomainErrorFeatureGroup(DataCreatorFeatureGroup):
     """Root FG whose ``calculate_feature`` raises a ``ValueError`` subclass."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"exc_domain_error_col"})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -85,12 +77,8 @@ class DomainErrorFeatureGroup(FeatureGroup):
         return {"exc_domain_error_col"}
 
 
-class CauseChainFeatureGroup(FeatureGroup):
+class CauseChainFeatureGroup(DataCreatorFeatureGroup):
     """Root FG that raises ``ValueError`` from a ``KeyError`` (``__cause__`` chain)."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"exc_cause_chain_col"})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -123,12 +111,8 @@ _LEAK_DSN = f"host=h password={_LEAK_MARKER} dbname=d"
 _LEAK_MESSAGE = f"failed for {_LEAK_PRESIGNED_URL} and {_LEAK_USERINFO_URL} and {_LEAK_DSN}"
 
 
-class SecretLeakFeatureGroup(FeatureGroup):
+class SecretLeakFeatureGroup(DataCreatorFeatureGroup):
     """Root FG whose ``calculate_feature`` raises an ``OSError`` carrying three credential shapes."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"exc_secret_leak_col"})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -139,12 +123,8 @@ class SecretLeakFeatureGroup(FeatureGroup):
         return {"exc_secret_leak_col"}
 
 
-class SecretLeakChainedFeatureGroup(FeatureGroup):
+class SecretLeakChainedFeatureGroup(DataCreatorFeatureGroup):
     """Root FG that raises ``RuntimeError`` from an ``OSError`` carrying the same credential shapes."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"exc_secret_leak_chained_col"})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -163,12 +143,8 @@ class UnpicklableSecretLeakError(RuntimeError):
         self.lock = threading.Lock()  # not picklable
 
 
-class UnpicklableSecretLeakFeatureGroup(FeatureGroup):
+class UnpicklableSecretLeakFeatureGroup(DataCreatorFeatureGroup):
     """Root FG whose ``calculate_feature`` raises a non-picklable, secret-bearing exception."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"exc_unpicklable_secret_col"})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -191,12 +167,8 @@ class RowLeakError(ValueError):
     """A specific error type for testing row leakage."""
 
 
-class RowLeakFeatureGroup(FeatureGroup):
+class RowLeakFeatureGroup(DataCreatorFeatureGroup):
     """Root FG whose ``calculate_feature`` raises an error carrying row values."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"exc_row_leak_col"})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -207,12 +179,8 @@ class RowLeakFeatureGroup(FeatureGroup):
         return {"exc_row_leak_col"}
 
 
-class RowLeakChainedFeatureGroup(FeatureGroup):
+class RowLeakChainedFeatureGroup(DataCreatorFeatureGroup):
     """Root FG that raises ``RuntimeError`` from a ``RowLeakError``."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"exc_row_leak_chained_col"})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -468,12 +436,8 @@ class UnpicklableError(RuntimeError):
         self.lock = threading.Lock()  # not picklable
 
 
-class UnpicklableErrorFeatureGroup(FeatureGroup):
+class UnpicklableErrorFeatureGroup(DataCreatorFeatureGroup):
     """Root FG whose ``calculate_feature`` raises a non-picklable exception."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"exc_unpicklable_col"})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

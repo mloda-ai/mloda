@@ -19,7 +19,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import DataCreator, PropertySpec
+from mloda.provider import DataCreatorFeatureGroup, PropertySpec
 from mloda.user import FeatureName, FilterType, GlobalFilter, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -95,12 +95,12 @@ def _explicit_none_options(probe: _Probe) -> Options:
 def _make_host_fg(probe: _Probe) -> type[FeatureGroup]:
     """A throwaway root FeatureGroup serving the host and the filter feature, echoing its option view."""
 
-    class FenFilterHostFeatureGroup(FeatureGroup):
+    class FenFilterHostFeatureGroup(DataCreatorFeatureGroup):
         PROPERTY_MAPPING = {probe.key: probe.spec}
 
         @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator({probe.root, probe.root_b, probe.target})
+        def feature_names_supported(cls) -> set[str]:
+            return {probe.root, probe.root_b, probe.target}
 
         @classmethod
         def final_filters(cls) -> bool:

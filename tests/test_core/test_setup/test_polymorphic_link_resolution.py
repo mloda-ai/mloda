@@ -10,13 +10,11 @@ during the data joining phase. Covers:
 
 from typing import Any
 
-from mloda.provider import FeatureGroup
+from mloda.provider import FeatureGroup, DataCreatorFeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
 from mloda.user import JoinSpec, Link
 from mloda.user import Options
 from mloda.user import PluginCollector
@@ -28,7 +26,7 @@ from mloda.provider import ApiDataFG
 # =============================================================================
 # Base Classes
 # =============================================================================
-class BaseFeatureGroupA(FeatureGroup):
+class BaseFeatureGroupA(DataCreatorFeatureGroup):
     """Base class A - provides index_columns()."""
 
     FEATURE_NAME = "feature_a"
@@ -39,7 +37,7 @@ class BaseFeatureGroupA(FeatureGroup):
         return [Index((cls.ROW_INDEX,))]
 
 
-class BaseFeatureGroupB(FeatureGroup):
+class BaseFeatureGroupB(DataCreatorFeatureGroup):
     """Base class B - provides index_columns()."""
 
     FEATURE_NAME = "feature_b"
@@ -57,8 +55,8 @@ class ConcreteFeatureGroupA(BaseFeatureGroupA):
     """Concrete implementation of A."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.FEATURE_NAME})
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.FEATURE_NAME}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -69,8 +67,8 @@ class ConcreteFeatureGroupB(BaseFeatureGroupB):
     """Concrete implementation of B."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.FEATURE_NAME})
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.FEATURE_NAME}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

@@ -39,7 +39,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.core.prepare.resolution_types import Elimination, EvaluationResult
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise, identify_winner
@@ -803,14 +803,14 @@ PLAIN_MISSING_REASON_PPR = (
 PLAIN_GUARD_REASON_PPR = "option 'limit_ppr' must be a whole number of 1 or more, got str '4'"
 
 
-class PlainMissingKeyFGPpr(FeatureGroup):
+class PlainMissingKeyFGPpr(DataCreatorFeatureGroup):
     """Plain root group with a required key and no mixin."""
 
     PROPERTY_MAPPING = {"needs_key_ppr": property_spec("required, no default")}
 
     @classmethod
-    def input_data(cls) -> DataCreator:
-        return DataCreator({PLAIN_MISSING_FEATURE_PPR})
+    def feature_names_supported(cls) -> set[str]:
+        return {PLAIN_MISSING_FEATURE_PPR}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -821,7 +821,7 @@ class PlainMissingKeyFGPpr(FeatureGroup):
         return pa.table({PLAIN_MISSING_FEATURE_PPR: [repr(features.get_options_key("needs_key_ppr"))]})
 
 
-class PlainExpectedGuardFGPpr(FeatureGroup):
+class PlainExpectedGuardFGPpr(DataCreatorFeatureGroup):
     """Plain root group whose match_guard rejection is reportable through ``expected``."""
 
     PROPERTY_MAPPING = {
@@ -831,8 +831,8 @@ class PlainExpectedGuardFGPpr(FeatureGroup):
     }
 
     @classmethod
-    def input_data(cls) -> DataCreator:
-        return DataCreator({PLAIN_EXPECTED_GUARD_FEATURE_PPR})
+    def feature_names_supported(cls) -> set[str]:
+        return {PLAIN_EXPECTED_GUARD_FEATURE_PPR}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -843,32 +843,44 @@ class PlainExpectedGuardFGPpr(FeatureGroup):
         return pa.table({PLAIN_EXPECTED_GUARD_FEATURE_PPR: [1]})
 
 
-class PlainSilentGuardFGPpr(FeatureGroup):
+class PlainSilentGuardFGPpr(DataCreatorFeatureGroup):
     """Plain root group whose match_guard has no ``expected`` text: a rejection stays silent."""
 
     PROPERTY_MAPPING = {"limit_ppr": property_spec("positive count", match_guard=_is_int_geq1_mge, default=None)}
 
     @classmethod
-    def input_data(cls) -> DataCreator:
-        return DataCreator({PLAIN_SILENT_GUARD_FEATURE_PPR})
+    def feature_names_supported(cls) -> set[str]:
+        return {PLAIN_SILENT_GUARD_FEATURE_PPR}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({PLAIN_SILENT_GUARD_FEATURE_PPR: [1]})
 
 
-class PlainDecliningFGPpr(FeatureGroup):
+class PlainDecliningFGPpr(DataCreatorFeatureGroup):
     """Shares a feature name with its sibling, and declines it because its required key is missing."""
 
     PROPERTY_MAPPING = {"needs_key_ppr": property_spec("required, no default")}
 
     @classmethod
-    def input_data(cls) -> DataCreator:
-        return DataCreator({PLAIN_SHARED_FEATURE_PPR})
+    def feature_names_supported(cls) -> set[str]:
+        return {PLAIN_SHARED_FEATURE_PPR}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({PLAIN_SHARED_FEATURE_PPR: [1]})
 
 
-class PlainAcceptingFGPpr(FeatureGroup):
+class PlainAcceptingFGPpr(DataCreatorFeatureGroup):
     """Shares a feature name with its sibling and declares no options."""
 
     @classmethod
-    def input_data(cls) -> DataCreator:
-        return DataCreator({PLAIN_SHARED_FEATURE_PPR})
+    def feature_names_supported(cls) -> set[str]:
+        return {PLAIN_SHARED_FEATURE_PPR}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({PLAIN_SHARED_FEATURE_PPR: [1]})
 
 
 class TestPlainGroupRejectionRecording:

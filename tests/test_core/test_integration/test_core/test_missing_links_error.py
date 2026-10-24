@@ -25,8 +25,7 @@ from mloda.user import DataType
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import JoinSpec
 from mloda.user import Link
 from mloda.user import Options
@@ -36,12 +35,8 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 
 
 # Test Feature Groups
-class RootFeatureA(FeatureGroup):
+class RootFeatureA(DataCreatorFeatureGroup):
     """First root feature for testing"""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
@@ -52,12 +47,8 @@ class RootFeatureA(FeatureGroup):
         return {"id": [1, 2, 3], cls.get_class_name(): [10, 20, 30]}
 
 
-class RootFeatureB(FeatureGroup):
+class RootFeatureB(DataCreatorFeatureGroup):
     """Second root feature for testing"""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
@@ -92,13 +83,12 @@ class MultiDependencyFeature(FeatureGroup):
         return {cls.get_class_name(): pc.add(col_a, col_b)}
 
 
-class SplitMetricSource(FeatureGroup):
-    """Root feature group producing two columns from one DataCreator; requested with
-    differing Options it plans as two separate option buckets."""
+class SplitMetricSource(DataCreatorFeatureGroup):
+    """Root group producing two columns; differing Options plan as two option buckets."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"metric_a", "metric_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"metric_a", "metric_b"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
@@ -163,12 +153,12 @@ class MetricConverterScale(FeatureGroup):
         return {cls.get_class_name(): data.column("metric_a")}
 
 
-class SplitSourceDtype(FeatureGroup):
+class SplitSourceDtype(DataCreatorFeatureGroup):
     """Root feature group producing two columns, requested with differing data types (no options)."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"d_a", "d_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"d_a", "d_b"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
@@ -212,12 +202,12 @@ class DtypeOptionSibling(FeatureGroup):
         return {cls.get_class_name(): data.column("d_a")}
 
 
-class R5Root(FeatureGroup):
+class R5Root(DataCreatorFeatureGroup):
     """Single root feature; X5Intermediate splits on top of it without ever breaking anything."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"r5"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"r5"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
@@ -277,12 +267,12 @@ class Z5UnrelatedTypo(FeatureGroup):
         return data.append_column(cls.get_class_name(), base)
 
 
-class LinkedSplitSource(FeatureGroup):
+class LinkedSplitSource(DataCreatorFeatureGroup):
     """Root feature group split into two option buckets that the user already Linked."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"l_a", "l_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"l_a", "l_b"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
@@ -330,12 +320,12 @@ class LinkedCombiner(FeatureGroup):
         return data.append_column(cls.get_class_name(), base)
 
 
-class MixedKeySource(FeatureGroup):
+class MixedKeySource(DataCreatorFeatureGroup):
     """Root feature group split by two option keys of different types (int and str)."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"m_x"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"m_x"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
@@ -494,12 +484,12 @@ class SameNameDtypeConsumer(FeatureGroup):
         return {cls.get_class_name(): data.column("d_a")}
 
 
-class ScalingSource(FeatureGroup):
+class ScalingSource(DataCreatorFeatureGroup):
     """Root feature group serving pm, scaled by 1000 when requested with option unit == 'x'."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"pm"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"pm"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
@@ -599,12 +589,12 @@ class LinkSideConsumer(FeatureGroup):
         return {"ls_x", "ls_plain"}
 
 
-class LinkSideOther(FeatureGroup):
+class LinkSideOther(DataCreatorFeatureGroup):
     """Second root joined to LinkSideConsumer on id."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"ls_o"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"ls_o"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:

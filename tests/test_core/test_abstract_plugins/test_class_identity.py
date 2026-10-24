@@ -17,7 +17,7 @@ from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.provider import DataCreator, BaseInputData
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Feature, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
@@ -157,14 +157,14 @@ def create_domain_feature_group(domain_name: str, feature_value: int) -> type[Fe
     """
     domain = Domain(domain_name)
 
-    class DomainHandler(FeatureGroup):
+    class DomainHandler(DataCreatorFeatureGroup):
         @classmethod
         def get_domain(cls) -> Domain:
             return domain
 
         @classmethod
-        def input_data(cls) -> BaseInputData | None:
-            return DataCreator({"domain_feature"})
+        def feature_names_supported(cls) -> set[str]:
+            return {"domain_feature"}
 
         @classmethod
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

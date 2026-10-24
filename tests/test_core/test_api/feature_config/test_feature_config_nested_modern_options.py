@@ -35,8 +35,7 @@ from mloda.core.api.feature_config import loader as loader_module
 from mloda.core.api.feature_config.loader import load_features_from_config
 from mloda.core.api.feature_config.models import FeatureConfig, FeatureConfigItem
 from mloda.core.api.feature_config.parser import parse_json
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
@@ -629,12 +628,12 @@ def test_nested_context_options_source_keeps_options_equal() -> None:
 # ---------------------------------------------------------------------------
 
 
-class NestedConfigEngineSource(FeatureGroup):
+class NestedConfigEngineSource(DataCreatorFeatureGroup):
     """Root source: creates the raw column the innermost nested feature reads."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"cfg_nested_base"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"cfg_nested_base"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

@@ -36,7 +36,7 @@ from mloda.user import (
     FeatureName,
     Options,
 )
-from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet, BaseInputData, DataCreator
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.core.runtime.flight.flight_server import FlightServer
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
@@ -117,12 +117,12 @@ class _ThreadingOnlyPythonDictFramework(PythonDictFramework):
         return {ParallelizationMode.SYNC, ParallelizationMode.THREADING}
 
 
-class _MixedModeRootPythonDictFG(FeatureGroup):
+class _MixedModeRootPythonDictFG(DataCreatorFeatureGroup):
     """Root source on a THREADING-only framework; parent-resident under mixed mode."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"mixed_mode_root_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"mixed_mode_root_val"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -186,12 +186,12 @@ def _extract_mixed_mode_doubled_threading(final: Any) -> list[int]:
     return list(final["mixed_mode_doubled_threading"])
 
 
-class _JoinLeftRootFG(FeatureGroup):
+class _JoinLeftRootFG(DataCreatorFeatureGroup):
     """Left join root on the THREADING-only framework, providing join_key and left_val."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"join_key", "left_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"join_key", "left_val"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -206,12 +206,12 @@ class _JoinLeftRootFG(FeatureGroup):
         return {"join_key": [1, 2, 3], "left_val": [10, 20, 30]}
 
 
-class _JoinRightRootFG(FeatureGroup):
+class _JoinRightRootFG(DataCreatorFeatureGroup):
     """Right join root on the THREADING-only framework, providing join_key and right_val."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"join_key", "right_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"join_key", "right_val"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -444,12 +444,12 @@ class TestMixedModeParentDestinationE2E:
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
 
-class _MpTransformSourceFG(FeatureGroup):
+class _MpTransformSourceFG(DataCreatorFeatureGroup):
     """Root source on PythonDictFramework, computed in a MULTIPROCESSING-only run."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"mp_transform_source_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"mp_transform_source_val"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -509,12 +509,12 @@ class _ThreadingOnlyPyArrowTable(PyArrowTable):
         return {ParallelizationMode.SYNC, ParallelizationMode.THREADING}
 
 
-class _XFwJoinLeftRootFG(FeatureGroup):
+class _XFwJoinLeftRootFG(DataCreatorFeatureGroup):
     """Join root on the THREADING-only framework: the source side needing the cross-framework hop."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"xfw_join_key", "xfw_left_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"xfw_join_key", "xfw_left_val"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -529,12 +529,12 @@ class _XFwJoinLeftRootFG(FeatureGroup):
         return {"xfw_join_key": [1, 2, 3], "xfw_left_val": [10, 20, 30]}
 
 
-class _XFwJoinRightRootFG(FeatureGroup):
+class _XFwJoinRightRootFG(DataCreatorFeatureGroup):
     """Join root on a DIFFERENT framework than the left side, forcing a TransformFrameworkStep hop."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"xfw_join_key", "xfw_right_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"xfw_join_key", "xfw_right_val"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -568,12 +568,12 @@ class _XFwJoinChildFG(FeatureGroup):
         return {"xfw_join_sum"}
 
 
-class _CrossFwHopLeftRootFG(FeatureGroup):
+class _CrossFwHopLeftRootFG(DataCreatorFeatureGroup):
     """Join root on the THREADING-only framework: the side a cross-framework join must hop out of."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"cfw_hop_join_key", "cfw_hop_left_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"cfw_hop_join_key", "cfw_hop_left_val"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -588,12 +588,12 @@ class _CrossFwHopLeftRootFG(FeatureGroup):
         return {"cfw_hop_join_key": [1, 2, 3], "cfw_hop_left_val": [10, 20, 30]}
 
 
-class _CrossFwHopRightRootFG(FeatureGroup):
+class _CrossFwHopRightRootFG(DataCreatorFeatureGroup):
     """Join root on a DIFFERENT framework than the left side, forcing a TransformFrameworkStep hop."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"cfw_hop_join_key", "cfw_hop_right_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"cfw_hop_join_key", "cfw_hop_right_val"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -867,12 +867,12 @@ class TestCrossFrameworkJoinHopDropTiming:
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
 
-class _Gap1SharedRootFG(FeatureGroup):
+class _Gap1SharedRootFG(DataCreatorFeatureGroup):
     """Shared root feeding both a cross-framework hop and an independent same-framework chain."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"gap1_shared_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"gap1_shared_val"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -960,13 +960,13 @@ class _Gap1SiblingFG(FeatureGroup):
         return {"gap1_sibling_tripled"}
 
 
-class _DiamondHopRootFG(FeatureGroup):
+class _DiamondHopRootFG(DataCreatorFeatureGroup):
     """Root feature feeding both a plain cross-framework hop and a same-framework diamond
     descendant that also reads the hop's own output."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"diamond_hop_root_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"diamond_hop_root_val"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -1021,14 +1021,14 @@ class _DiamondHopDescendantFG(FeatureGroup):
         return {"diamond_hop_result"}
 
 
-class _FwClassGuardJoinLeftFG(FeatureGroup):
+class _FwClassGuardJoinLeftFG(DataCreatorFeatureGroup):
     """Left side of an unrelated cross-framework join elsewhere in the plan: shares the
     PythonDictFramework CLASS with `_MpTransformSourceFG`'s hop, but its own data
     (`fw_class_guard_*`) is entirely disjoint from that hop's source."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"fw_class_guard_join_key", "fw_class_guard_left_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"fw_class_guard_join_key", "fw_class_guard_left_val"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -1043,12 +1043,12 @@ class _FwClassGuardJoinLeftFG(FeatureGroup):
         return {"fw_class_guard_join_key": [1, 2, 3], "fw_class_guard_left_val": [10, 20, 30]}
 
 
-class _FwClassGuardJoinRightFG(FeatureGroup):
+class _FwClassGuardJoinRightFG(DataCreatorFeatureGroup):
     """Right side, a different framework, forcing a cross-framework JoinStep."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"fw_class_guard_join_key", "fw_class_guard_right_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"fw_class_guard_join_key", "fw_class_guard_right_val"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -1084,13 +1084,13 @@ class _FwClassGuardJoinChildFG(FeatureGroup):
         return {"fw_class_guard_join_sum"}
 
 
-class _ChainHopRootFG(FeatureGroup):
+class _ChainHopRootFG(DataCreatorFeatureGroup):
     """Root source on PythonDictFramework, the hop's SOURCE; read only by the hop itself, never by
     anything further down the chain."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"chain_hop_root_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"chain_hop_root_val"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -1159,14 +1159,14 @@ class _ChainHopChain3FG(FeatureGroup):
         return {"chain_hop_chain3_val"}
 
 
-class _CoarseGuardRootFG(FeatureGroup):
+class _CoarseGuardRootFG(DataCreatorFeatureGroup):
     """Root: the source side of a cross-framework join AND feeds a same-framework descendant
     below. The root and the descendant are distinct FeatureGroupSteps, but share ONE physical cfw
     instance at runtime, since no framework transition separates them."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"coarse_guard_key", "coarse_guard_root_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"coarse_guard_key", "coarse_guard_root_val"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -1222,13 +1222,13 @@ class _CoarseGuardHopDestFG(FeatureGroup):
         return {"coarse_guard_hop_val"}
 
 
-class _CoarseGuardJoinOtherSideFG(FeatureGroup):
+class _CoarseGuardJoinOtherSideFG(DataCreatorFeatureGroup):
     """Join's other side, forcing a cross-framework JoinStep whose source side is the root
     above, the same physical cfw the descendant's plain hop also reads."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"coarse_guard_key", "coarse_guard_other_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"coarse_guard_key", "coarse_guard_other_val"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -1692,12 +1692,12 @@ class TestTransformFrameworkStepSourceRootDropTiming:
             ], f"seed {seed} produced a wrong join result"
 
 
-class _H3ChainRootPandasFG(FeatureGroup):
+class _H3ChainRootPandasFG(DataCreatorFeatureGroup):
     """Near root of a Pandas-PyArrow-PythonDict join chain, plus its own Pandas-only side chain."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"h3_key", "h3_p"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"h3_key", "h3_p"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -1712,12 +1712,12 @@ class _H3ChainRootPandasFG(FeatureGroup):
         return pd.DataFrame({"h3_key": [1, 2, 3], "h3_p": [1, 2, 3]})
 
 
-class _H3ChainRootPyArrowFG(FeatureGroup):
+class _H3ChainRootPyArrowFG(DataCreatorFeatureGroup):
     """Middle join root of the chain, on PyArrow."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"h3_key", "h3_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"h3_key", "h3_a"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -1732,12 +1732,12 @@ class _H3ChainRootPyArrowFG(FeatureGroup):
         return pa.table({"h3_key": [1, 2, 3], "h3_a": [10, 20, 30]})
 
 
-class _H3ChainRootPythonDictFG(FeatureGroup):
+class _H3ChainRootPythonDictFG(DataCreatorFeatureGroup):
     """Far join root of the chain, on PythonDict: the source a plain hop must not credit too early."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"h3_key", "h3_d"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"h3_key", "h3_d"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:

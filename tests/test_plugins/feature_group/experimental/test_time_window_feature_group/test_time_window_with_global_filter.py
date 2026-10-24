@@ -3,11 +3,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 from mloda.user import mloda
-from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.provider import FeatureSet
-from mloda.provider import DataCreator
-from mloda.provider import BaseInputData
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import PluginCollector
 from mloda.user import GlobalFilter
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -29,20 +27,18 @@ class TestTimeWindowWithGlobalFilter:
         3. The window calculations near the boundaries of the filter handle edge cases properly
         """
 
-        # Create a feature group that uses DataCreator to provide test data
+        # Feature group providing the test data
         # with a wider date range than we'll filter to
-        class TestTimeDataCreator(FeatureGroup):
+        class TestTimeDataCreator(DataCreatorFeatureGroup):
             @classmethod
-            def input_data(cls) -> BaseInputData | None:
-                return DataCreator(
-                    {
-                        "temperature",
-                        "humidity",
-                        "pressure",
-                        "wind_speed",
-                        DefaultOptionKeys.reference_time,
-                    }
-                )
+            def feature_names_supported(cls) -> set[str]:
+                return {
+                    "temperature",
+                    "humidity",
+                    "pressure",
+                    "wind_speed",
+                    DefaultOptionKeys.reference_time,
+                }
 
             @classmethod
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -194,12 +190,12 @@ class TestTimeWindowWithGlobalFilter:
             # Override the default time filter feature name
             DEFAULT_TIME_FILTER_FEATURE = custom_time_filter
 
-        # Create a feature group that uses DataCreator to provide test data
+        # Feature group providing the test data
         # with the custom time filter feature name
-        class TestCustomTimeDataCreator(FeatureGroup):
+        class TestCustomTimeDataCreator(DataCreatorFeatureGroup):
             @classmethod
-            def input_data(cls) -> BaseInputData | None:
-                return DataCreator({"temperature", "humidity", custom_time_filter})
+            def feature_names_supported(cls) -> set[str]:
+                return {"temperature", "humidity", custom_time_filter}
 
             @classmethod
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

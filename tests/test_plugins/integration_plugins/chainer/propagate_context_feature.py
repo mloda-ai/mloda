@@ -6,7 +6,7 @@ from typing import Any, ClassVar
 
 import pandas as pd
 
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureChainParserMixin, FeatureGroup
+from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureChainParserMixin, FeatureGroup
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda.user import Feature
@@ -141,12 +141,12 @@ class NameChainedCascadeGroupTest(FeatureChainParserMixin, FeatureGroup):
 CASCADE_ENV_ROOT = "cer_env_root"
 
 
-class CascadeEnvRootGroupTest(FeatureGroup):
+class CascadeEnvRootGroupTest(DataCreatorFeatureGroup):
     """Root whose values depend on env: [10, 20, 30] for prod, otherwise [1, 2, 3]."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({CASCADE_ENV_ROOT})
+    def feature_names_supported(cls) -> set[str]:
+        return {CASCADE_ENV_ROOT}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -165,12 +165,12 @@ CASCADE_GUARD_PULL_CONSUMER = "cgd_consumer_pull"
 CASCADE_GUARD_HOP_CONSUMER = "cgd_consumer_hop"
 
 
-class CascadeGuardRootGroupTest(FeatureGroup):
+class CascadeGuardRootGroupTest(DataCreatorFeatureGroup):
     """Root of the cascade guard fixtures."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({CASCADE_GUARD_ROOT})
+    def feature_names_supported(cls) -> set[str]:
+        return {CASCADE_GUARD_ROOT}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

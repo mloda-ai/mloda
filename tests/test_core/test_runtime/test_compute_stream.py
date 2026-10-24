@@ -21,7 +21,7 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.runtime.run import ExecutionOrchestrator
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -296,10 +296,10 @@ class _RunCompleteProbe(Extender):
 _EARLY_CLOSE_COLUMN = "early_closed_stream_col"
 
 
-class _EarlyCloseFeatureGroup(FeatureGroup):
+class _EarlyCloseFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({_EARLY_CLOSE_COLUMN})
+    def feature_names_supported(cls) -> set[str]:
+        return {_EARLY_CLOSE_COLUMN}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

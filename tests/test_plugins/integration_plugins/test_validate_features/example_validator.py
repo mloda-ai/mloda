@@ -2,10 +2,8 @@ from typing import Any
 
 from pandera import Column, Check
 
-from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from pandera import pandas
 import pyarrow as pa
 from pandera.errors import SchemaError
@@ -31,11 +29,7 @@ class ExamplePanderaValidator(BaseValidator):
             self.handle_log_level("SchemaError:", e)
 
 
-class BaseValidateOutputFeaturesBase(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
-
+class BaseValidateOutputFeaturesBase(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [1, 2, 3]}

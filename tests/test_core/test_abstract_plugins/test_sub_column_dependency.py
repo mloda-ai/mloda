@@ -23,8 +23,7 @@ import pytest
 from mloda.provider import ANY_OUTPUT_PART
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import ComputeFramework
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -45,12 +44,12 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
-class SubColumnTestDataCreator(FeatureGroup):
+class SubColumnTestDataCreator(DataCreatorFeatureGroup):
     """Test data creator providing source data for sub-column tests."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"source_data"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"source_data"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -1220,14 +1219,14 @@ class CountingVecProducer(FeatureGroup):
         return {PandasDataFrame}
 
 
-class LiteralTildeProducer(FeatureGroup):
+class LiteralTildeProducer(DataCreatorFeatureGroup):
     """Declares parts (value, unit) and also supports the literal names `lit` and `lit~extra`."""
 
     OUTPUT_PARTS = ("value", "unit")
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"lit", "lit~extra"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"lit", "lit~extra"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -1238,12 +1237,12 @@ class LiteralTildeProducer(FeatureGroup):
         return {PandasDataFrame}
 
 
-class LiteralMeasureValueProducer(FeatureGroup):
+class LiteralMeasureValueProducer(DataCreatorFeatureGroup):
     """Provides the literal column `measure~value`."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"measure~value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"measure~value"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -1319,12 +1318,12 @@ class TestFullNameAskedFirst:
         np.testing.assert_array_equal(results[0]["cd~b~1"].values, _SOURCE * 3)
 
 
-class _ParentWholeName(FeatureGroup):
+class _ParentWholeName(DataCreatorFeatureGroup):
     """Matches the literal whole name `m2~value` and writes 1."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"m2~value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"m2~value"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -1341,8 +1340,8 @@ class _ChildDeclaringValue(_ParentWholeName):
     OUTPUT_PARTS = ("value",)
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"m2"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"m2"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

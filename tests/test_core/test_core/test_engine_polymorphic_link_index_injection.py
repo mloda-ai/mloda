@@ -6,25 +6,25 @@ from typing import Any
 from unittest.mock import patch
 
 from mloda.core.core.engine import Engine
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, Features, Index, JoinSpec, Link, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
 class PlkiBaseA(FeatureGroup):
-    """Base side A: no input_data, so it never resolves a requested feature on its own."""
+    """Base side A: declares no names, so it never resolves a requested feature on its own."""
 
 
 class PlkiBaseB(FeatureGroup):
-    """Base side B: no input_data, so it never resolves a requested feature on its own."""
+    """Base side B: declares no names, so it never resolves a requested feature on its own."""
 
 
-class PlkiSubA(PlkiBaseA):
+class PlkiSubA(PlkiBaseA, DataCreatorFeatureGroup):
     """Concrete side A; also supports plki_a_key directly."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"plki_a_val", "plki_a_key"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plki_a_val", "plki_a_key"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -35,12 +35,12 @@ class PlkiSubA(PlkiBaseA):
         return {PyArrowTable}
 
 
-class PlkiSubA2(PlkiBaseA):
+class PlkiSubA2(PlkiBaseA, DataCreatorFeatureGroup):
     """Sibling of PlkiSubA: must never receive keys injected for links naming PlkiSubA."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"plki_a2_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plki_a2_val"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -51,10 +51,10 @@ class PlkiSubA2(PlkiBaseA):
         return {PyArrowTable}
 
 
-class PlkiSubB(PlkiBaseB):
+class PlkiSubB(PlkiBaseB, DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"plki_b_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plki_b_val"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -81,10 +81,10 @@ class PlkiIdxBaseB(FeatureGroup):
         return [Index(("plki_ib_key",))]
 
 
-class PlkiIdxSubA(PlkiIdxBaseA):
+class PlkiIdxSubA(PlkiIdxBaseA, DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"plki_ia_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plki_ia_val"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -95,10 +95,10 @@ class PlkiIdxSubA(PlkiIdxBaseA):
         return {PyArrowTable}
 
 
-class PlkiIdxSubB(PlkiIdxBaseB):
+class PlkiIdxSubB(PlkiIdxBaseB, DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"plki_ib_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plki_ib_val"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

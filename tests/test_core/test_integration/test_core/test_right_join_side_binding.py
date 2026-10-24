@@ -6,9 +6,8 @@ import pytest
 
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
-from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -84,10 +83,10 @@ def _packed_rows(results: Any, column: str) -> list[str]:
     return [str(value) for value in _columns(matching[0])[column]]
 
 
-class RightBindLeftInArrow(FeatureGroup):
+class RightBindLeftInArrow(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"rjsb_left_key", "rjsb_left_payload"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"rjsb_left_key", "rjsb_left_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -98,10 +97,10 @@ class RightBindLeftInArrow(FeatureGroup):
         return {PyArrowTable}
 
 
-class RightBindRightInPandas(FeatureGroup):
+class RightBindRightInPandas(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"rjsb_right_key", "rjsb_right_payload"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"rjsb_right_key", "rjsb_right_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -127,12 +126,12 @@ class RightBindChild(FeatureGroup):
         return {PandasDataFrame}
 
 
-class RightBindPolyBase(FeatureGroup):
+class RightBindPolyBase(DataCreatorFeatureGroup):
     """Declared left side of a link whose declared right side derives from it."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"rjsbp_left_key", "rjsbp_left_payload"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"rjsbp_left_key", "rjsbp_left_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -147,8 +146,8 @@ class RightBindPolyDerived(RightBindPolyBase):
     """Declared right side, and a subclass of the declared left side, so it answers to both sides."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"rjsbp_right_key", "rjsbp_right_payload"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"rjsbp_right_key", "rjsbp_right_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -172,12 +171,12 @@ class RightBindPolyChild(FeatureGroup):
         return {PandasDataFrame}
 
 
-class RightBindAncestorBase(FeatureGroup):
+class RightBindAncestorBase(DataCreatorFeatureGroup):
     """Declared left side of the RIGHT join, and the base class of an unrelated ancestor of the same child."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"rjsba_left_key", "rjsba_left_payload"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"rjsba_left_key", "rjsba_left_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -188,10 +187,10 @@ class RightBindAncestorBase(FeatureGroup):
         return {PyArrowTable}
 
 
-class RightBindAncestorRight(FeatureGroup):
+class RightBindAncestorRight(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"rjsba_right_key", "rjsba_right_payload"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"rjsba_right_key", "rjsba_right_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -206,8 +205,8 @@ class RightBindAncestorSibling(RightBindAncestorBase):
     """Subclasses the declared left side but runs in the destination framework and joins on its own link."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"rjsba_sibling_key", "rjsba_sibling_payload"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"rjsba_sibling_key", "rjsba_sibling_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -322,12 +321,12 @@ SIDE_ARROW_PAYLOADS = ["a9", "a8"]
 SIDE_ROWS = [f"k1|l1|{MISSING}|r1", f"k2|l2|{MISSING}|r2", f"k9|{MISSING}|a9|r9"]
 
 
-class RightBindSideBase(FeatureGroup):
+class RightBindSideBase(DataCreatorFeatureGroup):
     """Declared left side, in the destination framework."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"rjsbs_left_key", "rjsbs_left_payload"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"rjsbs_left_key", "rjsbs_left_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -342,8 +341,8 @@ class RightBindSideArrow(RightBindSideBase):
     """Subclass of the declared left side, in another framework: its own payload feature, plus a key the base lacks."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"rjsbs_arrow_payload"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"rjsbs_arrow_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -354,10 +353,10 @@ class RightBindSideArrow(RightBindSideBase):
         return {PyArrowTable}
 
 
-class RightBindSideRight(FeatureGroup):
+class RightBindSideRight(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"rjsbs_right_key", "rjsbs_right_payload"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"rjsbs_right_key", "rjsbs_right_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

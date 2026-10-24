@@ -29,6 +29,7 @@ from typing import Any
 
 import pytest
 
+from mloda.provider import DataCreatorFeatureGroup
 from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import records_from_frame
 
 
@@ -99,9 +100,13 @@ class EmptyResultFrameworkTestMixin:
 
 
 class _NonRootFeatureGroup:
+    pass
+
+
+class _DataCreatorStub(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> None:
-        return None
+    def calculate_feature(cls, data: Any, features: Any) -> Any:
+        return {}
 
 
 class AppendColumnsFrameworkTestMixin:
@@ -213,15 +218,21 @@ class AppendColumnsFrameworkTestMixin:
         else:
             assert [r["new_col"] for r in records_from_frame(out)] == result["new_col"]
 
-    def test_dict_append_on_pinned_joined_frame(self, framework_instance: Any, joined_data: Any) -> None:
+    @pytest.mark.parametrize("group, appends", [(_NonRootFeatureGroup, True), (_DataCreatorStub, False)])
+    def test_dict_append_on_pinned_joined_frame(
+        self, framework_instance: Any, joined_data: Any, group: Any, appends: bool
+    ) -> None:
         rows = len(records_from_frame(joined_data))
         framework_instance.data = joined_data
         framework_instance._pinned_frame = framework_instance.data
         values = list(range(rows))
 
         result = {"new_col": values}
-        out = framework_instance._append_dict_to_frame(_NonRootFeatureGroup, result)
+        out = framework_instance._append_dict_to_frame(group, result)
 
+        if not appends:
+            assert out is result
+            return
         assert out is not result
         assert [r["new_col"] for r in records_from_frame(out)] == values
 

@@ -14,18 +14,17 @@ import pytest
 
 from mloda.user import mloda, Feature, FeatureName, Options, DataAccessCollection, ParallelizationMode, PluginCollector
 from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet
-from mloda.core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda.provider import BaseInputData
+from mloda.provider import DataCreatorFeatureGroup
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
-class TfsRawValPyArrowSource(FeatureGroup):
+class TfsRawValPyArrowSource(DataCreatorFeatureGroup):
     """Shared source: emits raw_val=[1,2,3] on PyArrowTable so every SQL backend
     test exercises the same PyArrow -> <SQL framework> TFS edge."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"raw_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"raw_val"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -51,10 +50,10 @@ def root_binding_groups(
     src = f"tfs_root_val_{framework.__name__}"
     dst = f"tfs_root_out_{framework.__name__}"
 
-    class RootBindingRoot(FeatureGroup):
+    class RootBindingRoot(DataCreatorFeatureGroup):
         @classmethod
-        def input_data(cls) -> BaseInputData | None:
-            return DataCreator({src})
+        def feature_names_supported(cls) -> set[str]:
+            return {src}
 
         @classmethod
         def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

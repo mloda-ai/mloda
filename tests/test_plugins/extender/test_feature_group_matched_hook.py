@@ -18,7 +18,7 @@ from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.core.engine import Engine
 from mloda.core.prepare.resolution_types import EvaluationResult
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Features, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_abstract_plugins.test_abstract_compute_framework import BaseTestComputeFramework1
@@ -27,12 +27,12 @@ from tests.test_core.test_abstract_plugins.test_abstract_feature_group import Ba
 _MARKER = "fgmatch051"
 
 
-class _MatchHookRootFeatureGroup(FeatureGroup):
+class _MatchHookRootFeatureGroup(DataCreatorFeatureGroup):
     """Root feature group: single resolved feature for the basic FEATURE_GROUP_MATCHED assertions."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_root_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{_MARKER}_root_col"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -43,10 +43,10 @@ class _MatchHookRootFeatureGroup(FeatureGroup):
         return {f"{_MARKER}_root_col": [1, 2, 3]}
 
 
-class _MatchHookColOneFeatureGroup(FeatureGroup):
+class _MatchHookColOneFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_col_one"})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{_MARKER}_col_one"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -57,10 +57,10 @@ class _MatchHookColOneFeatureGroup(FeatureGroup):
         return {f"{_MARKER}_col_one": [1, 2, 3]}
 
 
-class _MatchHookColTwoFeatureGroup(FeatureGroup):
+class _MatchHookColTwoFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_col_two"})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{_MARKER}_col_two"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -71,10 +71,10 @@ class _MatchHookColTwoFeatureGroup(FeatureGroup):
         return {f"{_MARKER}_col_two": [4, 5, 6]}
 
 
-class _MatchVetoFeatureGroupA(FeatureGroup):
+class _MatchVetoFeatureGroupA(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_veto_col_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{_MARKER}_veto_col_a"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -85,10 +85,10 @@ class _MatchVetoFeatureGroupA(FeatureGroup):
         return {f"{_MARKER}_veto_col_a": [1, 2, 3]}
 
 
-class _MatchVetoFeatureGroupB(FeatureGroup):
+class _MatchVetoFeatureGroupB(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_veto_col_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{_MARKER}_veto_col_b"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -99,12 +99,12 @@ class _MatchVetoFeatureGroupB(FeatureGroup):
         return {f"{_MARKER}_veto_col_b": [4, 5, 6]}
 
 
-class _MatchDepthRootFeatureGroup(FeatureGroup):
+class _MatchDepthRootFeatureGroup(DataCreatorFeatureGroup):
     """Root of a two-level input_features() chain, for the plan_depth assertions."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_depth_root_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{_MARKER}_depth_root_col"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -131,12 +131,12 @@ class _MatchDepthDerivedFeatureGroup(FeatureGroup):
         return data
 
 
-class _MatchMultiColRootFeatureGroup(FeatureGroup):
+class _MatchMultiColRootFeatureGroup(DataCreatorFeatureGroup):
     """Root serving three columns, all requested in one prepare call."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_multi_col_{i}" for i in range(3)})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{_MARKER}_multi_col_{i}" for i in range(3)}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -644,12 +644,12 @@ class TestEngineSelectsExtenderOncePerRun:
         assert extender.wraps_calls == 2
 
 
-class _MatchReplacedParentFeatureGroup(FeatureGroup):
+class _MatchReplacedParentFeatureGroup(DataCreatorFeatureGroup):
     """Parent that a subclass replaces at match time."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_replaced_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{_MARKER}_replaced_col"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

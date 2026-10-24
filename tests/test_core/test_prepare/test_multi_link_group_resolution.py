@@ -14,7 +14,7 @@ from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
 from mloda.core.prepare.choose_compute_frameworks import ChooseComputeFrameworks
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import (
     Feature,
     FeatureName,
@@ -43,10 +43,10 @@ def _joined_columns(data: Any, expected: set[str]) -> str:
     return "|".join(sorted(expected.intersection(data.columns)))
 
 
-class MultiLinkRootA(FeatureGroup):
+class MultiLinkRootA(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"mlg_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"mlg_a"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -57,12 +57,12 @@ class MultiLinkRootA(FeatureGroup):
         return {PyArrowTable}
 
 
-class MultiLinkRootBSame(FeatureGroup):
+class MultiLinkRootBSame(DataCreatorFeatureGroup):
     """Root B on the same framework as root A, so the A-B link joins in one framework."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"mlg_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"mlg_b"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -73,12 +73,12 @@ class MultiLinkRootBSame(FeatureGroup):
         return {PyArrowTable}
 
 
-class MultiLinkRootBDistinct(FeatureGroup):
+class MultiLinkRootBDistinct(DataCreatorFeatureGroup):
     """Root B on a second framework, so the A-B link joins across two distinct frameworks."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"mlg_bd"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"mlg_bd"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -105,10 +105,10 @@ class MultiLinkRootBDistinctPartial(MultiLinkRootBDistinct):
         return {"mlg_bd": [10, 20, 30, 50, 60], "mlg_idx": ["x", "y", "z", "v", "u"]}
 
 
-class MultiLinkRootC(FeatureGroup):
+class MultiLinkRootC(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"mlg_c"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"mlg_c"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -149,12 +149,12 @@ class MultiLinkChildDistinct(FeatureGroup):
         return {PandasDataFrame}
 
 
-class SameFrameworkSharedParent(FeatureGroup):
+class SameFrameworkSharedParent(DataCreatorFeatureGroup):
     """Read as the join source by both spokes below; every feature group here stays on one framework."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"sfw_p"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"sfw_p"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -165,10 +165,10 @@ class SameFrameworkSharedParent(FeatureGroup):
         return {PandasDataFrame}
 
 
-class SameFrameworkSpokeD1(FeatureGroup):
+class SameFrameworkSpokeD1(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"sfw_d1"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"sfw_d1"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -179,10 +179,10 @@ class SameFrameworkSpokeD1(FeatureGroup):
         return {PandasDataFrame}
 
 
-class SameFrameworkSpokeD2(FeatureGroup):
+class SameFrameworkSpokeD2(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"sfw_d2"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"sfw_d2"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -809,7 +809,7 @@ def _tie_root_data(features: FeatureSet, name: str, base: list[int]) -> dict[str
     return {"tie_jid": list(range(1, len(base) + 1)), name: [value * scale for value in base]}
 
 
-class _TieRoot(FeatureGroup):
+class _TieRoot(DataCreatorFeatureGroup):
     """Root whose values depend on the tie_tag option, built in FRAMEWORK's native type."""
 
     COLUMN: ClassVar[str] = ""
@@ -817,8 +817,8 @@ class _TieRoot(FeatureGroup):
     FRAMEWORK: ClassVar[type[ComputeFramework]] = PyArrowTable
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.COLUMN})
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.COLUMN}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -1450,8 +1450,8 @@ class RemedyRootA1(MultiLinkRootA):
     """Polymorphic root A variant on a third framework."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"mlg_a1"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"mlg_a1"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -1770,8 +1770,8 @@ class RemedyRootBArrowX(RemedyRootBThird):
     """Root B variant on PyArrow providing mlg_bx."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"mlg_bx"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"mlg_bx"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -1918,8 +1918,8 @@ class RemedyRootA1Partial(MultiLinkRootAPartial):
     """Member of the partial root A on the third framework, keys y, z, q."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"mlg_a1"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"mlg_a1"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -2024,12 +2024,12 @@ def test_a_join_keeping_the_member_side_of_two_members_on_different_frameworks_i
     assert "reads both members directly" not in message
 
 
-class RemedyAsofRootA(FeatureGroup):
+class RemedyAsofRootA(DataCreatorFeatureGroup):
     """Time-stamped root A for ASOF links."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"mlg_asof_a", "mlg_ts_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"mlg_asof_a", "mlg_ts_a"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -2044,8 +2044,8 @@ class RemedyAsofRootA1(RemedyAsofRootA):
     """Member of the ASOF root A on the third framework."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"mlg_asof_a1", "mlg_ts_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"mlg_asof_a1", "mlg_ts_a"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -2056,12 +2056,12 @@ class RemedyAsofRootA1(RemedyAsofRootA):
         return {ThirdCfw}
 
 
-class RemedyAsofRootB(FeatureGroup):
+class RemedyAsofRootB(DataCreatorFeatureGroup):
     """Time-stamped root B for ASOF links on the second framework."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"mlg_asof_b", "mlg_ts_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"mlg_asof_b", "mlg_ts_b"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -2110,8 +2110,8 @@ class RemedyRootBSubclass(MultiLinkRootBDistinct):
     """Second member of the B link side on B's framework."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"mlg_bd2"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"mlg_bd2"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -2196,8 +2196,8 @@ class RemedyRootASibling(MultiLinkRootA):
     """Root A variant on A's own framework."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"mlg_a2"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"mlg_a2"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -2384,8 +2384,8 @@ def test_a_member_allowed_on_two_frameworks_is_pushed_apart_from_its_sibling_and
 
 
 def _star_group(name: str, column: str, rows: dict[str, int], framework: type[ComputeFramework]) -> type[FeatureGroup]:
-    def input_data(cls: Any) -> BaseInputData | None:
-        return DataCreator({column})
+    def feature_names_supported(cls: Any) -> set[str]:
+        return {column}
 
     def calculate_feature(cls: Any, data: Any, features: FeatureSet) -> Any:
         return {column: list(rows.values()), "mlg_idx": list(rows)}
@@ -2395,11 +2395,11 @@ def _star_group(name: str, column: str, rows: dict[str, int], framework: type[Co
 
     namespace = {
         "__module__": __name__,
-        "input_data": classmethod(input_data),
+        "feature_names_supported": classmethod(feature_names_supported),
         "calculate_feature": classmethod(calculate_feature),
         "compute_framework_rule": classmethod(compute_framework_rule),
     }
-    created = type(name, (FeatureGroup,), namespace)
+    created = type(name, (DataCreatorFeatureGroup,), namespace)
     globals()[name] = created  # module level, so multiprocessing can pickle the link back
     return created
 

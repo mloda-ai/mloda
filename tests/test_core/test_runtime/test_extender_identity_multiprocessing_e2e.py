@@ -41,7 +41,7 @@ from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.steward import FeatureResolutionError
 from mloda.core.runtime.run import ExecutionOrchestrator
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.uuid7_assertions import assert_valid_uuid7
@@ -274,10 +274,10 @@ class TestWorkerPayloadShipsTheParentsSelectionTable:
 _RUN_COMPLETE_COLUMN = "run_complete_notification_e2e_col"
 
 
-class _RunCompleteFeatureGroup(FeatureGroup):
+class _RunCompleteFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({_RUN_COMPLETE_COLUMN})
+    def feature_names_supported(cls) -> set[str]:
+        return {_RUN_COMPLETE_COLUMN}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -491,10 +491,10 @@ _MISSING_COLUMN = "lifecycle_matrix_missing_col"
 _SYSTEM_EXIT_COLUMN = "lifecycle_matrix_system_exit_col"
 
 
-class _SystemExitFeatureGroup(FeatureGroup):
+class _SystemExitFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({_SYSTEM_EXIT_COLUMN})
+    def feature_names_supported(cls) -> set[str]:
+        return {_SYSTEM_EXIT_COLUMN}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -505,10 +505,10 @@ class _SystemExitFeatureGroup(FeatureGroup):
         raise SystemExit("calculate failed")
 
 
-class _FailingLifecycleFeatureGroup(FeatureGroup):
+class _FailingLifecycleFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({_FAIL_COLUMN})
+    def feature_names_supported(cls) -> set[str]:
+        return {_FAIL_COLUMN}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -942,15 +942,15 @@ import threading
 from typing import Any
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
-class BlockingFG(FeatureGroup):
+class BlockingFG(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"cancelled_threading_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"cancelled_threading_col"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

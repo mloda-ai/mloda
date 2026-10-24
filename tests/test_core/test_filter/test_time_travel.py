@@ -4,8 +4,7 @@ from typing import Any
 import pyarrow as pa
 
 from mloda.user import FeatureName
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Options
 from mloda.provider import ComputeFramework
 from mloda.user import GlobalFilter
@@ -18,11 +17,7 @@ from mloda.provider import FeatureSet
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_ALL
 
 
-class TimeTravelNegativeFilterTest(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
-
+class TimeTravelNegativeFilterTest(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         if features.filters is not None:

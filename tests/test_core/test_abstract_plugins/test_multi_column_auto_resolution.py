@@ -16,8 +16,7 @@ from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Options
 from mloda.provider import ComputeFramework
 from mloda.user import PluginLoader
@@ -26,13 +25,12 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
-class MultiColumnTestDataCreator(FeatureGroup):
+class MultiColumnTestDataCreator(DataCreatorFeatureGroup):
     """Test data creator providing source data for multi-column tests."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        """Return a DataCreator with the supported feature names."""
-        return DataCreator({"source_data"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"source_data"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

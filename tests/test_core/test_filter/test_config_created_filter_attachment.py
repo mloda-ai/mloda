@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, DefaultOptionKeys, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, DefaultOptionKeys, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FilterType, GlobalFilter, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
@@ -24,12 +24,12 @@ CFA_FILTER_COLUMN = "cfa_region"
 CFA_HOST = "cfa_sum_sales"
 
 
-class CfaRoot(FeatureGroup):
+class CfaRoot(DataCreatorFeatureGroup):
     """Root serving the aggregation source column and the column only the filter ever names."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({CFA_SOURCE, CFA_FILTER_COLUMN})
+    def feature_names_supported(cls) -> set[str]:
+        return {CFA_SOURCE, CFA_FILTER_COLUMN}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

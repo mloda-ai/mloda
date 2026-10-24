@@ -1,8 +1,7 @@
 from typing import Any
 import pyarrow as pa
 import pyarrow.compute as pc
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda.user import FeatureName
@@ -21,11 +20,7 @@ from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 
 
-class MultipleCfwTest1(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
-
+class MultipleCfwTest1(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [1, 2, 3]}
@@ -35,11 +30,7 @@ class MultipleCfwTest1(FeatureGroup):
         return {PyArrowTable}
 
 
-class MultipleCfwTest2(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
-
+class MultipleCfwTest2(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [4, 5, 6]}

@@ -11,23 +11,21 @@ from mloda.provider import FeatureGroup
 from mloda.user import Feature, Options
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import mloda
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
 from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature  # noqa: F401
 
 
-class InputDataTestFeatureGroup(FeatureGroup):
+class InputDataTestFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(
-            supports_features={
-                "InputDataTestFeatureGroup_id",
-                "InputDataTestFeatureGroup_V1",
-                "InputDataTestFeatureGroup_V2",
-            }
-        )
+    def feature_names_supported(cls) -> set[str]:
+        return {
+            "InputDataTestFeatureGroup_id",
+            "InputDataTestFeatureGroup_V1",
+            "InputDataTestFeatureGroup_V2",
+        }
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -149,11 +147,12 @@ _REMOVED_MODULE_SYMBOLS = [
     ("mloda.core.abstract_plugins.components.declared_attributes", "current_declaration_requirement"),
     ("mloda.core.abstract_plugins.components.declared_attributes", "declaration_requirement_scope"),
     ("mloda.core.abstract_plugins.components.credential_scrub", "_URI_PATTERN"),
+    ("mloda.provider", "DataCreator"),
 ]
 
 
 class TestBaseInputDataIsOnlyAMarker:
-    """BaseInputData keeps no reader path: data comes from a SourceFeatureGroup, or a DataCreator."""
+    """BaseInputData keeps no reader path: data comes from a SourceFeatureGroup, or a DataCreatorFeatureGroup."""
 
     @pytest.mark.parametrize("member", _REMOVED_BASE_INPUT_DATA_MEMBERS)
     def test_the_legacy_reader_member_is_gone(self, member: str) -> None:
@@ -224,11 +223,6 @@ class TestBaseInputDataIsOnlyAMarker:
             type("MixedInputData", (LoadMixin, BaseInputData), {})
 
         assert "load_data" in str(excinfo.value)
-
-    def test_data_creator_subclass_still_defines(self) -> None:
-        creator = type("PlainCreator", (DataCreator,), {})
-
-        assert issubclass(creator, BaseInputData)
 
     def test_a_subclass_without_a_legacy_hook_still_defines(self) -> None:
         defined = type("PlainMarkerInputData", (BaseInputData,), {})

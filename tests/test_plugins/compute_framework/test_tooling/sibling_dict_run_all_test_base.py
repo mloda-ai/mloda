@@ -7,8 +7,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureChainParserMixin
 from mloda.provider import FeatureSet
@@ -35,20 +34,16 @@ def _column(data: Any, name: str) -> list[Any]:
     return [row[name] for row in records_from_frame(data)]
 
 
-class SiblingDictRoot(FeatureGroup):
+class SiblingDictRoot(DataCreatorFeatureGroup):
     """Root FeatureGroup producing the shared three-row ``sd_a`` column."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"sd_a"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {"sd_a": list(SD_A_VALUES)}
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"sd_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"sd_a": list(SD_A_VALUES)}
 
 
 class _SiblingDictConsumer(FeatureGroup):

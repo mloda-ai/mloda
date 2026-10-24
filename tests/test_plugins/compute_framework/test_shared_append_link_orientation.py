@@ -7,11 +7,10 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
-from mloda.provider import DataCreator
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Index
@@ -42,14 +41,12 @@ def _assert_is_orientation_configuration_error(message: str, link: Link) -> None
     assert any(word in message.lower() for word in UNSUPPORTED_WORDS)
 
 
-class SharedAppendSource(FeatureGroup):
+class SharedAppendSource(DataCreatorFeatureGroup):
     """Serves both sides of the append; each side is pinned to a different framework."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(
-            supports_features={"stack_left_key", "stack_left_payload", "stack_right_key", "stack_right_payload"}
-        )
+    def feature_names_supported(cls) -> set[str]:
+        return {"stack_left_key", "stack_left_payload", "stack_right_key", "stack_right_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

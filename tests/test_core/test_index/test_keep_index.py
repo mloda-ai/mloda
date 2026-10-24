@@ -11,7 +11,7 @@ from typing import Any
 import pyarrow as pa
 import pytest
 
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import (
     DataAccessCollection,
     Feature,
@@ -93,10 +93,10 @@ def _as_dict(kind: str, frame: Any) -> dict[str, list[Any]]:
 def _source(kind: str, indexes: list[Index] | None, data: dict[str, list[int]] | None = None) -> type[FeatureGroup]:
     cols = DATA if data is None else data
 
-    class KiSource(FeatureGroup):
+    class KiSource(DataCreatorFeatureGroup):
         @classmethod
-        def input_data(cls) -> BaseInputData | None:
-            return DataCreator(supports_features=set(cols))
+        def feature_names_supported(cls) -> set[str]:
+            return set(cols)
 
         @classmethod
         def index_columns(cls) -> list[Index] | None:

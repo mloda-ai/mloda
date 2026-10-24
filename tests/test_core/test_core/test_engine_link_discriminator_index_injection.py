@@ -9,7 +9,7 @@ import pytest
 
 from mloda.core.core.engine import Engine
 from mloda.core.core.step.join_step import JoinStep
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet, LinkValidator
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup, LinkValidator
 from mloda.user import Feature, FeatureName, Features, Index, JoinSpec, Link, Options, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -19,12 +19,12 @@ _SCLK_REGION = {"sclk_code": [2, 3, 4, 5], "sclk_pop": [200, 300, 400, 500]}
 _SCLK_DATA = {"election": _SCLK_ELECTION, "region": _SCLK_REGION}
 
 
-class SclkSourceFG(FeatureGroup):
+class SclkSourceFG(DataCreatorFeatureGroup):
     """Root FG with no declared index_columns: injection runs through _add_index_feature_from_links."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"sclk_nr", "sclk_votes", "sclk_code", "sclk_pop"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"sclk_nr", "sclk_votes", "sclk_code", "sclk_pop"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -44,12 +44,12 @@ class SclkIndexedSourceFG(SclkSourceFG):
         return [Index(("sclk_nr",)), Index(("sclk_code",))]
 
 
-class SclkOtherFG(FeatureGroup):
+class SclkOtherFG(DataCreatorFeatureGroup):
     """Distinct class used as the right side of a different-class link."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"sclk_other_key", "sclk_other_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"sclk_other_key", "sclk_other_val"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -330,12 +330,12 @@ def test_valid_feature_link_still_registers_in_engine_links() -> None:
     assert link in engine.links
 
 
-class TwinRootA(FeatureGroup):
+class TwinRootA(DataCreatorFeatureGroup):
     """Root on the left side of a link joining on twin_rid."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"twin_a", "twin_rid"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"twin_a", "twin_rid"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -350,8 +350,8 @@ class TwinRootB(TwinRootA):
     """Root on the right side of the same link."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"twin_b", "twin_rid"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"twin_b", "twin_rid"}
 
 
 def _twin_reader(name: str, inputs: list[str]) -> type[FeatureGroup]:

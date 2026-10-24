@@ -20,7 +20,7 @@ from typing import Any, cast
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData, dispatch_input_data_load
+from mloda.core.abstract_plugins.components.input_data.base_input_data import dispatch_input_data_load
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -28,7 +28,14 @@ from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
-from mloda.provider import ApiDataFG, DataCreator, FeatureGroup, FileSource, InputDataDescriptor, SourceMatch
+from mloda.provider import (
+    ApiDataFG,
+    DataCreatorFeatureGroup,
+    FeatureGroup,
+    FileSource,
+    InputDataDescriptor,
+    SourceMatch,
+)
 from mloda.steward import GateBypassError
 from mloda.user import (
     DataAccessCollection,
@@ -1201,10 +1208,10 @@ class _FileRecordingGateExtender(Extender):
         return result
 
 
-class _MultiprocessingHopFeatureGroup(FeatureGroup):
+class _MultiprocessingHopFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({_MP_HOP_COLUMN})
+    def feature_names_supported(cls) -> set[str]:
+        return {_MP_HOP_COLUMN}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

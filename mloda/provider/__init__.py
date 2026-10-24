@@ -32,6 +32,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework as Co
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.implementation_pin_error import ImplementationPinError
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
+from mloda.core.abstract_plugins.data_creator_feature_group import DataCreatorFeatureGroup
 from mloda.core.abstract_plugins.hook_context import OutputSchema as OutputSchema
 from mloda.core.abstract_plugins.hook_context import HookContext as HookContext
 from mloda.core.abstract_plugins.hook_context import instrument as instrument
@@ -61,7 +62,6 @@ from mloda.core.abstract_plugins.components.input_data.read_document_fg import R
 from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
-from mloda.core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 
 # Artifact
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
@@ -182,6 +182,7 @@ __all__ = [
     "SourceMatch",
     "SourceProbeOutcome",
     "SourceFeatureGroup",
+    "DataCreatorFeatureGroup",
     "Implementation",
     "ImplementationPinError",
     "OperationFeatureGroup",
@@ -194,7 +195,6 @@ __all__ = [
     "ReadFileFG",
     "InputDataDescriptor",
     "ApiDataFG",
-    "DataCreator",
     # Artifact
     "BaseArtifact",
     # Validators

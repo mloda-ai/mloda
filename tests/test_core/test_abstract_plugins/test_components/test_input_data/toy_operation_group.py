@@ -11,11 +11,9 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import (
-    BaseInputData,
     ComputeFramework,
-    DataCreator,
-    FeatureGroup,
     FeatureSet,
+    DataCreatorFeatureGroup,
     OperationFeatureGroup,
     SubtypeDeclaration,
     property_spec,
@@ -110,12 +108,12 @@ OPTOY_CHAIN_SUFFIX = "__optoy_chain"
 CHAIN_LOG: list[tuple[str, str]] = []
 
 
-class OpToyChainSourceFG(FeatureGroup):
+class OpToyChainSourceFG(DataCreatorFeatureGroup):
     """Pandas-only source for the chain toy."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({OPTOY_CHAIN_SRC})
+    def feature_names_supported(cls) -> set[str]:
+        return {OPTOY_CHAIN_SRC}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

@@ -10,7 +10,7 @@ import pytest
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.plan_context import PlanContext
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureSet
 from mloda.steward import FeatureResolutionError, PlanStep, plan_content_hash, plan_structure_hash
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -18,10 +18,10 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 _COLUMN = "lifecycle_hooks_col"
 
 
-class _LifecycleFeatureGroup(FeatureGroup):
+class _LifecycleFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({_COLUMN})
+    def feature_names_supported(cls) -> set[str]:
+        return {_COLUMN}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

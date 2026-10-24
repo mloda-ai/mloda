@@ -1,7 +1,6 @@
 from typing import Any
 import pytest
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -42,11 +41,7 @@ COMPUTE_FRAMEWORKS: list[type[ComputeFramework]] = [
 ]
 
 
-class JoinCfwTest1(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
-
+class JoinCfwTest1(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [1, 2, 3], "idx": ["a", "b", "c"]}
@@ -56,11 +51,7 @@ class JoinCfwTest1(FeatureGroup):
         return {PyArrowTable}
 
 
-class JoinCfwTest2(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
-
+class JoinCfwTest2(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [4, 5, 6], "idx": ["a", "b", "c"]}
@@ -70,11 +61,7 @@ class JoinCfwTest2(FeatureGroup):
         return {SecondCfw}
 
 
-class JoinCfwTest3(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
-
+class JoinCfwTest3(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [7, 8, 9], "idx": ["a", "b", "c"]}
@@ -84,11 +71,7 @@ class JoinCfwTest3(FeatureGroup):
         return {ThirdCfw}
 
 
-class JoinCfwTest4(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
-
+class JoinCfwTest4(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [12, 13, 14], "idx": ["a", "b", "c"]}
@@ -150,12 +133,8 @@ class Join4CfwTest(Join3CfwTest):
         return {PyArrowTable}
 
 
-class MultiIndexJoinTest1(FeatureGroup):
+class MultiIndexJoinTest1(DataCreatorFeatureGroup):
     """Feature group using Pandas framework with 2-column multi-index."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -170,12 +149,8 @@ class MultiIndexJoinTest1(FeatureGroup):
         return {PandasDataFrame}
 
 
-class MultiIndexJoinTest2(FeatureGroup):
+class MultiIndexJoinTest2(DataCreatorFeatureGroup):
     """Feature group using PolarsLazy framework with 2-column multi-index."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -190,12 +165,8 @@ class MultiIndexJoinTest2(FeatureGroup):
         return {PolarsLazyDataFrame}
 
 
-class MultiIndexJoinTest3(FeatureGroup):
+class MultiIndexJoinTest3(DataCreatorFeatureGroup):
     """Feature group using PyArrow framework with 2-column multi-index."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -210,12 +181,8 @@ class MultiIndexJoinTest3(FeatureGroup):
         return {PyArrowTable}
 
 
-class MultiIndexJoinTest4(FeatureGroup):
+class MultiIndexJoinTest4(DataCreatorFeatureGroup):
     """Feature group using PythonDict framework with 2-column multi-index."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

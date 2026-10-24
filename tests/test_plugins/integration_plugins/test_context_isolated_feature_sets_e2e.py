@@ -23,9 +23,8 @@ from typing import Any, ClassVar
 
 import pandas as pd
 
-from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import DataAccessCollection
@@ -45,7 +44,7 @@ TENANT_VALUES: dict[str, list[int]] = {
 }
 
 
-class ContextIsoSourceGroup(FeatureGroup):
+class ContextIsoSourceGroup(DataCreatorFeatureGroup):
     """Root child group whose output depends on the pulled "tenant" context value.
 
     Records every resolved feature's context and counts calculate_feature invocations
@@ -61,8 +60,8 @@ class ContextIsoSourceGroup(FeatureGroup):
         cls.invocation_count = 0
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({SOURCE_NAME})
+    def feature_names_supported(cls) -> set[str]:
+        return {SOURCE_NAME}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

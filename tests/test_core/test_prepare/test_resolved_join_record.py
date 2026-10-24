@@ -28,9 +28,8 @@ from mloda.core.prepare.resolved_join import (
 )
 from mloda.core.prepare.join_decision import DeclinedJoin, JoinDecision
 from mloda.core.prepare.resolved_join_builder import joinstep_signatures
-from mloda.provider import BaseInputData
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import ComputeFramework
-from mloda.provider import DataCreator
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -127,12 +126,12 @@ class ResolvedJoinChild(FeatureGroup):
     pass
 
 
-class ResolvedJoinEndLeft(FeatureGroup):
+class ResolvedJoinEndLeft(DataCreatorFeatureGroup):
     """Pinned to the framework the end to end link declares as its left side."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={END_LEFT_PAYLOAD})
+    def feature_names_supported(cls) -> set[str]:
+        return {END_LEFT_PAYLOAD}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -143,12 +142,12 @@ class ResolvedJoinEndLeft(FeatureGroup):
         return {PyArrowTable}
 
 
-class ResolvedJoinEndRight(FeatureGroup):
+class ResolvedJoinEndRight(DataCreatorFeatureGroup):
     """Pinned to the other framework, so the join needs a transform hop."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={END_RIGHT_PAYLOAD})
+    def feature_names_supported(cls) -> set[str]:
+        return {END_RIGHT_PAYLOAD}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

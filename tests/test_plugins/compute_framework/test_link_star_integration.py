@@ -17,7 +17,7 @@ import pytest
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, BaseInputData, DataCreator
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import (
     Feature,
     FeatureName,
@@ -39,10 +39,10 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 # === Fully-matching star topology (all FGs expose row_id [1, 2, 3]) ===
 
 
-class StarHubFG(FeatureGroup):
+class StarHubFG(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"row_id", "hub_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"row_id", "hub_value"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -53,10 +53,10 @@ class StarHubFG(FeatureGroup):
         return {"row_id": [1, 2, 3], "hub_value": ["h1", "h2", "h3"]}
 
 
-class StarSpokeAFG(FeatureGroup):
+class StarSpokeAFG(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"row_id", "spoke_a_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"row_id", "spoke_a_value"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -67,10 +67,10 @@ class StarSpokeAFG(FeatureGroup):
         return {"row_id": [1, 2, 3], "spoke_a_value": [10, 20, 30]}
 
 
-class StarSpokeBFG(FeatureGroup):
+class StarSpokeBFG(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"row_id", "spoke_b_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"row_id", "spoke_b_value"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -106,10 +106,10 @@ class StarConsumerFG(FeatureGroup):
 # === Partial star topology (spoke B is missing row_id 3) to observe LEFT vs INNER ===
 
 
-class StarLeftHubFG(FeatureGroup):
+class StarLeftHubFG(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"row_id", "left_hub_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"row_id", "left_hub_value"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -120,10 +120,10 @@ class StarLeftHubFG(FeatureGroup):
         return {"row_id": [1, 2, 3], "left_hub_value": ["h1", "h2", "h3"]}
 
 
-class StarLeftSpokeAFG(FeatureGroup):
+class StarLeftSpokeAFG(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"row_id", "left_spoke_a_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"row_id", "left_spoke_a_value"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -134,12 +134,12 @@ class StarLeftSpokeAFG(FeatureGroup):
         return {"row_id": [1, 2, 3], "left_spoke_a_value": [10, 20, 30]}
 
 
-class StarLeftSpokeBFG(FeatureGroup):
+class StarLeftSpokeBFG(DataCreatorFeatureGroup):
     """Spoke B is intentionally missing row_id 3 so INNER drops it and LEFT keeps it."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"row_id", "left_spoke_b_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"row_id", "left_spoke_b_value"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -174,10 +174,10 @@ class StarLeftConsumerFG(FeatureGroup):
 # === Outer star topology (spoke has a row_id the hub lacks) to observe OUTER vs INNER ===
 
 
-class StarOuterHubFG(FeatureGroup):
+class StarOuterHubFG(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"row_id", "outer_hub_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"row_id", "outer_hub_value"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -188,12 +188,12 @@ class StarOuterHubFG(FeatureGroup):
         return {"row_id": [1, 2, 3], "outer_hub_value": ["h1", "h2", "h3"]}
 
 
-class StarOuterSpokeAFG(FeatureGroup):
+class StarOuterSpokeAFG(DataCreatorFeatureGroup):
     """Spoke carries row_id 4 (which the hub lacks) and lacks row_id 1 (which the hub has)."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"row_id", "outer_spoke_a_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"row_id", "outer_spoke_a_value"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -412,8 +412,8 @@ _HR_B_ROWS = {"x": 10, "y": 20, "z": 30, "v": 50, "u": 60}
 def _hub_right_group(
     name: str, column: str, rows: dict[str, int], framework: type[ComputeFramework]
 ) -> type[FeatureGroup]:
-    def input_data(cls: Any) -> BaseInputData | None:
-        return DataCreator({column})
+    def feature_names_supported(cls: Any) -> set[str]:
+        return {column}
 
     def calculate_feature(cls: Any, data: Any, features: FeatureSet) -> Any:
         return {"idx": list(rows), column: list(rows.values())}
@@ -423,11 +423,11 @@ def _hub_right_group(
 
     namespace = {
         "__module__": __name__,
-        "input_data": classmethod(input_data),
+        "feature_names_supported": classmethod(feature_names_supported),
         "calculate_feature": classmethod(calculate_feature),
         "compute_framework_rule": classmethod(compute_framework_rule),
     }
-    return type(name, (FeatureGroup,), namespace)
+    return type(name, (DataCreatorFeatureGroup,), namespace)
 
 
 HubRightA = _hub_right_group("HubRightA", "hr_a", _HR_A_ROWS, PyArrowTable)

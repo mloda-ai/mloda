@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, Index, Link, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -14,10 +14,10 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 )
 
 
-class LinkedRootA(FeatureGroup):
+class LinkedRootA(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"linked_root_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"linked_root_a"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -34,10 +34,10 @@ class LinkedRootA(FeatureGroup):
         return [Index(("id",))]
 
 
-class LinkedRootB(FeatureGroup):
+class LinkedRootB(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"linked_root_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"linked_root_b"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -54,10 +54,10 @@ class LinkedRootB(FeatureGroup):
         return [Index(("id",))]
 
 
-class OrphanRootC(FeatureGroup):
+class OrphanRootC(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"orphan_root_c"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"orphan_root_c"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -68,10 +68,10 @@ class OrphanRootC(FeatureGroup):
         return {PythonDictFramework}
 
 
-class OrphanRootD(FeatureGroup):
+class OrphanRootD(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"orphan_root_d"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"orphan_root_d"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -165,10 +165,10 @@ def test_joinstep_matched_raises_for_literal_three_parent_scenario() -> None:
     )
 
 
-class IndependentJoinPairOneLeft(FeatureGroup):
+class IndependentJoinPairOneLeft(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"independent_join_pair_one_left"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"independent_join_pair_one_left"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -185,10 +185,10 @@ class IndependentJoinPairOneLeft(FeatureGroup):
         return [Index(("pair_one_id",))]
 
 
-class IndependentJoinPairOneRight(FeatureGroup):
+class IndependentJoinPairOneRight(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"independent_join_pair_one_right"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"independent_join_pair_one_right"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -203,10 +203,10 @@ class IndependentJoinPairOneRight(FeatureGroup):
         return [Index(("pair_one_id",))]
 
 
-class IndependentJoinPairTwoLeft(FeatureGroup):
+class IndependentJoinPairTwoLeft(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"independent_join_pair_two_left"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"independent_join_pair_two_left"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -223,10 +223,10 @@ class IndependentJoinPairTwoLeft(FeatureGroup):
         return [Index(("pair_two_id",))]
 
 
-class IndependentJoinPairTwoRight(FeatureGroup):
+class IndependentJoinPairTwoRight(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"independent_join_pair_two_right"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"independent_join_pair_two_right"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

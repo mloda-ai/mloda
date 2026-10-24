@@ -26,7 +26,7 @@ from mloda.interfaces.service.errors import is_error
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.planner import Planner
 from mloda.interfaces.service.runner import Runner
-from mloda.provider import BaseInputData, DataCreator, FeatureSet, SourceMatch
+from mloda.provider import DataCreatorFeatureGroup, FeatureSet, SourceMatch
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
@@ -91,12 +91,12 @@ class ReviewDoubleMcp9(FeatureGroup):
         return {name: [value * 2 for value in data[name[: -len(DOUBLE_SUFFIX)]]]}
 
 
-class ReviewCreatorMcp9(FeatureGroup):
+class ReviewCreatorMcp9(DataCreatorFeatureGroup):
     """Creates its own rows; no configured source backs it."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({MADE})
+    def feature_names_supported(cls) -> set[str]:
+        return {MADE}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:

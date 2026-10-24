@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, JoinSpec, Link, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -22,12 +22,12 @@ _SCLKR_B = {"sclkr_nr": [1, 2, 3], "sclkr_vb": [10, 20, 30]}
 _SCLKR_HUB_DATA = {"region2": _SCLKR_REGION2, "a": _SCLKR_A, "b": _SCLKR_B}
 
 
-class SclkrSourceFG(FeatureGroup):
+class SclkrSourceFG(DataCreatorFeatureGroup):
     """Root FG reading like a real source: a foreign-key column absent from a source raises KeyError."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"sclkr_nr", "sclkr_votes", "sclkr_code", "sclkr_pop"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"sclkr_nr", "sclkr_votes", "sclkr_code", "sclkr_pop"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -58,12 +58,12 @@ class SclkrJoinedFG(FeatureGroup):
         return {PyArrowTable}
 
 
-class SclkrHubSourceFG(FeatureGroup):
+class SclkrHubSourceFG(DataCreatorFeatureGroup):
     """Root FG serving a hub and two spokes, all sharing the join key ``sclkr_nr``."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"sclkr_nr", "sclkr_pop2", "sclkr_va", "sclkr_vb"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"sclkr_nr", "sclkr_pop2", "sclkr_va", "sclkr_vb"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

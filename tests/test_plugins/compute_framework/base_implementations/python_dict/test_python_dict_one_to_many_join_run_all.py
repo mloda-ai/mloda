@@ -9,8 +9,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -36,36 +35,28 @@ def _one_to_many_link() -> Link:
     )
 
 
-class OneToManyLeftFeature(FeatureGroup):
+class OneToManyLeftFeature(DataCreatorFeatureGroup):
     """Left side: one row per user (unique join keys)."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"user_id", "uname"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {"user_id": [1, 2], "uname": ["ann", "bob"]}
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"user_id", "uname"}
 
-
-class OneToManyRightFeature(FeatureGroup):
-    """Right side: many rows per user (duplicate join keys)."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"user_id", "amount"})
-
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {"user_id": [1, 1, 2, 2], "amount": [10, 20, 30, 40]}
+        return {"user_id": [1, 2], "uname": ["ann", "bob"]}
+
+
+class OneToManyRightFeature(DataCreatorFeatureGroup):
+    """Right side: many rows per user (duplicate join keys)."""
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"user_id", "amount"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"user_id": [1, 1, 2, 2], "amount": [10, 20, 30, 40]}
 
 
 class OneToManyJoinedFeature(FeatureGroup):

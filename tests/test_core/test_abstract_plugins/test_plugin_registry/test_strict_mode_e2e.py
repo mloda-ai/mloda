@@ -3,7 +3,7 @@
 A strict-mode run must succeed when everything it needs is registered: the
 PluginLoader funnel registers the loaded compute framework plugins, and the
 locally defined root FeatureGroup is registered explicitly. Mirrors the minimal
-DataCreator recipe of tests/test_core/test_api/test_capability_run_all.py on
+DataCreatorFeatureGroup recipe of tests/test_core/test_api/test_capability_run_all.py on
 PythonDictFramework only, so the test never skips and stays fast.
 
 Parallel-safety: assertions are membership-based and the feature name is unique
@@ -20,7 +20,7 @@ import pytest
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 from mloda.core.abstract_plugins.plugin_registry.plugin_policy import PluginPolicy, PluginPolicyViolationError
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
-from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, Options, PluginCollector, PluginLoader, mloda, register_plugin
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
@@ -28,12 +28,12 @@ from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 FEAT = "strict_e2e_run_all_feature_unique_xyz"
 
 
-class StrictE2ERunAllFeatureGroup(FeatureGroup):
+class StrictE2ERunAllFeatureGroup(DataCreatorFeatureGroup):
     """Root feature group producing one columnar feature for the strict e2e run."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({FEAT})
+    def feature_names_supported(cls) -> set[str]:
+        return {FEAT}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

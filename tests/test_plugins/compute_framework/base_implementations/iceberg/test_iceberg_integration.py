@@ -9,8 +9,7 @@ from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.user import PluginCollector
-from mloda.provider import DataCreator
-from mloda.provider import BaseInputData
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import ComputeFramework
 from mloda.user import mloda
 from mloda.user import ParallelizationMode
@@ -90,13 +89,12 @@ iceberg_test_dict = {
 }
 
 
-class IcebergTestDataCreator(FeatureGroup):
+class IcebergTestDataCreator(DataCreatorFeatureGroup):
     """Test data creator for Iceberg integration tests."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        """Return a DataCreator with the supported feature names."""
-        return DataCreator(set(iceberg_test_dict.keys()))
+    def feature_names_supported(cls) -> set[str]:
+        return set(iceberg_test_dict.keys())
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -241,12 +239,12 @@ class IcebergTableRegularFeatureGroupForFilterTest(RegularFeatureGroupForFilterT
         return mock_table
 
 
-class IcebergTableStructFieldFilterTest(FeatureGroup):
+class IcebergTableStructFieldFilterTest(DataCreatorFeatureGroup):
     """Requests the nested field 'b.c', which the plain scan drops from the arrow result."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"b.c", "status"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"b.c", "status"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -279,13 +277,13 @@ IJK_RIGHT_PAYLOAD = "ijk_right_payload"
 ijk_captured_tables: list[Mock] = []
 
 
-class IcebergJoinKeyLeftFG(FeatureGroup):
+class IcebergJoinKeyLeftFG(DataCreatorFeatureGroup):
     """Only the payload is requested by the consumer; the composite index's second column (ijk_key2) is
     never a requested feature and only survives a projected, filtered scan via the link index column stamp."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={IJK_KEY, IJK_KEY2, IJK_PAYLOAD, IJK_STATUS})
+    def feature_names_supported(cls) -> set[str]:
+        return {IJK_KEY, IJK_KEY2, IJK_PAYLOAD, IJK_STATUS}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -324,10 +322,10 @@ class IcebergJoinKeyLeftFG(FeatureGroup):
         return mock_table
 
 
-class IcebergJoinKeyRightFG(FeatureGroup):
+class IcebergJoinKeyRightFG(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={IJK_KEY, IJK_KEY2, IJK_RIGHT_PAYLOAD})
+    def feature_names_supported(cls) -> set[str]:
+        return {IJK_KEY, IJK_KEY2, IJK_RIGHT_PAYLOAD}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -373,12 +371,12 @@ ANCESTOR_STAMP_C_KEY = "ancestor_stamp_c_key"
 ANCESTOR_STAMP_C_PAYLOAD = "ancestor_stamp_c_payload"
 
 
-class AncestorStampRootFG(FeatureGroup):
+class AncestorStampRootFG(DataCreatorFeatureGroup):
     """Iceberg root: key column desc_k, value, status, filtered by a GlobalFilter on status."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={ANCESTOR_STAMP_DESC_K, ANCESTOR_STAMP_VALUE, ANCESTOR_STAMP_STATUS})
+    def feature_names_supported(cls) -> set[str]:
+        return {ANCESTOR_STAMP_DESC_K, ANCESTOR_STAMP_VALUE, ANCESTOR_STAMP_STATUS}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -443,12 +441,12 @@ class AncestorStampMiddleFG(FeatureGroup):
         return result
 
 
-class AncestorStampOtherFG(FeatureGroup):
+class AncestorStampOtherFG(DataCreatorFeatureGroup):
     """Unrelated PyArrow data creator, joined to the middle FG's desc_k on c_key."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={ANCESTOR_STAMP_C_KEY, ANCESTOR_STAMP_C_PAYLOAD})
+    def feature_names_supported(cls) -> set[str]:
+        return {ANCESTOR_STAMP_C_KEY, ANCESTOR_STAMP_C_PAYLOAD}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:

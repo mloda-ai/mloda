@@ -65,17 +65,17 @@ assert _pyarrow_module.PyArrowTable.is_available() is False, (
     "PyArrowTable.is_available() must be False while pyarrow is blocked"
 )
 
-from mloda.provider import FeatureGroup, FeatureSet, DataCreator, BaseInputData
+from mloda.provider import FeatureSet, DataCreatorFeatureGroup
 
 from typing import Any
 
 
-class InlinePythonDictCreator(FeatureGroup):
+class InlinePythonDictCreator(DataCreatorFeatureGroup):
     """Self-contained primary-source FeatureGroup producing PythonDict data."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"inline_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"inline_value"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

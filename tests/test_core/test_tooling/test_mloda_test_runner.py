@@ -2,9 +2,7 @@
 
 from typing import Any
 
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
-from mloda.provider import FeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda.user import Features
@@ -13,11 +11,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from tests.test_core.test_tooling import MlodaTestRunner
 
 
-class RunnerFieldRootFeature(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
-
+class RunnerFieldRootFeature(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [1]}

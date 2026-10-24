@@ -20,7 +20,7 @@ Contract under test:
     ambiguous name raises ``ValueError``.
 
 The chained ``plan_info_sales__mean_aggr`` request reuses the feature groups registered by
-``tests/test_core/test_api/test_plan_info.py`` so no new registry-wide DataCreator claim is made.
+``tests/test_core/test_api/test_plan_info.py`` so no new registry-wide data creator group's name claim is made.
 """
 
 import collections.abc
@@ -41,7 +41,7 @@ import pytest
 # with the ``mloda`` mlodaAPI alias imported below.
 import mloda.user as mloda_user
 from mloda.core.api.request import Engine
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet, PropertySpec
+from mloda.provider import ComputeFramework, FeatureSet, DataCreatorFeatureGroup, PropertySpec
 from mloda.user import Feature, Options, ParallelizationMode, PlanStep, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -64,12 +64,12 @@ _TWO_GROUP_FEATURES: list[Feature | str] = ["plan_info_sales", "plan_info_sales_
 _PROBE_VALUES = {"A": [1, 2, 3], "B": [10, 20, 30]}
 
 
-class RunResultProbe(FeatureGroup):
+class RunResultProbe(DataCreatorFeatureGroup):
     """Root source whose column values depend on the ``source_table`` group option."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"run_result_probe_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"run_result_probe_value"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -84,7 +84,7 @@ class RunResultProbe(FeatureGroup):
 _PROBE_PLUGINS = PluginCollector.enabled_feature_groups({RunResultProbe})
 
 
-class RunResultOrderProbe(FeatureGroup):
+class RunResultOrderProbe(DataCreatorFeatureGroup):
     """The "slow" role blocks on a class-level gate until "fast" signals it, then adds a short
     delay so a single THREADING poll pass can't hide the fix (a class attribute, since a
     threading.Event in Options wouldn't survive Engine.compute()'s per-step deepcopy)."""
@@ -92,8 +92,8 @@ class RunResultOrderProbe(FeatureGroup):
     _gate: threading.Event = threading.Event()
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"run_result_order_probe_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"run_result_order_probe_value"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -448,14 +448,14 @@ class TestRunResultFrames:
         assert frame["run_result_probe_value"].tolist() == _PROBE_VALUES["A"]
 
 
-class RunResultDefaultsProbe(FeatureGroup):
+class RunResultDefaultsProbe(DataCreatorFeatureGroup):
     """Root source whose step options gain a declared group default."""
 
     PROPERTY_MAPPING = {"run_result_mode": PropertySpec("Engine-filled group default", context=False, default="fast")}
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"run_result_defaults_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"run_result_defaults_value"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -487,12 +487,12 @@ def _run_defaults_probe_with(features: list[Feature | str]) -> Any:
     )
 
 
-class RunResultAnyFrameworkProbe(FeatureGroup):
+class RunResultAnyFrameworkProbe(DataCreatorFeatureGroup):
     """Root source with no framework rule, so it runs on any requested framework."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"run_result_any_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"run_result_any_value"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -502,12 +502,12 @@ class RunResultAnyFrameworkProbe(FeatureGroup):
 _ANY_PLUGINS = PluginCollector.enabled_feature_groups({RunResultAnyFrameworkProbe})
 
 
-class RunResultSecretProbe(FeatureGroup):
+class RunResultSecretProbe(DataCreatorFeatureGroup):
     """Root source whose column value depends on a nested credential-shaped group option."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"run_result_secret_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"run_result_secret_value"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

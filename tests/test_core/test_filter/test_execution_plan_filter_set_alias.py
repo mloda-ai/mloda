@@ -15,7 +15,7 @@ from typing import Any
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import DataCreator
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Feature, FilterType, GlobalFilter, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -29,10 +29,10 @@ EPA_TARGET_B = "epa_target_b"
 def _make_fg() -> type[FeatureGroup]:
     """A throwaway root feature group serving the host and both filter targets."""
 
-    class EpaHostFeatureGroup(FeatureGroup):
+    class EpaHostFeatureGroup(DataCreatorFeatureGroup):
         @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator({EPA_ROOT, EPA_TARGET_A, EPA_TARGET_B})
+        def feature_names_supported(cls) -> set[str]:
+            return {EPA_ROOT, EPA_TARGET_A, EPA_TARGET_B}
 
         @classmethod
         def final_filters(cls) -> bool:

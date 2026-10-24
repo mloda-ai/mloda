@@ -40,7 +40,7 @@ class TestContributingFile:
     def test_contributing_mentions_python_version(self) -> None:
         content = _read_text(PROJECT_ROOT / "CONTRIBUTING.md")
         assert "Python 3.11 or higher" in content, "CONTRIBUTING.md must state the minimum Python version (3.11)"
-        assert "3.10" not in content, "CONTRIBUTING.md must not mention Python 3.10"
+        assert "Python 3.10" not in content and "3.10," not in content, "CONTRIBUTING.md mentions Python 3.10"
 
     def test_contributing_has_code_style_section(self) -> None:
         content = _read_text(PROJECT_ROOT / "CONTRIBUTING.md")

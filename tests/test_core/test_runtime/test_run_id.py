@@ -61,12 +61,12 @@ class TestGenerateRunIdBranches:
             raise AssertionError("uuid.uuid7 must not be used below 3.14")
 
         monkeypatch.setattr(uuid, "uuid7", boom, raising=False)
-        monkeypatch.setattr(sys, "version_info", (3, 10, 0, "final", 0))
+        monkeypatch.setattr(sys, "version_info", (3, 13, 0, "final", 0))
 
         assert_valid_uuid7(generate_run_id())
 
     def test_hand_rolled_branch_embeds_the_current_millisecond_timestamp(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(sys, "version_info", (3, 10, 0, "final", 0))
+        monkeypatch.setattr(sys, "version_info", (3, 13, 0, "final", 0))
         monkeypatch.setattr("time.time_ns", lambda: 1_700_000_000_123 * 1_000_000)
 
         assert uuid.UUID(generate_run_id()).int >> 80 == 1_700_000_000_123

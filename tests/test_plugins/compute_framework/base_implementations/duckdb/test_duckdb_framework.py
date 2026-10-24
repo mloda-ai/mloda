@@ -179,7 +179,7 @@ class TestDuckDBFrameworkSessionTimezone:
         """Build a single-row TIMESTAMPTZ relation on the framework's connection."""
         conn = framework.get_framework_connection_object()
         # pa.array with a tz-typed timestamp interprets naive datetimes as already in that tz;
-        # tz-aware datetimes are rejected on some PyArrow builds across the 3.10-3.14 matrix,
+        # tz-aware datetimes are rejected on some PyArrow builds across the 3.11-3.14 matrix,
         # hence the .replace(tzinfo=None). The stored absolute instant is unchanged.
         naive_utc = instant.replace(tzinfo=None)
         arrow_table = pa.table({"ts": pa.array([naive_utc], type=pa.timestamp("us", tz="UTC"))})

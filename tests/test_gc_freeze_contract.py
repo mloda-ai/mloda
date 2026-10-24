@@ -177,7 +177,7 @@ def test_conftest_unfreezes_the_graph_at_session_finish() -> None:
         f"(count {baseline} before, {frozen} after). {_FREEZE_MISSING}"
     )
     # Not `released == 0`: on CPython 3.12 the ~375 objects the interpreter seeds at startup come back into the
-    # permanent generation on the next full collection. Requiring the bulk back holds on 3.10 through 3.14.
+    # permanent generation on the next full collection. Requiring the bulk back holds on 3.11 through 3.14.
     assert released * 10 < frozen, (
         f"pytest_sessionfinish left {released} of {frozen} objects frozen (count {baseline} before the freeze), "
         f"so it did not release the graph it froze. {_UNFREEZE_MISSING}"

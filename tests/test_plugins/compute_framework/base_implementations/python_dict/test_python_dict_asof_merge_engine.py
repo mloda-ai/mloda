@@ -131,7 +131,7 @@ class TestPythonDictAsofMergeEngine(AsofMergeEngineTestBase):
             direction="backward",
             coerce_time_columns=True,
         )
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Invalid isoformat"):
             engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
 
     def test_coerce_mixed_tz_naive_and_aware_raises(self) -> None:

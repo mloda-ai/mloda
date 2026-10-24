@@ -36,7 +36,7 @@ def loaded(module: str) -> Any | None:
     if found is None:
         return None
     if getattr(getattr(found, "__spec__", None), "_initializing", True):
-        # Mirrors CPython's _find_and_load: a module still importing (or without a spec) goes through
-        # import_module, which waits on its per-module import lock; an initialized one is returned directly.
+        # Same check as CPython's _find_and_load, except a module without a spec counts as still importing;
+        # import_module then waits on its per-module lock.
         return importlib.import_module(module)
     return found

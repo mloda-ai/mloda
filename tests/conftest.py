@@ -133,7 +133,7 @@ def flight_server(flight_server_setup: ParallelRunnerFlightServer) -> Any:
 
 NO_GC_FREEZE_ENV_VAR = "MLODA_NO_GC_FREEZE"
 
-# CPython 3.12 seeds the permanent generation with ~375 objects at interpreter startup (3.10, 3.11, 3.13 and 3.14
+# CPython 3.12 seeds the permanent generation with ~375 objects at interpreter startup (3.11, 3.13 and 3.14
 # seed none), while freezing a realistic imported graph moves tens of thousands. A truthiness check would read
 # 3.12's seed as a host freeze and never freeze on that version, so ownership is decided against this floor.
 MIN_FROZEN_GRAPH_OBJECTS = 1000
@@ -143,7 +143,7 @@ _froze_the_graph = False
 
 # The gc.collect() is load-bearing, not a tidy-up: a FeatureGroup subclass that is dead but not yet collected here
 # gets frozen alive and stays visible to get_all_subclasses(FeatureGroup) for the whole run, since objects frozen
-# before a collection are never reclaimed afterwards on any of 3.10-3.14. A non-empty permanent generation means a
+# before a collection are never reclaimed afterwards on any of 3.11-3.14. A non-empty permanent generation means a
 # host froze its own graph before calling pytest, and that freeze is not ours to touch. Freezing also empties
 # gc.get_objects() and hides frozen referrers from gc.get_referrers(), so MLODA_NO_GC_FREEZE opts out of it for
 # anyone debugging object retention inside the suite.

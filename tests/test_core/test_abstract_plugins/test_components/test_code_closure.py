@@ -107,7 +107,7 @@ class TestLargeInputsDoNotRaise:
         canonical_dump(node)
 
     def test_flat_expression_2000_terms_does_not_raise_recursion_error(self) -> None:
-        # 2000 terms parses on Python 3.10-3.14 and still exceeds the default
+        # 2000 terms parses on Python 3.11-3.14 and still exceeds the default
         # recursion limit, so a recursive dump would overflow too.
         src = "a" + " + a" * 1999
         tree = ast.parse(src, mode="eval")

@@ -49,8 +49,27 @@ _DOC_CHECK_DRIVER = """\
 import sys
 from pathlib import Path
 from mloda.user import PluginLoader
-from mktestdocs import check_md_file
+import inspect
+from mktestdocs import check_md_file, register_executor
 PluginLoader.all()
+
+
+def run_python(source):
+    ns = {"__name__": "__main__"}
+    exec(source, ns)
+    for name, obj in list(ns.items()):
+        if getattr(obj, "__module__", None) != "__main__":
+            continue
+        if inspect.isclass(obj) and name.startswith("Test"):
+            raise TypeError(f"doc-defined test class {name} is not collected; use test_* functions")
+        if inspect.isfunction(obj) and name.startswith("test_"):
+            if inspect.iscoroutinefunction(obj) or inspect.isgeneratorfunction(obj) or inspect.signature(obj).parameters:
+                raise TypeError(f"doc-defined {name} must be a plain no-argument function")
+            print(f"CALLING {name}", flush=True)
+            obj()
+
+
+register_executor("python", run_python)
 for path in sys.argv[1:]:
     print(f"CHECKING {path}", flush=True)
     check_md_file(fpath=Path(path), memory=True)
@@ -64,7 +83,8 @@ def run_md_files_isolated(fpaths: Sequence[Path]) -> None:
     pollute doc-snippet feature resolution (issue #828). One seeded child for
     the whole doc set keeps resolution isolated from that leakage while paying
     the plugin-load cost once; docs sharing one interpreter matches the
-    pre-isolation semantics. The last CHECKING line attributes a failure.
+    pre-isolation semantics. Doc-defined test_* functions are called; a failure
+    is attributed as <doc>[::<test>] from the last CHECKING and CALLING lines.
     """
     kept_paths = [fpath for fpath in fpaths if f"```{RUNNABLE_TAG}" in fpath.read_text(encoding="utf-8")]
     if not kept_paths:
@@ -76,10 +96,14 @@ def run_md_files_isolated(fpaths: Sequence[Path]) -> None:
         text=True,
         timeout=110,
     )
-    stdout_tail = "\n".join(result.stdout.splitlines()[-50:])
+    lines = result.stdout.splitlines()
+    stdout_tail = "\n".join(lines[-50:])
+    checking = [i for i, line in enumerate(lines) if line.startswith("CHECKING ")]
+    doc = lines[checking[-1]].removeprefix("CHECKING ") if checking else "<unknown doc>"
+    calling = [line for line in lines[checking[-1] if checking else 0 :] if line.startswith("CALLING ")]
+    where = doc + (f"::{calling[-1].removeprefix('CALLING ')}" if calling else "")
     assert result.returncode == 0, (
-        f"Doc snippet check failed (last CHECKING line names the file)\n"
-        f"stdout (last 50 lines):\n{stdout_tail}\nstderr:\n{result.stderr}"
+        f"Doc snippet check failed in {where}\nstdout (last 50 lines):\n{stdout_tail}\nstderr:\n{result.stderr}"
     )
 
 

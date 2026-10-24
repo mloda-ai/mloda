@@ -27,7 +27,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas im
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import PolarsLazyAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.test_plugins.feature_group.experimental.reference_contract import same_on_pandas
+from tests.test_plugins.feature_group.experimental.reference_contract import same, same_on_pandas
 
 
 AGGREGATION_UNIVERSE = frozenset(AggregatedFeatureGroup.AGGREGATION_TYPES)
@@ -160,6 +160,8 @@ def _reference(aggregation_type: str, cells: list[float | None]) -> float | int 
         return sum(clean)
     if aggregation_type in ("avg", "mean"):
         return statistics.fmean(clean)
+    if aggregation_type in ("std", "var") and len(clean) < 2:
+        return None
     return statistics.stdev(clean) if aggregation_type == "std" else statistics.variance(clean)
 
 
@@ -251,6 +253,7 @@ class TestImplementationsConformToTheReferenceContract:
             actual = runner(aggregation_type, columns)
             expected = _reference_result(aggregation_type, columns)
             assert len(actual) == len(expected), f"{shape}: {actual} vs {expected}"
-            if not all(same_on_pandas(a, e) for a, e in zip(actual, expected)):
+            compare = same_on_pandas if implementation is PandasAggregation else same
+            if not all(compare(a, e) for a, e in zip(actual, expected)):
                 differing.append(f"{shape}: {actual} != reference {expected}")
         assert bool(differing) == (aggregation_type in implementation.divergent), differing

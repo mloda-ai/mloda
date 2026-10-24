@@ -130,8 +130,11 @@ class PyArrowAggregation(Implementation[AggregatedFeatureGroup]):
             else:
                 raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
 
-            # Convert back to PyArrow array (will be added as column)
-            return result
+            # Rows with no values (std/var: fewer than 2) are masked, so they become null.
+            if aggregation_type in ["sum", "count"]:
+                return result
+            minimum = 2 if aggregation_type in ["std", "var"] else 1
+            return np.ma.masked_array(result, mask=valid_counts < minimum)
         else:
             # Single column: vertical aggregation (returns scalar)
             column = data.column(in_features[0])

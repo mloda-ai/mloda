@@ -508,6 +508,15 @@ class TestPyArrowAggregationMultiColumnIntegerHandling:
             f"expected integer dtype preserved when no nulls present, got {result_col.type}"
         )
 
+    @pytest.mark.parametrize("aggregation_type", ["max", "sum"])
+    def test_perform_aggregation_multi_column_keeps_infinite_result(self, aggregation_type: str) -> None:
+        table = pa.table({"m~0": pa.array([float("inf"), 1.0]), "m~1": pa.array([1.0, 2.0])})
+        result = PyArrowAggregation._perform_aggregation(table, aggregation_type, ["m~0", "m~1"])
+
+        updated = PyArrowAggregation._add_result_to_data(table, "m__aggr", result)
+
+        assert updated.column("m__aggr").to_pylist() == [float("inf"), 3.0 if aggregation_type == "sum" else 2.0]
+
 
 class TestAggPyArrowIntegration:
     """Integration tests for the aggregated feature group."""

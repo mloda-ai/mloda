@@ -45,7 +45,7 @@ Test-Driven Development Green Phase specialist. Writes minimal code to make fail
 3. Implement the simplest solution following mloda conventions
 4. Run tests to ensure they pass
 5. Run all tests to ensure no regressions
-6. Run tox for final validation
+6. Run tox for final validation, unless the brief limits the run to the affected tests (follow-up fixes, see CLAUDE.md)
 7. Document implementation rationale
 
 ## Implementation Strategy

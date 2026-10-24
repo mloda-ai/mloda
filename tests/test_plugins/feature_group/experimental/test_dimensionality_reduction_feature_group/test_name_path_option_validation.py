@@ -17,9 +17,6 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import (
     DimensionalityReductionFeatureGroup,
 )
-from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
-    PandasDimensionalityReductionFeatureGroup,
-)
 
 
 class TestPcaSvdSolverValidatedOnBothPaths:
@@ -181,7 +178,7 @@ class TestForwardedAlgorithmOutsideTheChildValueSpace:
         """
         feature = Feature("f0__pca_2d", _forwarded_child_options("kmeans"))
         accessible_plugins: FeatureGroupEnvironmentMapping = {
-            PandasDimensionalityReductionFeatureGroup: {PandasDataFrame},
+            DimensionalityReductionFeatureGroup: {PandasDataFrame},
         }
 
         with pytest.raises(ValueError) as exc_info:
@@ -218,7 +215,7 @@ class TestForwardedAlgorithmInsideTheChildValueSpace:
         """However the engine reports it, the user is told to carve the key out."""
         feature = Feature("f0__pca_2d", _forwarded_child_options("tsne"))
         accessible_plugins: FeatureGroupEnvironmentMapping = {
-            PandasDimensionalityReductionFeatureGroup: {PandasDataFrame},
+            DimensionalityReductionFeatureGroup: {PandasDataFrame},
         }
 
         with pytest.raises(ValueError) as exc_info:

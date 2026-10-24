@@ -30,7 +30,6 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     COLUMN_DISCOVERY_HOOKS,
     COLUMNWISE_HOOKS,
     FeatureChainParserMixin,
-    missing_columnwise_hooks,
 )
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
@@ -43,6 +42,8 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas im
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import PolarsLazyAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
+from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClustering
+from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecasting
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueImputation
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow import PyArrowMissingValueImputation
@@ -50,10 +51,12 @@ from mloda_plugins.feature_group.experimental.data_quality.missing_value.python_
     PythonDictMissingValueImputation,
 )
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
+from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import PandasDimensionalityReduction
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
 from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistance
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
+from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentrality
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
@@ -70,13 +73,11 @@ from tests.test_plugins.feature_group.experimental.columnwise_hooks_test_mixin i
     ADD_HOOK,
     CHECK_HOOK,
     DISCOVERY_HOOK,
-    resolved_hook,
 )
 from tests.test_plugins.feature_group.experimental.test_columnwise_hooks_contract import (
     HOOK_NAMES,
     MIN_BASE_MODULES,
     SCAN_ROOT,
-    STRICTNESS,
 )
 
 MIXIN_MODULE = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin"
@@ -93,18 +94,6 @@ CONTRACT_SYMBOLS = (
 
 # Lower bounds only, so a broken glob or a wrong root cannot make the widened sweeps pass vacuously.
 MIN_EXPERIMENTAL_MODULES = 40
-MIN_HOOK_CALLING_MODULES = 6
-
-# The expected declaration per family base, kept as a table so a changed declaration is a visible diff.
-# A family that resolves column names against the data needs the discovery hook on top of the pair.
-FAMILY_REQUIREMENTS: dict[type[Any], frozenset[str]] = {
-    ClusteringFeatureGroup: COLUMN_DISCOVERY_HOOKS,
-    ForecastingFeatureGroup: COLUMN_DISCOVERY_HOOKS,
-    DimensionalityReductionFeatureGroup: COLUMNWISE_HOOKS,
-    NodeCentralityFeatureGroup: COLUMNWISE_HOOKS,
-}
-
-FAMILY_IDS = [family.__name__ for family in FAMILY_REQUIREMENTS]
 
 
 def _module_name_of(path: Path) -> str:
@@ -266,6 +255,45 @@ OPERATION_FAMILIES: dict[str, tuple[type[Any], list[type[Any]], str, str, list[d
             ),
         ],
     ),
+    "clustering": (
+        ClusteringFeatureGroup,
+        [PandasClustering],
+        "cluster",
+        "a__cluster_kmeans_2",
+        [
+            _kwargs(
+                perform=_perform("_perform_clustering"),
+                perform_with_probabilities=_perform("_perform_clustering_with_probabilities"),
+            )
+        ],
+    ),
+    "forecasting": (
+        ForecastingFeatureGroup,
+        [PandasForecasting],
+        "forecast",
+        "sales__linear_forecast_7day",
+        [
+            _kwargs(
+                perform=_perform("_perform_forecasting"),
+                perform_with_confidence=_perform("_perform_forecasting_with_confidence"),
+                column_semantics=lambda _impl: pandas_type_semantics.column_semantics,
+            )
+        ],
+    ),
+    "dimensionality_reduction": (
+        DimensionalityReductionFeatureGroup,
+        [PandasDimensionalityReduction],
+        "reduce",
+        "a,b,c__pca_2d",
+        [_kwargs(perform=_perform("_perform_reduction"))],
+    ),
+    "node_centrality": (
+        NodeCentralityFeatureGroup,
+        [PandasNodeCentrality],
+        "centrality",
+        "user__degree_centrality",
+        [_kwargs(perform=_perform("_calculate_centrality"))],
+    ),
     "missing_value": (
         MissingValueFeatureGroup,
         [PandasMissingValueImputation, PyArrowMissingValueImputation, PythonDictMissingValueImputation],
@@ -374,18 +402,6 @@ def test_calculate_delegates_to_the_group_it_is_handed(name: str, impl: type[Any
     assert result is getattr(group, loop).return_value
 
 
-@pytest.mark.parametrize(("family", "expected"), list(FAMILY_REQUIREMENTS.items()), ids=FAMILY_IDS)
-def test_family_base_declares_its_required_hooks(family: type[Any], expected: frozenset[str]) -> None:
-    """Each family base states the hooks its calculate_feature calls."""
-    assert family.REQUIRED_COLUMNWISE_HOOKS == expected
-
-
-@pytest.mark.parametrize("family", list(FAMILY_REQUIREMENTS), ids=FAMILY_IDS)
-def test_family_base_owns_its_declaration(family: type[Any]) -> None:
-    """The declaration sits in the family's own class body, not inherited from a sibling or the mixin."""
-    assert "REQUIRED_COLUMNWISE_HOOKS" in family.__dict__
-
-
 def test_declaration_matches_the_hooks_each_base_module_calls() -> None:
     """Anti-drift sweep: a base's declaration must equal the hooks its own module calls on cls.
 
@@ -422,13 +438,11 @@ def test_no_family_module_calls_a_hook_its_base_does_not_declare() -> None:
     declarations = _family_declarations()
     offenders: list[str] = []
     visited = 0
-    calling = 0
     for path in sorted(SCAN_ROOT.rglob("*.py")):
         visited += 1
         called = _hooks_called_in(path)
         if not called:
             continue
-        calling += 1
         family = _owning_family(path, declarations)
         if family is None:
             offenders.append(f"{path.relative_to(SCAN_ROOT)} calls {sorted(called)} but belongs to no family base")
@@ -441,35 +455,4 @@ def test_no_family_module_calls_a_hook_its_base_does_not_declare() -> None:
     assert offenders == [], f"REQUIRED_COLUMNWISE_HOOKS drifted from the code: {offenders}"
     assert visited >= MIN_EXPERIMENTAL_MODULES, (
         f"sweep visited only {visited} modules under {SCAN_ROOT}: the sweep root is wrong or the glob broke"
-    )
-    assert calling >= MIN_HOOK_CALLING_MODULES, (
-        f"sweep found only {calling} hook-calling modules under {SCAN_ROOT}: the call detection broke"
-    )
-
-
-@pytest.mark.parametrize("plugin_class", list(STRICTNESS), ids=[cls.__name__ for cls in STRICTNESS])
-def test_shipped_family_class_declares_a_requirement_it_implements(plugin_class: type[Any]) -> None:
-    """Precondition for the sweep below: every shipped class is framework-bound and carries a requirement."""
-    assert "compute_framework_rule" in plugin_class.__dict__, (
-        f"{plugin_class.__name__} is not framework-bound, so it is no implementation to check"
-    )
-    assert plugin_class.REQUIRED_COLUMNWISE_HOOKS, f"{plugin_class.__name__} inherits an empty requirement"
-
-
-@pytest.mark.parametrize("plugin_class", list(STRICTNESS), ids=[cls.__name__ for cls in STRICTNESS])
-def test_shipped_family_class_reports_no_missing_hook(plugin_class: type[Any]) -> None:
-    """This is the check a plugin repo runs: no shipped class leaves a declared hook unimplemented.
-
-    The hand-rolled comparison is an independent oracle: it must agree with the exported reader, so a
-    reader that silently reports nothing cannot pass this sweep.
-    """
-    default_hooks = {hook: resolved_hook(FeatureChainParserMixin, hook) for hook in HOOK_NAMES}
-    expected = sorted(
-        hook
-        for hook in plugin_class.REQUIRED_COLUMNWISE_HOOKS
-        if resolved_hook(plugin_class, hook) is default_hooks[hook]
-    )
-    assert expected == [], f"{plugin_class.__name__} inherits the raising default for {expected}"
-    assert missing_columnwise_hooks(plugin_class) == expected, (
-        f"missing_columnwise_hooks disagrees with the direct hook comparison for {plugin_class.__name__}"
     )

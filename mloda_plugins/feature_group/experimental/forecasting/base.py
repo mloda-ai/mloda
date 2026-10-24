@@ -4,14 +4,13 @@ Base implementation for forecasting feature groups.
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from collections.abc import Callable
 from typing import Any, cast
 
-from mloda.provider import ANY_OUTPUT_PART, FeatureGroup
+from mloda.provider import ANY_OUTPUT_PART, OperationFeatureGroup
 from mloda.provider import BaseArtifact
 from mloda.user import Feature
 from mloda.provider import FeatureChainParser, FeatureChainParserMixin, FeatureSet
-from mloda.provider import COLUMN_DISCOVERY_HOOKS
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
@@ -32,7 +31,7 @@ def _part_suffix(part: str) -> str | None:
     return None if level in ("lower", "upper") else level
 
 
-class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
+class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, OperationFeatureGroup):
     """
     Base class for all forecasting feature groups.
 
@@ -143,9 +142,6 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = 1
 
-    # Hooks calculate_feature calls: _get_available_columns, _check_source_features_exist, _add_result_to_data.
-    REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
-
     # Property mapping for configuration-based features with group/context separation
     PROPERTY_MAPPING = {
         ALGORITHM: PropertySpec(
@@ -245,20 +241,18 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         return algorithm, horizon, time_unit
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Perform forecasting operations.
-
-        Processes all requested features, determining the forecasting algorithm,
-        horizon, time unit, and source feature from either string parsing or
-        configuration-based options.
-
-        If a trained model exists in the artifact, it is used to generate forecasts.
-        Otherwise, a new model is trained and saved as an artifact.
-
-        Adds the forecasting results directly to the input data structure.
-        """
-
+    def forecast(
+        cls,
+        data: Any,
+        features: FeatureSet,
+        *,
+        perform: Callable[[Any, str, int, str, str, str, Any | None], tuple[Any, Any | None]],
+        perform_with_confidence: Callable[[Any, str, int, str, str, str, Any | None], tuple[Any, Any, Any, Any | None]],
+        add_column: Callable[[Any, str, Any], Any],
+        columns: Callable[[Any], set[str]],
+        column_semantics: Callable[[Any, str], Any],
+    ) -> Any:
+        """Forecast each requested feature, loading or saving the model artifact, and add the results."""
         _options = None
         for feature in features.get_sorted_features():
             if _options:
@@ -268,8 +262,12 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
 
         reference_time_column = cls.get_reference_time_column(_options)
 
-        cls._check_reference_time_column_exists(data, reference_time_column)
-        cls._check_reference_time_column_is_datetime(data, reference_time_column)
+        if reference_time_column not in columns(data):
+            raise ValueError(
+                f"Reference time column '{reference_time_column}' not found in data. "
+                f"Please ensure the DataFrame contains this column."
+            )
+        cls._validate_reference_time_column(column_semantics(data, reference_time_column), reference_time_column)
 
         # Store the original clean data
         original_data = data
@@ -282,7 +280,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             algorithm, horizon, time_unit, in_features = cls._extract_forecasting_parameters(feature)
 
             # A "~" source such as "product__onehot_encoded" expands to ["...~0", "...~1", ...]
-            available_columns = cls._get_available_columns(original_data)
+            available_columns = columns(original_data)
             resolved_columns = cls.resolve_multi_column_feature(in_features, available_columns)
             # Chaining skips bound columns such as "~0~lower" or "~0~upper"
             resolved_columns = [
@@ -292,7 +290,11 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             ]
 
             # Check that resolved columns exist
-            cls._check_source_features_exist(original_data, resolved_columns)
+            if all(c not in available_columns for c in resolved_columns):
+                raise ValueError(
+                    f"None of the source features {resolved_columns} found in data. "
+                    f"Available columns: {sorted(available_columns, key=str)}"
+                )
 
             # Check if we have a trained model in the artifact
             model_artifact = None
@@ -322,7 +324,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
                 column_artifact = column_artifacts.get(suffix) if column_artifacts is not None else None
 
                 if output_confidence_intervals:
-                    result, lower_bound, upper_bound, updated_artifact = cls._perform_forecasting_with_confidence(
+                    result, lower_bound, upper_bound, updated_artifact = perform_with_confidence(
                         original_data,
                         algorithm,
                         horizon,
@@ -335,7 +337,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
                     results.append((f"{output_name}~lower", lower_bound))
                     results.append((f"{output_name}~upper", upper_bound))
                 else:
-                    result, updated_artifact = cls._perform_forecasting(
+                    result, updated_artifact = perform(
                         original_data,
                         algorithm,
                         horizon,
@@ -355,7 +357,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
 
         # Add all results to the data at once
         for feature_name, result in results:
-            data = cls._add_result_to_data(data, feature_name, result)
+            data = add_column(data, feature_name, result)
 
         return data
 
@@ -464,99 +466,3 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         if horizon is not None:
             horizon = int(horizon)
         return algorithm, horizon, time_unit
-
-    @classmethod
-    @abstractmethod
-    def _check_reference_time_column_exists(cls, data: Any, reference_time_column: str) -> None:
-        """
-        Check if the reference time column exists in the data.
-
-        Args:
-            data: The input data
-            reference_time_column: The name of the reference time column
-
-        Raises:
-            ValueError: If the reference time column does not exist in the data
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _check_reference_time_column_is_datetime(cls, data: Any, reference_time_column: str) -> None:
-        """
-        Check if the reference time column is a datetime column.
-
-        Args:
-            data: The input data
-            reference_time_column: The name of the reference time column
-
-        Raises:
-            ValueError: If the reference time column is not a datetime column
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _perform_forecasting(
-        cls,
-        data: Any,
-        algorithm: str,
-        horizon: int,
-        time_unit: str,
-        source_column: str,
-        time_filter_feature: str,
-        model_artifact: Any | None = None,
-    ) -> tuple[Any, Any | None]:
-        """
-        Method to perform the forecasting. Should be implemented by subclasses.
-
-        Forecasts one source column per call; the caller loops over multi-column sources.
-
-        Args:
-            data: The input data
-            algorithm: The forecasting algorithm to use
-            horizon: The forecast horizon
-            time_unit: The time unit for the horizon
-            source_column: The single source column to forecast
-            time_filter_feature: The name of the time filter feature
-            model_artifact: Optional artifact containing a trained model
-
-        Returns:
-            A tuple containing (forecast_result, updated_artifact)
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _perform_forecasting_with_confidence(
-        cls,
-        data: Any,
-        algorithm: str,
-        horizon: int,
-        time_unit: str,
-        source_column: str,
-        time_filter_feature: str,
-        model_artifact: Any | None = None,
-    ) -> tuple[Any, Any, Any, Any | None]:
-        """
-        Method to perform forecasting and return point forecast plus confidence intervals.
-
-        Forecasts one source column per call.
-
-        Args:
-            data: The input data
-            algorithm: The forecasting algorithm to use
-            horizon: The forecast horizon
-            time_unit: The time unit for the horizon
-            source_column: The single source column to forecast
-            time_filter_feature: The name of the time filter feature
-            model_artifact: Optional artifact containing a trained model
-
-        Returns:
-            A tuple containing (point_forecast, lower_bound, upper_bound, updated_artifact)
-            - point_forecast: The point forecast values
-            - lower_bound: The lower confidence bound
-            - upper_bound: The upper confidence bound
-            - updated_artifact: The updated artifact (or None)
-        """
-        ...

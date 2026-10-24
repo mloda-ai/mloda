@@ -14,60 +14,41 @@ except ImportError:
     pd = None
     np = None  # type: ignore
 
-from mloda.provider import ComputeFramework, FeatureChainParser
+from mloda.provider import ComputeFramework, FeatureSet, Implementation
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
 
 
-class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        """Define the compute framework for this feature group."""
-        return {PandasDataFrame}
+class PandasNodeCentrality(Implementation[NodeCentralityFeatureGroup]):
+    feature_group = NodeCentralityFeatureGroup
+    compute_framework = PandasDataFrame
 
     @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
-        """
-        Check if the source features exist in the DataFrame.
-
-        Args:
-            data: The pandas DataFrame
-            feature_names: List of feature names to check
-
-        Raises:
-            ValueError: If a feature does not exist in the DataFrame
-        """
-        missing_features = [f for f in feature_names if f not in data.columns]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {list(data.columns)}"
-            )
+    def calculate(
+        cls,
+        group: type[NodeCentralityFeatureGroup],
+        data: Any,
+        features: FeatureSet,
+        framework: ComputeFramework | None,
+    ) -> Any:
+        return group.centrality(
+            data,
+            features,
+            perform=cls._calculate_centrality,
+            add_column=cls._add_result_to_data,
+            columns=cls.compute_framework.extract_column_names,
+        )
 
     @classmethod
-    def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: pd.Series) -> pd.DataFrame:
-        """
-        Add the centrality result to the DataFrame.
-
-        Args:
-            data: The pandas DataFrame
-            feature_name: The name of the feature to add
-            result: The centrality result (node scores)
-
-        Returns:
-            The updated DataFrame with the centrality result added
-        """
-        # Create a mapping from node to centrality score
+    def _add_result_to_data(
+        cls, data: pd.DataFrame, feature_name: str, result: pd.Series, node_feature: str | None
+    ) -> pd.DataFrame:
+        """Map node scores onto the node column, or onto source/target columns when there is none."""
         node_to_score = result.to_dict()
 
-        # Map through the node column only when the name matches PREFIX_PATTERN
-        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
-        if parsed.matched:
-            node_feature = parsed.source_feature
-
-            if node_feature in data.columns:
-                # Map each row's node value to its centrality score
-                data[feature_name] = data[node_feature].map(node_to_score)
-                return data
+        if node_feature is not None and node_feature in data.columns:
+            data[feature_name] = data[node_feature].map(node_to_score)
+            return data
 
         # Otherwise fall back to the source and target columns
         source_col = "source"

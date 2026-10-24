@@ -16,7 +16,7 @@ from mloda.user import FeatureName
 from mloda.provider import ANY_OUTPUT_PART, FeatureGroup, FeatureSet
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
-from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
+from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecasting
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
 
@@ -78,7 +78,7 @@ class TestForecastingFeatureGroup:
     def test_input_features(self) -> None:
         """Test extraction of input features."""
         feature_name = "sales__linear_forecast_7day"
-        feature_group = PandasForecastingFeatureGroup()
+        feature_group = ForecastingFeatureGroup()
 
         input_features = feature_group.input_features(self.options, Feature(feature_name).name)
 
@@ -174,13 +174,13 @@ class TestForecastingFeatureGroup:
         assert "found 2" in reason
 
         with pytest.raises(ValueError) as exc_info:
-            PandasForecastingFeatureGroup().input_features(self.options, FeatureName(name))
+            ForecastingFeatureGroup().input_features(self.options, FeatureName(name))
         assert str(exc_info.value) == reason
 
     def test_pandas_forecasting(self) -> None:
         """Test forecasting with the Pandas implementation."""
         # Perform forecasting
-        result, artifact = PandasForecastingFeatureGroup._perform_forecasting(
+        result, artifact = PandasForecasting._perform_forecasting(
             self.df, "linear", 7, "day", "sales", "time_filter", None
         )
 
@@ -197,7 +197,7 @@ class TestForecastingFeatureGroup:
         assert len(result) == 37  # 30 original points + 7 forecast points
 
         # Test with a pre-trained model
-        result2, artifact2 = PandasForecastingFeatureGroup._perform_forecasting(
+        result2, artifact2 = PandasForecasting._perform_forecasting(
             self.df, "linear", 7, "day", "sales", "time_filter", artifact
         )
 
@@ -216,7 +216,7 @@ class TestForecastingFeatureGroup:
 
         for algorithm in algorithms:
             # Perform forecasting
-            result, artifact = PandasForecastingFeatureGroup._perform_forecasting(
+            result, artifact = PandasForecasting._perform_forecasting(
                 self.df,
                 algorithm,
                 3,  # Use a smaller horizon for faster tests
@@ -248,7 +248,7 @@ class TestForecastingFeatureGroup:
         feature_set.artifact_to_save = feature_name
 
         # Calculate the feature
-        result_df = PandasForecastingFeatureGroup.calculate_feature(self.df.copy(), feature_set)
+        result_df = PandasForecasting.calculate(ForecastingFeatureGroup, self.df.copy(), feature_set, None)
 
         # Check that the result contains the forecast feature
         assert feature_name in result_df.columns
@@ -279,7 +279,7 @@ class TestForecastingFeatureGroup:
         feature_set2.artifact_to_load = feature_name
 
         # Calculate the feature using the saved artifact
-        result_df2 = PandasForecastingFeatureGroup.calculate_feature(self.df.copy(), feature_set2)
+        result_df2 = PandasForecasting.calculate(ForecastingFeatureGroup, self.df.copy(), feature_set2, None)
 
         # Check that the result contains the forecast feature
         assert feature_name in result_df2.columns
@@ -292,7 +292,7 @@ class TestForecastingFeatureGroup:
         feature_set.add(Feature(feature_name, self.options))
         feature_set.artifact_to_save = feature_name
 
-        result_df = PandasForecastingFeatureGroup.calculate_feature(self.df.copy(), feature_set)
+        result_df = PandasForecasting.calculate(ForecastingFeatureGroup, self.df.copy(), feature_set, None)
 
         assert feature_name in result_df.columns
         assert len(result_df) == 37
@@ -311,7 +311,7 @@ class TestForecastingFeatureGroup:
         feature_set.add(Feature(feature_name, self.options))
         feature_set.artifact_to_save = feature_name
 
-        result_df = PandasForecastingFeatureGroup.calculate_feature(df_unsorted.copy(), feature_set)
+        result_df = PandasForecasting.calculate(ForecastingFeatureGroup, df_unsorted.copy(), feature_set, None)
 
         assert len(result_df) == 37
         assert feature_name in result_df.columns
@@ -326,7 +326,7 @@ class TestForecastingFeatureGroup:
         feature_set.add(Feature("sales__linear_forecast_7day", self.options))
         feature_set.add(Feature("sales__linear_forecast_14day", self.options))
 
-        result_df = PandasForecastingFeatureGroup.calculate_feature(self.df.copy(), feature_set)
+        result_df = PandasForecasting.calculate(ForecastingFeatureGroup, self.df.copy(), feature_set, None)
 
         assert len(result_df) == 44
         assert "sales__linear_forecast_7day" in result_df.columns
@@ -495,7 +495,7 @@ class TestForecastingFeatureGroup:
         if feature_set is None:
             feature_set = FeatureSet()
             feature_set.add(Feature(self.FEATURE_NAME, self.options))
-        result: pd.DataFrame = PandasForecastingFeatureGroup.calculate_feature(df.copy(), feature_set)
+        result: pd.DataFrame = PandasForecasting.calculate(ForecastingFeatureGroup, df.copy(), feature_set, None)
         return result
 
     def _options(self, confidence_intervals: bool = False) -> Options:
@@ -786,3 +786,15 @@ class TestForecastingFeatureGroup:
         expected = self._calculate(self.df)
 
         assert np.allclose(result[self.FEATURE_NAME].to_numpy(), expected[self.FEATURE_NAME].to_numpy())
+
+    def test_all_sources_missing_raises_with_available_columns(self) -> None:
+        feature_set = FeatureSet()
+        feature_set.add(Feature("nonexistent__linear_forecast_7day", self.options))
+        with pytest.raises(ValueError, match="None of the source features") as excinfo:
+            self._calculate(self.df, feature_set)
+        assert "sales" in str(excinfo.value)
+        assert "time_filter" in str(excinfo.value)
+
+    def test_missing_reference_time_raises(self) -> None:
+        with pytest.raises(ValueError, match="Reference time column 'time_filter' not found in data"):
+            self._calculate(self.df.drop(columns=["time_filter"]))

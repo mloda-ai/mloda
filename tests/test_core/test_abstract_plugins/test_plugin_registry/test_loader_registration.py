@@ -274,9 +274,9 @@ class TestLoaderRegistrationSkipsAbstractClasses:
             del _AbstractHelperBaseFG, _ConcreteLeafProbeFG, module
             gc.collect()
 
-    def test_loaded_scope_registers_concrete_classes_but_not_abstract_bases(self) -> None:
+    def test_loaded_scope_registers_concrete_classes(self) -> None:
         """End to end through PluginLoader: the node_centrality scope needs only pandas and numpy and its
-        base module defines an inspect.isabstract helper base."""
+        operation group is concrete, so loading the scope registers it."""
         registry = PluginRegistry.default()
         registry.clear()
 
@@ -284,16 +284,10 @@ class TestLoaderRegistrationSkipsAbstractClasses:
         loader.load_matching("feature_group", "node_centrality/*")
 
         from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
-        from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
 
-        assert inspect.isabstract(NodeCentralityFeatureGroup), "sanity: the scope's base class is abstract"
-        assert not inspect.isabstract(PandasNodeCentralityFeatureGroup), "sanity: the scope has a concrete class"
+        assert not inspect.isabstract(NodeCentralityFeatureGroup), "sanity: the scope has a concrete class"
 
         registered_feature_groups = registry.list_registered(FeatureGroup)
-        assert PandasNodeCentralityFeatureGroup in registered_feature_groups, (
+        assert NodeCentralityFeatureGroup in registered_feature_groups, (
             "loading a scope must register its concrete plugin classes"
-        )
-        assert NodeCentralityFeatureGroup not in registered_feature_groups, (
-            "loading a scope must not register its abstract helper base class; abstract classes "
-            "pollute list_registered(), registered-only docs, and strict resolution"
         )

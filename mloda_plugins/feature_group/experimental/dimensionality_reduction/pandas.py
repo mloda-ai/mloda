@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING, cast
 
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, FeatureSet, Implementation
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
 
@@ -31,29 +31,25 @@ except ImportError:
     SKLEARN_AVAILABLE = False
 
 
-class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        """Define the compute framework for this feature group."""
-        return {PandasDataFrame}
+class PandasDimensionalityReduction(Implementation[DimensionalityReductionFeatureGroup]):
+    feature_group = DimensionalityReductionFeatureGroup
+    compute_framework = PandasDataFrame
 
     @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
-        """
-        Check if the source features exist in the DataFrame.
-
-        Args:
-            data: The pandas DataFrame
-            feature_names: List of feature names to check
-
-        Raises:
-            ValueError: If a feature does not exist in the DataFrame
-        """
-        missing_features = [f for f in feature_names if f not in data.columns]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {list(data.columns)}"
-            )
+    def calculate(
+        cls,
+        group: type[DimensionalityReductionFeatureGroup],
+        data: Any,
+        features: FeatureSet,
+        framework: ComputeFramework | None,
+    ) -> Any:
+        return group.reduce(
+            data,
+            features,
+            perform=cls._perform_reduction,
+            add_column=cls._add_result_to_data,
+            columns=cls.compute_framework.extract_column_names,
+        )
 
     @classmethod
     def _add_result_to_data(cls, data: "pd.DataFrame", feature_name: str, result: "NDArray[Any]") -> "pd.DataFrame":
@@ -72,7 +68,9 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
             The updated DataFrame with the dimensionality reduction result added as multiple columns
         """
         # Add individual dimension columns using the multiple result columns pattern
-        named_columns = cls.apply_naming_convention(result, feature_name, suffix_generator=lambda i: f"dim{i + 1}")
+        named_columns = DimensionalityReductionFeatureGroup.apply_naming_convention(
+            result, feature_name, suffix_generator=lambda i: f"dim{i + 1}"
+        )
         for col_name, col_data in named_columns.items():
             data[col_name] = col_data
 
@@ -100,11 +98,6 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
         Returns:
             A numpy array containing the reduced features
         """
-        # Import the base class to access option keys
-        from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import (
-            DimensionalityReductionFeatureGroup,
-        )
-
         # Cast data to pandas DataFrame
         df = cast(pd.DataFrame, data)
 

@@ -26,7 +26,9 @@ from mloda.provider import FeatureSet, DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow
 from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
-from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
+from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
+from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecasting
+from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 
 
 class TestPandasTimeWindowReferenceTimeContract:
@@ -112,7 +114,7 @@ class TestPandasForecastingReferenceTimeContract:
         feature_set.add(Feature("sales__linear_forecast_7day", options))
 
         with pytest.raises(ValueError, match="time_filter"):
-            PandasForecastingFeatureGroup.calculate_feature(df, feature_set)
+            PandasForecasting.calculate(ForecastingFeatureGroup, df, feature_set, None)
 
     def test_tz_aware_reference_time_accepted_guard(self) -> None:
         """GUARD: the datetime check accepts a tz-aware reference-time column."""
@@ -123,4 +125,6 @@ class TestPandasForecastingReferenceTimeContract:
                 "sales": [1.0, 2.0, 3.0, 4.0, 5.0],
             }
         )
-        PandasForecastingFeatureGroup._check_reference_time_column_is_datetime(df, "time_filter")
+        ForecastingFeatureGroup._validate_reference_time_column(
+            pandas_type_semantics.column_semantics(df, "time_filter"), "time_filter"
+        )

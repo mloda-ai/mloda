@@ -27,40 +27,27 @@ except ImportError:
     np = None  # type: ignore[assignment]
 
 
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, FeatureSet, Implementation
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 
 
-class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        """Define the compute framework for this feature group."""
-        return {PandasDataFrame}
+class PandasClustering(Implementation[ClusteringFeatureGroup]):
+    feature_group = ClusteringFeatureGroup
+    compute_framework = PandasDataFrame
 
     @classmethod
-    def _get_available_columns(cls, data: pd.DataFrame) -> set[str]:
-        """Get the set of available column names from the DataFrame."""
-        return PandasDataFrame.extract_column_names(data)
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
-        """
-        Check if the resolved features exist in the DataFrame.
-
-        Args:
-            data: The Pandas DataFrame
-            feature_names: List of resolved feature names (may contain ~N suffixes)
-
-        Raises:
-            ValueError: If none of the resolved features exist in the data
-        """
-        available_columns = cls._get_available_columns(data)
-        missing_features = [name for name in feature_names if name not in available_columns]
-        if len(missing_features) == len(feature_names):
-            raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {sorted(available_columns, key=str)}"
-            )
+    def calculate(
+        cls, group: type[ClusteringFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        return group.cluster(
+            data,
+            features,
+            perform=cls._perform_clustering,
+            perform_with_probabilities=cls._perform_clustering_with_probabilities,
+            add_column=cls._add_result_to_data,
+            columns=cls.compute_framework.extract_column_names,
+        )
 
     @classmethod
     def _add_result_to_data(cls, data: "pd.DataFrame", feature_name: str, result: "NDArray[Any]") -> "pd.DataFrame":

@@ -139,13 +139,13 @@ class TestClusteringAlgorithmsDoNotDrift:
         pytest.importorskip("sklearn")
 
         from mloda_plugins.feature_group.experimental.clustering.pandas import (
-            PandasClusteringFeatureGroup,
+            PandasClustering,
         )
 
         methods = sorted(set(self.BRANCHES.values()))
         for method in methods:
             monkeypatch.setattr(
-                PandasClusteringFeatureGroup,
+                PandasClustering,
                 method,
                 classmethod(lambda cls, *a, _m=method, **kw: _m),
                 raising=True,
@@ -154,11 +154,11 @@ class TestClusteringAlgorithmsDoNotDrift:
         data = pandas.DataFrame({"a": [0.0, 1.0, 2.0, 3.0], "b": [1.0, 0.0, 3.0, 2.0]})
 
         def resolve(algorithm: str) -> Any:
-            return PandasClusteringFeatureGroup._perform_clustering(data, algorithm, 2, ["a", "b"])
+            return PandasClustering._perform_clustering(data, algorithm, 2, ["a", "b"])
 
         # hierarchical and agglomerative deliberately share one implementation.
         assert_values_reach_distinct_branches(
-            feature_group="PandasClusteringFeatureGroup",
+            feature_group="PandasClustering",
             key=ClusteringFeatureGroup.ALGORITHM,
             declared=ClusteringFeatureGroup.CLUSTERING_ALGORITHMS,
             resolve=resolve,
@@ -170,12 +170,12 @@ class TestClusteringAlgorithmsDoNotDrift:
         pytest.importorskip("sklearn")
 
         from mloda_plugins.feature_group.experimental.clustering.pandas import (
-            PandasClusteringFeatureGroup,
+            PandasClustering,
         )
 
         data = pandas.DataFrame({"a": [0.0, 1.0], "b": [1.0, 0.0]})
         with pytest.raises(ValueError, match="Unsupported clustering algorithm"):
-            PandasClusteringFeatureGroup._perform_clustering(data, "not_declared", 2, ["a", "b"])
+            PandasClustering._perform_clustering(data, "not_declared", 2, ["a", "b"])
 
 
 def _scalar(result: Any) -> float:

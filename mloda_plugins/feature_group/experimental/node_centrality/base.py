@@ -4,16 +4,15 @@ Base implementation for node centrality feature groups.
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from collections.abc import Callable
 from typing import Any, cast
 
-from mloda.provider import FeatureGroup
+from mloda.provider import OperationFeatureGroup
 from mloda.user import Feature
 from mloda.provider import (
     FeatureChainParser,
     FeatureChainParserMixin,
 )
-from mloda.provider import COLUMNWISE_HOOKS
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
@@ -21,7 +20,7 @@ from mloda.user import FeatureName, Options
 from mloda_plugins.feature_group.experimental.key_features import with_key_features
 
 
-class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class NodeCentralityFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     # Option keys for centrality configuration
     CENTRALITY_TYPE = "centrality_type"
     GRAPH_TYPE = "graph_type"
@@ -142,9 +141,6 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = 1
 
-    # Hooks calculate_feature calls: _check_source_features_exist, _add_result_to_data.
-    REQUIRED_COLUMNWISE_HOOKS = COLUMNWISE_HOOKS
-
     # Property mapping for configuration-based feature creation
     PROPERTY_MAPPING = {
         # Context parameters (don't affect Feature Group resolution)
@@ -219,16 +215,16 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return cls.parse_centrality_prefix(feature_name)
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Calculate centrality metrics for nodes in a graph.
-
-        Processes all requested features, determining the centrality type
-        and source features from each feature name.
-
-        Adds the centrality results directly to the input data structure.
-        """
-        # Process each feature
+    def centrality(
+        cls,
+        data: Any,
+        features: FeatureSet,
+        *,
+        perform: Callable[[Any, str, str, str, str | None], Any],
+        add_column: Callable[[Any, str, Any, str | None], Any],
+        columns: Callable[[Any], set[str]],
+    ) -> Any:
+        """Shared loop: resolve each feature, check its source, compute centrality, add the column."""
         for feature in features.get_sorted_features():
             centrality_type, source_feature_str = cls._extract_centrality_and_source_feature(feature)
 
@@ -242,14 +238,16 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                     f"Unsupported graph type: {graph_type}. Supported types: {', '.join(cls.GRAPH_TYPES.keys())}"
                 )
 
-            # Check if source feature exists
-            cls._check_source_features_exist(data, [source_feature_str])
+            available = columns(data)
+            if source_feature_str not in available:
+                raise ValueError(
+                    f"Source features not found in data: {[source_feature_str]}. "
+                    f"Available columns: {sorted(available, key=str)}"
+                )
 
-            # Calculate centrality
-            result = cls._calculate_centrality(data, centrality_type, source_feature_str, graph_type, weight_column)
+            result = perform(data, centrality_type, source_feature_str, graph_type, weight_column)
 
-            # Add the result to the data
-            data = cls._add_result_to_data(data, feature.name, result)
+            data = add_column(data, feature.name, result, cls._node_column(feature.name))
 
         return data
 
@@ -290,26 +288,9 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return cls._resolve_operation(feature, cls.CENTRALITY_TYPE)
 
     @classmethod
-    @abstractmethod
-    def _calculate_centrality(
-        cls,
-        data: Any,
-        centrality_type: str,
-        node_feature: str,
-        graph_type: str = "undirected",
-        weight_column: str | None = None,
-    ) -> Any:
-        """
-        Method to calculate the centrality. Should be implemented by subclasses.
-
-        Args:
-            data: The input data
-            centrality_type: The type of centrality to calculate
-            node_feature: The feature representing the nodes
-            graph_type: The type of graph (directed or undirected)
-            weight_column: The column to use for edge weights (optional)
-
-        Returns:
-            The result of the centrality calculation
-        """
-        ...
+    def _node_column(cls, feature_name: str) -> str | None:
+        """Return the node column named by the feature name, or None if it does not match."""
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        if parsed.matched:
+            return parsed.source_feature
+        return None

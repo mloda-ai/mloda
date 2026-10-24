@@ -10,9 +10,7 @@ from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
-from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
-    PandasDimensionalityReductionFeatureGroup,
-)
+from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import PandasDimensionalityReduction
 
 
 class TestDimensionalityReductionFeatureGroup:
@@ -169,16 +167,14 @@ class TestDimensionalityReductionFeatureGroup:
         source_features = ["f1", "f2", "f3"]
 
         # _perform_reduction receives boundary-materialized options at runtime (#796); mirror that here.
-        options = PandasDimensionalityReductionFeatureGroup.options_with_defaults(Options())
+        options = DimensionalityReductionFeatureGroup.options_with_defaults(Options())
         for algorithm in DimensionalityReductionFeatureGroup.REDUCTION_ALGORITHMS:
-            result = PandasDimensionalityReductionFeatureGroup._perform_reduction(
-                data, algorithm, 2, source_features, options
-            )
+            result = PandasDimensionalityReduction._perform_reduction(data, algorithm, 2, source_features, options)
             assert result.shape == (12, 2), f"Unexpected result shape for algorithm {algorithm}"
 
     def test_input_features(self) -> None:
         """Test the input_features method."""
-        feature_group = PandasDimensionalityReductionFeatureGroup()
+        feature_group = DimensionalityReductionFeatureGroup()
 
         # Single source feature
         input_features = feature_group.input_features(Options(), FeatureName("customer_metrics__pca_2d"))

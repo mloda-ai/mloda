@@ -4,16 +4,15 @@ Base implementation for clustering feature groups.
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from collections.abc import Callable
 from typing import Any, cast
 
-from mloda.provider import FeatureGroup
+from mloda.provider import OperationFeatureGroup
 from mloda.user import Feature
 from mloda.provider import (
     FeatureChainParser,
     FeatureChainParserMixin,
 )
-from mloda.provider import COLUMN_DISCOVERY_HOOKS
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec, is_positive_int
@@ -24,7 +23,7 @@ def _is_bool(value: Any) -> bool:
     return isinstance(value, bool)
 
 
-class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class ClusteringFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     """
     Base class for all clustering feature groups.
 
@@ -116,9 +115,6 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = None  # Unlimited in_features allowed
-
-    # Hooks calculate_feature calls: _get_available_columns, _check_source_features_exist, _add_result_to_data.
-    REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
 
     # Property mapping for configuration-based feature creation
     PROPERTY_MAPPING = {
@@ -254,106 +250,36 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return algorithm, k_value, source_features
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Perform clustering operations.
-
-        Processes all requested features, determining the clustering algorithm,
-        k_value, and source features from either string parsing or configuration-based options.
-
-        Supports multi-column features by using resolve_multi_column_feature() to
-        automatically discover columns matching the pattern feature_name~N.
-
-        Optionally outputs cluster probabilities/distances as separate columns using
-        the ~N suffix pattern when output_probabilities=True.
-
-        Adds the clustering results directly to the input data structure.
-        """
-        # Process each requested feature
+    def cluster(
+        cls,
+        data: Any,
+        features: FeatureSet,
+        *,
+        perform: Callable[[Any, str, int | str, list[str]], Any],
+        perform_with_probabilities: Callable[[Any, str, int | str, list[str]], tuple[Any, Any]],
+        add_column: Callable[[Any, str, Any], Any],
+        columns: Callable[[Any], set[str]],
+    ) -> Any:
+        """Shared loop: resolve each feature's sources, cluster, add labels (and probability columns)."""
         for feature in features.get_sorted_features():
             algorithm, k_value, source_features = cls._extract_algorithm_k_value_and_source_features(feature)
 
-            # Resolve multi-column features automatically
-            # If source_features contains "onehot_encoded__product", this discovers
-            # ["onehot_encoded__product~0", "onehot_encoded__product~1", ...]
-            available_columns = cls._get_available_columns(data)
-            resolved_features = []
+            available = columns(data)
+            resolved: list[str] = []
             for source_feature in source_features:
-                resolved_columns = cls.resolve_multi_column_feature(source_feature, available_columns)
-                resolved_features.extend(resolved_columns)
+                resolved.extend(cls.resolve_multi_column_feature(source_feature, available))
 
-            # Check that resolved features exist
-            cls._check_source_features_exist(data, resolved_features)
+            if not any(name in available for name in resolved):
+                listing = sorted(available, key=str)
+                raise ValueError(f"None of the source features {resolved} found in data. Available columns: {listing}")
 
-            # Check if we should output probabilities
-            output_probabilities = feature.options.get(cls.OUTPUT_PROBABILITIES)
-
-            # Perform clustering
-            if output_probabilities:
-                # Get both cluster labels and probabilities
-                result, probabilities = cls._perform_clustering_with_probabilities(
-                    data, algorithm, k_value, resolved_features
-                )
-
-                # Add the cluster labels
-                data = cls._add_result_to_data(data, feature.name, result)
-
-                # Add probability columns using ~N suffix pattern
+            if feature.options.get(cls.OUTPUT_PROBABILITIES):
+                result, probabilities = perform_with_probabilities(data, algorithm, k_value, resolved)
+                data = add_column(data, feature.name, result)
                 for cluster_idx in range(probabilities.shape[1]):
-                    prob_column_name = f"{feature.name}~{cluster_idx}"
-                    data = cls._add_result_to_data(data, prob_column_name, probabilities[:, cluster_idx])
+                    data = add_column(data, f"{feature.name}~{cluster_idx}", probabilities[:, cluster_idx])
             else:
-                # Original behavior: only output cluster labels
-                result = cls._perform_clustering(data, algorithm, k_value, resolved_features)
-                data = cls._add_result_to_data(data, feature.name, result)
+                result = perform(data, algorithm, k_value, resolved)
+                data = add_column(data, feature.name, result)
 
         return data
-
-    @classmethod
-    @abstractmethod
-    def _perform_clustering(
-        cls,
-        data: Any,
-        algorithm: str,
-        k_value: int | str,
-        source_features: list[str],
-    ) -> Any:
-        """
-        Method to perform the clustering. Should be implemented by subclasses.
-
-        Args:
-            data: The input data
-            algorithm: The clustering algorithm to use
-            k_value: The number of clusters (or 'auto' for algorithms that determine this automatically)
-            source_features: The list of source features to use for clustering
-
-        Returns:
-            The result of the clustering (typically cluster assignments)
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _perform_clustering_with_probabilities(
-        cls,
-        data: Any,
-        algorithm: str,
-        k_value: int | str,
-        source_features: list[str],
-    ) -> tuple[Any, Any]:
-        """
-        Method to perform clustering and return both labels and probabilities/distances.
-
-        Args:
-            data: The input data
-            algorithm: The clustering algorithm to use
-            k_value: The number of clusters (or 'auto' for algorithms that determine this automatically)
-            source_features: The list of source features to use for clustering
-
-        Returns:
-            A tuple of (cluster_labels, probabilities) where:
-            - cluster_labels: Array of cluster assignments for each sample
-            - probabilities: 2D array where probabilities[i, j] is the probability/distance
-                           of sample i belonging to cluster j
-        """
-        ...

@@ -12,7 +12,9 @@ from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
-from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
+from mloda_plugins.feature_group.experimental.node_centrality.pandas import (
+    PandasNodeCentrality as PandasNodeCentrality,
+)
 from mloda.provider import DefaultOptionKeys
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
@@ -82,7 +84,7 @@ class TestNodeCentralityPandasIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {NodeCentralityTestDataCreator, PandasNodeCentralityFeatureGroup}
+            {NodeCentralityTestDataCreator, NodeCentralityFeatureGroup}
         )
 
         # Run the mloda with multiple node centrality features
@@ -122,7 +124,7 @@ class TestNodeCentralityPandasIntegration:
         """
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {NodeCentralityTestDataCreator, PandasNodeCentralityFeatureGroup}
+            {NodeCentralityTestDataCreator, NodeCentralityFeatureGroup}
         )
 
         # Create degree centrality feature using configuration-based approach
@@ -188,7 +190,7 @@ class TestNodeCentralityPandasIntegration:
         """
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {NodeCentralityTestDataCreator, PandasNodeCentralityFeatureGroup}
+            {NodeCentralityTestDataCreator, NodeCentralityFeatureGroup}
         )
 
         # Create a degree centrality feature WITHOUT the optional weight_column option
@@ -236,7 +238,7 @@ class TestNodeCentralityPandasIntegration:
         (centrally at the run_calculate_feature boundary, #796) rather than required from the user (#766).
         """
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {NodeCentralityTestDataCreator, PandasNodeCentralityFeatureGroup}
+            {NodeCentralityTestDataCreator, NodeCentralityFeatureGroup}
         )
 
         base_context: dict[str, Any] = {
@@ -267,7 +269,7 @@ class TestNodeCentralityPandasIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {NodeCentralityTestDataCreator, PandasNodeCentralityFeatureGroup}
+            {NodeCentralityTestDataCreator, NodeCentralityFeatureGroup}
         )
 
         # Create degree centrality features with different graph types and source features

@@ -15,7 +15,7 @@ from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
-    PandasDimensionalityReductionFeatureGroup,
+    PandasDimensionalityReduction as PandasDimensionalityReduction,
 )
 from mloda.provider import DefaultOptionKeys
 
@@ -109,7 +109,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         """Test integration with mloda using explicit feature names."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {DimensionalityReductionFeatureTestDataCreator, PandasDimensionalityReductionFeatureGroup}
+            {DimensionalityReductionFeatureTestDataCreator, DimensionalityReductionFeatureGroup}
         )
 
         # Define the features
@@ -131,7 +131,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         """Test integration with mloda using the parser."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {DimensionalityReductionFeatureTestDataCreator, PandasDimensionalityReductionFeatureGroup}
+            {DimensionalityReductionFeatureTestDataCreator, DimensionalityReductionFeatureGroup}
         )
 
         # Create features using the parser configuration
@@ -170,7 +170,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         """Test integration with mloda using different dimensionality reduction algorithms."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {DimensionalityReductionFeatureTestDataCreator, PandasDimensionalityReductionFeatureGroup}
+            {DimensionalityReductionFeatureTestDataCreator, DimensionalityReductionFeatureGroup}
         )
 
         # Define the features
@@ -230,7 +230,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         """Test integration with mloda using a config-based dimensionality reduction feature."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {DimensionalityReductionFeatureTestDataCreator, PandasDimensionalityReductionFeatureGroup}
+            {DimensionalityReductionFeatureTestDataCreator, DimensionalityReductionFeatureGroup}
         )
 
         # Create a config-based feature (any name, with algorithm, dimension and in_features in options)
@@ -285,7 +285,7 @@ class TestDimensionalityReductionOutputParts:
 
     def _run(self, *names: str) -> list[Any]:
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {DimensionalityReductionFeatureTestDataCreator, PandasDimensionalityReductionFeatureGroup}
+            {DimensionalityReductionFeatureTestDataCreator, DimensionalityReductionFeatureGroup}
         )
         features: list[Feature | str] = list(names)
         return mloda.run_all(features, compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)

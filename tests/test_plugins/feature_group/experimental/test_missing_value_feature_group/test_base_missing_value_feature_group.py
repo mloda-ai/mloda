@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import Mock
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -594,10 +595,10 @@ class NAType:
 
 
 class _ArrayNe:
-    def __eq__(self, other: object) -> np.ndarray:  # type: ignore[override]
+    def __eq__(self, other: object) -> npt.NDArray[np.bool_]:  # type: ignore[override]
         return np.array([True, False])
 
-    def __ne__(self, other: object) -> np.ndarray:  # type: ignore[override]
+    def __ne__(self, other: object) -> npt.NDArray[np.bool_]:  # type: ignore[override]
         return np.array([False, True])
 
     def __hash__(self) -> int:

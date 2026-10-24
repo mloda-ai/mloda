@@ -5,7 +5,7 @@ Two classes: one for the eager PolarsMergeEngine (pl.DataFrame), one for the
 lazy PolarsLazyMergeEngine (pl.LazyFrame).
 """
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest

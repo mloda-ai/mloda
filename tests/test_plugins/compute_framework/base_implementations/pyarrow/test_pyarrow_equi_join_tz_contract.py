@@ -12,7 +12,7 @@ equi-join path yet, so Acero either merges or surfaces its own low-level on-key
 type mismatch, neither of which mentions timezone.
 """
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 import pytest
 

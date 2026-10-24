@@ -5,7 +5,7 @@ HookContext population (plan_id/run_id/carrier/worker_index/plan_*), and deny-be
 """
 
 import logging
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import patch
 

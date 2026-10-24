@@ -29,7 +29,7 @@ so every negative fails today for the right reason.
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest

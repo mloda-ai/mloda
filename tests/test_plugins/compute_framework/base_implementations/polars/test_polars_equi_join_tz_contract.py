@@ -15,7 +15,7 @@ equi-join path yet, so polars either merges or surfaces its own low-level
 schema/dtype error, neither of which mentions timezone.
 """
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest

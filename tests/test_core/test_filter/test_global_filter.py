@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest

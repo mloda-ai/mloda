@@ -14,7 +14,7 @@ import secrets
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 from typing import Any

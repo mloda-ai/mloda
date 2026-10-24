@@ -19,7 +19,7 @@ dedicated pandas regression test would pass both before and after #435 and is
 omitted as redundant.
 """
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 import pyarrow as pa

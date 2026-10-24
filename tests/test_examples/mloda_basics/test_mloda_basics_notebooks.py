@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 import subprocess  # nosec B404
 import sys
 

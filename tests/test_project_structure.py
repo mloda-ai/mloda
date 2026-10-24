@@ -385,9 +385,12 @@ class TestToxConfig:
             if ln.startswith("uv pip install") and "pandas<3" in ln and "numpy<2.4" in ln
         ]
         assert installs, f"commands_pre needs a `uv pip install` line capping pandas<3 and numpy<2.4: {lines}"
-        assert any("pandas" in ln and "numpy" in ln for ln in lines[installs[0] + 1 :]), (
-            f"commands_pre needs a pandas/numpy version guard after the install line: {lines}"
-        )
+        guards = [
+            ln
+            for ln in lines[installs[0] + 1 :]
+            if all(word in ln for word in ("pandas", "numpy", "assert", "__version__"))
+        ]
+        assert guards, f"commands_pre needs an assert on pandas/numpy __version__ after the install line: {lines}"
         matrix = self._workflow_jobs("ci.yaml")["build"]["strategy"]["matrix"]["include"]
         assert any(str(e.get("python-version")) == "3.11" and e.get("toxenv") == "-e pandas2" for e in matrix), (
             f"ci.yaml build matrix needs an include entry for python 3.11 with toxenv '-e pandas2': {matrix}"

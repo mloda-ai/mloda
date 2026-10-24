@@ -5,7 +5,7 @@ Consumes the shared AsofMergeEngineTestBase. PyArrow is both the framework
 under test and the interchange format used by the DataConverter.
 """
 
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 

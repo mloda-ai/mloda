@@ -1,7 +1,7 @@
 """E2E tests for RunContext plumbing through mlodaAPI, CfwManager, and _build_run_context()."""
 
 from dataclasses import replace
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest

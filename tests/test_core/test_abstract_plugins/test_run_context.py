@@ -3,7 +3,7 @@
 import dataclasses
 import json
 import pickle  # nosec B403
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 import pytest
 from mloda.core.abstract_plugins.plan_context import PlanContext

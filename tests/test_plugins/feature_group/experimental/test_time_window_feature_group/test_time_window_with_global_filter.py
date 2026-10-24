@@ -1,5 +1,5 @@
 import pandas as pd
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 from mloda.user import mloda

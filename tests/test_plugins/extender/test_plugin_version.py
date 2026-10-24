@@ -3,7 +3,7 @@ populate HookContext.plugin_version.
 """
 
 import importlib.metadata
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from collections.abc import Iterator
 from typing import Any
 

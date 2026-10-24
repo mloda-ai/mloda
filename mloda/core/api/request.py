@@ -2,7 +2,7 @@ import contextlib
 import contextvars
 from copy import copy, deepcopy
 from dataclasses import replace
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from collections.abc import Mapping, Sequence
 from typing import Any, Callable, Generator, cast
 from uuid import UUID

@@ -14,7 +14,7 @@ fixture is reused, so each consumer only adds:
 """
 
 from abc import abstractmethod
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest

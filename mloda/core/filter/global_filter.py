@@ -1,6 +1,6 @@
 from contextvars import ContextVar
 from copy import copy, deepcopy
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from itertools import chain
 from typing import Any
 from uuid import UUID

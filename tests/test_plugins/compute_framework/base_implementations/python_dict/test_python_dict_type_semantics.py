@@ -6,7 +6,7 @@ Because python_dict carries no schema, the function inspects the first non-null 
 Expected to fail at import time (ModuleNotFoundError) until Green implements it.
 """
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics

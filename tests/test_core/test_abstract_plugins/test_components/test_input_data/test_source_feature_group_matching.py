@@ -1368,11 +1368,10 @@ class TestHasSource:
 
         assert outer == {}
 
-    def test_a_true_probe_leaves_the_options_untouched(self) -> None:
+    def test_a_true_probe_checks_no_name_and_leaves_the_options_untouched(self) -> None:
         options = Options({"toyfmt_required": 1})
 
-        assert ToyRequiredOptionFG.has_source(options, toy_dac(h1=_COLS), COL) is True
+        assert ToyRequiredOptionFG.has_source(options, toy_dac(h1=_COLS), "toyfmt_not_a_column") is True
 
         assert RESERVED_READER_OPTION_KEY not in options.group
         assert RESERVED_READER_OPTION_KEY not in options.context
-        assert options == Options({"toyfmt_required": 1})

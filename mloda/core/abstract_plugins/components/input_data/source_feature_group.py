@@ -442,8 +442,8 @@ class SourceFeatureGroup(FeatureGroup):
         data_access_collection: DataAccessCollection | None,
         feature_name: FeatureName | str = "",
     ) -> bool:
-        """Whether a claim route that matching would select finds a source; no name check, mutation or recorded rejection.
-        Runs inside the run's INPUT_DATA_MATCH gate when one is in scope, a refusal returns False."""
+        """Whether a claim route that matching would select finds a source, without claiming or recording rejections.
+        Runs behind the INPUT_DATA_MATCH gate when in scope; a refusal returns False."""
         if inspect.isabstract(cls):
             return False
         name = str(feature_name)

@@ -17,14 +17,14 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
 TEST_DOMAIN = Domain("TestDomain")
 
 
-class DomainTestDataCreator(GeneratedFeatureGroup):
+class DomainTestDataCreator(DataCreatorFeatureGroup):
     """Data creator that provides test data for domain propagation tests."""
 
     @classmethod

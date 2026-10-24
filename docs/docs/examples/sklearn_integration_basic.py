@@ -136,7 +136,7 @@ def _(mo):
 def _(data_dict, pd):
     from typing import Optional, Any
     from mloda.user import mloda
-    from mloda.provider import GeneratedFeatureGroup, FeatureSet
+    from mloda.provider import DataCreatorFeatureGroup, FeatureSet
     from mloda.user import PluginLoader
     from mloda.user.pandas import PandasDataFrame
 
@@ -144,7 +144,7 @@ def _(data_dict, pd):
     # A feature group is an abstraction between a data framework and processes of a data transformation.
     # In this example, the data framework is clearly pandas.
     # The processes are typically meta information like names, but lifecycle definition, or dependencies or relations to other data.
-    class SklearnDataCreator(GeneratedFeatureGroup):
+    class SklearnDataCreator(DataCreatorFeatureGroup):
         # Injects the earlier data_dict into the feature group abstraction.
         # Very simply spoken: we load the data.
 
@@ -170,7 +170,7 @@ def _(data_dict, pd):
     _result, _result2 = (
         _result[0],
         _result[1],
-    )  # One way to get this data is via a GeneratedFeatureGroup.
+    )  # One way to get this data is via a DataCreatorFeatureGroup.
     print("✅ Transformed dataset with split fit/transform:")
     print(_result.head(2))
     print(_result2.head(2))
@@ -185,7 +185,7 @@ def _(data_dict, pd):
     )  # Scale imputed age  # Scale imputed weight  # One-hot encode state  # One-hot encode gender
     return (
         Any,
-        GeneratedFeatureGroup,
+        DataCreatorFeatureGroup,
         FeatureSet,
         Optional,
         PandasDataFrame,
@@ -212,7 +212,7 @@ def _(PandasDataFrame, mloda):
 @app.cell
 def _(
     Any,
-    GeneratedFeatureGroup,
+    DataCreatorFeatureGroup,
     FeatureSet,
     Optional,
     PandasDataFrame,
@@ -224,7 +224,7 @@ def _(
     # We can replace feature groups and dataframe plugins in an easy fashion.
     from mloda.user import PluginCollector
 
-    class SecondSklearnDataCreator(GeneratedFeatureGroup):
+    class SecondSklearnDataCreator(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {"age", "weight", "state", "gender"}

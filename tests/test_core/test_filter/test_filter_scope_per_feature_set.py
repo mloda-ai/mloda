@@ -15,7 +15,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.execution_plan import ExecutionPlan
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, FilterType, GlobalFilter, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -45,7 +45,7 @@ def _make_fg(capture: list[tuple[Feature, ...]] | None = None) -> type[FeatureGr
     """A throwaway root group whose filter-feature match depends on the probing feature's mode."""
     gc.collect()
 
-    class FspScopeFG(GeneratedFeatureGroup):
+    class FspScopeFG(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return set(ALL_FSP_NAMES)
@@ -362,7 +362,7 @@ def _make_scoped_target_pair() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
     """Two throwaway root groups: each serves its own target and can serve the shared filter feature."""
     gc.collect()
 
-    class FspScopedTargetFG(GeneratedFeatureGroup):
+    class FspScopedTargetFG(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {FSP_SCOPED_TARGET, FSP_SHARED_FILTER}
@@ -371,7 +371,7 @@ def _make_scoped_target_pair() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
             return _target_rows(features)
 
-    class FspOtherTargetFG(GeneratedFeatureGroup):
+    class FspOtherTargetFG(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {FSP_OTHER_TARGET, FSP_SHARED_FILTER}

@@ -18,7 +18,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.compute_framework import EmptyResultError
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -208,7 +208,7 @@ class TestAllowEmptyResultRetired:
         assert not hasattr(FeatureGroup, "allow_empty_result")
 
 
-class _ColumnarZeroRowFeatureGroup(GeneratedFeatureGroup):
+class _ColumnarZeroRowFeatureGroup(DataCreatorFeatureGroup):
     """Root FG returning a schema-bearing zero-row columnar dict, with NO opt-in flag."""
 
     @classmethod
@@ -220,7 +220,7 @@ class _ColumnarZeroRowFeatureGroup(GeneratedFeatureGroup):
         return {"columnar_zero_row_col": []}
 
 
-class _ColumnarZeroColumnFeatureGroup(GeneratedFeatureGroup):
+class _ColumnarZeroColumnFeatureGroup(DataCreatorFeatureGroup):
     """Root FG returning a schema-less ``{}`` (zero columns), with NO opt-in flag."""
 
     @classmethod

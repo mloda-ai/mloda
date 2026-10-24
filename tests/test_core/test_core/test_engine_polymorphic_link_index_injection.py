@@ -6,7 +6,7 @@ from typing import Any
 from unittest.mock import patch
 
 from mloda.core.core.engine import Engine
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, Features, Index, JoinSpec, Link, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -19,7 +19,7 @@ class PlkiBaseB(FeatureGroup):
     """Base side B: declares no names, so it never resolves a requested feature on its own."""
 
 
-class PlkiSubA(PlkiBaseA, GeneratedFeatureGroup):
+class PlkiSubA(PlkiBaseA, DataCreatorFeatureGroup):
     """Concrete side A; also supports plki_a_key directly."""
 
     @classmethod
@@ -35,7 +35,7 @@ class PlkiSubA(PlkiBaseA, GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class PlkiSubA2(PlkiBaseA, GeneratedFeatureGroup):
+class PlkiSubA2(PlkiBaseA, DataCreatorFeatureGroup):
     """Sibling of PlkiSubA: must never receive keys injected for links naming PlkiSubA."""
 
     @classmethod
@@ -51,7 +51,7 @@ class PlkiSubA2(PlkiBaseA, GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class PlkiSubB(PlkiBaseB, GeneratedFeatureGroup):
+class PlkiSubB(PlkiBaseB, DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"plki_b_val"}
@@ -81,7 +81,7 @@ class PlkiIdxBaseB(FeatureGroup):
         return [Index(("plki_ib_key",))]
 
 
-class PlkiIdxSubA(PlkiIdxBaseA, GeneratedFeatureGroup):
+class PlkiIdxSubA(PlkiIdxBaseA, DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"plki_ia_val"}
@@ -95,7 +95,7 @@ class PlkiIdxSubA(PlkiIdxBaseA, GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class PlkiIdxSubB(PlkiIdxBaseB, GeneratedFeatureGroup):
+class PlkiIdxSubB(PlkiIdxBaseB, DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"plki_ib_val"}

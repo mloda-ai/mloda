@@ -29,7 +29,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import records_from_frame
 
 
@@ -103,7 +103,7 @@ class _NonRootFeatureGroup:
     pass
 
 
-class _GeneratedStub(GeneratedFeatureGroup):
+class _GeneratedStub(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: Any) -> Any:
         return {}

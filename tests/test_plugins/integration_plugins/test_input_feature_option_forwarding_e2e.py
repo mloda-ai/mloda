@@ -27,7 +27,7 @@ import pytest
 
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.provider import ComputeFramework
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import FeatureChainParserMixin
 from mloda.provider import FeatureGroup
@@ -45,7 +45,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 SOURCE_NAME = "forwarding_e2e_579_source"
 
 
-class ForwardingE2ESourceGroup(GeneratedFeatureGroup):
+class ForwardingE2ESourceGroup(DataCreatorFeatureGroup):
     """Upstream root group that records the options its resolved features carry.
 
     Returns [10, 20, 30] when the "backend" option arrives with value "premium",
@@ -205,7 +205,7 @@ REQ_ROOT_NAME = "forwarding_e2e_579_req_root"
 REQ_ROOT_KEY = "forwarding_e2e_579_req_key"
 
 
-class ForwardingE2EReqRootGroup(GeneratedFeatureGroup):
+class ForwardingE2EReqRootGroup(DataCreatorFeatureGroup):
     """Chain root declaring a required context key with no default; records the value it receives."""
 
     PROPERTY_MAPPING = {REQ_ROOT_KEY: PropertySpec("Required root option", context=True)}

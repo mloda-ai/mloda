@@ -2,7 +2,7 @@
 
 This exercises the shipped feature through the public API with real plugins and the real
 PandasDataFrame compute framework: shipped ``AggregatedFeatureGroup`` aggregations chain
-off raw columns produced by a ``GeneratedFeatureGroup`` source, so the report captures both the requested
+off raw columns produced by a ``DataCreatorFeatureGroup`` source, so the report captures both the requested
 aggregations (``requested=True``) and their derived source columns (``requested=False``).
 
 Everything carries an ``_811`` suffix: the source becomes a global FeatureGroup subclass and its

@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-from mloda.provider import ComputeFramework, DefaultOptionKeys, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, DefaultOptionKeys, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FilterType, GlobalFilter, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
@@ -24,7 +24,7 @@ CFA_FILTER_COLUMN = "cfa_region"
 CFA_HOST = "cfa_sum_sales"
 
 
-class CfaRoot(GeneratedFeatureGroup):
+class CfaRoot(DataCreatorFeatureGroup):
     """Root serving the aggregation source column and the column only the filter ever names."""
 
     @classmethod

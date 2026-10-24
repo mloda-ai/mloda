@@ -4,7 +4,7 @@ from mloda.user import JoinType
 import pandas as pd
 
 from mloda.user import mloda
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
@@ -18,7 +18,7 @@ from mloda_plugins.feature_group.experimental.source_input_feature import (
 )
 
 
-class _InputFeatureGeneratedBase(GeneratedFeatureGroup):
+class _InputFeatureGeneratedBase(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"input_feature"}
@@ -61,7 +61,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
         """
 
         # 1. Create generated Source Features
-        class SourceFeature1(GeneratedFeatureGroup):
+        class SourceFeature1(DataCreatorFeatureGroup):
             @classmethod
             def feature_names_supported(cls) -> set[str]:
                 return {"source_feature_1"}
@@ -70,7 +70,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
                 return pd.DataFrame({"idx": [1], "source_feature_1": [2]})
 
-        class SourceFeature2(GeneratedFeatureGroup):
+        class SourceFeature2(DataCreatorFeatureGroup):
             @classmethod
             def feature_names_supported(cls) -> set[str]:
                 return {"source_feature_2"}

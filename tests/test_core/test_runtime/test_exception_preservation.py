@@ -29,7 +29,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
-from mloda.provider import FeatureSet, GeneratedFeatureGroup, SourceMatch
+from mloda.provider import FeatureSet, DataCreatorFeatureGroup, SourceMatch
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
@@ -49,7 +49,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 # --------------------------------------------------------------------------- #
 
 
-class ImportErrorFeatureGroup(GeneratedFeatureGroup):
+class ImportErrorFeatureGroup(DataCreatorFeatureGroup):
     """Root FG whose ``calculate_feature`` raises a stdlib ``ImportError``."""
 
     @classmethod
@@ -65,7 +65,7 @@ class MyDomainError(ValueError):
     """Custom domain error that is also a ``ValueError`` subclass."""
 
 
-class DomainErrorFeatureGroup(GeneratedFeatureGroup):
+class DomainErrorFeatureGroup(DataCreatorFeatureGroup):
     """Root FG whose ``calculate_feature`` raises a ``ValueError`` subclass."""
 
     @classmethod
@@ -77,7 +77,7 @@ class DomainErrorFeatureGroup(GeneratedFeatureGroup):
         return {"exc_domain_error_col"}
 
 
-class CauseChainFeatureGroup(GeneratedFeatureGroup):
+class CauseChainFeatureGroup(DataCreatorFeatureGroup):
     """Root FG that raises ``ValueError`` from a ``KeyError`` (``__cause__`` chain)."""
 
     @classmethod
@@ -111,7 +111,7 @@ _LEAK_DSN = f"host=h password={_LEAK_MARKER} dbname=d"
 _LEAK_MESSAGE = f"failed for {_LEAK_PRESIGNED_URL} and {_LEAK_USERINFO_URL} and {_LEAK_DSN}"
 
 
-class SecretLeakFeatureGroup(GeneratedFeatureGroup):
+class SecretLeakFeatureGroup(DataCreatorFeatureGroup):
     """Root FG whose ``calculate_feature`` raises an ``OSError`` carrying three credential shapes."""
 
     @classmethod
@@ -123,7 +123,7 @@ class SecretLeakFeatureGroup(GeneratedFeatureGroup):
         return {"exc_secret_leak_col"}
 
 
-class SecretLeakChainedFeatureGroup(GeneratedFeatureGroup):
+class SecretLeakChainedFeatureGroup(DataCreatorFeatureGroup):
     """Root FG that raises ``RuntimeError`` from an ``OSError`` carrying the same credential shapes."""
 
     @classmethod
@@ -143,7 +143,7 @@ class UnpicklableSecretLeakError(RuntimeError):
         self.lock = threading.Lock()  # not picklable
 
 
-class UnpicklableSecretLeakFeatureGroup(GeneratedFeatureGroup):
+class UnpicklableSecretLeakFeatureGroup(DataCreatorFeatureGroup):
     """Root FG whose ``calculate_feature`` raises a non-picklable, secret-bearing exception."""
 
     @classmethod
@@ -167,7 +167,7 @@ class RowLeakError(ValueError):
     """A specific error type for testing row leakage."""
 
 
-class RowLeakFeatureGroup(GeneratedFeatureGroup):
+class RowLeakFeatureGroup(DataCreatorFeatureGroup):
     """Root FG whose ``calculate_feature`` raises an error carrying row values."""
 
     @classmethod
@@ -179,7 +179,7 @@ class RowLeakFeatureGroup(GeneratedFeatureGroup):
         return {"exc_row_leak_col"}
 
 
-class RowLeakChainedFeatureGroup(GeneratedFeatureGroup):
+class RowLeakChainedFeatureGroup(DataCreatorFeatureGroup):
     """Root FG that raises ``RuntimeError`` from a ``RowLeakError``."""
 
     @classmethod
@@ -436,7 +436,7 @@ class UnpicklableError(RuntimeError):
         self.lock = threading.Lock()  # not picklable
 
 
-class UnpicklableErrorFeatureGroup(GeneratedFeatureGroup):
+class UnpicklableErrorFeatureGroup(DataCreatorFeatureGroup):
     """Root FG whose ``calculate_feature`` raises a non-picklable exception."""
 
     @classmethod

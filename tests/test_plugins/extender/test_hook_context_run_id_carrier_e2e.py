@@ -7,7 +7,7 @@ import pytest
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
-from mloda.provider import ComputeFramework, GeneratedFeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureSet
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.uuid7_assertions import assert_valid_uuid7
@@ -15,7 +15,7 @@ from tests.helpers.uuid7_assertions import assert_valid_uuid7
 _CARRIER = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
 
 
-class _RunIdCarrierFeatureGroupOne(GeneratedFeatureGroup):
+class _RunIdCarrierFeatureGroupOne(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"run_id_carrier_e2e_col_one"}
@@ -29,7 +29,7 @@ class _RunIdCarrierFeatureGroupOne(GeneratedFeatureGroup):
         return {"run_id_carrier_e2e_col_one": [1, 2, 3]}
 
 
-class _RunIdCarrierFeatureGroupTwo(GeneratedFeatureGroup):
+class _RunIdCarrierFeatureGroupTwo(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"run_id_carrier_e2e_col_two"}

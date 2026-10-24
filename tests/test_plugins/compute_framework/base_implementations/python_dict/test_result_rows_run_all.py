@@ -3,7 +3,7 @@
 from typing import Any
 
 from mloda.provider import ComputeFramework
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda.user import ParallelizationMode
@@ -13,7 +13,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import result_rows
 
 
-class ResultRowsRootFeatureGroup(GeneratedFeatureGroup):
+class ResultRowsRootFeatureGroup(DataCreatorFeatureGroup):
     """Root PythonDict FeatureGroup emitting a two-row columnar dict for ``result_rows``."""
 
     @classmethod

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, JoinSpec, Link, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -21,7 +21,7 @@ class PlkirBaseB(FeatureGroup):
     """Base side B: no input_data, so a link declared on it never resolves on its own."""
 
 
-class PlkirSubA(PlkirBaseA, GeneratedFeatureGroup):
+class PlkirSubA(PlkirBaseA, DataCreatorFeatureGroup):
     """Concrete side A: a missing plkir_a_key in the data would raise KeyError."""
 
     @classmethod
@@ -37,7 +37,7 @@ class PlkirSubA(PlkirBaseA, GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class PlkirSubB(PlkirBaseB, GeneratedFeatureGroup):
+class PlkirSubB(PlkirBaseB, DataCreatorFeatureGroup):
     """Concrete side B: a missing plkir_b_key in the data would raise KeyError."""
 
     @classmethod

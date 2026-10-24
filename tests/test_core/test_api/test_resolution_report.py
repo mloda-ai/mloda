@@ -37,7 +37,7 @@ from mloda.core.prepare.resolution_types import (
     ResolutionRecord,
 )
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import (
     DataAccessCollection,
     Feature,
@@ -56,7 +56,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 # ---------------------------------------------------------------------------
 
 
-class ResReportSource_811(GeneratedFeatureGroup):
+class ResReportSource_811(DataCreatorFeatureGroup):
     """Pandas root source providing the feature the consumer chains off."""
 
     @classmethod
@@ -96,7 +96,7 @@ class ResReportConsumer_811(FeatureGroup):
 RES_REPORT_MATCH_CALLS_811: dict[str, int] = {}
 
 
-class ResReportCountingSource_811(GeneratedFeatureGroup):
+class ResReportCountingSource_811(DataCreatorFeatureGroup):
     """Root source whose match hook counts calls, proving resolution_report() does not re-match."""
 
     @classmethod

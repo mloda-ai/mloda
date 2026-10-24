@@ -25,7 +25,7 @@ from mloda.user import DataType
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import JoinSpec
 from mloda.user import Link
 from mloda.user import Options
@@ -35,7 +35,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 
 
 # Test Feature Groups
-class RootFeatureA(GeneratedFeatureGroup):
+class RootFeatureA(DataCreatorFeatureGroup):
     """First root feature for testing"""
 
     @classmethod
@@ -47,7 +47,7 @@ class RootFeatureA(GeneratedFeatureGroup):
         return {"id": [1, 2, 3], cls.get_class_name(): [10, 20, 30]}
 
 
-class RootFeatureB(GeneratedFeatureGroup):
+class RootFeatureB(DataCreatorFeatureGroup):
     """Second root feature for testing"""
 
     @classmethod
@@ -83,7 +83,7 @@ class MultiDependencyFeature(FeatureGroup):
         return {cls.get_class_name(): pc.add(col_a, col_b)}
 
 
-class SplitMetricSource(GeneratedFeatureGroup):
+class SplitMetricSource(DataCreatorFeatureGroup):
     """Root group producing two columns; differing Options plan as two option buckets."""
 
     @classmethod
@@ -153,7 +153,7 @@ class MetricConverterScale(FeatureGroup):
         return {cls.get_class_name(): data.column("metric_a")}
 
 
-class SplitSourceDtype(GeneratedFeatureGroup):
+class SplitSourceDtype(DataCreatorFeatureGroup):
     """Root feature group producing two columns, requested with differing data types (no options)."""
 
     @classmethod
@@ -202,7 +202,7 @@ class DtypeOptionSibling(FeatureGroup):
         return {cls.get_class_name(): data.column("d_a")}
 
 
-class R5Root(GeneratedFeatureGroup):
+class R5Root(DataCreatorFeatureGroup):
     """Single root feature; X5Intermediate splits on top of it without ever breaking anything."""
 
     @classmethod
@@ -267,7 +267,7 @@ class Z5UnrelatedTypo(FeatureGroup):
         return data.append_column(cls.get_class_name(), base)
 
 
-class LinkedSplitSource(GeneratedFeatureGroup):
+class LinkedSplitSource(DataCreatorFeatureGroup):
     """Root feature group split into two option buckets that the user already Linked."""
 
     @classmethod
@@ -320,7 +320,7 @@ class LinkedCombiner(FeatureGroup):
         return data.append_column(cls.get_class_name(), base)
 
 
-class MixedKeySource(GeneratedFeatureGroup):
+class MixedKeySource(DataCreatorFeatureGroup):
     """Root feature group split by two option keys of different types (int and str)."""
 
     @classmethod
@@ -484,7 +484,7 @@ class SameNameDtypeConsumer(FeatureGroup):
         return {cls.get_class_name(): data.column("d_a")}
 
 
-class ScalingSource(GeneratedFeatureGroup):
+class ScalingSource(DataCreatorFeatureGroup):
     """Root feature group serving pm, scaled by 1000 when requested with option unit == 'x'."""
 
     @classmethod
@@ -589,7 +589,7 @@ class LinkSideConsumer(FeatureGroup):
         return {"ls_x", "ls_plain"}
 
 
-class LinkSideOther(GeneratedFeatureGroup):
+class LinkSideOther(DataCreatorFeatureGroup):
     """Second root joined to LinkSideConsumer on id."""
 
     @classmethod

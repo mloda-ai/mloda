@@ -27,7 +27,7 @@ import pytest
 
 from mloda.provider import (
     ComputeFramework,
-    GeneratedFeatureGroup,
+    DataCreatorFeatureGroup,
     DefaultOptionKeys,
     FeatureSet,
 )
@@ -59,7 +59,7 @@ EXPECTED_ROW_COUNT: int = len(EXPECTED_TEMPERATURES)
 def test_pyarrow_tz_aware_time_range_filter() -> None:
     """Regression guard for #435 on the PyArrow filter engine."""
 
-    class PyArrowTzAwareSource(GeneratedFeatureGroup):
+    class PyArrowTzAwareSource(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {"temperature", DefaultOptionKeys.reference_time}
@@ -116,7 +116,7 @@ def test_pyarrow_tz_aware_time_range_filter_with_validity_window() -> None:
     second invocation explicitly.
     """
 
-    class PyArrowTzAwareValiditySource(GeneratedFeatureGroup):
+    class PyArrowTzAwareValiditySource(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {"temperature", DefaultOptionKeys.reference_time, "valid_time"}
@@ -171,7 +171,7 @@ def test_pyarrow_tz_aware_time_range_filter_with_validity_window() -> None:
 def test_python_dict_tz_aware_time_range_filter() -> None:
     """Regression guard for #435 on the python_dict filter engine."""
 
-    class PythonDictTzAwareSource(GeneratedFeatureGroup):
+    class PythonDictTzAwareSource(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {"temperature", DefaultOptionKeys.reference_time}
@@ -216,7 +216,7 @@ def test_python_dict_tz_aware_time_range_filter() -> None:
 def test_polars_tz_aware_time_range_filter() -> None:
     """Regression guard for #435 on the Polars filter engine."""
 
-    class PolarsTzAwareSource(GeneratedFeatureGroup):
+    class PolarsTzAwareSource(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {"temperature", DefaultOptionKeys.reference_time}

@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda.user import ParallelizationMode
@@ -77,7 +77,7 @@ def test_empty_result_allowed_succeeds_multiprocessing(flight_server: Any) -> No
     assert len(records_from_frame(result[0])) == 0
 
 
-class EmptyResultNoneAllowedFeatureGroup(GeneratedFeatureGroup):
+class EmptyResultNoneAllowedFeatureGroup(DataCreatorFeatureGroup):
     """Root FG whose ``calculate_feature`` returns ``None`` (state A).
 
     Module-local on purpose: it pins that a MISSING result is rejected upstream in

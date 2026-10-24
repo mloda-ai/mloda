@@ -14,7 +14,7 @@ from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.core.prepare.resolve_compute_frameworks import ResolveComputeFrameworks
 from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
@@ -97,7 +97,7 @@ def _paired_payloads(data: Any) -> list[str]:
     return [f"{a}|{b}" for a, b in zip(left, right)]
 
 
-class LinkPlanSharedLeft(GeneratedFeatureGroup):
+class LinkPlanSharedLeft(DataCreatorFeatureGroup):
     """Pinned to the framework the link declares as its left side, with descending keys as an order oracle."""
 
     @classmethod
@@ -113,7 +113,7 @@ class LinkPlanSharedLeft(GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class LinkPlanSharedRight(GeneratedFeatureGroup):
+class LinkPlanSharedRight(DataCreatorFeatureGroup):
     """Pinned to the right framework, with keys that only partly overlap the left side."""
 
     @classmethod
@@ -163,7 +163,7 @@ class LinkPlanSharedPinnedChild(FeatureGroup):
         return {PandasDataFrame}
 
 
-class LinkPlanSelfSource(GeneratedFeatureGroup):
+class LinkPlanSelfSource(DataCreatorFeatureGroup):
     """Serves both sides of the self join; the requested feature name picks the side."""
 
     @classmethod

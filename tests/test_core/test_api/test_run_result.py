@@ -41,7 +41,7 @@ import pytest
 # with the ``mloda`` mlodaAPI alias imported below.
 import mloda.user as mloda_user
 from mloda.core.api.request import Engine
-from mloda.provider import ComputeFramework, FeatureSet, GeneratedFeatureGroup, PropertySpec
+from mloda.provider import ComputeFramework, FeatureSet, DataCreatorFeatureGroup, PropertySpec
 from mloda.user import Feature, Options, ParallelizationMode, PlanStep, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -64,7 +64,7 @@ _TWO_GROUP_FEATURES: list[Feature | str] = ["plan_info_sales", "plan_info_sales_
 _PROBE_VALUES = {"A": [1, 2, 3], "B": [10, 20, 30]}
 
 
-class RunResultProbe(GeneratedFeatureGroup):
+class RunResultProbe(DataCreatorFeatureGroup):
     """Root source whose column values depend on the ``source_table`` group option."""
 
     @classmethod
@@ -84,7 +84,7 @@ class RunResultProbe(GeneratedFeatureGroup):
 _PROBE_PLUGINS = PluginCollector.enabled_feature_groups({RunResultProbe})
 
 
-class RunResultOrderProbe(GeneratedFeatureGroup):
+class RunResultOrderProbe(DataCreatorFeatureGroup):
     """The "slow" role blocks on a class-level gate until "fast" signals it, then adds a short
     delay so a single THREADING poll pass can't hide the fix (a class attribute, since a
     threading.Event in Options wouldn't survive Engine.compute()'s per-step deepcopy)."""
@@ -448,7 +448,7 @@ class TestRunResultFrames:
         assert frame["run_result_probe_value"].tolist() == _PROBE_VALUES["A"]
 
 
-class RunResultDefaultsProbe(GeneratedFeatureGroup):
+class RunResultDefaultsProbe(DataCreatorFeatureGroup):
     """Root source whose step options gain a declared group default."""
 
     PROPERTY_MAPPING = {"run_result_mode": PropertySpec("Engine-filled group default", context=False, default="fast")}
@@ -487,7 +487,7 @@ def _run_defaults_probe_with(features: list[Feature | str]) -> Any:
     )
 
 
-class RunResultAnyFrameworkProbe(GeneratedFeatureGroup):
+class RunResultAnyFrameworkProbe(DataCreatorFeatureGroup):
     """Root source with no framework rule, so it runs on any requested framework."""
 
     @classmethod
@@ -502,7 +502,7 @@ class RunResultAnyFrameworkProbe(GeneratedFeatureGroup):
 _ANY_PLUGINS = PluginCollector.enabled_feature_groups({RunResultAnyFrameworkProbe})
 
 
-class RunResultSecretProbe(GeneratedFeatureGroup):
+class RunResultSecretProbe(DataCreatorFeatureGroup):
     """Root source whose column value depends on a nested credential-shaped group option."""
 
     @classmethod

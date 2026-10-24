@@ -5,14 +5,14 @@ TestDataCreator classes for creating test data in different compute frameworks.
 from typing import Any
 import pandas as pd
 
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureSet
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
-class ATestDataCreator(GeneratedFeatureGroup):
+class ATestDataCreator(DataCreatorFeatureGroup):
     """
     Base class for creating test data in different compute frameworks.
     Subclasses should set the compute_framework class variable and implement

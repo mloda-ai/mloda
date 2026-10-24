@@ -21,12 +21,12 @@ Example: Input Feature Validation Using Custom Validators
 ```python
 from typing import Any
 from mloda.user import mloda
-from mloda.provider import GeneratedFeatureGroup, FeatureGroup, FeatureSet
+from mloda.provider import DataCreatorFeatureGroup, FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Feature
 from mloda.user.pyarrow import PyArrowTable
 
 
-class DocBaseValidateInputFeaturesBase(GeneratedFeatureGroup):
+class DocBaseValidateInputFeaturesBase(DataCreatorFeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -178,11 +178,11 @@ Output features are validated to ensure they meet the expected outcomes and perf
 
 ```python
 from mloda.user import mloda
-from mloda.provider import GeneratedFeatureGroup, FeatureGroup, FeatureSet
+from mloda.provider import DataCreatorFeatureGroup, FeatureGroup, FeatureSet
 from mloda.user import Options
 
 
-class DocBaseValidateOutputFeaturesBase(GeneratedFeatureGroup):
+class DocBaseValidateOutputFeaturesBase(DataCreatorFeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

@@ -38,7 +38,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
@@ -52,7 +52,7 @@ from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base 
 )
 
 
-class EmptyResultDefaultFeatureGroup(GeneratedFeatureGroup):
+class EmptyResultDefaultFeatureGroup(DataCreatorFeatureGroup):
     """Root FeatureGroup that yields a schema-bearing zero-row result under default behavior."""
 
     @classmethod
@@ -66,7 +66,7 @@ class EmptyResultDefaultFeatureGroup(GeneratedFeatureGroup):
         return {"empty_result_default_col": []}
 
 
-class EmptyResultAllowedFeatureGroup(GeneratedFeatureGroup):
+class EmptyResultAllowedFeatureGroup(DataCreatorFeatureGroup):
     """Root FeatureGroup that yields a schema-bearing zero-row result (one empty column)."""
 
     @classmethod
@@ -79,7 +79,7 @@ class EmptyResultAllowedFeatureGroup(GeneratedFeatureGroup):
         return {"empty_result_allowed_col": []}
 
 
-class EmptyResultSchemalessAllowedFeatureGroup(GeneratedFeatureGroup):
+class EmptyResultSchemalessAllowedFeatureGroup(DataCreatorFeatureGroup):
     """Root FeatureGroup that yields a ZERO-COLUMN (schema-less) ``{}`` result.
 
     The ``{}`` returned here is schema-less (state B) on EVERY framework: ``transform``
@@ -97,7 +97,7 @@ class EmptyResultSchemalessAllowedFeatureGroup(GeneratedFeatureGroup):
         return {}
 
 
-class EmptyResultNoneFeatureGroup(GeneratedFeatureGroup):
+class EmptyResultNoneFeatureGroup(DataCreatorFeatureGroup):
     """Root FeatureGroup whose ``calculate_feature`` returns ``None`` (state A)."""
 
     @classmethod

@@ -12,7 +12,7 @@ import pytest
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.user import mloda, mlodaAPI, Feature, PluginCollector
-from mloda.provider import ApiDataFG, ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ApiDataFG, ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Options, FeatureName, Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -396,7 +396,7 @@ class TestStepStateDoesNotLeakBetweenRuns:
 _PFEXT_MARKER = "prepfallback051"
 
 
-class _PrepareRunExtenderFeatureGroup(GeneratedFeatureGroup):
+class _PrepareRunExtenderFeatureGroup(DataCreatorFeatureGroup):
     """Simple root feature group for pinning function_extender fallback between prepare() and run()."""
 
     @classmethod

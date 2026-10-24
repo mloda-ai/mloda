@@ -10,7 +10,7 @@ from mloda.user import Feature
 from mloda.user import Features
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.steward import ExtenderHook, Extender
@@ -20,7 +20,7 @@ from tests.test_plugins.integration_plugins.test_validate_features.example_valid
 logger = logging.getLogger(__name__)
 
 
-class BaseValidateInputFeaturesBase(GeneratedFeatureGroup):
+class BaseValidateInputFeaturesBase(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [1, 2, 3]}

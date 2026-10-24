@@ -5,7 +5,7 @@ from typing import Any
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.provider import FeatureSet
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import PluginCollector
 from mloda.user import GlobalFilter
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -29,7 +29,7 @@ class TestTimeWindowWithGlobalFilter:
 
         # Feature group providing the test data
         # with a wider date range than we'll filter to
-        class TestTimeDataCreator(GeneratedFeatureGroup):
+        class TestTimeDataCreator(DataCreatorFeatureGroup):
             @classmethod
             def feature_names_supported(cls) -> set[str]:
                 return {
@@ -192,7 +192,7 @@ class TestTimeWindowWithGlobalFilter:
 
         # Feature group providing the test data
         # with the custom time filter feature name
-        class TestCustomTimeDataCreator(GeneratedFeatureGroup):
+        class TestCustomTimeDataCreator(DataCreatorFeatureGroup):
             @classmethod
             def feature_names_supported(cls) -> set[str]:
                 return {"temperature", "humidity", custom_time_filter}

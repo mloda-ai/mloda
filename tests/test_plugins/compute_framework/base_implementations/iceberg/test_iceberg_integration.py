@@ -9,7 +9,7 @@ from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.user import PluginCollector
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import ComputeFramework
 from mloda.user import mloda
 from mloda.user import ParallelizationMode
@@ -89,7 +89,7 @@ iceberg_test_dict = {
 }
 
 
-class IcebergTestDataCreator(GeneratedFeatureGroup):
+class IcebergTestDataCreator(DataCreatorFeatureGroup):
     """Test data creator for Iceberg integration tests."""
 
     @classmethod
@@ -239,7 +239,7 @@ class IcebergTableRegularFeatureGroupForFilterTest(RegularFeatureGroupForFilterT
         return mock_table
 
 
-class IcebergTableStructFieldFilterTest(GeneratedFeatureGroup):
+class IcebergTableStructFieldFilterTest(DataCreatorFeatureGroup):
     """Requests the nested field 'b.c', which the plain scan drops from the arrow result."""
 
     @classmethod
@@ -277,7 +277,7 @@ IJK_RIGHT_PAYLOAD = "ijk_right_payload"
 ijk_captured_tables: list[Mock] = []
 
 
-class IcebergJoinKeyLeftFG(GeneratedFeatureGroup):
+class IcebergJoinKeyLeftFG(DataCreatorFeatureGroup):
     """Only the payload is requested by the consumer; the composite index's second column (ijk_key2) is
     never a requested feature and only survives a projected, filtered scan via the link index column stamp."""
 
@@ -322,7 +322,7 @@ class IcebergJoinKeyLeftFG(GeneratedFeatureGroup):
         return mock_table
 
 
-class IcebergJoinKeyRightFG(GeneratedFeatureGroup):
+class IcebergJoinKeyRightFG(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {IJK_KEY, IJK_KEY2, IJK_RIGHT_PAYLOAD}
@@ -371,7 +371,7 @@ ANCESTOR_STAMP_C_KEY = "ancestor_stamp_c_key"
 ANCESTOR_STAMP_C_PAYLOAD = "ancestor_stamp_c_payload"
 
 
-class AncestorStampRootFG(GeneratedFeatureGroup):
+class AncestorStampRootFG(DataCreatorFeatureGroup):
     """Iceberg root: key column desc_k, value, status, filtered by a GlobalFilter on status."""
 
     @classmethod
@@ -441,7 +441,7 @@ class AncestorStampMiddleFG(FeatureGroup):
         return result
 
 
-class AncestorStampOtherFG(GeneratedFeatureGroup):
+class AncestorStampOtherFG(DataCreatorFeatureGroup):
     """Unrelated PyArrow data creator, joined to the middle FG's desc_k on c_key."""
 
     @classmethod

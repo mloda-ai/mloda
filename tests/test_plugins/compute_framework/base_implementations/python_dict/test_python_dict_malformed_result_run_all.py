@@ -23,7 +23,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda.user import ParallelizationMode
@@ -31,7 +31,7 @@ from mloda.user import PluginCollector
 from mloda.user import mloda
 
 
-class _ScalarValuedResultFeatureGroup(GeneratedFeatureGroup):
+class _ScalarValuedResultFeatureGroup(DataCreatorFeatureGroup):
     """Root FeatureGroup whose ``calculate_feature`` returns a scalar-valued dict.
 
     ``{"scalar_result_col": 1}`` is NOT columnar: the value is a bare int, not a list. It
@@ -48,7 +48,7 @@ class _ScalarValuedResultFeatureGroup(GeneratedFeatureGroup):
         return {"scalar_result_col": 1}
 
 
-class _MultiScalarValuedResultFeatureGroup(GeneratedFeatureGroup):
+class _MultiScalarValuedResultFeatureGroup(DataCreatorFeatureGroup):
     """Root FeatureGroup returning a multi-column scalar-valued dict ``{"a": 1, "b": 2}``."""
 
     @classmethod

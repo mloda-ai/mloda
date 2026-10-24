@@ -39,7 +39,7 @@ from mloda.core.prepare.identify_feature_group import (
 )
 from tests.helpers.plugin_stubs import StubFeatureGroup, make_fg
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
-from mloda.provider import FeatureSet, GeneratedFeatureGroup, SourceMatch
+from mloda.provider import FeatureSet, DataCreatorFeatureGroup, SourceMatch
 from mloda.user import Credential, DataAccessCollection, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
@@ -792,7 +792,7 @@ def test_framework_pin_narrows_base_name_scope_to_secondary_member() -> None:
 # ---------------------------------------------------------------------------
 
 
-class ScopePythonAggregationSource(GeneratedFeatureGroup):
+class ScopePythonAggregationSource(DataCreatorFeatureGroup):
     """Source data for the Python-surface aggregated-family scope test."""
 
     @classmethod
@@ -826,8 +826,8 @@ def test_end2end_python_feature_aggregation_group_scope_runs_the_pandas_implemen
     assert aggregation.implementation is PandasAggregation
 
 
-class ScopeE2EAbstractFamilyBase(GeneratedFeatureGroup):
-    """Abstract family base that reads its name from the generated group of its concrete member."""
+class ScopeE2EAbstractFamilyBase(DataCreatorFeatureGroup):
+    """Abstract family base that reads its name from the data creator group of its concrete member."""
 
     @classmethod
     @abstractmethod
@@ -836,7 +836,7 @@ class ScopeE2EAbstractFamilyBase(GeneratedFeatureGroup):
 
 
 class ScopeE2EConcreteFamilyMember(ScopeE2EAbstractFamilyBase):
-    """The concrete member: a generated group for one feature name."""
+    """The concrete member: a data creator group for one feature name."""
 
     @classmethod
     def _family_hook(cls) -> str:
@@ -867,7 +867,7 @@ def test_end2end_abstract_family_base_scope_runs_the_enabled_subclass() -> None:
     assert any(step.feature_group is ScopeE2EConcreteFamilyMember for step in steps)
 
 
-class ScopePythonAggregationSourceB(GeneratedFeatureGroup):
+class ScopePythonAggregationSourceB(DataCreatorFeatureGroup):
     """Second source of the same feature name with different values."""
 
     @classmethod

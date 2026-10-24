@@ -33,7 +33,7 @@ from mloda.core.prepare.resolution_types import (
     ResolutionDiagnosis,
     ResolutionRecord,
 )
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.mixins.reader_feature_groups.lazy_source_group import load_group
@@ -48,7 +48,7 @@ UNKNOWN_FEATURE_812 = "diagnose_unknown_812"
 BOGUS_ORDERING = "bogus"
 
 
-class DiagnoseSource_812(GeneratedFeatureGroup):
+class DiagnoseSource_812(DataCreatorFeatureGroup):
     """Pandas root source providing the feature the consumer chains off."""
 
     @classmethod

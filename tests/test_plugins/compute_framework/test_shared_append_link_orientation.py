@@ -10,7 +10,7 @@ import pytest
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Index
@@ -41,7 +41,7 @@ def _assert_is_orientation_configuration_error(message: str, link: Link) -> None
     assert any(word in message.lower() for word in UNSUPPORTED_WORDS)
 
 
-class SharedAppendSource(GeneratedFeatureGroup):
+class SharedAppendSource(DataCreatorFeatureGroup):
     """Serves both sides of the append; each side is pinned to a different framework."""
 
     @classmethod

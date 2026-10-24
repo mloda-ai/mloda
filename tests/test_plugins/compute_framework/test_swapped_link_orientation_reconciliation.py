@@ -9,7 +9,7 @@ import pyarrow as pa
 import pytest
 
 from mloda.provider import ComputeFramework
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -49,7 +49,7 @@ def _add_joined_column(data: Any, name: str) -> Any:
     return data
 
 
-class SwappedParentLeft(GeneratedFeatureGroup):
+class SwappedParentLeft(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): ["Same Value"], LEFT_PAYLOAD: ["left"]}
@@ -59,7 +59,7 @@ class SwappedParentLeft(GeneratedFeatureGroup):
         return {PyArrowTable, PandasDataFrame}
 
 
-class SwappedParentRight(GeneratedFeatureGroup):
+class SwappedParentRight(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): ["Same Value"], RIGHT_PAYLOAD: ["right"]}

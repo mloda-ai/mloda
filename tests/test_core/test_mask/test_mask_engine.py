@@ -10,7 +10,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 
-from mloda.provider import ComputeFramework, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, Features, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_mask_engine import (
     PyArrowMaskEngine,
@@ -106,7 +106,7 @@ class TestMaskEngineSetupWiring:
 # ---------------------------------------------------------------------------
 
 
-class MaskEngineFeatureGroup(GeneratedFeatureGroup):
+class MaskEngineFeatureGroup(DataCreatorFeatureGroup):
     """FeatureGroup that uses the mask engine to apply inline masking."""
 
     @classmethod
@@ -144,7 +144,7 @@ class MaskEngineFeatureGroup(GeneratedFeatureGroup):
         return pa.table({cls.get_class_name(): result, "status": status})
 
 
-class MaskEngineNoMaskFeatureGroup(GeneratedFeatureGroup):
+class MaskEngineNoMaskFeatureGroup(DataCreatorFeatureGroup):
     """Mask engine with all_true returns all-True mask.
 
     All values contribute to the region sum.
@@ -186,7 +186,7 @@ class MaskEngineNoMaskFeatureGroup(GeneratedFeatureGroup):
         return pa.table({cls.get_class_name(): result, "status": status})
 
 
-class MaskEngineRangeFeatureGroup(GeneratedFeatureGroup):
+class MaskEngineRangeFeatureGroup(DataCreatorFeatureGroup):
     """Mask engine with range mask via combine(greater_equal, less_equal).
 
     Data: region=[A,A,B,B], value=[10,20,30,40], weight=[1,2,3,4].
@@ -232,7 +232,7 @@ class MaskEngineRangeFeatureGroup(GeneratedFeatureGroup):
         return pa.table({cls.get_class_name(): result, "value": value})
 
 
-class MaskEngineCategoricalFeatureGroup(GeneratedFeatureGroup):
+class MaskEngineCategoricalFeatureGroup(DataCreatorFeatureGroup):
     """Mask engine with categorical mask via is_in.
 
     Data: region=[A,A,B,B,B], status=[active,pending,inactive,active,pending],
@@ -277,7 +277,7 @@ class MaskEngineCategoricalFeatureGroup(GeneratedFeatureGroup):
         return pa.table({cls.get_class_name(): result, "status": status})
 
 
-class MaskEngineMultiMaskFeatureGroup(GeneratedFeatureGroup):
+class MaskEngineMultiMaskFeatureGroup(DataCreatorFeatureGroup):
     """Mask engine with AND-combined masks on same column.
 
     Data: region=[A,A,B,B,B], value=[5,15,25,35,45], weight=[1,2,3,4,5].
@@ -324,7 +324,7 @@ class MaskEngineMultiMaskFeatureGroup(GeneratedFeatureGroup):
         return pa.table({cls.get_class_name(): result, "value": value})
 
 
-class MaskEngineBetweenFeatureGroup(GeneratedFeatureGroup):
+class MaskEngineBetweenFeatureGroup(DataCreatorFeatureGroup):
     """Mask engine with between() convenience method.
 
     Data: region=[A,A,B,B], value=[10,20,30,40], weight=[1,2,3,4].
@@ -367,7 +367,7 @@ class MaskEngineBetweenFeatureGroup(GeneratedFeatureGroup):
         return pa.table({cls.get_class_name(): result, "value": value})
 
 
-class MaskEngineAllOfFeatureGroup(GeneratedFeatureGroup):
+class MaskEngineAllOfFeatureGroup(DataCreatorFeatureGroup):
     """Mask engine with all_of() convenience method.
 
     Data: region=[A,A,B,B,B], value=[5,15,25,35,45], weight=[1,2,3,4,5].

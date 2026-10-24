@@ -11,14 +11,14 @@ from mloda.provider import FeatureGroup
 from mloda.user import Feature, Options
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import mloda
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
 from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature  # noqa: F401
 
 
-class InputDataTestFeatureGroup(GeneratedFeatureGroup):
+class InputDataTestFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {
@@ -152,7 +152,7 @@ _REMOVED_MODULE_SYMBOLS = [
 
 
 class TestBaseInputDataIsOnlyAMarker:
-    """BaseInputData keeps no reader path: data comes from a SourceFeatureGroup, or a GeneratedFeatureGroup."""
+    """BaseInputData keeps no reader path: data comes from a SourceFeatureGroup, or a DataCreatorFeatureGroup."""
 
     @pytest.mark.parametrize("member", _REMOVED_BASE_INPUT_DATA_MEMBERS)
     def test_the_legacy_reader_member_is_gone(self, member: str) -> None:

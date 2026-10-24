@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -60,7 +60,7 @@ def _make_fg(capture: list[tuple[Feature, ...]], notes: list[tuple[str, ...]]) -
     """A throwaway root group whose per-filter matches depend on the probing feature's mode."""
     gc.collect()
 
-    class FsdDivergenceFG(GeneratedFeatureGroup):
+    class FsdDivergenceFG(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return set(ALL_FSD_NAMES)
@@ -99,7 +99,7 @@ def _make_rename_fg(capture: list[tuple[Feature, ...]], notes: list[tuple[str, .
     """A throwaway root group renaming its one declared filter to a mode-specific column."""
     gc.collect()
 
-    class FsdRenameFG(GeneratedFeatureGroup):
+    class FsdRenameFG(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {FSD_RN_A, FSD_RN_B, FSD_RN_FILTER, FSD_COL_A, FSD_COL_B}
@@ -135,7 +135,7 @@ def _make_freshness_fg(modes: list[tuple[str, ...]]) -> type[FeatureGroup]:
     """A throwaway root group serving one host, recording each run's attached enrichment mode."""
     gc.collect()
 
-    class FsdFreshnessFG(GeneratedFeatureGroup):
+    class FsdFreshnessFG(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {FSD_FRESH_HOST, FSD_FRESH_FILTER}

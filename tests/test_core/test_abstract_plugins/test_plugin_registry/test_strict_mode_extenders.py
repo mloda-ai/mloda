@@ -30,7 +30,7 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
-from mloda.core.abstract_plugins.generated_feature_group import GeneratedFeatureGroup
+from mloda.core.abstract_plugins.data_creator_feature_group import DataCreatorFeatureGroup
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry, register_plugin
 from mloda.core.abstract_plugins.run_context import RunContext
@@ -105,7 +105,7 @@ class _ExtStrictInjectedOnly(Extender):
 _STRICT_WIRING_FEAT = "strict_mode_extenders_wiring_feature_unique_xyz"
 
 
-class _StrictWiringFeatureGroup(GeneratedFeatureGroup):
+class _StrictWiringFeatureGroup(DataCreatorFeatureGroup):
     """Root feature group used to build a real session for the runner-wiring tests."""
 
     @classmethod

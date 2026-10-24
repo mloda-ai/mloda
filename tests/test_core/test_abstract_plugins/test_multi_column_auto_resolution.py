@@ -16,7 +16,7 @@ from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Options
 from mloda.provider import ComputeFramework
 from mloda.user import PluginLoader
@@ -25,7 +25,7 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
-class MultiColumnTestDataCreator(GeneratedFeatureGroup):
+class MultiColumnTestDataCreator(DataCreatorFeatureGroup):
     """Test data creator providing source data for multi-column tests."""
 
     @classmethod

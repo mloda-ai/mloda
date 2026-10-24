@@ -14,7 +14,7 @@ from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
 from mloda.core.prepare.choose_compute_frameworks import ChooseComputeFrameworks
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import (
     Feature,
     FeatureName,
@@ -43,7 +43,7 @@ def _joined_columns(data: Any, expected: set[str]) -> str:
     return "|".join(sorted(expected.intersection(data.columns)))
 
 
-class MultiLinkRootA(GeneratedFeatureGroup):
+class MultiLinkRootA(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"mlg_a"}
@@ -57,7 +57,7 @@ class MultiLinkRootA(GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class MultiLinkRootBSame(GeneratedFeatureGroup):
+class MultiLinkRootBSame(DataCreatorFeatureGroup):
     """Root B on the same framework as root A, so the A-B link joins in one framework."""
 
     @classmethod
@@ -73,7 +73,7 @@ class MultiLinkRootBSame(GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class MultiLinkRootBDistinct(GeneratedFeatureGroup):
+class MultiLinkRootBDistinct(DataCreatorFeatureGroup):
     """Root B on a second framework, so the A-B link joins across two distinct frameworks."""
 
     @classmethod
@@ -105,7 +105,7 @@ class MultiLinkRootBDistinctPartial(MultiLinkRootBDistinct):
         return {"mlg_bd": [10, 20, 30, 50, 60], "mlg_idx": ["x", "y", "z", "v", "u"]}
 
 
-class MultiLinkRootC(GeneratedFeatureGroup):
+class MultiLinkRootC(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"mlg_c"}
@@ -149,7 +149,7 @@ class MultiLinkChildDistinct(FeatureGroup):
         return {PandasDataFrame}
 
 
-class SameFrameworkSharedParent(GeneratedFeatureGroup):
+class SameFrameworkSharedParent(DataCreatorFeatureGroup):
     """Read as the join source by both spokes below; every feature group here stays on one framework."""
 
     @classmethod
@@ -165,7 +165,7 @@ class SameFrameworkSharedParent(GeneratedFeatureGroup):
         return {PandasDataFrame}
 
 
-class SameFrameworkSpokeD1(GeneratedFeatureGroup):
+class SameFrameworkSpokeD1(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"sfw_d1"}
@@ -179,7 +179,7 @@ class SameFrameworkSpokeD1(GeneratedFeatureGroup):
         return {PandasDataFrame}
 
 
-class SameFrameworkSpokeD2(GeneratedFeatureGroup):
+class SameFrameworkSpokeD2(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"sfw_d2"}
@@ -809,7 +809,7 @@ def _tie_root_data(features: FeatureSet, name: str, base: list[int]) -> dict[str
     return {"tie_jid": list(range(1, len(base) + 1)), name: [value * scale for value in base]}
 
 
-class _TieRoot(GeneratedFeatureGroup):
+class _TieRoot(DataCreatorFeatureGroup):
     """Root whose values depend on the tie_tag option, built in FRAMEWORK's native type."""
 
     COLUMN: ClassVar[str] = ""
@@ -2024,7 +2024,7 @@ def test_a_join_keeping_the_member_side_of_two_members_on_different_frameworks_i
     assert "reads both members directly" not in message
 
 
-class RemedyAsofRootA(GeneratedFeatureGroup):
+class RemedyAsofRootA(DataCreatorFeatureGroup):
     """Time-stamped root A for ASOF links."""
 
     @classmethod
@@ -2056,7 +2056,7 @@ class RemedyAsofRootA1(RemedyAsofRootA):
         return {ThirdCfw}
 
 
-class RemedyAsofRootB(GeneratedFeatureGroup):
+class RemedyAsofRootB(DataCreatorFeatureGroup):
     """Time-stamped root B for ASOF links on the second framework."""
 
     @classmethod
@@ -2399,7 +2399,7 @@ def _star_group(name: str, column: str, rows: dict[str, int], framework: type[Co
         "calculate_feature": classmethod(calculate_feature),
         "compute_framework_rule": classmethod(compute_framework_rule),
     }
-    created = type(name, (GeneratedFeatureGroup,), namespace)
+    created = type(name, (DataCreatorFeatureGroup,), namespace)
     globals()[name] = created  # module level, so multiprocessing can pickle the link back
     return created
 

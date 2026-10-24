@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
-from mloda.provider import GeneratedFeatureGroup, FeatureGroup, PropertySpec
+from mloda.provider import DataCreatorFeatureGroup, FeatureGroup, PropertySpec
 from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -731,7 +731,7 @@ class TestDeclaredInputMemoAttributesGuarded:
 _REPL_COL = "ctx_replaced_col"
 
 
-class _ReplParentFeatureGroup(GeneratedFeatureGroup):
+class _ReplParentFeatureGroup(DataCreatorFeatureGroup):
     """Parent replaced by its subclass at match time."""
 
     @classmethod

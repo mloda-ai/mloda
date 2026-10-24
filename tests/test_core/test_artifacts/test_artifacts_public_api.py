@@ -7,12 +7,12 @@ Validates the patterns documented in docs/docs/in_depth/artifacts.md:
 
 from typing import Any
 
-from mloda.provider import BaseArtifact, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import BaseArtifact, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
-class PublicApiArtifactFeature(GeneratedFeatureGroup):
+class PublicApiArtifactFeature(DataCreatorFeatureGroup):
     """Artifact feature group mirroring the documentation example."""
 
     @staticmethod

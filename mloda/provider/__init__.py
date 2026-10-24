@@ -32,7 +32,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework as Co
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.implementation_pin_error import ImplementationPinError
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
-from mloda.core.abstract_plugins.generated_feature_group import GeneratedFeatureGroup
+from mloda.core.abstract_plugins.data_creator_feature_group import DataCreatorFeatureGroup
 from mloda.core.abstract_plugins.hook_context import OutputSchema as OutputSchema
 from mloda.core.abstract_plugins.hook_context import HookContext as HookContext
 from mloda.core.abstract_plugins.hook_context import instrument as instrument
@@ -182,7 +182,7 @@ __all__ = [
     "SourceMatch",
     "SourceProbeOutcome",
     "SourceFeatureGroup",
-    "GeneratedFeatureGroup",
+    "DataCreatorFeatureGroup",
     "Implementation",
     "ImplementationPinError",
     "OperationFeatureGroup",

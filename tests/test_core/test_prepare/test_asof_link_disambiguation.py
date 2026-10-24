@@ -25,7 +25,7 @@ import pytest
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.resolve_links import ResolveLinks
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -232,7 +232,7 @@ def _disambig_link_forward() -> Link:
     )
 
 
-class DisambigLeftFeature(GeneratedFeatureGroup):
+class DisambigLeftFeature(DataCreatorFeatureGroup):
     """Left side: emits by-key ``k``, time ``t`` and value ``lv``."""
 
     @classmethod
@@ -244,7 +244,7 @@ class DisambigLeftFeature(GeneratedFeatureGroup):
         return dict(_LEFT_ROWS)
 
 
-class DisambigRightFeature(GeneratedFeatureGroup):
+class DisambigRightFeature(DataCreatorFeatureGroup):
     """Right side: emits by-key ``k``, time ``t`` and value ``rv``."""
 
     @classmethod

@@ -1,6 +1,6 @@
 from typing import Any
 import pytest
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -41,7 +41,7 @@ COMPUTE_FRAMEWORKS: list[type[ComputeFramework]] = [
 ]
 
 
-class JoinCfwTest1(GeneratedFeatureGroup):
+class JoinCfwTest1(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [1, 2, 3], "idx": ["a", "b", "c"]}
@@ -51,7 +51,7 @@ class JoinCfwTest1(GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class JoinCfwTest2(GeneratedFeatureGroup):
+class JoinCfwTest2(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [4, 5, 6], "idx": ["a", "b", "c"]}
@@ -61,7 +61,7 @@ class JoinCfwTest2(GeneratedFeatureGroup):
         return {SecondCfw}
 
 
-class JoinCfwTest3(GeneratedFeatureGroup):
+class JoinCfwTest3(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [7, 8, 9], "idx": ["a", "b", "c"]}
@@ -71,7 +71,7 @@ class JoinCfwTest3(GeneratedFeatureGroup):
         return {ThirdCfw}
 
 
-class JoinCfwTest4(GeneratedFeatureGroup):
+class JoinCfwTest4(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [12, 13, 14], "idx": ["a", "b", "c"]}
@@ -133,7 +133,7 @@ class Join4CfwTest(Join3CfwTest):
         return {PyArrowTable}
 
 
-class MultiIndexJoinTest1(GeneratedFeatureGroup):
+class MultiIndexJoinTest1(DataCreatorFeatureGroup):
     """Feature group using Pandas framework with 2-column multi-index."""
 
     @classmethod
@@ -149,7 +149,7 @@ class MultiIndexJoinTest1(GeneratedFeatureGroup):
         return {PandasDataFrame}
 
 
-class MultiIndexJoinTest2(GeneratedFeatureGroup):
+class MultiIndexJoinTest2(DataCreatorFeatureGroup):
     """Feature group using PolarsLazy framework with 2-column multi-index."""
 
     @classmethod
@@ -165,7 +165,7 @@ class MultiIndexJoinTest2(GeneratedFeatureGroup):
         return {PolarsLazyDataFrame}
 
 
-class MultiIndexJoinTest3(GeneratedFeatureGroup):
+class MultiIndexJoinTest3(DataCreatorFeatureGroup):
     """Feature group using PyArrow framework with 2-column multi-index."""
 
     @classmethod
@@ -181,7 +181,7 @@ class MultiIndexJoinTest3(GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class MultiIndexJoinTest4(GeneratedFeatureGroup):
+class MultiIndexJoinTest4(DataCreatorFeatureGroup):
     """Feature group using PythonDict framework with 2-column multi-index."""
 
     @classmethod

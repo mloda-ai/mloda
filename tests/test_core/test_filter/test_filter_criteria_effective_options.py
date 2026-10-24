@@ -18,7 +18,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import GeneratedFeatureGroup, PropertySpec
+from mloda.provider import DataCreatorFeatureGroup, PropertySpec
 from mloda.user import FeatureName, FilterType, GlobalFilter, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -35,7 +35,7 @@ PFC_TARGET = "pfc_target_feature"  # never requested directly; only reachable as
 def _make_probe_fg() -> type[FeatureGroup]:
     """A throwaway root FeatureGroup whose criteria observes PFC_TARGET's PFC_KEY, the option this test pins."""
 
-    class PfcCriteriaProbeFeatureGroup(GeneratedFeatureGroup):
+    class PfcCriteriaProbeFeatureGroup(DataCreatorFeatureGroup):
         main_criteria_observed: list[Any] = []  # class-local recorder: no external ref, so no leak
 
         PROPERTY_MAPPING = {
@@ -96,7 +96,7 @@ def _single_row(frame: Any, column: str) -> Any:
 def _make_default_matcher_fg(spec: PropertySpec) -> type[FeatureGroup]:
     """A throwaway root FeatureGroup on the DEFAULT matcher, declaring PFC_KEY with ``spec``."""
 
-    class PfcDefaultMatcherFeatureGroup(GeneratedFeatureGroup):
+    class PfcDefaultMatcherFeatureGroup(DataCreatorFeatureGroup):
         PROPERTY_MAPPING = {PFC_KEY: spec}
 
         @classmethod

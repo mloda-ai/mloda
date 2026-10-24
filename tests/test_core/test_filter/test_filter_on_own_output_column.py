@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from mloda.provider import ComputeFramework, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, Features, GlobalFilter, Options, ParallelizationMode, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
@@ -10,7 +10,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from tests.test_core.test_tooling import MlodaTestRunner
 
 
-class FilterOwnOutputRetrievalFG(GeneratedFeatureGroup):
+class FilterOwnOutputRetrievalFG(DataCreatorFeatureGroup):
     """Root FeatureGroup that requires context-only options and outputs the filterable distance column."""
 
     @classmethod

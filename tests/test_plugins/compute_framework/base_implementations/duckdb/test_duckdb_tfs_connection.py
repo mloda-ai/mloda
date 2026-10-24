@@ -21,7 +21,7 @@ except ImportError:
 from mloda.user import Feature, DataAccessCollection, ParallelizationMode, PluginCollector, mloda
 from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet
 from mloda.user import FeatureName, Options
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
@@ -79,7 +79,7 @@ class DcArrowSink(FeatureGroup):
 _OTHER: dict[str, Any] = {}
 
 
-class DcWrongConnRoot(GeneratedFeatureGroup):
+class DcWrongConnRoot(DataCreatorFeatureGroup):
     """DuckDB root returning a relation that lives on a connection other than its handle's."""
 
     @classmethod
@@ -97,7 +97,7 @@ class DcWrongConnRoot(GeneratedFeatureGroup):
         return DuckdbRelation.from_arrow(_OTHER["conn"], pa.Table.from_pydict({"dc_wrong": [1]}))
 
 
-class DcChainRoot(GeneratedFeatureGroup):
+class DcChainRoot(DataCreatorFeatureGroup):
     """DuckDB root; the cfw it runs on is bound to the root's own handle."""
 
     @classmethod

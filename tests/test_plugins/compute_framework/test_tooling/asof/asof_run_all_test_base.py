@@ -23,7 +23,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import DataAccessCollection
@@ -61,7 +61,7 @@ _EXPECTED_ENCODED = sorted(["1|10|1", "1|20|2", "2|15|3"])
 
 
 def _columns_to_lists(rows: list[dict[str, Any]]) -> dict[str, list[Any]]:
-    """Convert a list of row dicts into a column-oriented dict for a generated group."""
+    """Convert a list of row dicts into a column-oriented dict for a data creator group."""
     keys = rows[0].keys()
     return {key: [row[key] for row in rows] for key in keys}
 
@@ -81,7 +81,7 @@ def _asof_link() -> Link:
     )
 
 
-class AsofLeftFeature(GeneratedFeatureGroup):
+class AsofLeftFeature(DataCreatorFeatureGroup):
     """Left side of the ASOF join: emits by-key ``k``, time ``t`` and value ``lv``."""
 
     @classmethod
@@ -93,7 +93,7 @@ class AsofLeftFeature(GeneratedFeatureGroup):
         return _columns_to_lists(_SCENARIO["left"])
 
 
-class AsofRightFeature(GeneratedFeatureGroup):
+class AsofRightFeature(DataCreatorFeatureGroup):
     """Right side of the ASOF join: emits by-key ``k``, time ``t`` and value ``rv``."""
 
     @classmethod

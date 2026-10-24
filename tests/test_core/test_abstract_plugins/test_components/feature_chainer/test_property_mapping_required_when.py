@@ -17,7 +17,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Feature, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.provider import PropertySpec
@@ -245,7 +245,7 @@ def _run_all_needs_order_by(options: Options) -> bool:
     return agg_type in _RUN_ALL_ORDER_DEPENDENT
 
 
-class ConditionalRequiredFeatureGroup(FeatureChainParserMixin, GeneratedFeatureGroup):
+class ConditionalRequiredFeatureGroup(FeatureChainParserMixin, DataCreatorFeatureGroup):
     """Full FeatureGroup with required_when for mloda.run_all integration testing."""
 
     PREFIX_PATTERN = r".*__([\w]+)_windowed$"

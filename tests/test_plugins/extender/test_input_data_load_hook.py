@@ -28,7 +28,14 @@ from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
-from mloda.provider import ApiDataFG, GeneratedFeatureGroup, FeatureGroup, FileSource, InputDataDescriptor, SourceMatch
+from mloda.provider import (
+    ApiDataFG,
+    DataCreatorFeatureGroup,
+    FeatureGroup,
+    FileSource,
+    InputDataDescriptor,
+    SourceMatch,
+)
 from mloda.steward import GateBypassError
 from mloda.user import (
     DataAccessCollection,
@@ -1201,7 +1208,7 @@ class _FileRecordingGateExtender(Extender):
         return result
 
 
-class _MultiprocessingHopFeatureGroup(GeneratedFeatureGroup):
+class _MultiprocessingHopFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {_MP_HOP_COLUMN}

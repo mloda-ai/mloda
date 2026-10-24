@@ -8,7 +8,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 
-class GeneratedFeatureGroup(FeatureGroup):
+class DataCreatorFeatureGroup(FeatureGroup):
     """Root group that generates the data for its feature_names_supported(); its dict result becomes its own frame."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:

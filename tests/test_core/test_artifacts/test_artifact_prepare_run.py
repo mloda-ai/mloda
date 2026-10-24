@@ -8,12 +8,12 @@ single prepare() session.
 import hashlib
 from typing import Any
 
-from mloda.provider import BaseArtifact, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import BaseArtifact, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, mloda, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
-class PrepareRunArtifactFeature(GeneratedFeatureGroup):
+class PrepareRunArtifactFeature(DataCreatorFeatureGroup):
     """Artifact-capable feature group for prepare/run tests."""
 
     @staticmethod
@@ -33,7 +33,7 @@ class PrepareRunArtifactFeature(GeneratedFeatureGroup):
         return {cls.get_class_name(): [1, 2, 3]}
 
 
-class VerifiableArtifactFeature(GeneratedFeatureGroup):
+class VerifiableArtifactFeature(DataCreatorFeatureGroup):
     """Artifact feature group that embeds the loaded artifact hash into its output.
 
     In save mode: stores a versioned model string as the artifact.

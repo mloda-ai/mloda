@@ -9,7 +9,7 @@ import pytest
 
 from mloda.core.core.engine import Engine
 from mloda.core.core.step.join_step import JoinStep
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup, LinkValidator
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup, LinkValidator
 from mloda.user import Feature, FeatureName, Features, Index, JoinSpec, Link, Options, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -19,7 +19,7 @@ _SCLK_REGION = {"sclk_code": [2, 3, 4, 5], "sclk_pop": [200, 300, 400, 500]}
 _SCLK_DATA = {"election": _SCLK_ELECTION, "region": _SCLK_REGION}
 
 
-class SclkSourceFG(GeneratedFeatureGroup):
+class SclkSourceFG(DataCreatorFeatureGroup):
     """Root FG with no declared index_columns: injection runs through _add_index_feature_from_links."""
 
     @classmethod
@@ -44,7 +44,7 @@ class SclkIndexedSourceFG(SclkSourceFG):
         return [Index(("sclk_nr",)), Index(("sclk_code",))]
 
 
-class SclkOtherFG(GeneratedFeatureGroup):
+class SclkOtherFG(DataCreatorFeatureGroup):
     """Distinct class used as the right side of a different-class link."""
 
     @classmethod
@@ -330,7 +330,7 @@ def test_valid_feature_link_still_registers_in_engine_links() -> None:
     assert link in engine.links
 
 
-class TwinRootA(GeneratedFeatureGroup):
+class TwinRootA(DataCreatorFeatureGroup):
     """Root on the left side of a link joining on twin_rid."""
 
     @classmethod

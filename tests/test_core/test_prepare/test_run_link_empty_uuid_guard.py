@@ -13,7 +13,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.prepare.execution_plan import ExecutionPlan
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Index
@@ -89,7 +89,7 @@ def test_validate_join_step_uuids_accepts_two_genuine_non_empty_sides() -> None:
     ExecutionPlan._validate_join_step_uuids(link, {uuid4()}, {uuid4()})
 
 
-class WiringJoinLeftFG(GeneratedFeatureGroup):
+class WiringJoinLeftFG(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"wiring_join_left"}
@@ -109,7 +109,7 @@ class WiringJoinLeftFG(GeneratedFeatureGroup):
         return [Index(("id",))]
 
 
-class WiringJoinRightFG(GeneratedFeatureGroup):
+class WiringJoinRightFG(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"wiring_join_right"}

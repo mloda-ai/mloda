@@ -8,7 +8,7 @@ Functions return data/results that can be used in subsequent cells.
 from copy import copy
 from typing import Any
 from mloda.provider import FeatureSet
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -29,7 +29,7 @@ import pandas as pd
 
 
 # Feature group for our sample data
-class SklearnDataCreator(GeneratedFeatureGroup):
+class SklearnDataCreator(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"age", "weight", "state", "gender"}
@@ -220,7 +220,7 @@ def cell5_demonstrate_feature_chaining() -> None:
 def cell6_reusability_demo() -> None:
     """Demonstrate reusability with new data."""
 
-    class SecondSklearnDataCreator(GeneratedFeatureGroup):
+    class SecondSklearnDataCreator(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {"age", "weight", "state", "gender"}

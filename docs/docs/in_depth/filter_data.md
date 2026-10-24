@@ -114,15 +114,15 @@ Result
 Now, we need to also use a FeatureGroup which supports it. In this example, we show where we can access the SingleFilters.
 The implementation of the concrete filters is dependent on the feature group. This example is rather complex as we filter a python dictionary. 
 
-Further, the feature is a `GeneratedFeatureGroup`, so we create the data here itself. 
+Further, the feature is a `DataCreatorFeatureGroup`, so we create the data here itself. 
 
 ```python
 from mloda.user import mloda
-from mloda.provider import FeatureGroup, FeatureSet, ComputeFramework, GeneratedFeatureGroup
+from mloda.provider import FeatureGroup, FeatureSet, ComputeFramework, DataCreatorFeatureGroup
 from typing import Any
 from mloda.user.pyarrow import PyArrowTable
 
-class ExampleOrderFilter(GeneratedFeatureGroup):
+class ExampleOrderFilter(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {cls.get_class_name(), "example_order_id"}

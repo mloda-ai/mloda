@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import GeneratedFeatureGroup, FeatureGroup, FeatureSet
+from mloda.provider import DataCreatorFeatureGroup, FeatureGroup, FeatureSet
 from tests.test_documentation.test_documentation import run_md_file_isolated
 
 DOC_SNIPPET_MD = textwrap.dedent(
@@ -56,7 +56,7 @@ def leaked_class_registry() -> Generator[list[type[FeatureGroup]], None, None]:
 def test_doc_snippets_unaffected_by_leaked_test_feature_groups(
     tmp_path: Path, leaked_class_registry: list[type[FeatureGroup]]
 ) -> None:
-    class LeakedCustomerIdDataCreator(GeneratedFeatureGroup):
+    class LeakedCustomerIdDataCreator(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {"customer_id"}

@@ -1,5 +1,5 @@
 from typing import Any
-from mloda.provider import BaseInputData, FeatureGroup, GeneratedFeatureGroup
+from mloda.provider import BaseInputData, FeatureGroup, DataCreatorFeatureGroup
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.user import FeatureName
@@ -25,7 +25,7 @@ class _StubInputData(BaseInputData):
     pass
 
 
-class _GeneratedFileFeatureBase(SourceInputFeature, GeneratedFeatureGroup):
+class _GeneratedFileFeatureBase(SourceInputFeature, DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"test_file_feature"}
@@ -106,7 +106,7 @@ class TestDynamicFeatureGroupFactory:
         # Test that the created class is a subclass of FeatureGroup
         assert issubclass(DynamicTestFeatureGroup, FeatureGroup)
         assert issubclass(DynamicTestFeatureGroup, SourceInputFeature)
-        assert issubclass(DynamicTestFeatureGroup, GeneratedFeatureGroup)
+        assert issubclass(DynamicTestFeatureGroup, DataCreatorFeatureGroup)
 
     def test_dynamic_feature_group_creator_consuming_a_document_group(self) -> None:
         properties: dict[str, Any] = {

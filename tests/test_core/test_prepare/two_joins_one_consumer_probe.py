@@ -6,14 +6,14 @@ import json
 from typing import Any
 
 from mloda.core.core.step.join_step import JoinStep
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, Index, JoinSpec, Link, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 IDX = Index(("idx",))
 
 
-class TjRootA(GeneratedFeatureGroup):
+class TjRootA(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"tj_a"}
@@ -27,7 +27,7 @@ class TjRootA(GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class TjRootC(GeneratedFeatureGroup):
+class TjRootC(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"tj_c"}
@@ -41,7 +41,7 @@ class TjRootC(GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class TjRootB(GeneratedFeatureGroup):
+class TjRootB(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"tj_b"}

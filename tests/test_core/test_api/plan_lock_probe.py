@@ -8,14 +8,14 @@ import pandas as pd
 import pyarrow as pa
 
 from mloda.core.api.plan_lock import _lock_text
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.steward import Extender, ExtenderHook, plan_content_hash, plan_structure_hash
 from mloda.user import Feature, FeatureName, Index, JoinSpec, Link, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
-class LockProbeLeftPandas(GeneratedFeatureGroup):
+class LockProbeLeftPandas(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"lock_probe_jid", "lock_probe_left_val"}
@@ -33,7 +33,7 @@ class LockProbeLeftPandas(GeneratedFeatureGroup):
         return [Index(("lock_probe_jid",))]
 
 
-class LockProbeRightArrow(GeneratedFeatureGroup):
+class LockProbeRightArrow(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"lock_probe_jid", "lock_probe_right_val"}
@@ -69,7 +69,7 @@ class LockProbeConsumer(FeatureGroup):
         return {cls.get_class_name()}
 
 
-class LockProbeAnyFramework(GeneratedFeatureGroup):
+class LockProbeAnyFramework(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"lock_probe_any_value"}

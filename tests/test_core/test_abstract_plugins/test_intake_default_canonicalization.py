@@ -17,7 +17,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import GeneratedFeatureGroup, PropertySpec
+from mloda.provider import DataCreatorFeatureGroup, PropertySpec
 from mloda.user import FeatureName, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
@@ -57,7 +57,7 @@ IDC_ENGINE_LOGGER = "mloda.core.core.engine"
 def _make_ctx_default_root_fg(feature_name: str) -> type[FeatureGroup]:
     """A throwaway root FeatureGroup with one context concrete default, echoing the observed value."""
 
-    class IdcCtxDefaultRootFeatureGroup(GeneratedFeatureGroup):
+    class IdcCtxDefaultRootFeatureGroup(DataCreatorFeatureGroup):
         PROPERTY_MAPPING = {
             IDC_CTX_KEY: PropertySpec("A context concrete default.", context=True, default=IDC_CTX_DEFAULT),
         }
@@ -76,7 +76,7 @@ def _make_ctx_default_root_fg(feature_name: str) -> type[FeatureGroup]:
 def _make_grp_default_root_fg(feature_name: str) -> type[FeatureGroup]:
     """A throwaway root FeatureGroup with one group concrete default, echoing the observed value."""
 
-    class IdcGrpDefaultRootFeatureGroup(GeneratedFeatureGroup):
+    class IdcGrpDefaultRootFeatureGroup(DataCreatorFeatureGroup):
         PROPERTY_MAPPING = {
             IDC_GRP_KEY: PropertySpec("A group concrete default.", context=False, default=IDC_GRP_DEFAULT),
         }
@@ -127,7 +127,7 @@ def _make_dep_probe_parent_fg(feature_name: str, resolve_defaults: bool = False)
 def _make_marker_child_fg() -> type[FeatureGroup]:
     """A throwaway root child serving both dependency names with a marker payload per requested name."""
 
-    class IdcMarkerChildFeatureGroup(GeneratedFeatureGroup):
+    class IdcMarkerChildFeatureGroup(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {IDC_CHILD_DECLARED, IDC_CHILD_EFFECTIVE}
@@ -164,7 +164,7 @@ def _make_inherit_parent_fg(feature_name: str) -> type[FeatureGroup]:
 def _make_option_echo_child_fg() -> type[FeatureGroup]:
     """A throwaway root child echoing whether the parent's group-default key reached its options."""
 
-    class IdcOptionEchoChildFeatureGroup(GeneratedFeatureGroup):
+    class IdcOptionEchoChildFeatureGroup(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {IDC_INHERIT_CHILD}
@@ -182,7 +182,7 @@ def _make_option_echo_child_fg() -> type[FeatureGroup]:
 def _make_alias_probe_root_fg() -> type[FeatureGroup]:
     """A throwaway root FG serving both alias names, echoing options-object sharing and the observed default."""
 
-    class IdcAliasProbeRootFeatureGroup(GeneratedFeatureGroup):
+    class IdcAliasProbeRootFeatureGroup(DataCreatorFeatureGroup):
         PROPERTY_MAPPING = {
             IDC_ALIAS_KEY: PropertySpec("A context concrete default.", context=True, default=IDC_ALIAS_DEFAULT),
         }
@@ -211,7 +211,7 @@ def _make_alias_probe_root_fg() -> type[FeatureGroup]:
 def _make_dup_child_root_fg() -> type[FeatureGroup]:
     """A throwaway root child with a context concrete default, echoing the observed value."""
 
-    class IdcDupChildRootFeatureGroup(GeneratedFeatureGroup):
+    class IdcDupChildRootFeatureGroup(DataCreatorFeatureGroup):
         PROPERTY_MAPPING = {
             IDC_DUP_KEY: PropertySpec("A context concrete default.", context=True, default=IDC_DUP_DEFAULT),
         }

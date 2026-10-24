@@ -3,7 +3,7 @@ Integration test: api_data sets with Links and Joins.
 
 Three features:
 1. ApiDataFG (existing) - receives mloda data
-2. CreatorDataFeature (custom) - creates own data via GeneratedFeatureGroup
+2. CreatorDataFeature (custom) - creates own data via DataCreatorFeatureGroup
 3. JoinedFeature (custom) - depends on both with a join
 """
 
@@ -16,7 +16,7 @@ from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Link, JoinSpec
 from mloda.user import Options
 from mloda.user import PluginCollector
@@ -28,8 +28,8 @@ from mloda.provider import ApiDataFG
 # ============================================================================
 # Feature B: Data Creator Feature
 # ============================================================================
-class CreatorDataFeature(GeneratedFeatureGroup):
-    """Creates its own data via GeneratedFeatureGroup."""
+class CreatorDataFeature(DataCreatorFeatureGroup):
+    """Creates its own data via DataCreatorFeatureGroup."""
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -121,7 +121,7 @@ class TestApiLinkJoin:
 
     def test_api_creator_left_join(self) -> None:
         """
-        Test LEFT join between mloda data and GeneratedFeatureGroup data.
+        Test LEFT join between mloda data and DataCreatorFeatureGroup data.
 
         mloda data (4 rows): ids 1, 2, 3, 4
         Creator data (3 rows): ids 1, 2, 3
@@ -144,7 +144,7 @@ class TestApiLinkJoin:
 
     def test_api_creator_append(self) -> None:
         """
-        Test APPEND between mloda data and GeneratedFeatureGroup data.
+        Test APPEND between mloda data and DataCreatorFeatureGroup data.
 
         mloda data (2 rows)
         Creator data (3 rows)
@@ -169,7 +169,7 @@ class TestApiLinkJoin:
 # ============================================================================
 # Planning warning for a declared link that plans no join
 # ============================================================================
-class UnjoinedCustomers(GeneratedFeatureGroup):
+class UnjoinedCustomers(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"ujc_id", "ujc_name"}
@@ -179,7 +179,7 @@ class UnjoinedCustomers(GeneratedFeatureGroup):
         return {"ujc_id": [1, 2], "ujc_name": ["a", "b"]}
 
 
-class UnjoinedOrders(GeneratedFeatureGroup):
+class UnjoinedOrders(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"ujo_cust_id", "ujo_amount"}
@@ -198,7 +198,7 @@ class UnjoinedNameAmount(FeatureGroup):
         return {cls.get_class_name(): data["ujc_name"] + data["ujo_amount"].astype(str)}
 
 
-class UnjoinedSelf(GeneratedFeatureGroup):
+class UnjoinedSelf(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"ujs_id", "ujs_a", "ujs_b"}

@@ -31,7 +31,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
-from mloda.provider import GeneratedFeatureGroup, PropertySpec
+from mloda.provider import DataCreatorFeatureGroup, PropertySpec
 from mloda.user import PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
@@ -59,7 +59,7 @@ def _make_boundary_probe_fg(feature_name: str) -> type[FeatureGroup]:
     disproves) that the framework materialized the declared defaults before the call.
     """
 
-    class MdbBoundaryProbeFeatureGroup(GeneratedFeatureGroup):
+    class MdbBoundaryProbeFeatureGroup(DataCreatorFeatureGroup):
         PROPERTY_MAPPING = {
             MDB_CTX_KEY: PropertySpec("A context concrete default.", context=True, default=CTX_DEFAULT),
             MDB_GRP_KEY: PropertySpec("A group concrete default.", context=False, default=GRP_DEFAULT),
@@ -89,7 +89,7 @@ def _make_boundary_probe_fg(feature_name: str) -> type[FeatureGroup]:
 def _make_explicit_none_probe_fg(feature_name: str) -> type[FeatureGroup]:
     """A throwaway root FeatureGroup pairing an opted-in explicit-None key with a plain default."""
 
-    class MdbExplicitNoneProbeFeatureGroup(GeneratedFeatureGroup):
+    class MdbExplicitNoneProbeFeatureGroup(DataCreatorFeatureGroup):
         PROPERTY_MAPPING = {
             MDB_EN_KEY: PropertySpec(
                 "Opted-in: an explicit None is honored.", context=True, default=EN_DEFAULT, allow_explicit_none=True

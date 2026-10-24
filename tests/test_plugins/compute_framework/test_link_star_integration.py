@@ -17,7 +17,7 @@ import pytest
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import (
     Feature,
     FeatureName,
@@ -39,7 +39,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 # === Fully-matching star topology (all FGs expose row_id [1, 2, 3]) ===
 
 
-class StarHubFG(GeneratedFeatureGroup):
+class StarHubFG(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"row_id", "hub_value"}
@@ -53,7 +53,7 @@ class StarHubFG(GeneratedFeatureGroup):
         return {"row_id": [1, 2, 3], "hub_value": ["h1", "h2", "h3"]}
 
 
-class StarSpokeAFG(GeneratedFeatureGroup):
+class StarSpokeAFG(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"row_id", "spoke_a_value"}
@@ -67,7 +67,7 @@ class StarSpokeAFG(GeneratedFeatureGroup):
         return {"row_id": [1, 2, 3], "spoke_a_value": [10, 20, 30]}
 
 
-class StarSpokeBFG(GeneratedFeatureGroup):
+class StarSpokeBFG(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"row_id", "spoke_b_value"}
@@ -106,7 +106,7 @@ class StarConsumerFG(FeatureGroup):
 # === Partial star topology (spoke B is missing row_id 3) to observe LEFT vs INNER ===
 
 
-class StarLeftHubFG(GeneratedFeatureGroup):
+class StarLeftHubFG(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"row_id", "left_hub_value"}
@@ -120,7 +120,7 @@ class StarLeftHubFG(GeneratedFeatureGroup):
         return {"row_id": [1, 2, 3], "left_hub_value": ["h1", "h2", "h3"]}
 
 
-class StarLeftSpokeAFG(GeneratedFeatureGroup):
+class StarLeftSpokeAFG(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"row_id", "left_spoke_a_value"}
@@ -134,7 +134,7 @@ class StarLeftSpokeAFG(GeneratedFeatureGroup):
         return {"row_id": [1, 2, 3], "left_spoke_a_value": [10, 20, 30]}
 
 
-class StarLeftSpokeBFG(GeneratedFeatureGroup):
+class StarLeftSpokeBFG(DataCreatorFeatureGroup):
     """Spoke B is intentionally missing row_id 3 so INNER drops it and LEFT keeps it."""
 
     @classmethod
@@ -174,7 +174,7 @@ class StarLeftConsumerFG(FeatureGroup):
 # === Outer star topology (spoke has a row_id the hub lacks) to observe OUTER vs INNER ===
 
 
-class StarOuterHubFG(GeneratedFeatureGroup):
+class StarOuterHubFG(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"row_id", "outer_hub_value"}
@@ -188,7 +188,7 @@ class StarOuterHubFG(GeneratedFeatureGroup):
         return {"row_id": [1, 2, 3], "outer_hub_value": ["h1", "h2", "h3"]}
 
 
-class StarOuterSpokeAFG(GeneratedFeatureGroup):
+class StarOuterSpokeAFG(DataCreatorFeatureGroup):
     """Spoke carries row_id 4 (which the hub lacks) and lacks row_id 1 (which the hub has)."""
 
     @classmethod
@@ -427,7 +427,7 @@ def _hub_right_group(
         "calculate_feature": classmethod(calculate_feature),
         "compute_framework_rule": classmethod(compute_framework_rule),
     }
-    return type(name, (GeneratedFeatureGroup,), namespace)
+    return type(name, (DataCreatorFeatureGroup,), namespace)
 
 
 HubRightA = _hub_right_group("HubRightA", "hr_a", _HR_A_ROWS, PyArrowTable)

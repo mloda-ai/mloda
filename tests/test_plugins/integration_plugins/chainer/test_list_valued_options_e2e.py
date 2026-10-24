@@ -10,7 +10,7 @@ from typing import Any
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import PropertySpec
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -24,7 +24,7 @@ from mloda.provider import DefaultOptionKeys
 import pandas as pd
 
 
-class ListValuedTestDataCreator(GeneratedFeatureGroup):
+class ListValuedTestDataCreator(DataCreatorFeatureGroup):
     """Creates test data with three columns."""
 
     @classmethod

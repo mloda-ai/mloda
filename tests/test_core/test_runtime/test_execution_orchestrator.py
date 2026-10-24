@@ -18,7 +18,7 @@ from uuid import UUID
 
 import pytest
 
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, PluginCollector, mloda
 from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
 from tests.helpers.uuid7_assertions import assert_valid_uuid7
@@ -600,7 +600,7 @@ class TestRegisterModesCache:
 _CHAIN_COLUMN = "planned_worker_chain_root_col"
 
 
-class _ChainRootFG(GeneratedFeatureGroup):
+class _ChainRootFG(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {_CHAIN_COLUMN}
@@ -1126,7 +1126,7 @@ class _RunCompleteRecorder(Extender):
 _RUN_COLUMN = "orchestrator_run_complete_request_col"
 
 
-class _RunCompleteFG(GeneratedFeatureGroup):
+class _RunCompleteFG(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {_RUN_COLUMN}

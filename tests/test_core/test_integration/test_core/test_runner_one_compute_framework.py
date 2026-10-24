@@ -1,7 +1,7 @@
 from typing import Any
 import pyarrow as pa
 import pyarrow.compute as pc
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import DataAccessCollection
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
@@ -13,7 +13,7 @@ from mloda.user import Options
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 
 
-class EngineRunnerTest(GeneratedFeatureGroup):
+class EngineRunnerTest(DataCreatorFeatureGroup):
     f_name = "EngineRunnerTest1"
 
     @classmethod
@@ -66,7 +66,7 @@ class EngineRunnerTest3(FeatureGroup):
         return pc.multiply(data.column(cls.feature_2.name), 3)
 
 
-class EngineRunnerTest4(GeneratedFeatureGroup):
+class EngineRunnerTest4(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         data = {

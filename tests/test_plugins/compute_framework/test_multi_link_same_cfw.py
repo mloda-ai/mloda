@@ -7,7 +7,7 @@ from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Link, JoinSpec
 from mloda.user import Options
 from mloda.user import ParallelizationMode
@@ -20,13 +20,13 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 # === Scenario 1: Same class used 3x with different feature names per batch ===
 
 
-class ReadFGS1(GeneratedFeatureGroup):
+class ReadFGS1(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): ["v1"]}
 
 
-class AggFGS1(GeneratedFeatureGroup):
+class AggFGS1(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"agg_sum_s1", "agg_count_s1", "agg_avg_s1"}
@@ -54,7 +54,7 @@ class ConsumerFGS1(FeatureGroup):
 # === Scenario 2: Subclasses with base-class Links ===
 
 
-class BaseAggS2(GeneratedFeatureGroup):
+class BaseAggS2(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): ["v1"]}
@@ -72,7 +72,7 @@ class AvgAggS2(BaseAggS2):
     pass
 
 
-class ReadFGS2(GeneratedFeatureGroup):
+class ReadFGS2(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): ["v1"]}
@@ -95,25 +95,25 @@ class ConsumerFGS2(FeatureGroup):
 # === Scenario 3: Fully distinct classes (verify still works with same cfw) ===
 
 
-class ReadFGS3(GeneratedFeatureGroup):
+class ReadFGS3(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): ["v1"]}
 
 
-class SumFGS3(GeneratedFeatureGroup):
+class SumFGS3(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): ["v1"]}
 
 
-class CountFGS3(GeneratedFeatureGroup):
+class CountFGS3(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): ["v1"]}
 
 
-class AvgFGS3(GeneratedFeatureGroup):
+class AvgFGS3(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): ["v1"]}

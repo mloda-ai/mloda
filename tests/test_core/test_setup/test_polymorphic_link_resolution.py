@@ -10,7 +10,7 @@ during the data joining phase. Covers:
 
 from typing import Any
 
-from mloda.provider import FeatureGroup, GeneratedFeatureGroup
+from mloda.provider import FeatureGroup, DataCreatorFeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
@@ -26,7 +26,7 @@ from mloda.provider import ApiDataFG
 # =============================================================================
 # Base Classes
 # =============================================================================
-class BaseFeatureGroupA(GeneratedFeatureGroup):
+class BaseFeatureGroupA(DataCreatorFeatureGroup):
     """Base class A - provides index_columns()."""
 
     FEATURE_NAME = "feature_a"
@@ -37,7 +37,7 @@ class BaseFeatureGroupA(GeneratedFeatureGroup):
         return [Index((cls.ROW_INDEX,))]
 
 
-class BaseFeatureGroupB(GeneratedFeatureGroup):
+class BaseFeatureGroupB(DataCreatorFeatureGroup):
     """Base class B - provides index_columns()."""
 
     FEATURE_NAME = "feature_b"

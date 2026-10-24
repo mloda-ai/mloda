@@ -6,11 +6,11 @@ from typing import Any
 import pandas as pd
 
 from mloda.user import mloda
-from mloda.provider import FeatureSet, GeneratedFeatureGroup
+from mloda.provider import FeatureSet, DataCreatorFeatureGroup
 from mloda.user import DataAccessCollection, Domain, Feature, FeatureName, Options
 
 
-class MlLifeCycleDataCreator(GeneratedFeatureGroup):
+class MlLifeCycleDataCreator(DataCreatorFeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,

@@ -41,7 +41,7 @@ from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.steward import FeatureResolutionError
 from mloda.core.runtime.run import ExecutionOrchestrator
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.uuid7_assertions import assert_valid_uuid7
@@ -274,7 +274,7 @@ class TestWorkerPayloadShipsTheParentsSelectionTable:
 _RUN_COMPLETE_COLUMN = "run_complete_notification_e2e_col"
 
 
-class _RunCompleteFeatureGroup(GeneratedFeatureGroup):
+class _RunCompleteFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {_RUN_COMPLETE_COLUMN}
@@ -491,7 +491,7 @@ _MISSING_COLUMN = "lifecycle_matrix_missing_col"
 _SYSTEM_EXIT_COLUMN = "lifecycle_matrix_system_exit_col"
 
 
-class _SystemExitFeatureGroup(GeneratedFeatureGroup):
+class _SystemExitFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {_SYSTEM_EXIT_COLUMN}
@@ -505,7 +505,7 @@ class _SystemExitFeatureGroup(GeneratedFeatureGroup):
         raise SystemExit("calculate failed")
 
 
-class _FailingLifecycleFeatureGroup(GeneratedFeatureGroup):
+class _FailingLifecycleFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {_FAIL_COLUMN}
@@ -942,12 +942,12 @@ import threading
 from typing import Any
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
-from mloda.provider import ComputeFramework, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
-class BlockingFG(GeneratedFeatureGroup):
+class BlockingFG(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"cancelled_threading_col"}

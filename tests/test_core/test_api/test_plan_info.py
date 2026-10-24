@@ -46,7 +46,7 @@ Contract under test:
 A caller must reach all of this without importing anything from the internal execution-step
 package; ``TestCallerNeedsNoInternalImport`` locks that in for this module itself.
 
-Root feature names in this module carry a ``plan_info_`` prefix on purpose: a ``GeneratedFeatureGroup``
+Root feature names in this module carry a ``plan_info_`` prefix on purpose: a ``DataCreatorFeatureGroup``
 claim is registry-wide, so generic names like ``sales`` would leak into every other test.
 """
 
@@ -82,7 +82,7 @@ from mloda.provider import (
     ComputeFramework,
     FeatureGroup,
     FeatureSet,
-    GeneratedFeatureGroup,
+    DataCreatorFeatureGroup,
     Implementation,
     NamePolicy,
     OperationFeatureGroup,
@@ -138,7 +138,7 @@ from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import Parqu
 # ---------------------------------------------------------------------------
 
 
-class PlanInfoPandasSource(GeneratedFeatureGroup):
+class PlanInfoPandasSource(DataCreatorFeatureGroup):
     """Pandas root source feeding the chained aggregation request."""
 
     @classmethod
@@ -154,7 +154,7 @@ class PlanInfoPandasSource(GeneratedFeatureGroup):
         return {PandasDataFrame}
 
 
-class PlanInfoArrowSource(GeneratedFeatureGroup):
+class PlanInfoArrowSource(DataCreatorFeatureGroup):
     """PyArrow root source: forces a transform step into the pandas aggregation group."""
 
     @classmethod
@@ -170,7 +170,7 @@ class PlanInfoArrowSource(GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class PlanInfoNeverExecutes(GeneratedFeatureGroup):
+class PlanInfoNeverExecutes(DataCreatorFeatureGroup):
     """Plans fine, but blows up if anything actually executes it.
 
     ``explain()`` must never reach ``calculate_feature``, so a successful explain call over this
@@ -190,7 +190,7 @@ class PlanInfoNeverExecutes(GeneratedFeatureGroup):
         return {PandasDataFrame}
 
 
-class PlanInfoLeftSource(GeneratedFeatureGroup):
+class PlanInfoLeftSource(DataCreatorFeatureGroup):
     """Left side of the single-framework join scenario."""
 
     @classmethod
@@ -210,7 +210,7 @@ class PlanInfoLeftSource(GeneratedFeatureGroup):
         return [Index(("plan_info_jid",))]
 
 
-class PlanInfoRightSource(GeneratedFeatureGroup):
+class PlanInfoRightSource(DataCreatorFeatureGroup):
     """Right side of the single-framework join scenario."""
 
     @classmethod
@@ -250,7 +250,7 @@ class PlanInfoJoinConsumer(FeatureGroup):
         return {cls.get_class_name()}
 
 
-class PlanInfoCrossLeftPandas(GeneratedFeatureGroup):
+class PlanInfoCrossLeftPandas(DataCreatorFeatureGroup):
     """Left side of the cross-framework join scenario: pandas."""
 
     @classmethod
@@ -270,7 +270,7 @@ class PlanInfoCrossLeftPandas(GeneratedFeatureGroup):
         return [Index(("plan_info_xjid",))]
 
 
-class PlanInfoCrossRightArrow(GeneratedFeatureGroup):
+class PlanInfoCrossRightArrow(DataCreatorFeatureGroup):
     """Right side of the cross-framework join scenario: pyarrow.
 
     Distinct framework from the left side, so a left/right swap in the plan records is
@@ -334,7 +334,7 @@ class PlanInfoInvertedConsumer(FeatureGroup):
         return {cls.get_class_name()}
 
 
-class PlanInfoNestedOptionsSource(GeneratedFeatureGroup):
+class PlanInfoNestedOptionsSource(DataCreatorFeatureGroup):
     """Root source whose values depend on a nested dict inside a group option."""
 
     @classmethod
@@ -353,7 +353,7 @@ class PlanInfoNestedOptionsSource(GeneratedFeatureGroup):
         return {PandasDataFrame}
 
 
-class PlanInfoParentSource(GeneratedFeatureGroup):
+class PlanInfoParentSource(DataCreatorFeatureGroup):
     """Parent root source; its subclass PlanInfoChildSource replaces it during resolution."""
 
     @classmethod
@@ -400,7 +400,7 @@ class PlanInfoPlainSpecializedConsumer(PlanInfoScopedSpecializedConsumer):
         return {Feature("plan_info_specialized_value")}
 
 
-class PlanInfoAnyFrameworkSource(GeneratedFeatureGroup):
+class PlanInfoAnyFrameworkSource(DataCreatorFeatureGroup):
     """Root source without a compute_framework_rule, so the framework choice is the planner's."""
 
     @classmethod
@@ -2022,7 +2022,7 @@ class TestPlanLock:
 # ---------------------------------------------------------------------------
 
 
-class LeaveSqliteRoot(GeneratedFeatureGroup):
+class LeaveSqliteRoot(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"leave_src"}
@@ -2036,7 +2036,7 @@ class LeaveSqliteRoot(GeneratedFeatureGroup):
         return {"leave_src": [1, 2, 3]}
 
 
-class LeaveDictRoot(GeneratedFeatureGroup):
+class LeaveDictRoot(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"leave_dict_src"}

@@ -30,9 +30,9 @@ def _(mo):
 @app.cell
 def _():
     import numpy as np
-    from mloda.provider import FeatureGroup, GeneratedFeatureGroup
+    from mloda.provider import FeatureGroup, DataCreatorFeatureGroup
 
-    class DummyData(GeneratedFeatureGroup):
+    class DummyData(DataCreatorFeatureGroup):
         @classmethod
         def calculate_feature(cls, data, features):
             n_samples = features.get_options_key("n_samples") or 100

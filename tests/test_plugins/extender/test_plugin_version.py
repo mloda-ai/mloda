@@ -15,7 +15,7 @@ from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.plan_context import PlanContext
 from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
 from mloda.core.core.engine import Engine
-from mloda.provider import ComputeFramework, GeneratedFeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureSet
 from mloda.user import Feature, Features, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -303,7 +303,7 @@ class TestReadDistributionCaching:
         assert distribution_calls.count("dist-b") <= 1
 
 
-class _PlanTimePluginVersionFeatureGroup(GeneratedFeatureGroup):
+class _PlanTimePluginVersionFeatureGroup(DataCreatorFeatureGroup):
     """Minimal root feature group for plan-time plugin_version resolution tests."""
 
     @classmethod

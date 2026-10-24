@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, JoinSpec, Link, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -22,7 +22,7 @@ _SCLKR_B = {"sclkr_nr": [1, 2, 3], "sclkr_vb": [10, 20, 30]}
 _SCLKR_HUB_DATA = {"region2": _SCLKR_REGION2, "a": _SCLKR_A, "b": _SCLKR_B}
 
 
-class SclkrSourceFG(GeneratedFeatureGroup):
+class SclkrSourceFG(DataCreatorFeatureGroup):
     """Root FG reading like a real source: a foreign-key column absent from a source raises KeyError."""
 
     @classmethod
@@ -58,7 +58,7 @@ class SclkrJoinedFG(FeatureGroup):
         return {PyArrowTable}
 
 
-class SclkrHubSourceFG(GeneratedFeatureGroup):
+class SclkrHubSourceFG(DataCreatorFeatureGroup):
     """Root FG serving a hub and two spokes, all sharing the join key ``sclkr_nr``."""
 
     @classmethod

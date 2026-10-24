@@ -8,7 +8,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.core.engine import Engine
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import (
     Feature,
     FeatureName,
@@ -28,7 +28,7 @@ from tests.test_core.test_tooling import MlodaTestRunner
 from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks import SecondCfw
 
 
-class CfwStrandLeftSrc(GeneratedFeatureGroup):
+class CfwStrandLeftSrc(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"cfwstr_left"}
@@ -42,7 +42,7 @@ class CfwStrandLeftSrc(GeneratedFeatureGroup):
         return {SecondCfw}
 
 
-class CfwStrandRightSrc(GeneratedFeatureGroup):
+class CfwStrandRightSrc(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"cfwstr_right"}
@@ -127,7 +127,7 @@ def test_link_cfw_rewrite_keeps_stored_filters_usable() -> None:
     )
 
 
-class PinHostFG(GeneratedFeatureGroup):
+class PinHostFG(DataCreatorFeatureGroup):
     """Unrestricted root hosting a filterable column."""
 
     @classmethod

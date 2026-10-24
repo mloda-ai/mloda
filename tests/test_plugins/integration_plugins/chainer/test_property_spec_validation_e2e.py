@@ -18,7 +18,7 @@ import pytest
 
 from mloda.provider import (
     ComputeFramework,
-    GeneratedFeatureGroup,
+    DataCreatorFeatureGroup,
     DefaultOptionKeys,
     FeatureChainParserMixin,
     FeatureGroup,
@@ -38,7 +38,7 @@ def is_valid_window_size(value: Any) -> bool:
     return isinstance(value, int) and 0 < value <= 13
 
 
-class PropertySpecE2EDataCreator(GeneratedFeatureGroup):
+class PropertySpecE2EDataCreator(DataCreatorFeatureGroup):
     """Root data provider supplying a numeric base column."""
 
     @classmethod

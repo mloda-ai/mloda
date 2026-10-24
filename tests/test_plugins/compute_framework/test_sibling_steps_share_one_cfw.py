@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from mloda.provider import ComputeFramework
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -26,7 +26,7 @@ early_writer_stored_data = threading.Event()
 late_writer_stored_data = threading.Event()
 
 
-class SharedSiblingParent(GeneratedFeatureGroup):
+class SharedSiblingParent(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [1, 2, 3]}

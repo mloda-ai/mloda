@@ -28,7 +28,7 @@ import pandas as pd
 import pytest
 
 from mloda.provider import ComputeFramework
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import PropertySpec
@@ -47,7 +47,7 @@ MODE_KEY = "dualwarn579_mode"
 SALT_KEY = "dualwarn579_salt"
 
 
-class DualWarn579SourceGroup(GeneratedFeatureGroup):
+class DualWarn579SourceGroup(DataCreatorFeatureGroup):
     """Upstream root group that declares the mode key and records resolved options."""
 
     PROPERTY_MAPPING = {
@@ -80,7 +80,7 @@ class DualWarn579SourceGroup(GeneratedFeatureGroup):
         return pd.DataFrame({SOURCE_NAME: [1, 2, 3]})
 
 
-class DualWarn579CleanSourceGroup(GeneratedFeatureGroup):
+class DualWarn579CleanSourceGroup(DataCreatorFeatureGroup):
     """Upstream root group WITHOUT the mode key in its PROPERTY_MAPPING."""
 
     @classmethod

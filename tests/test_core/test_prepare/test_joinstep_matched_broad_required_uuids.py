@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, Index, Link, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -14,7 +14,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 )
 
 
-class LinkedRootA(GeneratedFeatureGroup):
+class LinkedRootA(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"linked_root_a"}
@@ -34,7 +34,7 @@ class LinkedRootA(GeneratedFeatureGroup):
         return [Index(("id",))]
 
 
-class LinkedRootB(GeneratedFeatureGroup):
+class LinkedRootB(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"linked_root_b"}
@@ -54,7 +54,7 @@ class LinkedRootB(GeneratedFeatureGroup):
         return [Index(("id",))]
 
 
-class OrphanRootC(GeneratedFeatureGroup):
+class OrphanRootC(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"orphan_root_c"}
@@ -68,7 +68,7 @@ class OrphanRootC(GeneratedFeatureGroup):
         return {PythonDictFramework}
 
 
-class OrphanRootD(GeneratedFeatureGroup):
+class OrphanRootD(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"orphan_root_d"}
@@ -165,7 +165,7 @@ def test_joinstep_matched_raises_for_literal_three_parent_scenario() -> None:
     )
 
 
-class IndependentJoinPairOneLeft(GeneratedFeatureGroup):
+class IndependentJoinPairOneLeft(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"independent_join_pair_one_left"}
@@ -185,7 +185,7 @@ class IndependentJoinPairOneLeft(GeneratedFeatureGroup):
         return [Index(("pair_one_id",))]
 
 
-class IndependentJoinPairOneRight(GeneratedFeatureGroup):
+class IndependentJoinPairOneRight(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"independent_join_pair_one_right"}
@@ -203,7 +203,7 @@ class IndependentJoinPairOneRight(GeneratedFeatureGroup):
         return [Index(("pair_one_id",))]
 
 
-class IndependentJoinPairTwoLeft(GeneratedFeatureGroup):
+class IndependentJoinPairTwoLeft(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"independent_join_pair_two_left"}
@@ -223,7 +223,7 @@ class IndependentJoinPairTwoLeft(GeneratedFeatureGroup):
         return [Index(("pair_two_id",))]
 
 
-class IndependentJoinPairTwoRight(GeneratedFeatureGroup):
+class IndependentJoinPairTwoRight(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"independent_join_pair_two_right"}

@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import FeatureChainParserMixin, GeneratedFeatureGroup, PropertySpec
+from mloda.provider import FeatureChainParserMixin, DataCreatorFeatureGroup, PropertySpec
 
 
 def make_name_bound_fg(
@@ -88,4 +88,4 @@ def make_root_fg(
         "feature_names_supported": classmethod(feature_names_supported),
         "calculate_feature": classmethod(calculate_feature),
     }
-    return type(f"{prefix}RootFeatureGroup", (GeneratedFeatureGroup,), namespace)
+    return type(f"{prefix}RootFeatureGroup", (DataCreatorFeatureGroup,), namespace)

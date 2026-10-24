@@ -210,14 +210,14 @@ class TestValidateEnforcesOnPandas:
 
         import pandas as pd
 
-        from mloda.provider import ComputeFramework, FeatureGroup, GeneratedFeatureGroup
+        from mloda.provider import ComputeFramework, FeatureGroup, DataCreatorFeatureGroup
         from mloda.user import Feature as UFeature
         from mloda.user import PluginCollector, mloda
         from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import (
             PandasDataFrame,
         )
 
-        class _Src(GeneratedFeatureGroup):
+        class _Src(DataCreatorFeatureGroup):
             @classmethod
             def feature_names_supported(cls) -> set[str]:
                 return {"price"}
@@ -267,14 +267,14 @@ class TestValidateEnforcesOnPandas:
         import pandas as pd
         import pytest as _pytest
 
-        from mloda.provider import ComputeFramework, FeatureGroup, GeneratedFeatureGroup
+        from mloda.provider import ComputeFramework, FeatureGroup, DataCreatorFeatureGroup
         from mloda.user import Feature as UFeature
         from mloda.user import PluginCollector, mloda
         from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import (
             PandasDataFrame,
         )
 
-        class _Src(GeneratedFeatureGroup):
+        class _Src(DataCreatorFeatureGroup):
             @classmethod
             def feature_names_supported(cls) -> set[str]:
                 return {"price"}

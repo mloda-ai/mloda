@@ -713,9 +713,9 @@ class ComputeFramework(ABC):
     def _append_dict_to_frame(self, feature_group: Any, result: Any) -> Any:
         if not isinstance(result, dict) or not result or self.data is None:
             return result
-        from mloda.core.abstract_plugins.generated_feature_group import GeneratedFeatureGroup
+        from mloda.core.abstract_plugins.data_creator_feature_group import DataCreatorFeatureGroup
 
-        if isinstance(feature_group, type) and issubclass(feature_group, GeneratedFeatureGroup):
+        if isinstance(feature_group, type) and issubclass(feature_group, DataCreatorFeatureGroup):
             return result
         existing = self._extract_column_names(self.data)
         if any(key in existing for key in result):

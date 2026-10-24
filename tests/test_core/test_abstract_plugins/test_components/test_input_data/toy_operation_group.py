@@ -13,7 +13,7 @@ from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import (
     ComputeFramework,
     FeatureSet,
-    GeneratedFeatureGroup,
+    DataCreatorFeatureGroup,
     OperationFeatureGroup,
     SubtypeDeclaration,
     property_spec,
@@ -108,7 +108,7 @@ OPTOY_CHAIN_SUFFIX = "__optoy_chain"
 CHAIN_LOG: list[tuple[str, str]] = []
 
 
-class OpToyChainSourceFG(GeneratedFeatureGroup):
+class OpToyChainSourceFG(DataCreatorFeatureGroup):
     """Pandas-only source for the chain toy."""
 
     @classmethod

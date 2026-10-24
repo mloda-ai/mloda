@@ -16,7 +16,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from mloda.provider import FeatureSet, GeneratedFeatureGroup
+from mloda.provider import FeatureSet, DataCreatorFeatureGroup
 from mloda.user import DataAccessCollection, GlobalFilter, Index, Options, PluginCollector, mloda
 
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -329,7 +329,7 @@ def test_rank_key_orders_by_connection_rank_then_name(inputs: list[str], expecte
 # --- planning and run ---------------------------------------------------------------------------
 
 
-class _ConnAwareRoot(GeneratedFeatureGroup):
+class _ConnAwareRoot(DataCreatorFeatureGroup):
     """Data-creator root named by NAME; subclasses differ only by class name and NAME."""
 
     NAME: ClassVar[str] = ""
@@ -691,7 +691,7 @@ def test_engine_takes_a_framework_preference_keyword() -> None:
 # --- central choice wiring: plans through the public API ------------------------------------------
 
 
-class _PlanRoot(GeneratedFeatureGroup):
+class _PlanRoot(DataCreatorFeatureGroup):
     """Data-creator root; FW_NAME restricts it, None leaves it unrestricted."""
 
     NAMES: ClassVar[tuple[str, ...]] = ()

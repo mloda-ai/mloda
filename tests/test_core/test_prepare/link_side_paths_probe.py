@@ -10,7 +10,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, Index, JoinSpec, Link, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer import *  # noqa: F403
@@ -27,7 +27,7 @@ def _sum_columns(data: Any, name: str, columns: list[str]) -> Any:
     return data.append_column(name, total)
 
 
-class LsRootX(GeneratedFeatureGroup):
+class LsRootX(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"ls_x"}
@@ -45,7 +45,7 @@ class LsRootX(GeneratedFeatureGroup):
         return [Index(("ls_xid",))]
 
 
-class LsRootW(GeneratedFeatureGroup):
+class LsRootW(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"ls_w"}
@@ -130,7 +130,7 @@ LsQ = _sum_group("LsQ", ("ls_p", "ls_w"), "ls_q", PyArrowTable)
 LsPqC = _sum_group("LsPqC", ("ls_p", "ls_q"), "ls_pqc", PandasDataFrame)
 
 
-class HdRootA(GeneratedFeatureGroup):
+class HdRootA(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"hd_a"}
@@ -144,7 +144,7 @@ class HdRootA(GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class HdRootB(GeneratedFeatureGroup):
+class HdRootB(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"hd_b"}
@@ -168,7 +168,7 @@ HdCTwoPandas = _sum_group("HdCTwoPandas", ("hd_q", "hd_p", "hd_p2"), "hd_c", Pan
 HdCPandas = _sum_group("HdCPandas", ("hd_q", "hd_p"), "hd_c", PandasDataFrame)
 
 
-class RtRoot(GeneratedFeatureGroup):
+class RtRoot(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"rt_a"}

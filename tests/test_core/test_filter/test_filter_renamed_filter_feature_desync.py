@@ -6,7 +6,7 @@ A name snapshotted at construction makes the filter engines target a column that
 from typing import Any
 
 from mloda.core.filter.single_filter import SingleFilter
-from mloda.provider import ComputeFramework, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, Features, GlobalFilter, Options, ParallelizationMode, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
@@ -14,7 +14,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from tests.test_core.test_tooling import MlodaTestRunner
 
 
-class RnfilRenamingFG(GeneratedFeatureGroup):
+class RnfilRenamingFG(DataCreatorFeatureGroup):
     """Root group that renames the raw filter column via set_feature_name."""
 
     @classmethod

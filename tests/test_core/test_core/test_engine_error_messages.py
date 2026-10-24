@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.core.engine import Engine
-from mloda.provider import FeatureSet, GeneratedFeatureGroup
+from mloda.provider import FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, Features, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -110,7 +110,7 @@ class TestEngineErrorMessages:
             )
 
 
-class ConnectionInInputFeaturesRoot(GeneratedFeatureGroup):
+class ConnectionInInputFeaturesRoot(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"conn_in_input_root"}

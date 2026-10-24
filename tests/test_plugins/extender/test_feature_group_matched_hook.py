@@ -18,7 +18,7 @@ from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.core.engine import Engine
 from mloda.core.prepare.resolution_types import EvaluationResult
-from mloda.provider import ComputeFramework, GeneratedFeatureGroup, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Features, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_abstract_plugins.test_abstract_compute_framework import BaseTestComputeFramework1
@@ -27,7 +27,7 @@ from tests.test_core.test_abstract_plugins.test_abstract_feature_group import Ba
 _MARKER = "fgmatch051"
 
 
-class _MatchHookRootFeatureGroup(GeneratedFeatureGroup):
+class _MatchHookRootFeatureGroup(DataCreatorFeatureGroup):
     """Root feature group: single resolved feature for the basic FEATURE_GROUP_MATCHED assertions."""
 
     @classmethod
@@ -43,7 +43,7 @@ class _MatchHookRootFeatureGroup(GeneratedFeatureGroup):
         return {f"{_MARKER}_root_col": [1, 2, 3]}
 
 
-class _MatchHookColOneFeatureGroup(GeneratedFeatureGroup):
+class _MatchHookColOneFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {f"{_MARKER}_col_one"}
@@ -57,7 +57,7 @@ class _MatchHookColOneFeatureGroup(GeneratedFeatureGroup):
         return {f"{_MARKER}_col_one": [1, 2, 3]}
 
 
-class _MatchHookColTwoFeatureGroup(GeneratedFeatureGroup):
+class _MatchHookColTwoFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {f"{_MARKER}_col_two"}
@@ -71,7 +71,7 @@ class _MatchHookColTwoFeatureGroup(GeneratedFeatureGroup):
         return {f"{_MARKER}_col_two": [4, 5, 6]}
 
 
-class _MatchVetoFeatureGroupA(GeneratedFeatureGroup):
+class _MatchVetoFeatureGroupA(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {f"{_MARKER}_veto_col_a"}
@@ -85,7 +85,7 @@ class _MatchVetoFeatureGroupA(GeneratedFeatureGroup):
         return {f"{_MARKER}_veto_col_a": [1, 2, 3]}
 
 
-class _MatchVetoFeatureGroupB(GeneratedFeatureGroup):
+class _MatchVetoFeatureGroupB(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {f"{_MARKER}_veto_col_b"}
@@ -99,7 +99,7 @@ class _MatchVetoFeatureGroupB(GeneratedFeatureGroup):
         return {f"{_MARKER}_veto_col_b": [4, 5, 6]}
 
 
-class _MatchDepthRootFeatureGroup(GeneratedFeatureGroup):
+class _MatchDepthRootFeatureGroup(DataCreatorFeatureGroup):
     """Root of a two-level input_features() chain, for the plan_depth assertions."""
 
     @classmethod
@@ -131,7 +131,7 @@ class _MatchDepthDerivedFeatureGroup(FeatureGroup):
         return data
 
 
-class _MatchMultiColRootFeatureGroup(GeneratedFeatureGroup):
+class _MatchMultiColRootFeatureGroup(DataCreatorFeatureGroup):
     """Root serving three columns, all requested in one prepare call."""
 
     @classmethod
@@ -644,7 +644,7 @@ class TestEngineSelectsExtenderOncePerRun:
         assert extender.wraps_calls == 2
 
 
-class _MatchReplacedParentFeatureGroup(GeneratedFeatureGroup):
+class _MatchReplacedParentFeatureGroup(DataCreatorFeatureGroup):
     """Parent that a subclass replaces at match time."""
 
     @classmethod

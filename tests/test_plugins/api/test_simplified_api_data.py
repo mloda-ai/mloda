@@ -21,7 +21,7 @@ from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Link, JoinSpec
 from mloda.user import GlobalFilter, Options
 from mloda.user import PluginCollector
@@ -86,8 +86,8 @@ class MultiKeyApiFeature(FeatureGroup):
 # ============================================================================
 # Test Feature: Joined with Creator
 # ============================================================================
-class CreatorDataFeature(GeneratedFeatureGroup):
-    """Creates its own data via GeneratedFeatureGroup."""
+class CreatorDataFeature(DataCreatorFeatureGroup):
+    """Creates its own data via DataCreatorFeatureGroup."""
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -431,7 +431,7 @@ class TestSimplifiedApiData:
         assert len(df) == 3
 
 
-class AmbiguousApiColumnFeature(GeneratedFeatureGroup):
+class AmbiguousApiColumnFeature(DataCreatorFeatureGroup):
     """Computes a name that an api_data set also provides."""
 
     @classmethod

@@ -9,7 +9,7 @@ import pyarrow as pa
 import pytest
 
 from mloda.provider import ComputeFramework
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -24,7 +24,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
-class OrientParentLeft(GeneratedFeatureGroup):
+class OrientParentLeft(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): ["Same Value"], "orient_left_payload": ["left"]}
@@ -34,7 +34,7 @@ class OrientParentLeft(GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class OrientParentRight(GeneratedFeatureGroup):
+class OrientParentRight(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): ["Same Value"], "orient_right_payload": ["right"]}

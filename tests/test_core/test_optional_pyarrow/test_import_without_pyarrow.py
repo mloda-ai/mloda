@@ -65,12 +65,12 @@ assert _pyarrow_module.PyArrowTable.is_available() is False, (
     "PyArrowTable.is_available() must be False while pyarrow is blocked"
 )
 
-from mloda.provider import FeatureSet, GeneratedFeatureGroup
+from mloda.provider import FeatureSet, DataCreatorFeatureGroup
 
 from typing import Any
 
 
-class InlinePythonDictCreator(GeneratedFeatureGroup):
+class InlinePythonDictCreator(DataCreatorFeatureGroup):
     """Self-contained primary-source FeatureGroup producing PythonDict data."""
 
     @classmethod

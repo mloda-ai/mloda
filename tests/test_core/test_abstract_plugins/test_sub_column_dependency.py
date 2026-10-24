@@ -23,7 +23,7 @@ import pytest
 from mloda.provider import ANY_OUTPUT_PART
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import ComputeFramework
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -44,7 +44,7 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
-class SubColumnTestDataCreator(GeneratedFeatureGroup):
+class SubColumnTestDataCreator(DataCreatorFeatureGroup):
     """Test data creator providing source data for sub-column tests."""
 
     @classmethod
@@ -1219,7 +1219,7 @@ class CountingVecProducer(FeatureGroup):
         return {PandasDataFrame}
 
 
-class LiteralTildeProducer(GeneratedFeatureGroup):
+class LiteralTildeProducer(DataCreatorFeatureGroup):
     """Declares parts (value, unit) and also supports the literal names `lit` and `lit~extra`."""
 
     OUTPUT_PARTS = ("value", "unit")
@@ -1237,7 +1237,7 @@ class LiteralTildeProducer(GeneratedFeatureGroup):
         return {PandasDataFrame}
 
 
-class LiteralMeasureValueProducer(GeneratedFeatureGroup):
+class LiteralMeasureValueProducer(DataCreatorFeatureGroup):
     """Provides the literal column `measure~value`."""
 
     @classmethod
@@ -1318,7 +1318,7 @@ class TestFullNameAskedFirst:
         np.testing.assert_array_equal(results[0]["cd~b~1"].values, _SOURCE * 3)
 
 
-class _ParentWholeName(GeneratedFeatureGroup):
+class _ParentWholeName(DataCreatorFeatureGroup):
     """Matches the literal whole name `m2~value` and writes 1."""
 
     @classmethod

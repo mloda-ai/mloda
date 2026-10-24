@@ -14,7 +14,7 @@ except ImportError:
 
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda, DataAccessCollection
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
@@ -47,7 +47,7 @@ class ChainSameClassDuckDBFG(FeatureGroup):
         return {"chain_a", "chain_b"}
 
 
-class ChainSameClassRootDuckDBFG(ChainSameClassDuckDBFG, GeneratedFeatureGroup):
+class ChainSameClassRootDuckDBFG(ChainSameClassDuckDBFG, DataCreatorFeatureGroup):
     """Same shape, but chain_a is a generated root, matched by name; the framework binds the collection's connection."""
 
 
@@ -171,7 +171,7 @@ class SelfManagedFramework(PyArrowTable):
         return isinstance(conn, _SessionLike)
 
 
-class SelfManagedRootFG(GeneratedFeatureGroup):
+class SelfManagedRootFG(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"self_managed_col"}

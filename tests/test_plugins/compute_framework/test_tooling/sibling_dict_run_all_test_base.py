@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureChainParserMixin
 from mloda.provider import FeatureSet
@@ -34,7 +34,7 @@ def _column(data: Any, name: str) -> list[Any]:
     return [row[name] for row in records_from_frame(data)]
 
 
-class SiblingDictRoot(GeneratedFeatureGroup):
+class SiblingDictRoot(DataCreatorFeatureGroup):
     """Root FeatureGroup producing the shared three-row ``sd_a`` column."""
 
     @classmethod

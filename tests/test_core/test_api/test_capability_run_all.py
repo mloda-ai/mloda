@@ -13,7 +13,7 @@ from typing import Any
 
 import pandas as pd
 
-from mloda.provider import FeatureSet, GeneratedFeatureGroup
+from mloda.provider import FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -24,11 +24,11 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 FEAT = "E2ECapRunAllFeature"
 
 
-class E2ECapRunAllFeatureGroup(GeneratedFeatureGroup):
+class E2ECapRunAllFeatureGroup(DataCreatorFeatureGroup):
     """Root feature group that rejects PythonDictFramework only.
 
     Declared module-level so it registers as a discoverable FeatureGroup. It
-    produces a single root feature via ``GeneratedFeatureGroup`` and declares the operation
+    produces a single root feature via ``DataCreatorFeatureGroup`` and declares the operation
     unsupported on ``PythonDictFramework`` so route-around is deterministic.
     """
 

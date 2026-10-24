@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -115,7 +115,7 @@ class SingleSeriesOnNativeFrame(FeatureGroup):
         return pl.Series(data.collect()["NativeFrameWithColumn"].to_list())
 
 
-class DataFrameRoot(GeneratedFeatureGroup):
+class DataFrameRoot(DataCreatorFeatureGroup):
     """Root returning an eager ``pl.DataFrame``, which lazy Polars converts through ``transform``."""
 
     @classmethod

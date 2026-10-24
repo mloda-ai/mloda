@@ -2,7 +2,7 @@ from typing import Any, Callable
 import pyarrow as pa
 import pytest
 from mloda.provider import FeatureGroup
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Feature
 from mloda.user import Features
 from mloda.user import FeatureName
@@ -28,7 +28,7 @@ def _arrow_resolver(table: pa.Table) -> Callable[[str], DataType | None]:
     return resolve
 
 
-class TypedFeatureSource(GeneratedFeatureGroup):
+class TypedFeatureSource(DataCreatorFeatureGroup):
     """Feature group that returns typed data for testing."""
 
     @classmethod
@@ -38,7 +38,7 @@ class TypedFeatureSource(GeneratedFeatureGroup):
         return table
 
 
-class StringDataSource(GeneratedFeatureGroup):
+class StringDataSource(DataCreatorFeatureGroup):
     """Feature group that returns string data for testing type mismatches."""
 
     @classmethod
@@ -47,7 +47,7 @@ class StringDataSource(GeneratedFeatureGroup):
         return {cls.get_class_name(): ["a", "b", "c"]}
 
 
-class Int64DataSource(GeneratedFeatureGroup):
+class Int64DataSource(DataCreatorFeatureGroup):
     """Feature group that returns int64 data for testing widening."""
 
     @classmethod
@@ -457,7 +457,7 @@ class TestStrictTypeEnforcementPropagation:
         """
 
         # FeatureGroup that returns INT64 regardless of declared type
-        class ReturnsInt64(GeneratedFeatureGroup):
+        class ReturnsInt64(DataCreatorFeatureGroup):
             @classmethod
             def feature_names_supported(cls) -> set[str]:
                 return {"ReturnsInt64"}
@@ -504,7 +504,7 @@ class TestStrictTypeEnforcementPropagation:
         """
 
         # Dependency: returns INT64 regardless of declared type
-        class BaseFG(GeneratedFeatureGroup):
+        class BaseFG(DataCreatorFeatureGroup):
             @classmethod
             def feature_names_supported(cls) -> set[str]:
                 return {"BaseFG"}

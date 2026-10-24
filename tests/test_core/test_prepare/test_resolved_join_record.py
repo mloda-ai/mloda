@@ -28,7 +28,7 @@ from mloda.core.prepare.resolved_join import (
 )
 from mloda.core.prepare.join_decision import DeclinedJoin, JoinDecision
 from mloda.core.prepare.resolved_join_builder import joinstep_signatures
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
@@ -126,7 +126,7 @@ class ResolvedJoinChild(FeatureGroup):
     pass
 
 
-class ResolvedJoinEndLeft(GeneratedFeatureGroup):
+class ResolvedJoinEndLeft(DataCreatorFeatureGroup):
     """Pinned to the framework the end to end link declares as its left side."""
 
     @classmethod
@@ -142,7 +142,7 @@ class ResolvedJoinEndLeft(GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class ResolvedJoinEndRight(GeneratedFeatureGroup):
+class ResolvedJoinEndRight(DataCreatorFeatureGroup):
     """Pinned to the other framework, so the join needs a transform hop."""
 
     @classmethod

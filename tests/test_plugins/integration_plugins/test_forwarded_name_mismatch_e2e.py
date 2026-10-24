@@ -23,7 +23,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     FeatureChainParserMixin,
 )
 from mloda.provider import ComputeFramework
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import PropertySpec
@@ -42,8 +42,8 @@ CONSUMER_NAME = "namemis579_consumer"
 STRING_CONSUMER_NAME = "namemis579_string_consumer"
 
 
-class NameMis579SourceGroup(GeneratedFeatureGroup):
-    """Root group providing the source column via GeneratedFeatureGroup."""
+class NameMis579SourceGroup(DataCreatorFeatureGroup):
+    """Root group providing the source column via DataCreatorFeatureGroup."""
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:

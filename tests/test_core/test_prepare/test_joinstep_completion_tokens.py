@@ -20,7 +20,7 @@ from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.core.prepare.resolve_links import LinkTrekker
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
@@ -80,7 +80,7 @@ class TokenAppendSource(FeatureGroup):
     pass
 
 
-class TokenSelfSource(GeneratedFeatureGroup):
+class TokenSelfSource(DataCreatorFeatureGroup):
     """Serves both sides of the self join; the requested feature name picks the side."""
 
     @classmethod

@@ -36,7 +36,7 @@ from mloda.user import (
     FeatureName,
     Options,
 )
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.core.runtime.flight.flight_server import FlightServer
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
@@ -117,7 +117,7 @@ class _ThreadingOnlyPythonDictFramework(PythonDictFramework):
         return {ParallelizationMode.SYNC, ParallelizationMode.THREADING}
 
 
-class _MixedModeRootPythonDictFG(GeneratedFeatureGroup):
+class _MixedModeRootPythonDictFG(DataCreatorFeatureGroup):
     """Root source on a THREADING-only framework; parent-resident under mixed mode."""
 
     @classmethod
@@ -186,7 +186,7 @@ def _extract_mixed_mode_doubled_threading(final: Any) -> list[int]:
     return list(final["mixed_mode_doubled_threading"])
 
 
-class _JoinLeftRootFG(GeneratedFeatureGroup):
+class _JoinLeftRootFG(DataCreatorFeatureGroup):
     """Left join root on the THREADING-only framework, providing join_key and left_val."""
 
     @classmethod
@@ -206,7 +206,7 @@ class _JoinLeftRootFG(GeneratedFeatureGroup):
         return {"join_key": [1, 2, 3], "left_val": [10, 20, 30]}
 
 
-class _JoinRightRootFG(GeneratedFeatureGroup):
+class _JoinRightRootFG(DataCreatorFeatureGroup):
     """Right join root on the THREADING-only framework, providing join_key and right_val."""
 
     @classmethod
@@ -444,7 +444,7 @@ class TestMixedModeParentDestinationE2E:
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
 
-class _MpTransformSourceFG(GeneratedFeatureGroup):
+class _MpTransformSourceFG(DataCreatorFeatureGroup):
     """Root source on PythonDictFramework, computed in a MULTIPROCESSING-only run."""
 
     @classmethod
@@ -509,7 +509,7 @@ class _ThreadingOnlyPyArrowTable(PyArrowTable):
         return {ParallelizationMode.SYNC, ParallelizationMode.THREADING}
 
 
-class _XFwJoinLeftRootFG(GeneratedFeatureGroup):
+class _XFwJoinLeftRootFG(DataCreatorFeatureGroup):
     """Join root on the THREADING-only framework: the source side needing the cross-framework hop."""
 
     @classmethod
@@ -529,7 +529,7 @@ class _XFwJoinLeftRootFG(GeneratedFeatureGroup):
         return {"xfw_join_key": [1, 2, 3], "xfw_left_val": [10, 20, 30]}
 
 
-class _XFwJoinRightRootFG(GeneratedFeatureGroup):
+class _XFwJoinRightRootFG(DataCreatorFeatureGroup):
     """Join root on a DIFFERENT framework than the left side, forcing a TransformFrameworkStep hop."""
 
     @classmethod
@@ -568,7 +568,7 @@ class _XFwJoinChildFG(FeatureGroup):
         return {"xfw_join_sum"}
 
 
-class _CrossFwHopLeftRootFG(GeneratedFeatureGroup):
+class _CrossFwHopLeftRootFG(DataCreatorFeatureGroup):
     """Join root on the THREADING-only framework: the side a cross-framework join must hop out of."""
 
     @classmethod
@@ -588,7 +588,7 @@ class _CrossFwHopLeftRootFG(GeneratedFeatureGroup):
         return {"cfw_hop_join_key": [1, 2, 3], "cfw_hop_left_val": [10, 20, 30]}
 
 
-class _CrossFwHopRightRootFG(GeneratedFeatureGroup):
+class _CrossFwHopRightRootFG(DataCreatorFeatureGroup):
     """Join root on a DIFFERENT framework than the left side, forcing a TransformFrameworkStep hop."""
 
     @classmethod
@@ -867,7 +867,7 @@ class TestCrossFrameworkJoinHopDropTiming:
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
 
-class _Gap1SharedRootFG(GeneratedFeatureGroup):
+class _Gap1SharedRootFG(DataCreatorFeatureGroup):
     """Shared root feeding both a cross-framework hop and an independent same-framework chain."""
 
     @classmethod
@@ -960,7 +960,7 @@ class _Gap1SiblingFG(FeatureGroup):
         return {"gap1_sibling_tripled"}
 
 
-class _DiamondHopRootFG(GeneratedFeatureGroup):
+class _DiamondHopRootFG(DataCreatorFeatureGroup):
     """Root feature feeding both a plain cross-framework hop and a same-framework diamond
     descendant that also reads the hop's own output."""
 
@@ -1021,7 +1021,7 @@ class _DiamondHopDescendantFG(FeatureGroup):
         return {"diamond_hop_result"}
 
 
-class _FwClassGuardJoinLeftFG(GeneratedFeatureGroup):
+class _FwClassGuardJoinLeftFG(DataCreatorFeatureGroup):
     """Left side of an unrelated cross-framework join elsewhere in the plan: shares the
     PythonDictFramework CLASS with `_MpTransformSourceFG`'s hop, but its own data
     (`fw_class_guard_*`) is entirely disjoint from that hop's source."""
@@ -1043,7 +1043,7 @@ class _FwClassGuardJoinLeftFG(GeneratedFeatureGroup):
         return {"fw_class_guard_join_key": [1, 2, 3], "fw_class_guard_left_val": [10, 20, 30]}
 
 
-class _FwClassGuardJoinRightFG(GeneratedFeatureGroup):
+class _FwClassGuardJoinRightFG(DataCreatorFeatureGroup):
     """Right side, a different framework, forcing a cross-framework JoinStep."""
 
     @classmethod
@@ -1084,7 +1084,7 @@ class _FwClassGuardJoinChildFG(FeatureGroup):
         return {"fw_class_guard_join_sum"}
 
 
-class _ChainHopRootFG(GeneratedFeatureGroup):
+class _ChainHopRootFG(DataCreatorFeatureGroup):
     """Root source on PythonDictFramework, the hop's SOURCE; read only by the hop itself, never by
     anything further down the chain."""
 
@@ -1159,7 +1159,7 @@ class _ChainHopChain3FG(FeatureGroup):
         return {"chain_hop_chain3_val"}
 
 
-class _CoarseGuardRootFG(GeneratedFeatureGroup):
+class _CoarseGuardRootFG(DataCreatorFeatureGroup):
     """Root: the source side of a cross-framework join AND feeds a same-framework descendant
     below. The root and the descendant are distinct FeatureGroupSteps, but share ONE physical cfw
     instance at runtime, since no framework transition separates them."""
@@ -1222,7 +1222,7 @@ class _CoarseGuardHopDestFG(FeatureGroup):
         return {"coarse_guard_hop_val"}
 
 
-class _CoarseGuardJoinOtherSideFG(GeneratedFeatureGroup):
+class _CoarseGuardJoinOtherSideFG(DataCreatorFeatureGroup):
     """Join's other side, forcing a cross-framework JoinStep whose source side is the root
     above, the same physical cfw the descendant's plain hop also reads."""
 
@@ -1692,7 +1692,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
             ], f"seed {seed} produced a wrong join result"
 
 
-class _H3ChainRootPandasFG(GeneratedFeatureGroup):
+class _H3ChainRootPandasFG(DataCreatorFeatureGroup):
     """Near root of a Pandas-PyArrow-PythonDict join chain, plus its own Pandas-only side chain."""
 
     @classmethod
@@ -1712,7 +1712,7 @@ class _H3ChainRootPandasFG(GeneratedFeatureGroup):
         return pd.DataFrame({"h3_key": [1, 2, 3], "h3_p": [1, 2, 3]})
 
 
-class _H3ChainRootPyArrowFG(GeneratedFeatureGroup):
+class _H3ChainRootPyArrowFG(DataCreatorFeatureGroup):
     """Middle join root of the chain, on PyArrow."""
 
     @classmethod
@@ -1732,7 +1732,7 @@ class _H3ChainRootPyArrowFG(GeneratedFeatureGroup):
         return pa.table({"h3_key": [1, 2, 3], "h3_a": [10, 20, 30]})
 
 
-class _H3ChainRootPythonDictFG(GeneratedFeatureGroup):
+class _H3ChainRootPythonDictFG(DataCreatorFeatureGroup):
     """Far join root of the chain, on PythonDict: the source a plain hop must not credit too early."""
 
     @classmethod

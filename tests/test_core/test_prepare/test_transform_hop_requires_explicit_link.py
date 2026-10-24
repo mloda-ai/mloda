@@ -10,7 +10,7 @@ import pytest
 
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -18,7 +18,7 @@ from tests.helpers.probe_runner import run_probes
 from tests.test_core.test_prepare import link_side_paths_probe as hd_probe
 
 
-class UnlinkedRootA(GeneratedFeatureGroup):
+class UnlinkedRootA(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"unlinked_root_a"}
@@ -34,7 +34,7 @@ class UnlinkedRootA(GeneratedFeatureGroup):
         return {PandasDataFrame}
 
 
-class UnlinkedRootB(GeneratedFeatureGroup):
+class UnlinkedRootB(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"unlinked_root_b"}
@@ -199,7 +199,7 @@ def test_subclass_unrelated_roots_reject_missing_links_under_every_hash_seed() -
 # Unlinked parents must be rejected whatever frameworks run, not only when a transform hop is involved.
 
 
-class _Root(GeneratedFeatureGroup):
+class _Root(DataCreatorFeatureGroup):
     """Data-creator root: DATA maps column name to values, built in FRAMEWORK's native type."""
 
     DATA: ClassVar[dict[str, list[int]]] = {}

@@ -12,7 +12,7 @@ import pandas as pd
 import pyarrow.compute as pc
 
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -23,7 +23,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 # ---------------------------------------------------------------------------
 
 
-class SharedSourceRootFG(GeneratedFeatureGroup):
+class SharedSourceRootFG(DataCreatorFeatureGroup):
     """Pandas root exposing two columns that are always computed TOGETHER by one step."""
 
     @classmethod

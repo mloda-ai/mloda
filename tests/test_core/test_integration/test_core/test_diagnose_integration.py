@@ -2,7 +2,7 @@
 
 Exercises the non-raising preflight through the public API with real plugins and the real
 PandasDataFrame compute framework: shipped ``AggregatedFeatureGroup`` aggregations chain off raw
-columns produced by a ``GeneratedFeatureGroup`` source. A fully resolvable request yields a complete diagnosis;
+columns produced by a ``DataCreatorFeatureGroup`` source. A fully resolvable request yields a complete diagnosis;
 adding an unknown feature name projects a resolution-failure diagnosis instead of raising, and that
 projection equals the raising path's ``FeatureResolutionError``.
 

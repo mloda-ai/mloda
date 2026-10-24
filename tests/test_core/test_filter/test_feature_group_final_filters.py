@@ -27,7 +27,7 @@ import pytest
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda.provider import BaseFilterEngine, ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import BaseFilterEngine, ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
 from mloda.user import Feature, Features, GlobalFilter, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -50,7 +50,7 @@ class PyArrowTableInlineEngine(PyArrowTable):
         return InlineFilterEngine
 
 
-class InlineMaskViaFeatureGroup(GeneratedFeatureGroup):
+class InlineMaskViaFeatureGroup(DataCreatorFeatureGroup):
     """A FeatureGroup that handles filters inline instead of relying on final filtering.
 
     Uses the STANDARD PyArrowTable compute framework. No custom FilterEngine or
@@ -98,7 +98,7 @@ class InlineMaskViaFeatureGroup(GeneratedFeatureGroup):
         )
 
 
-class RegularFeatureGroupForFilterTest(GeneratedFeatureGroup):
+class RegularFeatureGroupForFilterTest(DataCreatorFeatureGroup):
     """A regular FeatureGroup that does NOT override final_filters().
 
     Filters should still be applied as a final step by the framework.
@@ -138,7 +138,7 @@ class InlineMaskOnInlineEngine(InlineMaskViaFeatureGroup):
         return False
 
 
-class ForceFinalOnInlineEngine(GeneratedFeatureGroup):
+class ForceFinalOnInlineEngine(DataCreatorFeatureGroup):
     """FG says True, Engine says False. FG overrides: force row elimination.
 
     The filter engine on PyArrowTableInlineEngine returns final_filters()=False,
@@ -168,7 +168,7 @@ class ForceFinalOnInlineEngine(GeneratedFeatureGroup):
         )
 
 
-class ForceFinalOnFinalEngine(GeneratedFeatureGroup):
+class ForceFinalOnFinalEngine(DataCreatorFeatureGroup):
     """FG says True, Engine says True. Both agree: apply final filtering.
 
     Both the FeatureGroup and the PyArrowTable filter engine agree that final
@@ -197,7 +197,7 @@ class ForceFinalOnFinalEngine(GeneratedFeatureGroup):
         )
 
 
-class InlineMaskWithFinalElimination(GeneratedFeatureGroup):
+class InlineMaskWithFinalElimination(DataCreatorFeatureGroup):
     """FG uses mask engine inline for masking AND returns True for row elimination.
 
     Proves that inline masking and final row elimination are independent.
@@ -263,7 +263,7 @@ class InlineMaskWithFinalElimination(GeneratedFeatureGroup):
         )
 
 
-class DropsFilterColumnFeatureGroup(GeneratedFeatureGroup):
+class DropsFilterColumnFeatureGroup(DataCreatorFeatureGroup):
     """FG returns final_filters()=True but drops the filter column from its output.
 
     This violates the overlap contract: row elimination needs the filter column
@@ -292,7 +292,7 @@ class DropsFilterColumnFeatureGroup(GeneratedFeatureGroup):
         )
 
 
-class DefaultFGDropsFilterColumn(GeneratedFeatureGroup):
+class DefaultFGDropsFilterColumn(DataCreatorFeatureGroup):
     """FG does NOT override final_filters() (defaults to None) but drops the filter column.
 
     The engine (PyArrowFilterEngine) returns True, so the framework applies
@@ -317,7 +317,7 @@ class DefaultFGDropsFilterColumn(GeneratedFeatureGroup):
         )
 
 
-class MutatesFilterColumnToInt(GeneratedFeatureGroup):
+class MutatesFilterColumnToInt(DataCreatorFeatureGroup):
     """FG returns final_filters()=True but changes filter column from string to int.
 
     The filter expects status=="active" (string comparison), but the FeatureGroup
@@ -346,7 +346,7 @@ class MutatesFilterColumnToInt(GeneratedFeatureGroup):
         )
 
 
-class MutatesFilterColumnToString(GeneratedFeatureGroup):
+class MutatesFilterColumnToString(DataCreatorFeatureGroup):
     """FG returns final_filters()=True but changes filter column from numeric to string.
 
     The filter expects price >= 10 (numeric comparison), but the FeatureGroup
@@ -375,7 +375,7 @@ class MutatesFilterColumnToString(GeneratedFeatureGroup):
         )
 
 
-class DefaultFGMutatesFilterColumnToInt(GeneratedFeatureGroup):
+class DefaultFGMutatesFilterColumnToInt(DataCreatorFeatureGroup):
     """FG does NOT override final_filters() but mutates filter column dtype.
 
     The engine fallback path applies row elimination. The dtype mismatch should
@@ -400,7 +400,7 @@ class DefaultFGMutatesFilterColumnToInt(GeneratedFeatureGroup):
         )
 
 
-class CompatibleDtypeFeatureGroup(GeneratedFeatureGroup):
+class CompatibleDtypeFeatureGroup(DataCreatorFeatureGroup):
     """FG returns final_filters()=True with a column dtype that differs from the filter value's.
 
     The filter compares against a Python ``str``, whose natural Arrow type is

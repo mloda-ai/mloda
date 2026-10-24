@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
-from mloda.provider import ComputeFramework, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -23,7 +23,7 @@ class _SyncOnlyExtenderSurvivalFramework(PythonDictFramework):
         return {ParallelizationMode.SYNC}
 
 
-class _ExtenderHandleSurvivalFeatureGroup(GeneratedFeatureGroup):
+class _ExtenderHandleSurvivalFeatureGroup(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"extender_handle_survival_e2e_col"}

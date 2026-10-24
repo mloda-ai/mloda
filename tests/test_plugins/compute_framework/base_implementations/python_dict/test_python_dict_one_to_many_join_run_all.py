@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -35,7 +35,7 @@ def _one_to_many_link() -> Link:
     )
 
 
-class OneToManyLeftFeature(GeneratedFeatureGroup):
+class OneToManyLeftFeature(DataCreatorFeatureGroup):
     """Left side: one row per user (unique join keys)."""
 
     @classmethod
@@ -47,7 +47,7 @@ class OneToManyLeftFeature(GeneratedFeatureGroup):
         return {"user_id": [1, 2], "uname": ["ann", "bob"]}
 
 
-class OneToManyRightFeature(GeneratedFeatureGroup):
+class OneToManyRightFeature(DataCreatorFeatureGroup):
     """Right side: many rows per user (duplicate join keys)."""
 
     @classmethod

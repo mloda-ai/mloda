@@ -31,10 +31,10 @@ Here, we create a `FeatureGroup` with a configured `BaseArtifact`.
 
 ```python
 from typing import Any
-from mloda.provider import FeatureGroup, FeatureSet, BaseArtifact, GeneratedFeatureGroup
+from mloda.provider import FeatureGroup, FeatureSet, BaseArtifact, DataCreatorFeatureGroup
 
 
-class BaseExampleArtifactFeature(GeneratedFeatureGroup):
+class BaseExampleArtifactFeature(DataCreatorFeatureGroup):
 
     @staticmethod
     def artifact() -> type[BaseArtifact] | None:

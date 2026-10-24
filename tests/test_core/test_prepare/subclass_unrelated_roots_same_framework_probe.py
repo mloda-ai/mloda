@@ -10,7 +10,7 @@ from typing import Any
 
 import pyarrow.compute as pc
 
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -18,7 +18,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 )
 
 
-class ScRootA(GeneratedFeatureGroup):
+class ScRootA(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"sc_a"}
@@ -33,7 +33,7 @@ class ScRootA(GeneratedFeatureGroup):
 
 
 class ScRootB(ScRootA):
-    """Subclass of ScRootA for code reuse only; independent generated group, same framework."""
+    """Subclass of ScRootA for code reuse only; independent data creator group, same framework."""
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:

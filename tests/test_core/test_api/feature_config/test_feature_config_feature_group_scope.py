@@ -21,7 +21,7 @@ from mloda.core.api.feature_config.loader import load_features_from_config, proc
 from mloda.core.api.feature_config.models import FeatureConfig, feature_config_schema
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.api.feature_config.parser import parse_json
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -577,7 +577,7 @@ def test_feature_config_schema_feature_group_is_non_empty() -> None:
 # ---------------------------------------------------------------------------
 
 
-class ConfigScopeSourceA(GeneratedFeatureGroup):
+class ConfigScopeSourceA(DataCreatorFeatureGroup):
     """Source A: provides the shared "config_shared_token" plus "config_value_a"."""
 
     @classmethod
@@ -592,7 +592,7 @@ class ConfigScopeSourceA(GeneratedFeatureGroup):
         }
 
 
-class ConfigScopeSourceB(GeneratedFeatureGroup):
+class ConfigScopeSourceB(DataCreatorFeatureGroup):
     """Source B: also provides the shared "config_shared_token" plus "config_value_b"."""
 
     @classmethod
@@ -661,7 +661,7 @@ def test_end2end_scoped_config_feature_resolves_to_source_b() -> None:
 # ---------------------------------------------------------------------------
 
 
-class ConfigScopeAggregationSource(GeneratedFeatureGroup):
+class ConfigScopeAggregationSource(DataCreatorFeatureGroup):
     """Source data for the aggregated-family scope test."""
 
     @classmethod
@@ -703,7 +703,7 @@ class ConfigScopeAbstractFamilyBase(FeatureGroup):
         """Abstract hook that makes this base abstract."""
 
 
-class ConfigScopePandasMember(ConfigScopeAbstractFamilyBase, GeneratedFeatureGroup):
+class ConfigScopePandasMember(ConfigScopeAbstractFamilyBase, DataCreatorFeatureGroup):
     """The member on the enabled Pandas framework."""
 
     @classmethod
@@ -723,7 +723,7 @@ class ConfigScopePandasMember(ConfigScopeAbstractFamilyBase, GeneratedFeatureGro
         return {"config_scope_token": [1, 2]}
 
 
-class ConfigScopePyArrowMember(ConfigScopeAbstractFamilyBase, GeneratedFeatureGroup):
+class ConfigScopePyArrowMember(ConfigScopeAbstractFamilyBase, DataCreatorFeatureGroup):
     """The rival sibling on a framework that is not enabled."""
 
     @classmethod

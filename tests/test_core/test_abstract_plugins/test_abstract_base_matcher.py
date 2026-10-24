@@ -17,7 +17,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Feature, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
@@ -35,7 +35,7 @@ class AbstractBaseWithAbstractMethod(FeatureGroup):
         return {PandasDataFrame}
 
 
-class ConcreteRootFeatureGroup(GeneratedFeatureGroup):
+class ConcreteRootFeatureGroup(DataCreatorFeatureGroup):
     """Concrete root feature group: no input features, creates its own data."""
 
     @classmethod
@@ -51,7 +51,7 @@ class ConcreteRootFeatureGroup(GeneratedFeatureGroup):
         return {PandasDataFrame}
 
 
-class ConcreteSubclassOfAbstractBase(AbstractBaseWithAbstractMethod, GeneratedFeatureGroup):
+class ConcreteSubclassOfAbstractBase(AbstractBaseWithAbstractMethod, DataCreatorFeatureGroup):
     """Leaf that implements the abstract method: instantiable, must match its root feature."""
 
     @classmethod

@@ -3,7 +3,7 @@ from typing import Any
 from unittest.mock import patch, Mock
 import pytest
 
-from mloda.provider import ComputeFramework, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Features
 from mloda.user import DataAccessCollection, Feature, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
@@ -158,7 +158,7 @@ class TestShutdownRunnerManagerDeleted:
 _CONN_SEEN: list[tuple[Any, str | None]] = []
 
 
-class ConnSugarRoot(GeneratedFeatureGroup):
+class ConnSugarRoot(DataCreatorFeatureGroup):
     """Sqlite root that records each feature's connection object and bound connection_handle."""
 
     @classmethod
@@ -257,7 +257,7 @@ class TestFeatureConnectionIntake:
             extra.close()
 
 
-class ConnValueRoot(GeneratedFeatureGroup):
+class ConnValueRoot(DataCreatorFeatureGroup):
     """Sqlite root whose value is the connection's user_version, so each connection yields its own frame."""
 
     @classmethod

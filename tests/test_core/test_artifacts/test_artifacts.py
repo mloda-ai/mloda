@@ -1,7 +1,7 @@
 from typing import Any
 
 from mloda.provider import BaseArtifact
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import ParallelizationMode
 from mloda.user import Feature
 from mloda.user import Features
@@ -14,7 +14,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class BaseTestArtifactFeature(GeneratedFeatureGroup):
+class BaseTestArtifactFeature(DataCreatorFeatureGroup):
     @staticmethod
     def artifact() -> type[BaseArtifact] | None:
         return BaseArtifact

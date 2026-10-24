@@ -10,7 +10,7 @@ from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Link, JoinSpec
 from mloda.user import Options
 from mloda.user import ParallelizationMode
@@ -19,7 +19,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from mloda.user import mloda
 
 
-class NonCfwRootJoinTestFeature(GeneratedFeatureGroup):
+class NonCfwRootJoinTestFeature(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): ["Same Value"], "dummy": ["dummy"]}

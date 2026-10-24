@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from mloda.provider import ComputeFramework
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -92,7 +92,7 @@ def _packed_rows(results: Any, column: str) -> list[str]:
     return [str(value) for value in _columns(_packed_frame(results, column))[column]]
 
 
-class OrientCharLeftInPandas(GeneratedFeatureGroup):
+class OrientCharLeftInPandas(DataCreatorFeatureGroup):
     """Declared left side of pair A, so a Pandas child joins in the declared orientation."""
 
     @classmethod
@@ -108,7 +108,7 @@ class OrientCharLeftInPandas(GeneratedFeatureGroup):
         return {PandasDataFrame}
 
 
-class OrientCharRightInArrow(GeneratedFeatureGroup):
+class OrientCharRightInArrow(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"oc_a_right_key", "oc_a_right_payload"}
@@ -122,7 +122,7 @@ class OrientCharRightInArrow(GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class OrientCharLeftInArrow(GeneratedFeatureGroup):
+class OrientCharLeftInArrow(DataCreatorFeatureGroup):
     """Declared left side of pair B, so a Pandas child inverts the declared orientation."""
 
     @classmethod
@@ -138,7 +138,7 @@ class OrientCharLeftInArrow(GeneratedFeatureGroup):
         return {PyArrowTable}
 
 
-class OrientCharRightInPandas(GeneratedFeatureGroup):
+class OrientCharRightInPandas(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"oc_b_right_key", "oc_b_right_payload"}
@@ -152,7 +152,7 @@ class OrientCharRightInPandas(GeneratedFeatureGroup):
         return {PandasDataFrame}
 
 
-class OrientCharThirdInDict(GeneratedFeatureGroup):
+class OrientCharThirdInDict(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"oc_c_key", "oc_c_payload"}

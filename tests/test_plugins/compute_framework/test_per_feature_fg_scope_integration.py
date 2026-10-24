@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -23,7 +23,7 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 
 
-class Source508A(GeneratedFeatureGroup):
+class Source508A(DataCreatorFeatureGroup):
     """Source A: provides the shared "subject_token" plus "scoping_value_a"."""
 
     @classmethod
@@ -38,7 +38,7 @@ class Source508A(GeneratedFeatureGroup):
         }
 
 
-class Source508B(GeneratedFeatureGroup):
+class Source508B(DataCreatorFeatureGroup):
     """Source B: also provides the shared "subject_token" plus "scoping_value_b"."""
 
     @classmethod
@@ -124,7 +124,7 @@ def test_unscoped_derived_feature_is_ambiguous(flight_server: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-class Source508CounterA(GeneratedFeatureGroup):
+class Source508CounterA(DataCreatorFeatureGroup):
     """Source A with a class-level call counter, providing subject_token + counter_value_a."""
 
     calls = 0
@@ -142,7 +142,7 @@ class Source508CounterA(GeneratedFeatureGroup):
         }
 
 
-class Source508CounterB(GeneratedFeatureGroup):
+class Source508CounterB(DataCreatorFeatureGroup):
     """Source B, providing the shared subject_token plus counter_value_b (creates ambiguity)."""
 
     @classmethod
@@ -208,7 +208,7 @@ def test_scoped_key_shares_read_with_siblings(flight_server: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-class Source508IndepA(GeneratedFeatureGroup):
+class Source508IndepA(DataCreatorFeatureGroup):
     """Source A: provides subject_token plus value_a."""
 
     @classmethod
@@ -223,7 +223,7 @@ class Source508IndepA(GeneratedFeatureGroup):
         }
 
 
-class Source508IndepB(GeneratedFeatureGroup):
+class Source508IndepB(DataCreatorFeatureGroup):
     """Source B: provides subject_token plus value_b."""
 
     @classmethod

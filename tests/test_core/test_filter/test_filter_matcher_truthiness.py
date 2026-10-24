@@ -22,7 +22,7 @@ from typing import Any, TypeVar
 
 import pytest
 
-from mloda.provider import GeneratedFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -581,7 +581,7 @@ def _make_e2e_probe_fg() -> type[FeatureGroup]:
     """A throwaway root group that resolves E2E_MAIN and answers None when matched for the filter feature."""
     gc.collect()
 
-    class NonBoolMatchE2EFG927(GeneratedFeatureGroup):
+    class NonBoolMatchE2EFG927(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {E2E_MAIN, E2E_TARGET}
@@ -825,7 +825,7 @@ def _make_unreadable_report_e2e_fg() -> type[FeatureGroup]:
     """The e2e twin of the probe above: it answers the filter feature with a value it cannot name."""
     gc.collect()
 
-    class UnreadableReportE2EFG991(GeneratedFeatureGroup):
+    class UnreadableReportE2EFG991(DataCreatorFeatureGroup):
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {E2E_MAIN, E2E_TARGET}

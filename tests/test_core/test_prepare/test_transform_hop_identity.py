@@ -14,7 +14,7 @@ import pyarrow.compute as pc
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, Index, JoinSpec, Link, Options, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -25,7 +25,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 # ---------------------------------------------------------------------------
 
 
-class HopIdA(GeneratedFeatureGroup):
+class HopIdA(DataCreatorFeatureGroup):
     """Pandas root: the join's declared left side."""
 
     @classmethod

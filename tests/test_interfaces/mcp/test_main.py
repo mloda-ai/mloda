@@ -6,7 +6,7 @@ Without the ``mcp`` extra both entry points print the install hint and exit 2.
 import ast
 import importlib.util
 import io
-import sys
+import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib.machinery import ModuleSpec
@@ -19,11 +19,6 @@ import mloda.interfaces.cli.main as cli_main
 import mloda.interfaces.mcp.main as mcp_main
 from mloda.interfaces.service.config import Settings, load_settings
 from tests.helpers.docs_scope import shipped_feature_group_walk
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
 
 # serve builds the catalog over every loaded FeatureGroup; a cold cache under xdist load can exceed 10s.
 pytestmark = pytest.mark.timeout(30)

@@ -88,11 +88,10 @@ class TestNoneSkipping:
 
 
 class TestSeparatorlessFormsRejected:
-    """Bare-digit and week/ordinal forms must classify as non-temporal on all Python versions.
+    """Bare-digit and week/ordinal forms must classify as non-temporal.
 
-    ``datetime.fromisoformat`` is lenient on 3.11+ (accepts separator-less, week and basic
-    forms) but strict on 3.10. Requiring a dash-bearing calendar date makes the result
-    reproducible across the 3.10-3.14 CI matrix and avoids false-positive temporal
+    ``datetime.fromisoformat`` is lenient (accepts separator-less, week and basic forms).
+    Requiring a dash-bearing calendar date avoids false-positive temporal
     classification of plain string codes (zip codes, product codes).
     """
 

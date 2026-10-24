@@ -5,9 +5,7 @@ The traceback element is logged at ERROR, so row values or PII in a message must
 
 from __future__ import annotations
 
-import builtins
 from collections.abc import Callable
-from typing import Any
 
 from mloda.core.abstract_plugins.components.utils import failure_report
 
@@ -84,14 +82,8 @@ class TestFailureReportExceptionGroups:
     """Sub-exceptions of a group keep their type names and raising frames."""
 
     def test_group_renders_sub_exception_types_and_frames(self) -> None:
-        # Looked up at runtime: the 3.10 gate (ruff, mypy) has no ExceptionGroup name.
-        exception_group: Any = getattr(builtins, "ExceptionGroup", None)
-        if exception_group is None:
-            # Return, not skip: the pinned skip count is shared across interpreter versions, so no version skips.
-            return
-
         flat = _caught(
-            lambda: _raise_given(exception_group(MARKER, [_caught(_raise_value_error), _caught(_raise_type_error)]))
+            lambda: _raise_given(BaseExceptionGroup(MARKER, [_caught(_raise_value_error), _caught(_raise_type_error)]))
         )
         _, tb = failure_report(flat)
 
@@ -101,9 +93,9 @@ class TestFailureReportExceptionGroups:
         assert "_raise_type_error" in tb
         assert MARKER not in tb
 
-        inner = _caught(lambda: _raise_given(exception_group(MARKER, [_caught(_raise_key_error)])))
-        assert isinstance(inner, exception_group)
-        nested = _caught(lambda: _raise_given(exception_group(MARKER, [inner])))
+        inner = _caught(lambda: _raise_given(BaseExceptionGroup(MARKER, [_caught(_raise_key_error)])))
+        assert isinstance(inner, ExceptionGroup)
+        nested = _caught(lambda: _raise_given(ExceptionGroup(MARKER, [inner])))
         _, nested_tb = failure_report(nested)
 
         assert "KeyError" in nested_tb
@@ -135,8 +127,8 @@ class TestFailureReportNotes:
 
     def test_notes_are_omitted(self) -> None:
         exc = _caught(_raise_value_error)
-        # setattr, not add_note: add_note is 3.11+, and typeshed omits __notes__ on 3.10
-        setattr(exc, "__notes__", [MARKER, f"row: {MARKER}"])
+        exc.add_note(MARKER)
+        exc.add_note(f"row: {MARKER}")
 
         _, tb = failure_report(exc)
 

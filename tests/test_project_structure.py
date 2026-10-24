@@ -1,19 +1,13 @@
 import configparser
 import fnmatch
 import re
-import sys
+import tomllib
 from pathlib import Path
 from typing import Any
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
 
 import yaml
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
-
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -45,7 +39,8 @@ class TestContributingFile:
 
     def test_contributing_mentions_python_version(self) -> None:
         content = _read_text(PROJECT_ROOT / "CONTRIBUTING.md")
-        assert "3.10" in content, "CONTRIBUTING.md must specify the minimum supported Python version (3.10)"
+        assert "Python 3.11 or higher" in content, "CONTRIBUTING.md must state the minimum Python version (3.11)"
+        assert "3.10" not in content, "CONTRIBUTING.md must not mention Python 3.10"
 
     def test_contributing_has_code_style_section(self) -> None:
         content = _read_text(PROJECT_ROOT / "CONTRIBUTING.md")
@@ -178,13 +173,14 @@ class TestRuffConfig:
     """Validate that ruff lint rules enforce modern Python typing conventions."""
 
     def test_modern_typing_rules_configured(self) -> None:
-        """UP006 (PEP 585 builtins), UP007 (PEP 604 unions), and UP045 (PEP 604 Optional rewrite) must be enforced."""
+        """UP006, UP007, UP045 and UP036 (outdated version blocks) must be enforced."""
         with open(PROJECT_ROOT / "pyproject.toml", "rb") as f:
             data: dict[str, Any] = tomllib.load(f)
         extend_select = data.get("tool", {}).get("ruff", {}).get("lint", {}).get("extend-select", [])
         assert "UP006" in extend_select, "ruff must enforce UP006 (use builtin generics instead of typing generics)"
         assert "UP007" in extend_select, "ruff must enforce UP007 (use X | Y instead of Union)"
         assert "UP045" in extend_select, "ruff must enforce UP045 (use X | None instead of Optional)"
+        assert "UP036" in extend_select, "ruff must enforce UP036 (remove outdated version blocks)"
 
     def test_no_redundant_typing_generics_in_source(self) -> None:
         """Source files must not import redundant typing generics that UP006/UP007 replace."""
@@ -245,6 +241,8 @@ class TestPackagingConfig:
         expected = {f"{prefix}{m}" for m in range(31) if spec.contains(f"3.{m}")}
         actual = {c for c in project.get("classifiers", []) if re.fullmatch(re.escape(prefix) + r"\d+", c)}
         assert actual == expected
+        assert "3.10" not in spec, "requires-python must exclude 3.10"
+        assert "3.11" in spec, "requires-python must admit 3.11"
 
 
 class TestToxConfig:
@@ -292,10 +290,12 @@ class TestToxConfig:
         assert len(set().union(*pins.values())) == 1, f"workflows must install the same tox and tox-uv: {pins}"
 
     def test_tox_splits_tests_from_lint(self) -> None:
-        """Plain `tox` runs python310 and lint; lint tools run only in the lint env."""
+        """Plain `tox` runs python311 and lint; lint tools run only in the lint env."""
         parser = self._tox_parser()
         envlist = parser.get("tox", "envlist")
-        assert {"python310", "lint"} <= set(re.findall(r"[\w-]+", envlist)), f"envlist lacks python310/lint: {envlist}"
+        envs = set(re.findall(r"[\w-]+", envlist))
+        assert {"python311", "lint"} <= envs, f"envlist lacks python311/lint: {envlist}"
+        assert "python310" not in envs, f"envlist must not include python310: {envlist}"
         assert parser.has_section("testenv:lint"), "tox.ini needs a [testenv:lint] section"
         lint = parser.get("testenv:lint", "commands", fallback="")
         for tool in ("ruff format", "ruff check", "pip-licenses", "mypy", "bandit"):
@@ -378,7 +378,7 @@ class TestToxConfig:
             "lint job needs a step running `tox -e lint`"
         )
         versions = {str(v) for v in jobs["lint"].get("strategy", {}).get("matrix", {}).get("python-version", [])}
-        assert {"3.10", "3.14"} <= versions, f"lint job must matrix python-version over 3.10 and 3.14: {versions}"
+        assert versions == {"3.11", "3.14"}, f"lint job must matrix python-version over 3.11 and 3.14: {versions}"
         assert not any(tox_lint.search(str(s.get("run", ""))) for s in jobs["build"].get("steps", [])), (
             "build job must not run `tox -e lint`"
         )

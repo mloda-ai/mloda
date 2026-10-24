@@ -129,9 +129,7 @@ class PythonDictMergeEngine(BaseMergeEngine):
                     f"Cannot coerce as-of time column '{column}': expected ISO-8601 string or None, "
                     f"got {type(v).__name__}."
                 )
-            # Python 3.10's fromisoformat rejects a trailing 'Z'; normalize it to '+00:00'.
-            parse_input = v[:-1] + "+00:00" if v.endswith("Z") else v
-            parsed = datetime.fromisoformat(parse_input)
+            parsed = datetime.fromisoformat(v)
             new_column.append(parsed)
             parsed_values.append(parsed)
         has_naive = any(p.tzinfo is None for p in parsed_values)

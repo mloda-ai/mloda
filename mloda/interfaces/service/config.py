@@ -1,10 +1,9 @@
 """Settings for the mloda service layer: TOML file, then MLODA_MCP_* env vars, then explicit overrides."""
 
 import hashlib
-import importlib.util
 import json
 import re
-import sys
+import tomllib
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -95,14 +94,8 @@ def load_settings(
 def _read_mcp_table(path: Path) -> dict[str, Any]:
     if not path.is_file():
         raise ConfigError(f"Config file not found: {path}")
-    if sys.version_info >= (3, 11):
-        import tomllib
-    elif importlib.util.find_spec("tomli") is not None:
-        import tomli as tomllib
-    else:
-        raise ConfigError("Reading mloda.toml needs Python 3.11+ or `pip install tomli`.")
     with path.open("rb") as handle:
-        # TOMLDecodeError subclasses ValueError; tomli's equivalent too.
+        # TOMLDecodeError subclasses ValueError.
         try:
             data = tomllib.load(handle)
         except ValueError as error:

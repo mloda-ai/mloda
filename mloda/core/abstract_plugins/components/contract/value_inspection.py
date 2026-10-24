@@ -14,10 +14,9 @@ from mloda.core.abstract_plugins.components.contract.comparison_contract import 
 
 
 def _parse_iso(value: str) -> date | datetime | None:
-    # fromisoformat is lenient on 3.11+ (accepts separator-less/basic and week/ordinal forms)
-    # but strict on 3.10. Require a dash-bearing extended calendar date and reject week dates
-    # so classification is reproducible across the 3.10-3.14 CI matrix and bare-digit codes
-    # (zip/product codes) never classify as temporal.
+    # fromisoformat is lenient (accepts separator-less/basic and week/ordinal forms). Require a
+    # dash-bearing extended calendar date and reject week dates so bare-digit codes
+    # (zip/product codes) and week dates never classify as temporal.
     date_part = value.split("T", 1)[0].split(" ", 1)[0]
     if "-" not in date_part or "w" in value.lower():
         return None
@@ -26,10 +25,8 @@ def _parse_iso(value: str) -> date | datetime | None:
     # ISO-8601 separators, so reject anything else before trusting fromisoformat.
     if len(value) > 10 and value[10] not in ("T", " "):
         return None
-    # Python 3.10's fromisoformat rejects a trailing 'Z'; normalize it to '+00:00'.
-    parse_input = value[:-1] + "+00:00" if value.endswith("Z") else value
     try:
-        return datetime.fromisoformat(parse_input)
+        return datetime.fromisoformat(value)
     except ValueError:
         pass
     try:

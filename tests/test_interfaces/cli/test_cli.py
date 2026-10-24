@@ -9,7 +9,7 @@ import csv
 import getpass
 import io
 import json
-import sys
+import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,13 +19,13 @@ import pytest
 
 from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.interfaces.cli.main import build_services, main
 from mloda.interfaces.service.catalog import Catalog
 from mloda.interfaces.service.config import Settings, load_settings
 from mloda.interfaces.service.errors import is_error
 from mloda.interfaces.service.planner import Planner
 from mloda.interfaces.service.runner import Runner
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.user import PluginCollector, PluginLoader
 from tests.helpers.docs_scope import shipped_feature_group_walk
 from tests.test_interfaces.source_groups import (
@@ -37,11 +37,6 @@ from tests.test_interfaces.source_groups import (
     PlanRaiseMcp5,
     RunnerRaiseMcp5,
 )
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
 
 # The CLI resolves real FeatureGroups and reads source files; a cold cache under xdist load can exceed 10s.
 pytestmark = pytest.mark.timeout(30)

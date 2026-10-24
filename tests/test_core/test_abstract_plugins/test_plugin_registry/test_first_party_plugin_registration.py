@@ -32,6 +32,7 @@ import inspect
 import logging
 import pkgutil
 import sys
+import tomllib
 import types
 from collections.abc import Callable, Iterator
 from functools import cache
@@ -40,17 +41,12 @@ from typing import Any
 
 import pytest
 
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
-
 from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, CompositeExtender
+from mloda.core.abstract_plugins.function_extender import CompositeExtender, Extender, ExtenderHook
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import (
     CORE_PLUGIN_MODULES,

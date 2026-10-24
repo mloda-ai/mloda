@@ -6,7 +6,6 @@ import dataclasses
 import inspect
 import logging
 import threading
-import types
 from dataclasses import dataclass
 from enum import Enum
 from types import ModuleType
@@ -81,8 +80,8 @@ PluginRegistrySnapshot = dict[str, PluginRegistryEntry]
 
 
 def _is_class(obj: object) -> bool:
-    """Python 3.10 reports a types.GenericAlias such as tuple[str, ...] as a type; issubclass then raises."""
-    return isinstance(obj, type) and not isinstance(obj, types.GenericAlias)
+    """True for real classes; generic aliases such as tuple[str, ...] are not."""
+    return isinstance(obj, type)
 
 
 def _resolve_plugin_type(cls: type[Any]) -> type[Any]:

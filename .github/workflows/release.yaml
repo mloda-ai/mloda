@@ -27,7 +27,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install tox
         run: |
@@ -47,7 +47,7 @@ jobs:
           TOX_WRITE_THIRD_PARTY_LICENSES: true
           PYTEST_WORKERS: 2
         run: |
-            tox -e python310,lint
+            tox -e python311,lint
             # Ship the committed ATTRIBUTION.md, not a copy regenerated from this
             # runner's environment; tox also rewrites it, so restore the tracked one.
             git checkout -- attribution/ATTRIBUTION.md
@@ -135,7 +135,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |

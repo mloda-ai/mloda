@@ -36,7 +36,7 @@ def loaded(module: str) -> Any | None:
     if found is None:
         return None
     if getattr(getattr(found, "__spec__", None), "_initializing", True):
-        # Still being executed, or unknowable: take the slow but safe path. This is the check CPython 3.11+
-        # does inside _find_and_load, hand-applied so 3.10 skips the process-global import lock too.
+        # Mirrors CPython's _find_and_load: a module still importing (or without a spec) goes through
+        # import_module, which waits on its per-module import lock; an initialized one is returned directly.
         return importlib.import_module(module)
     return found

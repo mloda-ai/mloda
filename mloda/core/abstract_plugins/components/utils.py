@@ -2,17 +2,12 @@ from __future__ import annotations
 
 import logging
 import reprlib
-import sys
 import traceback
 import weakref
 from collections.abc import Callable
 from typing import Any, TypeVar
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
-
-if sys.version_info >= (3, 11):
-    # Imported, not used as a bare builtin: the 3.10 ruff gate has no BaseExceptionGroup name.
-    from builtins import BaseExceptionGroup
 
 logger = logging.getLogger(__name__)
 
@@ -165,26 +160,24 @@ def _format_tb_without_msg(exc: BaseException, seen: set[int] | None = None, dep
             lines.append("Traceback (most recent call last):\n")
             lines.extend(traceback.format_tb(item.__traceback__))
         lines.append(f"{_exc_type_name(item)}\n")
-        if sys.version_info >= (3, 11) and isinstance(item, BaseExceptionGroup):
+        if isinstance(item, BaseExceptionGroup):
             lines.append(_format_group_members(item, seen, depth + 1))
         lines.append(item_separator)
     return "".join(lines)
 
 
-if sys.version_info >= (3, 11):
-
-    def _format_group_members(group: BaseExceptionGroup[BaseException], seen: set[int], depth: int) -> str:
-        """Each not yet rendered sub-exception of group, numbered, up to _MAX_GROUP_DEPTH nesting levels."""
-        if depth > _MAX_GROUP_DEPTH:
-            return "+---------------- ... (max group depth reached) ----------------\n"
-        lines: list[str] = []
-        for index, member in enumerate(group.exceptions, 1):
-            if id(member) not in seen:
-                lines.append(f"+---------------- {index} ----------------\n")
-                lines.append(_format_tb_without_msg(member, seen, depth))
-        if lines:
-            lines.append("+------------------------------------\n")
-        return "".join(lines)
+def _format_group_members(group: BaseExceptionGroup[BaseException], seen: set[int], depth: int) -> str:
+    """Each not yet rendered sub-exception of group, numbered, up to _MAX_GROUP_DEPTH nesting levels."""
+    if depth > _MAX_GROUP_DEPTH:
+        return "+---------------- ... (max group depth reached) ----------------\n"
+    lines: list[str] = []
+    for index, member in enumerate(group.exceptions, 1):
+        if id(member) not in seen:
+            lines.append(f"+---------------- {index} ----------------\n")
+            lines.append(_format_tb_without_msg(member, seen, depth))
+    if lines:
+        lines.append("+------------------------------------\n")
+    return "".join(lines)
 
 
 def failure_report(exc: BaseException) -> tuple[str, str]:

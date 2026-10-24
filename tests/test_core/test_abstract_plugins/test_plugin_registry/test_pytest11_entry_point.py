@@ -2,16 +2,10 @@
 
 from __future__ import annotations
 
-import sys
+import tomllib
 from importlib import metadata
 from pathlib import Path
 from typing import Any
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
-
 
 _PYPROJECT = Path(__file__).parents[4] / "pyproject.toml"
 _PLUGIN_MODULE = "mloda.core.abstract_plugins.plugin_registry.fixtures"

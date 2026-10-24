@@ -16,7 +16,7 @@
     "vscode": {
       "settings": {
         "mypy-type-checker.interpreter": [
-          "/home/vscode/.tox-cache/python310/bin/python3"
+          "/home/vscode/.tox-cache/python311/bin/python3"
         ]
       }
     }

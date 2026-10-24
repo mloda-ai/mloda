@@ -150,9 +150,9 @@ fgs = get_feature_group_docs(compute_framework="PandasDataFrame")
 Each `FeatureGroupInfo` also carries the subtype declaration: `subtype_key`
 (the `SUBTYPES.key`, `None` for shape-B and undeclared families), `subtypes`
 (the sorted universe), `parametric_subtypes`, `subtype_support` (supported
-subtypes per framework; empty for abstract bases; read from the
-implementations' `supported` intersected with the group's `SUBTYPES.supported`
-for an operation group; `accepts` restrictions do not show) and `subtype_error` (set when the declaration is invalid). See
+subtypes per framework; empty for abstract bases; `accepts` restrictions of an
+operation group do not show) and `subtype_error` (set when the declaration is
+invalid). See
 [Declaring capability per subtype](compute-framework-integration.md#declaring-capability-per-subtype).
 A file or document group also reports `suffixes`, the sorted suffixes it owns by default (empty for other groups).
 

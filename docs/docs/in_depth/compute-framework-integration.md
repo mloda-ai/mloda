@@ -131,13 +131,11 @@ subtypes and features without one stay open.
 empty for abstract bases; for an operation group read from its
 implementations) and `get_feature_group_docs()` (`subtype_key`, `subtypes`,
 `parametric_subtypes`, `subtype_support`, `subtype_error`). A
-hand-overridden `supports_compute_framework` yields no declared matrix; the
-misfit surfaces as `subtype_error`. An operation group's matrix is its
-implementations' `supported` intersected with the group's `SUBTYPES.supported`;
-a hand-overridden `supports_compute_framework` or a `supported` key naming no
-served framework surfaces as `subtype_error` like an ordinary group. Only
-`accepts` narrows features at match time without showing there;
-`resolve_feature(name, options=...)` gives the exact answer.
+hand-overridden `supports_compute_framework` (ordinary or operation group)
+yields no declared matrix and surfaces as `subtype_error`. An operation group's
+matrix is its implementations' `supported` intersected with the group's
+`SUBTYPES.supported`; only `accepts` narrows features at match time without
+showing there. `resolve_feature(name, options=...)` gives the exact answer.
 
 **The data user** sees the outcome on `resolve_feature(name, options=...)`:
 `subtype` (e.g. `ntile_2`) and `subtype_family` (`ntile`, parametric

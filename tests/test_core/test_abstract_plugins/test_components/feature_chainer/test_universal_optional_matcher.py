@@ -310,6 +310,18 @@ class TestUniversalMatcherDoesNotWarn:
 
         assert not _universal_matcher_warnings(caplog), "the escape hatch must silence the diagnostic"
 
+    def test_name_only_match_no_warn(self, caplog: pytest.LogCaptureFixture) -> None:
+        """An all-optional NAME_ONLY_MATCH class declines the probe name, so it is not universal (regression pin)."""
+        with caplog.at_level(logging.WARNING):
+
+            class _NameOnlyU771n(FeatureChainParserMixin, FeatureGroup):
+                NAME_ONLY_MATCH = True
+                PROPERTY_MAPPING = {"opt_u771n": PropertySpec("optional", default=None)}
+
+            assert _NameOnlyU771n.match_feature_group_criteria(UNRELATED_NAME_U771, _source_only_options()) is False
+
+        assert not _universal_matcher_warnings(caplog), "a name-only class is not a universal matcher"
+
     def test_self_referential_required_when_no_spurious_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """Case 12: a self-referential required_when must NOT trigger a spurious class-definition warning.
 

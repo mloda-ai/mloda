@@ -551,6 +551,7 @@ class FeatureChainParser:
         prefix_patterns: list[Any] | None = None,
         pattern: str = CHAIN_SEPARATOR,
         owner_name: str | None = None,
+        config_path: bool = True,
     ) -> bool:
         """
         Unified method for matching features using either configuration-based or pattern-based parsing.
@@ -566,6 +567,7 @@ class FeatureChainParser:
             property_mapping: Optional property mapping for configuration-based parsing
             prefix_patterns: Optional prefix patterns for pattern-based parsing
             pattern: Pattern string for pattern-based parsing (defaults to CHAIN_SEPARATOR)
+            config_path: False skips the configuration-based branch, so only an owned name matches
 
         Returns:
             True if the feature matches either pattern-based or configuration-based parsing, False otherwise
@@ -589,7 +591,7 @@ class FeatureChainParser:
                 return True
 
         # configuration-based
-        if property_mapping is not None:
+        if config_path and property_mapping is not None:
             return cls._validate_options_against_property_mapping(options, property_mapping)
 
         # If neither pattern-based nor configuration-based matching succeeded, return False

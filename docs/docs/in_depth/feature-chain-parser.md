@@ -153,7 +153,10 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 | `MAX_IN_FEATURES` | `int \| None` | `None` | Maximum allowed in_features (None = unlimited) |
 | `IN_FEATURE_SEPARATOR` | `str` | `"&"` | Separator for multiple in_features |
 | `RECOGNITION_ONLY_PATTERN` | `bool` | `False` | Declares a captureless pattern as recognition-only (binds no key from the name) |
+| `NAME_ONLY_MATCH` | `bool` | `False` | Claim only a name the patterns own; a configuration-path feature (non-matching name resolved via options such as `in_features`) is declined |
 | `REQUIRED_COLUMNWISE_HOOKS` | `frozenset[str]` | `frozenset()` | Column-wise data hooks the family requires |
+
+Use `NAME_ONLY_MATCH = True` for a group with no discriminator option. An override of `match_feature_group_criteria` must delegate to `super()` or `match_parser_criteria` to keep it. The rejection-reason diagnostic always honors the flag, and code calling `FeatureChainParser.match_configuration_feature_chain_parser` directly passes `config_path=not cls.NAME_ONLY_MATCH`.
 
 `Options.get_in_features()` returns sources in declared order (sets are sorted by name; duplicates are kept). Order-sensitive groups can reject sets with an `in_features` `match_guard=lambda v: not isinstance(v, (set, frozenset))` plus an `expected` text (for example "an ordered list, tuple or single source") so the rejection is reported.
 

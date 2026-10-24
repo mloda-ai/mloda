@@ -942,3 +942,51 @@ class TestPlainGroupRejectionRecording:
 
         assert winner is PlainAcceptingFGPpr
         assert frameworks == {RecorderFwOneOs005r}
+
+
+class ConfigPathRecordingNomRec(FeatureChainParserMixin):
+    """Flag-off twin: a rejected option value on the config path is recorded. Not a FeatureGroup, so inert."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_nomrec$"
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {
+        "mode_nomrec": property_spec("Mode", strict=True, allowed_values=("ok_nomrec",), context=True),
+    }
+
+
+class NameOnlyRecordingNomRec(ConfigPathRecordingNomRec):
+    """Name-only: the same config-path feature is declined without a recorded rejection."""
+
+    NAME_ONLY_MATCH = True
+
+
+class TestNameOnlyRejectionRecording:
+    """A config-path feature declined by NAME_ONLY_MATCH records no match rejection."""
+
+    def test_flag_off_twin_records_the_config_path_rejection(self) -> None:
+        token = MATCH_REJECTION_REASONS.set({})
+        options = Options(context={"mode_nomrec": "bogus_nomrec"})
+        assert ConfigPathRecordingNomRec.match_feature_group_criteria("plain_nomrec", options) is False
+        recorded = MATCH_REJECTION_REASONS.get()
+        MATCH_REJECTION_REASONS.reset(token)
+
+        assert recorded is not None
+        assert "ConfigPathRecordingNomRec" in recorded
+
+    def test_name_only_group_records_nothing_for_a_declined_config_path_feature(self) -> None:
+        token = MATCH_REJECTION_REASONS.set({})
+        options = Options(context={"mode_nomrec": "bogus_nomrec"})
+        assert NameOnlyRecordingNomRec.match_feature_group_criteria("plain_nomrec", options) is False
+        recorded = MATCH_REJECTION_REASONS.get()
+        MATCH_REJECTION_REASONS.reset(token)
+
+        assert recorded == {}
+
+    def test_name_only_group_still_records_a_rejected_owned_name(self) -> None:
+        token = MATCH_REJECTION_REASONS.set({})
+        assert NameOnlyRecordingNomRec.match_feature_group_criteria("src__bogus_nomrec", Options()) is False
+        recorded = MATCH_REJECTION_REASONS.get()
+        MATCH_REJECTION_REASONS.reset(token)
+
+        assert recorded is not None
+        assert "NameOnlyRecordingNomRec" in recorded

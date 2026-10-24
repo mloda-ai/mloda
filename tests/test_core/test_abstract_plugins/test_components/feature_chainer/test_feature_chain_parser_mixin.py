@@ -1041,3 +1041,139 @@ class TestFeatureChainParserMixinExtractOperationAndSourceFeature:
             )
 
         assert "at least 1 in_feature" in str(exc_info.value)
+
+
+NOM_MAPPING: dict[str, PropertySpec] = {
+    "op_nom": PropertySpec(
+        "Operation of the name-only fixtures",
+        allowed_values={"sum": "Sum", "avg": "Average"},
+        context=True,
+        strict_validation=True,
+    ),
+    DefaultOptionKeys.in_features: PropertySpec("Source feature", context=True),
+}
+
+
+class ConfigPathGroupNom(FeatureChainParserMixin):
+    """Flag-off twin: claims a config-path feature through its options."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_nom$"
+    PROPERTY_MAPPING = NOM_MAPPING
+
+
+class NameOnlyGroupNom(ConfigPathGroupNom):
+    """Claims only names its pattern owns."""
+
+    NAME_ONLY_MATCH = True
+
+
+class NameOnlySuffixGroupNom(FeatureChainParserMixin):
+    """Name-only group recognized through SUFFIX_PATTERN."""
+
+    NAME_ONLY_MATCH = True
+    SUFFIX_PATTERN = r".*__([\w]+)_nomsuf$"
+    PROPERTY_MAPPING = NOM_MAPPING
+
+
+class NameOnlyOptedOutGroupNom(NameOnlyGroupNom):
+    """Subclass of a name-only group that turns the flag back off."""
+
+    NAME_ONLY_MATCH = False
+
+
+class NameOnlyOverrideGroupNom(NameOnlyGroupNom):
+    """Overrides the matcher but delegates to super."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: Any, options: Options, data_access_collection: Any = None
+    ) -> bool:
+        return super().match_feature_group_criteria(feature_name, options, data_access_collection)
+
+
+class NameOnlyOptionalFirstGroupNom(FeatureChainParserMixin):
+    """Optional-first positional pattern: a name without the optional part is not owned."""
+
+    NAME_ONLY_MATCH = True
+    PREFIX_PATTERN = r".*__(?:(pca|tsne)_)?optfirst_nom$"
+    PROPERTY_MAPPING = {
+        "algo_nom": PropertySpec(
+            "Algorithm", allowed_values=("pca", "tsne"), context=True, strict_validation=True, default="pca"
+        ),
+        DefaultOptionKeys.in_features: PropertySpec("Source feature", context=True),
+    }
+
+
+def _needs_extra_nom(options: Options) -> bool:
+    return options.get("op_req_nom") in {"first", "last"}
+
+
+class NameOnlyRequiredWhenGroupNom(FeatureChainParserMixin):
+    """Name-only group with a required_when key."""
+
+    NAME_ONLY_MATCH = True
+    PREFIX_PATTERN = r".*__([\w]+)_nomreq$"
+    PROPERTY_MAPPING = {
+        "op_req_nom": PropertySpec(
+            "Operation", allowed_values=("sum", "first", "last"), context=True, strict_validation=True
+        ),
+        "extra_nom": PropertySpec("Needed for first/last", context=True, required_when=_needs_extra_nom),
+    }
+
+
+def _nom_config_options(op: str = "sum") -> Options:
+    return Options(context={"op_nom": op, DefaultOptionKeys.in_features: "src_nom"})
+
+
+class TestNameOnlyMatch:
+    """NAME_ONLY_MATCH turns config-path matching off; a name the patterns own is judged as before."""
+
+    def test_flag_defaults_to_false(self) -> None:
+        assert FeatureChainParserMixin.NAME_ONLY_MATCH is False
+
+    @pytest.mark.parametrize(
+        ("group", "name"),
+        [(NameOnlyGroupNom, "src_nom__sum_nom"), (NameOnlySuffixGroupNom, "src_nom__sum_nomsuf")],
+        ids=["prefix", "suffix"],
+    )
+    def test_matches_owned_name(self, group: Any, name: str) -> None:
+        assert group.match_feature_group_criteria(name, Options()) is True
+
+    @pytest.mark.parametrize(
+        ("group", "expected"),
+        [
+            (ConfigPathGroupNom, True),
+            (NameOnlyGroupNom, False),
+            (NameOnlySuffixGroupNom, False),
+            (NameOnlyOptedOutGroupNom, True),
+        ],
+        ids=["flag_off_claims", "name_only_declines", "suffix_name_only_declines", "opted_out_subclass_claims"],
+    )
+    def test_config_path_feature_claimed_only_without_the_flag(self, group: Any, expected: bool) -> None:
+        assert group.match_feature_group_criteria("plain_nom_feature", _nom_config_options()) is expected
+
+    def test_owned_name_with_rejected_value_still_declines(self) -> None:
+        assert NameOnlyGroupNom.match_feature_group_criteria("src_nom__bogus_nom", Options()) is False
+
+    def test_unowned_optional_first_name_is_declined(self) -> None:
+        options = Options(context={"algo_nom": "pca", DefaultOptionKeys.in_features: "src_nom"})
+
+        assert NameOnlyOptionalFirstGroupNom.match_feature_group_criteria("x__optfirst_nom", options) is False
+        assert NameOnlyOptionalFirstGroupNom.match_feature_group_criteria("x__pca_optfirst_nom", Options()) is True
+
+    def test_override_delegating_to_super_keeps_the_gate(self) -> None:
+        assert NameOnlyOverrideGroupNom.match_feature_group_criteria("src_nom__sum_nom", Options()) is True
+        assert (
+            NameOnlyOverrideGroupNom.match_feature_group_criteria("plain_nom_feature", _nom_config_options()) is False
+        )
+
+    def test_required_when_group_declines_config_path_and_matches_name(self) -> None:
+        config = Options(context={"op_req_nom": "sum"})
+        named = Options(context={"extra_nom": "ts"})
+
+        assert NameOnlyRequiredWhenGroupNom.match_feature_group_criteria("plain_nom_feature", config) is False
+        assert NameOnlyRequiredWhenGroupNom.match_feature_group_criteria("src__first_nomreq", named) is True
+
+    def test_match_parser_criteria_honors_the_flag(self) -> None:
+        assert NameOnlyGroupNom.match_parser_criteria("plain_nom_feature", _nom_config_options()) is False
+        assert ConfigPathGroupNom.match_parser_criteria("plain_nom_feature", _nom_config_options()) is True

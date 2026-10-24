@@ -27,10 +27,7 @@ from mloda.core.prepare.resolution_failure_renderer import (
     _supported_feature_names,
 )
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
-from mloda.core.abstract_plugins.components.data_access_collection import (
-    CONNECTION_HANDLE_OPTION,
-    DataAccessCollection,
-)
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.declared_attributes import DeclarationRequirement
 from mloda.core.abstract_plugins.components.input_data.claim_route import (
     DataAccessReader,
@@ -46,7 +43,6 @@ from mloda.core.abstract_plugins.components.input_data.source_feature_group impo
 )
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options, reject_reserved_reader_key
-from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.utils import (
@@ -827,11 +823,6 @@ class IdentifyFeatureGroupClass:
                         break
             feature.options._adopt(winner_options)
             feature.input_data_match = pair
-        elif _identified_feature_groups:
-            # Replaying each survivor's MatchData write raises the conflict when they differ.
-            scratch = feature.options._fork()
-            survivors = {fg: self._matched_options[fg] for fg in _identified_feature_groups}
-            self._replay_match_data_writes(scratch, survivors)
         return _identified_feature_groups
 
     def _hook_name(self, feature_group: type[FeatureGroup], feature: Feature) -> str:
@@ -915,18 +906,6 @@ class IdentifyFeatureGroupClass:
             if is_match_abort(exc):
                 raise
             return False
-
-    @staticmethod
-    def _replay_match_data_writes(target: Options, survivors: dict[type[FeatureGroup], Options]) -> None:
-        for feature_group, source in survivors.items():
-            if issubclass(feature_group, MatchData):
-                key = feature_group.get_class_name()
-                if key in source.group:
-                    feature_group.add_base_input_data_to_options(source.group[key], target)
-                if CONNECTION_HANDLE_OPTION in source.group:
-                    feature_group.add_base_input_data_to_options(
-                        source.group[CONNECTION_HANDLE_OPTION], target, CONNECTION_HANDLE_OPTION
-                    )
 
     def _declaration_requirement(
         self, feature_group: type[FeatureGroup], feature: Feature

@@ -74,7 +74,6 @@ import pytest
 import mloda.steward as mloda_steward
 import mloda.user as mloda_user
 from mloda.core.api.plan_info import _dependency_order, build_plan_steps
-from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.prepare.resolved_join import ResolvedJoinPlan
 from mloda.provider import (
@@ -2122,27 +2121,12 @@ class LeaveDictOverChain(FeatureGroup):
         return {"leave_over_chain_out"}
 
 
-class LeaveMarkerRoot(FeatureGroup, MatchData):
-    """Matches only the SQLite connection that holds the marker table."""
+class LeaveMarkerRoot(FeatureGroup):
+    """SQLite root; the caller pins the connection that holds the marker table."""
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {SqliteFramework}
-
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        if feature_name != "leave_marker_src" or data_access_collection is None:
-            return None
-        for conn in data_access_collection.connections.values():
-            if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'marker'").fetchone():
-                return conn
-        return None
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -2177,11 +2161,13 @@ def marker_plan(marker_first: bool) -> list[PlanStep]:
     plain = sqlite3.connect(":memory:")
     try:
         conns = [marked, plain] if marker_first else [plain, marked]
+        dac = DataAccessCollection(connections=conns)
+        handle = next(h for h, c in dac.connections.items() if c is marked)
         return requested_plan(
-            Feature("leave_marker_src"),
+            Feature("leave_marker_src", options={"connection_handle": handle}),
             {LeaveMarkerRoot},
             [SqliteFramework],
-            DataAccessCollection(connections=conns),
+            dac,
         )
     finally:
         marked.close()

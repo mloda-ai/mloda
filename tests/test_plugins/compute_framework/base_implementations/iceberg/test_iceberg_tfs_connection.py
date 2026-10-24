@@ -25,7 +25,7 @@ except ImportError:
     pc = None
 
 from mloda.user import Feature, DataAccessCollection
-from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet, MatchData
+from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet
 from mloda.user import FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -50,31 +50,8 @@ class ConnectionRecordingIcebergFramework(IcebergFramework):
         return IcebergFramework.pick_connection_from_dac(data_access_collection, options)
 
 
-class TfsDoubledIcebergFG(FeatureGroup, MatchData):
+class TfsDoubledIcebergFG(FeatureGroup):
     """Doubles raw_val via PyArrow compute (Iceberg transformer is a passthrough)."""
-
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        if pyiceberg is None:
-            return None
-        if feature_name not in cls.feature_names_supported():
-            return None
-        if framework_connection_object is not None and (
-            hasattr(framework_connection_object, "load_table") or isinstance(framework_connection_object, Mock)
-        ):
-            return framework_connection_object
-        if data_access_collection is None:
-            return None
-        for conn in data_access_collection.connections.values():
-            if hasattr(conn, "load_table") or isinstance(conn, Mock):
-                return conn
-        return None
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("raw_val")}

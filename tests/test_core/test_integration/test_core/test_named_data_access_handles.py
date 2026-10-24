@@ -20,7 +20,6 @@ from mloda.provider import (
     ComputeFramework,
     FeatureGroup,
     FeatureSet,
-    MatchData,
 )
 from mloda.user import (
     DataAccessCollection,
@@ -88,26 +87,7 @@ class _SqliteSeedCreator(ATestDataCreator):
         return _sqlite_seed_dict
 
 
-class _DoubledValueFG(FeatureGroup, MatchData):
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        if feature_name not in cls.feature_names_supported():
-            return None
-        if isinstance(framework_connection_object, sqlite3.Connection):
-            return framework_connection_object
-        if data_access_collection is None:
-            return None
-        for conn in data_access_collection.connections.values():
-            if isinstance(conn, sqlite3.Connection):
-                return conn
-        return None
-
+class _DoubledValueFG(FeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"doubled_value"}

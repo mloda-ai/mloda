@@ -4,7 +4,6 @@ from typing import Any
 import pyarrow as pa
 import pytest
 
-from mloda.provider import MatchData
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
@@ -52,33 +51,7 @@ class SqliteTestDataCreator(ATestDataCreator):
         return sqlite_test_dict
 
 
-class ATestSqliteFeatureGroup(FeatureGroup, MatchData):
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        if not SqliteFramework.is_available():
-            return None
-
-        if feature_name not in cls.feature_names_supported():
-            return None
-
-        if isinstance(framework_connection_object, sqlite3.Connection):
-            return framework_connection_object
-
-        if data_access_collection is None:
-            return None
-
-        if data_access_collection.connections:
-            for conn in data_access_collection.connections.values():
-                if isinstance(conn, sqlite3.Connection):
-                    return conn
-        return None
-
+class ATestSqliteFeatureGroup(FeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {SqliteFramework}

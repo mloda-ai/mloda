@@ -2017,7 +2017,7 @@ class TestInheritFromAtomicOnConflict:
 
 class TestOptionsNonForwardedGroupKeys:
     """Options.non_forwarded_group_keys: a per-instance opt-out that keeps a single group key off
-    inherit_from forwarding, closing the MatchData live-connection leak into upstream input features."""
+    inherit_from forwarding, closing the live-connection leak into upstream input features."""
 
     def test_fresh_options_has_empty_non_forwarded_group_keys(self) -> None:
         options = Options(group={"own_key": "own_value"})
@@ -2050,9 +2050,9 @@ class TestOptionsNonForwardedGroupKeys:
     def test_add_to_group_forward_false_marks_key(self) -> None:
         options = Options()
 
-        options.add_to_group("MatchDataFG", "connection_handle", forward=False)
+        options.add_to_group("ConnectionFG", "connection_handle", forward=False)
 
-        assert options.non_forwarded_group_keys == frozenset({"MatchDataFG"})
+        assert options.non_forwarded_group_keys == frozenset({"ConnectionFG"})
 
     def test_add_to_group_forward_false_still_sets_value(self) -> None:
         options = Options()

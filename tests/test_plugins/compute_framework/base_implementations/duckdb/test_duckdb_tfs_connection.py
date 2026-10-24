@@ -19,7 +19,7 @@ except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
 from mloda.user import Feature, DataAccessCollection, ParallelizationMode, PluginCollector, mloda
-from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet, MatchData, BaseInputData
+from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet, BaseInputData
 from mloda.user import FeatureName, Options
 from mloda.core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
@@ -33,29 +33,8 @@ from tests.test_plugins.compute_framework.base_implementations.tfs_connection_e2
 )
 
 
-class TfsDoubledDuckDBFG(FeatureGroup, MatchData):
+class TfsDoubledDuckDBFG(FeatureGroup):
     """Doubles raw_val using a DuckDB SQL projection that REQUIRES the connection."""
-
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        if duckdb is None or not DuckDBFramework.is_available():
-            return None
-        if feature_name not in cls.feature_names_supported():
-            return None
-        if isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
-            return framework_connection_object
-        if data_access_collection is None:
-            return None
-        for conn in data_access_collection.connections.values():
-            if isinstance(conn, duckdb.DuckDBPyConnection):
-                return conn
-        return None
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("raw_val")}

@@ -36,7 +36,7 @@ from mloda.user import (
     FeatureName,
     Options,
 )
-from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet, BaseInputData, DataCreator, MatchData
+from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet, BaseInputData, DataCreator
 from mloda.core.runtime.flight.flight_server import FlightServer
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
@@ -84,7 +84,7 @@ def _clean_flight_server(flight_server: Any) -> Any:
 
 
 class _MixedModeDoubledDuckDBFG(FeatureGroup):
-    """Destination on a SYNC-only framework; not MatchData, so no live connection lands in Options."""
+    """Destination on a SYNC-only framework."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("raw_val")}
@@ -106,57 +106,6 @@ def _extract_mixed_mode_doubled(final: Any) -> list[int]:
     if pa is not None and isinstance(final, pa.Table):
         return list(final.column("mixed_mode_doubled").to_pylist())
     rows = final.project("mixed_mode_doubled").fetchall()
-    return [row[0] for row in rows]
-
-
-class _MixedModeMatchDataDuckDBFG(FeatureGroup, MatchData):
-    """Destination on a SYNC/THREADING-only framework via MatchData: reproduces the leak where the
-    live DuckDB connection MatchData stashes under the class-name key gets forwarded into the
-    worker-eligible PyArrow source feature's pickled Options."""
-
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        if feature_name not in cls.feature_names_supported():
-            return None
-
-        if isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
-            return framework_connection_object
-
-        if data_access_collection is None:
-            return None
-
-        if data_access_collection.connections:
-            for conn in data_access_collection.connections.values():
-                if isinstance(conn, duckdb.DuckDBPyConnection):
-                    return conn
-        return None
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("raw_val")}
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {DuckDBFramework}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return data.project("*, raw_val * 2 AS mixed_mode_matchdata_doubled")
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"mixed_mode_matchdata_doubled"}
-
-
-def _extract_mixed_mode_matchdata_doubled(final: Any) -> list[int]:
-    if pa is not None and isinstance(final, pa.Table):
-        return list(final.column("mixed_mode_matchdata_doubled").to_pylist())
-    rows = final.project("mixed_mode_matchdata_doubled").fetchall()
     return [row[0] for row in rows]
 
 
@@ -338,15 +287,15 @@ class TestMixedModeParentDestinationE2E:
         assert _extract_mixed_mode_doubled(result[0]) == [2, 4, 6]
 
     @pytest.mark.skipif(duckdb is None, reason="DuckDB not installed.")
-    def test_worker_source_feeds_parent_matchdata_duckdb_destination(self, flight_server: Any) -> None:
-        """MatchData destination FG (unlike the sibling above): the class-name key MatchData stashes
-        the live DuckDB connection under must not leak into the worker-eligible PyArrow source
-        feature's pickled Options, else preflight raises ValueError before the run even starts."""
-        plugin_collector = PluginCollector.enabled_feature_groups({TfsRawValPyArrowSource, _MixedModeMatchDataDuckDBFG})
-        dac = DataAccessCollection(connections={duckdb.connect()})
+    def test_pinned_connection_feeds_parent_duckdb_destination_beside_another_connection(
+        self, flight_server: Any
+    ) -> None:
+        plugin_collector = PluginCollector.enabled_feature_groups({TfsRawValPyArrowSource, _MixedModeDoubledDuckDBFG})
+        conn = duckdb.connect()
+        dac = DataAccessCollection(connections={"conn": conn, "other": duckdb.connect()})
 
         result = mloda.run_all(
-            [Feature("mixed_mode_matchdata_doubled")],
+            [Feature("mixed_mode_doubled", connection=conn)],
             compute_frameworks=[PyArrowTable, DuckDBFramework],
             plugin_collector=plugin_collector,
             data_access_collection=dac,
@@ -356,7 +305,7 @@ class TestMixedModeParentDestinationE2E:
 
         assert result is not None
         assert len(result) == 1
-        assert _extract_mixed_mode_matchdata_doubled(result[0]) == [2, 4, 6]
+        assert _extract_mixed_mode_doubled(result[0]) == [2, 4, 6]
 
     @pytest.mark.parametrize(
         "destination_framework,modes",

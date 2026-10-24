@@ -18,7 +18,6 @@ from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 
-from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import _EmptyResultMatchData
 from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import (
     PolicyRunAllTestBase,
     PolicySuccess,
@@ -33,7 +32,7 @@ def _column(data: Any, name: str) -> list[Any]:
     return [row[name] for row in records_from_frame(data)]
 
 
-class SiblingDictRoot(FeatureGroup, _EmptyResultMatchData):
+class SiblingDictRoot(FeatureGroup):
     """Root FeatureGroup producing the shared three-row ``sd_a`` column."""
 
     @classmethod

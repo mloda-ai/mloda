@@ -11,7 +11,6 @@ from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.provider import DataCreator
 from mloda.provider import BaseInputData
-from mloda.provider import MatchData
 from mloda.provider import ComputeFramework
 from mloda.user import mloda
 from mloda.user import ParallelizationMode
@@ -120,43 +119,6 @@ class IcebergTestDataCreator(FeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Return the Iceberg compute framework."""
-        return {IcebergFramework}
-
-
-class ATestIcebergFeatureGroup(FeatureGroup, MatchData):
-    """Base class for Iceberg feature groups."""
-
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        """Check for data access collection if any child classes match the data access."""
-
-        if not IcebergFramework.is_available():
-            return None
-
-        if feature_name not in cls.feature_names_supported():
-            return None
-
-        # For testing, we'll use a mock catalog or table
-        if isinstance(framework_connection_object, (Mock, IcebergTable)):
-            return framework_connection_object
-
-        if data_access_collection is None:
-            return None
-
-        if data_access_collection.connections:
-            for conn in data_access_collection.connections.values():
-                if isinstance(conn, (Mock, IcebergTable)) or hasattr(conn, "load_table"):
-                    return conn
-        return None
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {IcebergFramework}
 
 

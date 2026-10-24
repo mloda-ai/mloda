@@ -18,7 +18,6 @@ hooks-only addition.
 This module is intentionally NOT collected as tests (no ``Test`` prefix).
 """
 
-import sqlite3
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -28,7 +27,6 @@ from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
-from mloda.provider import MatchData
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -84,41 +82,7 @@ def _asof_link() -> Link:
     )
 
 
-class _AsofMatchData(MatchData):
-    """Surfaces a DuckDB or sqlite3 connection when one is provided; inert otherwise.
-
-    Under pandas/polars/python_dict/pyarrow no connection is passed, so this returns
-    None and the framework selection falls back to the requested ``compute_frameworks``.
-    """
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        raise NotImplementedError
-
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        if feature_name not in cls.feature_names_supported():
-            return None
-        if duckdb is not None and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
-            return framework_connection_object
-        if isinstance(framework_connection_object, sqlite3.Connection):
-            return framework_connection_object
-        if data_access_collection is not None and data_access_collection.connections:
-            for conn in data_access_collection.connections.values():
-                if duckdb is not None and isinstance(conn, duckdb.DuckDBPyConnection):
-                    return conn
-                if isinstance(conn, sqlite3.Connection):
-                    return conn
-        return None
-
-
-class AsofLeftFeature(FeatureGroup, _AsofMatchData):
+class AsofLeftFeature(FeatureGroup):
     """Left side of the ASOF join: emits by-key ``k``, time ``t`` and value ``lv``."""
 
     @classmethod
@@ -134,7 +98,7 @@ class AsofLeftFeature(FeatureGroup, _AsofMatchData):
         return {"k", "t", "lv"}
 
 
-class AsofRightFeature(FeatureGroup, _AsofMatchData):
+class AsofRightFeature(FeatureGroup):
     """Right side of the ASOF join: emits by-key ``k``, time ``t`` and value ``rv``."""
 
     @classmethod
@@ -150,7 +114,7 @@ class AsofRightFeature(FeatureGroup, _AsofMatchData):
         return {"k", "t", "rv"}
 
 
-class AsofJoinedFeature(FeatureGroup, _AsofMatchData):
+class AsofJoinedFeature(FeatureGroup):
     """Parent feature group that requires the ASOF merge of the two leaf groups."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:

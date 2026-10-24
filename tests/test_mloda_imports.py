@@ -8,6 +8,7 @@ Structure:
 - `mloda.steward` - Data Steward governance
 """
 
+import importlib.util
 import os
 
 
@@ -135,8 +136,6 @@ def test_import_provider_base_classes() -> None:
         BaseApiData,
         ApiInputDataCollection,
         DataCreator,
-        # Match data
-        MatchData,
         # Artifact
         BaseArtifact,
         # Validators
@@ -186,8 +185,6 @@ def test_import_provider_base_classes() -> None:
     assert BaseApiData is not None
     assert ApiInputDataCollection is not None
     assert DataCreator is not None
-    # Match data
-    assert MatchData is not None
     # Artifact
     assert BaseArtifact is not None
     # Validators
@@ -347,3 +344,12 @@ def test_all_roles_demo() -> None:
     assert FeatureGroup is not None
     assert BaseFeatureGroupVersion is not None
     assert get_feature_group_docs is not None
+
+
+def test_match_data_mixin_is_removed() -> None:
+    import mloda.provider as provider_module
+
+    assert not hasattr(provider_module, "MatchData")
+    package = "mloda.core.abstract_plugins.components.match_data"
+    # A stale untracked __pycache__ can leave the package importable as a namespace; only the submodule counts.
+    assert importlib.util.find_spec(package) is None or importlib.util.find_spec(f"{package}.match_data") is None

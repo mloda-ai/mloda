@@ -234,5 +234,5 @@ Named handles collapse that bug class to one invariant: *if the registry has mor
 ## Related
 
 - [(Feature) data](access-feature-data.md): overview of data access in mloda.
-- [Data Access Patterns](data-access-patterns.md): source FeatureGroups and `MatchData`.
+- [Data Access Patterns](data-access-patterns.md): source FeatureGroups.
 - [Framework Connection Object](framework-connection-object.md): stateful connection lifecycle.

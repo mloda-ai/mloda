@@ -28,7 +28,6 @@ from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base 
     PolicySuccess,
     records_from_frame,
 )
-from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import _EmptyResultMatchData
 from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
     SiblingDictRoot,
     SiblingDictRunAllTestBase,
@@ -117,7 +116,7 @@ class SingleSeriesOnNativeFrame(FeatureGroup):
         return pl.Series(data.collect()["NativeFrameWithColumn"].to_list())
 
 
-class DataFrameRoot(FeatureGroup, _EmptyResultMatchData):
+class DataFrameRoot(FeatureGroup):
     """Root returning an eager ``pl.DataFrame``, which lazy Polars converts through ``transform``."""
 
     @classmethod

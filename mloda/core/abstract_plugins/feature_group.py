@@ -609,9 +609,10 @@ class FeatureGroup(ABC):
     @final
     @classmethod
     def declared_input_features(cls, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        """`input_features` resolved from the class, so an abstract base reports its declared inputs without being subclassed."""
+        """`input_features` resolved from the class, usable on an abstract base without subclassing."""
         if not inspect.isabstract(cls):
             return cls().input_features(options, feature_name)
+        # The __class__ swap needs a matching layout; the shell must not be a FeatureGroup, so discovery skips it.
         shell_bases = tuple(b for b in cls.__mro__ if b is not object and not issubclass(b, FeatureGroup))
         instance = cast(FeatureGroup, object.__new__(type("_InstanceShell", shell_bases, {})))
         instance.__class__ = cls

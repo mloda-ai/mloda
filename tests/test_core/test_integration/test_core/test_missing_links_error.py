@@ -84,8 +84,7 @@ class MultiDependencyFeature(FeatureGroup):
 
 
 class SplitMetricSource(GeneratedFeatureGroup):
-    """Root feature group producing two columns from one GeneratedFeatureGroup; requested with
-    differing Options it plans as two separate option buckets."""
+    """Root group producing two columns; differing Options plan as two option buckets."""
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:

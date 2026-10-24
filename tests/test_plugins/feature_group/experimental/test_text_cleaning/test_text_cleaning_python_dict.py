@@ -299,7 +299,7 @@ class TestTextCleaningPythonDictIntegration:
     """Integration tests for the text cleaning feature group using PythonDict framework."""
 
     def test_text_cleaning_with_data_creator(self) -> None:
-        """Test text cleaning features with mloda using GeneratedFeatureGroup."""
+        """Test text cleaning features with mloda."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(

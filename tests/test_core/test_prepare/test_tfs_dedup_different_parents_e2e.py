@@ -66,8 +66,7 @@ class DedupParentsConsumerFG(FeatureGroup):
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
-        # is_root() is False for both variant requests (input_features declares a parent),
-        # so it is not a generated group; name it here.
+        # Both variants declare a parent, so it is not a root; name the column here.
         return {"dedup_result"}
 
 

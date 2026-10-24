@@ -27,7 +27,7 @@ class TestTimeWindowWithGlobalFilter:
         3. The window calculations near the boundaries of the filter handle edge cases properly
         """
 
-        # Create a feature group that uses GeneratedFeatureGroup to provide test data
+        # Feature group providing the test data
         # with a wider date range than we'll filter to
         class TestTimeDataCreator(GeneratedFeatureGroup):
             @classmethod
@@ -190,7 +190,7 @@ class TestTimeWindowWithGlobalFilter:
             # Override the default time filter feature name
             DEFAULT_TIME_FILTER_FEATURE = custom_time_filter
 
-        # Create a feature group that uses GeneratedFeatureGroup to provide test data
+        # Feature group providing the test data
         # with the custom time filter feature name
         class TestCustomTimeDataCreator(GeneratedFeatureGroup):
             @classmethod

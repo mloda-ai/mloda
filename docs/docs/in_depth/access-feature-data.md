@@ -232,7 +232,7 @@ Further, we do not want to always load data from outside, be it before or during
 
 #### GeneratedFeatureGroup
 
-Subclass `GeneratedFeatureGroup`, declare the names it serves in `feature_names_supported()` (the class name always matches) and return the data from `calculate_feature`; the result becomes its own frame. It creates data independent of any other dependency and does not need a **DataAccessCollection** or **Feature Scope Data Access**.
+Subclass `GeneratedFeatureGroup` and return the data from `calculate_feature`; a dict result becomes its own frame. The class name always matches; add more names via `feature_names_supported()`. It needs no **DataAccessCollection** or **Feature Scope Data Access**.
 
 Usage:
 
@@ -250,11 +250,6 @@ from mloda.user.pandas import PandasDataFrame
 
 # Create a Creator FeatureGroup class, which delivers the data needed
 class AFeatureInputCreator(GeneratedFeatureGroup):
-
-    # Declare the feature names this group generates
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"AFeatureInputCreator"}
 
     # Define the data this feature creates
     @classmethod

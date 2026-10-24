@@ -70,8 +70,7 @@ class HopIdB(FeatureGroup):
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
-        # is_root() is False for the options={"hop_id_variant": "other"} request (input_features
-        # declares a parent for it), so it is not a generated group; plain names serve both requests.
+        # The "other" variant declares a parent, so it is not a root; name both columns here.
         return {"hop_id_bjid", "hop_id_b_val"}
 
 

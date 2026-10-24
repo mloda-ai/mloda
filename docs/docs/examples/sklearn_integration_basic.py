@@ -145,7 +145,7 @@ def _(data_dict, pd):
     # In this example, the data framework is clearly pandas.
     # The processes are typically meta information like names, but lifecycle definition, or dependencies or relations to other data.
     class SklearnDataCreator(GeneratedFeatureGroup):
-        # On the basis on the given data_dict earlier defined and its names, we use a GeneratedFeatureGroup to inject the data_dict into the feature group abstraction.
+        # Injects the earlier data_dict into the feature group abstraction.
         # Very simply spoken: we load the data.
 
         @classmethod
@@ -157,7 +157,7 @@ def _(data_dict, pd):
 
         @classmethod
         def feature_names_supported(cls) -> set[str]:
-            return {"age", "weight", "state", "gender"}  # The names this group generates data for.
+            return {"age", "weight", "state", "gender"}
 
     features = [
         "age__mean_imputed__standard_scaled",
@@ -170,7 +170,7 @@ def _(data_dict, pd):
     _result, _result2 = (
         _result[0],
         _result[1],
-    )  # One way to get this data is via a GeneratedFeatureGroup. But there are many more and we should not go to deep into this topic for now.
+    )  # One way to get this data is via a GeneratedFeatureGroup.
     print("✅ Transformed dataset with split fit/transform:")
     print(_result.head(2))
     print(_result2.head(2))

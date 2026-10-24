@@ -39,7 +39,7 @@ UNKNOWN_FEATURE = "diag_e2e_unknown_812"
 
 
 class DiagE2ESource_812(ATestDataCreator):
-    """generated source whose raw columns the shipped aggregations chain off."""
+    """Generated source whose raw columns the shipped aggregations chain off."""
 
     compute_framework = PandasDataFrame
 

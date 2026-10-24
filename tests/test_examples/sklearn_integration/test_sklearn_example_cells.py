@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 
 
-# Create a GeneratedFeatureGroup for our sample data
+# Feature group for our sample data
 class SklearnDataCreator(GeneratedFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -127,7 +127,7 @@ def cell2_traditional_sklearn_pipeline(data: Any) -> None:
 
 
 def cell4_mloda_approach() -> Any:
-    """mloda approach - using GeneratedFeatureGroup pattern."""
+    """mloda approach."""
     from mloda.user import PluginCollector
     from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
     from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding as PandasEncoding

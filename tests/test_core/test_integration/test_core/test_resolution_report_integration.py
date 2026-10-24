@@ -30,7 +30,7 @@ AVG_FEATURE = "avg_res_report_e2e_revenue_811"
 
 
 class ResReportE2ESource_811(ATestDataCreator):
-    """generated source whose raw columns the shipped aggregations chain off."""
+    """Generated source whose raw columns the shipped aggregations chain off."""
 
     compute_framework = PandasDataFrame
 

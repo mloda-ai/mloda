@@ -58,8 +58,7 @@ class SharedSourceConsumerFG(FeatureGroup):
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
-        # is_root() is False (input_features declares parents), so the generated-group root match
-        # path does not apply; name it here.
+        # Not a root (input_features declares parents), so the class-name match does not apply.
         return {"shared_result"}
 
 

@@ -45,7 +45,7 @@ class TestTimeWindowPandasIntegration:
     """Integration tests for the time window feature group using Pandas."""
 
     def test_time_window_with_data_creator(self) -> None:
-        """Test time window features with mloda using GeneratedFeatureGroup."""
+        """Test time window features with mloda."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
@@ -121,7 +121,7 @@ class TestTimeWindowPyArrowIntegration:
     """Integration tests for the time window feature group using PyArrow."""
 
     def test_time_window_with_data_creator(self) -> None:
-        """Test time window features with mloda using GeneratedFeatureGroup."""
+        """Test time window features with mloda."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(

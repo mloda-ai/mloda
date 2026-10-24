@@ -18,7 +18,7 @@ class MlLifeCycleDataCreator(GeneratedFeatureGroup):
         options: Options,
         data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
-        # Only matches when requested with the MlLifeCycleDataCreator option, so other lookups (e.g. the testing framework) do not find it.
+        # Match only when the MlLifeCycleDataCreator option is set, so other lookups do not find it.
         if options.get(MlLifeCycleDataCreator.__name__) is None:
             return False
         return super().match_feature_group_criteria(feature_name, options, data_access_collection)

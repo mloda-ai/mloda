@@ -477,7 +477,7 @@ class TestOutputSchemaPublicExport:
 
 
 class TestHookContextProviderExport:
-    """HookContext is re-exported from mloda.provider as the same object."""
+    """HookContext and instrument are re-exported from mloda.provider as the same objects."""
 
     def test_provider_hook_context_is_the_same_object(self) -> None:
         from mloda.provider import HookContext as ProviderHookContext
@@ -488,6 +488,13 @@ class TestHookContextProviderExport:
         import mloda.provider as provider
 
         assert "HookContext" in provider.__all__
+
+    def test_provider_instrument_is_the_same_object_and_listed(self) -> None:
+        import mloda.provider as provider
+        from mloda.provider import instrument as provider_instrument
+
+        assert provider_instrument is instrument
+        assert "instrument" in provider.__all__
 
 
 class _HugeInt(int):

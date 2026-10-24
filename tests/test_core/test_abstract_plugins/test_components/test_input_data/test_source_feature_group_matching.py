@@ -1316,13 +1316,17 @@ _COLS = {COL: [1]}
 _REQ = {"toyfmt_required": 1}
 
 
+class _AbstractToyRouted(_AbstractToyMid):
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.CHECKED, True),)
+
+
 class TestHasSource:
     @pytest.mark.parametrize(
         ("group", "options", "dac", "scope", "expected"),
         [
             (ToySourceFG, {}, toy_dac(h1=_COLS), None, True),
             (ToySourceFG, {}, None, None, False),
-            (ToySourceFG, {"ToySourceFG": _COLS}, None, None, True),
+            (ToySourceFG, {"query_text": "x"}, toy_dac(h1=_COLS), None, False),
             (_PointedChild, {"_PointedParent": _COLS}, None, None, True),
             (ToySourceFG, {"ToyOtherSourceFG": _COLS}, toy_dac(h1=_COLS), None, False),
             (ToyOpenFG, {}, toy_dac(h1=_COLS), None, False),
@@ -1330,7 +1334,7 @@ class TestHasSource:
             (ToyOpenFG, {}, toy_dac(h1=_COLS), ToyOpenFG, True),
             (ToyRequiredOptionFG, {}, toy_dac(h1=_COLS), None, False),
             (ToyRequiredOptionFG, _REQ, toy_dac(h1=_COLS), None, True),
-            (_AbstractRouted, {"_AbstractRouted": _COLS}, toy_dac(h1=_COLS), None, False),
+            (_AbstractToyRouted, {}, toy_dac(h1=_COLS), None, False),
             (
                 ApiDataFG,
                 {"ApiDataFG": "missing"},
@@ -1342,7 +1346,7 @@ class TestHasSource:
         ids=[
             "searched_with_source",
             "searched_without_collection",
-            "own_class_name_key",
+            "query_text_without_query_route",
             "parent_class_name_key",
             "foreign_pointer",
             "open_unpointed",

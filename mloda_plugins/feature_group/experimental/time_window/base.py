@@ -49,16 +49,15 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
     - `min`: Minimum value in the window
     - `max`: Maximum value in the window
     - `avg`/`mean`: Average (mean) of values in the window
-    - `count`: Count of non-null values in the window
+    - `count`: Count of non-missing values in the window
     - `std`: Standard deviation of values in the window
     - `var`: Variance of values in the window
     - `median`: Median value in the window
     - `first`: First value in the window
     - `last`: Last value in the window
 
-    Reference contract: per window null is skipped; NaN propagates in sum, avg, mean, std, var;
-    count counts non-null values including NaN; min, max and median skip NaN; first and last take the
-    window's first and last value as is. A multi-column feature reduces the per-column results across
+    Reference contract: null and NaN are both missing and skipped; count counts non-missing values;
+    first and last take the window's first and last value as is. A multi-column feature reduces the per-column results across
     columns with the same function, skipping missing values (first and last use mean, count gives the
     number of columns); a row with no value gives NaN.
 
@@ -93,7 +92,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
         "max": "Maximum value in window",
         "avg": "Average (mean) of values in window",
         "mean": "Average (mean) of values in window",
-        "count": "Count of non-null values in window",
+        "count": "Count of non-missing values in window",
         "std": "Standard deviation of values in window",
         "var": "Variance of values in window",
         "median": "Median value in window",

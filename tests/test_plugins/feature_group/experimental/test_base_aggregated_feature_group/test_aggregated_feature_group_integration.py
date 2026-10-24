@@ -3,7 +3,6 @@ Integration tests for the AggregatedFeatureGroup with mloda.
 """
 
 import gc
-import math
 from collections.abc import Iterator
 from typing import Any
 
@@ -62,72 +61,124 @@ class AggregatedNanSourceCreator(ATestDataCreator):
         return cls.get_raw_data()
 
 
-_NAN_SUM = "aggr_nan_x__sum_aggr"
-_NAN_PLUGINS = PluginCollector.enabled_feature_groups({AggregatedNanSourceCreator, AggregatedFeatureGroup})
-_DIVERGENT_PANDAS = "runs a version that differs: skips NaN in sum"
+class AggregatedNanPandasOnlySourceCreator(ATestDataCreator):
+    """Serves a float column holding a NaN on Pandas only, so PyArrow needs a transfer."""
 
+    @classmethod
+    def get_raw_data(cls) -> dict[str, Any]:
+        return {"aggr_nan_p": [1.0, float("nan"), 3.0]}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return cls.get_raw_data()
+
+
+_NAN_SUM = "aggr_nan_x__sum_aggr"
+_PANDAS_ONLY_SUM = "aggr_nan_p__sum_aggr"
+_PLUGINS_OF = {
+    _NAN_SUM: PluginCollector.enabled_feature_groups({AggregatedNanSourceCreator, AggregatedFeatureGroup}),
+    _PANDAS_ONLY_SUM: PluginCollector.enabled_feature_groups(
+        {AggregatedNanPandasOnlySourceCreator, AggregatedFeatureGroup}
+    ),
+}
+_NAN_PLUGINS = _PLUGINS_OF[_NAN_SUM]
+
+# No aggregation implementation diverges: null and NaN are both missing, so every path sums to 4.0.
 _NAN_SUM_CASES = [
     pytest.param(
+        _NAN_SUM,
         [PandasDataFrame, PyArrowTable],
         {},
-        "PyArrowTable",
-        "prefers a matching version",
-        float("nan"),
-        id="matching_implementation_wins_over_the_listed_first_divergent_one",
-    ),
-    pytest.param(
-        [PandasDataFrame],
-        {},
         "PandasDataFrame",
-        f"only allowed framework; {_DIVERGENT_PANDAS}",
-        4.0,
-        id="pandas_alone",
+        "your list order",
+        id="unpinned_pandas_listed_first",
     ),
     pytest.param(
+        _NAN_SUM,
+        [PyArrowTable, PandasDataFrame],
+        {},
+        "PyArrowTable",
+        "your list order",
+        id="unpinned_pyarrow_listed_first",
+    ),
+    pytest.param(_NAN_SUM, [PandasDataFrame], {}, "PandasDataFrame", "only allowed framework", id="pandas_alone"),
+    pytest.param(
+        _NAN_SUM,
         [PandasDataFrame, PyArrowTable],
         {"compute_framework": "PandasDataFrame"},
         "PandasDataFrame",
-        f"pinned; {_DIVERGENT_PANDAS}",
-        4.0,
+        "pinned",
         id="framework_pin",
     ),
     pytest.param(
+        _NAN_SUM,
+        [PandasDataFrame, PyArrowTable],
+        {"compute_framework": "PyArrowTable"},
+        "PyArrowTable",
+        "pinned",
+        id="pyarrow_framework_pin",
+    ),
+    pytest.param(
+        _NAN_SUM,
         [PandasDataFrame, PyArrowTable],
         {"implementation": "PandasAggregation"},
         "PandasDataFrame",
-        f"pinned; {_DIVERGENT_PANDAS}",
-        4.0,
+        "pinned",
         id="implementation_pin",
+    ),
+    pytest.param(
+        _NAN_SUM,
+        [PandasDataFrame, PyArrowTable],
+        {"implementation": "PyArrowAggregation"},
+        "PyArrowTable",
+        "pinned",
+        id="pyarrow_implementation_pin",
+    ),
+    pytest.param(
+        _PANDAS_ONLY_SUM,
+        [PandasDataFrame, PyArrowTable],
+        {},
+        "PandasDataFrame",
+        "your list order",
+        id="pandas_only_source_unpinned",
+    ),
+    pytest.param(
+        _PANDAS_ONLY_SUM,
+        [PandasDataFrame, PyArrowTable],
+        {"implementation": "PyArrowAggregation"},
+        "PyArrowTable",
+        "pinned",
+        id="pandas_only_source_pyarrow_pin",
     ),
 ]
 
 
 class TestAggregationImplementationChoice:
-    """One AggregatedFeatureGroup, one implementation per framework: the matching one is preferred."""
+    """One AggregatedFeatureGroup, one implementation per framework: all agree on a NaN."""
 
-    @pytest.mark.parametrize(("frameworks", "pin", "framework", "reason", "expected"), _NAN_SUM_CASES)
+    @pytest.mark.parametrize(("name", "frameworks", "pin", "framework", "reason"), _NAN_SUM_CASES)
     def test_sum_over_a_nan_runs_the_chosen_implementation_with_its_reason(
         self,
+        name: str,
         frameworks: list[type[ComputeFramework]],
         pin: dict[str, Any],
         framework: str,
         reason: str,
-        expected: float,
     ) -> None:
-        feature = Feature(_NAN_SUM, **pin)
+        feature = Feature(name, **pin)
+        plugins = _PLUGINS_OF[name]
 
-        steps = mloda.explain([feature], compute_frameworks=frameworks, plugin_collector=_NAN_PLUGINS)
+        steps = mloda.explain([feature], compute_frameworks=frameworks, plugin_collector=plugins)
         step = next(s for s in steps if s.step_kind == "compute" and s.feature_group is AggregatedFeatureGroup)
         assert step.compute_framework_name == framework
         assert step.compute_framework_reason == reason
 
-        results = mloda.run_all([feature], compute_frameworks=frameworks, plugin_collector=_NAN_PLUGINS)
-        values = column_values(results, _NAN_SUM)
-        assert len(values) == 3
-        if math.isnan(expected):
-            assert all(math.isnan(value) for value in values)
-        else:
-            assert values == [expected] * 3
+        results = mloda.run_all([feature], compute_frameworks=frameworks, plugin_collector=plugins)
+        assert column_values(results, name) == [4.0] * 3
 
     def test_the_pinned_implementation_is_the_one_the_plan_reports(self) -> None:
         feature = Feature(_NAN_SUM, implementation="PandasAggregation")

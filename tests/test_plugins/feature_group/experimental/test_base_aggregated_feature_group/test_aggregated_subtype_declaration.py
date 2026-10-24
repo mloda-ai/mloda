@@ -119,44 +119,31 @@ class TestAggregatedSubtypeSupportMatrix:
 
 _NAN = float("nan")
 
-# Single column: four non-null values (one NaN) and one null. Multi column: every row keeps two or more
-# non-null cells so std and var are defined; rows mix clean cells, NaN and null.
+# Single column: three non-missing values, one NaN and one null. Multi column: NaN and null are both missing;
+# the clean column "d" keeps every row at two or more non-missing cells so std and var are defined.
 _SINGLE_COLUMN: dict[str, list[float | None]] = {"a": [1.0, 2.0, _NAN, None, 3.0]}
 _MULTI_COLUMNS: dict[str, list[float | None]] = {
     "a": [1.0, _NAN, None, 8.0, None],
     "b": [2.0, 4.0, 6.0, _NAN, _NAN],
     "c": [3.0, 5.0, 7.0, None, 9.0],
+    "d": [4.0, 6.0, 8.0, 10.0, 12.0],
 }
 
 _DIVERGENT_DECLARATIONS: dict[type[Implementation[Any]], dict[str, str]] = {
-    PandasAggregation: {
-        "sum": "skips NaN in sum",
-        "avg": "skips NaN in avg",
-        "mean": "skips NaN in mean",
-        "std": "skips NaN in std",
-        "var": "skips NaN in var",
-        "count": "does not count NaN",
-    },
-    PolarsLazyAggregation: {
-        "median": "sorts NaN as the largest value in median",
-        "max": "propagates NaN in multi-column max",
-    },
+    PandasAggregation: {},
+    PolarsLazyAggregation: {},
     PyArrowAggregation: {},
 }
 
 
 def _reference(aggregation_type: str, cells: list[float | None]) -> float | int:
-    """The reference contract: null is skipped, NaN propagates in sum/avg/mean/std/var, count counts NaN."""
-    present = [cell for cell in cells if cell is not None]
-    clean = [cell for cell in present if not math.isnan(cell)]
-    has_nan = len(clean) != len(present)
+    """The reference contract: null and NaN are both missing and skipped; count counts non-missing values."""
+    clean = [cell for cell in cells if cell is not None and not math.isnan(cell)]
     if aggregation_type == "count":
-        return len(present)
+        return len(clean)
     if aggregation_type in ("min", "max", "median"):
         reducers: dict[str, Callable[[list[float]], float]] = {"min": min, "max": max, "median": statistics.median}
         return reducers[aggregation_type](clean)
-    if has_nan:
-        return _NAN
     if aggregation_type == "sum":
         return sum(clean)
     if aggregation_type in ("avg", "mean"):

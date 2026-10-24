@@ -2,7 +2,6 @@
 Integration tests for time window feature groups.
 """
 
-import math
 from typing import Any
 
 import pandas as pd
@@ -180,37 +179,66 @@ class TimeWindowNanSourceCreator(ATestDataCreator):
         return cls.get_raw_data()
 
 
+class TimeWindowNanPandasOnlySourceCreator(TimeWindowNanSourceCreator):
+    """Serves the same NaN column on Pandas only, so PyArrow needs a transfer."""
+
+    @classmethod
+    def get_raw_data(cls) -> dict[str, Any]:
+        return {
+            "tw_nan_p": [1.0, float("nan"), 3.0, 4.0, 5.0],
+            DefaultOptionKeys.reference_time: pd.date_range(start="2023-01-01", periods=5, freq="D"),
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
 _NAN_WINDOW = "tw_nan_x__sum_3_day_window"
-_NAN_WINDOW_PLUGINS = PluginCollector.enabled_feature_groups({TimeWindowNanSourceCreator, TimeWindowFeatureGroup})
+_PANDAS_ONLY_WINDOW = "tw_nan_p__sum_3_day_window"
+_WINDOW_PLUGINS_OF = {
+    _NAN_WINDOW: PluginCollector.enabled_feature_groups({TimeWindowNanSourceCreator, TimeWindowFeatureGroup}),
+    _PANDAS_ONLY_WINDOW: PluginCollector.enabled_feature_groups(
+        {TimeWindowNanPandasOnlySourceCreator, TimeWindowFeatureGroup}
+    ),
+}
+_PANDAS_DIVERGENT = "pinned; runs a version that differs: gives 0 for a multi-column row with no value"
 
 
 class TestTimeWindowImplementationChoice:
     """With Pandas and PyArrow both enabled the matching implementation wins unless one is pinned."""
 
     @pytest.mark.parametrize(
-        ("pin", "framework", "propagates_nan"),
+        ("name", "pin", "framework", "reason"),
         [
-            pytest.param({}, "PyArrowTable", True, id="matching_implementation_wins"),
-            pytest.param({"implementation": "PandasTimeWindow"}, "PandasDataFrame", False, id="implementation_pin"),
+            pytest.param(
+                _NAN_WINDOW, {}, "PyArrowTable", "prefers a matching version", id="matching_implementation_wins"
+            ),
+            pytest.param(
+                _NAN_WINDOW,
+                {"implementation": "PandasTimeWindow"},
+                "PandasDataFrame",
+                _PANDAS_DIVERGENT,
+                id="implementation_pin",
+            ),
+            pytest.param(
+                _PANDAS_ONLY_WINDOW, {}, "PyArrowTable", "prefers a matching version", id="pandas_only_source_unpinned"
+            ),
         ],
     )
     def test_sum_over_a_nan_runs_the_chosen_implementation(
-        self, pin: dict[str, Any], framework: str, propagates_nan: bool
+        self, name: str, pin: dict[str, Any], framework: str, reason: str
     ) -> None:
-        feature = Feature(_NAN_WINDOW, **pin)
+        feature = Feature(name, **pin)
         frameworks: list[type[ComputeFramework]] = [PandasDataFrame, PyArrowTable]
+        plugins = _WINDOW_PLUGINS_OF[name]
 
-        steps = mloda.explain([feature], compute_frameworks=frameworks, plugin_collector=_NAN_WINDOW_PLUGINS)
+        steps = mloda.explain([feature], compute_frameworks=frameworks, plugin_collector=plugins)
         step = next(s for s in steps if s.step_kind == "compute" and s.feature_group is TimeWindowFeatureGroup)
         assert step.compute_framework_name == framework
-        if propagates_nan:
-            assert step.compute_framework_reason == "prefers a matching version"
-        else:
-            assert step.compute_framework_reason is not None
-            assert step.compute_framework_reason.startswith("pinned; runs a version that differs: skips NaN in sum")
+        assert step.compute_framework_reason is not None
+        assert step.compute_framework_reason.startswith(reason)
 
-        results = mloda.run_all([feature], compute_frameworks=frameworks, plugin_collector=_NAN_WINDOW_PLUGINS)
-        values = column_values(results, _NAN_WINDOW)
-        assert len(values) == 5
-        assert values[0] == 1.0
-        assert math.isnan(values[1]) is propagates_nan
+        results = mloda.run_all([feature], compute_frameworks=frameworks, plugin_collector=plugins)
+        # NaN is missing and skipped: 3-day sums of [1, NaN, 3, 4, 5].
+        assert column_values(results, name) == [1.0, 1.0, 4.0, 7.0, 12.0]

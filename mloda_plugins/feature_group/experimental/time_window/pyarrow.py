@@ -97,6 +97,11 @@ class PyArrowTimeWindow(Implementation[TimeWindowFeatureGroup]):
 
         # Get the sorted source values for each column
         sorted_sources = [pc.take(col, sorted_indices) for col in source_columns]
+        if window_function not in ["first", "last"]:
+            sorted_sources = [
+                pc.if_else(pc.is_nan(col), pa.scalar(None, col.type), col) if pa.types.is_floating(col.type) else col
+                for col in sorted_sources
+            ]
 
         # Time-based (not row-count) window: include rows in (t - span, t].
         # Bound each window by ABSOLUTE integer nanoseconds (not Python datetimes):

@@ -1,4 +1,4 @@
-import math
+from typing import Any
 
 import pyarrow as pa
 import pandas as pd
@@ -348,40 +348,48 @@ class TestPyArrowAggregationDdofAndNullSkip:
             assert abs(result[row_index] - expected[row_index]) < 1e-9
 
     @pytest.mark.parametrize(
-        "agg_type, row0_nan, row0_value, row1, row2",
+        "agg_type, row0, row1, row2",
         [
-            ("sum", True, None, 7.0, 18.0),
-            ("avg", True, None, 3.5, 6.0),
-            ("mean", True, None, 3.5, 6.0),
-            ("count", False, 3, 2, 3),
-            ("std", True, None, 4.5**0.5, 2.0),
-            ("var", True, None, 4.5, 4.0),
-            ("min", False, 1.0, 2.0, 4.0),
-            ("max", False, 3.0, 5.0, 8.0),
-            ("median", False, 2.0, 3.5, 6.0),
+            ("sum", 4.0, 7.0, 18.0),
+            ("avg", 2.0, 3.5, 6.0),
+            ("mean", 2.0, 3.5, 6.0),
+            ("count", 2, 2, 3),
+            ("std", 2.0**0.5, 4.5**0.5, 2.0),
+            ("var", 2.0, 4.5, 4.0),
+            ("min", 1.0, 2.0, 4.0),
+            ("max", 3.0, 5.0, 8.0),
+            ("median", 2.0, 3.5, 6.0),
         ],
     )
-    def test_perform_aggregation_multi_column_nan_vs_null_contract(
+    def test_perform_aggregation_multi_column_nan_and_null_are_both_missing(
         self,
         multi_source_table_with_nan_and_null: pa.Table,
         agg_type: str,
-        row0_nan: bool,
-        row0_value: float | None,
+        row0: float,
         row1: float,
         row2: float,
     ) -> None:
-        """Nulls are skipped; NaN propagates in sum/avg/mean/std/var, counts in count, is skipped by min/max/median."""
+        """NaN and null are both skipped by every aggregation; count counts non-missing values."""
         result = PyArrowAggregation._perform_aggregation(
             multi_source_table_with_nan_and_null, agg_type, ["metrics~0", "metrics~1", "metrics~2"]
         )
 
-        if row0_nan:
-            assert math.isnan(result[0])
-        else:
-            assert not math.isnan(result[0])
-            assert abs(result[0] - row0_value) < 1e-9
+        assert abs(result[0] - row0) < 1e-9
         assert abs(result[1] - row1) < 1e-9
         assert abs(result[2] - row2) < 1e-9
+
+    @pytest.mark.parametrize("agg_type", ["min", "max"])
+    @pytest.mark.parametrize(
+        "values",
+        [["b", "a", "c"], [3, 1, 2]],
+        ids=["string", "int"],
+    )
+    def test_perform_aggregation_min_max_keeps_working_on_non_float_columns(
+        self, agg_type: str, values: list[Any]
+    ) -> None:
+        table = pa.table({"v": values})
+        result = PyArrowAggregation._perform_aggregation(table, agg_type, ["v"])
+        assert result.as_py() == (min(values) if agg_type == "min" else max(values))
 
     def test_perform_aggregation_count_multi_column_excludes_null_without_crashing(
         self, multi_source_table_with_null: pa.Table

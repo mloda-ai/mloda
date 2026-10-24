@@ -34,13 +34,12 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     - `max`: Maximum value
     - `avg`: Average (mean) of values
     - `mean`: Average (mean) of values
-    - `count`: Count of non-null values
+    - `count`: Count of non-missing values
     - `std`: Standard deviation of values
     - `var`: Variance of values
     - `median`: Median value
 
-    Reference contract: null is skipped; NaN propagates in sum, avg, mean, std, var; count counts
-    every non-null value including NaN; min, max and median skip NaN.
+    Reference contract: null and NaN are both missing and skipped; count counts non-missing values.
 
     ## Feature Creation Methods
 
@@ -99,7 +98,7 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
         "max": "Maximum value",
         "avg": "Average (mean) of values",
         "mean": "Average (mean) of values",
-        "count": "Count of non-null values",
+        "count": "Count of non-missing values",
         "std": "Standard deviation of values",
         "var": "Variance of values",
         "median": "Median value",

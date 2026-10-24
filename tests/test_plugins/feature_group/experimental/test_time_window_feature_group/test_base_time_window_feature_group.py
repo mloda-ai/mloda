@@ -435,14 +435,7 @@ _DAY = datetime.timedelta(days=1)
 _START = datetime.datetime(2024, 1, 1)
 
 _DIVERGENT_DECLARATIONS: dict[type[Implementation[Any]], dict[str, str]] = {
-    PandasTimeWindow: {
-        "sum": "skips NaN in sum and gives 0 for a multi-column row with no value",
-        "avg": "skips NaN in avg",
-        "mean": "skips NaN in mean",
-        "std": "skips NaN in std",
-        "var": "skips NaN in var",
-        "count": "does not count NaN",
-    },
+    PandasTimeWindow: {"sum": "gives 0 for a multi-column row with no value"},
     PyArrowTimeWindow: {},
 }
 
@@ -460,12 +453,10 @@ def _is_missing(cell: float | None) -> bool:
 
 
 def _column_window_result(window_function: str, window: list[float | None]) -> float | int | None:
-    """Reference for one column and one window: null skipped, NaN propagates in sum/avg/mean/std/var."""
-    present = [cell for cell in window if cell is not None]
-    clean = [cell for cell in present if not math.isnan(cell)]
-    has_nan = len(clean) != len(present)
+    """Reference for one column and one window: null and NaN are missing and skipped; first/last keep the cell."""
+    clean: list[float] = [cell for cell in window if cell is not None and not math.isnan(cell)]
     if window_function == "count":
-        return len(present)
+        return len(clean)
     if window_function == "first":
         return window[0]
     if window_function == "last":
@@ -475,10 +466,8 @@ def _column_window_result(window_function: str, window: list[float | None]) -> f
             return None
         reducers: dict[str, Callable[[list[float]], float]] = {"min": min, "max": max, "median": statistics.median}
         return reducers[window_function](clean)
-    if not present:
+    if not clean:
         return None
-    if has_nan:
-        return _NAN
     if window_function == "sum":
         return sum(clean)
     if window_function in ("avg", "mean"):

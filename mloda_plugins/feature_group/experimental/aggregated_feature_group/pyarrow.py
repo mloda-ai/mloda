@@ -93,9 +93,9 @@ class PyArrowAggregation(Implementation[AggregatedFeatureGroup]):
             stacked = np.column_stack(arrays)
 
             # Reducers run on the null mask below; degenerate rows are patched so numpy never warns.
-            # sum/avg/mean/std/var/count skip only null cells, so a genuine NaN propagates (count
-            # counts it); the null mask comes from Arrow, not from the NaN-cast values.
+            # Null and NaN are both missing: the mask covers Arrow nulls and float NaN.
             null_mask = np.column_stack([col.is_null().to_numpy(zero_copy_only=False) for col in columns])
+            null_mask = null_mask | np.isnan(stacked)
             valid_counts = np.sum(~null_mask, axis=1)
             zeroed = np.where(null_mask, 0, stacked)
 
@@ -130,6 +130,8 @@ class PyArrowAggregation(Implementation[AggregatedFeatureGroup]):
         else:
             # Single column: vertical aggregation (returns scalar)
             column = data.column(in_features[0])
+            if pa.types.is_floating(column.type):
+                column = pc.if_else(pc.is_nan(column), pa.scalar(None, column.type), column)
 
             if aggregation_type == "sum":
                 return pc.sum(column)

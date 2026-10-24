@@ -247,7 +247,7 @@ An `Implementation[G]` serves both operation groups (`data` is the input frame) 
 - **Framework set**: the frameworks that have an implementation (a framework subclass is served by its parent's implementation), intersected with `compute_framework_rule()`. A group with no implementation has no framework and never matches.
 - **Shared loop**: put the shared per-feature loop on the group as a classmethod that takes the per-framework pieces as keyword-only callables (`AggregatedFeatureGroup.aggregate(data, features, perform=..., add_column=..., columns=...)`). Each implementation's `calculate` hands its own methods over through the `group` it is called with, never through `cls.feature_group`, so a subclass of the group is served with its overrides. An `Implementation` subclass that leaves `calculate` abstract is ignored when implementations are loaded.
 - **Capability**: `supported` (a frozenset of subtypes, `None` means all) and the classmethod `accepts(feature_name, options)` (default `True`) decide whether an implementation can run a feature. A framework whose implementation rejects it is not a candidate for that feature.
-- **Divergence**: `divergent` maps a subtype to a short reason when the implementation's result differs from the group's reference contract (for example `{"sum": "skips NaN in sum"}`). The contract is documented on the group; implementations that follow it declare nothing. Divergence is declared per operation, not detected from the data: a NaN-free column still prefers the matching implementation. Polars `max` is declared divergent because its multi-column form propagates NaN.
+- **Divergence**: `divergent` maps a subtype to a short reason when the implementation's result differs from the group's reference contract (for example `{"sum": "gives 0 for a multi-column row with no value"}`). The contract is documented on the group; implementations that follow it declare nothing. Divergence is declared per operation, not detected from the data: data without the affected case still prefers the matching implementation.
 - **Loading**: an operation group's implementations are found by import, so call `PluginLoader.all()` (or import the implementation modules) before running.
 - **Hooks**: an operation group declares no column-wise hooks; the loop's keyword-only callables are its contract and mypy checks the `aggregate`, `window`, `impute`, `clean` or `measure` call inside each implementation's `calculate`.
 
@@ -257,7 +257,7 @@ When several frameworks can run a step, the choice order is: frameworks the step
 
 - `prefers a matching version`: a divergent implementation was skipped although it would otherwise have won.
 - `reads in place`: a source read from a connection in the collection costs one conversion when served off a framework that accepts that connection, so the work stays in the database ahead of list order.
-- `<reason>; runs a version that differs: skips NaN in sum`: the step runs a divergent implementation (only option, pinned, or no matching alternative).
+- `<reason>; runs a version that differs: gives 0 for a multi-column row with no value`: the step runs a divergent implementation (only option, pinned, or no matching alternative).
 
 ### Pinning an implementation
 
@@ -279,14 +279,14 @@ An unknown name, a name shared by two loaded classes, an implementation that is 
 - An allow or deny list that names an old class must name the group or the implementation instead.
 - Plan locks recorded before the move no longer match.
 - A subclass of an old per-framework class must subclass the group (or the implementation) instead.
-- Time window: Pandas skips NaN in sum, avg, mean, std, var and count, which diverges from the reference. With Pandas and PyArrow both enabled those windows run on PyArrow (NaN propagates, slower); pin `implementation="PandasTimeWindow"` to keep the Pandas result.
+- Aggregations and time windows treat NaN like null on every framework: skipped, and not counted by `count` (first and last keep it). PyArrow and Polars used to propagate NaN.
+- Time window: Pandas gives 0 for a multi-column sum row with no value, so with Pandas and PyArrow both enabled sum windows run on PyArrow; pin `implementation="PandasTimeWindow"` to keep the Pandas result.
 - PythonDict text cleaning turns NaN into an empty string, like Pandas.
 - PyArrow and PythonDict imputation treat NaN as missing (skipped in statistics and filled) and break `mode` ties by the smallest value, like Pandas; string ties change too.
 - Grouped imputation leaves rows with a null or NaN group key out of every group: statistics fill them from the column, `ffill`/`bfill` leave them. PythonDict used to group those keys, and Pandas `ffill`/`bfill` erased their values. PythonDict now also treats NaT, `pd.NA`, numpy and Decimal NaN as missing, in keys and values.
 - PyArrow `std` and `var` windows use the sample statistic like Pandas, so a one-row window is null for a single column and NaN for a multi-column feature.
 - `feature_group="<old per-framework class>"` becomes `implementation="<implementation>"`, or `compute_framework=...`, for every moved family.
 - A steward disables one implementation with `PluginCollector.add_disabled_implementation_classes`.
-- With Pandas and PyArrow both enabled, a sum now runs on PyArrow (it matches the reference contract; Pandas skips NaN) and may add a conversion. Pin `implementation="PandasAggregation"` to keep the old behaviour.
 - A provider customizes an implementation by overriding its methods (for example `_perform_aggregation`, `_perform_window_operation`, `_perform_imputation`, `_apply_operation`, `_calculate_distance`) on an implementation subclass, and the loop by overriding the group's loop (`aggregate`, `window`, `impute`, `clean`, `measure`) on a group subclass.
 
 ## Framework Selection Process

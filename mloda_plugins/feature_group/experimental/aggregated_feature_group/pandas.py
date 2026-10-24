@@ -14,10 +14,6 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 class PandasAggregation(Implementation[AggregatedFeatureGroup]):
     feature_group = AggregatedFeatureGroup
     compute_framework = PandasDataFrame
-    divergent = {
-        **{op: f"skips NaN in {op}" for op in ("sum", "avg", "mean", "std", "var")},
-        "count": "does not count NaN",
-    }
 
     @classmethod
     def calculate(

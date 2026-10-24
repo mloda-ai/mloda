@@ -818,9 +818,15 @@ class Engine:
             feature.options._fork(),
         )
 
-    def _root_may_have_column(self, group: type[FeatureGroup], root: Feature, column: str) -> bool:
+    def _root_column_rank(self, group: type[FeatureGroup], root: Feature, column: str) -> int | None:
+        """0 if the root may confirm the column, 1 if its source cannot list columns, None if excluded."""
         outcome = self._probe_has_column(group, root, column)
-        return outcome is None or (outcome.refused is None and outcome.result is not False)
+        if outcome is None:
+            return 0
+        if outcome.refused is not None or outcome.result is False:
+            return None
+        declared = root.input_data_match is not None and root.input_data_match[0]._declared_name(column)
+        return 1 if outcome.result is None and not declared else 0
 
     def _load_result_index_columns(self) -> None:
         """Inject each kept key column into the root features of the features that keep it."""
@@ -844,15 +850,18 @@ class Engine:
             for column in feature.result_index_columns:
                 if column in visited:
                     continue
-                match = next(
-                    (
-                        (group, root)
-                        for group, root in ordered
-                        if self._root_may_have_column(group, root, column)
-                        and call_match_hook(group, column, root.options._fork(), self.data_access_collection).matched
-                    ),
-                    None,
-                )
+                match = None
+                for group, root in ordered:
+                    rank = self._root_column_rank(group, root, column)
+                    if rank is None:
+                        continue
+                    if not call_match_hook(group, column, root.options._fork(), self.data_access_collection).matched:
+                        continue
+                    if rank == 0:
+                        match = (group, root)
+                        break
+                    if match is None:
+                        match = (group, root)
                 if match is None:
                     raise ValueError(
                         f"Feature '{feature.name}' keeps index column '{column}', but no input feature group "

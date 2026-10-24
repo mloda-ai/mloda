@@ -11,8 +11,9 @@ Simplified mloda:
     )
 """
 
-from typing import Any
+from typing import Any, ClassVar
 
+import pyarrow as pa
 import pytest
 
 from mloda.user import mloda
@@ -29,6 +30,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda.provider import ApiDataFG, ClaimRoute, NamePolicy, SourceFeatureGroup, SourceMatch
 from mloda.user import ParallelizationMode
+from mloda.core.abstract_plugins.feature_group import format_feature_group_class
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG  # noqa: F401
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef, api_data_scope, read_api_data
@@ -722,16 +724,62 @@ class IdxCorrectLinkFG(IdxJoinedBase):
     LINK = _idx_link("idx_a_id", "idx_b_id")
 
 
+class AaIdxUnknownSourceFG(SourceFeatureGroup):
+    """Pointed-only source that cannot list its columns, claims any name, and supplies only idx_u_id and idx_u_val."""
+
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("idxu", NamePolicy.OPEN, False),)
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        return [SourceMatch(source="idxu:unknown", access={})]
+
+    @classmethod
+    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+        return pa.table({"idx_u_id": [10, 20, 30], "idx_u_val": [7, 8, 9]})
+
+
+class IdxUnknownJoinedFG(FeatureGroup):
+    """Joins the unknown source's idx_u_val with api_data set A through idx_u_id = idx_a_val."""
+
+    LINK = Link.inner(
+        JoinSpec(AaIdxUnknownSourceFG, Index(("idx_u_id",))),
+        JoinSpec(ApiDataFG, Index(("idx_a_val",))),
+        right_discriminator=_IDX_A,
+    )
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature("idx_u_val", link=self.LINK, options={"AaIdxUnknownSourceFG": True}),
+            Feature("idx_a_val", options=dict(_IDX_A)),
+        }
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): data["idx_u_val"].astype(str)}
+
+
 class TestApiDataIndexColumnsAcrossSets:
     """Link and keep_index columns must exist in the api_data set that the side or request selects."""
 
     @staticmethod
-    def _call(fn: Any, features: list[Any], joined: type[FeatureGroup], **kwargs: Any) -> Any:
+    def _call(
+        fn: Any,
+        features: list[Any],
+        joined: type[FeatureGroup],
+        extra: set[type[FeatureGroup]] | None = None,
+        **kwargs: Any,
+    ) -> Any:
         return fn(
             features,
             compute_frameworks=[PandasDataFrame],
             api_data=_IDX_API,
-            plugin_collector=PluginCollector.enabled_feature_groups({ApiDataFG, joined}),
+            plugin_collector=PluginCollector.enabled_feature_groups({ApiDataFG, joined, *(extra or ())}),
             **kwargs,
         )
 
@@ -783,3 +831,20 @@ class TestApiDataIndexColumnsAcrossSets:
     def test_keep_index_missing_from_the_requested_api_data_set_raises_at_prepare(self) -> None:
         with pytest.raises(ValueError, match="no input feature group provides it"):
             self._prepare([Feature("idx_a_val", keep_index=True, index=Index(("idx_b_id",)))])
+
+    def _index_owners(self, column: str) -> set[str]:
+        api = self._prepare(
+            [Feature("IdxUnknownJoinedFG", keep_index=True, index=Index((column,)))],
+            IdxUnknownJoinedFG,
+            extra={AaIdxUnknownSourceFG},
+        )
+        collection = api.engine.feature_group_collection
+        return {g.__name__ for g, fs in collection.items() for f in fs if str(f.name) == column}
+
+    def test_confirming_root_beats_earlier_root_that_cannot_list_columns(self) -> None:
+        assert format_feature_group_class(AaIdxUnknownSourceFG) < format_feature_group_class(ApiDataFG)
+        assert self._index_owners("idx_a_id") == {"ApiDataFG"}
+
+    def test_unknown_root_still_used_when_no_root_confirms_the_column(self) -> None:
+        """Passes today: behavior to preserve."""
+        assert self._index_owners("idx_u_id") == {"AaIdxUnknownSourceFG"}

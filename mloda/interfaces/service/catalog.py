@@ -49,14 +49,7 @@ def sanitize_text(text: str | None, limit: int = MAX_DESCRIPTION_LENGTH) -> str:
 
 def plugin_collector_for(settings: Settings, base: PluginCollector | None = None) -> PluginCollector:
     """Copy ``base`` (or allow everything) and disable every FeatureGroup whose class name is denied."""
-    collector = PluginCollector()
-    if base is not None:
-        collector.add_enabled_feature_group_classes(base.enabled_feature_group_classes)
-        collector.add_disabled_feature_group_classes(base.disabled_feature_group_classes)
-        collector.add_disabled_implementation_classes(base.disabled_implementation_classes)
-        collector.allow_redefinition = base.allow_redefinition
-        collector.strict_mode = base.strict_mode
-        collector.registry = base.registry
+    collector = PluginCollector() if base is None else base.copy()
     denied = {fg for fg in get_all_subclasses(FeatureGroup) if fg.__name__ in settings.deny_feature_groups}
     collector.add_disabled_feature_group_classes(denied)
     return collector

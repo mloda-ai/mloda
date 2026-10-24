@@ -31,6 +31,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.implementation import accessible_implementations
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.steward import get_feature_group_docs
 from mloda.user import PluginCollector, mloda
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise, identify_winner
@@ -434,6 +435,33 @@ class TestOperationGroupImplementationCapability:
             return
         with pytest.raises(ValueError):
             run()
+
+    def test_group_level_supported_narrows_the_matrix_and_the_check(self) -> None:
+        toy = _toy_operation()
+
+        matrix = toy.OpToyNarrowFG.subtype_support_matrix()
+        assert matrix["PandasDataFrame"] == frozenset({"sum"})
+        assert matrix["PyArrowTable"] == frozenset({"sum"})
+        median = Options({toy.OPTOY_KEY: "median"})
+        assert toy.OpToyNarrowFG.supports_compute_framework(toy.OPTOY_FEATURE, median, toy.PandasDataFrame) is False
+
+    @pytest.mark.parametrize(
+        ("group_name", "message"),
+        [("OpToyHookFG", "supports_compute_framework"), ("OpToyUnservedFG", "PythonDictFramework")],
+    )
+    def test_matrix_raises_for_hook_override_or_unserved_framework(self, group_name: str, message: str) -> None:
+        group = getattr(_toy_operation(), group_name)
+
+        with pytest.raises(ValueError, match=message):
+            group.subtype_support_matrix()
+
+    def test_hook_override_group_surfaces_subtype_error_in_docs(self) -> None:
+        toy = _toy_operation()
+
+        docs = get_feature_group_docs(plugin_collector=PluginCollector.enabled_feature_groups(toy.OpToyHookFG))
+
+        assert len(docs) == 1
+        assert docs[0].subtype_error is not None
 
     def test_subtype_support_matrix_reads_the_implementations(self, make_implementation: Any) -> None:
         toy = _toy_operation()

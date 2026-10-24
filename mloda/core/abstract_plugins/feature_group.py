@@ -349,20 +349,16 @@ class FeatureGroup(ABC):
     @classmethod
     def subtype_support_matrix(cls) -> dict[str, frozenset[str]]:
         """Supported subtypes per declared compute framework; empty for abstract classes and
-        families without a subtype dimension. For an operation group it is read from the implementations'
-        ``supported`` alone; ``accepts`` and the group's ``SUBTYPES.supported`` are not reflected.
-        Otherwise raises ValueError when the class hand-overrides ``supports_compute_framework``, which
-        makes the declared matrix unverifiable."""
+        families without a subtype dimension. For an operation group it is the implementations' ``supported``
+        intersected with the group's ``SUBTYPES.supported``; only ``accepts`` is not reflected.
+        Raises ValueError when the class hand-overrides ``supports_compute_framework`` or a ``supported`` key
+        names no declared compute framework (for an operation group, the frameworks its implementations serve)."""
         if inspect.isabstract(cls):
             return {}
 
         universe = cls.subtype_universe()
         if not universe:
             return {}
-
-        implemented = cls._implemented_subtype_matrix()
-        if implemented is not None:
-            return implemented
 
         if cls._overrides("supports_compute_framework"):
             raise ValueError(
@@ -379,6 +375,10 @@ class FeatureGroup(ABC):
                     f"{cls.get_class_name()} declares supported subtypes for {unmatched}, "
                     f"which name no declared compute framework of the class."
                 )
+
+        implemented = cls._implemented_subtype_matrix()
+        if implemented is not None:
+            return implemented
 
         return {
             compute_framework.get_class_name(): cls.supported_subtypes(compute_framework)

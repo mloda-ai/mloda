@@ -130,13 +130,14 @@ subtypes and features without one stay open.
 (supported subtypes per framework from `compute_framework_definition()`;
 empty for abstract bases; for an operation group read from its
 implementations) and `get_feature_group_docs()` (`subtype_key`, `subtypes`,
-`parametric_subtypes`, `subtype_support`, `subtype_error`). For an ordinary
-group, a hand-overridden `supports_compute_framework` yields no declared
-matrix; the misfit surfaces as `subtype_error`. An operation group's matrix is
-read from its implementations' `supported` alone, so `accepts` and the group's
-`SUBTYPES.supported` narrow features at match time without showing there and
-raise no `subtype_error`; `resolve_feature(name, options=...)` gives the exact
-answer.
+`parametric_subtypes`, `subtype_support`, `subtype_error`). A
+hand-overridden `supports_compute_framework` yields no declared matrix; the
+misfit surfaces as `subtype_error`. An operation group's matrix is its
+implementations' `supported` intersected with the group's `SUBTYPES.supported`;
+a hand-overridden `supports_compute_framework` or a `supported` key naming no
+served framework surfaces as `subtype_error` like an ordinary group. Only
+`accepts` narrows features at match time without showing there;
+`resolve_feature(name, options=...)` gives the exact answer.
 
 **The data user** sees the outcome on `resolve_feature(name, options=...)`:
 `subtype` (e.g. `ntile_2`) and `subtype_family` (`ntile`, parametric
@@ -251,7 +252,7 @@ An `Implementation[G]` serves both operation groups (`data` is the input frame) 
 
 - **Framework set**: the frameworks that have an implementation (a framework subclass is served by its parent's implementation), intersected with `compute_framework_rule()`. A group with no implementation has no framework and never matches.
 - **Shared loop**: put the shared per-feature loop on the group as a classmethod that takes the per-framework pieces as keyword-only callables (`AggregatedFeatureGroup.aggregate(data, features, perform=..., add_column=..., columns=...)`). Each implementation's `calculate` hands its own methods over through the `group` it is called with, never through `cls.feature_group`, so a subclass of the group is served with its overrides. An `Implementation` subclass that leaves `calculate` abstract is ignored when implementations are loaded.
-- **Capability**: `supported` (a frozenset of subtypes, `None` means all) and the classmethod `accepts(feature_name, options)` (default `True`) decide whether an implementation can run a feature. A framework whose implementation rejects it is not a candidate for that feature. `subtype_support_matrix()` reads only the implementations' `supported`, so a restriction made in `accepts` (e.g. on a second option) does not show there; `resolve_feature(name, options=...)` gives the exact answer.
+- **Capability**: `supported` (a frozenset of subtypes, `None` means all) and the classmethod `accepts(feature_name, options)` (default `True`) decide whether an implementation can run a feature. A framework whose implementation rejects it is not a candidate for that feature. `subtype_support_matrix()` reflects the implementations' `supported` and the group's `SUBTYPES.supported`, but not `accepts`, so a restriction made in `accepts` (e.g. on a second option) does not show there; `resolve_feature(name, options=...)` gives the exact answer.
 - **Divergence**: `divergent` maps a subtype to a short reason when the implementation's result differs from the group's reference contract (for example `{"sum": "gives 0 for a multi-column row with no value"}`). The contract is documented on the group; implementations that follow it declare nothing. Divergence is declared per operation, not detected from the data: data without the affected case still prefers the matching implementation.
 - **Loading**: an operation group's implementations are found by import, so call `PluginLoader.all()` (or import the implementation modules) before running.
 - **Hooks**: an operation group declares no column-wise hooks; the loop's keyword-only callables are its contract and mypy checks the `aggregate`, `window`, `impute`, `clean`, `measure`, `scale`, `encode`, `run_pipeline`, `cluster`, `reduce`, `centrality` or `forecast` call inside each implementation's `calculate`.

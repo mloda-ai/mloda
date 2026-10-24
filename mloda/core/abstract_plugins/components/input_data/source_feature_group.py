@@ -21,12 +21,14 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
     aborts_are_contained,
     computed_elsewhere,
     current_feature_group_scope,
+    feature_group_scope,
     note_open_claim,
 )
 from mloda.core.abstract_plugins.components.input_data.reader_probe import SourceProbeOutcome, probe_source_group
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
     MATCH_REJECTION_REASONS,
+    collect_match_rejections,
     drop_match_rejections_since,
     match_rejection_owners,
     record_match_rejection,
@@ -432,6 +434,41 @@ class SourceFeatureGroup(FeatureGroup):
         if outcome.refused is not None:
             cls._decline_refused_probe(outcome, pointed, known_owners)
         return outcome
+
+    @classmethod
+    def has_source(
+        cls,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+        feature_name: FeatureName | str = "",
+    ) -> bool:
+        """Whether a claim route that matching would select finds a source; no name check, mutation or recorded rejection.
+        Runs inside the run's INPUT_DATA_MATCH gate when one is in scope, a refusal returns False."""
+        if inspect.isabstract(cls):
+            return False
+        name = str(feature_name)
+        with collect_match_rejections(), feature_group_scope(current_feature_group_scope(), contain_aborts=True):
+            pointed = cls.is_pointed(name, options, data_access_collection)
+            if not pointed and cls.foreign_pointer(options) is not None:
+                return False
+            if QUERY_OPTION in options and not cls.serves_query_text():
+                return False
+            routes = [
+                route
+                for route in cls.CLAIM_ROUTES
+                if all(key in options for key in route.required_options)
+                and (route.searched or pointed or bool(route.required_options))
+            ]
+            if not routes:
+                return False
+            outcome = probe_source_group(
+                cls,
+                lambda: any(cls.find_sources(route, name, options, data_access_collection) for route in routes),
+                data_access_collection,
+                cls.get_column_base_feature(name),
+                options,
+            )
+        return outcome.refused is None and bool(outcome.result)
 
     @classmethod
     def _matches_by_default_rules(

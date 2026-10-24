@@ -4,6 +4,7 @@ import gc
 import logging
 from abc import abstractmethod
 from collections.abc import Collection
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -17,10 +18,11 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import featur
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import (
     SourcePointerError,
 )
-from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection, collect_match_rejections
+from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.provider import ClaimRoute, SourceFeatureGroup, NamePolicy, ReadFileFG, SourceMatch
+from mloda.provider import ApiDataFG, ClaimRoute, SourceFeatureGroup, NamePolicy, ReadFileFG, SourceMatch
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -1308,3 +1310,69 @@ class TestUnreachablePointerRaises:
 
         assert key in str(exc_info.value)
         assert f"did you mean {group}" in str(exc_info.value)
+
+
+_COLS = {COL: [1]}
+_REQ = {"toyfmt_required": 1}
+
+
+class TestHasSource:
+    @pytest.mark.parametrize(
+        ("group", "options", "dac", "scope", "expected"),
+        [
+            (ToySourceFG, {}, toy_dac(h1=_COLS), None, True),
+            (ToySourceFG, {}, None, None, False),
+            (ToySourceFG, {"ToySourceFG": _COLS}, None, None, True),
+            (_PointedChild, {"_PointedParent": _COLS}, None, None, True),
+            (ToySourceFG, {"ToyOtherSourceFG": _COLS}, toy_dac(h1=_COLS), None, False),
+            (ToyOpenFG, {}, toy_dac(h1=_COLS), None, False),
+            (ToyOpenFG, {"ToyOpenFG": _COLS}, None, None, True),
+            (ToyOpenFG, {}, toy_dac(h1=_COLS), ToyOpenFG, True),
+            (ToyRequiredOptionFG, {}, toy_dac(h1=_COLS), None, False),
+            (ToyRequiredOptionFG, _REQ, toy_dac(h1=_COLS), None, True),
+            (_AbstractRouted, {"_AbstractRouted": _COLS}, toy_dac(h1=_COLS), None, False),
+            (
+                ApiDataFG,
+                {"ApiDataFG": "missing"},
+                DataAccessCollection().with_api_data_columns({"k": (COL,)}),
+                None,
+                False,
+            ),
+        ],
+        ids=[
+            "searched_with_source",
+            "searched_without_collection",
+            "own_class_name_key",
+            "parent_class_name_key",
+            "foreign_pointer",
+            "open_unpointed",
+            "open_class_name_key",
+            "open_scope",
+            "required_option_absent",
+            "required_option_present",
+            "abstract",
+            "api_data_unknown_set_key_is_contained",
+        ],
+    )
+    def test_has_source(
+        self,
+        group: type[SourceFeatureGroup],
+        options: dict[str, Any],
+        dac: DataAccessCollection | None,
+        scope: type | None,
+        expected: bool,
+    ) -> None:
+        with collect_match_rejections() as outer:
+            with feature_group_scope(scope) if scope else nullcontext():
+                assert group.has_source(Options(options), dac, COL) is expected
+
+        assert outer == {}
+
+    def test_a_true_probe_leaves_the_options_untouched(self) -> None:
+        options = Options({"toyfmt_required": 1})
+
+        assert ToyRequiredOptionFG.has_source(options, toy_dac(h1=_COLS), COL) is True
+
+        assert RESERVED_READER_OPTION_KEY not in options.group
+        assert RESERVED_READER_OPTION_KEY not in options.context
+        assert options == Options({"toyfmt_required": 1})

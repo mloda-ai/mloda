@@ -103,6 +103,10 @@ ALLOWED_DYNAMIC_READS: dict[tuple[str, str], tuple[str, str]] = {
         "SourceFeatureGroup",
         "key is one of the group's pointer keys, resolved at runtime",
     ),
+    (_SOURCE_BASES + "source_feature_group.py", "has_source"): (
+        "SourceFeatureGroup",
+        "key is one of the group's pointer keys, resolved at runtime",
+    ),
     (_SOURCE_BASES + "source_feature_group.py", "_matches_by_default_rules"): (
         "SourceFeatureGroup",
         "key is one of the group's pointer keys, resolved at runtime",

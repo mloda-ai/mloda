@@ -1917,6 +1917,7 @@ def test_two_unnamed_connections_without_a_handle_drop_duckdb_and_the_reason_nam
     assert "_auto_connection" not in reason
     assert "2" in reason
     assert "connection_handle" in reason
+    assert "DuckDBFramework: " in reason
 
 
 class CkJoinConsumer(_PlanConsumer):

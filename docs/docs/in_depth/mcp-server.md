@@ -91,9 +91,9 @@ the request by JSON pointer, with a suggestion when a close name exists.
 - Sources are named by alias only. Paths, connection details, data-access objects and option values never appear in a
   result, and a request cannot set data-access options.
 - Denied FeatureGroups are disabled before matching, so their code does not run; the agent sees `policy_denied` and
-  the alternatives you configured. Requested names, `index` columns and `in_features` source names are checked before
-  planning. Any planned feature a denied FeatureGroup would serve, such as a chained name over a denied column, is
-  refused after planning.
+  the alternatives you configured. Requested names, `index` columns, `in_features` source names and filter columns are
+  checked before planning. Any planned feature name the deny list matches, such as a chained name over a denied
+  column, is refused after planning.
 - `run` re-plans the request: validation, policy, filters and row limits are checked again, and a plan that resolves
   differently is refused as `plan_stale`.
 - With `max_rows` set, a request is refused as `limit_exceeded` when a configured source has more rows or cannot be

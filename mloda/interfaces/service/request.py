@@ -155,7 +155,7 @@ def _is_type(value: Any, name: str) -> bool:
 
 
 def _conforms(value: Any, schema: Mapping[str, Any]) -> bool:
-    """Evaluate the leaf keywords this module's schemas use: type, enum, minLength, maxLength, minimum, oneOf, items."""
+    """Evaluate the keywords the schemas use: type, enum, min/maxLength, minimum, min/uniqueItems, oneOf, items."""
     types = schema.get("type")
     if types is not None:
         names = [types] if isinstance(types, str) else types

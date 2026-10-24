@@ -225,7 +225,10 @@ class Planner:
             return error_result("validation_failed", "A feature config is invalid.", problems_to_details(parsed))
         request_names = [_item_name(item) for item in request["features"]]
         names = [(f"/features/{index}", name) for index, name in enumerate(request_names)]
-        denied = self._denied([*names, *self._index_entries(request), *in_feature_sources(request)])
+        filter_entries = [
+            (f"/filters/{i}/feature", item["feature"]) for i, item in enumerate(request.get("filters", []))
+        ]
+        denied = self._denied([*names, *self._index_entries(request), *in_feature_sources(request), *filter_entries])
         if denied is not None:
             return denied
         sources = self._sources(parsed.restrict_sources)
@@ -388,7 +391,11 @@ class Planner:
             detail = {"path": "/features", "problem": "unresolved", "message": _UNPLANNABLE_MESSAGE}
             return error_result("validation_failed", _UNPLANNABLE_MESSAGE, [detail])
         known = diagnosis.failed_result.facts.known_names if diagnosis.failed_result is not None else ()
-        candidates = [candidate for candidate in dict.fromkeys([*known, *source_columns(sources)]) if candidate != name]
+        candidates = [
+            candidate
+            for candidate in dict.fromkeys([*known, *source_columns(sources)])
+            if candidate != name and not self._catalog.is_denied(candidate)
+        ]
         close = difflib.get_close_matches(name, candidates, n=1)
         shown = sanitize_text(name, MAX_NAME_LENGTH)
         detail = {

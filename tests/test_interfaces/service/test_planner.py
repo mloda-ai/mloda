@@ -406,6 +406,47 @@ class TestDiagnosisWithoutFeatureName:
 
 
 class TestPolicy:
+    def test_filter_on_denied_column_is_refused_before_planning(self, tmp_path: Path, denied_calls: list[str]) -> None:
+        sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=True))}
+        request = {"features": ["income"], "filters": [{"feature": "mcp4_salary", "op": "eq", "value": 5}]}
+
+        result = _explain(
+            tmp_path,
+            request,
+            sources=sources,
+            classification={"mcp4_salary": "public", "income": "public"},
+            preview_allows=("public",),
+        )
+
+        error = _error(result, "policy_denied")
+        assert _has_detail(error, path="/filters/0/feature")
+        assert denied_calls == []
+
+    @pytest.mark.parametrize(
+        ("feature", "pointer"),
+        [("mcp4_salary~0", "/features/0"), ("mcp4_salary~0" + DOUBLE_SUFFIX, None)],
+    )
+    def test_column_index_suffix_does_not_bypass_policy(
+        self, tmp_path: Path, denied_calls: list[str], feature: str, pointer: str | None
+    ) -> None:
+        sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=True))}
+
+        result = _explain(tmp_path, {"features": [feature]}, sources=sources)
+
+        error = _error(result, "policy_denied")
+        if pointer is not None:
+            assert _has_detail(error, path=pointer)
+        assert denied_calls == []
+
+    def test_unresolved_name_never_suggests_denied_column(self, tmp_path: Path) -> None:
+        sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=True))}
+
+        result = _explain(tmp_path, {"features": ["mcp4_salarx"]}, sources=sources)
+
+        error = _error(result, "validation_failed")
+        assert all(detail.get("suggestion") != "mcp4_salary" for detail in error["details"])
+        assert "mcp4_salary" not in json.dumps(result)
+
     def test_denied_feature_is_policy_denied_without_running_its_code(
         self, tmp_path: Path, denied_calls: list[str]
     ) -> None:

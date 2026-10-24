@@ -259,7 +259,10 @@ AGREEMENT_CORPUS: list[Any] = [
     _filter_request(op="range", min=1, max=10),
     {"features": [{"name": "b", "implementation": "x"}]},
     {"features": [{"name": "b", "implementation": ["x", "y"]}]},
+    {"features": [{"name": "x", "implementation": ["x", "x"]}]},
     # invalid
+    {"features": [{"name": "x", "column_index": True}]},
+    {"features": [{"name": "x", "implementation": 5}]},
     {"features": [{"name": "x", "implementation": []}]},
     {"features": [{"name": "x", "implementation": ["x", ""]}]},
     {"features": [{"name": "x", "implementation": ""}]},
@@ -365,9 +368,10 @@ def _keywords(schema: Any) -> set[str]:
 
 
 def test_feature_config_keywords_are_evaluated_by_validator() -> None:
-    props = request_schema()["$defs"]["featureConfig"]["properties"]
-    used = set().union(*[_keywords(s) for s in props.values()])
-    assert used <= _EVALUATED_KEYWORDS
+    defs = request_schema()["$defs"]
+    for props in (defs["featureConfig"]["properties"], defs["filter"]["properties"]):
+        used = set().union(*[_keywords(s) for s in props.values()])
+        assert used <= _EVALUATED_KEYWORDS
 
 
 def test_agreement_corpus_covers_both_outcomes() -> None:

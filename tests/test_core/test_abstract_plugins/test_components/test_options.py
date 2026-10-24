@@ -224,25 +224,13 @@ class TestOptions:
         assert optimized_options.get("data_source") == "prod"
         assert optimized_options.get("aggregation_type") == "sum"
 
-    def test_iter_yields_group_then_context_keys(self) -> None:
-        options = Options(group={"g": 1}, context={"c": 2})
-        assert list(islice(options, 5)) == ["g", "c"]
-
-    def test_iter_as_set_matches_keys(self) -> None:
-        options = Options(group={"g": 1}, context={"c": 2})
-        assert set(islice(options, 5)) == {"g", "c"}
-
-    def test_iter_in_for_loop(self) -> None:
-        options = Options(group={"g": 1}, context={"c": 2})
-        collected = []
-        for key in options:
-            collected.append(key)
-            if len(collected) >= 5:
-                break
-        assert collected == ["g", "c"]
-
-    def test_iter_empty_options(self) -> None:
-        assert list(islice(Options(), 5)) == []
+    @pytest.mark.parametrize(
+        "options, expected",
+        [(Options(group={"g": 1}, context={"c": 2}), ["g", "c"]), (Options(), [])],
+    )
+    def test_iter_yields_keys(self, options: Options, expected: list[str]) -> None:
+        assert list(islice(options, 5)) == expected
+        assert set(islice(options, 5)) == set(expected)
 
 
 _KEY_ARGUMENTS = ["propagate_context_keys", "cascade_context_keys"]

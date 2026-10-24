@@ -846,5 +846,5 @@ class TestApiDataIndexColumnsAcrossSets:
         assert self._index_owners("idx_a_id") == {"ApiDataFG"}
 
     def test_unknown_root_still_used_when_no_root_confirms_the_column(self) -> None:
-        """Passes today: behavior to preserve."""
+        """A root that cannot list its columns is still used when no other root has the column."""
         assert self._index_owners("idx_u_id") == {"AaIdxUnknownSourceFG"}

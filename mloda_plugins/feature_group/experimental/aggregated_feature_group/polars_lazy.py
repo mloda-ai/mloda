@@ -26,10 +26,6 @@ class PolarsLazyAggregation(Implementation[AggregatedFeatureGroup]):
 
     feature_group = AggregatedFeatureGroup
     compute_framework = PolarsLazyDataFrame
-    divergent = {
-        "median": "sorts NaN as the largest value in median",
-        "max": "propagates NaN in multi-column max",
-    }
 
     @classmethod
     def calculate(
@@ -77,11 +73,17 @@ class PolarsLazyAggregation(Implementation[AggregatedFeatureGroup]):
         if pl is None:
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
 
+        schema = data.collect_schema()
+        floating = {name for name in in_features if schema[name].is_float()}
+
+        def source(name: str) -> Any:
+            return pl.col(name).fill_nan(None) if name in floating else pl.col(name)
+
         # For multi-column features, use horizontal aggregation (across columns)
         # For single-column features, use vertical aggregation (within column)
         if len(in_features) > 1:
             # Multi-column: aggregate across columns horizontally
-            columns = [pl.col(name) for name in in_features]
+            columns = [source(name) for name in in_features]
             if aggregation_type == "sum":
                 return pl.sum_horizontal(*columns)
             elif aggregation_type == "min":
@@ -91,7 +93,7 @@ class PolarsLazyAggregation(Implementation[AggregatedFeatureGroup]):
             elif aggregation_type in ["avg", "mean"]:
                 return pl.mean_horizontal(*columns)
             elif aggregation_type == "count":
-                # Count non-null values across columns
+                # Count non-missing values across columns
                 return pl.sum_horizontal(*[col.is_not_null().cast(pl.Int64) for col in columns])
             elif aggregation_type == "std":
                 # Polars doesn't have horizontal std, compute manually (ddof=1, null-skipping)
@@ -106,7 +108,7 @@ class PolarsLazyAggregation(Implementation[AggregatedFeatureGroup]):
                 raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
         else:
             # Single column: vertical aggregation
-            column = pl.col(in_features[0])
+            column = source(in_features[0])
             if aggregation_type == "sum":
                 return column.sum()
             elif aggregation_type == "min":

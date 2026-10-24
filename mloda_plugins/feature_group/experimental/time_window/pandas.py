@@ -22,11 +22,7 @@ except ImportError:
 class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
     feature_group = TimeWindowFeatureGroup
     compute_framework = PandasDataFrame
-    divergent = {
-        "sum": "skips NaN in sum and gives 0 for a multi-column row with no value",
-        **{op: f"skips NaN in {op}" for op in ("avg", "mean", "std", "var")},
-        "count": "does not count NaN",
-    }
+    divergent = {"sum": "gives 0 for a multi-column row with no value"}
 
     @classmethod
     def calculate(

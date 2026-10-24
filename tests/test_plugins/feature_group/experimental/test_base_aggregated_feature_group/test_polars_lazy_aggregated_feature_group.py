@@ -159,6 +159,17 @@ class TestPolarsLazyAggregation:
         result_df = sample_lazy_dataframe.with_columns(result_expr.alias("test_median")).collect()
         assert result_df["test_median"][0] == 300  # Median of [100, 200, 300, 400, 500]
 
+    @pytest.mark.parametrize("agg_type", ["min", "max"])
+    @pytest.mark.parametrize("values", [["b", "a", "c"], [3, 1, 2]], ids=["string", "int"])
+    def test_perform_aggregation_min_max_keeps_working_on_non_float_columns(
+        self, agg_type: str, values: list[Any]
+    ) -> None:
+        pl = pytest.importorskip("polars")
+        frame = pl.LazyFrame({"v": values})
+        expr = PolarsLazyAggregation._perform_aggregation(frame, agg_type, ["v"])
+        result = frame.select(expr.alias("r")).collect()["r"][0]
+        assert result == (min(values) if agg_type == "min" else max(values))
+
     def test_perform_aggregation_invalid(self, sample_lazy_dataframe: Any) -> None:
         """Test _perform_aggregation method with invalid aggregation type."""
         with pytest.raises(ValueError, match="Unsupported aggregation type: invalid"):

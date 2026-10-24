@@ -22,12 +22,12 @@ from typing import Any, TypeVar
 
 import pytest
 
+from mloda.provider import GeneratedFeatureGroup
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
-from mloda.provider import DataCreator
 from mloda.user import Feature, FeatureName, FilterType, GlobalFilter, Options, PluginCollector, SingleFilter, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -581,10 +581,10 @@ def _make_e2e_probe_fg() -> type[FeatureGroup]:
     """A throwaway root group that resolves E2E_MAIN and answers None when matched for the filter feature."""
     gc.collect()
 
-    class NonBoolMatchE2EFG927(FeatureGroup):
+    class NonBoolMatchE2EFG927(GeneratedFeatureGroup):
         @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator({E2E_MAIN, E2E_TARGET})
+        def feature_names_supported(cls) -> set[str]:
+            return {E2E_MAIN, E2E_TARGET}
 
         @classmethod
         def match_feature_group_criteria(
@@ -825,10 +825,10 @@ def _make_unreadable_report_e2e_fg() -> type[FeatureGroup]:
     """The e2e twin of the probe above: it answers the filter feature with a value it cannot name."""
     gc.collect()
 
-    class UnreadableReportE2EFG991(FeatureGroup):
+    class UnreadableReportE2EFG991(GeneratedFeatureGroup):
         @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator({E2E_MAIN, E2E_TARGET})
+        def feature_names_supported(cls) -> set[str]:
+            return {E2E_MAIN, E2E_TARGET}
 
         @classmethod
         def match_feature_group_criteria(

@@ -2,12 +2,12 @@
 
 Exercises the non-raising preflight through the public API with real plugins and the real
 PandasDataFrame compute framework: shipped ``AggregatedFeatureGroup`` aggregations chain off raw
-columns produced by a ``DataCreator`` source. A fully resolvable request yields a complete diagnosis;
+columns produced by a ``GeneratedFeatureGroup`` source. A fully resolvable request yields a complete diagnosis;
 adding an unknown feature name projects a resolution-failure diagnosis instead of raising, and that
 projection equals the raising path's ``FeatureResolutionError``.
 
 Everything carries an ``_812`` suffix: the source becomes a global FeatureGroup subclass and its
-DataCreator claim is registry-wide, so shared names would leak into another module's candidate universe
+generated-name claim is registry-wide, so shared names would leak into another module's candidate universe
 in the parallel suite.
 """
 
@@ -39,7 +39,7 @@ UNKNOWN_FEATURE = "diag_e2e_unknown_812"
 
 
 class DiagE2ESource_812(ATestDataCreator):
-    """DataCreator source whose raw columns the shipped aggregations chain off."""
+    """generated source whose raw columns the shipped aggregations chain off."""
 
     compute_framework = PandasDataFrame
 
@@ -104,7 +104,7 @@ class TestDiagnoseEndToEnd_812:
             assert matches[0].result.failure_kind is None
             assert AggregatedFeatureGroup in matches[0].result.identified
 
-        # Each derived source column resolves (requested=False) to our DataCreator source.
+        # Each derived source column resolves (requested=False) to our generated source.
         for source_name in (SALES_COL, REVENUE_COL):
             matches = [record for record in diagnosis.records if record.feature_name == source_name]
             assert len(matches) == 1, f"expected exactly one record for {source_name}"

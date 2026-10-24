@@ -9,7 +9,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
-from mloda.provider import DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import FeatureGroup, FeatureSet, GeneratedFeatureGroup
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -17,12 +17,12 @@ CIF_ROOT_FEATURE = "cif_root_feature_name"
 CIF_DEPENDENT_FEATURE = "cif_dependent_feature_name"
 
 
-class _CifRootFeatureGroup(FeatureGroup):
+class _CifRootFeatureGroup(GeneratedFeatureGroup):
     """Root feature group producing cif_root_feature_name."""
 
     @classmethod
-    def input_data(cls) -> DataCreator:
-        return DataCreator({CIF_ROOT_FEATURE})
+    def feature_names_supported(cls) -> set[str]:
+        return {CIF_ROOT_FEATURE}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

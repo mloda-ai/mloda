@@ -9,7 +9,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.filter.single_filter import SingleFilter
-from mloda.provider import DataCreator
+from mloda.provider import GeneratedFeatureGroup
 from mloda.user import FeatureName, FilterType, GlobalFilter, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -20,12 +20,12 @@ GFO_HOST = "gfo_owned_host"
 GFO_FILTER_ONLY = "gfo_owned_filter_only"
 
 
-class GfoOwnedRoot(FeatureGroup):
+class GfoOwnedRoot(GeneratedFeatureGroup):
     """Root serving the requested host column plus a column only a filter ever reaches."""
 
     @classmethod
-    def input_data(cls) -> DataCreator:
-        return DataCreator({GFO_HOST, GFO_FILTER_ONLY})
+    def feature_names_supported(cls) -> set[str]:
+        return {GFO_HOST, GFO_FILTER_ONLY}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

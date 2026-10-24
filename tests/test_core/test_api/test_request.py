@@ -3,7 +3,7 @@ from typing import Any
 from unittest.mock import patch, Mock
 import pytest
 
-from mloda.provider import ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureSet, GeneratedFeatureGroup
 from mloda.user import Features
 from mloda.user import DataAccessCollection, Feature, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
@@ -158,12 +158,12 @@ class TestShutdownRunnerManagerDeleted:
 _CONN_SEEN: list[tuple[Any, str | None]] = []
 
 
-class ConnSugarRoot(FeatureGroup):
+class ConnSugarRoot(GeneratedFeatureGroup):
     """Sqlite root that records each feature's connection object and bound connection_handle."""
 
     @classmethod
-    def input_data(cls) -> DataCreator:
-        return DataCreator({"conn_sugar_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"conn_sugar_col"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -257,12 +257,12 @@ class TestFeatureConnectionIntake:
             extra.close()
 
 
-class ConnValueRoot(FeatureGroup):
+class ConnValueRoot(GeneratedFeatureGroup):
     """Sqlite root whose value is the connection's user_version, so each connection yields its own frame."""
 
     @classmethod
-    def input_data(cls) -> DataCreator:
-        return DataCreator({"conn_value_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"conn_value_col"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

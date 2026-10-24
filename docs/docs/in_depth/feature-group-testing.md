@@ -104,16 +104,16 @@ When testing a FeatureGroup that depends on another FeatureGroup, you can inject
 ```python
 from typing import Any
 
-from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import GeneratedFeatureGroup, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
 
 
-class HandGenerator(FeatureGroup):
+class HandGenerator(GeneratedFeatureGroup):
     """The expensive dependency under test, replaced by mock data below."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"hand"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"hand"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

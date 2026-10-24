@@ -4,11 +4,10 @@ from mloda.user import JoinType
 import pandas as pd
 
 from mloda.user import mloda
-from mloda.provider import FeatureGroup
+from mloda.provider import GeneratedFeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda.provider import BaseInputData
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
@@ -17,7 +16,12 @@ from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dyna
 from mloda_plugins.feature_group.experimental.source_input_feature import (
     SourceInputFeature,
 )
-from mloda.provider import DataCreator
+
+
+class _InputFeatureGeneratedBase(GeneratedFeatureGroup):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"input_feature"}
 
 
 class TestDynamicFeatureGroupFactoryIntegration:
@@ -28,12 +32,13 @@ class TestDynamicFeatureGroupFactoryIntegration:
             "match_feature_group_criteria": lambda cls, feature_name, options, data_access_collection: (
                 feature_name == FeatureName("input_feature")
             ),
-            "input_data": lambda: DataCreator({"input_feature"}),
             "compute_framework_rule": lambda: {PandasDataFrame},
         }
 
         # 2. Create the Dynamic Feature Group
-        DynamicFeatureGroupCreator.create(properties, class_name="DynamicTestFeatureGroupSimpleCalc")
+        DynamicFeatureGroupCreator.create(
+            properties, class_name="DynamicTestFeatureGroupSimpleCalc", feature_group_cls=_InputFeatureGeneratedBase
+        )
 
         # 3. Define the Features
         features: list[Feature | str] = [
@@ -55,20 +60,20 @@ class TestDynamicFeatureGroupFactoryIntegration:
         where an aggregated feature is created from two source features.
         """
 
-        # 1. Create DataCreators for Source Features
-        class SourceFeature1(FeatureGroup):
+        # 1. Create generated Source Features
+        class SourceFeature1(GeneratedFeatureGroup):
             @classmethod
-            def input_data(cls) -> BaseInputData | None:
-                return DataCreator({"source_feature_1"})
+            def feature_names_supported(cls) -> set[str]:
+                return {"source_feature_1"}
 
             @classmethod
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
                 return pd.DataFrame({"idx": [1], "source_feature_1": [2]})
 
-        class SourceFeature2(FeatureGroup):
+        class SourceFeature2(GeneratedFeatureGroup):
             @classmethod
-            def input_data(cls) -> BaseInputData | None:
-                return DataCreator({"source_feature_2"})
+            def feature_names_supported(cls) -> set[str]:
+                return {"source_feature_2"}
 
             @classmethod
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

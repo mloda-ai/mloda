@@ -12,10 +12,10 @@ from typing import Any
 
 import pytest
 
+from mloda.provider import GeneratedFeatureGroup
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import DataCreator
 from mloda.user import Feature, FeatureName, FilterType, GlobalFilter, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -60,10 +60,10 @@ def _make_fg(capture: list[tuple[Feature, ...]], notes: list[tuple[str, ...]]) -
     """A throwaway root group whose per-filter matches depend on the probing feature's mode."""
     gc.collect()
 
-    class FsdDivergenceFG(FeatureGroup):
+    class FsdDivergenceFG(GeneratedFeatureGroup):
         @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator(set(ALL_FSD_NAMES))
+        def feature_names_supported(cls) -> set[str]:
+            return set(ALL_FSD_NAMES)
 
         @classmethod
         def match_feature_group_criteria(
@@ -99,10 +99,10 @@ def _make_rename_fg(capture: list[tuple[Feature, ...]], notes: list[tuple[str, .
     """A throwaway root group renaming its one declared filter to a mode-specific column."""
     gc.collect()
 
-    class FsdRenameFG(FeatureGroup):
+    class FsdRenameFG(GeneratedFeatureGroup):
         @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator({FSD_RN_A, FSD_RN_B, FSD_RN_FILTER, FSD_COL_A, FSD_COL_B})
+        def feature_names_supported(cls) -> set[str]:
+            return {FSD_RN_A, FSD_RN_B, FSD_RN_FILTER, FSD_COL_A, FSD_COL_B}
 
         @classmethod
         def match_feature_group_criteria(
@@ -135,10 +135,10 @@ def _make_freshness_fg(modes: list[tuple[str, ...]]) -> type[FeatureGroup]:
     """A throwaway root group serving one host, recording each run's attached enrichment mode."""
     gc.collect()
 
-    class FsdFreshnessFG(FeatureGroup):
+    class FsdFreshnessFG(GeneratedFeatureGroup):
         @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator({FSD_FRESH_HOST, FSD_FRESH_FILTER})
+        def feature_names_supported(cls) -> set[str]:
+            return {FSD_FRESH_HOST, FSD_FRESH_FILTER}
 
         @classmethod
         def match_feature_group_criteria(

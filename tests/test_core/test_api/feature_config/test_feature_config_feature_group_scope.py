@@ -21,8 +21,7 @@ from mloda.core.api.feature_config.loader import load_features_from_config, proc
 from mloda.core.api.feature_config.models import FeatureConfig, feature_config_schema
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.api.feature_config.parser import parse_json
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import GeneratedFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -578,12 +577,12 @@ def test_feature_config_schema_feature_group_is_non_empty() -> None:
 # ---------------------------------------------------------------------------
 
 
-class ConfigScopeSourceA(FeatureGroup):
+class ConfigScopeSourceA(GeneratedFeatureGroup):
     """Source A: provides the shared "config_shared_token" plus "config_value_a"."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"config_shared_token", "config_value_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"config_shared_token", "config_value_a"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -593,12 +592,12 @@ class ConfigScopeSourceA(FeatureGroup):
         }
 
 
-class ConfigScopeSourceB(FeatureGroup):
+class ConfigScopeSourceB(GeneratedFeatureGroup):
     """Source B: also provides the shared "config_shared_token" plus "config_value_b"."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"config_shared_token", "config_value_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"config_shared_token", "config_value_b"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -662,12 +661,12 @@ def test_end2end_scoped_config_feature_resolves_to_source_b() -> None:
 # ---------------------------------------------------------------------------
 
 
-class ConfigScopeAggregationSource(FeatureGroup):
+class ConfigScopeAggregationSource(GeneratedFeatureGroup):
     """Source data for the aggregated-family scope test."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"config_scope_sales"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"config_scope_sales"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -704,7 +703,7 @@ class ConfigScopeAbstractFamilyBase(FeatureGroup):
         """Abstract hook that makes this base abstract."""
 
 
-class ConfigScopePandasMember(ConfigScopeAbstractFamilyBase):
+class ConfigScopePandasMember(ConfigScopeAbstractFamilyBase, GeneratedFeatureGroup):
     """The member on the enabled Pandas framework."""
 
     @classmethod
@@ -712,8 +711,8 @@ class ConfigScopePandasMember(ConfigScopeAbstractFamilyBase):
         return "pandas"
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"config_scope_token"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"config_scope_token"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -724,7 +723,7 @@ class ConfigScopePandasMember(ConfigScopeAbstractFamilyBase):
         return {"config_scope_token": [1, 2]}
 
 
-class ConfigScopePyArrowMember(ConfigScopeAbstractFamilyBase):
+class ConfigScopePyArrowMember(ConfigScopeAbstractFamilyBase, GeneratedFeatureGroup):
     """The rival sibling on a framework that is not enabled."""
 
     @classmethod
@@ -732,8 +731,8 @@ class ConfigScopePyArrowMember(ConfigScopeAbstractFamilyBase):
         return "pyarrow"
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"config_scope_token"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"config_scope_token"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

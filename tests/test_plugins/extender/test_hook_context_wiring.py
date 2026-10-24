@@ -17,7 +17,7 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup
+from mloda.provider import ComputeFramework, GeneratedFeatureGroup, FeatureGroup
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -802,10 +802,10 @@ def _attempt(name: str, assign: Any) -> None:
         _forge_outcomes[name] = None
 
 
-class _ForgingFeatureGroup(FeatureGroup):
+class _ForgingFeatureGroup(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"sealed_forge_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"sealed_forge_col"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

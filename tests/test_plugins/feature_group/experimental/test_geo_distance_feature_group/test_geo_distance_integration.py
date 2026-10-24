@@ -87,7 +87,7 @@ class TestGeoDistancePandasIntegration:
     """Integration tests for the geo distance feature group using Pandas."""
 
     def test_geo_distance_with_data_creator(self) -> None:
-        """Test geo distance features with mloda using DataCreator."""
+        """Test geo distance features with mloda using GeneratedFeatureGroup."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(

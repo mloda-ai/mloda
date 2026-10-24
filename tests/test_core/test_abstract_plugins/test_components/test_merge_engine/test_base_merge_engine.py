@@ -10,9 +10,8 @@ from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
-from mloda.provider import BaseInputData
 from mloda.provider import BaseMergeEngine
-from mloda.provider import DataCreator
+from mloda.provider import GeneratedFeatureGroup
 from mloda.user import Link, JoinSpec
 from mloda.user import Options
 from mloda.user import PluginCollector
@@ -21,10 +20,10 @@ from mloda.provider import DefaultOptionKeys
 from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
 
 
-class AppendMergeTestFeature(FeatureGroup):
+class AppendMergeTestFeature(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={f"{cls.get_class_name()}{i}" for i in range(0, 99)})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{cls.get_class_name()}{i}" for i in range(0, 99)}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

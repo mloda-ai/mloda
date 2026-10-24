@@ -15,7 +15,7 @@ Contract under test:
     ``engine.resolution_records``; the failing feature's own record is not appended.
 
 All fixture feature-group names carry an ``_811`` suffix and all root feature names a ``res_report_`` prefix:
-test feature groups become global subclasses and a ``DataCreator`` claim is registry-wide, so a shared name
+test feature groups become global subclasses and a generated-name claim is registry-wide, so a shared name
 would leak into another module's candidate universe in the parallel suite.
 """
 
@@ -37,7 +37,7 @@ from mloda.core.prepare.resolution_types import (
     ResolutionRecord,
 )
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
 from mloda.user import (
     DataAccessCollection,
     Feature,
@@ -56,12 +56,12 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 # ---------------------------------------------------------------------------
 
 
-class ResReportSource_811(FeatureGroup):
+class ResReportSource_811(GeneratedFeatureGroup):
     """Pandas root source providing the feature the consumer chains off."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"res_report_sales"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"res_report_sales"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -96,12 +96,12 @@ class ResReportConsumer_811(FeatureGroup):
 RES_REPORT_MATCH_CALLS_811: dict[str, int] = {}
 
 
-class ResReportCountingSource_811(FeatureGroup):
+class ResReportCountingSource_811(GeneratedFeatureGroup):
     """Root source whose match hook counts calls, proving resolution_report() does not re-match."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"res_report_counted_811"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"res_report_counted_811"}
 
     @classmethod
     def match_feature_group_criteria(

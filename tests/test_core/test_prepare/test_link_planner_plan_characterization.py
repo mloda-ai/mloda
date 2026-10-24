@@ -14,9 +14,8 @@ from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.core.prepare.resolve_compute_frameworks import ResolveComputeFrameworks
 from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker
-from mloda.provider import BaseInputData
+from mloda.provider import GeneratedFeatureGroup
 from mloda.provider import ComputeFramework
-from mloda.provider import DataCreator
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -98,12 +97,12 @@ def _paired_payloads(data: Any) -> list[str]:
     return [f"{a}|{b}" for a, b in zip(left, right)]
 
 
-class LinkPlanSharedLeft(FeatureGroup):
+class LinkPlanSharedLeft(GeneratedFeatureGroup):
     """Pinned to the framework the link declares as its left side, with descending keys as an order oracle."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={SHARED_LEFT_PAYLOAD})
+    def feature_names_supported(cls) -> set[str]:
+        return {SHARED_LEFT_PAYLOAD}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -114,12 +113,12 @@ class LinkPlanSharedLeft(FeatureGroup):
         return {PyArrowTable}
 
 
-class LinkPlanSharedRight(FeatureGroup):
+class LinkPlanSharedRight(GeneratedFeatureGroup):
     """Pinned to the right framework, with keys that only partly overlap the left side."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={SHARED_RIGHT_PAYLOAD})
+    def feature_names_supported(cls) -> set[str]:
+        return {SHARED_RIGHT_PAYLOAD}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -164,12 +163,12 @@ class LinkPlanSharedPinnedChild(FeatureGroup):
         return {PandasDataFrame}
 
 
-class LinkPlanSelfSource(FeatureGroup):
+class LinkPlanSelfSource(GeneratedFeatureGroup):
     """Serves both sides of the self join; the requested feature name picks the side."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={SELF_LEFT_PAYLOAD, SELF_RIGHT_PAYLOAD})
+    def feature_names_supported(cls) -> set[str]:
+        return {SELF_LEFT_PAYLOAD, SELF_RIGHT_PAYLOAD}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

@@ -18,8 +18,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.compute_framework import EmptyResultError
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import GeneratedFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -209,36 +208,28 @@ class TestAllowEmptyResultRetired:
         assert not hasattr(FeatureGroup, "allow_empty_result")
 
 
-class _ColumnarZeroRowFeatureGroup(FeatureGroup):
+class _ColumnarZeroRowFeatureGroup(GeneratedFeatureGroup):
     """Root FG returning a schema-bearing zero-row columnar dict, with NO opt-in flag."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"columnar_zero_row_col"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {"columnar_zero_row_col": []}
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"columnar_zero_row_col"}
 
-
-class _ColumnarZeroColumnFeatureGroup(FeatureGroup):
-    """Root FG returning a schema-less ``{}`` (zero columns), with NO opt-in flag."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"columnar_zero_column_col"})
-
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {}
+        return {"columnar_zero_row_col": []}
+
+
+class _ColumnarZeroColumnFeatureGroup(GeneratedFeatureGroup):
+    """Root FG returning a schema-less ``{}`` (zero columns), with NO opt-in flag."""
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"columnar_zero_column_col"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {}
 
 
 _ENABLED_ZERO_ROW = PluginCollector.enabled_feature_groups({_ColumnarZeroRowFeatureGroup})

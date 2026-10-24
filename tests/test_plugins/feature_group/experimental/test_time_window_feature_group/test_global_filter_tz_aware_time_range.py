@@ -26,11 +26,9 @@ import pyarrow as pa
 import pytest
 
 from mloda.provider import (
-    BaseInputData,
     ComputeFramework,
-    DataCreator,
+    GeneratedFeatureGroup,
     DefaultOptionKeys,
-    FeatureGroup,
     FeatureSet,
 )
 from mloda.user import GlobalFilter, PluginCollector, mloda
@@ -61,10 +59,10 @@ EXPECTED_ROW_COUNT: int = len(EXPECTED_TEMPERATURES)
 def test_pyarrow_tz_aware_time_range_filter() -> None:
     """Regression guard for #435 on the PyArrow filter engine."""
 
-    class PyArrowTzAwareSource(FeatureGroup):
+    class PyArrowTzAwareSource(GeneratedFeatureGroup):
         @classmethod
-        def input_data(cls) -> BaseInputData | None:
-            return DataCreator({"temperature", DefaultOptionKeys.reference_time})
+        def feature_names_supported(cls) -> set[str]:
+            return {"temperature", DefaultOptionKeys.reference_time}
 
         @classmethod
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -118,10 +116,10 @@ def test_pyarrow_tz_aware_time_range_filter_with_validity_window() -> None:
     second invocation explicitly.
     """
 
-    class PyArrowTzAwareValiditySource(FeatureGroup):
+    class PyArrowTzAwareValiditySource(GeneratedFeatureGroup):
         @classmethod
-        def input_data(cls) -> BaseInputData | None:
-            return DataCreator({"temperature", DefaultOptionKeys.reference_time, "valid_time"})
+        def feature_names_supported(cls) -> set[str]:
+            return {"temperature", DefaultOptionKeys.reference_time, "valid_time"}
 
         @classmethod
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -173,10 +171,10 @@ def test_pyarrow_tz_aware_time_range_filter_with_validity_window() -> None:
 def test_python_dict_tz_aware_time_range_filter() -> None:
     """Regression guard for #435 on the python_dict filter engine."""
 
-    class PythonDictTzAwareSource(FeatureGroup):
+    class PythonDictTzAwareSource(GeneratedFeatureGroup):
         @classmethod
-        def input_data(cls) -> BaseInputData | None:
-            return DataCreator({"temperature", DefaultOptionKeys.reference_time})
+        def feature_names_supported(cls) -> set[str]:
+            return {"temperature", DefaultOptionKeys.reference_time}
 
         @classmethod
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -218,10 +216,10 @@ def test_python_dict_tz_aware_time_range_filter() -> None:
 def test_polars_tz_aware_time_range_filter() -> None:
     """Regression guard for #435 on the Polars filter engine."""
 
-    class PolarsTzAwareSource(FeatureGroup):
+    class PolarsTzAwareSource(GeneratedFeatureGroup):
         @classmethod
-        def input_data(cls) -> BaseInputData | None:
-            return DataCreator({"temperature", DefaultOptionKeys.reference_time})
+        def feature_names_supported(cls) -> set[str]:
+            return {"temperature", DefaultOptionKeys.reference_time}
 
         @classmethod
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

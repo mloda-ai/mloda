@@ -26,9 +26,8 @@ import pandas as pd
 import pytest
 
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
-from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
-from mloda.provider import DataCreator
+from mloda.provider import GeneratedFeatureGroup
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import FeatureChainParserMixin
 from mloda.provider import FeatureGroup
@@ -46,7 +45,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 SOURCE_NAME = "forwarding_e2e_579_source"
 
 
-class ForwardingE2ESourceGroup(FeatureGroup):
+class ForwardingE2ESourceGroup(GeneratedFeatureGroup):
     """Upstream root group that records the options its resolved features carry.
 
     Returns [10, 20, 30] when the "backend" option arrives with value "premium",
@@ -62,8 +61,8 @@ class ForwardingE2ESourceGroup(FeatureGroup):
         cls.invocation_count = 0
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({SOURCE_NAME})
+    def feature_names_supported(cls) -> set[str]:
+        return {SOURCE_NAME}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -206,7 +205,7 @@ REQ_ROOT_NAME = "forwarding_e2e_579_req_root"
 REQ_ROOT_KEY = "forwarding_e2e_579_req_key"
 
 
-class ForwardingE2EReqRootGroup(FeatureGroup):
+class ForwardingE2EReqRootGroup(GeneratedFeatureGroup):
     """Chain root declaring a required context key with no default; records the value it receives."""
 
     PROPERTY_MAPPING = {REQ_ROOT_KEY: PropertySpec("Required root option", context=True)}
@@ -214,8 +213,8 @@ class ForwardingE2EReqRootGroup(FeatureGroup):
     received: ClassVar[list[Any]] = []
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({REQ_ROOT_NAME})
+    def feature_names_supported(cls) -> set[str]:
+        return {REQ_ROOT_NAME}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

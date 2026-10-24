@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import DataCreator, PropertySpec
+from mloda.provider import GeneratedFeatureGroup, PropertySpec
 from mloda.user import FilterType, GlobalFilter, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -69,12 +69,12 @@ def _accepting_probe() -> type[FeatureGroup]:
 def _engine_probe(served: set[str], mapping: dict[str, PropertySpec] | None = None) -> type[FeatureGroup]:
     """A throwaway root FeatureGroup serving ``served``, echoing one payload row per feature."""
 
-    class FdgEngineProbeFeatureGroup(FeatureGroup):
+    class FdgEngineProbeFeatureGroup(GeneratedFeatureGroup):
         PROPERTY_MAPPING = mapping or {}
 
         @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator(served)
+        def feature_names_supported(cls) -> set[str]:
+            return served
 
         @classmethod
         def final_filters(cls) -> bool:

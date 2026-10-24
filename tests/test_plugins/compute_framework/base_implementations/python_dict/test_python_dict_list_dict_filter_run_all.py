@@ -8,8 +8,7 @@ engine and ``_validate_filter_columns`` always see a columnar ``dict[str, list[A
 
 from typing import Any
 
-from mloda.provider import ComputeFramework, DataCreator, FeatureGroup, FeatureSet
-from mloda.provider import BaseInputData
+from mloda.provider import ComputeFramework, GeneratedFeatureGroup, FeatureSet
 from mloda.user import Feature, Features, GlobalFilter, ParallelizationMode, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
@@ -17,7 +16,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from tests.test_core.test_tooling import MlodaTestRunner
 
 
-class ListDictRootFeatureGroup(FeatureGroup):
+class ListDictRootFeatureGroup(GeneratedFeatureGroup):
     """Root PythonDict FeatureGroup that returns ROW-WISE ``list[dict]`` output.
 
     ``calculate_feature`` returns ``[{"x": .., "y": ..}, ...]``, a still-accepted transform
@@ -25,8 +24,8 @@ class ListDictRootFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"x", "y"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"x", "y"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

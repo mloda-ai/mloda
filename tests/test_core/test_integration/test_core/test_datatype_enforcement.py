@@ -1,9 +1,8 @@
 from typing import Any, Callable
 import pyarrow as pa
 import pytest
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
 from mloda.provider import FeatureGroup
+from mloda.provider import GeneratedFeatureGroup
 from mloda.user import Feature
 from mloda.user import Features
 from mloda.user import FeatureName
@@ -29,7 +28,7 @@ def _arrow_resolver(table: pa.Table) -> Callable[[str], DataType | None]:
     return resolve
 
 
-class TypedFeatureSource(FeatureGroup):
+class TypedFeatureSource(GeneratedFeatureGroup):
     """Feature group that returns typed data for testing."""
 
     @classmethod
@@ -38,12 +37,8 @@ class TypedFeatureSource(FeatureGroup):
         table = pa.table({cls.get_class_name(): pa.array([25, 30, 35], type=pa.int32())})
         return table
 
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
 
-
-class StringDataSource(FeatureGroup):
+class StringDataSource(GeneratedFeatureGroup):
     """Feature group that returns string data for testing type mismatches."""
 
     @classmethod
@@ -51,12 +46,8 @@ class StringDataSource(FeatureGroup):
         """Returns string data."""
         return {cls.get_class_name(): ["a", "b", "c"]}
 
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
 
-
-class Int64DataSource(FeatureGroup):
+class Int64DataSource(GeneratedFeatureGroup):
     """Feature group that returns int64 data for testing widening."""
 
     @classmethod
@@ -66,8 +57,8 @@ class Int64DataSource(FeatureGroup):
         return table
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"Int64DataSource"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"Int64DataSource"}
 
 
 class TestDataTypeEnforcementSeparation:
@@ -466,10 +457,10 @@ class TestStrictTypeEnforcementPropagation:
         """
 
         # FeatureGroup that returns INT64 regardless of declared type
-        class ReturnsInt64(FeatureGroup):
+        class ReturnsInt64(GeneratedFeatureGroup):
             @classmethod
-            def input_data(cls) -> BaseInputData | None:
-                return DataCreator(supports_features={"ReturnsInt64"})
+            def feature_names_supported(cls) -> set[str]:
+                return {"ReturnsInt64"}
 
             @classmethod
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -513,10 +504,10 @@ class TestStrictTypeEnforcementPropagation:
         """
 
         # Dependency: returns INT64 regardless of declared type
-        class BaseFG(FeatureGroup):
+        class BaseFG(GeneratedFeatureGroup):
             @classmethod
-            def input_data(cls) -> BaseInputData | None:
-                return DataCreator(supports_features={"BaseFG"})
+            def feature_names_supported(cls) -> set[str]:
+                return {"BaseFG"}
 
             @classmethod
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -524,10 +515,6 @@ class TestStrictTypeEnforcementPropagation:
 
         # Parent: depends on BaseFG with INT32 type
         class DerivedFG(FeatureGroup):
-            @classmethod
-            def input_data(cls) -> BaseInputData | None:
-                return DataCreator(supports_features={"DerivedFG"})
-
             def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
                 return {Feature.int32_of("BaseFG")}
 

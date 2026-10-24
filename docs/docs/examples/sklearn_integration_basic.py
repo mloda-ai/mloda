@@ -136,7 +136,7 @@ def _(mo):
 def _(data_dict, pd):
     from typing import Optional, Any
     from mloda.user import mloda
-    from mloda.provider import FeatureGroup, BaseInputData, DataCreator, FeatureSet
+    from mloda.provider import GeneratedFeatureGroup, FeatureSet
     from mloda.user import PluginLoader
     from mloda.user.pandas import PandasDataFrame
 
@@ -144,8 +144,8 @@ def _(data_dict, pd):
     # A feature group is an abstraction between a data framework and processes of a data transformation.
     # In this example, the data framework is clearly pandas.
     # The processes are typically meta information like names, but lifecycle definition, or dependencies or relations to other data.
-    class SklearnDataCreator(FeatureGroup):
-        # On the basis on the given data_dict earlier defined and its names, we use a DataCreator to inject the data_dict into the feature group abstraction.
+    class SklearnDataCreator(GeneratedFeatureGroup):
+        # On the basis on the given data_dict earlier defined and its names, we use a GeneratedFeatureGroup to inject the data_dict into the feature group abstraction.
         # Very simply spoken: we load the data.
 
         @classmethod
@@ -156,10 +156,8 @@ def _(data_dict, pd):
             return data  # With this, we have access to the before and after state of a feature.
 
         @classmethod
-        def input_data(cls) -> BaseInputData | None:
-            return DataCreator(
-                {"age", "weight", "state", "gender"}
-            )  # If this feature would not load data, we would use the data given from the parameter "data".
+        def feature_names_supported(cls) -> set[str]:
+            return {"age", "weight", "state", "gender"}  # The names this group generates data for.
 
     features = [
         "age__mean_imputed__standard_scaled",
@@ -172,7 +170,7 @@ def _(data_dict, pd):
     _result, _result2 = (
         _result[0],
         _result[1],
-    )  # One way to get this data is via defined input_data. But there are many more and we should not go to deep into this topic for now.
+    )  # One way to get this data is via a GeneratedFeatureGroup. But there are many more and we should not go to deep into this topic for now.
     print("✅ Transformed dataset with split fit/transform:")
     print(_result.head(2))
     print(_result2.head(2))
@@ -187,9 +185,7 @@ def _(data_dict, pd):
     )  # Scale imputed age  # Scale imputed weight  # One-hot encode state  # One-hot encode gender
     return (
         Any,
-        BaseInputData,
-        DataCreator,
-        FeatureGroup,
+        GeneratedFeatureGroup,
         FeatureSet,
         Optional,
         PandasDataFrame,
@@ -216,9 +212,7 @@ def _(PandasDataFrame, mloda):
 @app.cell
 def _(
     Any,
-    BaseInputData,
-    DataCreator,
-    FeatureGroup,
+    GeneratedFeatureGroup,
     FeatureSet,
     Optional,
     PandasDataFrame,
@@ -230,10 +224,10 @@ def _(
     # We can replace feature groups and dataframe plugins in an easy fashion.
     from mloda.user import PluginCollector
 
-    class SecondSklearnDataCreator(FeatureGroup):
+    class SecondSklearnDataCreator(GeneratedFeatureGroup):
         @classmethod
-        def input_data(cls) -> BaseInputData | None:
-            return DataCreator({"age", "weight", "state", "gender"})
+        def feature_names_supported(cls) -> set[str]:
+            return {"age", "weight", "state", "gender"}
 
         @classmethod
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

@@ -12,7 +12,7 @@ from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.api.request import mlodaAPI
 from mloda.core.runtime.worker_manager import WorkerManager
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureSet, GeneratedFeatureGroup
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -23,10 +23,10 @@ def _run_context_api_bootstrap() -> None:
     """Proves child_bootstrap threads through without error; SYNC mode never invokes it."""
 
 
-class _RunContextApiFeatureGroup(FeatureGroup):
+class _RunContextApiFeatureGroup(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"run_context_api_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"run_context_api_col"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

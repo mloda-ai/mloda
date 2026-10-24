@@ -6,17 +6,17 @@ import json
 from typing import Any
 
 from mloda.core.core.step.join_step import JoinStep
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
 from mloda.user import Feature, FeatureName, Index, JoinSpec, Link, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 IDX = Index(("idx",))
 
 
-class TjRootA(FeatureGroup):
+class TjRootA(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"tj_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"tj_a"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -27,10 +27,10 @@ class TjRootA(FeatureGroup):
         return {PyArrowTable}
 
 
-class TjRootC(FeatureGroup):
+class TjRootC(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"tj_c"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"tj_c"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -41,10 +41,10 @@ class TjRootC(FeatureGroup):
         return {PyArrowTable}
 
 
-class TjRootB(FeatureGroup):
+class TjRootB(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"tj_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"tj_b"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

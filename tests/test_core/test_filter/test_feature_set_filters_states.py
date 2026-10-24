@@ -22,7 +22,7 @@ from typing import Any
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import DataCreator
+from mloda.provider import GeneratedFeatureGroup
 from mloda.user import (
     DataAccessCollection,
     Feature,
@@ -78,10 +78,10 @@ def _filter_on(filter_feature: str) -> GlobalFilter:
 def _make_fgs() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
     """Two throwaway root groups: one serves the filtered column, the other one does not."""
 
-    class FssMatchingFeatureGroup(FeatureGroup):
+    class FssMatchingFeatureGroup(GeneratedFeatureGroup):
         @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator({FSS_MATCHING, FSS_FILTERED})
+        def feature_names_supported(cls) -> set[str]:
+            return {FSS_MATCHING, FSS_FILTERED}
 
         @classmethod
         def final_filters(cls) -> bool:
@@ -93,10 +93,10 @@ def _make_fgs() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
             return _sentinel(features)
 
-    class FssUnrelatedFeatureGroup(FeatureGroup):
+    class FssUnrelatedFeatureGroup(GeneratedFeatureGroup):
         @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator({FSS_UNRELATED})
+        def feature_names_supported(cls) -> set[str]:
+            return {FSS_UNRELATED}
 
         @classmethod
         def final_filters(cls) -> bool:
@@ -112,10 +112,10 @@ def _make_fgs() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
 def _make_split_fg() -> type[FeatureGroup]:
     """One throwaway root group serving both tenants, but serving the filtered column for tenant x only."""
 
-    class FssSplitFeatureGroup(FeatureGroup):
+    class FssSplitFeatureGroup(GeneratedFeatureGroup):
         @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator({FSS_SPLIT_TENANT_X, FSS_SPLIT_TENANT_Y, FSS_SPLIT_FILTERED})
+        def feature_names_supported(cls) -> set[str]:
+            return {FSS_SPLIT_TENANT_X, FSS_SPLIT_TENANT_Y, FSS_SPLIT_FILTERED}
 
         @classmethod
         def match_feature_group_criteria(

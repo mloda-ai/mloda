@@ -17,17 +17,17 @@ from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.core.step.join_step import JoinStep
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, GeneratedFeatureGroup, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Index, JoinSpec, Link, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 _MARKER = "joinhook051"
 
 
-class _JoinHookLeftFeatureGroup(FeatureGroup):
+class _JoinHookLeftFeatureGroup(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_left_id", f"{_MARKER}_left_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{_MARKER}_left_id", f"{_MARKER}_left_value"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -38,10 +38,10 @@ class _JoinHookLeftFeatureGroup(FeatureGroup):
         return {f"{_MARKER}_left_id": [1, 2, 3], f"{_MARKER}_left_value": ["a", "b", "c"]}
 
 
-class _JoinHookRightFeatureGroup(FeatureGroup):
+class _JoinHookRightFeatureGroup(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_right_id", f"{_MARKER}_right_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{_MARKER}_right_id", f"{_MARKER}_right_value"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -340,10 +340,10 @@ class TestDenyWithFallback:
 # === Star topology (hub + two spokes): JOIN fires once per merge ===
 
 
-class _JoinHookStarHubFeatureGroup(FeatureGroup):
+class _JoinHookStarHubFeatureGroup(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_star_row_id", f"{_MARKER}_star_hub_value", f"{_MARKER}_star_hub_other"})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{_MARKER}_star_row_id", f"{_MARKER}_star_hub_value", f"{_MARKER}_star_hub_other"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -358,10 +358,10 @@ class _JoinHookStarHubFeatureGroup(FeatureGroup):
         }
 
 
-class _JoinHookStarSpokeAFeatureGroup(FeatureGroup):
+class _JoinHookStarSpokeAFeatureGroup(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_star_row_id", f"{_MARKER}_star_spoke_a_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{_MARKER}_star_row_id", f"{_MARKER}_star_spoke_a_value"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -372,10 +372,10 @@ class _JoinHookStarSpokeAFeatureGroup(FeatureGroup):
         return {f"{_MARKER}_star_row_id": [1, 2, 3], f"{_MARKER}_star_spoke_a_value": [10, 20, 30]}
 
 
-class _JoinHookStarSpokeBFeatureGroup(FeatureGroup):
+class _JoinHookStarSpokeBFeatureGroup(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_star_row_id", f"{_MARKER}_star_spoke_b_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{_MARKER}_star_row_id", f"{_MARKER}_star_spoke_b_value"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -439,10 +439,10 @@ class TestJoinHookFiresOncePerMergeInStarTopology:
 # === APPEND join type: join_keys is None, since APPEND does not use keys to merge ===
 
 
-class _JoinHookAppendLeftFeatureGroup(FeatureGroup):
+class _JoinHookAppendLeftFeatureGroup(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_append_left_id", f"{_MARKER}_append_left_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{_MARKER}_append_left_id", f"{_MARKER}_append_left_value"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -453,10 +453,10 @@ class _JoinHookAppendLeftFeatureGroup(FeatureGroup):
         return {f"{_MARKER}_append_left_id": [1, 2], f"{_MARKER}_append_left_value": ["a", "b"]}
 
 
-class _JoinHookAppendRightFeatureGroup(FeatureGroup):
+class _JoinHookAppendRightFeatureGroup(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_append_right_id", f"{_MARKER}_append_right_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {f"{_MARKER}_append_right_id", f"{_MARKER}_append_right_value"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -700,13 +700,9 @@ class TestJoinsOfDifferentLinksSharingADestinationAreOrdered:
 _ORDER_KEY = f"{_MARKER}_order_key"
 
 
-class _JoinOrderRootFeatureGroup(FeatureGroup):
+class _JoinOrderRootFeatureGroup(GeneratedFeatureGroup):
     keys: ClassVar[list[int]] = [1, 2]
     value_prefix: ClassVar[str] = ""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

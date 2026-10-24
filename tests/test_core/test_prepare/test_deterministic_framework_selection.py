@@ -16,7 +16,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from mloda.provider import BaseInputData, DataCreator, FeatureSet
+from mloda.provider import FeatureSet, GeneratedFeatureGroup
 from mloda.user import DataAccessCollection, GlobalFilter, Index, Options, PluginCollector, mloda
 
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -329,14 +329,14 @@ def test_rank_key_orders_by_connection_rank_then_name(inputs: list[str], expecte
 # --- planning and run ---------------------------------------------------------------------------
 
 
-class _ConnAwareRoot(FeatureGroup):
+class _ConnAwareRoot(GeneratedFeatureGroup):
     """Data-creator root named by NAME; subclasses differ only by class name and NAME."""
 
     NAME: ClassVar[str] = ""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.NAME} if cls.NAME else set())
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.NAME} if cls.NAME else set()
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -691,7 +691,7 @@ def test_engine_takes_a_framework_preference_keyword() -> None:
 # --- central choice wiring: plans through the public API ------------------------------------------
 
 
-class _PlanRoot(FeatureGroup):
+class _PlanRoot(GeneratedFeatureGroup):
     """Data-creator root; FW_NAME restricts it, None leaves it unrestricted."""
 
     NAMES: ClassVar[tuple[str, ...]] = ()
@@ -699,8 +699,8 @@ class _PlanRoot(FeatureGroup):
     INDEXES: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(set(cls.NAMES))
+    def feature_names_supported(cls) -> set[str]:
+        return set(cls.NAMES)
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

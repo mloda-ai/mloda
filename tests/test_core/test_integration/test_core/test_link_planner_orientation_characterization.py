@@ -4,9 +4,8 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
-from mloda.provider import DataCreator
+from mloda.provider import GeneratedFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -93,12 +92,12 @@ def _packed_rows(results: Any, column: str) -> list[str]:
     return [str(value) for value in _columns(_packed_frame(results, column))[column]]
 
 
-class OrientCharLeftInPandas(FeatureGroup):
+class OrientCharLeftInPandas(GeneratedFeatureGroup):
     """Declared left side of pair A, so a Pandas child joins in the declared orientation."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"oc_a_left_key", "oc_a_left_payload"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"oc_a_left_key", "oc_a_left_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -109,10 +108,10 @@ class OrientCharLeftInPandas(FeatureGroup):
         return {PandasDataFrame}
 
 
-class OrientCharRightInArrow(FeatureGroup):
+class OrientCharRightInArrow(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"oc_a_right_key", "oc_a_right_payload"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"oc_a_right_key", "oc_a_right_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -123,12 +122,12 @@ class OrientCharRightInArrow(FeatureGroup):
         return {PyArrowTable}
 
 
-class OrientCharLeftInArrow(FeatureGroup):
+class OrientCharLeftInArrow(GeneratedFeatureGroup):
     """Declared left side of pair B, so a Pandas child inverts the declared orientation."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"oc_b_left_key", "oc_b_left_payload"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"oc_b_left_key", "oc_b_left_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -139,10 +138,10 @@ class OrientCharLeftInArrow(FeatureGroup):
         return {PyArrowTable}
 
 
-class OrientCharRightInPandas(FeatureGroup):
+class OrientCharRightInPandas(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"oc_b_right_key", "oc_b_right_payload"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"oc_b_right_key", "oc_b_right_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -153,10 +152,10 @@ class OrientCharRightInPandas(FeatureGroup):
         return {PandasDataFrame}
 
 
-class OrientCharThirdInDict(FeatureGroup):
+class OrientCharThirdInDict(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"oc_c_key", "oc_c_payload"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"oc_c_key", "oc_c_payload"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

@@ -19,9 +19,9 @@ except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
 from mloda.user import Feature, DataAccessCollection, ParallelizationMode, PluginCollector, mloda
-from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet, BaseInputData
+from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet
 from mloda.user import FeatureName, Options
-from mloda.core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
+from mloda.provider import GeneratedFeatureGroup
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
@@ -79,12 +79,12 @@ class DcArrowSink(FeatureGroup):
 _OTHER: dict[str, Any] = {}
 
 
-class DcWrongConnRoot(FeatureGroup):
+class DcWrongConnRoot(GeneratedFeatureGroup):
     """DuckDB root returning a relation that lives on a connection other than its handle's."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"dc_wrong"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"dc_wrong"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -97,12 +97,12 @@ class DcWrongConnRoot(FeatureGroup):
         return DuckdbRelation.from_arrow(_OTHER["conn"], pa.Table.from_pydict({"dc_wrong": [1]}))
 
 
-class DcChainRoot(FeatureGroup):
+class DcChainRoot(GeneratedFeatureGroup):
     """DuckDB root; the cfw it runs on is bound to the root's own handle."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"dc_chain_src"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"dc_chain_src"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

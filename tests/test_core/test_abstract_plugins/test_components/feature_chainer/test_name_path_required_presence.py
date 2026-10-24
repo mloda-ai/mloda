@@ -30,7 +30,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import DataCreator, PropertySpec, property_spec
+from mloda.provider import GeneratedFeatureGroup, PropertySpec, property_spec
 from mloda.user import FeatureName, Options
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
@@ -443,14 +443,14 @@ PGP_OVERRIDE_FEATURE = "pgp_override_feature"
 PGP_MISSING_PREFIX = f"required option(s) {PGP_KEY} are absent after declared defaults and name bindings"
 
 
-class PlainRootPgp(FeatureGroup):
-    """Matches through the DataCreator root rule; the required key has no default."""
+class PlainRootPgp(GeneratedFeatureGroup):
+    """Matches through the generated root rule; the required key has no default."""
 
     PROPERTY_MAPPING = {PGP_KEY: property_spec("required, no default")}
 
     @classmethod
-    def input_data(cls) -> DataCreator:
-        return DataCreator({PGP_ROOT_FEATURE})
+    def feature_names_supported(cls) -> set[str]:
+        return {PGP_ROOT_FEATURE}
 
 
 class PlainClassNamePgp(FeatureGroup):

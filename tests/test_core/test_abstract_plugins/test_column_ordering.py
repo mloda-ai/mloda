@@ -14,7 +14,7 @@ from mloda.core.core.engine import Engine
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
 from mloda.core.runtime.run import ExecutionOrchestrator
-from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreator, BaseInputData
+from mloda.provider import ComputeFramework, FeatureSet, GeneratedFeatureGroup
 from mloda.user import FeatureName, ParallelizationMode, mloda, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -70,12 +70,8 @@ def create_compute_framework() -> ConcreteComputeFramework:
     )
 
 
-class SimpleTestFeature(FeatureGroup):
+class SimpleTestFeature(GeneratedFeatureGroup):
     """Simple test feature for API tests."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"SimpleTestFeature"})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -363,12 +359,8 @@ class TestComputeFrameworksColumnOrdering:
 # --- End-to-End Test Features ---
 
 
-class MultiFeatureGroup(FeatureGroup):
+class MultiFeatureGroup(GeneratedFeatureGroup):
     """Test feature group that supports 5 features (FeatureA through FeatureE)."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"FeatureA", "FeatureB", "FeatureC", "FeatureD", "FeatureE"})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

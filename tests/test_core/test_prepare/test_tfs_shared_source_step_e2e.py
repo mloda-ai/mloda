@@ -12,7 +12,7 @@ import pandas as pd
 import pyarrow.compute as pc
 
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -23,12 +23,12 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 # ---------------------------------------------------------------------------
 
 
-class SharedSourceRootFG(FeatureGroup):
+class SharedSourceRootFG(GeneratedFeatureGroup):
     """Pandas root exposing two columns that are always computed TOGETHER by one step."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"twocol_a", "twocol_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"twocol_a", "twocol_b"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -58,7 +58,7 @@ class SharedSourceConsumerFG(FeatureGroup):
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
-        # is_root() is False (input_features declares parents), so the DataCreator root-match
+        # is_root() is False (input_features declares parents), so the generated-group root match
         # path does not apply; name it here.
         return {"shared_result"}
 

@@ -22,7 +22,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import DataCreator, DefaultOptionKeys, property_spec
+from mloda.provider import DefaultOptionKeys, GeneratedFeatureGroup, property_spec
 from mloda.user import Feature, FeatureName, FilterType, GlobalFilter, Options, PluginCollector, SingleFilter, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -459,10 +459,10 @@ def _make_e2e_probe_fg(escalate: bool) -> type[FeatureGroup]:
     """A throwaway root group that resolves E2E_MAIN but raises when matched for the filter feature."""
     gc.collect()
 
-    class FilterMatchRaiserFG899(FeatureGroup):
+    class FilterMatchRaiserFG899(GeneratedFeatureGroup):
         @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator({E2E_MAIN, E2E_TARGET})
+        def feature_names_supported(cls) -> set[str]:
+            return {E2E_MAIN, E2E_TARGET}
 
         @classmethod
         def match_feature_group_criteria(

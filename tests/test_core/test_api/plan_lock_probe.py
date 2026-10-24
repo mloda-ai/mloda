@@ -8,17 +8,17 @@ import pandas as pd
 import pyarrow as pa
 
 from mloda.core.api.plan_lock import _lock_text
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
 from mloda.steward import Extender, ExtenderHook, plan_content_hash, plan_structure_hash
 from mloda.user import Feature, FeatureName, Index, JoinSpec, Link, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
-class LockProbeLeftPandas(FeatureGroup):
+class LockProbeLeftPandas(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"lock_probe_jid", "lock_probe_left_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"lock_probe_jid", "lock_probe_left_val"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -33,10 +33,10 @@ class LockProbeLeftPandas(FeatureGroup):
         return [Index(("lock_probe_jid",))]
 
 
-class LockProbeRightArrow(FeatureGroup):
+class LockProbeRightArrow(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"lock_probe_jid", "lock_probe_right_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"lock_probe_jid", "lock_probe_right_val"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -69,10 +69,10 @@ class LockProbeConsumer(FeatureGroup):
         return {cls.get_class_name()}
 
 
-class LockProbeAnyFramework(FeatureGroup):
+class LockProbeAnyFramework(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"lock_probe_any_value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"lock_probe_any_value"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

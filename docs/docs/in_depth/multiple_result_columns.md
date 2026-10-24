@@ -140,16 +140,16 @@ A group that returns named parts declares them, so `Feature("measure~value")` re
 ```python
 from typing import Any
 
-from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import GeneratedFeatureGroup, FeatureGroup, FeatureSet
 from mloda.user import PluginCollector, mloda
 
 
-class DocMeasureFeatureGroup(FeatureGroup):
+class DocMeasureFeatureGroup(GeneratedFeatureGroup):
     OUTPUT_PARTS = ("value", "unit")  # or (ANY_OUTPUT_PART,) if parts are only named at run time
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"measure"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"measure"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

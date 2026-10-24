@@ -80,7 +80,7 @@ class TestNodeCentralityPandasIntegration:
     """Integration tests for the node centrality feature group using Pandas."""
 
     def test_node_centrality_with_data_creator(self) -> None:
-        """Test node centrality features with mloda using DataCreator."""
+        """Test node centrality features with mloda using GeneratedFeatureGroup."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(

@@ -14,7 +14,7 @@ import pyarrow.compute as pc
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
 from mloda.user import Feature, FeatureName, Index, JoinSpec, Link, Options, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -25,12 +25,12 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 # ---------------------------------------------------------------------------
 
 
-class HopIdA(FeatureGroup):
+class HopIdA(GeneratedFeatureGroup):
     """Pandas root: the join's declared left side."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"hop_id_jid", "hop_id_a_val", "hop_id_a_helper"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"hop_id_jid", "hop_id_a_val", "hop_id_a_helper"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -47,10 +47,6 @@ class HopIdA(FeatureGroup):
 
 class HopIdB(FeatureGroup):
     """PyArrow root (join's declared right side); its own index feature doubles as an option-gated derived one."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"hop_id_bjid", "hop_id_b_val"})
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         if options.get("hop_id_variant") == "other":
@@ -75,8 +71,8 @@ class HopIdB(FeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         # is_root() is False for the options={"hop_id_variant": "other"} request (input_features
-        # declares a parent for it), so the DataCreator root-match path does not apply; name it here.
-        return {"hop_id_bjid"}
+        # declares a parent for it), so it is not a generated group; plain names serve both requests.
+        return {"hop_id_bjid", "hop_id_b_val"}
 
 
 class HopIdC(FeatureGroup):

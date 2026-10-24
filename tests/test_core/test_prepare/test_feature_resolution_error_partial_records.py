@@ -10,7 +10,7 @@ Contract under test (PR #836):
     setup-phase configuration errors, and the ``_defer_planning`` / ``auto_plan`` / ``Engine.plan`` hack is gone.
 
 All fixture feature-group names carry an ``_836pr`` suffix and root feature names a ``partial_records_`` prefix:
-test feature groups become global subclasses and a ``DataCreator`` claim is registry-wide, so a shared name would
+test feature groups become global subclasses and a generated-group name claim is registry-wide, so a shared name would
 leak into another module's candidate universe in the parallel suite.
 """
 
@@ -29,7 +29,7 @@ from mloda.core.prepare.resolution_types import (
     EvaluationResult,
     ResolutionRecord,
 )
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
@@ -43,12 +43,12 @@ UNKNOWN_FEATURE_836PR = "partial_records_unknown_836pr"
 CONSUMER_FEATURE_836PR = "PartialRecordsConsumer_836pr"
 
 
-class PartialRecordsSource_836pr(FeatureGroup):
+class PartialRecordsSource_836pr(GeneratedFeatureGroup):
     """Pandas root source providing the feature the consumer chains off."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({SOURCE_FEATURE_836PR})
+    def feature_names_supported(cls) -> set[str]:
+        return {SOURCE_FEATURE_836PR}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

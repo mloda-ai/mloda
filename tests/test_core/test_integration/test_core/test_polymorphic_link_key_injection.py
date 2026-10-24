@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
 from mloda.user import Feature, FeatureName, JoinSpec, Link, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -21,12 +21,12 @@ class PlkirBaseB(FeatureGroup):
     """Base side B: no input_data, so a link declared on it never resolves on its own."""
 
 
-class PlkirSubA(PlkirBaseA):
+class PlkirSubA(PlkirBaseA, GeneratedFeatureGroup):
     """Concrete side A: a missing plkir_a_key in the data would raise KeyError."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"plkir_a_key", "plkir_a_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plkir_a_key", "plkir_a_val"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -37,12 +37,12 @@ class PlkirSubA(PlkirBaseA):
         return {PyArrowTable}
 
 
-class PlkirSubB(PlkirBaseB):
+class PlkirSubB(PlkirBaseB, GeneratedFeatureGroup):
     """Concrete side B: a missing plkir_b_key in the data would raise KeyError."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"plkir_b_key", "plkir_b_val"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"plkir_b_key", "plkir_b_val"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

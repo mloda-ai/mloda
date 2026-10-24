@@ -21,8 +21,7 @@ from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import GeneratedFeatureGroup
 from mloda.user import Link, JoinSpec
 from mloda.user import GlobalFilter, Options
 from mloda.user import PluginCollector
@@ -87,20 +86,16 @@ class MultiKeyApiFeature(FeatureGroup):
 # ============================================================================
 # Test Feature: Joined with Creator
 # ============================================================================
-class CreatorDataFeature(FeatureGroup):
-    """Creates its own data via DataCreator."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"creator_id", "creator_value"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {"creator_id": [1, 2, 3], "creator_value": ["a", "b", "c"]}
+class CreatorDataFeature(GeneratedFeatureGroup):
+    """Creates its own data via GeneratedFeatureGroup."""
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"creator_id", "creator_value"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"creator_id": [1, 2, 3], "creator_value": ["a", "b", "c"]}
 
 
 class SimplifiedApiJoinFeature(FeatureGroup):
@@ -436,12 +431,12 @@ class TestSimplifiedApiData:
         assert len(df) == 3
 
 
-class AmbiguousApiColumnFeature(FeatureGroup):
+class AmbiguousApiColumnFeature(GeneratedFeatureGroup):
     """Computes a name that an api_data set also provides."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"simplified_api_ambiguous_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"simplified_api_ambiguous_col"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

@@ -10,7 +10,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 
-from mloda.provider import ComputeFramework, DataCreator, FeatureGroup, FeatureSet, BaseInputData
+from mloda.provider import ComputeFramework, FeatureSet, GeneratedFeatureGroup
 from mloda.user import Feature, Features, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_mask_engine import (
     PyArrowMaskEngine,
@@ -106,12 +106,12 @@ class TestMaskEngineSetupWiring:
 # ---------------------------------------------------------------------------
 
 
-class MaskEngineFeatureGroup(FeatureGroup):
+class MaskEngineFeatureGroup(GeneratedFeatureGroup):
     """FeatureGroup that uses the mask engine to apply inline masking."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name(), "status"})
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name(), "status"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -144,7 +144,7 @@ class MaskEngineFeatureGroup(FeatureGroup):
         return pa.table({cls.get_class_name(): result, "status": status})
 
 
-class MaskEngineNoMaskFeatureGroup(FeatureGroup):
+class MaskEngineNoMaskFeatureGroup(GeneratedFeatureGroup):
     """Mask engine with all_true returns all-True mask.
 
     All values contribute to the region sum.
@@ -152,8 +152,8 @@ class MaskEngineNoMaskFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name(), "status"})
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name(), "status"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -186,7 +186,7 @@ class MaskEngineNoMaskFeatureGroup(FeatureGroup):
         return pa.table({cls.get_class_name(): result, "status": status})
 
 
-class MaskEngineRangeFeatureGroup(FeatureGroup):
+class MaskEngineRangeFeatureGroup(GeneratedFeatureGroup):
     """Mask engine with range mask via combine(greater_equal, less_equal).
 
     Data: region=[A,A,B,B], value=[10,20,30,40], weight=[1,2,3,4].
@@ -195,8 +195,8 @@ class MaskEngineRangeFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name(), "value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name(), "value"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -232,7 +232,7 @@ class MaskEngineRangeFeatureGroup(FeatureGroup):
         return pa.table({cls.get_class_name(): result, "value": value})
 
 
-class MaskEngineCategoricalFeatureGroup(FeatureGroup):
+class MaskEngineCategoricalFeatureGroup(GeneratedFeatureGroup):
     """Mask engine with categorical mask via is_in.
 
     Data: region=[A,A,B,B,B], status=[active,pending,inactive,active,pending],
@@ -243,8 +243,8 @@ class MaskEngineCategoricalFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name(), "status"})
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name(), "status"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -277,7 +277,7 @@ class MaskEngineCategoricalFeatureGroup(FeatureGroup):
         return pa.table({cls.get_class_name(): result, "status": status})
 
 
-class MaskEngineMultiMaskFeatureGroup(FeatureGroup):
+class MaskEngineMultiMaskFeatureGroup(GeneratedFeatureGroup):
     """Mask engine with AND-combined masks on same column.
 
     Data: region=[A,A,B,B,B], value=[5,15,25,35,45], weight=[1,2,3,4,5].
@@ -287,8 +287,8 @@ class MaskEngineMultiMaskFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name(), "value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name(), "value"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -324,7 +324,7 @@ class MaskEngineMultiMaskFeatureGroup(FeatureGroup):
         return pa.table({cls.get_class_name(): result, "value": value})
 
 
-class MaskEngineBetweenFeatureGroup(FeatureGroup):
+class MaskEngineBetweenFeatureGroup(GeneratedFeatureGroup):
     """Mask engine with between() convenience method.
 
     Data: region=[A,A,B,B], value=[10,20,30,40], weight=[1,2,3,4].
@@ -333,8 +333,8 @@ class MaskEngineBetweenFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name(), "value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name(), "value"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -367,7 +367,7 @@ class MaskEngineBetweenFeatureGroup(FeatureGroup):
         return pa.table({cls.get_class_name(): result, "value": value})
 
 
-class MaskEngineAllOfFeatureGroup(FeatureGroup):
+class MaskEngineAllOfFeatureGroup(GeneratedFeatureGroup):
     """Mask engine with all_of() convenience method.
 
     Data: region=[A,A,B,B,B], value=[5,15,25,35,45], weight=[1,2,3,4,5].
@@ -377,8 +377,8 @@ class MaskEngineAllOfFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({cls.get_class_name(), "value"})
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name(), "value"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

@@ -210,17 +210,17 @@ class TestValidateEnforcesOnPandas:
 
         import pandas as pd
 
-        from mloda.provider import ComputeFramework, DataCreator, FeatureGroup
+        from mloda.provider import ComputeFramework, FeatureGroup, GeneratedFeatureGroup
         from mloda.user import Feature as UFeature
         from mloda.user import PluginCollector, mloda
         from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import (
             PandasDataFrame,
         )
 
-        class _Src(FeatureGroup):
+        class _Src(GeneratedFeatureGroup):
             @classmethod
-            def input_data(cls) -> Any | None:
-                return DataCreator({"price"})
+            def feature_names_supported(cls) -> set[str]:
+                return {"price"}
 
             @classmethod
             def calculate_feature(cls, data: Any, features: Any) -> Any:
@@ -267,17 +267,17 @@ class TestValidateEnforcesOnPandas:
         import pandas as pd
         import pytest as _pytest
 
-        from mloda.provider import ComputeFramework, DataCreator, FeatureGroup
+        from mloda.provider import ComputeFramework, FeatureGroup, GeneratedFeatureGroup
         from mloda.user import Feature as UFeature
         from mloda.user import PluginCollector, mloda
         from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import (
             PandasDataFrame,
         )
 
-        class _Src(FeatureGroup):
+        class _Src(GeneratedFeatureGroup):
             @classmethod
-            def input_data(cls) -> Any | None:
-                return DataCreator({"price"})
+            def feature_names_supported(cls) -> set[str]:
+                return {"price"}
 
             @classmethod
             def calculate_feature(cls, data: Any, features: Any) -> Any:

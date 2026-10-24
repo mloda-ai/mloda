@@ -8,7 +8,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.core.engine import Engine
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
 from mloda.user import (
     Feature,
     FeatureName,
@@ -28,10 +28,10 @@ from tests.test_core.test_tooling import MlodaTestRunner
 from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks import SecondCfw
 
 
-class CfwStrandLeftSrc(FeatureGroup):
+class CfwStrandLeftSrc(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"cfwstr_left"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"cfwstr_left"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -42,10 +42,10 @@ class CfwStrandLeftSrc(FeatureGroup):
         return {SecondCfw}
 
 
-class CfwStrandRightSrc(FeatureGroup):
+class CfwStrandRightSrc(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"cfwstr_right"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"cfwstr_right"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -127,12 +127,12 @@ def test_link_cfw_rewrite_keeps_stored_filters_usable() -> None:
     )
 
 
-class PinHostFG(FeatureGroup):
+class PinHostFG(GeneratedFeatureGroup):
     """Unrestricted root hosting a filterable column."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"pinhost_val", "pinhost_ts"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"pinhost_val", "pinhost_ts"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

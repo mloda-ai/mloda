@@ -27,9 +27,8 @@ from typing import Any, ClassVar
 import pandas as pd
 import pytest
 
-from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
-from mloda.provider import DataCreator
+from mloda.provider import GeneratedFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import PropertySpec
@@ -48,7 +47,7 @@ MODE_KEY = "dualwarn579_mode"
 SALT_KEY = "dualwarn579_salt"
 
 
-class DualWarn579SourceGroup(FeatureGroup):
+class DualWarn579SourceGroup(GeneratedFeatureGroup):
     """Upstream root group that declares the mode key and records resolved options."""
 
     PROPERTY_MAPPING = {
@@ -62,8 +61,8 @@ class DualWarn579SourceGroup(FeatureGroup):
         cls.seen_options = []
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({SOURCE_NAME})
+    def feature_names_supported(cls) -> set[str]:
+        return {SOURCE_NAME}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -81,12 +80,12 @@ class DualWarn579SourceGroup(FeatureGroup):
         return pd.DataFrame({SOURCE_NAME: [1, 2, 3]})
 
 
-class DualWarn579CleanSourceGroup(FeatureGroup):
+class DualWarn579CleanSourceGroup(GeneratedFeatureGroup):
     """Upstream root group WITHOUT the mode key in its PROPERTY_MAPPING."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({CLEAN_SOURCE_NAME})
+    def feature_names_supported(cls) -> set[str]:
+        return {CLEAN_SOURCE_NAME}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

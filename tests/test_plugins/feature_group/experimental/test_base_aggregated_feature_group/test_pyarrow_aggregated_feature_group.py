@@ -510,10 +510,10 @@ class TestPyArrowAggregationMultiColumnIntegerHandling:
 
 
 class TestAggPyArrowIntegration:
-    """Integration tests for the aggregated feature group using DataCreator."""
+    """Integration tests for the aggregated feature group using GeneratedFeatureGroup."""
 
     def test_aggregation_with_data_creator(self) -> None:
-        """Test aggregation features with mloda using DataCreator."""
+        """Test aggregation features with mloda using GeneratedFeatureGroup."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(

@@ -23,9 +23,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
-from mloda.provider import FeatureGroup
+from mloda.provider import GeneratedFeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda.user import ParallelizationMode
@@ -33,7 +31,7 @@ from mloda.user import PluginCollector
 from mloda.user import mloda
 
 
-class _ScalarValuedResultFeatureGroup(FeatureGroup):
+class _ScalarValuedResultFeatureGroup(GeneratedFeatureGroup):
     """Root FeatureGroup whose ``calculate_feature`` returns a scalar-valued dict.
 
     ``{"scalar_result_col": 1}`` is NOT columnar: the value is a bare int, not a list. It
@@ -41,34 +39,26 @@ class _ScalarValuedResultFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"scalar_result_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"scalar_result_col"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         # Scalar value, not a list -> malformed columnar dict. Bypasses transform today.
         return {"scalar_result_col": 1}
 
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"scalar_result_col"}
 
-
-class _MultiScalarValuedResultFeatureGroup(FeatureGroup):
+class _MultiScalarValuedResultFeatureGroup(GeneratedFeatureGroup):
     """Root FeatureGroup returning a multi-column scalar-valued dict ``{"a": 1, "b": 2}``."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"multi_scalar_result_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"multi_scalar_result_col"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         # Both values scalar -> malformed columnar dict.
         return {"multi_scalar_result_col": 1, "extra_scalar_col": 2}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"multi_scalar_result_col"}
 
 
 _ENABLED_SCALAR = PluginCollector.enabled_feature_groups({_ScalarValuedResultFeatureGroup})

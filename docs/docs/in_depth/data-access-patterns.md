@@ -2,18 +2,18 @@
 
 ## Overview
 
-mloda reads data through **source FeatureGroups** (files, documents, databases and custom sources). `BaseInputData` is only the marker base of `DataCreator`, the return type of `input_data()`; it carries no reader behavior.
+mloda reads data through **source FeatureGroups** (files, documents, databases and custom sources).
 
 For practical examples of data access methods, see [Data Access Overview](access-feature-data.md).
 
 ## Data Sources
 
-- **Source FeatureGroups**: one FeatureGroup per kind of source, claiming features through `CLAIM_ROUTES` instead of `input_data()`:
+- **Source FeatureGroups**: one FeatureGroup per kind of source, claiming features through `CLAIM_ROUTES`:
     - `ReadFileFG` with `CsvFG`, `ParquetFG`, `JsonFG`, `FeatherFG`, `OrcFG` (see [access-feature-data](access-feature-data.md#global-scope-data-access))
     - `ReadDBFG` with `SqliteFG`
     - `DuckdbFG`: reads the tables and views of a DuckDB connection in the DataAccessCollection, only when the feature's `connection_handle` names it (`Feature("amount", connection=conn)` sets one). On DuckDB it hands over a lazy relation on your connection, so later DuckDB steps run as SQL; elsewhere it loads a `pa.Table`. It reads the `main` schema of the connection's current database; a `connection_handle` forwarded from a consumer counts too. A feature tied to a DuckDB connection whose table has a column of that name is read from the table, so if another group also serves that name, resolution reports both groups (leave `DuckdbFG` out of the plugin collector, or rename). Off DuckDB it reads through a separate cursor, which sees committed rows only. mloda never closes the connection.
     - `ReadDocumentFG` with `TextFG`, `PyFG`, `MarkdownFG`, `YamlFG`, `JsonDocumentFG`; documents skip suffixes owned by ReadFileFG groups by default
-- **DataCreator**: For generating synthetic data (see [access-feature-data](access-feature-data.md#data-creator))
+- **GeneratedFeatureGroup**: For generating synthetic data (see [access-feature-data](access-feature-data.md#generatedfeaturegroup))
 - **ApiDataFG**: A source FeatureGroup for runtime data injection (see [access-feature-data](access-feature-data.md#apidata))
 
 ## Writing a source FeatureGroup
@@ -156,16 +156,16 @@ A connection lives in the DataAccessCollection, and the framework binds the sing
 Feature("id", options={"CsvFG": "data/people.csv"})
 ```
 
-### Scenario 2: DataCreator + Feature(connection=)
+### Scenario 2: GeneratedFeatureGroup + Feature(connection=)
 
 **Use Case**: Analytics with DuckDB requiring a connection object
-**Pattern**: `DataCreator` supplies the data and the group is restricted to the DuckDB framework, which builds its frame on the connection the feature pins
+**Pattern**: `GeneratedFeatureGroup` supplies the data and the group is restricted to the DuckDB framework, which builds its frame on the connection the feature pins
 
 ```py
-class DuckDBAnalyticsFeature(FeatureGroup):
+class DuckDBAnalyticsFeature(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"analytics_input"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"analytics_input"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
@@ -176,22 +176,22 @@ Feature("analytics_input", connection=conn)
 
 For database connection patterns, see [Framework Connection Object](framework-connection-object.md).
 
-### Scenario 3: In-Memory Processing (DataCreator Only)
+### Scenario 3: In-Memory Processing (GeneratedFeatureGroup Only)
 
 **Use Case**: Creating synthetic data with Pandas
-**Pattern**: Only `DataCreator` is needed
+**Pattern**: Only `GeneratedFeatureGroup` is needed
 
 ```py
-class SyntheticDataFeature(FeatureGroup):
+class SyntheticDataFeature(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"synthetic_data"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"synthetic_data"}
 ```
 
 ## Integration with Other Concepts
 
 ### Compute Frameworks
-- **Source FeatureGroups and `DataCreator`**: work with all compute frameworks
+- **Source FeatureGroups and `GeneratedFeatureGroup`**: work with all compute frameworks
 - **Connections**: only frameworks that take a connection object (like DuckDB) bind one
 
 For more information, see:
@@ -206,7 +206,7 @@ These patterns are fundamental to how feature groups access data. For more detai
 
 ## Best Practices
 
-- Use source FeatureGroups for files, documents and databases, `ApiDataFG` for runtime data and `DataCreator` for synthetic data.
+- Use source FeatureGroups for files, documents and databases, `ApiDataFG` for runtime data and `GeneratedFeatureGroup` for synthetic data.
 - In a source group, focus on robust source discovery, error handling and performance.
 
 ## Related Documentation
@@ -219,4 +219,4 @@ These patterns are fundamental to how feature groups access data. For more detai
 
 ## Summary
 
-**Source FeatureGroups** are the way mloda reads files, documents, databases and custom sources. `DataCreator` and `ApiDataFG` supply in-memory data.
+**Source FeatureGroups** are the way mloda reads files, documents, databases and custom sources. `GeneratedFeatureGroup` and `ApiDataFG` supply in-memory data.

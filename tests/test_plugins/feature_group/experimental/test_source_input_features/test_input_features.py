@@ -9,8 +9,7 @@ from mloda.user import DataAccessCollection
 from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.user import Index
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
+from mloda.provider import GeneratedFeatureGroup
 from mloda.user import JoinType
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import (
@@ -48,11 +47,7 @@ class InputFeatureMergeTest(SourceInputFeature):
 
 
 class TestInputFeatures:
-    class FeatureInputCreatorTest(FeatureGroup):
-        @classmethod
-        def input_data(cls) -> BaseInputData | None:
-            return DataCreator({cls.get_class_name()})
-
+    class FeatureInputCreatorTest(GeneratedFeatureGroup):
         @classmethod
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
             return {cls.get_class_name(): ["TestValue5", "TestValue6"]}

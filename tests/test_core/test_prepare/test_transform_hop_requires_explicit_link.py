@@ -10,7 +10,7 @@ import pytest
 
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
 from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -18,10 +18,10 @@ from tests.helpers.probe_runner import run_probes
 from tests.test_core.test_prepare import link_side_paths_probe as hd_probe
 
 
-class UnlinkedRootA(FeatureGroup):
+class UnlinkedRootA(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"unlinked_root_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"unlinked_root_a"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -34,10 +34,10 @@ class UnlinkedRootA(FeatureGroup):
         return {PandasDataFrame}
 
 
-class UnlinkedRootB(FeatureGroup):
+class UnlinkedRootB(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"unlinked_root_b"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"unlinked_root_b"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -137,7 +137,7 @@ def test_subclass_sibling_plain_hops_both_survive_under_every_hash_seed() -> Non
 
 
 # ScRootA and ScRootB(ScRootA) are related only by subclassing for code reuse: each is its own
-# independent DataCreator root with zero shared physical lineage. Since the two parents share no
+# independent generated root with zero shared physical lineage. Since the two parents share no
 # ancestor, the plan must reject this shape deterministically at plan-build time with a "missing
 # Links" ValueError under every hash seed, for both the cross-framework and same-framework variants,
 # never a crash (from the candidate loop in `prepare_tfs_right_cfw` / `_drop_tfs_source_if_possible`
@@ -199,15 +199,15 @@ def test_subclass_unrelated_roots_reject_missing_links_under_every_hash_seed() -
 # Unlinked parents must be rejected whatever frameworks run, not only when a transform hop is involved.
 
 
-class _Root(FeatureGroup):
+class _Root(GeneratedFeatureGroup):
     """Data-creator root: DATA maps column name to values, built in FRAMEWORK's native type."""
 
     DATA: ClassVar[dict[str, list[int]]] = {}
     FRAMEWORK: ClassVar[type[ComputeFramework]] = PyArrowTable
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(set(cls.DATA))
+    def feature_names_supported(cls) -> set[str]:
+        return set(cls.DATA)
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

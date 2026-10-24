@@ -5,7 +5,7 @@ This framework provides several structured mechanisms for features to access and
 -   **DataAccessCollection** for global data loading management, 
 -   **Feature Scope Data Access** for feature-specific data loading management, 
 -   **Api Data** for using data directly with the mlodaAPI request.
--   **Data Creator** for generating data instead of loading data,
+-   **GeneratedFeatureGroup** for generating data instead of loading data,
 -   **Input Features** facilitates data sharing between features.
 
 These methods ensure efficient data management while maintaining flexibility and scalability. A typical scenario involves a complex feature relying on three input features. These input features, in turn, may depend on other input features or load data using ApiData.
@@ -228,11 +228,11 @@ Output:
 1          TestValue4
 ```
 
-Further, we do not want to always load data from outside, be it before or during the framework run, but we want to be able to create Data. For this purpose, we have the Data Creator.
+Further, we do not want to always load data from outside, be it before or during the framework run, but we want to be able to create Data. For this purpose, we have the `GeneratedFeatureGroup`.
 
-#### Data Creator
+#### GeneratedFeatureGroup
 
-The data creator can create data independent of any other dependency. It is essentially a base feature that does not need a **DataAccessCollection** or **Feature Scope Data Access**.
+Subclass `GeneratedFeatureGroup`, declare the names it serves in `feature_names_supported()` (the class name always matches) and return the data from `calculate_feature`; the result becomes its own frame. It creates data independent of any other dependency and does not need a **DataAccessCollection** or **Feature Scope Data Access**.
 
 Usage:
 
@@ -245,16 +245,16 @@ One could imagine that for experimenting one wants to see data. Then one could u
 
 ```python
 from mloda.user import mloda
-from mloda.provider import FeatureGroup, BaseInputData, FeatureSet, DataCreator
+from mloda.provider import FeatureGroup, FeatureSet, GeneratedFeatureGroup
 from mloda.user.pandas import PandasDataFrame
 
 # Create a Creator FeatureGroup class, which delivers the data needed
-class AFeatureInputCreator(FeatureGroup):
+class AFeatureInputCreator(GeneratedFeatureGroup):
 
-    # Define input_data with using DataCreator
+    # Declare the feature names this group generates
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"AFeatureInputCreator"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"AFeatureInputCreator"}
 
     # Define the data this feature creates
     @classmethod
@@ -350,7 +350,7 @@ As the input features can be fulfilled by **multiple other features**, we can ha
 
 #### Combining Data Sources with Links
 
-When input features come from different sources (e.g., ApiData and DataCreator), you can join them using Links. Create a `Link` in `input_features()` and attach it to a `Feature`:
+When input features come from different sources (e.g., ApiData and a GeneratedFeatureGroup), you can join them using Links. Create a `Link` in `input_features()` and attach it to a `Feature`:
 
 ```python
 from mloda.user import Link, Index, Feature, JoinSpec

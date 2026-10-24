@@ -18,7 +18,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import DataCreator, PropertySpec
+from mloda.provider import GeneratedFeatureGroup, PropertySpec
 from mloda.user import FilterType, GlobalFilter, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -45,12 +45,12 @@ OPTIN_SPEC = PropertySpec(
 def _make_probe_fg(mapping: dict[str, PropertySpec]) -> type[FeatureGroup]:
     """A throwaway root FeatureGroup serving the host and the filter target, echoing its effective options."""
 
-    class UnwWarningProbeFeatureGroup(FeatureGroup):
+    class UnwWarningProbeFeatureGroup(GeneratedFeatureGroup):
         PROPERTY_MAPPING = mapping
 
         @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator({UNW_HOST, UNW_TARGET})
+        def feature_names_supported(cls) -> set[str]:
+            return {UNW_HOST, UNW_TARGET}
 
         @classmethod
         def final_filters(cls) -> bool:

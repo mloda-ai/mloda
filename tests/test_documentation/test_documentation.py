@@ -204,7 +204,7 @@ def test_internal_link_targets_exist(fpath: Path) -> None:
 #     This test uses mktestdocs to extract and execute all Python code blocks
 #     from the README, ensuring all examples are correct and runnable.
 #
-#     Note: README examples use DataCreator (in-memory data generation),
+#     Note: README examples use GeneratedFeatureGroup (in-memory data generation),
 #     so no external files are needed.
 #     """
 #     readme_path = Path("README.md")

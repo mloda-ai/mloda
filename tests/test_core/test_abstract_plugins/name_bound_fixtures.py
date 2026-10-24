@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import DataCreator, FeatureChainParserMixin, PropertySpec
+from mloda.provider import FeatureChainParserMixin, GeneratedFeatureGroup, PropertySpec
 
 
 def make_name_bound_fg(
@@ -74,8 +74,8 @@ def make_root_fg(
 ) -> type[FeatureGroup]:
     """Root group serving ``column``; with ``seen`` and ``observe_key`` it records that option as ``seen["child"]``."""
 
-    def input_data(cls: Any) -> DataCreator:
-        return DataCreator({column})
+    def feature_names_supported(cls: Any) -> set[str]:
+        return {column}
 
     def calculate_feature(cls: Any, data: Any, features: FeatureSet) -> Any:
         if seen is not None and observe_key is not None:
@@ -85,7 +85,7 @@ def make_root_fg(
 
     namespace = {
         "__module__": module,
-        "input_data": classmethod(input_data),
+        "feature_names_supported": classmethod(feature_names_supported),
         "calculate_feature": classmethod(calculate_feature),
     }
-    return type(f"{prefix}RootFeatureGroup", (FeatureGroup,), namespace)
+    return type(f"{prefix}RootFeatureGroup", (GeneratedFeatureGroup,), namespace)

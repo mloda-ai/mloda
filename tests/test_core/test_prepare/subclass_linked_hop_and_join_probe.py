@@ -10,7 +10,7 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
 from mloda.user import Feature, FeatureName, Index, JoinSpec, Link, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -37,11 +37,7 @@ class SubclassLinkedDerived(FeatureGroup):
         return {"subclass_linked_t"}
 
 
-class SubclassLinkedSource(SubclassLinkedDerived):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"subclass_linked_key", "subclass_linked_s"})
-
+class SubclassLinkedSource(SubclassLinkedDerived, GeneratedFeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
@@ -55,13 +51,13 @@ class SubclassLinkedSource(SubclassLinkedDerived):
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
-        return set()
+        return {"subclass_linked_key", "subclass_linked_s"}
 
 
-class SubclassLinkedDest(FeatureGroup):
+class SubclassLinkedDest(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"subclass_linked_key", "subclass_linked_d"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"subclass_linked_key", "subclass_linked_d"}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:

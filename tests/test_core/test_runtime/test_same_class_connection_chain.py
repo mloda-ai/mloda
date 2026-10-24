@@ -14,7 +14,7 @@ except ImportError:
 
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda, DataAccessCollection
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
-from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet, DataCreator
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
@@ -47,12 +47,12 @@ class ChainSameClassDuckDBFG(FeatureGroup):
         return {"chain_a", "chain_b"}
 
 
-class ChainSameClassRootDuckDBFG(ChainSameClassDuckDBFG):
-    """Same shape, but chain_a is a DataCreator root, matched by name; the framework binds the collection's connection."""
+class ChainSameClassRootDuckDBFG(ChainSameClassDuckDBFG, GeneratedFeatureGroup):
+    """Same shape, but chain_a is a generated root, matched by name; the framework binds the collection's connection."""
 
     @classmethod
-    def input_data(cls) -> DataCreator:
-        return DataCreator({"chain_a"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"chain_a", "chain_b"}
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed.")
@@ -91,7 +91,7 @@ class TestSameClassChainKeepsConnection:
         assert "connection_handle" in str(raised.value)
 
     def test_global_scope_dac_same_class_chain_resolves(self) -> None:
-        """chain_a is a DataCreator root matched by name; chain_b needs the same bound connection."""
+        """chain_a is a generated root matched by name; chain_b needs the same bound connection."""
         conn = duckdb.connect()
         plugin_collector = PluginCollector.enabled_feature_groups({ChainSameClassRootDuckDBFG})
 
@@ -175,10 +175,10 @@ class SelfManagedFramework(PyArrowTable):
         return isinstance(conn, _SessionLike)
 
 
-class SelfManagedRootFG(FeatureGroup):
+class SelfManagedRootFG(GeneratedFeatureGroup):
     @classmethod
-    def input_data(cls) -> DataCreator:
-        return DataCreator({"self_managed_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"self_managed_col"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

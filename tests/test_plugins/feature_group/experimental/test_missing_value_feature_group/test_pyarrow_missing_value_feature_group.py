@@ -382,10 +382,10 @@ class TestPyArrowMissingValueZeroRow(PyArrowZeroRowAdapter, MissingValueZeroRowT
 
 
 class TestMissingValuePyArrowIntegration:
-    """Integration tests for the missing value feature group using DataCreator."""
+    """Integration tests for the missing value feature group using GeneratedFeatureGroup."""
 
     def test_imputation_with_data_creator(self) -> None:
-        """Test imputation features with mloda using DataCreator."""
+        """Test imputation features with mloda using GeneratedFeatureGroup."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(

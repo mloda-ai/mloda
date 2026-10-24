@@ -10,8 +10,7 @@ from typing import Any
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
-from mloda.provider import DataCreator
-from mloda.provider import BaseInputData
+from mloda.provider import GeneratedFeatureGroup
 from mloda.provider import PropertySpec
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -25,12 +24,12 @@ from mloda.provider import DefaultOptionKeys
 import pandas as pd
 
 
-class ListValuedTestDataCreator(FeatureGroup):
+class ListValuedTestDataCreator(GeneratedFeatureGroup):
     """Creates test data with three columns."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"col_a", "col_b", "col_c"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"col_a", "col_b", "col_c"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

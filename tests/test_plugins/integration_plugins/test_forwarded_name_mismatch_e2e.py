@@ -22,9 +22,8 @@ import pytest
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
-from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
-from mloda.provider import DataCreator
+from mloda.provider import GeneratedFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import PropertySpec
@@ -43,12 +42,12 @@ CONSUMER_NAME = "namemis579_consumer"
 STRING_CONSUMER_NAME = "namemis579_string_consumer"
 
 
-class NameMis579SourceGroup(FeatureGroup):
-    """Root group providing the source column via DataCreator."""
+class NameMis579SourceGroup(GeneratedFeatureGroup):
+    """Root group providing the source column via GeneratedFeatureGroup."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({SOURCE_NAME})
+    def feature_names_supported(cls) -> set[str]:
+        return {SOURCE_NAME}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

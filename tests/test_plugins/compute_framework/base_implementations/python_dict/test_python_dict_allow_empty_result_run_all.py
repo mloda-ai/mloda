@@ -12,9 +12,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
-from mloda.provider import FeatureGroup
+from mloda.provider import GeneratedFeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda.user import ParallelizationMode
@@ -79,7 +77,7 @@ def test_empty_result_allowed_succeeds_multiprocessing(flight_server: Any) -> No
     assert len(records_from_frame(result[0])) == 0
 
 
-class EmptyResultNoneAllowedFeatureGroup(FeatureGroup):
+class EmptyResultNoneAllowedFeatureGroup(GeneratedFeatureGroup):
     """Root FG whose ``calculate_feature`` returns ``None`` (state A).
 
     Module-local on purpose: it pins that a MISSING result is rejected upstream in
@@ -87,17 +85,13 @@ class EmptyResultNoneAllowedFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"empty_result_none_allowed_col"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"empty_result_none_allowed_col"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         # No result at all -> state A. The opt-in must NOT legitimize this.
         return None
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"empty_result_none_allowed_col"}
 
 
 _ENABLED_NONE_ALLOWED = PluginCollector.enabled_feature_groups({EmptyResultNoneAllowedFeatureGroup})

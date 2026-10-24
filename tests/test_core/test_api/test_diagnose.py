@@ -12,7 +12,7 @@ Contract under test:
       - configuration error: ``complete is False``, ``records == []``, ``message`` equals the raised ValueError text.
 
 All fixture feature-group names carry an ``_812`` suffix and root feature names a ``diagnose_`` prefix: test
-feature groups become global subclasses and a ``DataCreator`` claim is registry-wide, so a shared name would
+feature groups become global subclasses and a generated-name claim is registry-wide, so a shared name would
 leak into another module's candidate universe in the parallel suite.
 """
 
@@ -33,7 +33,7 @@ from mloda.core.prepare.resolution_types import (
     ResolutionDiagnosis,
     ResolutionRecord,
 )
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, GeneratedFeatureGroup
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.mixins.reader_feature_groups.lazy_source_group import load_group
@@ -48,12 +48,12 @@ UNKNOWN_FEATURE_812 = "diagnose_unknown_812"
 BOGUS_ORDERING = "bogus"
 
 
-class DiagnoseSource_812(FeatureGroup):
+class DiagnoseSource_812(GeneratedFeatureGroup):
     """Pandas root source providing the feature the consumer chains off."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({SOURCE_FEATURE_812})
+    def feature_names_supported(cls) -> set[str]:
+        return {SOURCE_FEATURE_812}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

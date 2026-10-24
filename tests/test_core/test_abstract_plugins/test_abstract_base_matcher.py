@@ -17,7 +17,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import BaseInputData, DataCreator
+from mloda.provider import GeneratedFeatureGroup
 from mloda.user import Feature, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
@@ -35,12 +35,12 @@ class AbstractBaseWithAbstractMethod(FeatureGroup):
         return {PandasDataFrame}
 
 
-class ConcreteRootFeatureGroup(FeatureGroup):
+class ConcreteRootFeatureGroup(GeneratedFeatureGroup):
     """Concrete root feature group: no input features, creates its own data."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"issue692_root_feature"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"issue692_root_feature"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -51,7 +51,7 @@ class ConcreteRootFeatureGroup(FeatureGroup):
         return {PandasDataFrame}
 
 
-class ConcreteSubclassOfAbstractBase(AbstractBaseWithAbstractMethod):
+class ConcreteSubclassOfAbstractBase(AbstractBaseWithAbstractMethod, GeneratedFeatureGroup):
     """Leaf that implements the abstract method: instantiable, must match its root feature."""
 
     @classmethod
@@ -59,8 +59,8 @@ class ConcreteSubclassOfAbstractBase(AbstractBaseWithAbstractMethod):
         return data
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"issue692_subclass_root_feature"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"issue692_subclass_root_feature"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

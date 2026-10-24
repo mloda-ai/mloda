@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import ComputeFramework, FeatureSet, GeneratedFeatureGroup
 from mloda.user import Feature, Features, GlobalFilter, Options, ParallelizationMode, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
@@ -10,12 +10,12 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from tests.test_core.test_tooling import MlodaTestRunner
 
 
-class FilterOwnOutputRetrievalFG(FeatureGroup):
+class FilterOwnOutputRetrievalFG(GeneratedFeatureGroup):
     """Root FeatureGroup that requires context-only options and outputs the filterable distance column."""
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"retrieval__text", "retrieval__doc_id", "retrieval__distance"})
+    def feature_names_supported(cls) -> set[str]:
+        return {"retrieval__text", "retrieval__doc_id", "retrieval__distance"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

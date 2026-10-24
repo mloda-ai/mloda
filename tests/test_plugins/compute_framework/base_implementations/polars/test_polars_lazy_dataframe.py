@@ -137,7 +137,8 @@ class TestPolarsLazyDataFrameComputeFramework:
 
         # Verify results when collected
         collected = result.collect()
-        expected = self.left_data.join(self.right_data, on="idx", how="left").collect()
+        # Built explicitly: an unordered polars join is not a deterministic reference under polars 2.
+        expected = pl.DataFrame({"idx": [1, 3], "col1": ["a", "b"], "col2": ["x", None]})
         assert collected.equals(expected)
 
     def test_merge_append(self) -> None:
@@ -267,7 +268,8 @@ class TestPolarsLazyEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFram
     @pytest.fixture
     def joined_data(self) -> Any:
         left = pl.LazyFrame({"a": [1, 2, 3]})
-        return left.join(pl.LazyFrame({"a": [3, 1, 2], "b": [30, 10, 20]}), on="a")
+        # maintain_order keeps repeated collects of this unpinned join plan in one row order under polars 2.
+        return left.join(pl.LazyFrame({"a": [3, 1, 2], "b": [30, 10, 20]}), on="a", maintain_order="left")
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")

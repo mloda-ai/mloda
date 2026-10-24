@@ -19,6 +19,7 @@ import pyarrow.compute as pc
 import pytest
 
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.provider import BaseArtifact
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.user import DataType
@@ -200,6 +201,14 @@ class DtypeOptionSibling(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): data.column("d_a")}
+
+
+class SplitSourceDtypeArtifact(SplitSourceDtype):
+    """SplitSourceDtype with an artifact, so the same-framework merge skips it and the data-type split stays."""
+
+    @staticmethod
+    def artifact() -> type[BaseArtifact] | None:
+        return BaseArtifact
 
 
 class R5Root(DataCreatorFeatureGroup):
@@ -633,6 +642,41 @@ class TestMissingLinksError:
 
         values = [table.column("DtypeCombiner").to_pylist() for table in results]
         assert values == [[110, 220, 330]]
+
+    def test_data_type_split_raises_at_plan_time_when_merge_is_skipped(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            mloda.prepare(
+                features=[Feature.int32_of("DtypeCombiner")],
+                links=set(),
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups({SplitSourceDtypeArtifact, DtypeCombiner}),
+            )
+
+        error_message = str(exc_info.value)
+        assert "DtypeCombiner" in error_message
+        assert "SplitSourceDtype" in error_message
+        assert "missing Links" in error_message
+        assert "separate steps" in error_message
+        assert "Link.inner_on(SplitSourceDtypeArtifact, SplitSourceDtypeArtifact)" not in error_message
+        # Discriminators match options only, so they cannot resolve a data-type split.
+        assert "left_discriminator" not in error_message
+        assert "data type" in error_message
+
+    def test_option_split_hint_silent_when_spanned_buckets_differ_only_by_data_type(self) -> None:
+        """DtypeCombiner's spanned buckets differ only by data type; the unrelated 'unit' split must not be blamed."""
+        with pytest.raises(Exception) as exc_info:
+            mloda.run_all(
+                features=[Feature.int32_of("DtypeCombiner"), Feature.int32_of("DtypeOptionSibling")],
+                links=set(),
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {SplitSourceDtypeArtifact, DtypeCombiner, DtypeOptionSibling}
+                ),
+            )
+
+        error_message = str(exc_info.value)
+        assert "differing option" not in error_message.lower()
+        assert "unlinked sources (missing Links)" in error_message
 
     def test_direct_option_split_raises_at_plan_time(self) -> None:
         with pytest.raises(ValueError) as exc_info:

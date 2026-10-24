@@ -1,10 +1,11 @@
 import os
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.implementation import Implementation
 
 if TYPE_CHECKING:
-    from mloda.core.abstract_plugins.implementation import Implementation
     from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 
 STRICT_MODE_ENV_VAR = "MLODA_PLUGIN_REGISTRY_STRICT"
@@ -21,6 +22,21 @@ def strict_mode_from_env() -> str:
 def _validate_strict_mode(mode: str) -> None:
     if mode not in VALID_STRICT_MODES:
         raise ValueError(f"Invalid strict mode {mode!r}. Valid modes are: {', '.join(VALID_STRICT_MODES)}.")
+
+
+def _reject_implementations(classes: Iterable[Any]) -> None:
+    """Raise TypeError for Implementation classes passed where FeatureGroups are expected."""
+    for cls in classes:
+        if isinstance(cls, type) and issubclass(cls, Implementation):
+            group = getattr(cls, "feature_group", None)
+            group_name = group.__name__ if group is not None else "its feature_group"
+            impl_name = cls.__name__
+            raise TypeError(
+                f"{impl_name} is an Implementation of {group_name}, not a FeatureGroup. "
+                f"Use PluginCollector.enabled_feature_groups({{{group_name}}}) to scope to its group, "
+                f"Feature(..., implementation={impl_name}) to pin it, or "
+                f"PluginCollector().add_disabled_implementation_classes({{{impl_name}}}) to disable it."
+            )
 
 
 class PluginCollector:
@@ -42,7 +58,7 @@ class PluginCollector:
     def __init__(self) -> None:
         self.disabled_feature_group_classes: set[type[FeatureGroup]] = set()
         self.enabled_feature_group_classes: set[type[FeatureGroup]] = set()
-        self.disabled_implementation_classes: "set[type[Implementation[Any]]]" = set()
+        self.disabled_implementation_classes: set[type[Implementation[Any]]] = set()
         self.allow_redefinition: bool = False
         self.strict_mode: str = strict_mode_from_env()
         self.registry: "PluginRegistry | None" = None
@@ -64,15 +80,17 @@ class PluginCollector:
         return self
 
     def add_disabled_feature_group_classes(self, feature_group_cls: set[type[FeatureGroup]]) -> None:
+        _reject_implementations(feature_group_cls)
         self.disabled_feature_group_classes.update(feature_group_cls)
 
     def add_enabled_feature_group_classes(self, feature_group_cls: set[type[FeatureGroup]]) -> None:
+        _reject_implementations(feature_group_cls)
         self.enabled_feature_group_classes.update(feature_group_cls)
 
-    def add_disabled_implementation_classes(self, implementation_cls: "set[type[Implementation[Any]]]") -> None:
+    def add_disabled_implementation_classes(self, implementation_cls: set[type[Implementation[Any]]]) -> None:
         self.disabled_implementation_classes.update(implementation_cls)
 
-    def applicable_implementation_class(self, implementation_cls: "type[Implementation[Any]]") -> bool:
+    def applicable_implementation_class(self, implementation_cls: type[Implementation[Any]]) -> bool:
         return implementation_cls not in self.disabled_implementation_classes
 
     def applicable_feature_group_class(self, feature_group_cls: type[FeatureGroup]) -> bool:

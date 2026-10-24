@@ -27,7 +27,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas im
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import PolarsLazyAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.test_plugins.feature_group.experimental.reference_contract import same
+from tests.test_plugins.feature_group.experimental.reference_contract import same_missing_agnostic
 
 
 AGGREGATION_UNIVERSE = frozenset(AggregatedFeatureGroup.AGGREGATION_TYPES)
@@ -136,11 +136,23 @@ _DIVERGENT_DECLARATIONS: dict[type[Implementation[Any]], dict[str, str]] = {
 }
 
 
-def _reference(aggregation_type: str, cells: list[float | None]) -> float | int:
-    """The reference contract: null and NaN are both missing and skipped; count counts non-missing values."""
+# Aggregation over no values: all missing, empty, and a multi-column frame with one all-missing row.
+_ALL_MISSING_SINGLE: dict[str, list[float | None]] = {"a": [_NAN, None]}
+_EMPTY_SINGLE: dict[str, list[float | None]] = {"a": []}
+_MULTI_WITH_MISSING_ROW: dict[str, list[float | None]] = {
+    "a": [1.0, _NAN, 3.0],
+    "b": [2.0, None, 5.0],
+    "c": [4.0, _NAN, 6.0],
+}
+
+
+def _reference(aggregation_type: str, cells: list[float | None]) -> float | int | None:
+    """The reference contract: null and NaN are missing and skipped; over no values sum and count are 0, others missing."""
     clean = [cell for cell in cells if cell is not None and not math.isnan(cell)]
     if aggregation_type == "count":
         return len(clean)
+    if not clean:
+        return 0 if aggregation_type == "sum" else None
     if aggregation_type in ("min", "max", "median"):
         reducers: dict[str, Callable[[list[float]], float]] = {"min": min, "max": max, "median": statistics.median}
         return reducers[aggregation_type](clean)
@@ -151,7 +163,7 @@ def _reference(aggregation_type: str, cells: list[float | None]) -> float | int:
     return statistics.stdev(clean) if aggregation_type == "std" else statistics.variance(clean)
 
 
-def _reference_result(aggregation_type: str, columns: dict[str, list[float | None]]) -> list[float | int]:
+def _reference_result(aggregation_type: str, columns: dict[str, list[float | None]]) -> list[float | int | None]:
     names = list(columns)
     if len(names) == 1:
         return [_reference(aggregation_type, columns[names[0]])]
@@ -161,8 +173,20 @@ def _reference_result(aggregation_type: str, columns: dict[str, list[float | Non
 
 def _pandas_result(aggregation_type: str, columns: dict[str, list[float | None]]) -> list[Any]:
     # A pandas float column cannot tell null from NaN, so both cells become NaN.
-    frame = pd.DataFrame({k: [np.nan if v is None else v for v in vs] for k, vs in columns.items()})
+    frame = pd.DataFrame({k: [np.nan if v is None else v for v in vs] for k, vs in columns.items()}, dtype="float64")
     result = PandasAggregation._perform_aggregation(frame, aggregation_type, list(columns))
+    return list(result) if hasattr(result, "__iter__") else [result]
+
+
+def _arrow_backed_frame(columns: dict[str, list[float | None]]) -> pd.DataFrame:
+    # ArrowExtensionArray over pa.array keeps NaN and null distinct (pd.array(dtype=ArrowDtype) turns NaN into null).
+    return pd.DataFrame(
+        {k: pd.arrays.ArrowExtensionArray(pa.array(vs, type=pa.float64())) for k, vs in columns.items()}
+    )
+
+
+def _pandas_arrow_result(aggregation_type: str, columns: dict[str, list[float | None]]) -> list[Any]:
+    result = PandasAggregation._perform_aggregation(_arrow_backed_frame(columns), aggregation_type, list(columns))
     return list(result) if hasattr(result, "__iter__") else [result]
 
 
@@ -186,24 +210,63 @@ _RESULT_OF: dict[type[Implementation[Any]], Callable[[str, dict[str, list[float 
 }
 
 
+_RUNNERS: list[tuple[type[Implementation[Any]], Callable[[str, dict[str, list[float | None]]], list[Any]]]] = [
+    *_RESULT_OF.items(),
+    (PandasAggregation, _pandas_arrow_result),
+]
+_RUNNER_IDS = [f"{impl.__name__}-{runner.__name__.strip('_')}" for impl, runner in _RUNNERS]
+
+
+class TestAggregationOverNoValues:
+    """The reference gives 0 for sum and count and a missing value for the rest over no values."""
+
+    @pytest.mark.parametrize("aggregation_type", sorted(AGGREGATION_UNIVERSE))
+    def test_reference_over_no_values(self, aggregation_type: str) -> None:
+        expected = 0 if aggregation_type in ("sum", "count") else None
+        assert _reference(aggregation_type, []) == expected
+        assert _reference(aggregation_type, [_NAN, None]) == expected
+
+    def test_missing_results_compare_across_representations(self) -> None:
+        assert all(same_missing_agnostic(a, None) for a in (None, _NAN, pd.NA))
+        assert not same_missing_agnostic(0, None)
+        assert not same_missing_agnostic(None, 0)
+
+    def test_pandas_leaves_an_arrow_backed_frame_unchanged(self) -> None:
+        frame = _arrow_backed_frame(_SINGLE_COLUMN)
+        before = frame.copy(deep=True)
+        PandasAggregation._perform_aggregation(frame, "sum", ["a"])
+        pd.testing.assert_frame_equal(frame, before)
+        column = pa.chunked_array([frame["a"].array._pa_array]).combine_chunks()  # type: ignore[attr-defined]
+        assert column.null_count == 1  # the NaN was not turned into a second null
+
+
 class TestImplementationsConformToTheReferenceContract:
     """An implementation differs from the reference exactly where it declares a divergence."""
 
     @pytest.mark.parametrize("aggregation_type", sorted(AGGREGATION_UNIVERSE))
-    @pytest.mark.parametrize("implementation", list(_RESULT_OF), ids=lambda impl: impl.__name__)
+    @pytest.mark.parametrize("implementation,runner", _RUNNERS, ids=_RUNNER_IDS)
     def test_result_differs_from_the_reference_exactly_when_declared(
-        self, implementation: type[Implementation[Any]], aggregation_type: str
+        self,
+        implementation: type[Implementation[Any]],
+        runner: Callable[[str, dict[str, list[float | None]]], list[Any]],
+        aggregation_type: str,
     ) -> None:
         assert dict(implementation.divergent) == _DIVERGENT_DECLARATIONS[implementation]
-        shapes = {"single": _SINGLE_COLUMN, "multi": _MULTI_COLUMNS}
+        shapes = {
+            "single": _SINGLE_COLUMN,
+            "multi": _MULTI_COLUMNS,
+            "all_missing": _ALL_MISSING_SINGLE,
+            "empty": _EMPTY_SINGLE,
+            "multi_missing_row": _MULTI_WITH_MISSING_ROW,
+        }
         differing: list[str] = []
         for shape, columns in shapes.items():
             # Polars rejects a multi-column median at run time; unsupported_multi_column_aggregations pins that.
-            if implementation is PolarsLazyAggregation and shape == "multi" and aggregation_type == "median":
+            if implementation is PolarsLazyAggregation and shape.startswith("multi") and aggregation_type == "median":
                 continue
-            actual = _RESULT_OF[implementation](aggregation_type, columns)
+            actual = runner(aggregation_type, columns)
             expected = _reference_result(aggregation_type, columns)
             assert len(actual) == len(expected), f"{shape}: {actual} vs {expected}"
-            if not all(same(a, e) for a, e in zip(actual, expected)):
+            if not all(same_missing_agnostic(a, e) for a, e in zip(actual, expected)):
                 differing.append(f"{shape}: {actual} != reference {expected}")
         assert bool(differing) == (aggregation_type in implementation.divergent), differing

@@ -139,7 +139,7 @@ class PyArrowAggregation(Implementation[AggregatedFeatureGroup]):
                 column = pc.if_else(pc.is_nan(column), pa.scalar(None, column.type), column)
 
             if aggregation_type == "sum":
-                return pc.sum(column)
+                return pc.sum(column, min_count=0)
             elif aggregation_type == "min":
                 return pc.min(column)
             elif aggregation_type == "max":

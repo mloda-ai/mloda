@@ -40,6 +40,7 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     - `median`: Median value
 
     Reference contract: null and NaN are both missing and skipped; count counts non-missing values.
+    Over no values (empty or all missing), sum and count are 0 and the other functions give a missing value.
 
     ## Feature Creation Methods
 

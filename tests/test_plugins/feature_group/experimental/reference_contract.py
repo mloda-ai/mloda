@@ -4,6 +4,8 @@ import math
 from numbers import Real
 from typing import Any
 
+import pandas as pd
+
 
 def _is_nan(value: Any) -> bool:
     return isinstance(value, float) and math.isnan(value)
@@ -18,6 +20,18 @@ def same(actual: Any, expected: Any) -> bool:
     if isinstance(actual, Real) and isinstance(expected, Real):
         return math.isclose(actual, expected, rel_tol=1e-9, abs_tol=1e-12)
     return bool(actual == expected)
+
+
+def is_missing(value: Any) -> bool:
+    """None, NaN and pd.NA all count as missing."""
+    return value is None or _is_nan(value) or value is pd.NA
+
+
+def same_missing_agnostic(actual: Any, expected: Any) -> bool:
+    """A missing expected value matches any missing representation; otherwise strict `same`."""
+    if is_missing(expected):
+        return is_missing(actual)
+    return not is_missing(actual) and same(actual, expected)
 
 
 def same_on_pandas(actual: Any, expected: Any) -> bool:

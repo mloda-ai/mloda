@@ -44,7 +44,7 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
-from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
+from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding as PandasEncoding
@@ -66,7 +66,7 @@ class TestForecastingInputFeatureDefaults:
 
     def test_string_parsed_children_have_forward_group_none(self) -> None:
         """String path: the source child AND the time_filter child carry forward_group is None."""
-        group = PandasForecastingFeatureGroup()
+        group = ForecastingFeatureGroup()
         options = Options({DefaultOptionKeys.reference_time: "time_filter"})
 
         by_name = _by_name(group.input_features(options, FeatureName("sales__linear_forecast_7day")))
@@ -77,7 +77,7 @@ class TestForecastingInputFeatureDefaults:
 
     def test_config_declared_children_have_forward_group_none(self) -> None:
         """Config path: the unspecified source child stays at None; time_filter is None too."""
-        group = PandasForecastingFeatureGroup()
+        group = ForecastingFeatureGroup()
         options = Options(
             group={
                 DefaultOptionKeys.in_features: "sales",
@@ -93,7 +93,7 @@ class TestForecastingInputFeatureDefaults:
 
     def test_config_declared_child_explicit_allowlist_is_preserved(self) -> None:
         """Config path: an explicit user allowlist on the source child is kept untouched."""
-        group = PandasForecastingFeatureGroup()
+        group = ForecastingFeatureGroup()
         source = Feature("sales", forward_group={"keep_me"})
         options = Options(
             group={
@@ -332,7 +332,7 @@ class TestConfigPathCountErrorWording:
             pytest.param(GeoDistanceFeatureGroup, ["a"], id="geo_distance-below_min"),
             pytest.param(GeoDistanceFeatureGroup, ["a", "b", "c"], id="geo_distance-above_max"),
             pytest.param(TimeWindowFeatureGroup, ["a", "b"], id="time_window-above_max"),
-            pytest.param(PandasForecastingFeatureGroup, ["a", "b"], id="forecasting-above_max"),
+            pytest.param(ForecastingFeatureGroup, ["a", "b"], id="forecasting-above_max"),
             pytest.param(EncodingFeatureGroup, ["a", "b"], id="encoding-above_max"),
         ],
     )

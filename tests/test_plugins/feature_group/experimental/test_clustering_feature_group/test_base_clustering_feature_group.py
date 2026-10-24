@@ -9,7 +9,6 @@ from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
-from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
 
 
 class TestClusteringFeatureGroup:
@@ -145,7 +144,7 @@ class TestClusteringFeatureGroup:
 
     def test_input_features(self) -> None:
         """Test the input_features method."""
-        feature_group = PandasClusteringFeatureGroup()
+        feature_group = ClusteringFeatureGroup()
 
         # Single source feature
         input_features = feature_group.input_features(Options(), FeatureName("customer_behavior__cluster_kmeans_5"))

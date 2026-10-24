@@ -8,7 +8,7 @@ from typing import Any, cast
 
 from datetime import datetime, timedelta
 
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, FeatureSet, Implementation
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
@@ -32,68 +32,23 @@ except ImportError:
     np = None  # type: ignore
 
 
-class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        """Define the compute framework for this feature group."""
-        return {PandasDataFrame}
+class PandasForecasting(Implementation[ForecastingFeatureGroup]):
+    feature_group = ForecastingFeatureGroup
+    compute_framework = PandasDataFrame
 
     @classmethod
-    def _get_available_columns(cls, data: pd.DataFrame) -> set[str]:
-        """Get the set of available column names from the DataFrame."""
-        return PandasDataFrame.extract_column_names(data)
-
-    @classmethod
-    def _check_reference_time_column_exists(cls, data: pd.DataFrame, reference_time_column: str) -> None:
-        """
-        Check if the reference time column exists in the DataFrame.
-
-        Args:
-            data: The pandas DataFrame
-            reference_time_column: The name of the reference time column
-
-        Raises:
-            ValueError: If the reference time column does not exist in the DataFrame
-        """
-        if reference_time_column not in data.columns:
-            raise ValueError(
-                f"Reference time column '{reference_time_column}' not found in data. "
-                f"Please ensure the DataFrame contains this column."
-            )
-
-    @classmethod
-    def _check_reference_time_column_is_datetime(cls, data: pd.DataFrame, reference_time_column: str) -> None:
-        """
-        Check if the reference time column is a datetime column.
-
-        Args:
-            data: The pandas DataFrame
-            reference_time_column: The name of the reference time column
-
-        Raises:
-            ValueError: If the reference time column is not a datetime column
-        """
-        semantics = pandas_type_semantics.column_semantics(data, reference_time_column)
-        cls._validate_reference_time_column(semantics, reference_time_column)
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
-        """
-        Check if the resolved features exist in the DataFrame.
-
-        Args:
-            data: The pandas DataFrame
-            feature_names: List of resolved feature names (may contain ~N suffixes)
-
-        Raises:
-            ValueError: If none of the resolved features exist in the data
-        """
-        available_columns = cls._get_available_columns(data)
-        missing_features = [name for name in feature_names if name not in available_columns]
-        if len(missing_features) == len(feature_names):
-            raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {sorted(available_columns, key=str)}"
-            )
+    def calculate(
+        cls, group: type[ForecastingFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        return group.forecast(
+            data,
+            features,
+            perform=cls._perform_forecasting,
+            perform_with_confidence=cls._perform_forecasting_with_confidence,
+            add_column=cls._add_result_to_data,
+            columns=cls.compute_framework.extract_column_names,
+            column_semantics=pandas_type_semantics.column_semantics,
+        )
 
     @classmethod
     def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: pd.Series) -> pd.DataFrame:

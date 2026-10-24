@@ -12,7 +12,6 @@ from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
-from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
 
 
 class TestNodeCentralityFeatureGroup:
@@ -82,7 +81,7 @@ class TestNodeCentralityFeatureGroup:
 
     def test_input_features(self) -> None:
         """Test the input_features method."""
-        feature_group = PandasNodeCentralityFeatureGroup()
+        feature_group = NodeCentralityFeatureGroup()
 
         # Test with different centrality types
         input_features = feature_group.input_features(Options(), FeatureName("user__degree_centrality"))
@@ -140,7 +139,7 @@ class TestNodeCentralityFeatureGroup:
         ],
     )
     def test_input_features_declare_edge_columns(self, context: dict[str, Any], expected: set[str]) -> None:
-        result = PandasNodeCentralityFeatureGroup().input_features(
+        result = NodeCentralityFeatureGroup().input_features(
             Options(context=context), FeatureName("user__degree_centrality")
         )
         assert result is not None
@@ -163,7 +162,7 @@ class TestNodeCentralityFeatureGroup:
         self, source: Feature, expected_group: dict[str, Any]
     ) -> None:
         options = Options(context={DefaultOptionKeys.in_features: frozenset([source]), "weight_column": "w"})
-        result = PandasNodeCentralityFeatureGroup().input_features(options, FeatureName("user__degree_centrality"))
+        result = NodeCentralityFeatureGroup().input_features(options, FeatureName("user__degree_centrality"))
         assert result is not None
         by_name = {str(f.name): f for f in result}
         assert set(by_name) == {"user", "source", "target", "w"}

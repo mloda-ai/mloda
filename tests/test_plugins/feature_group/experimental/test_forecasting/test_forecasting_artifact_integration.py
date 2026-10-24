@@ -19,8 +19,9 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding as PandasEncoding
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
-from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
+from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecasting
 from mloda.provider import DefaultOptionKeys
+from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
@@ -61,7 +62,7 @@ class TestForecastingArtifactIntegration:
     def test_forecast_chained_onehot_source_per_category(self) -> None:
         """A chained one-hot source yields one forecast column per category."""
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {ForecastingCategoryTestDataCreator, EncodingFeatureGroup, PandasForecastingFeatureGroup}
+            {ForecastingCategoryTestDataCreator, EncodingFeatureGroup, ForecastingFeatureGroup}
         )
         feature_name = "category__onehot_encoded__linear_forecast_7day"
         options = Options({DefaultOptionKeys.reference_time: "time_filter"})
@@ -91,7 +92,7 @@ class TestForecastingArtifactIntegration:
     def test_forecast_chained_onehot_source_selects_one_category(self) -> None:
         """Requesting `name~1` on a chained one-hot source returns only the `~1` forecast."""
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {ForecastingCategoryTestDataCreator, EncodingFeatureGroup, PandasForecastingFeatureGroup}
+            {ForecastingCategoryTestDataCreator, EncodingFeatureGroup, ForecastingFeatureGroup}
         )
         base_name = "category__onehot_encoded__linear_forecast_7day"
         options = Options({DefaultOptionKeys.reference_time: "time_filter"})
@@ -107,7 +108,7 @@ class TestForecastingArtifactIntegration:
     def test_forecast_multi_and_selected_together_artifact_reload(self) -> None:
         """Requesting `name` and `name~1` together saves the nested artifact under `name` and reloads."""
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {ForecastingCategoryTestDataCreator, EncodingFeatureGroup, PandasForecastingFeatureGroup}
+            {ForecastingCategoryTestDataCreator, EncodingFeatureGroup, ForecastingFeatureGroup}
         )
         base_name = "category__onehot_encoded__linear_forecast_7day"
         options = Options({DefaultOptionKeys.reference_time: "time_filter"})
@@ -132,7 +133,7 @@ class TestForecastingArtifactIntegration:
     SINGLE = "sales__linear_forecast_7day"
 
     def _collector(self, creator: type[ATestDataCreator]) -> PluginCollector:
-        return PluginCollector.enabled_feature_groups({creator, EncodingFeatureGroup, PandasForecastingFeatureGroup})
+        return PluginCollector.enabled_feature_groups({creator, EncodingFeatureGroup, ForecastingFeatureGroup})
 
     def _options(self, confidence_intervals: bool = False) -> Options:
         options = Options({DefaultOptionKeys.reference_time: "time_filter"})
@@ -202,11 +203,16 @@ class TestForecastingArtifactIntegration:
         with pytest.raises(ValueError):
             self._run(f"{self.SINGLE}~a\n", ForecastingArtifactTestDataCreator, self._options())
 
-    def test_artifact_save_and_load(self) -> None:
-        """Test saving and loading forecasting artifacts."""
+    def test_artifact_owned_by_group_not_implementation(self) -> None:
+        """The group owns the artifact; the implementation defines none."""
+        assert ForecastingFeatureGroup.artifact() is ForecastingArtifact
+        assert "artifact" not in PandasForecasting.__dict__
+
+    def test_artifact_save_and_load(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test saving and loading forecasting artifacts; run 2 must load, not refit."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {ForecastingArtifactTestDataCreator, PandasForecastingFeatureGroup}
+            {ForecastingArtifactTestDataCreator, ForecastingFeatureGroup}
         )
 
         # Create a feature for linear forecasting with 7-day horizon
@@ -245,6 +251,11 @@ class TestForecastingArtifactIntegration:
             compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
+
+        def _no_refit(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("run 2 refit instead of loading the artifact")
+
+        monkeypatch.setattr(PandasForecasting, "_train_model", classmethod(_no_refit))
 
         # Run the mloda to generate forecasts using the loaded artifact
         results2 = api2.run()

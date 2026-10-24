@@ -1,17 +1,21 @@
 """
-Tests for the PandasNodeCentralityFeatureGroup class.
+Tests for the PandasNodeCentrality implementation.
 """
+
+from unittest.mock import Mock
 
 import pytest
 import pandas as pd
 
 from mloda.user import Feature
 from mloda.provider import FeatureSet
-from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
+from mloda.user.pandas import PandasDataFrame
+from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
+from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentrality
 
 
-class TestPandasNodeCentralityFeatureGroup:
-    """Tests for the PandasNodeCentralityFeatureGroup class."""
+class TestPandasNodeCentrality:
+    """Tests for the PandasNodeCentrality implementation."""
 
     @pytest.fixture
     def sample_data(self) -> pd.DataFrame:
@@ -27,17 +31,47 @@ class TestPandasNodeCentralityFeatureGroup:
         ]
         return pd.DataFrame(edges)
 
-    def test_check_source_features_exist(self, sample_data: pd.DataFrame) -> None:
-        """Test the _check_source_features_exist method."""
-        # Valid feature
-        PandasNodeCentralityFeatureGroup._check_source_features_exist(sample_data, ["source"])
+    def _run_centrality(self, data: pd.DataFrame, feature_name: str) -> pd.DataFrame:
+        """Run the group centrality loop with a stub perform and the real pandas add/columns callables."""
+        feature_set = FeatureSet()
+        feature_set.add(Feature(feature_name))
+        feature_set.materialize_option_defaults(NodeCentralityFeatureGroup)
+        scores = pd.Series(0.5, index=["A", "B", "C", "D", "E"])
+        result: pd.DataFrame = NodeCentralityFeatureGroup.centrality(
+            data,
+            feature_set,
+            perform=Mock(return_value=scores),
+            add_column=PandasNodeCentrality._add_result_to_data,
+            columns=PandasDataFrame.extract_column_names,
+        )
+        return result
 
-        # Multiple valid features
-        PandasNodeCentralityFeatureGroup._check_source_features_exist(sample_data, ["source", "target"])
+    def test_centrality_source_present(self, sample_data: pd.DataFrame) -> None:
+        """A present source writes the result column."""
+        result = self._run_centrality(sample_data, "source__degree_centrality")
+        assert "source__degree_centrality" in result.columns
 
-        # Invalid feature
-        with pytest.raises(ValueError):
-            PandasNodeCentralityFeatureGroup._check_source_features_exist(sample_data, ["invalid_feature"])
+    def test_centrality_missing_source_raises(self, sample_data: pd.DataFrame) -> None:
+        """A missing source raises while the other edge columns are present (partial presence)."""
+        with pytest.raises(ValueError, match="Source features not found in data:") as exc:
+            self._run_centrality(sample_data, "invalid_feature__degree_centrality")
+        assert "invalid_feature" in str(exc.value)
+        assert "Available columns" in str(exc.value)
+        assert "target" in str(exc.value)
+        assert "weight" in str(exc.value)
+
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [
+            ("a__degree_centrality", "a"),
+            ("a__b", None),
+            ("centrality_result", None),
+            ("x__a__degree_centrality", "x__a"),
+        ],
+    )
+    def test_node_column_only_for_prefix_pattern(self, name: str, expected: str | None) -> None:
+        """Only names matching PREFIX_PATTERN yield a node column."""
+        assert NodeCentralityFeatureGroup._node_column(name) == expected
 
     @pytest.mark.parametrize(
         "name, mapped_column",
@@ -51,7 +85,7 @@ class TestPandasNodeCentralityFeatureGroup:
     def test_add_result_to_data_maps_through_column_only_for_prefix_pattern(
         self, name: str, mapped_column: str
     ) -> None:
-        """Only names matching PREFIX_PATTERN map through the column before the last separator."""
+        """Only a non-None node column maps through that column, else source is used."""
         data = pd.DataFrame(
             {
                 "source": ["A", "B", "C", "D"],
@@ -62,7 +96,9 @@ class TestPandasNodeCentralityFeatureGroup:
         )
         scores = pd.Series([0.5, 0.3, 0.2, 0.1, 0.0], index=["A", "B", "C", "D", "E"])
 
-        updated = PandasNodeCentralityFeatureGroup._add_result_to_data(data.copy(), name, scores)
+        updated = PandasNodeCentrality._add_result_to_data(
+            data.copy(), name, scores, NodeCentralityFeatureGroup._node_column(name)
+        )
 
         assert updated[name].tolist() == data[mapped_column].map(scores).tolist()
 
@@ -72,7 +108,7 @@ class TestPandasNodeCentralityFeatureGroup:
         nodes = pd.concat([sample_data["source"], sample_data["target"]]).unique()
 
         # Create adjacency matrix
-        adj_matrix = PandasNodeCentralityFeatureGroup._create_adjacency_matrix(
+        adj_matrix = PandasNodeCentrality._create_adjacency_matrix(
             sample_data, nodes, "source", "target", "weight", "undirected"
         )
 
@@ -86,7 +122,7 @@ class TestPandasNodeCentralityFeatureGroup:
         assert adj_matrix.loc["C", "A"] == 2.0  # Undirected
 
         # Create directed adjacency matrix
-        adj_matrix = PandasNodeCentralityFeatureGroup._create_adjacency_matrix(
+        adj_matrix = PandasNodeCentrality._create_adjacency_matrix(
             sample_data, nodes, "source", "target", "weight", "directed"
         )
 
@@ -100,12 +136,12 @@ class TestPandasNodeCentralityFeatureGroup:
         nodes = pd.concat([sample_data["source"], sample_data["target"]]).unique()
 
         # Create adjacency matrix
-        adj_matrix = PandasNodeCentralityFeatureGroup._create_adjacency_matrix(
+        adj_matrix = PandasNodeCentrality._create_adjacency_matrix(
             sample_data, nodes, "source", "target", "weight", "undirected"
         )
 
         # Calculate degree centrality
-        centrality = PandasNodeCentralityFeatureGroup._calculate_degree_centrality(adj_matrix, nodes, "undirected")
+        centrality = PandasNodeCentrality._calculate_degree_centrality(adj_matrix, nodes, "undirected")
 
         # Check that the centrality has the correct shape
         assert len(centrality) == len(nodes)
@@ -125,11 +161,11 @@ class TestPandasNodeCentralityFeatureGroup:
         nodes = pd.concat([sample_data["source"], sample_data["target"]]).unique()
 
         # Create adjacency matrix
-        adj_matrix = PandasNodeCentralityFeatureGroup._create_adjacency_matrix(
+        adj_matrix = PandasNodeCentrality._create_adjacency_matrix(
             sample_data, nodes, "source", "target", "weight", "undirected"
         )
 
-        calculate = getattr(PandasNodeCentralityFeatureGroup, f"_calculate_{algorithm}_centrality")
+        calculate = getattr(PandasNodeCentrality, f"_calculate_{algorithm}_centrality")
         centrality = calculate(adj_matrix, nodes)
 
         # Check that the centrality has the correct shape
@@ -149,11 +185,9 @@ class TestPandasNodeCentralityFeatureGroup:
         )
         nodes = pd.concat([edges["source"], edges["target"]]).unique()
 
-        adj_matrix = PandasNodeCentralityFeatureGroup._create_adjacency_matrix(
-            edges, nodes, "source", "target", None, "undirected"
-        )
+        adj_matrix = PandasNodeCentrality._create_adjacency_matrix(edges, nodes, "source", "target", None, "undirected")
 
-        centrality = PandasNodeCentralityFeatureGroup._calculate_betweenness_centrality(adj_matrix, nodes)
+        centrality = PandasNodeCentrality._calculate_betweenness_centrality(adj_matrix, nodes)
 
         # b sits on the only shortest path between a and c: hand-computed C_B(b) == 1.0
         assert centrality["b"] == 1.0
@@ -164,9 +198,7 @@ class TestPandasNodeCentralityFeatureGroup:
     def test_calculate_centrality(self, sample_data: pd.DataFrame) -> None:
         """Test the _calculate_centrality method."""
         # Test degree centrality
-        centrality = PandasNodeCentralityFeatureGroup._calculate_centrality(
-            sample_data, "degree", "source", "undirected", "weight"
-        )
+        centrality = PandasNodeCentrality._calculate_centrality(sample_data, "degree", "source", "undirected", "weight")
 
         # Check that the centrality has the correct shape
         assert len(centrality) == len(pd.concat([sample_data["source"], sample_data["target"]]).unique())
@@ -176,7 +208,7 @@ class TestPandasNodeCentralityFeatureGroup:
         # Note: Centrality values may exceed 1 depending on the normalization method
 
         # Test betweenness centrality
-        centrality = PandasNodeCentralityFeatureGroup._calculate_centrality(
+        centrality = PandasNodeCentrality._calculate_centrality(
             sample_data, "betweenness", "source", "undirected", "weight"
         )
 
@@ -194,10 +226,10 @@ class TestPandasNodeCentralityFeatureGroup:
         feature_set.add(Feature("source__degree_centrality"))
 
         # Direct call bypasses run_calculate_feature, so mirror its default materialization (#796)
-        feature_set.materialize_option_defaults(PandasNodeCentralityFeatureGroup)
+        feature_set.materialize_option_defaults(NodeCentralityFeatureGroup)
 
         # Calculate the feature
-        result = PandasNodeCentralityFeatureGroup.calculate_feature(sample_data, feature_set)
+        result = PandasNodeCentrality.calculate(NodeCentralityFeatureGroup, sample_data, feature_set, None)
 
         # Check that the result has the expected column
         assert "source__degree_centrality" in result.columns
@@ -219,10 +251,10 @@ class TestPandasNodeCentralityFeatureGroup:
             feature_set.add(feature)
 
         # Direct call bypasses run_calculate_feature, so mirror its default materialization (#796)
-        feature_set.materialize_option_defaults(PandasNodeCentralityFeatureGroup)
+        feature_set.materialize_option_defaults(NodeCentralityFeatureGroup)
 
         # Calculate the features
-        result = PandasNodeCentralityFeatureGroup.calculate_feature(sample_data, feature_set)
+        result = PandasNodeCentrality.calculate(NodeCentralityFeatureGroup, sample_data, feature_set, None)
 
         # Check that the result has the expected columns
         assert "source__degree_centrality" in result.columns

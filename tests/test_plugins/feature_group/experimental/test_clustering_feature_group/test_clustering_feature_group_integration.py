@@ -13,7 +13,7 @@ from mloda.user import PluginCollector
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
-from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
+from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClustering as PandasClustering
 from mloda.provider import DefaultOptionKeys
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
@@ -116,7 +116,7 @@ class TestClusteringFeatureGroupIntegration:
         plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 ClusteringFeatureTestDataCreator,
-                PandasClusteringFeatureGroup,
+                ClusteringFeatureGroup,
             }
         )
 
@@ -145,7 +145,7 @@ class TestClusteringFeatureGroupIntegration:
         plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 ClusteringFeatureTestDataCreator,
-                PandasClusteringFeatureGroup,
+                ClusteringFeatureGroup,
             }
         )
 
@@ -207,7 +207,7 @@ class TestClusteringFeatureGroupIntegration:
         plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 ClusteringFeatureTestDataCreator,
-                PandasClusteringFeatureGroup,
+                ClusteringFeatureGroup,
             }
         )
 

@@ -1,6 +1,8 @@
 """
-Tests for the PandasClusteringFeatureGroup class.
+Tests for the PandasClustering implementation.
 """
+
+from unittest.mock import Mock
 
 import pytest
 import pandas as pd
@@ -8,11 +10,13 @@ import numpy as np
 
 from mloda.user import Feature
 from mloda.provider import FeatureSet
-from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
+from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
+from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClustering
+from mloda.user.pandas import PandasDataFrame
 
 
-class TestPandasClusteringFeatureGroup:
-    """Tests for the PandasClusteringFeatureGroup class."""
+class TestPandasClustering:
+    """Tests for the PandasClustering implementation."""
 
     @pytest.fixture
     def sample_data(self) -> pd.DataFrame:
@@ -42,18 +46,32 @@ class TestPandasClusteringFeatureGroup:
 
         return df
 
-    def test_check_source_features_exist(self, sample_data: pd.DataFrame) -> None:
-        """Test the _check_source_features_exist method."""
-        # Valid features
-        PandasClusteringFeatureGroup._check_source_features_exist(sample_data, ["feature1"])
-        PandasClusteringFeatureGroup._check_source_features_exist(sample_data, ["feature1", "feature2"])
+    def _run_loop(self, data: pd.DataFrame, feature_name: str) -> pd.DataFrame:
+        """Run the group loop with a stub perform and the real pandas add/columns callables."""
+        feature_set = FeatureSet()
+        feature_set.add(Feature(feature_name))
+        labels = np.zeros(len(data), dtype=int)
+        result: pd.DataFrame = ClusteringFeatureGroup.cluster(
+            data,
+            feature_set,
+            perform=Mock(return_value=labels),
+            perform_with_probabilities=Mock(),
+            add_column=PandasClustering._add_result_to_data,
+            columns=PandasDataFrame.extract_column_names,
+        )
+        return result
 
-        # Invalid features - all missing should raise error
-        with pytest.raises(ValueError):
-            PandasClusteringFeatureGroup._check_source_features_exist(sample_data, ["invalid_feature"])
+    def test_cluster_loop_partial_source_presence_passes(self, sample_data: pd.DataFrame) -> None:
+        """One of two source names present does not raise."""
+        result = self._run_loop(sample_data, "feature1&invalid_feature__cluster_kmeans_2")
+        assert "feature1&invalid_feature__cluster_kmeans_2" in result.columns
 
-        # Partial match should NOT raise error (some features exist)
-        PandasClusteringFeatureGroup._check_source_features_exist(sample_data, ["feature1", "invalid_feature"])
+    def test_cluster_loop_all_sources_missing_raises(self, sample_data: pd.DataFrame) -> None:
+        """No source name present raises ValueError listing available columns."""
+        with pytest.raises(ValueError, match="None of the source features") as exc:
+            self._run_loop(sample_data, "invalid1&invalid2__cluster_kmeans_2")
+        assert "Available columns" in str(exc.value)
+        assert "feature1" in str(exc.value)
 
     def test_add_result_to_data(self, sample_data: pd.DataFrame) -> None:
         """Test the _add_result_to_data method."""
@@ -61,7 +79,7 @@ class TestPandasClusteringFeatureGroup:
         result = np.array([0, 1] * 50)
 
         # Add the result to the data
-        updated_data = PandasClusteringFeatureGroup._add_result_to_data(sample_data, "cluster_result", result)
+        updated_data = PandasClustering._add_result_to_data(sample_data, "cluster_result", result)
 
         # Check that the result was added
         assert "cluster_result" in updated_data.columns
@@ -74,7 +92,7 @@ class TestPandasClusteringFeatureGroup:
         # Extract features
         X = sample_data[["feature1", "feature2"]].values
 
-        cluster = getattr(PandasClusteringFeatureGroup, f"_perform_{algorithm}_clustering")
+        cluster = getattr(PandasClustering, f"_perform_{algorithm}_clustering")
         result = cluster(X, 2)
 
         # Check that the result has the expected shape
@@ -89,7 +107,7 @@ class TestPandasClusteringFeatureGroup:
         X = sample_data[["feature1", "feature2"]].values
 
         # Perform DBSCAN clustering
-        result = PandasClusteringFeatureGroup._perform_dbscan_clustering(X, "auto")
+        result = PandasClustering._perform_dbscan_clustering(X, "auto")
 
         # Check that the result has the expected shape
         assert len(result) == len(sample_data)
@@ -105,7 +123,7 @@ class TestPandasClusteringFeatureGroup:
         X = sample_data[["feature1", "feature2"]].values
 
         # Perform affinity clustering
-        result = PandasClusteringFeatureGroup._perform_affinity_clustering(X, "auto")
+        result = PandasClustering._perform_affinity_clustering(X, "auto")
 
         # Check that the result has the expected shape
         assert len(result) == len(sample_data)
@@ -119,7 +137,7 @@ class TestPandasClusteringFeatureGroup:
         X = sample_data[["feature1", "feature2"]].values
 
         # Find optimal k
-        k = PandasClusteringFeatureGroup._find_optimal_k(X, "kmeans", max_k=5)
+        k = PandasClustering._find_optimal_k(X, "kmeans", max_k=5)
 
         # Check that k is a positive integer
         assert isinstance(k, int)
@@ -133,7 +151,7 @@ class TestPandasClusteringFeatureGroup:
         feature_set.add(Feature("feature1&feature2__cluster_kmeans_2"))
 
         # Calculate the feature
-        result = PandasClusteringFeatureGroup.calculate_feature(sample_data, feature_set)
+        result = PandasClustering.calculate(ClusteringFeatureGroup, sample_data, feature_set, None)
 
         # Check that the result has the expected column
         assert "feature1&feature2__cluster_kmeans_2" in result.columns
@@ -148,7 +166,7 @@ class TestPandasClusteringFeatureGroup:
         feature_set.add(Feature("feature1&feature2__cluster_dbscan_auto"))
 
         # Calculate the feature
-        result = PandasClusteringFeatureGroup.calculate_feature(sample_data, feature_set)
+        result = PandasClustering.calculate(ClusteringFeatureGroup, sample_data, feature_set, None)
 
         # Check that the result has the expected column
         assert "feature1&feature2__cluster_dbscan_auto" in result.columns
@@ -165,7 +183,7 @@ class TestPandasClusteringFeatureGroup:
         feature_set.add(Feature("feature1&feature2__cluster_hierarchical_2"))
 
         # Calculate the feature
-        result = PandasClusteringFeatureGroup.calculate_feature(sample_data, feature_set)
+        result = PandasClustering.calculate(ClusteringFeatureGroup, sample_data, feature_set, None)
 
         # Check that the result has the expected column
         assert "feature1&feature2__cluster_hierarchical_2" in result.columns
@@ -186,7 +204,7 @@ class TestPandasClusteringFeatureGroup:
             feature_set.add(i)
 
         # Calculate the features
-        result = PandasClusteringFeatureGroup.calculate_feature(sample_data, feature_set)
+        result = PandasClustering.calculate(ClusteringFeatureGroup, sample_data, feature_set, None)
 
         # Check that the result has the expected columns
         assert "feature1&feature2__cluster_kmeans_2" in result.columns

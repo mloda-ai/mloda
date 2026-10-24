@@ -15,27 +15,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
-from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
-from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
-    PandasDimensionalityReductionFeatureGroup,
-)
-from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
-from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
 from tests.test_plugins.feature_group.experimental.columnwise_hooks_test_mixin import (
     ADD_HOOK,
     CHECK_HOOK,
     DISCOVERY_HOOK,
-    ColumnDiscoveryHooksTestMixin,
-    ColumnwiseHooksTestMixin,
-)
-from tests.test_plugins.feature_group.experimental.test_check_source_features_signature import (
-    STRICT_PANDAS_CLASSES,
-    TOLERANT_PANDAS_CLASSES,
 )
 
 HOOK_NAMES: tuple[str, ...] = (DISCOVERY_HOOK, CHECK_HOOK, ADD_HOOK)
@@ -48,17 +35,6 @@ assert SCAN_ROOT.exists(), f"scan root not found; check the parents index for th
 
 # Lower bound only: a new experimental family adds a base.py and must not fail this sweep.
 MIN_BASE_MODULES = 12
-PANDAS_CONSUMER_COUNT = 4
-
-# Single source of truth for the tolerant/strict split: a strict group raises when ANY source name is
-# missing, a tolerant one only when NONE of them exists. Every strict fixture below reads this map,
-# and test_strictness_map_agrees_with_signature_lists pins it against the signature suite's lists.
-STRICTNESS: dict[type[Any], bool] = {
-    PandasClusteringFeatureGroup: False,
-    PandasForecastingFeatureGroup: False,
-    PandasDimensionalityReductionFeatureGroup: True,
-    PandasNodeCentralityFeatureGroup: True,
-}
 
 
 def sample_frame() -> pd.DataFrame:
@@ -75,14 +51,6 @@ HOOK_INVOCATIONS: list[tuple[str, Callable[[Any, Any], Any]]] = [
     (CHECK_HOOK, lambda hook, data: hook(data, ["col_a"])),
     (ADD_HOOK, lambda hook, data: hook(data, "hook_result", [1, 2])),
 ]
-
-
-class StrictnessFromMap:
-    """Supplies the strict fixture from STRICTNESS, so no consumer restates the split."""
-
-    @pytest.fixture
-    def strict(self, plugin_class: Any) -> bool:
-        return STRICTNESS[plugin_class]
 
 
 @pytest.mark.parametrize("hook_name", HOOK_NAMES)
@@ -121,17 +89,6 @@ def test_unimplemented_hook_raises_not_implemented(hook_name: str, invoke: Calla
     assert hook_name in message, f"{hook_name} error omits the hook name: {message}"
 
 
-def test_strictness_map_agrees_with_signature_lists() -> None:
-    """The strict/tolerant split here must not drift from the lists the signature suite drives."""
-    from_lists: dict[type[Any], bool] = {cls: True for cls in STRICT_PANDAS_CLASSES}
-    from_lists.update({cls: False for cls in TOLERANT_PANDAS_CLASSES})
-    assert len(from_lists) == PANDAS_CONSUMER_COUNT, (
-        f"signature lists cover {len(from_lists)} pandas classes, expected {PANDAS_CONSUMER_COUNT}"
-    )
-    mismatches = sorted(cls.__name__ for cls, strict in from_lists.items() if STRICTNESS.get(cls) is not strict)
-    assert mismatches == [], f"STRICTNESS disagrees with test_check_source_features_signature for: {mismatches}"
-
-
 def test_no_base_module_declares_a_hook_in_source() -> None:
     """Static sweep: no base.py under the experimental tree re-adds a hook declaration to a class body."""
     offenders: list[str] = []
@@ -152,61 +109,3 @@ def test_no_base_module_declares_a_hook_in_source() -> None:
     assert visited >= MIN_BASE_MODULES, (
         f"sweep visited only {visited} base.py files under {SCAN_ROOT}: the sweep root is wrong or the glob broke"
     )
-
-
-class TestPandasClusteringHooks(StrictnessFromMap, ColumnDiscoveryHooksTestMixin):
-    """Clustering pandas group: tolerant check, plus column discovery."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PandasClusteringFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_frame()
-
-
-class TestPandasForecastingHooks(StrictnessFromMap, ColumnDiscoveryHooksTestMixin):
-    """Forecasting pandas group: tolerant check, plus column discovery."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PandasForecastingFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_frame()
-
-
-class TestPandasDimensionalityReductionHooks(StrictnessFromMap, ColumnwiseHooksTestMixin):
-    """Dimensionality reduction pandas group: strict check, and one result expands to per-dimension columns."""
-
-    result_feature_name = "col_a__pca_2d"
-
-    def make_result(self, sample_data: Any) -> Any:
-        """Return a two-dimensional reduction result with one row per data row."""
-        rows = len(sample_data)
-        return np.arange(rows * 2, dtype=float).reshape(rows, 2)
-
-    def expected_result_columns(self) -> set[str]:
-        return {f"{self.result_feature_name}~dim1", f"{self.result_feature_name}~dim2"}
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PandasDimensionalityReductionFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_frame()
-
-
-class TestPandasNodeCentralityHooks(StrictnessFromMap, ColumnwiseHooksTestMixin):
-    """Node centrality pandas group: strict check."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PandasNodeCentralityFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_frame()

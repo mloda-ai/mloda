@@ -16,7 +16,7 @@ from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
-from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
+from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecasting as PandasForecasting
 from mloda.provider import DefaultOptionKeys
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
@@ -47,7 +47,7 @@ class TestForecastingModernization:
         """Test that string-based feature creation still works (legacy approach)."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {ForecastingModernizationTestDataCreator, PandasForecastingFeatureGroup}
+            {ForecastingModernizationTestDataCreator, ForecastingFeatureGroup}
         )
 
         # Create a string-based feature
@@ -76,7 +76,7 @@ class TestForecastingModernization:
         """Test that configuration-based feature creation works (modern approach)."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {ForecastingModernizationTestDataCreator, PandasForecastingFeatureGroup}
+            {ForecastingModernizationTestDataCreator, ForecastingFeatureGroup}
         )
 
         # Create a configuration-based feature
@@ -112,7 +112,7 @@ class TestForecastingModernization:
         """Test that both string-based and configuration-based approaches produce equivalent functionality."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {ForecastingModernizationTestDataCreator, PandasForecastingFeatureGroup}
+            {ForecastingModernizationTestDataCreator, ForecastingFeatureGroup}
         )
 
         # Create string-based feature
@@ -153,7 +153,7 @@ class TestForecastingModernization:
         """Test that parameter validation works correctly for configuration-based features."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {ForecastingModernizationTestDataCreator, PandasForecastingFeatureGroup}
+            {ForecastingModernizationTestDataCreator, ForecastingFeatureGroup}
         )
 
         # Test invalid algorithm
@@ -208,7 +208,7 @@ class TestForecastingModernization:
         """Test multiple forecasting algorithms using configuration-based approach."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {ForecastingModernizationTestDataCreator, PandasForecastingFeatureGroup}
+            {ForecastingModernizationTestDataCreator, ForecastingFeatureGroup}
         )
 
         algorithms = ["linear", "ridge", "randomforest"]
@@ -243,7 +243,7 @@ class TestForecastingModernization:
         """Test that context parameters don't affect Feature Group resolution/splitting."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {ForecastingModernizationTestDataCreator, PandasForecastingFeatureGroup}
+            {ForecastingModernizationTestDataCreator, ForecastingFeatureGroup}
         )
 
         # Create two features with different context parameters but same group parameters

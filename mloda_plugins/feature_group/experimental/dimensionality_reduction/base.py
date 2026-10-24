@@ -4,23 +4,22 @@ Base implementation for dimensionality reduction feature groups.
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from collections.abc import Callable
 from typing import Any, cast
 
-from mloda.provider import FeatureGroup
+from mloda.provider import OperationFeatureGroup
 from mloda.user import Feature
 from mloda.provider import (
     FeatureChainParser,
     FeatureChainParserMixin,
 )
-from mloda.provider import COLUMNWISE_HOOKS
 from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec, is_positive_int
 
 
-class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     """
     Base class for all dimensionality reduction feature groups.
 
@@ -119,9 +118,6 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
     IN_FEATURE_SEPARATOR = ","
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = None
-
-    # Hooks calculate_feature calls: _check_source_features_exist, _add_result_to_data.
-    REQUIRED_COLUMNWISE_HOOKS = COLUMNWISE_HOOKS
 
     PROPERTY_MAPPING = {
         ALGORITHM: PropertySpec(
@@ -308,53 +304,28 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
         return algorithm, dimension, feature.options
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Perform dimensionality reduction operations.
-
-        Processes all requested features, determining the dimensionality reduction algorithm,
-        dimension, and source features from either string parsing or configuration-based options.
-
-        Adds the dimensionality reduction results directly to the input data structure.
-        """
-
-        # Process each requested feature
+    def reduce(
+        cls,
+        data: Any,
+        features: FeatureSet,
+        *,
+        perform: Callable[[Any, str, int, list[str], Options], Any],
+        add_column: Callable[[Any, str, Any], Any],
+        columns: Callable[[Any], set[str]],
+    ) -> Any:
+        """Shared loop: resolve each feature's sources, check them, reduce, add the result columns."""
         for feature in features.get_sorted_features():
             algorithm, dimension, source_features, options = cls._extract_algorithm_dimension_and_source_features(
                 feature
             )
 
-            # Check if all source features exist
-            cls._check_source_features_exist(data, source_features)
+            available = columns(data)
+            missing = [n for n in source_features if n not in available]
+            if missing:
+                raise ValueError(
+                    f"Source features not found in data: {missing}. Available columns: {sorted(available, key=str)}"
+                )
 
-            # Perform dimensionality reduction
-            result = cls._perform_reduction(data, algorithm, dimension, source_features, options)
-
-            # Add the result to the data
-            data = cls._add_result_to_data(data, feature.name, result)
+            result = perform(data, algorithm, dimension, source_features, options)
+            data = add_column(data, feature.name, result)
         return data
-
-    @classmethod
-    @abstractmethod
-    def _perform_reduction(
-        cls,
-        data: Any,
-        algorithm: str,
-        dimension: int,
-        source_features: list[str],
-        options: Options,
-    ) -> Any:
-        """
-        Method to perform the dimensionality reduction. Should be implemented by subclasses.
-
-        Args:
-            data: The input data
-            algorithm: The dimensionality reduction algorithm to use
-            dimension: The target dimension for the reduction
-            source_features: The list of source features to use for dimensionality reduction
-            options: Options containing algorithm-specific parameters
-
-        Returns:
-            The result of the dimensionality reduction (typically the reduced features)
-        """
-        ...

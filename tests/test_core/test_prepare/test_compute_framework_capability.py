@@ -28,6 +28,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.implementation import accessible_implementations
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.user import PluginCollector, mloda
@@ -434,10 +435,33 @@ class TestOperationGroupImplementationCapability:
         with pytest.raises(ValueError):
             run()
 
-    def test_subtype_support_matrix_reads_the_implementations(self) -> None:
+    def test_subtype_support_matrix_reads_the_implementations(self, make_implementation: Any) -> None:
         toy = _toy_operation()
 
         matrix = toy.OpToyFG.subtype_support_matrix()
         assert matrix["PandasDataFrame"] == frozenset({"sum", "median"})
         assert matrix["PyArrowTable"] == frozenset({"sum"})
         assert "PythonDictFramework" not in matrix
+
+        child = make_implementation(
+            toy.OpToyFG,
+            toy.PandasDataFrame,
+            lambda g, m, f: pd.DataFrame({toy.OPTOY_FEATURE: [toy.PANDAS_MARK]}),
+            base=toy.OpToyPandas,
+        )
+        child.accepts = classmethod(
+            lambda cls, feature_name, options: (
+                not (options.get(toy.OPTOY_KEY) == "median" and options.get(toy.OPTOY_PANDAS_OFF) is not None)
+            )
+        )
+
+        def probe(kind: str, off: bool) -> bool:
+            options = Options({toy.OPTOY_KEY: kind, **({toy.OPTOY_PANDAS_OFF: "1"} if off else {})})
+            return bool(toy.OpToyFG.supports_compute_framework(toy.OPTOY_FEATURE, options, toy.PandasDataFrame))
+
+        with accessible_implementations({child, toy.OpToyPyArrow}):
+            # The matrix reads only the implementations' supported, so an accepts restriction is not reflected.
+            assert toy.OpToyFG.subtype_support_matrix()["PandasDataFrame"] == frozenset({"sum", "median"})
+            assert probe("median", True) is False
+            assert probe("sum", True) is True
+            assert probe("median", False) is True

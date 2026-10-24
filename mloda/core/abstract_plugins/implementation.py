@@ -103,7 +103,8 @@ class Implementation(ABC, Generic[G]):
 
     @classmethod
     def accepts(cls, feature_name: str, options: Options) -> bool:
-        """Whether this implementation can compute the concrete feature; True by default."""
+        """Whether this implementation can compute the concrete feature; True by default.
+        A rejection here is per feature and does not show in subtype_support_matrix()."""
         return True
 
     @classmethod

@@ -444,6 +444,28 @@ class TestPolicy:
 
         _success(_explain(tmp_path, {"features": [feature]}, sources=sources))
 
+    def test_derived_name_over_denied_column_is_policy_denied(self, tmp_path: Path, denied_calls: list[str]) -> None:
+        sources = {"sales": _source("sales", _write_sales_with_denied_column(tmp_path))}
+
+        result = _explain(tmp_path, {"features": ["mcp4_salary" + DOUBLE_SUFFIX]}, sources=sources)
+
+        error = _error(result, "policy_denied")
+        assert _has_detail(error, path="/features", problem="policy_denied")
+        assert denied_calls == []
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+    def test_derived_name_over_denied_column_carries_alternatives(self, tmp_path: Path) -> None:
+        sources = {"sales": _source("sales", _write_sales_with_denied_column(tmp_path))}
+
+        result = _explain(
+            tmp_path,
+            {"features": ["mcp4_salary" + DOUBLE_SUFFIX]},
+            sources=sources,
+            alternatives={"mcp4_salary": ("income",)},
+        )
+
+        assert _error(result, "policy_denied")["alternatives"] == ["income"]
+
     def test_allowed_request_never_calls_into_denied(self, tmp_path: Path, denied_calls: list[str]) -> None:
         _success(_explain(tmp_path, {"features": ["customer_id", DERIVED]}))
         assert denied_calls == []

@@ -91,7 +91,8 @@ the request by JSON pointer, with a suggestion when a close name exists.
 - Sources are named by alias only. Paths, connection details, data-access objects and option values never appear in a
   result, and a request cannot set data-access options.
 - Denied FeatureGroups are disabled before matching, so their code does not run; the agent sees `policy_denied` and
-  the alternatives you configured.
+  the alternatives you configured. Requested names, `index` columns and `in_features` source names are deny-checked
+  before planning; a column the plan would read from a name a denied FeatureGroup serves is refused after planning.
 - `run` re-plans the request: validation, policy, filters and row limits are checked again, and a plan that resolves
   differently is refused as `plan_stale`.
 - With `max_rows` set, a request is refused as `limit_exceeded` when a configured source has more rows or cannot be
@@ -99,7 +100,7 @@ the request by JSON pointer, with a suggestion when a close name exists.
   loads itself (never countable), and, after `run`, when a result table has more rows.
 - The preview holds only columns whose classification is in `preview_allows`. A derived feature takes the strictest
   classification of its inputs unless you classify it yourself. Unclassified columns are withheld.
-- `keep_index: true` in a request requires `index`. Index columns are deny-checked and classified like any column.
+- `keep_index: true` in a request requires `index`. Index columns are classified like any column.
 - A filter on a column the preview withholds is refused as `policy_denied`: row counts would reveal its values.
 - Descriptions and previewed values come from plugins and data: the server marks them untrusted.
 - Each call writes one audit record to the `mloda.interfaces.mcp` logger, without argument values. The principal is the

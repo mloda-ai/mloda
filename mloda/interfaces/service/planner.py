@@ -224,7 +224,8 @@ class Planner:
         if isinstance(parsed, list):
             return error_result("validation_failed", "A feature config is invalid.", problems_to_details(parsed))
         request_names = [_item_name(item) for item in request["features"]]
-        denied = self._denied(request_names, [*self._index_entries(request), *in_feature_sources(request)])
+        names = [(f"/features/{index}", name) for index, name in enumerate(request_names)]
+        denied = self._denied([*names, *self._index_entries(request), *in_feature_sources(request)])
         if denied is not None:
             return denied
         sources = self._sources(parsed.restrict_sources)
@@ -239,6 +240,9 @@ class Planner:
             return failure_result("Planning", error)
         if not diagnosis.complete:
             return self._unresolved(diagnosis, request_names, sources)
+        planned = self._denied([("/features", name) for step in steps for name in step.feature_names])
+        if planned is not None:
+            return planned
         filters = request.get("filters", [])
         unmatched = self._unmatched_filters(parsed, filters)
         if unmatched is not None:
@@ -363,14 +367,16 @@ class Planner:
             for j, column in enumerate(item.get("index", ()))
         ]
 
-    def _denied(self, names: Sequence[str], index_entries: Sequence[tuple[str, str]]) -> dict[str, Any] | None:
-        entries = [(f"/features/{index}", name) for index, name in enumerate(names)]
-        denied = [(path, name) for path, name in [*entries, *index_entries] if self._catalog.is_denied(name)]
+    def _denied(self, entries: Sequence[tuple[str, str]]) -> dict[str, Any] | None:
+        denied = [(path, name) for path, name in entries if self._catalog.is_denied(name)]
         if not denied:
             return None
         alternatives = [alt for _, name in denied for alt in self._settings.alternatives.get(name, ())]
         extra: dict[str, Any] = {"alternatives": list(dict.fromkeys(alternatives))} if alternatives else {}
-        details = [{"path": path, "problem": "policy_denied", "message": _DENIED_MESSAGE} for path, _ in denied]
+        details = [
+            {"path": path, "problem": "policy_denied", "message": _DENIED_MESSAGE}
+            for path in dict.fromkeys(p for p, _ in denied)
+        ]
         return error_result("policy_denied", _DENIED_MESSAGE, details, **extra)
 
     def _unresolved(

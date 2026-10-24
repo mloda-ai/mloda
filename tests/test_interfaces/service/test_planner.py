@@ -23,7 +23,13 @@ from mloda.interfaces.service.catalog import Catalog
 from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import ERROR_CODES, is_error
 from mloda.interfaces.service.lock import MLODA_LOCK
-from mloda.interfaces.service.planner import MAX_PLAN_ID_LENGTH, PLAN_TOKEN_PREFIX, Planner
+from mloda.interfaces.service.planner import (
+    MAX_PLAN_ID_LENGTH,
+    PLAN_TOKEN_PREFIX,
+    PlannedRequest,
+    Planner,
+    _inline_alias,
+)
 from mloda.provider import ApiDataFG, BaseInputData, DataCreator, FeatureSet, ResolutionDiagnosis, SourceMatch
 from mloda.user import PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -929,6 +935,16 @@ class TestInlineData:
         assert result["estimate"]["sources"] == [{"alias": "Tokens", "rows": 3, "rows_exact": True}]
         assert result["estimate"]["rows_read"] == 3
         assert result["normalized_request"]["data"] == INLINE_REQUEST["data"]
+
+    def test_only_api_data_fg_steps_are_inline_sets(self, tmp_path: Path) -> None:
+        planned = _planner(_settings(tmp_path, inline_data=True)).plan(INLINE_REQUEST)
+        assert isinstance(planned, PlannedRequest)
+        step = next(s for s in planned.steps if s.feature_group is not None and issubclass(s.feature_group, ApiDataFG))
+        foreign = dataclasses.replace(step, feature_group=CsvFG)
+        assert (foreign.data_access_identity or "").startswith("api_data:")
+
+        assert _inline_alias(step, planned.parsed.inline_data) == "Tokens"
+        assert _inline_alias(foreign, planned.parsed.inline_data) is None
 
     def test_max_rows_applies_to_inline_rows(self, tmp_path: Path) -> None:
         result = _explain(tmp_path, INLINE_REQUEST, inline_data=True, max_rows=2)

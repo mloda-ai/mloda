@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
-import math
 import numbers
 import statistics
 from collections import Counter
+from decimal import Decimal
 from typing import Any
 
 from mloda.provider import ComputeFramework, FeatureSet, Implementation
 
 from mloda.user.python_dict import PythonDictFramework, row_count
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
+
+_PLAIN_TYPES = frozenset({str, int, bool, bytes})
+_NAT_TYPES = frozenset({("pandas", "NaTType"), ("numpy", "datetime64"), ("numpy", "timedelta64")})
 
 
 class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup]):
@@ -48,12 +51,31 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
 
     @classmethod
     def _nan_to_none(cls, data: dict[str, list[Any]], columns: list[str]) -> dict[str, list[Any]]:
-        """Copy data with float NaN replaced by None in the given columns."""
+        """Copy data with NaN-like cells replaced by None in the given columns."""
         normalized = dict(data)
         for name in columns:
             if name in data:
-                normalized[name] = [None if isinstance(v, float) and math.isnan(v) else v for v in data[name]]
+                normalized[name] = [None if cls._is_missing(v) else v for v in data[name]]
         return normalized
+
+    @staticmethod
+    def _is_missing(v: Any) -> bool:
+        """Type-based check that never calls a user-defined comparison."""
+        t = type(v)
+        if v is None:
+            return True
+        if t in _PLAIN_TYPES:
+            return False
+        if t is float:
+            return bool(v != v)
+        module = t.__module__.split(".")[0]
+        if module == "pandas" and t.__name__ == "NAType":
+            return True
+        if (module, t.__name__) in _NAT_TYPES:
+            return bool(v != v)
+        if isinstance(v, Decimal):
+            return v.is_nan()
+        return module in ("builtins", "numpy") and isinstance(v, numbers.Complex) and bool(v != v)
 
     @classmethod
     def _mode_of(cls, values: list[Any]) -> Any:
@@ -184,8 +206,12 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
         """
         # Create groups based on group_by_features
         groups: dict[tuple[Any, ...], list[int]] = {}
+        keyless: list[int] = []
         for i in range(row_count(data)):
             group_key = tuple(data[feature][i] if feature in data else None for feature in group_by_features)
+            if any(cls._is_missing(v) for v in group_key):
+                keyless.append(i)
+                continue
             if group_key not in groups:
                 groups[group_key] = []
             groups[group_key].append(i)
@@ -199,9 +225,14 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
 
         # Calculate overall statistics for fallback
         non_null_values = [val for val in result if val is not None]
-        overall_mean = statistics.mean(non_null_values) if non_null_values else None
-        overall_median = statistics.median(non_null_values) if non_null_values else None
-        overall_mode = cls._mode_of(non_null_values) if non_null_values else None
+        overall = None
+        if non_null_values:
+            if imputation_method == "mean":
+                overall = statistics.mean(non_null_values)
+            elif imputation_method == "median":
+                overall = statistics.median(non_null_values)
+            elif imputation_method == "mode":
+                overall = cls._mode_of(non_null_values)
 
         # Process each group
         for group_indices in groups.values():
@@ -218,7 +249,7 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
                     # Fall back to overall mean
                     for i in group_indices:
                         if result[i] is None:
-                            result[i] = overall_mean
+                            result[i] = overall
 
             elif imputation_method == "median":
                 if group_non_null:
@@ -230,7 +261,7 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
                     # Fall back to overall median
                     for i in group_indices:
                         if result[i] is None:
-                            result[i] = overall_median
+                            result[i] = overall
 
             elif imputation_method == "mode":
                 if group_non_null:
@@ -242,7 +273,7 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
                     # Fall back to overall mode
                     for i in group_indices:
                         if result[i] is None:
-                            result[i] = overall_mode
+                            result[i] = overall
 
             elif imputation_method == "ffill":
                 # Forward fill within group
@@ -262,6 +293,11 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
                         next_valid = result[i]
                     elif next_valid is not None:
                         result[i] = next_valid
+
+        if imputation_method in ("mean", "median", "mode"):
+            for i in keyless:
+                if result[i] is None:
+                    result[i] = overall
 
         return result
 

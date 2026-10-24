@@ -238,8 +238,8 @@ class PyArrowMissingValueImputation(Implementation[MissingValueFeatureGroup]):
                 group_value = cls._mode_value(group_data)
             elif imputation_method == "ffill":
                 # `i` is the global row index; translate it to the row's position within the group.
-                # A null group key yields an all-null group_mask, so `i` won't be found; there is
-                # no identifiable group to ffill from, so fall back to the overall value.
+                # A row with a null or NaN group key matches no group (all-null group_mask), so `i` is not
+                # found and the row is left missing.
                 group_row_indices = pc.indices_nonzero(group_mask).to_pylist()
                 if i in group_row_indices:
                     local_idx = group_row_indices.index(i)
@@ -252,8 +252,8 @@ class PyArrowMissingValueImputation(Implementation[MissingValueFeatureGroup]):
                             group_value = group_data[last_valid_idx].as_py()
             elif imputation_method == "bfill":
                 # `i` is the global row index; translate it to the row's position within the group.
-                # A null group key yields an all-null group_mask, so `i` won't be found; there is
-                # no identifiable group to bfill from, so fall back to the overall value.
+                # A row with a null or NaN group key matches no group (all-null group_mask), so `i` is not
+                # found and the row is left missing.
                 group_row_indices = pc.indices_nonzero(group_mask).to_pylist()
                 if i in group_row_indices:
                     local_idx = group_row_indices.index(i)

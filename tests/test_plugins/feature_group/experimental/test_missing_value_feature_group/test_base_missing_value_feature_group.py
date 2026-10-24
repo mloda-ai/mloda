@@ -1,10 +1,12 @@
-import math
+import datetime
+from decimal import Decimal
 import statistics
 from collections.abc import Callable
 from typing import Any
 from unittest.mock import Mock
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -308,7 +310,7 @@ _Columns = dict[str, _Cells]
 
 
 def _missing(cell: Any) -> bool:
-    return cell is None or (isinstance(cell, float) and math.isnan(cell))
+    return cell is None or (np.ndim(cell) == 0 and bool(pd.isna(cell)))
 
 
 def _statistic(method: str, cells: _Cells) -> Any:
@@ -355,15 +357,18 @@ def _reference_multi(method: str, columns: _Columns, constant: Any) -> _Cells:
     return [_statistic(method, [columns[name][row] for name in names]) for row in rows]
 
 
-def _reference_grouped(method: str, columns: _Columns, constant: Any) -> _Cells:
-    """Per group fill; a constant fills everywhere; a group without a statistic falls back to the overall one."""
+def _reference_grouped(method: str, columns: _Columns, constant: Any, group_by: list[str] | None = None) -> _Cells:
+    """Per group fill; rows with a missing key part join no group; no group statistic falls back to the overall one."""
     values = columns["a"]
     if method == "constant":
         return _reference_fill(method, values, constant)
     result = list(values)
-    keys = columns["g"]
-    for key in dict.fromkeys(keys):
-        indices = [i for i, k in enumerate(keys) if k == key]
+    keys = list(zip(*(columns[name] for name in group_by or ["g"])))
+    groups: dict[tuple[Any, ...], list[int]] = {}
+    for i, key in enumerate(keys):
+        if not any(_missing(part) for part in key):
+            groups.setdefault(key, []).append(i)
+    for key, indices in groups.items():
         group = [values[i] for i in indices]
         if method in ("mean", "median", "mode") and _statistic(method, group) is None:
             filled = _reference_fill(method, group, constant)
@@ -373,6 +378,15 @@ def _reference_grouped(method: str, columns: _Columns, constant: Any) -> _Cells:
             filled = _reference_fill(method, group, constant)
         for i, cell in zip(indices, filled):
             result[i] = cell
+    if method in ("mean", "median", "mode"):
+        overall = _statistic(method, values)
+        grouped_rows = {i for indices in groups.values() for i in indices}
+        for i, cell in enumerate(values):
+            if i not in grouped_rows and _missing(cell):
+                result[i] = overall
+    if method in ("ffill", "bfill"):
+        grouped_rows = {i for indices in groups.values() for i in indices}
+        result = [None if i not in grouped_rows and _missing(cell) else cell for i, cell in enumerate(result)]
     return result
 
 
@@ -424,21 +438,61 @@ def _differences(implementation: Any, actual: _Cells, expected: _Cells) -> list[
 
 
 # Methods are chosen so the filled values differ between a NaN-skipping and a NaN-keeping implementation.
-_SINGLE: _Columns = {"a": [3.0, _NAN, 1.0, 3.0, None, 1.0, 5.0]}
-_STRINGS: _Columns = {"a": ["b", None, "a", "b", "a"]}
+_SINGLE: _Columns = {"a": [_NAN, 3.0, _NAN, 1.0, 3.0, None, 1.0, 5.0, None]}
+_STRINGS: _Columns = {"a": ["b", None, "a", "b", "a"], "g": [1.0, 1.0, 2.0, 2.0, 2.0]}
 _MULTI: _Columns = {
-    "a": [3.0, _NAN, None, 2.0, 4.0],
-    "b": [3.0, 2.0, 6.0, 1.0, None],
-    "c": [_NAN, 8.0, None, None, 4.0],
+    "a": [3.0, _NAN, None, 2.0, 4.0, _NAN],
+    "b": [3.0, 2.0, 6.0, 1.0, None, None],
+    "c": [_NAN, 8.0, None, None, 4.0, _NAN],
 }
 _GROUPED: _Columns = {
     "a": [4.0, _NAN, 7.0, 2.0, None, 4.0, 2.0, _NAN, 9.0, 5.0, None, _NAN, None],
     "g": ["x", "x", "y", "x", "y", "x", "x", "x", "y", "x", "z", "z", "w"],
 }
+_MISSING_KEYS: _Columns = {
+    "a": [10.0, None, None, 100.0, None, 20.0, None, _NAN, 60.0, None, 100.0],
+    "g": [1.0, 1.0, float("nan"), float("nan"), float("nan"), 2.0, None, None, None, 2.0, float("nan")],
+}
+_ALL_KEYS_MISSING: _Columns = {
+    "a": [1.0, None, 3.0, None, 5.0, 3.0],
+    "g": [float("nan"), None, float("nan"), None, float("nan"), None],
+}
+_TWO_KEYS: _Columns = {
+    "a": [4.0, None, 8.0, None, 30.0, None, 5.0, 30.0, None, None],
+    "g": [1.0, 1.0, 1.0, 1.0, _NAN, 2.0, 2.0, 1.0, _NAN, 3.0],
+    "h": ["p", "p", "p", None, "q", "q", "q", None, "q", "r"],
+}
+_F32_NAN = np.float32("nan")
+_FLOAT32_NAN_KEY: _Columns = {
+    "a": [1.0, None, 10.0, None, 3.0, None, 20.0, None, 7.0],
+    "g": [1.0, 1.0, _F32_NAN, _F32_NAN, 2.0, 2.0, _F32_NAN, 1.0, 2.0],
+}
+_GROUPING_CASES = [
+    pytest.param(_GROUPED, ["g"], id="grouped"),
+    pytest.param(_FLOAT32_NAN_KEY, ["g"], id="float32_nan_key"),
+    pytest.param(_MISSING_KEYS, ["g"], id="missing_keys"),
+    pytest.param(_ALL_KEYS_MISSING, ["g"], id="all_keys_missing"),
+    pytest.param(_TWO_KEYS, ["g", "h"], id="two_keys"),
+]
 _CONSTANT = 0.5
 _ALL_METHODS = sorted(METHOD_UNIVERSE)
 _MULTI_METHODS = [method for method in _ALL_METHODS if method not in ("ffill", "bfill")]
 
+
+_NAT64 = np.datetime64("NaT")
+_DAYS = [datetime.datetime(2024, 1, d) for d in (1, 2)]
+_DAYS64 = [np.datetime64("2024-01-01"), np.datetime64("2024-01-02")]
+_NAN_LIKE_KEYS = [
+    pytest.param(pd.NA, ["x", "y"], id="pd_na"),
+    pytest.param(pd.NaT, _DAYS, id="pd_nat"),
+    pytest.param(_NAT64, _DAYS64, id="np_datetime64_nat"),
+]
+_NAN_LIKE_VALUES = [
+    pytest.param(np.float32("nan"), id="np_float32_nan"),
+    pytest.param(pd.NA, id="pd_na"),
+    pytest.param(pd.NaT, id="pd_nat"),
+]
+_ARRAY_CELLS: _Cells = [np.array([1.0, 2.0]), None, np.array([3.0, 4.0]), None]
 
 _MIXED_TIE = [2.0, 1, 2.0, 1, None]
 _MIXED_MULTI_INT = [1, 3]
@@ -476,9 +530,14 @@ class TestImplementationsConformToTheReferenceContract:
 
     @pytest.mark.parametrize("method", ["mode", "constant", "ffill", "bfill"])
     @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
-    def test_string_column_with_a_mode_tie(self, implementation: Any, method: str) -> None:
-        actual = _impute(implementation, _STRINGS, method, ["a"], "z", None)
-        assert not _differences(implementation, actual, _reference_single(method, _STRINGS, "z"))
+    @pytest.mark.parametrize("group_by", [None, ["g"]], ids=["ungrouped", "grouped"])
+    def test_string_column_with_a_mode_tie(self, implementation: Any, method: str, group_by: list[str] | None) -> None:
+        actual = _impute(implementation, _STRINGS, method, ["a"], "z", group_by)
+        if group_by is None:
+            expected = _reference_single(method, _STRINGS, "z")
+        else:
+            expected = _reference_grouped(method, _STRINGS, "z", group_by)
+        assert not _differences(implementation, actual, expected)
 
     @pytest.mark.parametrize("method", _MULTI_METHODS)
     @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
@@ -492,15 +551,130 @@ class TestImplementationsConformToTheReferenceContract:
         with pytest.raises(ValueError):
             _impute(implementation, _MULTI, method, ["a", "b", "c"], _CONSTANT, None)
 
+    @pytest.mark.parametrize(("columns", "group_by"), _GROUPING_CASES)
     @pytest.mark.parametrize("method", _ALL_METHODS)
     @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
-    def test_grouped_imputation(self, implementation: Any, method: str) -> None:
-        actual = _impute(implementation, _GROUPED, method, ["a"], _CONSTANT, ["g"])
-        assert not _differences(implementation, actual, _reference_grouped(method, _GROUPED, _CONSTANT))
+    def test_grouped_imputation(self, implementation: Any, method: str, columns: _Columns, group_by: list[str]) -> None:
+        actual = _impute(implementation, columns, method, ["a"], _CONSTANT, group_by)
+        assert not _differences(implementation, actual, _reference_grouped(method, columns, _CONSTANT, group_by))
+
+    @pytest.mark.parametrize(("columns", "group_by"), _GROUPING_CASES)
+    @pytest.mark.parametrize("method", _ALL_METHODS)
+    def test_pandas_grouped_imputation_with_a_duplicate_index(
+        self, method: str, columns: _Columns, group_by: list[str]
+    ) -> None:
+        data = _pandas_data(columns)
+        data.index = pd.Index([i // 2 for i in range(len(data))])
+        result = PandasMissingValueImputation._perform_imputation(data, method, ["a"], _CONSTANT, group_by)
+        expected = _reference_grouped(method, columns, _CONSTANT, group_by)
+        assert not _differences(PandasMissingValueImputation, _to_list(result), expected)
+
+    @pytest.mark.parametrize("method", ["mean", "mode", "ffill", "bfill"])
+    @pytest.mark.parametrize(
+        "implementation",
+        [PandasMissingValueImputation, PythonDictMissingValueImputation],
+        ids=["pandas", "python_dict"],
+    )
+    @pytest.mark.parametrize(("scalar", "keys"), _NAN_LIKE_KEYS)
+    def test_nan_like_group_key_joins_no_group(
+        self, implementation: Any, method: str, scalar: Any, keys: _Cells
+    ) -> None:
+        k1, k2 = keys
+        values: _Cells = [1.0, None, 3.0, None, 5.0, None, 9.0, 2.0]
+        key_cells = [k1, k1, scalar, scalar, k2, k2, scalar, k1]
+        columns: _Columns = {"a": values, "g": key_cells}
+        with_none: _Columns = {"a": values, "g": [None if c is scalar else c for c in key_cells]}
+        actual = _impute(implementation, columns, method, ["a"], None, ["g"])
+        assert not _differences(implementation, actual, _reference_grouped(method, columns, None, ["g"]))
+        baseline = _impute(implementation, with_none, method, ["a"], None, ["g"])
+        assert not _differences(implementation, actual, baseline)
+
+
+class NAType:
+    """A user class that only shares its name with the pandas NA type."""
+
+
+class _ArrayNe:
+    def __eq__(self, other: object) -> npt.NDArray[np.bool_]:  # type: ignore[override]
+        return np.array([True, False])
+
+    def __ne__(self, other: object) -> npt.NDArray[np.bool_]:  # type: ignore[override]
+        return np.array([False, True])
+
+    def __hash__(self) -> int:
+        return 1
+
+
+class _RaisingNe:
+    def __ne__(self, other: object) -> bool:
+        raise RuntimeError("no comparison")
+
+    def __hash__(self) -> int:
+        return 2
+
+
+class _NeverEqual:
+    def __eq__(self, other: object) -> bool:
+        return False
+
+    def __hash__(self) -> int:
+        return 3
+
+
+_NEVER_EQUAL_KEY = _NeverEqual()
+_ODD_CELL_KINDS = [
+    pytest.param(lambda i: np.array([float(i), 2.0]), id="numpy_array"),
+    pytest.param(lambda i: _ArrayNe(), id="array_ne"),
+    pytest.param(lambda i: _RaisingNe(), id="raising_ne"),
+    pytest.param(lambda i: _NeverEqual(), id="never_equal"),
+    pytest.param(lambda i: NAType(), id="user_class_named_natype"),
+]
 
 
 class TestNanNormalizationIsLimitedToFloatColumns:
-    """Only floating source columns have NaN treated as missing; ints, strings and group keys are untouched."""
+    """NaN-like cells are missing; strings such as "nan", ints and other present values are untouched."""
+
+    @pytest.mark.parametrize("method", ["mean", "ffill"])
+    @pytest.mark.parametrize("scalar", _NAN_LIKE_VALUES)
+    def test_python_dict_nan_like_value_cells_are_missing(self, method: str, scalar: Any) -> None:
+        cells: _Cells = [1.0, scalar, 3.0, scalar, 8.0, scalar]
+        columns: _Columns = {"a": cells}
+        with_none: _Columns = {"a": [None if c is scalar else c for c in cells]}
+        actual = _impute(PythonDictMissingValueImputation, columns, method, ["a"], None, None)
+        expected = _reference_single(method, columns, None)
+        assert not _differences(PythonDictMissingValueImputation, actual, expected)
+        baseline = _impute(PythonDictMissingValueImputation, with_none, method, ["a"], None, None)
+        assert not _differences(PythonDictMissingValueImputation, actual, baseline)
+
+    @pytest.mark.parametrize(("method", "constant"), [("ffill", None), ("constant", 0.0)])
+    @pytest.mark.parametrize("make", _ODD_CELL_KINDS)
+    def test_python_dict_odd_cells_are_left_alone(self, method: str, constant: Any, make: Callable[[int], Any]) -> None:
+        first, second = make(1), make(3)
+        actual = _impute(
+            PythonDictMissingValueImputation, {"a": [first, None, second, None]}, method, ["a"], constant, None
+        )
+        fill = first if method == "ffill" else constant
+        expected = [first, fill, second, fill if method == "constant" else second]
+        assert len(actual) == 4
+        for a, e in zip(actual, expected):
+            assert a is e
+
+    @pytest.mark.parametrize("method", ["mean", "mode", "ffill"])
+    def test_python_dict_never_equal_group_key_groups_like_a_plain_key(self, method: str) -> None:
+        values: _Cells = [1.0, None, 3.0, None, 5.0, None, 9.0, 2.0]
+        plain: _Columns = {"a": values, "g": ["x", "x", "y", "y", "x", "x", "y", "x"]}
+        odd: _Columns = {"a": values, "g": [_NEVER_EQUAL_KEY if k == "x" else k for k in plain["g"]]}
+        expected = _impute(PythonDictMissingValueImputation, plain, method, ["a"], None, ["g"])
+        actual = _impute(PythonDictMissingValueImputation, odd, method, ["a"], None, ["g"])
+        assert not _differences(PythonDictMissingValueImputation, actual, expected)
+
+    @pytest.mark.parametrize("method", ["constant", "ffill"])
+    @pytest.mark.parametrize("scalar", [Decimal("sNaN"), Decimal("NaN")], ids=["snan", "nan"])
+    def test_python_dict_decimal_nan_cells_are_missing(self, method: str, scalar: Decimal) -> None:
+        cells: _Cells = [Decimal("1.5"), scalar, Decimal("3"), scalar]
+        actual = _impute(PythonDictMissingValueImputation, {"a": cells}, method, ["a"], Decimal("0"), None)
+        fill = Decimal("1.5") if method == "ffill" else Decimal("0")
+        assert actual == [Decimal("1.5"), fill, Decimal("3"), Decimal("3") if method == "ffill" else fill]
 
     @pytest.mark.parametrize("method", ["mode", "constant"])
     @pytest.mark.parametrize("implementation", [PyArrowMissingValueImputation, PythonDictMissingValueImputation])
@@ -523,7 +697,7 @@ class TestNanNormalizationIsLimitedToFloatColumns:
         assert actual == ["nan", "nan", "NaN", "nan"]
 
     @pytest.mark.parametrize("method", ["mean", "mode", "ffill"])
-    @pytest.mark.parametrize("implementation", [PyArrowMissingValueImputation, PythonDictMissingValueImputation])
+    @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
     def test_float_group_keys_are_never_altered(self, implementation: Any, method: str) -> None:
         values: _Cells = [1.0, None, 3.0, 4.0, 5.0, 6.0, 7.0, None]
         float_keys: _Columns = {"a": values, "g": [1.0, 1.0, float("nan"), float("nan"), None, None, 2.0, 2.0]}

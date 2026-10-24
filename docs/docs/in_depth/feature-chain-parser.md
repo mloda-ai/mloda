@@ -285,7 +285,7 @@ requirements belong in `required_when` instead: it is enforced by a guard instal
 definition, so it still runs on an override.
 
 ```py
-class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class SklearnPipelineFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     @classmethod
     def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None) -> bool:
         """Mutual exclusivity: pipeline_name and pipeline_steps cannot both be set."""

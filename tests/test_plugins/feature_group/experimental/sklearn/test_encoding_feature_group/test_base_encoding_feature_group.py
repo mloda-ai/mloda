@@ -11,7 +11,6 @@ from mloda.user import FeatureName
 from mloda.provider import ANY_OUTPUT_PART, DefaultOptionKeys, FeatureGroup
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
-from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 
 
 class TestEncodingFeatureGroup:
@@ -68,7 +67,7 @@ class TestEncodingFeatureGroup:
 
         assert EncodingFeatureGroup.match_feature_group_criteria(FeatureName("x~1__onehot_encoded"), options) is True
 
-        result = PandasEncodingFeatureGroup().input_features(options, FeatureName("x~1__onehot_encoded"))
+        result = EncodingFeatureGroup().input_features(options, FeatureName("x~1__onehot_encoded"))
 
         assert result is not None
         [returned] = result
@@ -170,13 +169,13 @@ class TestEncodingFeatureGroup:
         """Core hands input_features the base name; a part name is split first."""
         split = FeatureGroup.split_output_part(name)
         name = split[0] if split else name
-        input_features = PandasEncodingFeatureGroup().input_features(Options({}), FeatureName(name))
+        input_features = EncodingFeatureGroup().input_features(Options({}), FeatureName(name))
         assert input_features is not None
         assert {f.name for f in input_features} == {"x"}
 
     def test_input_features(self) -> None:
         """Test input_features method extracts correct source features."""
-        feature_group = PandasEncodingFeatureGroup()
+        feature_group = EncodingFeatureGroup()
         feature_name = FeatureName("category__onehot_encoded")
         options = Options({})
 
@@ -266,8 +265,3 @@ class TestEncodingFeatureGroup:
 
         with pytest.raises(ValueError, match="Unsupported encoder type: invalid_encoder"):
             EncodingFeatureGroup._encoder_matches_type(mock_encoder, "invalid_encoder")
-
-    def test_abstract_methods_not_implemented(self) -> None:
-        """Test that abstract base class cannot be instantiated directly."""
-        with pytest.raises(TypeError, match="abstract method"):
-            EncodingFeatureGroup()  # type: ignore[abstract]

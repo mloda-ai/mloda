@@ -2,13 +2,16 @@
 Tests for the base ScalingFeatureGroup class.
 """
 
+import numpy as np
+import pandas as pd
 import pytest
 
+from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
-from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScaling
 
 
 class TestScalingFeatureGroup:
@@ -74,7 +77,7 @@ class TestScalingFeatureGroup:
 
     def test_input_features(self) -> None:
         """Test the input_features method."""
-        feature_group = PandasScalingFeatureGroup()
+        feature_group = ScalingFeatureGroup()
 
         # Single source feature
         input_features = feature_group.input_features(Options(), FeatureName("income__standard_scaled"))
@@ -180,7 +183,46 @@ class TestScalingFeatureGroup:
             # This is expected when sklearn is not available
             pass
 
-    def test_abstract_methods_not_implemented(self) -> None:
-        """Test that abstract base class cannot be instantiated directly."""
-        with pytest.raises(TypeError, match="abstract method"):
-            ScalingFeatureGroup()  # type: ignore[abstract]
+
+class TestPandasScaling:
+    """Tests for PandasScaling."""
+
+    @pytest.mark.parametrize(
+        ("name", "missing", "available"),
+        [
+            ("zz__standard_scaled", "['zz']", "['age', 'income']"),
+            ("zz__minmax_scaled", "['zz']", "['age', 'income']"),
+        ],
+        ids=["standard", "minmax"],
+    )
+    def test_source_check_is_strict_and_lists_sorted_columns(self, name: str, missing: str, available: str) -> None:
+        df = pd.DataFrame({"income": [1.0, 2.0, 3.0], "age": [4.0, 5.0, 6.0]})
+        features = FeatureSet()
+        features.add(Feature(name))
+
+        with pytest.raises(ValueError) as exc_info:
+            PandasScaling.calculate(ScalingFeatureGroup, df, features, None)
+
+        assert str(exc_info.value) == f"Source features not found in data: {missing}. Available columns: {available}"
+
+    def test_add_result_to_data_1d_array(self) -> None:
+        df = pd.DataFrame({"a": [1, 2, 3]})
+
+        updated = PandasScaling._add_result_to_data(df, "new_feature", np.array([10, 20, 30]))
+
+        assert list(updated["new_feature"]) == [10, 20, 30]
+
+    def test_add_result_to_data_2d_single_column(self) -> None:
+        df = pd.DataFrame({"a": [1, 2, 3]})
+
+        updated = PandasScaling._add_result_to_data(df, "new_feature", np.array([[10], [20], [30]]))
+
+        assert list(updated["new_feature"]) == [10, 20, 30]
+
+    def test_add_result_to_data_2d_multiple_columns(self) -> None:
+        df = pd.DataFrame({"a": [1, 2, 3]})
+
+        updated = PandasScaling._add_result_to_data(df, "new_feature", np.array([[1, 2], [3, 4], [5, 6]]))
+
+        assert list(updated["new_feature~0"]) == [1, 3, 5]
+        assert list(updated["new_feature~1"]) == [2, 4, 6]

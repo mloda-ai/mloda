@@ -1,5 +1,5 @@
 """
-Tests for PandasSklearnPipelineFeatureGroup.
+Tests for PandasSklearnPipeline.
 """
 
 from typing import Any
@@ -7,42 +7,53 @@ import pytest
 import pandas as pd
 import numpy as np
 from unittest.mock import patch
-from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipeline
 from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
-class TestPandasSklearnPipelineFeatureGroup:
-    """Test cases for PandasSklearnPipelineFeatureGroup."""
+class TestPandasSklearnPipeline:
+    """Test cases for PandasSklearnPipeline."""
 
-    def test_compute_framework_rule(self) -> None:
-        """Test that the feature group specifies pandas framework."""
-        rule = PandasSklearnPipelineFeatureGroup.compute_framework_rule()
-        assert PandasDataFrame in rule
+    def test_compute_framework(self) -> None:
+        assert PandasSklearnPipeline.compute_framework is PandasDataFrame
 
-    def test_check_source_features_exist_valid(self) -> None:
-        """Test checking for existing source features."""
-        df = pd.DataFrame({"feature1": [1, 2, 3], "feature2": [4, 5, 6]})
+    @pytest.mark.parametrize(
+        ("name", "missing", "available"),
+        [
+            ("feature1,missing__sklearn_pipeline_scaling", "['missing']", "['feature1', 'feature2']"),
+            ("zz,yy__sklearn_pipeline_scaling", "['zz', 'yy']", "['feature1', 'feature2']"),
+        ],
+        ids=["one_missing", "all_missing"],
+    )
+    def test_source_check_is_strict_and_lists_sorted_columns(self, name: str, missing: str, available: str) -> None:
+        df = pd.DataFrame({"feature2": [4, 5, 6], "feature1": [1, 2, 3]})
+        features = FeatureSet()
+        features.add(Feature(name))
 
-        # Should not raise exception for existing features
-        PandasSklearnPipelineFeatureGroup._check_source_features_exist(df, ["feature1"])
-        PandasSklearnPipelineFeatureGroup._check_source_features_exist(df, ["feature2"])
-        PandasSklearnPipelineFeatureGroup._check_source_features_exist(df, ["feature1", "feature2"])
+        with pytest.raises(ValueError) as exc_info:
+            PandasSklearnPipeline.calculate(SklearnPipelineFeatureGroup, df, features, None)
 
-    def test_check_source_features_exist_invalid(self) -> None:
-        """Test checking for non-existing source features."""
-        df = pd.DataFrame({"feature1": [1, 2, 3], "feature2": [4, 5, 6]})
+        assert str(exc_info.value) == f"Source features not found in data: {missing}. Available columns: {available}"
 
-        with pytest.raises(ValueError, match="Source features not found in data:"):
-            PandasSklearnPipelineFeatureGroup._check_source_features_exist(df, ["nonexistent"])
+    def test_existing_sources_pass_the_source_check(self) -> None:
+        pytest.importorskip("sklearn")
+        df = pd.DataFrame({"feature1": [1.0, 2.0, 3.0], "feature2": [4.0, 5.0, 6.0]})
+        features = FeatureSet()
+        features.add(Feature("feature1,feature2__sklearn_pipeline_scaling"))
+
+        result = PandasSklearnPipeline.calculate(SklearnPipelineFeatureGroup, df, features, None)
+
+        assert "feature1,feature2__sklearn_pipeline_scaling~0" in result.columns
 
     def test_add_result_to_data_1d_array(self) -> None:
         """Test adding 1D array result to DataFrame."""
         df = pd.DataFrame({"feature1": [1, 2, 3], "feature2": [4, 5, 6]})
 
         result = np.array([10, 20, 30])
-        updated_df = PandasSklearnPipelineFeatureGroup._add_result_to_data(df, "new_feature", result)
+        updated_df = PandasSklearnPipeline._add_result_to_data(df, "new_feature", result)
 
         assert "new_feature" in updated_df.columns
         assert list(updated_df["new_feature"]) == [10, 20, 30]
@@ -52,7 +63,7 @@ class TestPandasSklearnPipelineFeatureGroup:
         df = pd.DataFrame({"feature1": [1, 2, 3], "feature2": [4, 5, 6]})
 
         result = np.array([[10], [20], [30]])
-        updated_df = PandasSklearnPipelineFeatureGroup._add_result_to_data(df, "new_feature", result)
+        updated_df = PandasSklearnPipeline._add_result_to_data(df, "new_feature", result)
 
         assert "new_feature" in updated_df.columns
         assert list(updated_df["new_feature"]) == [10, 20, 30]
@@ -62,7 +73,7 @@ class TestPandasSklearnPipelineFeatureGroup:
         df = pd.DataFrame({"feature1": [1, 2, 3], "feature2": [4, 5, 6]})
 
         result = np.array([[10, 11], [20, 21], [30, 31]])
-        updated_df = PandasSklearnPipelineFeatureGroup._add_result_to_data(df, "new_feature", result)
+        updated_df = PandasSklearnPipeline._add_result_to_data(df, "new_feature", result)
 
         assert "new_feature~0" in updated_df.columns
         assert "new_feature~1" in updated_df.columns
@@ -74,7 +85,7 @@ class TestPandasSklearnPipelineFeatureGroup:
         df = pd.DataFrame({"feature1": [1, 2, 3], "feature2": [4, 5, 6]})
 
         result = 42
-        updated_df = PandasSklearnPipelineFeatureGroup._add_result_to_data(df, "new_feature", result)
+        updated_df = PandasSklearnPipeline._add_result_to_data(df, "new_feature", result)
 
         assert "new_feature" in updated_df.columns
         assert updated_df["new_feature"].iloc[0] == 42
@@ -83,7 +94,7 @@ class TestPandasSklearnPipelineFeatureGroup:
         """Test extracting training data for single feature."""
         df = pd.DataFrame({"feature1": [1.0, 2.0, 3.0, 4.0], "feature2": [5.0, 6.0, 7.0, 8.0]})
 
-        result = PandasSklearnPipelineFeatureGroup._extract_training_data(df, ["feature1"])
+        result = PandasSklearnPipeline._extract_training_data(df, ["feature1"])
 
         assert isinstance(result, np.ndarray)
         assert result.shape == (4, 1)
@@ -95,7 +106,7 @@ class TestPandasSklearnPipelineFeatureGroup:
             {"feature1": [1.0, 2.0, 3.0, 4.0], "feature2": [5.0, 6.0, 7.0, 8.0], "feature3": [9.0, 10.0, 11.0, 12.0]}
         )
 
-        result = PandasSklearnPipelineFeatureGroup._extract_training_data(df, ["feature1", "feature2"])
+        result = PandasSklearnPipeline._extract_training_data(df, ["feature1", "feature2"])
 
         assert isinstance(result, np.ndarray)
         assert result.shape == (4, 2)
@@ -106,7 +117,7 @@ class TestPandasSklearnPipelineFeatureGroup:
         """Test extracting training data with NaN values."""
         df = pd.DataFrame({"feature1": [1.0, 2.0, np.nan, 4.0], "feature2": [5.0, np.nan, 7.0, 8.0]})
 
-        result = PandasSklearnPipelineFeatureGroup._extract_training_data(df, ["feature1", "feature2"])
+        result = PandasSklearnPipeline._extract_training_data(df, ["feature1", "feature2"])
 
         assert isinstance(result, np.ndarray)
         # Should drop rows with NaN, leaving only row with index 0 and 3
@@ -128,7 +139,7 @@ class TestPandasSklearnPipelineFeatureGroup:
         scaler = StandardScaler()
         scaler.fit([[1.0], [2.0], [3.0], [4.0]])
 
-        result = PandasSklearnPipelineFeatureGroup._apply_pipeline(df, ["feature1"], scaler)
+        result = PandasSklearnPipeline._apply_pipeline(df, ["feature1"], scaler)
 
         assert isinstance(result, np.ndarray)
         assert result.shape == (4, 1)
@@ -149,7 +160,7 @@ class TestPandasSklearnPipelineFeatureGroup:
         scaler = StandardScaler()
         scaler.fit([[1.0, 5.0], [2.0, 6.0], [3.0, 7.0], [4.0, 8.0]])
 
-        result = PandasSklearnPipelineFeatureGroup._apply_pipeline(df, ["feature1", "feature2"], scaler)
+        result = PandasSklearnPipeline._apply_pipeline(df, ["feature1", "feature2"], scaler)
 
         assert isinstance(result, np.ndarray)
         assert result.shape == (4, 2)
@@ -168,7 +179,7 @@ class TestPandasSklearnPipelineFeatureGroup:
         scaler = StandardScaler()
         scaler.fit([[1.0, 5.0], [2.0, 6.0], [3.0, 7.0], [4.0, 8.0]])
 
-        result = PandasSklearnPipelineFeatureGroup._apply_pipeline(df, ["feature1", "feature2"], scaler)
+        result = PandasSklearnPipeline._apply_pipeline(df, ["feature1", "feature2"], scaler)
 
         assert isinstance(result, np.ndarray)
         assert result.shape == (4, 2)
@@ -201,7 +212,7 @@ class TestPandasSklearnPipelineFeatureGroup:
         features.artifact_to_load = None  # No existing artifact to load
 
         # Calculate feature
-        result_df = PandasSklearnPipelineFeatureGroup.calculate_feature(df, features)
+        result_df = PandasSklearnPipeline.calculate(SklearnPipelineFeatureGroup, df, features, None)
 
         # Verify result
         assert "feature1__sklearn_pipeline_scaling" in result_df.columns
@@ -229,4 +240,4 @@ class TestPandasSklearnPipelineFeatureGroup:
         features.add(Feature("nonexistent__sklearn_pipeline_scaling"))
 
         with pytest.raises(ValueError, match="Source features not found in data:"):
-            PandasSklearnPipelineFeatureGroup.calculate_feature(df, features)
+            PandasSklearnPipeline.calculate(SklearnPipelineFeatureGroup, df, features, None)

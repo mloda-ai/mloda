@@ -9,12 +9,14 @@ from mloda.user import mloda
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.core.api.feature_config.loader import load_features_from_config
-from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScaling as PandasScaling
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
     PandasMissingValueImputation as PandasMissingValueImputation,
 )
-from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding as PandasEncoding
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
     PandasAggregation as PandasAggregation,
@@ -87,9 +89,9 @@ def test_features_runtime_one_by_one() -> None:
     # Required plugins (expand as needed)
     plugins = {
         IntegrationDataCreator,
-        PandasScalingFeatureGroup,
+        ScalingFeatureGroup,
         MissingValueFeatureGroup,
-        PandasEncodingFeatureGroup,
+        EncodingFeatureGroup,
         AggregatedFeatureGroup,
         GeoDistanceFeatureGroup,
         # Add more plugins as features require them
@@ -165,7 +167,7 @@ def test_feature_3_step1_onehot_encoding() -> None:
     # Required plugins
     plugins = {
         IntegrationDataCreator,
-        PandasEncodingFeatureGroup,
+        EncodingFeatureGroup,
         AggregatedFeatureGroup,
     }
 

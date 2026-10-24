@@ -11,7 +11,9 @@ from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
-from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import (
+    PandasSklearnPipeline as PandasSklearnPipeline,
+)
 from mloda.provider import DefaultOptionKeys
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
@@ -45,7 +47,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
+            {SklearnPipelineTestDataCreator, SklearnPipelineFeatureGroup}
         )
 
         # Create a scaling pipeline feature
@@ -84,7 +86,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
+            {SklearnPipelineTestDataCreator, SklearnPipelineFeatureGroup}
         )
 
         # Create a preprocessing pipeline feature
@@ -123,7 +125,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
+            {SklearnPipelineTestDataCreator, SklearnPipelineFeatureGroup}
         )
 
         # Create a scaling pipeline feature with multiple source features
@@ -170,7 +172,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
+            {SklearnPipelineTestDataCreator, SklearnPipelineFeatureGroup}
         )
 
         # Create a feature using configuration
@@ -230,7 +232,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
+            {SklearnPipelineTestDataCreator, SklearnPipelineFeatureGroup}
         )
 
         # Create a feature with custom pipeline steps using frozenset to make it hashable
@@ -296,7 +298,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
+            {SklearnPipelineTestDataCreator, SklearnPipelineFeatureGroup}
         )
 
         # Create the same feature twice to test artifact reuse
@@ -345,7 +347,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
+            {SklearnPipelineTestDataCreator, SklearnPipelineFeatureGroup}
         )
 
         # Use tmp_path for isolation - each test gets unique directory

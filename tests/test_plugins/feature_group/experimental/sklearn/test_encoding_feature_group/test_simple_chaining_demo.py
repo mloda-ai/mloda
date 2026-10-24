@@ -10,8 +10,10 @@ from mloda.user import Feature
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
-from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding as PandasEncoding
+from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScaling as PandasScaling
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 
@@ -45,7 +47,7 @@ class TestSimpleChaining:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {SimpleChainTestDataCreator, PandasEncodingFeatureGroup, PandasScalingFeatureGroup}
+            {SimpleChainTestDataCreator, EncodingFeatureGroup, ScalingFeatureGroup}
         )
 
         # Step 1: Create OneHot encoding first

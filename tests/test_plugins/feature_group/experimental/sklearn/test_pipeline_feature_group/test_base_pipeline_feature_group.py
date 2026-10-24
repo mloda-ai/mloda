@@ -5,7 +5,6 @@ Tests for base SklearnPipelineFeatureGroup.
 import pytest
 from unittest.mock import Mock, patch
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
-from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
 from mloda.provider import DefaultOptionKeys
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -75,7 +74,7 @@ class TestSklearnPipelineFeatureGroup:
         feature_name = FeatureName("raw_features__sklearn_pipeline_preprocessing")
         options = Options({})
 
-        result = PandasSklearnPipelineFeatureGroup().input_features(options, feature_name)
+        result = SklearnPipelineFeatureGroup().input_features(options, feature_name)
 
         assert result is not None
         assert len(result) == 1
@@ -87,7 +86,7 @@ class TestSklearnPipelineFeatureGroup:
         feature_name = FeatureName("income,age,salary__sklearn_pipeline_scaling")
         options = Options({})
 
-        result = PandasSklearnPipelineFeatureGroup().input_features(options, feature_name)
+        result = SklearnPipelineFeatureGroup().input_features(options, feature_name)
 
         assert result is not None
         assert len(result) == 3
@@ -98,7 +97,7 @@ class TestSklearnPipelineFeatureGroup:
 
     @pytest.mark.parametrize("name", ["a,b__sklearn_pipeline_scaling", "a, b__sklearn_pipeline_scaling"])
     def test_input_features_agree_with_the_mixin_source_extraction(self, name: str) -> None:
-        result = PandasSklearnPipelineFeatureGroup().input_features(Options({}), FeatureName(name))
+        result = SklearnPipelineFeatureGroup().input_features(Options({}), FeatureName(name))
 
         assert result is not None
         assert sorted(f.name for f in result) == sorted(
@@ -107,7 +106,7 @@ class TestSklearnPipelineFeatureGroup:
 
     def test_input_features_keep_the_space_after_a_comma(self) -> None:
         name = "a, b__sklearn_pipeline_scaling"
-        result = PandasSklearnPipelineFeatureGroup().input_features(Options({}), FeatureName(name))
+        result = SklearnPipelineFeatureGroup().input_features(Options({}), FeatureName(name))
 
         assert result is not None
         assert {str(f.name) for f in result} == {"a", " b"}
@@ -223,11 +222,6 @@ class TestSklearnPipelineFeatureGroup:
         config = {"steps": [("scaler", Mock())], "params": {}}
 
         assert not SklearnPipelineFeatureGroup._pipeline_matches_config(mock_pipeline, config)
-
-    def test_abstract_methods_not_implemented(self) -> None:
-        """Test that abstract base class cannot be instantiated directly."""
-        with pytest.raises(TypeError, match="abstract method"):
-            SklearnPipelineFeatureGroup()  # type: ignore[abstract]
 
 
 PIPELINE_STEPS_VALUE = frozenset({("scaler", "StandardScaler")})

@@ -22,8 +22,10 @@ from mloda_plugins.feature_group.experimental.data_quality.missing_value.base im
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
     PandasMissingValueImputation as PandasMissingValueImputation,
 )
-from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
-from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding as PandasEncoding
+from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScaling as PandasScaling
 import numpy as np
 import pandas as pd
 
@@ -129,8 +131,10 @@ def cell2_traditional_sklearn_pipeline(data: Any) -> None:
 def cell4_mloda_approach() -> Any:
     """mloda approach - using DataCreator pattern."""
     from mloda.user import PluginCollector
-    from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
-    from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
+    from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
+    from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding as PandasEncoding
+    from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
+    from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScaling as PandasScaling
     from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
     from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
         PandasMissingValueImputation as PandasMissingValueImputation,
@@ -142,8 +146,8 @@ def cell4_mloda_approach() -> Any:
     plugin_collector = PluginCollector.enabled_feature_groups(
         {
             SklearnDataCreator,
-            PandasEncodingFeatureGroup,
-            PandasScalingFeatureGroup,
+            EncodingFeatureGroup,
+            ScalingFeatureGroup,
             MissingValueFeatureGroup,
         }
     )
@@ -173,8 +177,10 @@ def cell5_demonstrate_feature_chaining() -> None:
     """Feature chaining: The real power of mloda."""
     # Feature chaining: The real power of mloda
     from mloda.user import PluginCollector
-    from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
-    from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
+    from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
+    from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding as PandasEncoding
+    from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
+    from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScaling as PandasScaling
     from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
     from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
         PandasMissingValueImputation as PandasMissingValueImputation,
@@ -186,8 +192,8 @@ def cell5_demonstrate_feature_chaining() -> None:
     plugin_collector = PluginCollector.enabled_feature_groups(
         {
             SklearnDataCreator,
-            PandasEncodingFeatureGroup,
-            PandasScalingFeatureGroup,
+            EncodingFeatureGroup,
+            ScalingFeatureGroup,
             MissingValueFeatureGroup,
             AggregatedFeatureGroup,
         }
@@ -241,8 +247,8 @@ def cell6_reusability_demo() -> None:
     plugin_collector = PluginCollector.enabled_feature_groups(
         {
             SecondSklearnDataCreator,
-            PandasEncodingFeatureGroup,
-            PandasScalingFeatureGroup,
+            EncodingFeatureGroup,
+            ScalingFeatureGroup,
             MissingValueFeatureGroup,
             AggregatedFeatureGroup,
         }

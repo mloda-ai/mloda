@@ -46,8 +46,9 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
-from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
-from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding as PandasEncoding
+from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
 from mloda_plugins.feature_group.experimental.source_input_feature import (
     SourceInputFeatureComposite,
     SourceTuple,
@@ -148,7 +149,7 @@ class TestSklearnEncodingInputFeatureDefaults:
 
     def test_string_parsed_child_has_forward_group_none(self) -> None:
         """Core hands plugins the base name (a ~part request resolves through it), so the child stays at None."""
-        group = PandasEncodingFeatureGroup()
+        group = EncodingFeatureGroup()
 
         by_name = _by_name(group.input_features(Options(), FeatureName("category__onehot_encoded")))
 
@@ -156,7 +157,7 @@ class TestSklearnEncodingInputFeatureDefaults:
         assert by_name["category"].forward_group is None
 
     def test_config_declared_child_has_forward_group_none(self) -> None:
-        group = PandasEncodingFeatureGroup()
+        group = EncodingFeatureGroup()
         options = Options(group={DefaultOptionKeys.in_features: "category"})
 
         by_name = _by_name(group.input_features(options, FeatureName("placeholder")))
@@ -165,7 +166,7 @@ class TestSklearnEncodingInputFeatureDefaults:
         assert by_name["category"].forward_group is None
 
     def test_config_declared_child_explicit_allowlist_is_preserved(self) -> None:
-        group = PandasEncodingFeatureGroup()
+        group = EncodingFeatureGroup()
         source = Feature("category", forward_group={"keep_me"})
         options = Options(group={DefaultOptionKeys.in_features: frozenset({source})})
 
@@ -190,15 +191,15 @@ class TestSklearnEncodingPartRequestEndToEnd:
     def test_string_parsed_multi_column_child_has_forward_group_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         pytest.importorskip("sklearn")
         seen: list[dict[str, Feature]] = []
-        original = PandasEncodingFeatureGroup.input_features
+        original = EncodingFeatureGroup.input_features
 
         def spy(self: Any, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             result = original(self, options, feature_name)
             seen.append(_by_name(result))
             return result
 
-        monkeypatch.setattr(PandasEncodingFeatureGroup, "input_features", spy)
-        collector = PluginCollector.enabled_feature_groups({_CategoryCreator, PandasEncodingFeatureGroup})
+        monkeypatch.setattr(EncodingFeatureGroup, "input_features", spy)
+        collector = PluginCollector.enabled_feature_groups({_CategoryCreator, EncodingFeatureGroup})
 
         mloda(["category__onehot_encoded~1"], [PandasDataFrame], plugin_collector=collector).run()
 
@@ -212,7 +213,7 @@ class TestSklearnPipelineInputFeatureDefaults:
     """SklearnPipelineFeatureGroup.input_features must leave every source child at the default None sentinel."""
 
     def test_string_parsed_single_child_has_forward_group_none(self) -> None:
-        group = PandasSklearnPipelineFeatureGroup()
+        group = SklearnPipelineFeatureGroup()
 
         by_name = _by_name(group.input_features(Options(), FeatureName("raw_features__sklearn_pipeline_preprocessing")))
 
@@ -221,7 +222,7 @@ class TestSklearnPipelineInputFeatureDefaults:
 
     def test_string_parsed_multiple_children_have_forward_group_none(self) -> None:
         """Comma-separated source features all carry forward_group is None."""
-        group = PandasSklearnPipelineFeatureGroup()
+        group = SklearnPipelineFeatureGroup()
 
         by_name = _by_name(group.input_features(Options(), FeatureName("income,age__sklearn_pipeline_scaling")))
 
@@ -230,7 +231,7 @@ class TestSklearnPipelineInputFeatureDefaults:
         assert by_name["age"].forward_group is None
 
     def test_config_declared_children_have_forward_group_none(self) -> None:
-        group = PandasSklearnPipelineFeatureGroup()
+        group = SklearnPipelineFeatureGroup()
         options = Options(group={DefaultOptionKeys.in_features: "income,age"})
 
         by_name = _by_name(group.input_features(options, FeatureName("placeholder")))
@@ -241,7 +242,7 @@ class TestSklearnPipelineInputFeatureDefaults:
 
     def test_config_declared_children_explicit_directives_are_preserved(self) -> None:
         """An explicit allowlist and an explicit False opt-out both survive input_features."""
-        group = PandasSklearnPipelineFeatureGroup()
+        group = SklearnPipelineFeatureGroup()
         allowlisted = Feature("income", forward_group={"keep_me"})
         opted_out = Feature("age", forward_group=False)
         options = Options(group={DefaultOptionKeys.in_features: frozenset({allowlisted, opted_out})})
@@ -332,7 +333,7 @@ class TestConfigPathCountErrorWording:
             pytest.param(GeoDistanceFeatureGroup, ["a", "b", "c"], id="geo_distance-above_max"),
             pytest.param(TimeWindowFeatureGroup, ["a", "b"], id="time_window-above_max"),
             pytest.param(PandasForecastingFeatureGroup, ["a", "b"], id="forecasting-above_max"),
-            pytest.param(PandasEncodingFeatureGroup, ["a", "b"], id="encoding-above_max"),
+            pytest.param(EncodingFeatureGroup, ["a", "b"], id="encoding-above_max"),
         ],
     )
     def test_error_message_is_standard_reason(

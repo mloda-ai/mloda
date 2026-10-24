@@ -33,7 +33,6 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
 from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -720,9 +719,6 @@ class FeatureGroup(ABC):
         if cls._is_root_and_matches_input_data(base_feature_name, options, data_access_collection):
             return True
 
-        if cls._matches_data(base_feature_name, options, data_access_collection):
-            return True
-
         if cls.feature_name_equal_to_class_name(base_feature_name):
             return True
 
@@ -959,28 +955,6 @@ class FeatureGroup(ABC):
         return cls().is_root(options, feature_name) and cls._matches_input_data(
             feature_name, options, data_access_collection
         )
-
-    @final
-    @classmethod
-    def _matches_data(
-        cls, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
-    ) -> bool:
-        """
-        This functionality is for matching data, when a data access is necessary.
-        This is relevant for compute frameworks which need a connection object.
-
-        To be used, create a class like this:
-
-        class MyMatchData(FeatureGroup, MatchData):
-            ...
-
-        and then create the function match_data_access.
-        """
-
-        if not issubclass(cls, MatchData):
-            return False
-
-        return cls.matches(feature_name, options, data_access_collection)
 
 
 def format_feature_group_class(fg_class: type[FeatureGroup]) -> str:

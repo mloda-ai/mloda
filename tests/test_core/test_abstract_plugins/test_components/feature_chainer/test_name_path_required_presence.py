@@ -28,7 +28,6 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
-from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import DataCreator, PropertySpec, property_spec
@@ -440,7 +439,6 @@ class TestShippedPluginsClean:
 PGP_KEY = "threshold_pgp"
 PGP_ROOT_FEATURE = "pgp_root_feature"
 PGP_SUPPORTED_FEATURE = "pgp_supported_feature"
-PGP_MATCH_DATA_FEATURE = "pgp_match_data_feature"
 PGP_OVERRIDE_FEATURE = "pgp_override_feature"
 PGP_MISSING_PREFIX = f"required option(s) {PGP_KEY} are absent after declared defaults and name bindings"
 
@@ -475,22 +473,6 @@ class PlainSupportedPgp(FeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {PGP_SUPPORTED_FEATURE}
-
-
-class PlainMatchDataPgp(FeatureGroup, MatchData):
-    """Matches through the MatchData rule, via the feature-scope connection option."""
-
-    PROPERTY_MAPPING = {PGP_KEY: property_spec("required, no default")}
-
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        return feature_name == PGP_MATCH_DATA_FEATURE
 
 
 class PlainOverridePgp(FeatureGroup):
@@ -540,12 +522,6 @@ PLAIN_ENTRY_RULES = [
     pytest.param(PlainClassNamePgp, PlainClassNamePgp.get_class_name(), {}, id="class_name"),
     pytest.param(PlainPrefixPgp, f"{PlainPrefixPgp.prefix()}x", {}, id="class_name_prefix"),
     pytest.param(PlainSupportedPgp, PGP_SUPPORTED_FEATURE, {}, id="feature_names_supported"),
-    pytest.param(
-        PlainMatchDataPgp,
-        PGP_MATCH_DATA_FEATURE,
-        {PlainMatchDataPgp.get_class_name(): "connection_pgp"},
-        id="match_data",
-    ),
     pytest.param(PlainOverridePgp, PGP_OVERRIDE_FEATURE, {}, id="non_delegating_override"),
 ]
 

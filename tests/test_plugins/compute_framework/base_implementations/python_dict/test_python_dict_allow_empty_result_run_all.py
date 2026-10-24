@@ -27,7 +27,6 @@ from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test
     _ENABLED_ALLOWED,
     _ENABLED_DEFAULT,
     EmptyResultRunAllTestBase,
-    _EmptyResultMatchData,
 )
 from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import records_from_frame
 
@@ -80,7 +79,7 @@ def test_empty_result_allowed_succeeds_multiprocessing(flight_server: Any) -> No
     assert len(records_from_frame(result[0])) == 0
 
 
-class EmptyResultNoneAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchData):
+class EmptyResultNoneAllowedFeatureGroup(FeatureGroup):
     """Root FG whose ``calculate_feature`` returns ``None`` (state A).
 
     Module-local on purpose: it pins that a MISSING result is rejected upstream in

@@ -24,7 +24,6 @@ ensure proper resource management across all test methods.
 from typing import Any
 import pytest
 
-from mloda.provider import MatchData
 from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda.provider import FeatureGroup
@@ -93,35 +92,7 @@ class SparkTestDataCreator(ATestDataCreator):
         return spark_test_dict
 
 
-class ATestSparkFeatureGroup(FeatureGroup, MatchData):
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        """Check for data access collection if any child classes match the data access."""
-
-        if not SparkFramework.is_available():
-            return None
-
-        if feature_name not in cls.feature_names_supported():
-            return None
-
-        if isinstance(framework_connection_object, SparkSession):
-            return framework_connection_object
-
-        if data_access_collection is None:
-            return None
-
-        if data_access_collection.connections:
-            for conn in data_access_collection.connections.values():
-                if isinstance(conn, SparkSession):
-                    return conn
-        return None
-
+class ATestSparkFeatureGroup(FeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {SparkFramework}

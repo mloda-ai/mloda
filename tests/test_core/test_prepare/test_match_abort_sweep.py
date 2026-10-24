@@ -67,7 +67,6 @@ MATCH_PATH_MODULES: dict[str, str] = {
     "mloda/core/abstract_plugins/components/input_data/reader_probe.py": "the extender-wrapped source group probe",
     "mloda/core/abstract_plugins/components/input_data/api/api_input_data.py": "the api input data match hook",
     "mloda/core/abstract_plugins/components/input_data/creator/data_creator.py": "the data-creator match hook",
-    "mloda/core/abstract_plugins/components/match_data/match_data.py": "match data selection during matching",
 }
 
 for _module in MATCH_PATH_MODULES:
@@ -85,10 +84,6 @@ SEEDS: dict[str, str] = {
 # Raising functions OUTSIDE the declared modules that the match path calls; the decision is recorded here
 # instead of at the raise. Resolution is by name, so an entry can be a name COLLISION, not a call edge.
 _CANDIDATE_OWN_DECLARATION = "contained: validates the requesting feature's own declaration during matching"
-_DECIDED_ABOVE_BY_READER_SELECTION = (
-    "decided above by the marked raise in MatchData.add_base_input_data_to_options; this write only "
-    "ever reaches an absent or equal key"
-)
 _MATCHES_COLLISION = "name collision: the match path calls the input-data hooks named matches, not Link.matches"
 _JOIN_COLLISION = "name collision: str.join, not the runner's join"
 _FORK_COLLISION = (
@@ -123,7 +118,6 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/declared_attributes.py", "read_declared_attributes"): (
         "read inside safe_field, so a raising reader declaration degrades to None"
     ),
-    ("mloda/core/abstract_plugins/components/options.py", "add_to_group"): _DECIDED_ABOVE_BY_READER_SELECTION,
     ("mloda/core/abstract_plugins/components/options.py", "_fork"): _FORK_COLLISION,
     ("mloda/core/abstract_plugins/components/options.py", "_adopt"): _ADOPT_COLLISION,
     ("mloda/core/abstract_plugins/components/options.py", "get_in_features"): _CANDIDATE_OWN_DECLARATION,
@@ -182,7 +176,6 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
         "which renders discriminators through safe_field"
     ),
     ("mloda/core/abstract_plugins/components/feature.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
-    ("mloda/core/abstract_plugins/components/link.py", "matches"): _MATCHES_COLLISION,
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
 }
 
@@ -1032,10 +1025,8 @@ def test_the_reachable_walk_does_not_collapse() -> None:
 
 def test_known_escalations_are_enumerated() -> None:
     """Canary: the escalations that exist today are all seen, so a silently empty sweep cannot pass."""
-    match_data = "mloda/core/abstract_plugins/components/match_data/match_data.py"
     mixin = "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser_mixin.py"
     expected = {
-        (match_data, "add_base_input_data_to_options"),
         (mixin, "_validate_forwarded_name_mismatch"),
     }
 

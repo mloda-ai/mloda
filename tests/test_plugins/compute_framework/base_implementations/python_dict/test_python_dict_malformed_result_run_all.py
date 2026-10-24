@@ -31,12 +31,9 @@ from mloda.user import Feature
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import mloda
-from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
-    _EmptyResultMatchData,
-)
 
 
-class _ScalarValuedResultFeatureGroup(FeatureGroup, _EmptyResultMatchData):
+class _ScalarValuedResultFeatureGroup(FeatureGroup):
     """Root FeatureGroup whose ``calculate_feature`` returns a scalar-valued dict.
 
     ``{"scalar_result_col": 1}`` is NOT columnar: the value is a bare int, not a list. It
@@ -57,7 +54,7 @@ class _ScalarValuedResultFeatureGroup(FeatureGroup, _EmptyResultMatchData):
         return {"scalar_result_col"}
 
 
-class _MultiScalarValuedResultFeatureGroup(FeatureGroup, _EmptyResultMatchData):
+class _MultiScalarValuedResultFeatureGroup(FeatureGroup):
     """Root FeatureGroup returning a multi-column scalar-valued dict ``{"a": 1, "b": 2}``."""
 
     @classmethod

@@ -67,7 +67,6 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collec
 from mloda.core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 
 # Match data
-from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
 
 # Artifact
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
@@ -205,7 +204,6 @@ __all__ = [
     "ApiInputDataCollection",
     "DataCreator",
     # Match data
-    "MatchData",
     # Artifact
     "BaseArtifact",
     # Validators

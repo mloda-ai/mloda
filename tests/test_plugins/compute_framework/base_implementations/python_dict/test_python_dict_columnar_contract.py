@@ -28,9 +28,6 @@ from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
-    _EmptyResultMatchData,
-)
 
 
 def _framework() -> PythonDictFramework:
@@ -212,7 +209,7 @@ class TestAllowEmptyResultRetired:
         assert not hasattr(FeatureGroup, "allow_empty_result")
 
 
-class _ColumnarZeroRowFeatureGroup(FeatureGroup, _EmptyResultMatchData):
+class _ColumnarZeroRowFeatureGroup(FeatureGroup):
     """Root FG returning a schema-bearing zero-row columnar dict, with NO opt-in flag."""
 
     @classmethod
@@ -228,7 +225,7 @@ class _ColumnarZeroRowFeatureGroup(FeatureGroup, _EmptyResultMatchData):
         return {"columnar_zero_row_col"}
 
 
-class _ColumnarZeroColumnFeatureGroup(FeatureGroup, _EmptyResultMatchData):
+class _ColumnarZeroColumnFeatureGroup(FeatureGroup):
     """Root FG returning a schema-less ``{}`` (zero columns), with NO opt-in flag."""
 
     @classmethod

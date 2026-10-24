@@ -42,9 +42,6 @@ from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
-from mloda.provider import MatchData
-from mloda.user import DataAccessCollection
-from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import RunResult
@@ -57,39 +54,7 @@ from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base 
 )
 
 
-class _EmptyResultMatchData(MatchData):
-    """Surfaces a framework connection when one is provided; inert otherwise.
-
-    For connection-backed frameworks (DuckDB / SQLite / Spark / Iceberg) the connection is
-    threaded through ``Feature.options`` and a ``DataAccessCollection``; this returns it so
-    the framework can build its native (empty) frame. For pandas / polars / pyarrow /
-    python_dict no connection is passed, so this returns ``None`` and feature resolution
-    falls back to the ``DataCreator`` declared by ``input_data``.
-    """
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        raise NotImplementedError
-
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        if feature_name not in cls.feature_names_supported():
-            return None
-        if framework_connection_object is not None:
-            return framework_connection_object
-        if data_access_collection is not None and data_access_collection.connections:
-            for conn in data_access_collection.connections.values():
-                return conn
-        return None
-
-
-class EmptyResultDefaultFeatureGroup(FeatureGroup, _EmptyResultMatchData):
+class EmptyResultDefaultFeatureGroup(FeatureGroup):
     """Root FeatureGroup that yields a schema-bearing zero-row result under default behavior."""
 
     @classmethod
@@ -107,7 +72,7 @@ class EmptyResultDefaultFeatureGroup(FeatureGroup, _EmptyResultMatchData):
         return {"empty_result_default_col"}
 
 
-class EmptyResultAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchData):
+class EmptyResultAllowedFeatureGroup(FeatureGroup):
     """Root FeatureGroup that yields a schema-bearing zero-row result (one empty column)."""
 
     @classmethod
@@ -124,7 +89,7 @@ class EmptyResultAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchData):
         return {"empty_result_allowed_col"}
 
 
-class EmptyResultSchemalessAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchData):
+class EmptyResultSchemalessAllowedFeatureGroup(FeatureGroup):
     """Root FeatureGroup that yields a ZERO-COLUMN (schema-less) ``{}`` result.
 
     The ``{}`` returned here is schema-less (state B) on EVERY framework: ``transform``
@@ -146,7 +111,7 @@ class EmptyResultSchemalessAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchDa
         return {"empty_result_schemaless_col"}
 
 
-class EmptyResultNoneFeatureGroup(FeatureGroup, _EmptyResultMatchData):
+class EmptyResultNoneFeatureGroup(FeatureGroup):
     """Root FeatureGroup whose ``calculate_feature`` returns ``None`` (state A)."""
 
     @classmethod

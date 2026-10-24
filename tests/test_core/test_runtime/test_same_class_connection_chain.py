@@ -1,5 +1,5 @@
-"""Regression: a same-class MatchData chain (a feature's input_features resolved by the SAME
-MatchData class) must keep receiving the framework connection on the upstream step. Blocking
+"""Regression: a same-class connection chain (a feature's input_features resolved by the SAME
+class) must keep receiving the framework connection on the upstream step. Blocking
 inherit_from from ever copying the connection key breaks this (the upstream step's
 run_calculation reads the key off its own Options), even though the connection must still
 never survive pickling into a multiprocessing worker."""
@@ -16,36 +16,16 @@ except ImportError:
 
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda, DataAccessCollection
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
-from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet, MatchData, DataCreator
+from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet, DataCreator
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 
 
-class ChainSameClassDuckDBFG(FeatureGroup, MatchData):
+class ChainSameClassDuckDBFG(FeatureGroup):
     """chain_b's input_features resolves chain_a via the SAME class, feature-scope entry point."""
 
     SEEN_CONNECTIONS: list[Any] = []
-
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        if feature_name not in {"chain_a", "chain_b"}:
-            return None
-        if isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
-            return framework_connection_object
-        if data_access_collection is not None and options.get("connection_handle") is not None:
-            return data_access_collection.resolve("connection", hint=options.get("connection_handle"))
-        if data_access_collection is not None:
-            for conn in data_access_collection.connections.values():
-                if isinstance(conn, duckdb.DuckDBPyConnection):
-                    return conn
-        return None
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         if str(feature_name) == "chain_b":
@@ -78,7 +58,7 @@ class ChainSameClassRootDuckDBFG(ChainSameClassDuckDBFG):
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed.")
-class TestMatchDataSameClassChainKeepsConnection:
+class TestSameClassChainKeepsConnection:
     """Both entry points must resolve, not raise 'connection object required'."""
 
     def test_feature_scope_same_class_chain_resolves(self) -> None:
@@ -129,20 +109,8 @@ class TestMatchDataSameClassChainKeepsConnection:
         assert rows is not None
 
 
-class TwoClassSqliteRootFG(FeatureGroup, MatchData):
-    """Root whose own matcher selects the SQLite connection of the DataAccessCollection."""
-
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        if feature_name != "two_class_y" or data_access_collection is None:
-            return None
-        return next((c for c in data_access_collection.connections.values() if isinstance(c, sqlite3.Connection)), None)
+class TwoClassSqliteRootFG(FeatureGroup):
+    """Root served by the SQLite connection of the DataAccessCollection."""
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -157,22 +125,8 @@ class TwoClassSqliteRootFG(FeatureGroup, MatchData):
         return {"two_class_y": [1, 2]}
 
 
-class TwoClassDuckDBConsumerFG(FeatureGroup, MatchData):
-    """Consumer whose matcher selects the DuckDB connection; its input belongs to another MatchData class."""
-
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        if feature_name != "two_class_x" or data_access_collection is None:
-            return None
-        return next(
-            (c for c in data_access_collection.connections.values() if isinstance(c, duckdb.DuckDBPyConnection)), None
-        )
+class TwoClassDuckDBConsumerFG(FeatureGroup):
+    """Consumer served by the DuckDB connection; its input belongs to another class."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("two_class_y")}
@@ -191,10 +145,10 @@ class TwoClassDuckDBConsumerFG(FeatureGroup, MatchData):
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed.")
-class TestMatchDataTwoClassChain:
-    """Each MatchData class resolves its own connection handle; a handle only inherited from the consumer yields."""
+class TestTwoClassChain:
+    """Each class resolves its own connection; a handle only inherited from the consumer yields."""
 
-    def test_two_matchdata_classes_on_two_connections_in_one_chain_run(self) -> None:
+    def test_two_classes_on_two_connections_in_one_chain_run(self) -> None:
         access = DataAccessCollection(connections={"d": duckdb.connect(), "s": sqlite3.connect(":memory:")})
 
         result = mloda.run_all(
@@ -205,17 +159,6 @@ class TestMatchDataTwoClassChain:
         )
 
         assert result[0].to_pydict() == {"two_class_x": [2, 4]}
-
-    def test_a_handle_the_feature_set_itself_still_conflicts_with_its_matcher(self) -> None:
-        access = DataAccessCollection(connections={"d": duckdb.connect(), "s": sqlite3.connect(":memory:")})
-
-        with pytest.raises(ValueError, match="already set with different values"):
-            mloda.run_all(
-                [Feature("two_class_y", Options({"connection_handle": "d"}))],
-                data_access_collection=access,
-                compute_frameworks=[DuckDBFramework, SqliteFramework],
-                plugin_collector=PluginCollector.enabled_feature_groups({TwoClassSqliteRootFG}),
-            )
 
 
 class _SessionLike:

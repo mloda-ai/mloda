@@ -1,8 +1,8 @@
-# Data Access Patterns: Source FeatureGroups and MatchData
+# Data Access Patterns: Source FeatureGroups
 
 ## Overview
 
-mloda reads data through **source FeatureGroups** (files, documents, databases and custom sources). **MatchData** is a separate, narrow pattern for feature groups that need framework connection objects. `BaseInputData` is only the marker base of `DataCreator` and `ApiInputData`, the return type of `input_data()`; it carries no reader behavior.
+mloda reads data through **source FeatureGroups** (files, documents, databases and custom sources). `BaseInputData` is only the marker base of `DataCreator` and `ApiInputData`, the return type of `input_data()`; it carries no reader behavior.
 
 For practical examples of data access methods, see [Data Access Overview](access-feature-data.md).
 
@@ -141,75 +141,10 @@ A `feature_group=` scope is final: only the scoped group and its subclasses are 
 
 Since group options forward to input features, a pointer on a derived feature binds its inputs too (see [Resolution errors](troubleshooting/feature-group-resolution-errors.md#pointers-on-derived-features)). A pinned group that matches nothing without a recorded reason is reported under its own name.
 
-## MatchData Pattern
+## Connections
 
-### Purpose
-MatchData is a **specialized matching mechanism** specifically designed for feature groups that require **framework connection objects**. It determines which data access method should be used when stateful connections are needed.
+A connection lives in the DataAccessCollection, and the framework binds the single one it accepts. Pin one with `connection_handle` or `Feature(name, connection=conn)` (see [Selecting a connection](named-data-access-handles.md#selecting-a-connection-connection_handle) and [Framework Connection Object](framework-connection-object.md)). A source group that reads a connection declares `ClaimRoute("connection", ...)` and `match_connection` (see `DuckdbFG`); choosing a connection by its content belongs in `match_connection`.
 
-### Key Characteristics
-- **Connection-Specific**: Only used for feature groups that need framework connection objects
-- **Matching Logic**: Determines which data source matches when connections are involved
-- **Scope Resolution**: Resolves conflicts between feature-scope and global-scope data access for stateful frameworks
-- **Limited Usage**: Only applies to specific compute frameworks (like DuckDB) that require persistent connections
-
-### When MatchData is Used
-MatchData is **only** used in these specific scenarios:
-- Feature groups that work with **stateful compute frameworks** (e.g., DuckDB)
-- When **framework connection objects** are required
-- For data sources that need **persistent connections** (databases, connection pools)
-
-### Use Cases
-- Matching DuckDB features to appropriate DuckDB connections
-- Routing features to specific database connections based on credentials
-- Resolving data access when multiple connection objects are available
-- Enabling flexible connection configuration for stateful frameworks
-
-### Example Implementation
-```py
-from mloda.provider import MatchData, FeatureGroup
-
-class DuckDBFeatureGroup(FeatureGroup, MatchData):
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        # Connections come from the DataAccessCollection only
-        if data_access_collection is not None:
-            return data_access_collection.resolve(
-                "connection",
-                predicate=lambda c: isinstance(c, duckdb.DuckDBPyConnection),
-                hint=options.get("connection_handle") or options.get("data_access_handle"),
-            )
-        return None
-```
-
-### Connection Handle
-- A connection lives only in the DataAccessCollection. A connection object under a feature option, including the group's class name, raises at planning and asks you to move it to the collection and select it with `connection_handle`. The option under a group's class name is only a source pointer.
-- When `match_data_access` returns a connection of the collection, `global_scope_data_access` writes its handle to the `connection_handle` option, never the object under the class name. The handle is picklable, so MatchData features stay safe in mixed SYNC/MULTIPROCESSING runs.
-- The handle forwards to input features, but an input feature whose own matcher selects another connection overrides the inherited one. A handle the feature sets itself still conflicts with its matcher.
-
-## Combined Usage Example
-```py
-class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"analytics_input"})
-
-    @classmethod
-    def match_data_access(cls, feature_name: str, options: Options,
-                         data_access_collection: DataAccessCollection | None = None,
-                         framework_connection_object: Any | None = None) -> Any:
-        # MatchData for connection object matching, from the DataAccessCollection
-        if data_access_collection is not None:
-            return data_access_collection.resolve(
-                "connection", predicate=lambda c: isinstance(c, duckdb.DuckDBPyConnection)
-            )
-        return None
-```
 ## Practical Examples
 
 ### Scenario 1: Standard File Processing (Source FeatureGroup Only)
@@ -221,21 +156,18 @@ class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
 Feature("id", options={"CsvFG": "data/people.csv"})
 ```
 
-### Scenario 2: DuckDB Analytics (DataCreator + MatchData)
+### Scenario 2: DataCreator + Feature(connection=)
 
-**Use Case**: Analytics with DuckDB requiring connection objects
-**Pattern**: `DataCreator` supplies the data and MatchData matches the connection
+**Use Case**: Analytics with DuckDB requiring a connection object
+**Pattern**: `DataCreator` supplies the data and the feature pins the connection
 
 ```py
-class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
+class DuckDBAnalyticsFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -> BaseInputData | None:
         return DataCreator({"analytics_input"})
 
-    @classmethod
-    def match_data_access(cls, ...):
-        # MatchData for connection matching
-        return appropriate_duckdb_connection
+Feature("analytics_input", connection=conn)
 ```
 
 For database connection patterns, see [Framework Connection Object](framework-connection-object.md).
@@ -256,7 +188,7 @@ class SyntheticDataFeature(FeatureGroup):
 
 ### Compute Frameworks
 - **Source FeatureGroups and `DataCreator`**: work with all compute frameworks
-- **MatchData**: Only works with stateful frameworks requiring connection objects
+- **Connections**: only frameworks that take a connection object (like DuckDB) bind one
 
 For more information, see:
 - [Compute Frameworks](../chapter1/compute-frameworks.md)
@@ -270,33 +202,17 @@ These patterns are fundamental to how feature groups access data. For more detai
 
 ## Best Practices
 
-### When to Use Source FeatureGroups or DataCreator Only
-- Working with stateless compute frameworks (Pandas, PyArrow, Polars)
-- Files, documents and databases (source FeatureGroups)
-- Runtime data injection (`ApiInputData`) and synthetic data (`DataCreator`)
-- Most standard data processing scenarios
-
-### When to Add MatchData
-- Working with stateful compute frameworks (DuckDB)
-- Database connections requiring persistent state
-- Connection pooling scenarios
-- When framework connection objects are required
-
-### Design Considerations
-- **Source FeatureGroups**: Focus on robust source discovery, error handling, and performance
-- **MatchData**: Focus on accurate connection matching and state management
-- **Integration**: Use MatchData only when framework connection objects are actually needed
+- Use source FeatureGroups for files, documents and databases, `ApiInputData` for runtime data and `DataCreator` for synthetic data.
+- In a source group, focus on robust source discovery, error handling and performance.
 
 ## Related Documentation
 
 - **[(Feature) data](access-feature-data.md)** - Comprehensive guide to data access in mloda
-- **[Framework Connection Object](framework-connection-object.md)** - Managing stateful connections (essential for understanding MatchData)
+- **[Framework Connection Object](framework-connection-object.md)** - Managing stateful connections
 - **[Feature Groups](../chapter1/feature-groups.md)** - Introduction to feature groups
 - **[Compute Frameworks](../chapter1/compute-frameworks.md)** - Overview of compute framework system
 - **[Feature Group Matching](feature-group-matching.md)** - How features are matched to implementations
 
 ## Summary
 
-- **Source FeatureGroups** are the way mloda reads files, documents, databases and custom sources
-- **MatchData** is a specialized pattern for connection object matching, only used by feature groups that require framework connection objects
-- They are not alternatives: they solve different problems in different contexts
+**Source FeatureGroups** are the way mloda reads files, documents, databases and custom sources. `DataCreator` and `ApiInputData` supply in-memory data.

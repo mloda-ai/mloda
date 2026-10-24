@@ -1,4 +1,3 @@
-from mloda.provider import MatchData
 from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 import pytest
@@ -69,35 +68,7 @@ class DuckDBTestDataCreator(ATestDataCreator):
         return duckdb_test_dict
 
 
-class ATestDuckDBFeatureGroup(FeatureGroup, MatchData):
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        """We check for data access collection if any child classes match the data access."""
-
-        if not DuckDBFramework.is_available():
-            return None
-
-        if feature_name not in cls.feature_names_supported():
-            return None
-
-        if isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
-            return framework_connection_object
-
-        if data_access_collection is None:
-            return None
-
-        if data_access_collection.connections:
-            for conn in data_access_collection.connections.values():
-                if isinstance(conn, duckdb.DuckDBPyConnection):
-                    return conn
-        return None
-
+class ATestDuckDBFeatureGroup(FeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {DuckDBFramework}

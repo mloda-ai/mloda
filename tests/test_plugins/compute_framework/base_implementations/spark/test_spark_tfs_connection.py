@@ -9,8 +9,8 @@ try:
 except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
-from mloda.user import Feature, DataAccessCollection
-from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet, MatchData
+from mloda.user import Feature
+from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet
 from mloda.user import FeatureName, Options
 from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
 from tests.test_plugins.compute_framework.base_implementations.spark.conftest import (
@@ -27,29 +27,8 @@ else:
     SparkSession = None
 
 
-class TfsDoubledSparkFG(FeatureGroup, MatchData):
+class TfsDoubledSparkFG(FeatureGroup):
     """Doubles raw_val via Spark selectExpr; requires the SparkSession to be set."""
-
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -> Any:
-        if not PYSPARK_AVAILABLE:
-            return None
-        if feature_name not in cls.feature_names_supported():
-            return None
-        if isinstance(framework_connection_object, SparkSession):
-            return framework_connection_object
-        if data_access_collection is None:
-            return None
-        for conn in data_access_collection.connections.values():
-            if isinstance(conn, SparkSession):
-                return conn
-        return None
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("raw_val")}

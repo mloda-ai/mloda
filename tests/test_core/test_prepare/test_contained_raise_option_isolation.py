@@ -85,7 +85,7 @@ def _make_mutating_raise_fg_marks_non_forwarded() -> type[FeatureGroup]:
     gc.collect()
 
     class MutatingRaiseMarksNonForwardedFG845r(FeatureGroup):
-        """Stands in for a MatchData matcher that stamps its connection key before it breaks."""
+        """Stands in for a connection matcher that stamps its connection key before it breaks."""
 
         @classmethod
         def feature_names_supported(cls) -> set[str]:

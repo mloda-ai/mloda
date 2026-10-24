@@ -312,7 +312,6 @@ class ScalingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
             data: The input data
             source_feature: Name of the source feature
             scaler_type: Type of scaler to create
-            training_data: Callable extracting the training data
 
         Returns:
             Fitted scaler

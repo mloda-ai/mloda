@@ -420,7 +420,6 @@ class EncodingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
             data: The input data
             source_feature: Name of the source feature
             encoder_type: Type of encoder to create
-            training_data: Callable extracting the training data
 
         Returns:
             Fitted encoder

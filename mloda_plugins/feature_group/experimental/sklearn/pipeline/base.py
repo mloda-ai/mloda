@@ -536,7 +536,6 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup
             data: The input data
             source_features: List of source feature names
             config: Pipeline configuration
-            training_data: Callable extracting the training data
 
         Returns:
             Fitted pipeline

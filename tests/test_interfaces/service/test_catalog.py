@@ -27,6 +27,7 @@ from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.docs_scope import small_feature_group_walk
 from tests.helpers.plugin_stubs import StubFeatureGroup
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
 
 # Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
 pytestmark = pytest.mark.timeout(30)
@@ -242,6 +243,17 @@ class TestPluginCollectorFor:
         assert collector.applicable_feature_group_class(CatalogAlphaMcp3) is True
         assert collector.applicable_feature_group_class(CatalogBetaMcp3) is True
         assert collector.applicable_feature_group_class(CatalogDeniedMcp3) is False
+
+    def test_keeps_base_disabled_implementations(self, make_implementation: Any) -> None:
+        disabled = make_implementation(ToySourceFG, PythonDictFramework, name="CatalogDisabledImpl")
+        kept = make_implementation(ToySourceFG, PythonDictFramework, name="CatalogKeptImpl")
+        base = PluginCollector()
+        base.add_disabled_implementation_classes({disabled})
+
+        collector = plugin_collector_for(Settings(), base)
+
+        assert collector.applicable_implementation_class(disabled) is False
+        assert collector.applicable_implementation_class(kept) is True
 
 
 class TestBuildDoesNotTouchDenied:

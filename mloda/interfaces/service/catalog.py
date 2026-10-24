@@ -53,6 +53,7 @@ def plugin_collector_for(settings: Settings, base: PluginCollector | None = None
     if base is not None:
         collector.add_enabled_feature_group_classes(base.enabled_feature_group_classes)
         collector.add_disabled_feature_group_classes(base.disabled_feature_group_classes)
+        collector.add_disabled_implementation_classes(base.disabled_implementation_classes)
         collector.allow_redefinition = base.allow_redefinition
         collector.strict_mode = base.strict_mode
         collector.registry = base.registry

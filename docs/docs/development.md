@@ -1,19 +1,10 @@
 ## Development Setup (for Contributors)
 
-Thanks for your interest in contributing to mloda. The canonical contributor guide is [CONTRIBUTING.md](https://github.com/mloda-ai/mloda/blob/main/CONTRIBUTING.md), and all participants are expected to follow our [Code of Conduct](https://github.com/mloda-ai/mloda/blob/main/CODE_OF_CONDUCT.md). This page covers two topics that are specific to working on the docs and the dev environment.
-
-#### Dev Container (Optional)
-
-Prerequisite: Docker.
-
-- Open the project in a dev container (in VS Code or a compatible tool).
-- The dev container includes all necessary dependencies and tools to work on mloda.
-
-If you don't use Docker, follow the local setup in [CONTRIBUTING.md](https://github.com/mloda-ai/mloda/blob/main/CONTRIBUTING.md#local-development-setup) (`uv sync --all-extras`, then `source .venv/bin/activate`).
+Thanks for your interest in contributing to mloda. The canonical contributor guide is [CONTRIBUTING.md](https://github.com/mloda-ai/mloda/blob/main/CONTRIBUTING.md), and all participants are expected to follow our [Code of Conduct](https://github.com/mloda-ai/mloda/blob/main/CODE_OF_CONDUCT.md).
 
 #### Building the docs locally
 
-After completing the setup in CONTRIBUTING.md (`uv sync --all-extras`), you can preview docs changes with:
+After completing [the setup in CONTRIBUTING.md](https://github.com/mloda-ai/mloda/blob/main/CONTRIBUTING.md#local-development-setup) (`uv sync --all-extras`), you can preview docs changes with:
 
 ```bash
 mkdocs serve --config-file docs/mkdocs.yml

@@ -133,7 +133,6 @@ exclude_dirs = [
     "./.venv/",
     "./build/",
     "./dist/",
-    "./.devcontainer/",
     "./.tox/",
     "./.vscode/",
     "./attribution/",

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 import pytest
 
@@ -178,7 +178,7 @@ class TestPythonDictEquiJoinTimezoneGuard:
         """NEGATIVE: tz-aware datetime key on the left, tz-naive on the right must be rejected."""
         engine = PythonDictMergeEngine()
         idx = Index(("t",))
-        left_data = {"t": [datetime(2021, 1, 1, 12, 0, tzinfo=timezone.utc)], "lv": ["a"]}
+        left_data = {"t": [datetime(2021, 1, 1, 12, 0, tzinfo=UTC)], "lv": ["a"]}
         right_data = {"t": [datetime(2021, 1, 1, 12, 0)], "rv": ["x"]}
         link = make_merge_link(JoinType.INNER, idx, idx)
 

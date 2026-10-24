@@ -15,7 +15,7 @@ equi-join path yet, so polars either merges or surfaces its own low-level
 schema/dtype error, neither of which mentions timezone.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 import pytest
@@ -70,8 +70,8 @@ class _PolarsEquiJoinTzChecks:
             pl.DataFrame(
                 {
                     "t": [
-                        datetime(2021, 1, 1, 0, 0, 10, tzinfo=timezone.utc),
-                        datetime(2021, 1, 1, 0, 0, 20, tzinfo=timezone.utc),
+                        datetime(2021, 1, 1, 0, 0, 10, tzinfo=UTC),
+                        datetime(2021, 1, 1, 0, 0, 20, tzinfo=UTC),
                     ],
                     "lv": [1, 2],
                 }
@@ -112,16 +112,14 @@ class _PolarsEquiJoinTzChecks:
             pl.DataFrame(
                 {
                     "t": [
-                        datetime(2021, 1, 1, 0, 0, 10, tzinfo=timezone.utc),
-                        datetime(2021, 1, 1, 0, 0, 20, tzinfo=timezone.utc),
+                        datetime(2021, 1, 1, 0, 0, 10, tzinfo=UTC),
+                        datetime(2021, 1, 1, 0, 0, 20, tzinfo=UTC),
                     ],
                     "lv": [1, 2],
                 }
             )
         )
-        right = self._as_framework(
-            pl.DataFrame({"t": [datetime(2021, 1, 1, 0, 0, 10, tzinfo=timezone.utc)], "rv": [7.0]})
-        )
+        right = self._as_framework(pl.DataFrame({"t": [datetime(2021, 1, 1, 0, 0, 10, tzinfo=UTC)], "rv": [7.0]}))
 
         engine = self.merge_engine_class()()
         link = make_merge_link(JoinType.INNER, Index(("t",)), Index(("t",)))

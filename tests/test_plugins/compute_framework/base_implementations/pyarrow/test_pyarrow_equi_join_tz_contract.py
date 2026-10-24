@@ -12,7 +12,7 @@ equi-join path yet, so Acero either merges or surfaces its own low-level on-key
 type mismatch, neither of which mentions timezone.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 import pytest
 
@@ -48,8 +48,8 @@ class TestPyArrowEquiJoinTimezoneContract:
             {
                 "t": pa.array(
                     [
-                        datetime(2021, 1, 1, 0, 0, 10, tzinfo=timezone.utc),
-                        datetime(2021, 1, 1, 0, 0, 20, tzinfo=timezone.utc),
+                        datetime(2021, 1, 1, 0, 0, 10, tzinfo=UTC),
+                        datetime(2021, 1, 1, 0, 0, 20, tzinfo=UTC),
                     ],
                     type=pa.timestamp("us", tz="UTC"),
                 ),
@@ -101,8 +101,8 @@ class TestPyArrowEquiJoinTimezoneContract:
             {
                 "t": pa.array(
                     [
-                        datetime(2021, 1, 1, 0, 0, 10, tzinfo=timezone.utc),
-                        datetime(2021, 1, 1, 0, 0, 20, tzinfo=timezone.utc),
+                        datetime(2021, 1, 1, 0, 0, 10, tzinfo=UTC),
+                        datetime(2021, 1, 1, 0, 0, 20, tzinfo=UTC),
                     ],
                     type=pa.timestamp("us", tz="UTC"),
                 ),
@@ -112,7 +112,7 @@ class TestPyArrowEquiJoinTimezoneContract:
         right = pa.Table.from_pydict(
             {
                 "t": pa.array(
-                    [datetime(2021, 1, 1, 0, 0, 10, tzinfo=timezone.utc)],
+                    [datetime(2021, 1, 1, 0, 0, 10, tzinfo=UTC)],
                     type=pa.timestamp("us", tz="UTC"),
                 ),
                 "rv": ["A"],

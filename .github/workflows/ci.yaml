@@ -36,6 +36,9 @@ jobs:
         include:
           - python-version: "3.11"
             toxenv: "-e python311"
+          # Lockfile versions except pandas<3 / numpy<2.4 (the lockfile only covers pandas 3).
+          - python-version: "3.11"
+            toxenv: "-e pandas2"
           - python-version: "3.12"
             toxenv: "-e python312"
           - python-version: "3.13"

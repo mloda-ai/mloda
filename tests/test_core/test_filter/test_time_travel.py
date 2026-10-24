@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from typing import Any
 
 import pyarrow as pa
@@ -37,7 +37,7 @@ class TimeTravelPositiveFilterTest(FeatureGroup):
             raise ValueError("Test Filter not found")
 
         # Snapshot `now` once so the three row timestamps are mutually consistent.
-        now_utc = datetime.now(tz=timezone.utc)
+        now_utc = datetime.now(tz=UTC)
         # pa.array with a tz-typed timestamp interprets naive datetimes as already in that tz;
         # tz-aware datetimes are rejected on some PyArrow versions, hence the .replace(tzinfo=None).
         ts_array = pa.array(
@@ -80,10 +80,10 @@ class TestTimeTravel:
         global_filter = GlobalFilter()
 
         global_filter.add_time_and_time_travel_filters(
-            event_from=datetime.now(tz=timezone.utc) - timedelta(days=20),
-            event_to=datetime.now(tz=timezone.utc),
-            valid_from=datetime.now(tz=timezone.utc) - timedelta(days=40),
-            valid_to=datetime.now(tz=timezone.utc),
+            event_from=datetime.now(tz=UTC) - timedelta(days=20),
+            event_to=datetime.now(tz=UTC),
+            valid_from=datetime.now(tz=UTC) - timedelta(days=40),
+            valid_to=datetime.now(tz=UTC),
         )
 
         runner = MlodaTestRunner.run_engine(
@@ -101,8 +101,8 @@ class TestTimeTravel:
         global_filter = GlobalFilter()
 
         global_filter.add_time_and_time_travel_filters(
-            event_from=datetime.now(tz=timezone.utc) - timedelta(days=20),
-            event_to=datetime.now(tz=timezone.utc),
+            event_from=datetime.now(tz=UTC) - timedelta(days=20),
+            event_to=datetime.now(tz=UTC),
         )
         runner = MlodaTestRunner.run_engine(
             features, parallelization_modes=modes, flight_server=flight_server, global_filter=global_filter

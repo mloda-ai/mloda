@@ -14,6 +14,7 @@ from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureSet
 from mloda.steward import FeatureResolutionError, PlanStep, plan_content_hash, plan_structure_hash
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from datetime import UTC
 
 _COLUMN = "lifecycle_hooks_col"
 
@@ -102,14 +103,12 @@ class TestLifecycleOutcome:
 
 class TestBaseExtenderLifecycleDefaults:
     def test_all_four_hooks_are_noops_on_a_minimal_extender(self) -> None:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from mloda.steward import LifecycleOutcome
 
         extender = _Minimal()
-        plan = PlanContext(
-            plan_id="p", tenant_id=None, project_id=None, principal=None, created_at=datetime.now(timezone.utc)
-        )
+        plan = PlanContext(plan_id="p", tenant_id=None, project_id=None, principal=None, created_at=datetime.now(UTC))
         run = RunContext(run_id="r", plan_id="p")
         outcome = LifecycleOutcome(status="succeeded", error_type=None)
 

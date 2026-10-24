@@ -5,7 +5,7 @@ HookContext population (plan_id/run_id/carrier/worker_index/plan_*), and deny-be
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 from unittest.mock import patch
 
@@ -568,7 +568,7 @@ class TestEngineFunctionExtenderAndRunIdConstruction:
                     tenant_id=None,
                     project_id=None,
                     principal=None,
-                    created_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(UTC),
                 ),
             )
 

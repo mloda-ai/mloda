@@ -3,7 +3,7 @@ populate HookContext.plugin_version.
 """
 
 import importlib.metadata
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from collections.abc import Iterator
 from typing import Any
 
@@ -387,7 +387,7 @@ class TestPluginVersionResolvedAtPlanTimeUnderSync:
                 tenant_id=None,
                 project_id=None,
                 principal=None,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             ),
         )
 

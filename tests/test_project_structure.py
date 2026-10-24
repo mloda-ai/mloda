@@ -173,7 +173,7 @@ class TestRuffConfig:
     """Validate that ruff lint rules enforce modern Python typing conventions."""
 
     def test_modern_typing_rules_configured(self) -> None:
-        """UP006, UP007, UP045 and UP036 (outdated version blocks) must be enforced."""
+        """UP006, UP007, UP045, UP036 (outdated version blocks) and UP017 (datetime.UTC) must be enforced."""
         with open(PROJECT_ROOT / "pyproject.toml", "rb") as f:
             data: dict[str, Any] = tomllib.load(f)
         extend_select = data.get("tool", {}).get("ruff", {}).get("lint", {}).get("extend-select", [])
@@ -181,6 +181,7 @@ class TestRuffConfig:
         assert "UP007" in extend_select, "ruff must enforce UP007 (use X | Y instead of Union)"
         assert "UP045" in extend_select, "ruff must enforce UP045 (use X | None instead of Optional)"
         assert "UP036" in extend_select, "ruff must enforce UP036 (remove outdated version blocks)"
+        assert "UP017" in extend_select, "ruff must enforce UP017 (use datetime.UTC instead of timezone.utc)"
 
     def test_no_redundant_typing_generics_in_source(self) -> None:
         """Source files must not import redundant typing generics that UP006/UP007 replace."""
@@ -367,6 +368,29 @@ class TestToxConfig:
         assert defaults.get("CHECK_SKIP_COUNT") == "1", f"[testenv:mcp] must default CHECK_SKIP_COUNT to 1: {setenv}"
         assert defaults.get("EXPECTED_SKIP_COUNT") == "0", (
             f"[testenv:mcp] must default EXPECTED_SKIP_COUNT to 0: {setenv}"
+        )
+
+    def test_ci_runs_pandas2_env(self) -> None:
+        """Lockfile everywhere except pandas/numpy, which are capped to pandas 2.x / numpy < 2.4."""
+        parser = self._tox_parser()
+        sections = [name for name in parser.sections() if name.replace(" ", "") == "testenv:pandas2"]
+        assert len(sections) == 1, f"tox.ini needs exactly one [testenv:pandas2] section: {parser.sections()}"
+        section = sections[0]
+        overridden = [key for key in ("runner", "deps", "package", "extras") if parser.has_option(section, key)]
+        assert not overridden, f"[testenv:pandas2] must inherit the lockfile install from [testenv]: {overridden}"
+        lines = [ln.strip() for ln in parser.get(section, "commands_pre", fallback="").splitlines() if ln.strip()]
+        installs = [
+            i
+            for i, ln in enumerate(lines)
+            if ln.startswith("uv pip install") and "pandas<3" in ln and "numpy<2.4" in ln
+        ]
+        assert installs, f"commands_pre needs a `uv pip install` line capping pandas<3 and numpy<2.4: {lines}"
+        assert any("pandas" in ln and "numpy" in ln for ln in lines[installs[0] + 1 :]), (
+            f"commands_pre needs a pandas/numpy version guard after the install line: {lines}"
+        )
+        matrix = self._workflow_jobs("ci.yaml")["build"]["strategy"]["matrix"]["include"]
+        assert any(str(e.get("python-version")) == "3.11" and e.get("toxenv") == "-e pandas2" for e in matrix), (
+            f"ci.yaml build matrix needs an include entry for python 3.11 with toxenv '-e pandas2': {matrix}"
         )
 
     def test_ci_runs_lint_env(self) -> None:

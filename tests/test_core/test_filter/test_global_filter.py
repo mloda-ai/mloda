@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from typing import Any
 
 import pytest
@@ -97,10 +97,10 @@ class TestGlobalFilterTimeTravel:
 
     def test_add_time_and_time_travel_filters(self) -> None:
         """Test adding time and time-travel filters."""
-        event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
-        event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
-        valid_from = datetime(2022, 1, 1, tzinfo=timezone.utc)
-        valid_to = datetime(2022, 12, 31, tzinfo=timezone.utc)
+        event_from = datetime(2023, 1, 1, tzinfo=UTC)
+        event_to = datetime(2023, 12, 31, tzinfo=UTC)
+        valid_from = datetime(2022, 1, 1, tzinfo=UTC)
+        valid_to = datetime(2022, 12, 31, tzinfo=UTC)
 
         self.global_filter.add_time_and_time_travel_filters(event_from, event_to, valid_from, valid_to)
 
@@ -109,10 +109,10 @@ class TestGlobalFilterTimeTravel:
 
     def test_add_time_and_time_travel_filters_with_custom_features(self) -> None:
         """Test adding time and time-travel filters with custom feature names."""
-        event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
-        event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
-        valid_from = datetime(2022, 1, 1, tzinfo=timezone.utc)
-        valid_to = datetime(2022, 12, 31, tzinfo=timezone.utc)
+        event_from = datetime(2023, 1, 1, tzinfo=UTC)
+        event_to = datetime(2023, 12, 31, tzinfo=UTC)
+        valid_from = datetime(2022, 1, 1, tzinfo=UTC)
+        valid_to = datetime(2022, 12, 31, tzinfo=UTC)
         event_time_column = "custom_time_filter"
         validity_time_column = "custom_time_travel_filter"
 
@@ -136,8 +136,8 @@ class TestGlobalFilterTimeTravel:
 
     def test_add_time_filters_with_custom_feature(self) -> None:
         """Test adding time filters with a custom feature name."""
-        event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
-        event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
+        event_from = datetime(2023, 1, 1, tzinfo=UTC)
+        event_to = datetime(2023, 12, 31, tzinfo=UTC)
         event_time_column = "custom_time_filter"
 
         self.global_filter.add_time_and_time_travel_filters(event_from, event_to, event_time_column=event_time_column)
@@ -151,10 +151,10 @@ class TestGlobalFilterTimeTravel:
 
     def test_add_time_travel_filters_with_custom_feature(self) -> None:
         """Test adding time-travel filters with a custom feature name."""
-        event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
-        event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
-        valid_from = datetime(2022, 1, 1, tzinfo=timezone.utc)
-        valid_to = datetime(2022, 12, 31, tzinfo=timezone.utc)
+        event_from = datetime(2023, 1, 1, tzinfo=UTC)
+        event_to = datetime(2023, 12, 31, tzinfo=UTC)
+        valid_from = datetime(2022, 1, 1, tzinfo=UTC)
+        valid_to = datetime(2022, 12, 31, tzinfo=UTC)
         validity_time_column = "custom_time_travel_filter"
 
         self.global_filter.add_time_and_time_travel_filters(
@@ -170,8 +170,8 @@ class TestGlobalFilterTimeTravel:
 
     def test_add_time_filters_without_validity(self) -> None:
         """Test adding time filters without validity period."""
-        event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
-        event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
+        event_from = datetime(2023, 1, 1, tzinfo=UTC)
+        event_to = datetime(2023, 12, 31, tzinfo=UTC)
 
         self.global_filter.add_time_and_time_travel_filters(event_from, event_to)
 
@@ -180,9 +180,9 @@ class TestGlobalFilterTimeTravel:
 
     def test_add_time_filters_with_invalid_validity(self) -> None:
         """Test adding time filters with invalid validity period."""
-        event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
-        event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
-        valid_from = datetime(2022, 1, 1, tzinfo=timezone.utc)
+        event_from = datetime(2023, 1, 1, tzinfo=UTC)
+        event_to = datetime(2023, 12, 31, tzinfo=UTC)
+        valid_from = datetime(2022, 1, 1, tzinfo=UTC)
 
         with pytest.raises(ValueError):
             self.global_filter.add_time_and_time_travel_filters(event_from, event_to, valid_from)
@@ -190,16 +190,16 @@ class TestGlobalFilterTimeTravel:
     def test_normalize_to_utc(self) -> None:
         """Test the _normalize_to_utc method returns a UTC-normalized datetime (not a string)."""
         # Identity case: already-UTC input passes through unchanged.
-        time_with_tz = datetime(2023, 1, 1, tzinfo=timezone.utc)
+        time_with_tz = datetime(2023, 1, 1, tzinfo=UTC)
         converted_time = self.global_filter._normalize_to_utc(time_with_tz)
-        assert converted_time == datetime(2023, 1, 1, tzinfo=timezone.utc)
-        assert converted_time.tzinfo == timezone.utc
+        assert converted_time == datetime(2023, 1, 1, tzinfo=UTC)
+        assert converted_time.tzinfo == UTC
 
         # Conversion case: a non-UTC tz must shift to UTC.
         time_offset = datetime(2023, 1, 1, 12, tzinfo=timezone(timedelta(hours=5)))
         converted_offset = self.global_filter._normalize_to_utc(time_offset)
-        assert converted_offset == datetime(2023, 1, 1, 7, tzinfo=timezone.utc)
-        assert converted_offset.tzinfo == timezone.utc
+        assert converted_offset == datetime(2023, 1, 1, 7, tzinfo=UTC)
+        assert converted_offset.tzinfo == UTC
 
     def test_normalize_to_utc_without_tz(self) -> None:
         """Test the _normalize_to_utc method with missing timezone info."""
@@ -210,8 +210,8 @@ class TestGlobalFilterTimeTravel:
 
     def test_add_time_filters_with_event_time_column(self) -> None:
         """Test adding time filters with the new event_time_column parameter name."""
-        event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
-        event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
+        event_from = datetime(2023, 1, 1, tzinfo=UTC)
+        event_to = datetime(2023, 12, 31, tzinfo=UTC)
         event_time_column = "custom_event_time"
 
         self.global_filter.add_time_and_time_travel_filters(event_from, event_to, event_time_column=event_time_column)
@@ -225,10 +225,10 @@ class TestGlobalFilterTimeTravel:
 
     def test_add_time_filters_with_validity_time_column(self) -> None:
         """Test adding time-travel filters with the new validity_time_column parameter name."""
-        event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
-        event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
-        valid_from = datetime(2022, 1, 1, tzinfo=timezone.utc)
-        valid_to = datetime(2022, 12, 31, tzinfo=timezone.utc)
+        event_from = datetime(2023, 1, 1, tzinfo=UTC)
+        event_to = datetime(2023, 12, 31, tzinfo=UTC)
+        valid_from = datetime(2022, 1, 1, tzinfo=UTC)
+        valid_to = datetime(2022, 12, 31, tzinfo=UTC)
         validity_time_column = "custom_validity_time"
 
         self.global_filter.add_time_and_time_travel_filters(
@@ -244,10 +244,10 @@ class TestGlobalFilterTimeTravel:
 
     def test_add_time_filters_with_both_new_parameter_names(self) -> None:
         """Test adding filters with both event_time_column and validity_time_column parameter names."""
-        event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
-        event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
-        valid_from = datetime(2022, 1, 1, tzinfo=timezone.utc)
-        valid_to = datetime(2022, 12, 31, tzinfo=timezone.utc)
+        event_from = datetime(2023, 1, 1, tzinfo=UTC)
+        event_to = datetime(2023, 12, 31, tzinfo=UTC)
+        valid_from = datetime(2022, 1, 1, tzinfo=UTC)
+        valid_to = datetime(2022, 12, 31, tzinfo=UTC)
         event_time_column = "custom_event_time"
         validity_time_column = "custom_validity_time"
 

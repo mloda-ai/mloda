@@ -639,10 +639,10 @@ class TestIcebergFilterEngineStructAndTypePinning:
                 "i": pa.array([1, 2, 3, 4], type=pa.int32()),
                 "tz": pa.array(
                     [
-                        datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc),
-                        datetime.datetime(2024, 1, 2, tzinfo=datetime.timezone.utc),
-                        datetime.datetime(2024, 1, 3, tzinfo=datetime.timezone.utc),
-                        datetime.datetime(2024, 1, 4, tzinfo=datetime.timezone.utc),
+                        datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC),
+                        datetime.datetime(2024, 1, 2, tzinfo=datetime.UTC),
+                        datetime.datetime(2024, 1, 3, tzinfo=datetime.UTC),
+                        datetime.datetime(2024, 1, 4, tzinfo=datetime.UTC),
                     ],
                     type=pa.timestamp("us", tz="UTC"),
                 ),
@@ -775,11 +775,9 @@ class TestIcebergFilterEngineStructAndTypePinning:
                 lambda: SingleFilter(
                     Feature("tz"),
                     FilterType.MIN,
-                    {"value": datetime.datetime(2024, 1, 3, tzinfo=datetime.timezone.utc)},
+                    {"value": datetime.datetime(2024, 1, 3, tzinfo=datetime.UTC)},
                 ),
-                lambda: GreaterThanOrEqual(
-                    Reference("tz"), datetime.datetime(2024, 1, 3, tzinfo=datetime.timezone.utc)
-                ),
+                lambda: GreaterThanOrEqual(Reference("tz"), datetime.datetime(2024, 1, 3, tzinfo=datetime.UTC)),
                 [3, 4],
                 [None, 400],
                 id="min_aware_datetime_on_timestamptz_pushed",

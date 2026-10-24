@@ -242,7 +242,7 @@ class PandasMyOperation(Implementation[MyOperation]):
         ...  # group is the matched feature group class
 ```
 
-An `Implementation[G]` serves both operation groups (`data` is the input frame) and source groups (`data` is the `SourceMatch`).
+An `Implementation[G]` serves both operation groups (`data` is the input frame) and source groups (`data` is the `SourceMatch`). `feature_group` must be `G` or a subclass of it; a mismatch raises `TypeError` at class definition.
 
 - **Framework set**: the frameworks that have an implementation (a framework subclass is served by its parent's implementation), intersected with `compute_framework_rule()`. A group with no implementation has no framework and never matches.
 - **Shared loop**: put the shared per-feature loop on the group as a classmethod that takes the per-framework pieces as keyword-only callables (`AggregatedFeatureGroup.aggregate(data, features, perform=..., add_column=..., columns=...)`). Each implementation's `calculate` hands its own methods over through the `group` it is called with, never through `cls.feature_group`, so a subclass of the group is served with its overrides. An `Implementation` subclass that leaves `calculate` abstract is ignored when implementations are loaded.

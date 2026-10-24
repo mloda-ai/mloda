@@ -2,6 +2,7 @@
 
 import inspect
 import types
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
@@ -32,10 +33,35 @@ def _serves_groups(group: Any) -> bool:
     return isinstance(group, type) and issubclass(group, (SourceFeatureGroup, OperationFeatureGroup))
 
 
+def _declared_groups(node: Any, subst: Mapping[Any, Any]) -> list[type]:
+    """Every concrete G bound by an Implementation[G] reachable from node, resolving TypeVars through generic bases."""
+    origin = typing.get_origin(node) or node
+    args = [subst.get(a, a) if isinstance(a, TypeVar) else a for a in typing.get_args(node)]
+    if origin is Implementation:
+        group = args[0] if args else None
+        return [group] if isinstance(group, type) and group is not Any and typing.get_origin(group) is None else []
+    if not (isinstance(origin, type) and issubclass(origin, Implementation)):
+        return []
+    mapping = dict(zip(getattr(origin, "__parameters__", ()), args))
+    declared: list[type] = []
+    for base in origin.__dict__.get("__orig_bases__", origin.__bases__):
+        declared.extend(_declared_groups(base, mapping))
+    return declared
+
+
+def _mismatched_group(cls: Any, group: Any) -> type | None:
+    return next((g for g in _declared_groups(cls, {}) if not issubclass(group, g)), None)
+
+
 def _names_a_pair(cls: Any) -> bool:
     group = getattr(cls, "feature_group", None)
     framework = getattr(cls, "compute_framework", None)
-    return _serves_groups(group) and isinstance(framework, type) and issubclass(framework, ComputeFramework)
+    return (
+        _serves_groups(group)
+        and _mismatched_group(cls, group) is None
+        and isinstance(framework, type)
+        and issubclass(framework, ComputeFramework)
+    )
 
 
 class Implementation(ABC, Generic[G]):
@@ -50,11 +76,17 @@ class Implementation(ABC, Generic[G]):
         super().__init_subclass__(**kwargs)
         if not _is_concrete(cls):
             return
-        group = getattr(cls, "feature_group", None)
+        group: Any = getattr(cls, "feature_group", None)
         framework = getattr(cls, "compute_framework", None)
         if not _serves_groups(group):
             raise TypeError(
                 f"{cls.__name__} must set feature_group to a SourceFeatureGroup or OperationFeatureGroup subclass."
+            )
+        declared = _mismatched_group(cls, group)
+        if declared is not None:
+            raise TypeError(
+                f"{cls.__name__}.feature_group must be {declared.__name__} or a subclass "
+                f"(Implementation[{declared.__name__}]), got {group.__name__}."
             )
         if not (isinstance(framework, type) and issubclass(framework, ComputeFramework)):
             raise TypeError(f"{cls.__name__} must set compute_framework to a ComputeFramework subclass.")

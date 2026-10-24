@@ -2,10 +2,11 @@
 
 import gc
 import importlib
+import typing
 from abc import abstractmethod
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Generic, NamedTuple, TypeVar
 
 import pandas as pd
 import pytest
@@ -49,6 +50,18 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_s
 )
 
 SENTINEL = [{"toyfmt_ld": 111}, {"toyfmt_ld": 222}]
+
+
+_T = TypeVar("_T")
+_G = TypeVar("_G", bound=FeatureGroup)
+_G2 = TypeVar("_G2", bound=FeatureGroup)
+
+
+def _release_subscripted_generics() -> None:
+    """Drop typing's alias cache, which keeps subscripted local generic classes alive."""
+    for cleanup in getattr(typing, "_cleanups", []):
+        cleanup()
+    gc.collect()
 
 
 def _toy_operation() -> Any:
@@ -316,18 +329,260 @@ def gc_disabled() -> Iterator[None]:
 
 
 class TestImplementationDefinition:
-    def test_a_rejected_subclass_is_not_a_loaded_implementation_before_it_is_collected(self, gc_disabled: None) -> None:
+    @pytest.mark.parametrize("case", ["missing_feature_group", "mismatched_feature_group"])
+    def test_a_rejected_subclass_is_not_a_loaded_implementation_before_it_is_collected(
+        self, case: str, gc_disabled: None
+    ) -> None:
         with pytest.raises(TypeError, match="feature_group"):
+            if case == "missing_feature_group":
 
-            class _RejectedImpl(Implementation[Any]):
+                class _RejectedImpl(Implementation[Any]):
+                    compute_framework = PythonDictFramework
+
+                    @classmethod
+                    def calculate(cls, *args: Any) -> Any:
+                        return None
+
+            else:
+
+                class _RejectedImpl(Implementation[OpToyFG]):  # type: ignore[no-redef]
+                    feature_group = ToySourceFG
+                    compute_framework = PythonDictFramework
+
+                    @classmethod
+                    def calculate(cls, *args: Any) -> Any:
+                        return None
+
+        assert all(impl.__name__ != "_RejectedImpl" for impl in loaded_implementations())
+        assert PreFilterPlugins({PythonDictFramework}).implementations is not None
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "inherited",
+            "other_generic_base",
+            "walk_past_orig_bases",
+            "generic_intermediate",
+            "reparameterized",
+            "two_level_generic",
+        ],
+    )
+    def test_feature_group_must_match_the_parameterized_group(self, case: str) -> None:
+        class _Mixin(Generic[_T]):
+            pass
+
+        class _BaseImpl(Implementation[OpToyFG]):
+            feature_group = OpToyFG
+            compute_framework = PythonDictFramework
+
+            @classmethod
+            def calculate(cls, *args: Any) -> Any:
+                return None
+
+        if case == "inherited":
+            with pytest.raises(TypeError, match="feature_group") as excinfo:
+
+                class _Child(_BaseImpl):
+                    feature_group = ToySourceFG  # type: ignore[assignment]
+
+            assert "OpToyFG" in str(excinfo.value)
+        elif case == "other_generic_base":
+            with pytest.raises(TypeError, match="feature_group"):
+
+                class _Multi(_Mixin[int], Implementation[OpToyFG]):
+                    feature_group = ToySourceFG
+                    compute_framework = PythonDictFramework
+
+                    @classmethod
+                    def calculate(cls, *args: Any) -> Any:
+                        return None
+
+        elif case == "generic_intermediate":
+
+            class _GenericMid(Implementation[_G]):
+                pass
+
+            with pytest.raises(TypeError, match="feature_group") as excinfo:
+
+                class _GLeaf(_GenericMid[OpToyFG]):
+                    feature_group = ToySourceFG
+                    compute_framework = PythonDictFramework
+
+                    @classmethod
+                    def calculate(cls, *args: Any) -> Any:
+                        return None
+
+            assert "OpToyFG" in str(excinfo.value)
+            del _GenericMid
+        elif case == "reparameterized":
+            with pytest.raises(TypeError, match="feature_group") as excinfo:
+
+                class _Bar(_BaseImpl, Implementation[ToySourceFG]):
+                    feature_group = ToySourceFG  # type: ignore[assignment]
+
+            assert "OpToyFG" in str(excinfo.value)
+        elif case == "two_level_generic":
+
+            class _Outer(Implementation[_G]):
+                pass
+
+            class _Inner(_Outer[_G2]):
+                pass
+
+            with pytest.raises(TypeError, match="feature_group") as excinfo:
+
+                class _Deep(_Inner[OpToyFG]):
+                    feature_group = ToySourceFG
+                    compute_framework = PythonDictFramework
+
+                    @classmethod
+                    def calculate(cls, *args: Any) -> Any:
+                        return None
+
+            assert "OpToyFG" in str(excinfo.value)
+            del _Outer
+            del _Inner
+        else:
+
+            class _Mid(Implementation[OpToyFG], _Mixin[int]):
+                pass
+
+            with pytest.raises(TypeError, match="feature_group"):
+
+                class _Leaf(_Mid, _Mixin[int]):
+                    feature_group = ToySourceFG
+                    compute_framework = PythonDictFramework
+
+                    @classmethod
+                    def calculate(cls, *args: Any) -> Any:
+                        return None
+
+            del _Mid
+        del _BaseImpl
+        _release_subscripted_generics()
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "free_typevar",
+            "unsubscripted_generic",
+            "bare",
+            "resolved_match",
+            "narrowing",
+            "namedtuple_mixin",
+            "generic_alias_argument",
+        ],
+    )
+    def test_unresolved_or_matching_parameter_is_accepted(self, case: str) -> None:
+        created: Any
+        helper: Any = None
+        if case == "free_typevar":
+
+            class _Free(Implementation[_G]):
+                feature_group = ToySourceFG
                 compute_framework = PythonDictFramework
 
                 @classmethod
                 def calculate(cls, *args: Any) -> Any:
                     return None
 
-        assert all(impl.__name__ != "_RejectedImpl" for impl in loaded_implementations())
-        assert PreFilterPlugins({PythonDictFramework}).implementations is not None
+            created = _Free
+        elif case == "unsubscripted_generic":
+
+            class _GenericMid(Implementation[_G]):
+                pass
+
+            class _Open(_GenericMid):  # type: ignore[type-arg]
+                feature_group = ToySourceFG
+                compute_framework = PythonDictFramework
+
+                @classmethod
+                def calculate(cls, *args: Any) -> Any:
+                    return None
+
+            helper = _GenericMid
+            created = _Open
+        elif case == "bare":
+
+            class _Bare(Implementation):  # type: ignore[type-arg]
+                feature_group = ToySourceFG
+                compute_framework = PythonDictFramework
+
+                @classmethod
+                def calculate(cls, *args: Any) -> Any:
+                    return None
+
+            created = _Bare
+        elif case == "resolved_match":
+
+            class _SubOp(OpToyFG):
+                pass
+
+            class _GenericBase(Implementation[_G]):
+                pass
+
+            class _Leaf(_GenericBase[OpToyFG]):
+                feature_group = _SubOp
+                compute_framework = PythonDictFramework
+
+                @classmethod
+                def calculate(cls, *args: Any) -> Any:
+                    return None
+
+            helper = _GenericBase
+            created = _Leaf
+        elif case == "narrowing":
+
+            class _SubFG(OpToyFG):
+                pass
+
+            class _BaseImpl(Implementation[OpToyFG]):
+                feature_group = OpToyFG
+                compute_framework = PythonDictFramework
+
+                @classmethod
+                def calculate(cls, *args: Any) -> Any:
+                    return None
+
+            class _Narrow(_BaseImpl, Implementation[_SubFG]):
+                feature_group = _SubFG
+
+            helper = _BaseImpl
+            created = _Narrow
+        elif case == "namedtuple_mixin":
+
+            class _Point(NamedTuple):
+                x: int
+
+            class _PointMixin(_Point):
+                pass
+
+            class _WithTuple(_PointMixin, Implementation[OpToyFG]):
+                feature_group = OpToyFG
+                compute_framework = PythonDictFramework
+
+                @classmethod
+                def calculate(cls, *args: Any) -> Any:
+                    return None
+
+            helper = (_Point, _PointMixin)
+            created = _WithTuple
+        else:
+
+            class _Listed(Implementation[list[OpToyFG]]):  # type: ignore[type-var]
+                feature_group = OpToyFG
+                compute_framework = PythonDictFramework
+
+                @classmethod
+                def calculate(cls, *args: Any) -> Any:
+                    return None
+
+            created = _Listed
+
+        assert created in loaded_implementations()
+        del created
+        del helper
+        _release_subscripted_generics()
 
     @pytest.mark.parametrize("missing", ["feature_group", "compute_framework", "both"])
     def test_concrete_subclass_missing_an_attribute_raises(self, missing: str) -> None:

@@ -350,8 +350,10 @@ class FeatureGroup(ABC):
     @classmethod
     def subtype_support_matrix(cls) -> dict[str, frozenset[str]]:
         """Supported subtypes per declared compute framework; empty for abstract classes and
-        families without a subtype dimension. Raises ValueError when the class hand-overrides
-        ``supports_compute_framework``, which makes the declared matrix unverifiable."""
+        families without a subtype dimension. For an operation group it is read from the implementations'
+        ``supported`` alone; ``accepts`` and the group's ``SUBTYPES.supported`` are not reflected.
+        Otherwise raises ValueError when the class hand-overrides ``supports_compute_framework``, which
+        makes the declared matrix unverifiable."""
         if inspect.isabstract(cls):
             return {}
 

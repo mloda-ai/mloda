@@ -1005,7 +1005,7 @@ def test_the_reachable_walk_does_not_collapse() -> None:
     """One reached definition per module already satisfies the module canary, so pin the walk's size too."""
     reachable = sweep().reachable
 
-    # Vacuity floor, not a target: 79 definitions today, so pruning a helper stays a legitimate change.
+    # Vacuity floor, not a target, so pruning a helper stays a legitimate change.
     assert len(reachable) >= 70, (
         f"the walk reached only {len(reachable)} definitions; it stopped following calls somewhere"
     )

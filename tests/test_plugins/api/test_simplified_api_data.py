@@ -678,12 +678,8 @@ def _idx_link(left: str, right: str, discriminated: bool = True) -> Link:
     return Link.inner(JoinSpec(ApiDataFG, Index((left,))), JoinSpec(ApiDataFG, Index((right,))), **kw)
 
 
-class IdxOtherCreatorFG(FeatureGroup):
+class IdxOtherCreatorFG(DataCreatorFeatureGroup):
     """A creator group that is not an ApiDataFG, with its own index column."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"idx_cr_id"})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

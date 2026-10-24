@@ -8,7 +8,14 @@ from typing import Any
 
 from mloda.provider import ComputeFramework, FeatureSet, Implementation
 from mloda.user.pandas import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pandas.pandas_type_semantics import null_or_nan_mask
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+
+
+def _is_extension_float(dtype: Any) -> bool:
+    import pandas as pd
+
+    return bool(pd.api.types.is_extension_array_dtype(dtype) and pd.api.types.is_float_dtype(dtype))
 
 
 class PandasAggregation(Implementation[AggregatedFeatureGroup]):
@@ -33,6 +40,13 @@ class PandasAggregation(Implementation[AggregatedFeatureGroup]):
         data[feature_name] = result
         return data
 
+    @staticmethod
+    def _mask_nan(series: Any) -> Any:
+        """Return a copy with NaN turned into missing for non-numpy float columns."""
+        if not _is_extension_float(series.dtype):
+            return series
+        return series.mask(null_or_nan_mask(series))
+
     @classmethod
     def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: list[str]) -> Any:
         """
@@ -54,10 +68,12 @@ class PandasAggregation(Implementation[AggregatedFeatureGroup]):
         # Note: data[[col]] returns DataFrame with 1 column, data[col] returns Series
         if len(in_features) == 1:
             # Single column: extract as Series for simpler aggregation
-            selected_data = data[in_features[0]]
+            selected_data = cls._mask_nan(data[in_features[0]])
         else:
             # Multiple columns: keep as DataFrame
             selected_data = data[in_features]
+            if any(_is_extension_float(dtype) for dtype in selected_data.dtypes):
+                selected_data = selected_data.apply(cls._mask_nan)
 
         # For multi-column features, aggregate across columns (axis=1)
         # For single-column features, aggregate within the Series

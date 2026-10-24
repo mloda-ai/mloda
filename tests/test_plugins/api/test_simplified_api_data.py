@@ -663,3 +663,123 @@ class TestApiDataScopeAndShapes:
         dac._api_data_columns = {"Cols": ("simplified_api_pointed_col",)}
 
         assert ApiDataFG.is_pointed("simplified_api_pointed_col", Options({}), dac) is True
+
+
+_IDX_API = {
+    "A": {"idx_a_id": [1, 2, 3], "idx_a_val": [10, 20, 30]},
+    "B": {"idx_b_id": [3, 2, 1], "idx_b_val": [300, 200, 100]},
+}
+_IDX_A = {"ApiDataFG": "A"}
+_IDX_B = {"ApiDataFG": "B"}
+
+
+def _idx_link(left: str, right: str, discriminated: bool = True) -> Link:
+    kw: dict[str, Any] = {"left_discriminator": _IDX_A, "right_discriminator": _IDX_B} if discriminated else {}
+    return Link.inner(JoinSpec(ApiDataFG, Index((left,))), JoinSpec(ApiDataFG, Index((right,))), **kw)
+
+
+class IdxOtherCreatorFG(DataCreatorFeatureGroup):
+    """A creator group that is not an ApiDataFG, with its own index column."""
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"idx_cr_id": [1, 2, 3]}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"idx_cr_id"}
+
+
+class IdxJoinedBase(FeatureGroup):
+    """Joins idx_a_val (through LINK) with idx_b_val; subclasses pick the link."""
+
+    LINK: Link | None = None
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature("idx_a_val", link=self.LINK, options=dict(_IDX_A)),
+            Feature("idx_b_val", options=dict(_IDX_B)),
+        }
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): data["idx_a_val"].astype(str) + "_" + data["idx_b_val"].astype(str)}
+
+
+class IdxNoLinkFG(IdxJoinedBase):
+    """Joined group without a link."""
+
+
+class IdxSwappedLinkFG(IdxJoinedBase):
+    """Joined group whose discriminated link has its index columns swapped."""
+
+    LINK = _idx_link("idx_b_id", "idx_a_id")
+
+
+class IdxCorrectLinkFG(IdxJoinedBase):
+    """Joined group whose discriminated link has the right index columns."""
+
+    LINK = _idx_link("idx_a_id", "idx_b_id")
+
+
+class TestApiDataIndexColumnsAcrossSets:
+    """Link and keep_index columns must exist in the api_data set that the side or request selects."""
+
+    @staticmethod
+    def _call(fn: Any, features: list[Any], joined: type[FeatureGroup], **kwargs: Any) -> Any:
+        return fn(
+            features,
+            compute_frameworks=[PandasDataFrame],
+            api_data=_IDX_API,
+            plugin_collector=PluginCollector.enabled_feature_groups({ApiDataFG, joined}),
+            **kwargs,
+        )
+
+    def _prepare(self, features: list[Any], joined: type[FeatureGroup] = IdxNoLinkFG, **kwargs: Any) -> Any:
+        return self._call(mloda.prepare, features, joined, **kwargs)
+
+    def _run(self, features: list[Any], joined: type[FeatureGroup] = IdxNoLinkFG, **kwargs: Any) -> list[Any]:
+        return list(self._call(mloda.run_all, features, joined, **kwargs))
+
+    def test_swapped_index_on_discriminated_link_raises_at_prepare(self) -> None:
+        with pytest.raises(ValueError, match=r"(?s)idx_b_id.*api_data:A|api_data:A.*idx_b_id"):
+            self._prepare(["IdxSwappedLinkFG"], IdxSwappedLinkFG)
+
+    def test_swapped_index_on_global_link_raises_even_when_not_joined(self) -> None:
+        link = _idx_link("idx_b_id", "idx_a_id")
+        with pytest.raises(ValueError, match=r"(?s)idx_b_id.*api_data:A|api_data:A.*idx_b_id"):
+            self._prepare([Feature("idx_a_val", options=dict(_IDX_A))], links={link})
+
+    def test_undiscriminated_one_sided_link_with_index_from_another_set_raises_at_prepare(self) -> None:
+        link = Link.inner(JoinSpec(ApiDataFG, Index(("idx_b_id",))), JoinSpec(IdxOtherCreatorFG, Index(("idx_cr_id",))))
+        with pytest.raises(ValueError, match="idx_b_id"):
+            mloda.prepare(
+                [Feature("idx_a_val", link=link)],
+                compute_frameworks=[PandasDataFrame],
+                api_data=_IDX_API,
+                plugin_collector=PluginCollector.enabled_feature_groups({ApiDataFG, IdxOtherCreatorFG}),
+            )
+
+    def test_global_link_without_discriminators_still_runs(self) -> None:
+        link = _idx_link("idx_a_id", "idx_b_id", discriminated=False)
+        res = self._run(["idx_a_val", "idx_b_val"], links={link})
+        cols = {c: sorted(r[c].tolist()) for r in res for c in r.columns}
+        assert cols == {"idx_a_val": [10, 20, 30], "idx_b_val": [100, 200, 300]}
+
+    def test_discriminated_link_with_correct_sides_joins(self) -> None:
+        res = self._run(["IdxCorrectLinkFG"], IdxCorrectLinkFG)
+        assert len(res) == 1
+        assert sorted(res[0]["IdxCorrectLinkFG"].tolist()) == ["10_100", "20_200", "30_300"]
+
+    def test_keep_index_from_the_other_joined_api_data_set(self) -> None:
+        res = self._run(
+            [Feature("IdxCorrectLinkFG", keep_index=True, index=Index(("idx_b_id",)))],
+            IdxCorrectLinkFG,
+        )
+        assert len(res) == 1
+        rows = sorted(zip(res[0]["idx_b_id"].tolist(), res[0]["IdxCorrectLinkFG"].tolist()))
+        assert rows == [(1, "10_100"), (2, "20_200"), (3, "30_300")]
+
+    def test_keep_index_missing_from_the_requested_api_data_set_raises_at_prepare(self) -> None:
+        with pytest.raises(ValueError, match="no input feature group provides it"):
+            self._prepare([Feature("idx_a_val", keep_index=True, index=Index(("idx_b_id",)))])

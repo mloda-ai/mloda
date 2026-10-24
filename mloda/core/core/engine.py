@@ -11,6 +11,7 @@ from mloda.core.abstract_plugins.components.index.add_index_feature import creat
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.input_data.reader_probe import (
     ReaderProbeScope,
+    SourceProbeOutcome,
     probe_source_group,
     reader_probe_scope,
 )
@@ -64,6 +65,7 @@ from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _d
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.match_hook import call_match_hook
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
@@ -550,6 +552,12 @@ class Engine:
 
         return left, right
 
+    @staticmethod
+    def _link_may_raise(link: Link, feature: Feature, discriminator: dict[str, Any] | None, one_sided: bool) -> bool:
+        """A missing link key column is an error for a matched discriminator or a one-sided link the feature declares."""
+        matched = bool(discriminator and Link.matches_discriminator(discriminator, feature.options))
+        return matched or (one_sided and feature.link == link)
+
     def _add_index_feature_from_links(
         self,
         feature_group_class: type[FeatureGroup],
@@ -578,11 +586,23 @@ class Engine:
             left, right = self._link_sides(link, feature_group_class, feature)
             if left:
                 self._create_and_add_index_feature(
-                    feature_group_class, feature_group, feature, features.child_uuid, link.left_index, link
+                    feature_group_class,
+                    feature_group,
+                    feature,
+                    features.child_uuid,
+                    link.left_index,
+                    link,
+                    self._link_may_raise(link, feature, link.left_discriminator, left != right),
                 )
             if right:
                 self._create_and_add_index_feature(
-                    feature_group_class, feature_group, feature, features.child_uuid, link.right_index, link
+                    feature_group_class,
+                    feature_group,
+                    feature,
+                    features.child_uuid,
+                    link.right_index,
+                    link,
+                    self._link_may_raise(link, feature, link.right_discriminator, left != right),
                 )
 
     def _process_index_feature(
@@ -617,18 +637,18 @@ class Engine:
         child_uuid: UUID | None,
         index: Index,
         link: Link | None,
+        may_raise: bool = False,
     ) -> None:
         """Creates and adds a new index feature; a link's key columns are probed through the INPUT_DATA_MATCH gate."""
-        if (
-            link is not None
-            and feature.input_data_match is not None
-            and issubclass(feature_group_class, SourceFeatureGroup)
-        ):
+        if link is not None:
             for column in index.index:
-                outcome = probe_source_group(
-                    feature_group_class, lambda: None, self.data_access_collection, column, feature.options._fork()
-                )
-                if outcome.refused is not None:
+                outcome = self._probe_has_column(feature_group_class, feature, column, read=may_raise)
+                if outcome is None:
+                    break
+                if outcome.refused is None:
+                    if outcome.result is False:
+                        raise ValueError(self._missing_link_column_message(feature_group_class, feature, column, link))
+                else:
                     raise ValueError(
                         f"The link index column '{column}' of feature '{feature.name}' on "
                         f"{feature_group_class.get_class_name()} (link {link}) was refused at INPUT_DATA_MATCH: "
@@ -774,6 +794,34 @@ class Engine:
             )
         return key
 
+    def _missing_link_column_message(self, group: type[FeatureGroup], feature: Feature, column: str, link: Link) -> str:
+        head = f"The link index column '{column}' of feature '{feature.name}' (link {link}) is in none of the sources"
+        if feature.input_data_match is None or not issubclass(group, SourceFeatureGroup):
+            return head
+        match = feature.input_data_match[1]
+        pointed = group.is_pointed(str(feature.name), feature.options, self.data_access_collection)
+        source = scrub_credentials(match.source) if pointed else group._hidden_source(match)
+        return f"{head} of {group.get_class_name()}: {source}"
+
+    def _probe_has_column(
+        self, group: type[FeatureGroup], feature: Feature, column: str, read: bool = True
+    ) -> SourceProbeOutcome | None:
+        """Asks the matched source whether it has the column, through the INPUT_DATA_MATCH gate."""
+        if feature.input_data_match is None or not issubclass(group, SourceFeatureGroup):
+            return None
+        reader, match = feature.input_data_match
+        return probe_source_group(
+            group,
+            lambda: None if not read or reader._declared_name(column) else reader.has_column(match, column),
+            self.data_access_collection,
+            column,
+            feature.options._fork(),
+        )
+
+    def _root_may_have_column(self, group: type[FeatureGroup], root: Feature, column: str) -> bool:
+        outcome = self._probe_has_column(group, root, column)
+        return outcome is None or (outcome.refused is None and outcome.result is not False)
+
     def _load_result_index_columns(self) -> None:
         """Inject each kept key column into the root features of the features that keep it."""
         owners = {f.uuid: (group, f) for group, fs in self.feature_group_collection.items() for f in fs}
@@ -800,7 +848,8 @@ class Engine:
                     (
                         (group, root)
                         for group, root in ordered
-                        if call_match_hook(group, column, root.options._fork(), self.data_access_collection).matched
+                        if self._root_may_have_column(group, root, column)
+                        and call_match_hook(group, column, root.options._fork(), self.data_access_collection).matched
                     ),
                     None,
                 )

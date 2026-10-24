@@ -4,6 +4,8 @@ import math
 from numbers import Real
 from typing import Any
 
+import pandas as pd
+
 
 def _is_nan(value: Any) -> bool:
     return isinstance(value, float) and math.isnan(value)
@@ -21,9 +23,9 @@ def same(actual: Any, expected: Any) -> bool:
 
 
 def same_on_pandas(actual: Any, expected: Any) -> bool:
-    """Like same, but None and NaN are interchangeable (a pandas float column cannot hold null)."""
-    missing_actual = actual is None or _is_nan(actual)
-    missing_expected = expected is None or _is_nan(expected)
+    """Like same, but None, NaN and pd.NA are interchangeable (a pandas float column cannot hold null)."""
+    missing_actual = actual is None or _is_nan(actual) or actual is pd.NA
+    missing_expected = expected is None or _is_nan(expected) or expected is pd.NA
     if missing_actual or missing_expected:
         return missing_actual and missing_expected
     return same(actual, expected)

@@ -13,7 +13,7 @@ from mloda.provider import DefaultOptionKeys, FeatureSet
 from mloda.user import Options
 
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
-from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
+from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistance
 
 
 class TestGeoDistanceFeatureGroup:
@@ -82,7 +82,7 @@ class TestGeoDistanceFeatureGroup:
 
     def test_input_features(self) -> None:
         """Test extraction of input features."""
-        feature_group = PandasGeoDistanceFeatureGroup()
+        feature_group = GeoDistanceFeatureGroup()
         feature_name = FeatureName("point1&point2__haversine_distance")
 
         input_features = feature_group.input_features(Options(), feature_name)
@@ -98,7 +98,7 @@ class TestGeoDistanceFeatureGroup:
         name = "a&b&c__haversine_distance"
 
         with pytest.raises(ValueError) as exc_info:
-            PandasGeoDistanceFeatureGroup().input_features(Options(), FeatureName(name))
+            GeoDistanceFeatureGroup().input_features(Options(), FeatureName(name))
 
         assert str(exc_info.value) == GeoDistanceFeatureGroup.in_feature_count_reason(name, 3)
 
@@ -188,8 +188,8 @@ class TestGeoDistanceFeatureGroup:
         assert GeoDistanceFeatureGroup.get_distance_type("p1&p2__haversine_distance") == "haversine"
 
 
-class TestPandasGeoDistanceFeatureGroup:
-    """Test cases for the PandasGeoDistanceFeatureGroup."""
+class TestPandasGeoDistance:
+    """Test cases for PandasGeoDistance."""
 
     def setup_method(self) -> None:
         """Set up test data."""
@@ -208,28 +208,33 @@ class TestPandasGeoDistanceFeatureGroup:
             }
         )
 
-    def test_check_source_features_exist(self) -> None:
-        """Test checking if source features exist."""
-        # Test with existing features
-        PandasGeoDistanceFeatureGroup._check_source_features_exist(self.df, ["sf", "nyc"])
+    @pytest.mark.parametrize(
+        ("name", "missing", "available"),
+        [
+            ("sf&invalid__haversine_distance", "['invalid']", "['la', 'nyc', 'point1', 'point2', 'sf']"),
+            ("zz&yy__haversine_distance", "['zz', 'yy']", "['la', 'nyc', 'point1', 'point2', 'sf']"),
+        ],
+        ids=["one_missing", "both_missing"],
+    )
+    def test_source_check_is_strict_and_lists_sorted_columns(self, name: str, missing: str, available: str) -> None:
+        feature_set = FeatureSet()
+        feature_set.add(Feature(name))
 
-        # Test with non-existing features
-        with pytest.raises(ValueError):
-            PandasGeoDistanceFeatureGroup._check_source_features_exist(self.df, ["sf", "invalid"])
+        with pytest.raises(ValueError) as exc_info:
+            PandasGeoDistance.calculate(GeoDistanceFeatureGroup, self.df.copy(), feature_set, None)
 
-        with pytest.raises(ValueError):
-            PandasGeoDistanceFeatureGroup._check_source_features_exist(self.df, ["invalid", "nyc"])
+        assert str(exc_info.value) == f"Source features not found in data: {missing}. Available columns: {available}"
 
     def test_haversine_distance(self) -> None:
         """Test calculation of haversine distance."""
         # Calculate haversine distance between San Francisco and New York
-        distance = PandasGeoDistanceFeatureGroup._calculate_haversine_distance(self.df, "sf", "nyc")
+        distance = PandasGeoDistance._calculate_haversine_distance(self.df, "sf", "nyc")
 
         # Expected distance is approximately 4130 km
         assert distance[0] == pytest.approx(4130, abs=100)
 
         # Calculate haversine distance between San Francisco and Los Angeles
-        distance = PandasGeoDistanceFeatureGroup._calculate_haversine_distance(self.df, "sf", "la")
+        distance = PandasGeoDistance._calculate_haversine_distance(self.df, "sf", "la")
 
         # Expected distance is approximately 560 km
         assert distance[0] == pytest.approx(560, abs=50)
@@ -237,7 +242,7 @@ class TestPandasGeoDistanceFeatureGroup:
     def test_euclidean_distance(self) -> None:
         """Test calculation of euclidean distance."""
         # Calculate euclidean distance between point1 and point2
-        distance = PandasGeoDistanceFeatureGroup._calculate_euclidean_distance(self.df, "point1", "point2")
+        distance = PandasGeoDistance._calculate_euclidean_distance(self.df, "point1", "point2")
 
         # Expected distances: sqrt(3^2 + 4^2) = 5, sqrt(4^2 + 4^2) = 5.66, sqrt(4^2 + 6^2) = 7.21
         assert distance[0] == pytest.approx(5.0, abs=0.01)
@@ -247,7 +252,7 @@ class TestPandasGeoDistanceFeatureGroup:
     def test_manhattan_distance(self) -> None:
         """Test calculation of manhattan distance."""
         # Calculate manhattan distance between point1 and point2
-        distance = PandasGeoDistanceFeatureGroup._calculate_manhattan_distance(self.df, "point1", "point2")
+        distance = PandasGeoDistance._calculate_manhattan_distance(self.df, "point1", "point2")
 
         # Expected distances: |3-0| + |4-0| = 7, |5-1| + |5-1| = 8, |6-2| + |8-2| = 10
         assert distance[0] == 7
@@ -261,7 +266,7 @@ class TestPandasGeoDistanceFeatureGroup:
         feature_set.add(Feature("sf&nyc__haversine_distance"))
 
         # Calculate the feature
-        result_df = PandasGeoDistanceFeatureGroup.calculate_feature(self.df.copy(), feature_set)
+        result_df = PandasGeoDistance.calculate(GeoDistanceFeatureGroup, self.df.copy(), feature_set, None)
 
         # Check if the feature was added to the DataFrame
         assert "sf&nyc__haversine_distance" in result_df.columns
@@ -276,7 +281,7 @@ class TestPandasGeoDistanceFeatureGroup:
         feature_set.add(Feature("point1&point2__manhattan_distance"))
 
         # Calculate the features
-        result_df = PandasGeoDistanceFeatureGroup.calculate_feature(self.df.copy(), feature_set)
+        result_df = PandasGeoDistance.calculate(GeoDistanceFeatureGroup, self.df.copy(), feature_set, None)
 
         # Check if all features were added to the DataFrame
         assert "sf&nyc__haversine_distance" in result_df.columns

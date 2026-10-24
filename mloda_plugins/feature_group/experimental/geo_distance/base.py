@@ -4,23 +4,22 @@ Base implementation for geo distance feature groups.
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from collections.abc import Callable
 from typing import Any
 
-from mloda.provider import FeatureGroup
+from mloda.provider import OperationFeatureGroup
 from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda.provider import COLUMNWISE_HOOKS
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
 
 
-class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class GeoDistanceFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     """
-    Base class for all geo distance feature groups.
+    Geo distance feature group, served per compute framework by an Implementation.
 
     The GeoDistanceFeatureGroup calculates distances between geographic points,
     such as haversine (great-circle), euclidean, or manhattan distances. Supports both
@@ -100,9 +99,6 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     MIN_IN_FEATURES = 2
     MAX_IN_FEATURES = 2
 
-    # Hooks calculate_feature calls: _check_source_features_exist, _add_result_to_data.
-    REQUIRED_COLUMNWISE_HOOKS = COLUMNWISE_HOOKS
-
     # Property mapping for configuration-based features with group/context separation
     PROPERTY_MAPPING = {
         DISTANCE_TYPE: PropertySpec(
@@ -148,27 +144,28 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return resolution.sources[0], resolution.sources[1]
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Calculate distances between point features.
-
-        Processes all requested features, determining the distance type
-        and point features from either string parsing or configuration-based options.
-
-        Adds the calculated distances directly to the input data structure.
-        """
-        # Process each requested feature
+    def measure(
+        cls,
+        data: Any,
+        features: FeatureSet,
+        *,
+        distance: Callable[[Any, str, str, str], Any],
+        add_column: Callable[[Any, str, Any], Any],
+        columns: Callable[[Any], set[str]],
+    ) -> Any:
+        """Shared loop: check the two sources, compute the distance, add the result."""
         for feature in features.get_sorted_features():
             distance_type, point1_feature, point2_feature = cls._extract_geo_distance_parameters(feature)
 
-            cls._check_source_features_exist(data, [point1_feature, point2_feature])
+            available = columns(data)
+            missing = [f for f in (point1_feature, point2_feature) if f not in available]
+            if missing:
+                raise ValueError(
+                    f"Source features not found in data: {missing}. Available columns: {sorted(available, key=str)}"
+                )
 
-            if distance_type not in cls.DISTANCE_TYPES:
-                raise ValueError(f"Unsupported distance type: {distance_type}")
-
-            result = cls._calculate_distance(data, distance_type, point1_feature, point2_feature)
-
-            data = cls._add_result_to_data(data, feature.name, result)
+            result = distance(data, distance_type, point1_feature, point2_feature)
+            data = add_column(data, feature.name, result)
 
         return data
 
@@ -212,20 +209,3 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             )
 
         return str(distance_type)
-
-    @classmethod
-    @abstractmethod
-    def _calculate_distance(cls, data: Any, distance_type: str, point1_feature: str, point2_feature: str) -> Any:
-        """
-        Method to calculate the distance. Should be implemented by subclasses.
-
-        Args:
-            data: The input data
-            distance_type: The type of distance to calculate
-            point1_feature: The name of the first point feature
-            point2_feature: The name of the second point feature
-
-        Returns:
-            The calculated distance
-        """
-        ...

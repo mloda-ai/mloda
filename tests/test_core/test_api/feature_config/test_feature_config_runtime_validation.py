@@ -19,7 +19,8 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
     PandasAggregation as PandasAggregation,
 )
-from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
+from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
+from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistance as PandasGeoDistance
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 
@@ -90,7 +91,7 @@ def test_features_runtime_one_by_one() -> None:
         MissingValueFeatureGroup,
         PandasEncodingFeatureGroup,
         AggregatedFeatureGroup,
-        PandasGeoDistanceFeatureGroup,
+        GeoDistanceFeatureGroup,
         # Add more plugins as features require them
     }
 

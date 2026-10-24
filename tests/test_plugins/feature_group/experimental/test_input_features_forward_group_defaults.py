@@ -45,7 +45,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
-from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
+from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
 from mloda_plugins.feature_group.experimental.source_input_feature import (
@@ -111,7 +111,7 @@ class TestGeoDistanceInputFeatureDefaults:
     """GeoDistanceFeatureGroup.input_features must leave both point children at the default None sentinel."""
 
     def test_string_parsed_children_have_forward_group_none(self) -> None:
-        group = PandasGeoDistanceFeatureGroup()
+        group = GeoDistanceFeatureGroup()
 
         by_name = _by_name(group.input_features(Options(), FeatureName("point1&point2__haversine_distance")))
 
@@ -121,7 +121,7 @@ class TestGeoDistanceInputFeatureDefaults:
 
     @pytest.mark.parametrize("name", ["placeholder", "my&name__custom"], ids=["plain", "amp_dunder"])
     def test_config_declared_children_have_forward_group_none(self, name: str) -> None:
-        group = PandasGeoDistanceFeatureGroup()
+        group = GeoDistanceFeatureGroup()
         options = Options(group={DefaultOptionKeys.in_features: frozenset({Feature("point1"), Feature("point2")})})
 
         by_name = _by_name(group.input_features(options, FeatureName(name)))
@@ -132,7 +132,7 @@ class TestGeoDistanceInputFeatureDefaults:
 
     def test_config_declared_children_explicit_directives_are_preserved(self) -> None:
         """An explicit allowlist and an explicit False opt-out both survive input_features."""
-        group = PandasGeoDistanceFeatureGroup()
+        group = GeoDistanceFeatureGroup()
         allowlisted = Feature("point1", forward_group={"keep_me"})
         opted_out = Feature("point2", forward_group=False)
         options = Options(group={DefaultOptionKeys.in_features: frozenset({allowlisted, opted_out})})
@@ -328,8 +328,8 @@ class TestConfigPathCountErrorWording:
     @pytest.mark.parametrize(
         "group_cls, operands",
         [
-            pytest.param(PandasGeoDistanceFeatureGroup, ["a"], id="geo_distance-below_min"),
-            pytest.param(PandasGeoDistanceFeatureGroup, ["a", "b", "c"], id="geo_distance-above_max"),
+            pytest.param(GeoDistanceFeatureGroup, ["a"], id="geo_distance-below_min"),
+            pytest.param(GeoDistanceFeatureGroup, ["a", "b", "c"], id="geo_distance-above_max"),
             pytest.param(TimeWindowFeatureGroup, ["a", "b"], id="time_window-above_max"),
             pytest.param(PandasForecastingFeatureGroup, ["a", "b"], id="forecasting-above_max"),
             pytest.param(PandasEncodingFeatureGroup, ["a", "b"], id="encoding-above_max"),

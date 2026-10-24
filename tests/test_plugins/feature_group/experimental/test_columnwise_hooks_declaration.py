@@ -52,6 +52,7 @@ from mloda_plugins.feature_group.experimental.data_quality.missing_value.python_
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
+from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistance
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
@@ -89,7 +90,7 @@ CONTRACT_SYMBOLS = (
 
 # Lower bounds only, so a broken glob or a wrong root cannot make the widened sweeps pass vacuously.
 MIN_EXPERIMENTAL_MODULES = 40
-MIN_HOOK_CALLING_MODULES = 10
+MIN_HOOK_CALLING_MODULES = 9
 
 # The expected declaration per family base, kept as a table so a changed declaration is a visible diff.
 # A family that resolves column names against the data needs the discovery hook on top of the pair.
@@ -97,7 +98,6 @@ FAMILY_REQUIREMENTS: dict[type[Any], frozenset[str]] = {
     ClusteringFeatureGroup: COLUMN_DISCOVERY_HOOKS,
     ForecastingFeatureGroup: COLUMN_DISCOVERY_HOOKS,
     DimensionalityReductionFeatureGroup: COLUMNWISE_HOOKS,
-    GeoDistanceFeatureGroup: COLUMNWISE_HOOKS,
     NodeCentralityFeatureGroup: COLUMNWISE_HOOKS,
     EncodingFeatureGroup: COLUMNWISE_HOOKS,
     SklearnPipelineFeatureGroup: COLUMNWISE_HOOKS,
@@ -279,6 +279,13 @@ OPERATION_FAMILIES: dict[str, tuple[type[Any], list[type[Any]], str, str, list[d
         "clean",
         "text__cleaned_text",
         [_kwargs(source_text=_perform("_get_source_text"), apply=_perform("_apply_operation"))] * 2,
+    ),
+    "geo_distance": (
+        GeoDistanceFeatureGroup,
+        [PandasGeoDistance],
+        "measure",
+        "a&b__haversine_distance",
+        [_kwargs(distance=_perform("_calculate_distance"))],
     ),
 }
 

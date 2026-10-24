@@ -8,26 +8,29 @@ from typing import Any
 
 import numpy as np
 
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, FeatureSet, Implementation
 
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
 
 
-class PandasGeoDistanceFeatureGroup(GeoDistanceFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        """Specify that this feature group works with Pandas."""
-        return {PandasDataFrame}
+class PandasGeoDistance(Implementation[GeoDistanceFeatureGroup]):
+    """Pandas implementation of the geo distance operations."""
+
+    feature_group = GeoDistanceFeatureGroup
+    compute_framework = PandasDataFrame
 
     @classmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-        """Check if the source features exist in the DataFrame."""
-        missing_features = [f for f in feature_names if f not in data.columns]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {list(data.columns)}"
-            )
+    def calculate(
+        cls, group: type[GeoDistanceFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        return group.measure(
+            data,
+            features,
+            distance=cls._calculate_distance,
+            add_column=cls._add_result_to_data,
+            columns=cls.compute_framework.extract_column_names,
+        )
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:

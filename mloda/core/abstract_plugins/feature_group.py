@@ -30,7 +30,6 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -433,13 +432,6 @@ class FeatureGroup(ABC):
         return {}
 
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        """
-        This function should return the input data class used for this feature group.
-        """
-        return None
-
-    @classmethod
     def validate_input_features(cls, data: Any, features: FeatureSet) -> None:
         """
         Validate the input data before feature calculation.
@@ -675,20 +667,6 @@ class FeatureGroup(ABC):
         return False
 
     @classmethod
-    def _matches_input_data(
-        cls, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
-    ) -> bool:
-        """
-        Helper function to check if the input data matches.
-        """
-        input_data_class = cls.input_data()
-
-        if input_data_class is None:
-            return False
-
-        return input_data_class.matches(feature_name, options, data_access_collection)
-
-    @classmethod
     def match_feature_group_criteria(
         cls,
         feature_name: FeatureName | str,
@@ -733,11 +711,8 @@ class FeatureGroup(ABC):
         options: Options,
         data_access_collection: DataAccessCollection | None,
     ) -> bool:
-        """The name and input-data rules of the default matcher."""
+        """The name rules of the default matcher."""
         base_feature_name = cls.get_column_base_feature(feature_name)
-
-        if cls._is_root_and_matches_input_data(base_feature_name, options, data_access_collection):
-            return True
 
         if cls.feature_name_equal_to_class_name(base_feature_name):
             return True
@@ -960,21 +935,6 @@ class FeatureGroup(ABC):
         This is a convention, which means we can refer to a class via this.
         """
         return f"{cls.get_class_name()}_"
-
-    @classmethod
-    def _is_root_and_matches_input_data(
-        cls, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
-    ) -> bool:
-        """
-        Checks if the feature group is a root and matches input data.
-        """
-        # Abstract classes cannot be instantiated, so the rootness probe below would raise: they are never root.
-        if inspect.isabstract(cls):
-            return False
-
-        return cls().is_root(options, feature_name) and cls._matches_input_data(
-            feature_name, options, data_access_collection
-        )
 
 
 def format_feature_group_class(fg_class: type[FeatureGroup]) -> str:

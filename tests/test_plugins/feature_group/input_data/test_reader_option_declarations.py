@@ -118,7 +118,7 @@ class TestDuckdbFGDeclarations:
 
 
 class TestEveryOptionKeyReadIsDeclared:
-    """Observed match-time reads are a subset of the declared keys, per BaseInputData reader."""
+    """Observed match-time reads are a subset of the declared keys, per source reader."""
 
     def test_read_file_group_reads_only_declared_keys(self, json_path: str) -> None:
         options = _RodRecordingOptions()

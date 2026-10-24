@@ -78,8 +78,7 @@ def _isolate_forwarded_value(value: Any, memo: dict[int, Any], leaf: Callable[[A
 
 
 def _normalize_reader_class_keys(d: dict[str, Any]) -> dict[str, Any]:
-    """Source group class keys normalize to the class name, legacy reader class keys to
-    data_access_name(), so both documented key forms share one identity."""
+    """Source group class keys normalize to the class name."""
     if not any(isinstance(k, type) for k in d):
         return d
     return {_normalize_class_key(k): v for k, v in d.items()}
@@ -90,8 +89,6 @@ def _normalize_class_key(k: Any) -> Any:
         return k
     if hasattr(k, "pointer_keys"):
         return k.__name__
-    if hasattr(k, "data_access_name"):
-        return k.data_access_name()
     return k
 
 
@@ -139,7 +136,7 @@ def validate_forwarding_directives(
         )
 
 
-RESERVED_READER_OPTION_KEY = "BaseInputData"
+RESERVED_READER_OPTION_KEY = "mloda_source_reader"
 
 
 def reject_reserved_reader_key(options: "Options") -> None:

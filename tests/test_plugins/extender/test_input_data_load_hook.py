@@ -20,7 +20,7 @@ from typing import Any, cast
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.components.input_data.base_input_data import dispatch_input_data_load
+from mloda.core.abstract_plugins.components.input_data.input_data_load import dispatch_input_data_load
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -966,7 +966,7 @@ def _direct_load_context(reader_cls: type[_DirectLoader], data_access: Any = "ac
     return extender.captured
 
 
-_BASE_INPUT_DATA_LOGGER = "mloda.core.abstract_plugins.components.input_data.base_input_data"
+_BASE_INPUT_DATA_LOGGER = "mloda.core.abstract_plugins.components.input_data.input_data_load"
 
 
 class _NamedIdentityReader(_DirectLoader):

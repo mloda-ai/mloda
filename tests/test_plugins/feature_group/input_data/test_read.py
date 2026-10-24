@@ -96,7 +96,6 @@ class TestTwoReader:
                 plugin_collector=PluginCollector.enabled_feature_groups(cast(Any, {sibling_a, sibling_b})),
             )
         assert "Multiple feature groups found" in str(excinfo.value)
-        assert "BaseInputData already set" not in str(excinfo.value)
         del sibling_a, sibling_b, excinfo
         gc.collect()
 

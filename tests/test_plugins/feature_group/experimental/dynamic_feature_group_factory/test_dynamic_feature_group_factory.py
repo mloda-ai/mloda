@@ -1,5 +1,8 @@
 from typing import Any
-from mloda.provider import BaseInputData, FeatureGroup, DataCreatorFeatureGroup
+
+import pytest
+
+from mloda.provider import FeatureGroup, DataCreatorFeatureGroup
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.user import FeatureName
@@ -19,10 +22,6 @@ from mloda_plugins.feature_group.experimental.source_input_feature import (
     SourceTuple,
 )
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
-
-
-class _StubInputData(BaseInputData):
-    pass
 
 
 class _DataCreatorFileFeatureBase(SourceInputFeature, DataCreatorFeatureGroup):
@@ -70,14 +69,13 @@ class TestDynamicFeatureGroupFactory:
         # Test that the created class is a subclass of FeatureGroup
         assert issubclass(DynamicTestFeatureGroup, FeatureGroup)
 
-    def test_dynamic_feature_group_creator_with_input_data_feature_group(self) -> None:
+    def test_dynamic_feature_group_creator_with_data_creator_base(self) -> None:
         # Example property dictionary
         properties: dict[str, Any] = {
             "calculate_feature": lambda cls, data, features: f"Calculated with {cls.__name__} and {data}",
             "match_feature_group_criteria": lambda cls, feature_name, options, data_access_collection: (
                 feature_name == FeatureName("test_file_feature")
             ),
-            "input_data": lambda: _StubInputData(),
         }
 
         # Create a dynamic feature group
@@ -93,9 +91,6 @@ class TestDynamicFeatureGroupFactory:
         # Test generated names
         assert DynamicTestFeatureGroup.feature_names_supported() == {"test_file_feature"}
 
-        # Test input_data property passthrough
-        assert isinstance(DynamicTestFeatureGroup.input_data(), _StubInputData)
-
         # Test calculate feature
         features = FeatureSet()
         features.add(Feature("example"))
@@ -107,6 +102,19 @@ class TestDynamicFeatureGroupFactory:
         assert issubclass(DynamicTestFeatureGroup, FeatureGroup)
         assert issubclass(DynamicTestFeatureGroup, SourceInputFeature)
         assert issubclass(DynamicTestFeatureGroup, DataCreatorFeatureGroup)
+
+    def test_input_data_property_is_rejected(self) -> None:
+        properties: dict[str, Any] = {"input_data": lambda: None}
+
+        with pytest.raises(ValueError, match="DataCreatorFeatureGroup"):
+            DynamicFeatureGroupCreator.create(properties, class_name="DynamicRejectedInputDataFeatureGroup")
+
+    def test_input_data_property_is_rejected_for_a_cached_class_name(self) -> None:
+        name = "DynamicCachedRejectedInputDataFeatureGroup"
+        DynamicFeatureGroupCreator.create({"calculate_feature": lambda cls, data, features: None}, class_name=name)
+
+        with pytest.raises(ValueError, match="DataCreatorFeatureGroup"):
+            DynamicFeatureGroupCreator.create({"input_data": lambda: None}, class_name=name)
 
     def test_dynamic_feature_group_creator_consuming_a_document_group(self) -> None:
         properties: dict[str, Any] = {

@@ -1,9 +1,7 @@
 """Tests for issue #692: abstract FeatureGroup bases must not break matching.
 
-The default `match_feature_group_criteria` calls `_is_root_and_matches_input_data`,
-which instantiates `cls()`. For an abstract base (an @abstractmethod, no matcher
-override, no FeatureChainParserMixin) this raises TypeError for every feature name
-and aborts resolution for the whole run. Such a base must simply not match.
+An abstract base (an @abstractmethod, no matcher override, no FeatureChainParserMixin)
+must simply not match, and must not abort resolution for the whole run.
 """
 
 import inspect

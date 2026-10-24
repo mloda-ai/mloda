@@ -151,7 +151,6 @@ class TestMlodaBasicsBaseDataSources:
         message = str(exc_info.value)
         assert "JsonFG" in message
         assert "SqliteFG" in message
-        assert "BaseInputData already set" not in message
 
     @pytest.mark.parametrize("scope", ["JsonFG", "SqliteFG"])
     def test_scoped_shared_column_loads_from_its_own_source(self, scope: str) -> None:

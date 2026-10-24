@@ -74,6 +74,7 @@ import pytest
 import mloda.steward as mloda_steward
 import mloda.user as mloda_user
 from mloda.core.api.plan_info import _dependency_order, build_plan_steps
+from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.prepare.resolved_join import ResolvedJoinPlan
 from mloda.provider import (
@@ -1331,7 +1332,7 @@ class TestPlanStepDataAccessIdentity:
         assert not hasattr(step, "reader_data_access")
         assert "reader_data_access" not in {field.name for field in dataclasses.fields(PlanStep)}
         assert step.feature_set_options is not None
-        assert "BaseInputData" not in step.feature_set_options.group
+        assert RESERVED_READER_OPTION_KEY not in step.feature_set_options.group
         assert step.data_access_identity == str(tmp_path / "plan_info_rows.parquet")
         assert step.data_access_identity_is_fallback is False
 

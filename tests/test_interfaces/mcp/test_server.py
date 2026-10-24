@@ -17,7 +17,7 @@ import jsonschema  # noqa: E402
 from mcp import Client  # noqa: E402
 from mcp.types import CallToolResult, TextContent, TextResourceContents, Tool  # noqa: E402
 
-from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY  # noqa: E402
+from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY  # noqa: E402
 from mloda.interfaces.cli.main import build_services  # noqa: E402
 from mloda.interfaces.mcp.server import SCHEMA_URI, build_server  # noqa: E402
 from mloda.interfaces.service.catalog import Catalog  # noqa: E402

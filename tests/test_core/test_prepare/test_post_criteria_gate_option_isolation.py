@@ -14,7 +14,7 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
@@ -353,7 +353,6 @@ class TestUnrelatedDifferentReadersStillConflict:
         assert message is not None
         assert message.startswith("FeatureResolutionError")
         assert "Multiple feature groups found" in message
-        assert "BaseInputData already set" not in message
         assert "ReaderParent_winner_iso: one_access" in message
         assert "ReaderSub_winner_iso: two_access" in message
 

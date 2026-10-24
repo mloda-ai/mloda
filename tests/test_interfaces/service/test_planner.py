@@ -180,12 +180,6 @@ def _base() -> PluginCollector:
     )
 
 
-def _write_sales_with_denied_column(tmp_path: Path) -> Path:
-    path = tmp_path / "sales.csv"
-    path.write_text("customer_id,income,mcp4_salary\n1,10,5\n2,20,6\n")
-    return path
-
-
 def _in_features_cases(column: str) -> list[tuple[dict[str, Any], str]]:
     name = "out" + IN_SUFFIX
     mid = "mid" + IN_SUFFIX
@@ -206,9 +200,12 @@ def _in_features_cases(column: str) -> list[tuple[dict[str, Any], str]]:
     ]
 
 
-def _write_sales(tmp_path: Path) -> Path:
+def _write_sales(tmp_path: Path, with_denied_column: bool = False) -> Path:
     path = tmp_path / "sales.csv"
-    path.write_text("customer_id,income,segment\n1,10,a\n2,20,b\n3,30,a\n4,40,b\n5,50,a\n")
+    if with_denied_column:
+        path.write_text("customer_id,income,mcp4_salary\n1,10,5\n2,20,6\n")
+    else:
+        path.write_text("customer_id,income,segment\n1,10,a\n2,20,b\n3,30,a\n4,40,b\n5,50,a\n")
     return path
 
 
@@ -430,7 +427,7 @@ class TestPolicy:
     def test_denied_in_features_source_is_policy_denied(
         self, tmp_path: Path, denied_calls: list[str], feature: dict[str, Any], pointer: str
     ) -> None:
-        sources = {"sales": _source("sales", _write_sales_with_denied_column(tmp_path))}
+        sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=True))}
 
         result = _explain(tmp_path, {"features": [feature]}, sources=sources)
 
@@ -438,14 +435,14 @@ class TestPolicy:
         assert _has_detail(error, path=pointer)
         assert denied_calls == []
 
-    @pytest.mark.parametrize(("feature", "pointer"), _in_features_cases("income"))
-    def test_allowed_in_features_source_plans(self, tmp_path: Path, feature: dict[str, Any], pointer: str) -> None:
-        sources = {"sales": _source("sales", _write_sales_with_denied_column(tmp_path))}
+    @pytest.mark.parametrize("feature", [feature for feature, _ in _in_features_cases("income")])
+    def test_allowed_in_features_source_plans(self, tmp_path: Path, feature: dict[str, Any]) -> None:
+        sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=True))}
 
         _success(_explain(tmp_path, {"features": [feature]}, sources=sources))
 
     def test_derived_name_over_denied_column_is_policy_denied(self, tmp_path: Path, denied_calls: list[str]) -> None:
-        sources = {"sales": _source("sales", _write_sales_with_denied_column(tmp_path))}
+        sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=True))}
 
         result = _explain(tmp_path, {"features": ["mcp4_salary" + DOUBLE_SUFFIX]}, sources=sources)
 
@@ -455,7 +452,7 @@ class TestPolicy:
         _assert_no_paths(result, tmp_path, "sales.csv")
 
     def test_derived_name_over_denied_column_carries_alternatives(self, tmp_path: Path) -> None:
-        sources = {"sales": _source("sales", _write_sales_with_denied_column(tmp_path))}
+        sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=True))}
 
         result = _explain(
             tmp_path,

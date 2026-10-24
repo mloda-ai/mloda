@@ -34,7 +34,7 @@ input_features = AggregatedFeatureGroup().input_features(Options(), FeatureName(
 assert Feature("sales") in input_features
 ```
 
-`input_features` is an instance method, so instantiate the feature group before calling it.
+`input_features` is an instance method, so instantiate the feature group before calling it. For an abstract base, `FeatureGroup.declared_input_features(options, feature_name)` returns the declared inputs from the class.
 
 ### 3. Calculation Logic
 

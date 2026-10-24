@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import logging
 from collections.abc import Collection, Mapping
-from typing import Any, ClassVar, Callable, final
+from typing import Any, ClassVar, Callable, cast, final
 from abc import ABC
 
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
@@ -605,6 +605,18 @@ class FeatureGroup(ABC):
         """
         # Contained: this is the root-feature protocol signal, which is_root reads as "this IS a root" (#845).
         raise NotImplementedError
+
+    @final
+    @classmethod
+    def declared_input_features(cls, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        """`input_features` resolved from the class, so an abstract base reports its declared inputs without being subclassed."""
+        if not inspect.isabstract(cls):
+            return cls().input_features(options, feature_name)
+        shell_bases = tuple(b for b in cls.__mro__ if b is not object and not issubclass(b, FeatureGroup))
+        instance = cast(FeatureGroup, object.__new__(type("_InstanceShell", shell_bases, {})))
+        instance.__class__ = cls
+        cls.__init__(instance)
+        return instance.input_features(options, feature_name)
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:

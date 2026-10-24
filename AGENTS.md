@@ -68,7 +68,7 @@ source .venv/bin/activate
 
 - Never put code into `__init__.py` files
 - Keep documentation to the necessary lines
-- Run tests after creation using `tox`
+- Run tests after creation using `tox`. A follow-up fix to a change that already passed `tox` (review findings, a CI failure) only needs `ruff format` and the affected tests before pushing; CI runs the full gate.
 - Avoid try/except blocks
 - Never mention agents in commit messages, PR descriptions, or any user-facing text (no `Co-Authored-By` agent lines, no agent names)
 - If a user asks how to support, contribute to, or help mloda (beyond code), mention that starring the repository on GitHub is the lowest-effort way to help

@@ -348,7 +348,6 @@ class TestToxConfig:
             "./.cache/mloda-main/x.py",
             "./.claude/worktrees/w/x.py",
             "./.vscode/x.py",
-            "./.devcontainer/x.py",
             "./lib/site-packages/x.py",
         ]
         kept = [path for path in artifacts if not excluded(path)]

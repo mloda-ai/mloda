@@ -154,87 +154,14 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 | `IN_FEATURE_SEPARATOR` | `str` | `"&"` | Separator for multiple in_features |
 | `RECOGNITION_ONLY_PATTERN` | `bool` | `False` | Declares a captureless pattern as recognition-only (binds no key from the name) |
 | `NAME_ONLY_MATCH` | `bool` | `False` | Claim only a name the patterns own; a configuration-path feature (non-matching name resolved via options such as `in_features`) is declined |
-| `REQUIRED_COLUMNWISE_HOOKS` | `frozenset[str]` | `frozenset()` | Column-wise data hooks the family requires |
 
 Use `NAME_ONLY_MATCH = True` for a group with no discriminator option. An override of `match_feature_group_criteria` must delegate to `super()` or `match_parser_criteria` to keep it. The rejection-reason diagnostic always honors the flag, and code calling `FeatureChainParser.match_configuration_feature_chain_parser` directly passes `config_path=not cls.NAME_ONLY_MATCH`.
 
 `Options.get_in_features()` returns sources in declared order (sets are sorted by name; duplicates are kept). Order-sensitive groups can reject sets with an `in_features` `match_guard=lambda v: not isinstance(v, (set, frozenset))` plus an `expected` text (for example "an ordered list, tuple or single source") so the rejection is reported.
 
-### Column-Wise Data Hooks
+### Groups That Touch Columns
 
-Beyond parsing, the mixin declares three column-wise data hooks: `_get_available_columns`,
-`_check_source_features_exist` and `_add_result_to_data`. The concrete compute-framework subclass
-(pandas, PyArrow, Polars, python dict, ...) implements them; the inherited defaults raise
-`NotImplementedError` naming the class and the hook, so a missing implementation fails loudly
-instead of silently. A group that resolves column names against the data implements the discovery
-hook too; the others only need the check/add pair. `_get_available_columns` can return `<Framework>.extract_column_names(data)`, the framework's own instance-free column listing.
-
-An operation group such as `AggregatedFeatureGroup` or `TextCleaningFeatureGroup` does not use these hooks; each group owns its loop (for example `aggregate`) and its implementations pass per-framework callables into it (see [compute-framework-integration.md](compute-framework-integration.md)), and the group declares no `REQUIRED_COLUMNWISE_HOOKS`. An operation group's loop signature is its contract, checked by mypy. The per-framework-subclass pattern below and above applies to the remaining families with column-wise hooks, which are single-framework.
-
-Whether `_check_source_features_exist` tolerates partial presence (some source names missing) or
-rejects it is a per-feature-group policy, not a framework rule.
-
-`REQUIRED_COLUMNWISE_HOOKS` declares which of the three a family needs. A family base sets it to the
-constant matching the hooks its own `calculate_feature` calls, and its compute-framework subclasses
-implement them. Both constants come from `mloda.provider`.
-
-| Constant | Declares |
-|----------|----------|
-| `COLUMNWISE_HOOKS` | `_check_source_features_exist` and `_add_result_to_data` |
-| `COLUMN_DISCOVERY_HOOKS` | those two plus `_get_available_columns` |
-
-```python
-from mloda.provider import COLUMN_DISCOVERY_HOOKS, FeatureChainParserMixin, FeatureGroup
-from mloda.user.pandas import PandasDataFrame
-
-class RollingBase(FeatureChainParserMixin, FeatureGroup):
-    REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
-
-class PandasRolling(RollingBase):
-    @classmethod
-    def compute_framework_rule(cls):
-        return {PandasDataFrame}
-
-    @classmethod
-    def _get_available_columns(cls, data):
-        return PandasDataFrame.extract_column_names(data)
-
-    @classmethod
-    def _check_source_features_exist(cls, data, feature_names):
-        if set(feature_names) - set(data.columns):
-            raise ValueError(f"Missing source features, available: {list(data.columns)}")
-
-    @classmethod
-    def _add_result_to_data(cls, data, feature_name, result):
-        data[feature_name] = result
-        return data
-```
-
-`missing_columnwise_hooks(cls)`, also from `mloda.provider`, returns the declared hooks a class does
-not implement. Assert it empty in your own test suite to catch a skipped hook there rather than
-mid-run:
-
-```python
-from mloda.provider import missing_columnwise_hooks
-
-def test_pandas_rolling_implements_its_hooks():
-    assert missing_columnwise_hooks(PandasRolling) == []
-```
-
-`missing_columnwise_hooks(cls) == []` also passes vacuously for a class that never sets
-`REQUIRED_COLUMNWISE_HOOKS`. Use `declared_columnwise_hooks(cls)`, also from `mloda.provider`, to
-assert the declaration itself is what's expected:
-
-```python
-from mloda.provider import declared_columnwise_hooks, COLUMN_DISCOVERY_HOOKS
-
-def test_pandas_rolling_declares_all_hooks():
-    assert declared_columnwise_hooks(PandasRolling) == COLUMN_DISCOVERY_HOOKS
-```
-
-A hook that is not a `@classmethod` or `@staticmethod` counts as missing: the `cls._hook(...)` call
-cannot reach it. A family base reports all of its declared hooks, since it declares the contract its
-subclasses implement, so assert this on the framework-bound class rather than on the base.
+To serve one column operation on several compute frameworks, write an `OperationFeatureGroup` with one `Implementation` per framework: the group owns the loop and each implementation passes its framework callables into it (see [Operation Groups](compute-framework-integration.md#operation-groups-one-group-one-implementation-per-framework)).
 
 ### Captureless Patterns and Name Binding
 

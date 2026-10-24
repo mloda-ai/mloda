@@ -147,11 +147,6 @@ def test_import_provider_base_classes() -> None:
         # Feature chaining
         FeatureChainParser,
         FeatureChainParserMixin,
-        # Column-wise hook contract
-        COLUMNWISE_HOOKS,
-        COLUMN_DISCOVERY_HOOKS,
-        missing_columnwise_hooks,
-        declared_columnwise_hooks,
         # Match rejection recording
         record_match_rejection,
         INPUT_DATA_STAGE,
@@ -194,11 +189,6 @@ def test_import_provider_base_classes() -> None:
     # Feature chaining
     assert FeatureChainParser is not None
     assert FeatureChainParserMixin is not None
-    # Column-wise hook contract: a plugin author declares it without reading core source
-    assert COLUMNWISE_HOOKS
-    assert COLUMN_DISCOVERY_HOOKS > COLUMNWISE_HOOKS
-    assert callable(missing_columnwise_hooks)
-    assert callable(declared_columnwise_hooks)
     # Match rejection recording
     assert callable(record_match_rejection)
     assert INPUT_DATA_STAGE == "input_data"
@@ -349,3 +339,19 @@ def test_match_data_mixin_is_removed() -> None:
     package = "mloda.core.abstract_plugins.components.match_data"
     # A stale untracked __pycache__ can leave the package importable as a namespace; only the submodule counts.
     assert importlib.util.find_spec(package) is None or importlib.util.find_spec(f"{package}.match_data") is None
+
+
+def test_columnwise_hook_api_is_removed() -> None:
+    import mloda.provider as provider_module
+    from mloda.provider import FeatureChainParserMixin
+
+    for name in ("COLUMNWISE_HOOKS", "COLUMN_DISCOVERY_HOOKS", "missing_columnwise_hooks", "declared_columnwise_hooks"):
+        assert not hasattr(provider_module, name), name
+        assert name not in provider_module.__all__, name
+    for name in (
+        "REQUIRED_COLUMNWISE_HOOKS",
+        "_get_available_columns",
+        "_check_source_features_exist",
+        "_add_result_to_data",
+    ):
+        assert not hasattr(FeatureChainParserMixin, name), name

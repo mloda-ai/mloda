@@ -103,22 +103,6 @@ class SiblingDictCaseFold(_SiblingDictConsumer):
         return {"SD_A": [v * cls.FACTOR for v in _column(data, "sd_a")]}
 
 
-class PartialResultProbeRoot(FeatureGroup, _EmptyResultMatchData):
-    """Root FeatureGroup producing ``partial_result_probe_x``."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={"partial_result_probe_x"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {"partial_result_probe_x": [1, 2, 3]}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"partial_result_probe_x"}
-
-
 class PartialResultProbeFirstOnly(FeatureChainParserMixin, FeatureGroup):
     """Serves two requested features in one FeatureSet but returns a column for only the first."""
 
@@ -218,16 +202,14 @@ class SiblingDictRunAllTestBase(PolicyRunAllTestBase):
     def _run_partial_result(self, mode: ParallelizationMode, flight_server: Any) -> None:
         self.assert_policy_case(
             feature_name=[
-                "partial_result_probe_x__partial_result_probe_first_1",
-                "partial_result_probe_x__partial_result_probe_first_2",
+                "sd_a__partial_result_probe_first_1",
+                "sd_a__partial_result_probe_first_2",
             ],
-            plugin_collector=PluginCollector.enabled_feature_groups(
-                {PartialResultProbeRoot, PartialResultProbeFirstOnly}
-            ),
+            plugin_collector=PluginCollector.enabled_feature_groups({SiblingDictRoot, PartialResultProbeFirstOnly}),
             expectation=PolicyRaises(
                 match_substring=(
                     "PartialResultProbeFirstOnly did not produce the requested feature(s) "
-                    "['partial_result_probe_x__partial_result_probe_first_2']"
+                    "['sd_a__partial_result_probe_first_2']"
                 )
             ),
             mode=mode,

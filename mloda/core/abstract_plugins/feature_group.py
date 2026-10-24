@@ -48,6 +48,21 @@ from mloda.core.abstract_plugins.components.utils import (
 logger = logging.getLogger(__name__)
 
 
+_INSTANCE_SHELLS: dict[type, type] = {}
+
+
+def _instance_shell(cls: type) -> type:
+    """A non-FeatureGroup class whose instances can take cls as their __class__."""
+    # __class__ assignment needs the same base below the first class adding __dict__ (ABC or object in practice).
+    layout = cls
+    while layout.__base__ is not None and not (layout.__dictoffset__ and not layout.__base__.__dictoffset__):
+        layout = layout.__base__
+    root = layout.__base__ or object
+    if root not in _INSTANCE_SHELLS:
+        _INSTANCE_SHELLS[root] = type("_InstanceShell", (root,), {})
+    return _INSTANCE_SHELLS[root]
+
+
 class FeatureGroup(ABC):
     """Base class for all feature groups.
 
@@ -612,9 +627,7 @@ class FeatureGroup(ABC):
         """`input_features` resolved from the class, usable on an abstract base without subclassing."""
         if not inspect.isabstract(cls):
             return cls().input_features(options, feature_name)
-        # The __class__ swap needs a matching layout; the shell must not be a FeatureGroup, so discovery skips it.
-        shell_bases = tuple(b for b in cls.__mro__ if b is not object and not issubclass(b, FeatureGroup))
-        instance = cast(FeatureGroup, object.__new__(type("_InstanceShell", shell_bases, {})))
+        instance = cast(FeatureGroup, object.__new__(_instance_shell(cls)))
         instance.__class__ = cls
         cls.__init__(instance)
         return instance.input_features(options, feature_name)

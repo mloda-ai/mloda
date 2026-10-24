@@ -1,4 +1,5 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
+from typing import Any, ClassVar, Generic, TypeVar
 
 import numpy as np
 import pytest
@@ -248,3 +249,65 @@ def test_declared_input_features_leaves_base_untouched() -> None:
 def test_declared_input_features_propagates_not_implemented_for_root_group() -> None:
     with pytest.raises(NotImplementedError):
         _DeclaredInputsProbeRoot.declared_input_features(Options(), FeatureName("declared_inputs_probe_root"))
+
+
+_DI_T = TypeVar("_DI_T")
+_DI_FIXED = {"declared_inputs_probe_fixed"}
+
+
+def _di_fixed_inputs(self: Any, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+    return {Feature.str_of(n) for n in _DI_FIXED}
+
+
+class _DeclaredInputsProbeAbcMixin(ABC):
+    @abstractmethod
+    def m(self) -> None: ...
+
+
+class _DeclaredInputsProbeAbcGroup(_DeclaredInputsProbeAbcMixin, FeatureGroup):
+    input_features = _di_fixed_inputs
+
+
+class _DeclaredInputsProbeGenericGroup(FeatureGroup, Generic[_DI_T]):
+    input_features = _di_fixed_inputs
+
+
+class _DeclaredInputsProbeRecording:
+    seen: ClassVar[list[str]] = []
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        _DeclaredInputsProbeRecording.seen.append(cls.__name__)
+
+
+class _DeclaredInputsProbeRecordingGroup(_DeclaredInputsProbeRecording, FeatureGroup):
+    input_features = _di_fixed_inputs
+
+    @classmethod
+    @abstractmethod
+    def declared_inputs_probe_rec_hook(cls) -> str: ...
+
+
+@pytest.mark.parametrize(
+    "group",
+    [_DeclaredInputsProbeAbcGroup, _DeclaredInputsProbeGenericGroup, _DeclaredInputsProbeRecordingGroup],
+    ids=["abc_mixin_with_abstractmethod", "generic", "recording_mixin"],
+)
+def test_declared_input_features_on_special_abstract_bases(group: Any) -> None:
+    result = group.declared_input_features(Options(), FeatureName("declared_inputs_probe_x"))
+    assert _names(result) == _DI_FIXED
+
+
+def test_declared_input_features_does_not_trigger_mixin_init_subclass() -> None:
+    before = list(_DeclaredInputsProbeRecording.seen)
+    _DeclaredInputsProbeRecordingGroup.declared_input_features(Options(), FeatureName("declared_inputs_probe_x"))
+    assert _DeclaredInputsProbeRecording.seen == before
+
+
+def test_declared_input_features_does_not_grow_mixin_subclasses() -> None:
+    name = FeatureName("declared_inputs_probe_x")
+    _DeclaredInputsProbeRecordingGroup.declared_input_features(Options(), name)
+    after_first = len(_DeclaredInputsProbeRecording.__subclasses__())
+    for _ in range(50):
+        _DeclaredInputsProbeRecordingGroup.declared_input_features(Options(), name)
+    assert len(_DeclaredInputsProbeRecording.__subclasses__()) == after_first

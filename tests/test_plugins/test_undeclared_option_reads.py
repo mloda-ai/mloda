@@ -115,10 +115,6 @@ ALLOWED_DYNAMIC_READS: dict[tuple[str, str], tuple[str, str]] = {
         "ReadDBFG",
         "key is one of the group's pointer keys, or a claim route's required key, resolved at runtime",
     ),
-    (_SOURCE_BASES + "api/api_input_data.py", "matches"): (
-        "ApiInputData",
-        "key is the subclass's data access name",
-    ),
     ("mloda_plugins/feature_group/experimental/forecasting/forecasting_artifact.py", "custom_loader"): (
         "ForecastingArtifact",
         "artifact is keyed by the runtime feature name, not a fixed option key",

@@ -28,7 +28,7 @@ from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
-from mloda.provider import DataCreator, FeatureGroup, FileSource, InputDataDescriptor, SourceMatch
+from mloda.provider import ApiDataFG, DataCreator, FeatureGroup, FileSource, InputDataDescriptor, SourceMatch
 from mloda.steward import GateBypassError
 from mloda.user import (
     DataAccessCollection,
@@ -635,6 +635,9 @@ class _GateInputDataLoadExtender(_InputDataLoadCapturingExtender):
     never_fall_back = True
 
 
+_API_COLUMN = f"{_MARKER}_api_col"
+
+
 class _CountingReader(_DirectLoader):
     """Reader counting its load_data calls, for direct dispatch_input_data_load calls."""
 
@@ -921,6 +924,19 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
         assert result == [1, 2, 3]
         assert _CountingReader.loads == 1
 
+    def test_gate_wraps_the_api_data_load(self) -> None:
+        gate = _GateInputDataLoadExtender()
+
+        result = mloda.run_all(
+            [_API_COLUMN],
+            compute_frameworks=[PythonDictFramework],
+            api_data={"gated": {_API_COLUMN: [1, 2]}},
+            function_extender={gate},
+        )
+
+        assert len(gate.all_captured) == 1
+        assert dict(result[0]) == {_API_COLUMN: [1, 2]}
+
 
 class _DeclaringReader(_DirectLoader):
     @classmethod
@@ -1161,17 +1177,28 @@ class _FileRecordingGateExtender(Extender):
 
     never_fall_back = True
 
-    def __init__(self, output_path: Path) -> None:
+    def __init__(self, output_path: Path, record_identity: bool = False) -> None:
         self.priority = 100
         self._output_path = output_path
+        self._record_identity = record_identity
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.INPUT_DATA_LOAD}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        if not self._record_identity:
+            with self._output_path.open("a", encoding="utf-8") as handle:
+                handle.write("gate\n")
+            return func(*args, **kwargs)
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        assert context is not None and context.reader_class is not None
+        line = (
+            f"{context.data_access_identity}|{context.data_access_identity_is_fallback}|{context.reader_class.__name__}"
+        )
         with self._output_path.open("a", encoding="utf-8") as handle:
-            handle.write("gate\n")
-        return func(*args, **kwargs)
+            handle.write(line + "\n")
+        return result
 
 
 class _MultiprocessingHopFeatureGroup(FeatureGroup):
@@ -1210,6 +1237,21 @@ class TestThreadHopInASpawnedWorkerReachesTheGate:
 
         assert result[0][_MP_HOP_COLUMN] == [1, 2, 3] or list(result[0][_MP_HOP_COLUMN]) == [[1, 2, 3]]
         assert output_path.read_text(encoding="utf-8").splitlines() == ["gate"]
+
+    def test_api_data_load_in_a_multiprocessing_worker_is_observed(self, tmp_path: Path, flight_server: Any) -> None:
+        output_path = tmp_path / "identity_calls.txt"
+
+        result = mloda.run_all(
+            [_API_COLUMN],
+            compute_frameworks=["PythonDictFramework"],
+            api_data={"mp": {_API_COLUMN: [1, 2]}},
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+            function_extender={_FileRecordingGateExtender(output_path, record_identity=True)},
+        )
+
+        assert output_path.read_text(encoding="utf-8").splitlines() == ["api_data:mp|False|ApiDataFG"]
+        assert len(result) == 1
 
 
 class TestInputDataLoadAuditForSourceGroups:
@@ -1283,3 +1325,19 @@ class TestInputDataLoadAuditForSourceGroups:
         assert context.data_access_loader == "neutral"
         assert context.implementation == "neutral"
         assert context.implementation_version is None
+
+    def test_api_data_load_is_audited_with_the_set_key_identity(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+
+        mloda.run_all(
+            [_API_COLUMN],
+            compute_frameworks=[PythonDictFramework],
+            api_data={"audited": {_API_COLUMN: [1, 2]}},
+            function_extender={extender},
+        )
+
+        context = extender.captured
+        assert context is not None
+        assert context.data_access_identity == "api_data:audited"
+        assert context.data_access_identity_is_fallback is False
+        assert context.reader_class is ApiDataFG

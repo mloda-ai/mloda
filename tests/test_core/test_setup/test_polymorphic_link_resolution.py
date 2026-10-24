@@ -22,7 +22,7 @@ from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from mloda.provider import ApiInputDataFeature
+from mloda.provider import ApiDataFG
 
 
 # =============================================================================
@@ -207,10 +207,10 @@ class AssemblerWithMixedLink(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         idx = Index((BaseFeatureGroupA.ROW_INDEX,))
 
-        # Base class + External concrete class (ApiInputDataFeature has no subclass)
+        # Base class + External concrete class (ApiDataFG has no subclass)
         link = Link.inner(
             JoinSpec(BaseFeatureGroupA, idx),  # Base class -> resolves to ConcreteFeatureGroupA
-            JoinSpec(ApiInputDataFeature, idx),  # External concrete class (no subclass)
+            JoinSpec(ApiDataFG, idx),  # External concrete class (no subclass)
         )
 
         return {
@@ -238,7 +238,7 @@ class TestAsymmetricPolymorphicLinkResolution:
             compute_frameworks=[PythonDictFramework],
             api_data={"UserQuery": {"_idx": [0], "user_query": ["test query"]}},
             plugin_collector=PluginCollector.enabled_feature_groups(
-                {AssemblerWithMixedLink, ConcreteFeatureGroupA, ApiInputDataFeature}
+                {AssemblerWithMixedLink, ConcreteFeatureGroupA, ApiDataFG}
             ),
         )
 

@@ -79,7 +79,7 @@ The resource `mloda://schema/feature-request` is the JSON Schema of a request. A
 (default off) and a set name that is not a source alias. Values travel in the signed, unencrypted plan id and are echoed in the `normalized_request` of explain. Inline
 columns are unclassified, so the preview is empty unless you classify them in `[mcp.classification]`. Use it for trusted
 callers only, since row counts over caller-chosen values can reveal plugin data;
-`deny_feature_groups = ["ApiInputDataFeature"]` turns it off entirely.
+`deny_feature_groups = ["ApiDataFG"]` turns it off entirely.
 
 Every result is a one-line summary followed by the result as JSON, which is also the structured content. A failed
 call has `isError` set and one error shape: `{"error": {"code", "message", "details", "audit_id"}}` with the codes

@@ -8,7 +8,7 @@ from unittest.mock import patch
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.api.request import mlodaAPI
 from mloda.user import Feature, PluginCollector, mloda
-from mloda.provider import ApiInputDataFeature, FeatureGroup, FeatureSet
+from mloda.provider import ApiDataFG, FeatureGroup, FeatureSet
 from mloda.user import Index, Options, FeatureName
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
@@ -34,7 +34,7 @@ class ClassMethodFeature(FeatureGroup):
 
 _enabled = PluginCollector.enabled_feature_groups(
     {
-        ApiInputDataFeature,
+        ApiDataFG,
         ClassMethodFeature,
     }
 )

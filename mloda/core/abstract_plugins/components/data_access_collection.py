@@ -60,7 +60,7 @@ class DataAccessCollection:
             anything else raises an early mis-wrap ``ValueError``.
             ``HashableDict`` is no longer accepted on the credentials path; the
             class itself stays for hashability-required internals (e.g. ``Options``
-            hashing, ``ApiInputDataCollection``). Credentials have no ``set``
+            hashing). Credentials have no ``set``
             form (dicts are unhashable). Any other top-level ``credentials``
             value (``str``, ``bytes``, ``int``, ...) raises ``ValueError``.
 
@@ -86,6 +86,18 @@ class DataAccessCollection:
         self._assign_auto_handles("credentials", self.credentials, credentials)
 
         self.column_to_file: dict[str, str] | None = self._normalize_column_to_file(column_to_file)
+        self._api_data_columns: dict[str, tuple[str, ...]] = {}
+
+    @property
+    def api_data_columns(self) -> Mapping[str, tuple[str, ...]]:
+        """Column names per api_data set, frozen at prepare time."""
+        return self._api_data_columns
+
+    def with_api_data_columns(self, spec: Mapping[str, tuple[str, ...]]) -> "DataAccessCollection":
+        """A copy carrying the api_data column spec."""
+        duplicate = self.copy()
+        duplicate._api_data_columns = dict(spec)
+        return duplicate
 
     def copy(self) -> "DataAccessCollection":
         """Return an independent collection sharing the registered objects."""
@@ -96,6 +108,7 @@ class DataAccessCollection:
         duplicate.credentials = dict(self.credentials)
         duplicate._auto_handles = set(self._auto_handles)
         duplicate.column_to_file = None if self.column_to_file is None else dict(self.column_to_file)
+        duplicate._api_data_columns = dict(self._api_data_columns)
         return duplicate
 
     @property

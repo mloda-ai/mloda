@@ -10,11 +10,6 @@ from mloda.core.abstract_plugins.components.error_utils import REPORT_URL, inter
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.components.index.index import Index
 
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
-    ApiInputDataCollection,
-)
-from mloda.core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
@@ -136,7 +131,6 @@ class ExecutionPlan:
     def __init__(
         self,
         global_filter: GlobalFilter | None = None,
-        api_input_data_collection: ApiInputDataCollection | None = None,
         resolved_input_feature_names: dict[UUID, frozenset[str] | None] | None = None,
         specialized_from: dict[UUID, tuple[str, ...]] | None = None,
         implementations: Collection[type[Implementation[Any]]] | None = None,
@@ -149,7 +143,6 @@ class ExecutionPlan:
         self.tfs_collection: dict[TransformFrameworkStep, TransformFrameworkStep] = {}
         self.joinstep_collection = JoinStepCollection()
         self.global_filter = global_filter
-        self.api_input_data_collection = api_input_data_collection
         self.resolved_input_feature_names = resolved_input_feature_names
         self.specialized_from = specialized_from
 
@@ -3591,14 +3584,6 @@ Available join types:
         features_grouped_by_framework_and_options: dict[Any, set[Feature]] = (
             self.group_features_by_compute_framework_and_options(features)
         )
-        if isinstance(feature_group.input_data(), ApiInputData) and self.api_input_data_collection is not None:
-            api_groups: dict[tuple[int, str], set[Feature]] = defaultdict(set)
-            for f_hash, grouped_features in features_grouped_by_framework_and_options.items():
-                for feature in grouped_features:
-                    source_key, _ = self.api_input_data_collection.get_name_cls_by_matching_column_name(feature.name)
-                    api_groups[(f_hash, source_key)].add(feature)
-            features_grouped_by_framework_and_options = api_groups
-
         # Only a root feature group (no upstream ancestors) can be the actual cause of a
         # missing-Links error: a split with ancestors of its own is never the source read directly.
         is_root = not any(parent_to_children_mapping.get(feature.uuid) for feature in features)
@@ -3690,38 +3675,10 @@ Available join types:
                     pre_calculated,
                     cf,
                     children_if_root,
-                    self.prepare_api_input_data(feature_group, feature_set),
                 )
 
                 fg_steps[(f_hash, bucket_idx, level_idx)] = feature_group_step
         return fg_steps
-
-    def prepare_api_input_data(self, feature_group: type[FeatureGroup], feature_set: FeatureSet) -> bool | BaseApiData:
-        if not isinstance(feature_group.input_data(), ApiInputData):
-            return False
-
-        if self.api_input_data_collection is None:
-            raise ValueError(
-                f"Feature group {feature_group} has an api input data class, but no api_input_data_collection was given."
-            )
-
-        if feature_set.get_name_of_one_feature() is None:
-            raise ValueError(f"Feature group {format_feature_group_class(feature_group)} has no feature set name.")
-
-        api_input_name, matching_cls = self.api_input_data_collection.get_name_cls_by_matching_column_name(
-            feature_set.get_name_of_one_feature()
-        )
-
-        if matching_cls is None:
-            raise ValueError(
-                f"Feature group {format_feature_group_class(feature_group)} has no matching api data class for feature."
-            )
-
-        matching_cls_initialized = matching_cls(
-            api_input_name, feature_set.get_name_of_one_feature(), feature_set.options
-        )
-
-        return matching_cls_initialized
 
     def add_artifact_to_feature_set(self, feature_group: type[FeatureGroup], feature_set: FeatureSet) -> None:
         if feature_group.artifact() is None:

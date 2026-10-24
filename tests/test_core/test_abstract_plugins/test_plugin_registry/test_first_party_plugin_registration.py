@@ -4,7 +4,7 @@ Contract, pinned as a regression guard: after PluginLoader.all(), every concrete
 and Extender shipped in the mloda wheel holds a default-registry entry, and a wheel-owned ComputeFramework is
 bundled (strict-mode exempt) regardless of which wheel-owned package it lives in. Registry membership rests on
 an unwritten coupling (loader base package + CORE_PLUGIN_MODULES + the module that DEFINES a class), and #726
-showed a class can leave the registry silently: ApiInputDataFeature moved to mloda.core, dropped out, tox stayed
+showed a class can leave the registry silently: an api_data group moved to mloda.core, dropped out, tox stayed
 green.
 
 Wheel-owned is not "starts with mloda": ``mloda`` is a PEP 420 namespace shared with other distributions.
@@ -45,7 +45,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature import ApiInputDataFeature
+from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -288,7 +288,7 @@ class TestEveryWheelOwnedPluginIsRegistered:
         """Positive control: `unregistered == []` is vacuously true on an empty candidate set."""
         from mloda_plugins.function_extender.base_implementations.timing.timing_extender import TimingExtender
 
-        assert ApiInputDataFeature in _wheel_owned_plugin_classes(FeatureGroup), (
+        assert ApiDataFG in _wheel_owned_plugin_classes(FeatureGroup), (
             "the sweep must reach FeatureGroups defined under mloda.core; it found "
             f"{len(_wheel_owned_plugin_classes(FeatureGroup))} FeatureGroups"
         )
@@ -337,7 +337,7 @@ class TestGuardDetectsCoreDrift:
 
         The private case is the #735 blind spot itself: register_module_plugins registers underscore-prefixed
         classes and the strict filter exempts only abstract ones, so a private concrete FeatureGroup that drifts
-        into mloda/core/ is dropped by strict mode exactly like ApiInputDataFeature was.
+        into mloda/core/ is dropped by strict mode exactly like the api_data group once was.
         """
         assert CORE_DRIFT_MODULE not in CORE_PLUGIN_MODULES, "sanity: the loader does not know the drift probe"
 
@@ -347,7 +347,7 @@ class TestGuardDetectsCoreDrift:
         assert probe_key in reported, (
             "the guard must report a concrete FeatureGroup defined under mloda.core that no loader path "
             f"registers; it reported {reported} instead. Without this, a plugin class moving out of "
-            "mloda_plugins leaves the registry silently, exactly as ApiInputDataFeature did in #726."
+            "mloda_plugins leaves the registry silently, exactly as the api_data group once did."
         )
 
 

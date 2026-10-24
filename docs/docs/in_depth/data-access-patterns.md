@@ -2,7 +2,7 @@
 
 ## Overview
 
-mloda reads data through **source FeatureGroups** (files, documents, databases and custom sources). `BaseInputData` is only the marker base of `DataCreator` and `ApiInputData`, the return type of `input_data()`; it carries no reader behavior.
+mloda reads data through **source FeatureGroups** (files, documents, databases and custom sources). `BaseInputData` is only the marker base of `DataCreator`, the return type of `input_data()`; it carries no reader behavior.
 
 For practical examples of data access methods, see [Data Access Overview](access-feature-data.md).
 
@@ -14,7 +14,7 @@ For practical examples of data access methods, see [Data Access Overview](access
     - `DuckdbFG`: reads the tables and views of a DuckDB connection in the DataAccessCollection, only when the feature's `connection_handle` names it (`Feature("amount", connection=conn)` sets one). On DuckDB it hands over a lazy relation on your connection, so later DuckDB steps run as SQL; elsewhere it loads a `pa.Table`. It reads the `main` schema of the connection's current database; a `connection_handle` forwarded from a consumer counts too. A feature tied to a DuckDB connection whose table has a column of that name is read from the table, so if another group also serves that name, resolution reports both groups (leave `DuckdbFG` out of the plugin collector, or rename). Off DuckDB it reads through a separate cursor, which sees committed rows only. mloda never closes the connection.
     - `ReadDocumentFG` with `TextFG`, `PyFG`, `MarkdownFG`, `YamlFG`, `JsonDocumentFG`; documents skip suffixes owned by ReadFileFG groups by default
 - **DataCreator**: For generating synthetic data (see [access-feature-data](access-feature-data.md#data-creator))
-- **ApiInputData**: For runtime data injection (see [access-feature-data](access-feature-data.md#apidata))
+- **ApiDataFG**: A source FeatureGroup for runtime data injection (see [access-feature-data](access-feature-data.md#apidata))
 
 ## Writing a source FeatureGroup
 
@@ -84,7 +84,7 @@ The matched pair lives on `Feature.input_data_match`, never in the options, and 
 
 ### Non-file sources such as HTTP
 
-Write a `SourceFeatureGroup` subclass with a pointed-only `NamePolicy.OPEN` claim route: it claims a name only when pointed at (`options={"MyApiFG": url}` or `feature_group=MyApiFG`). Implement `find_sources` and `load_neutral` to fetch and return the data. A plain `FeatureGroup` is not a pointer target. A key that differs from a loaded source group's name only by case raises a `SourcePointerError`; a key naming a group that is not loaded is an unknown option key and is ignored. `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
+Write a `SourceFeatureGroup` subclass with a pointed-only `NamePolicy.OPEN` claim route: it claims a name only when pointed at (`options={"MyApiFG": url}` or `feature_group=MyApiFG`). Implement `find_sources` and `load_neutral` to fetch and return the data. A plain `FeatureGroup` is not a pointer target. A key that differs from a loaded source group's name only by case raises a `SourcePointerError`; a key naming a group that is not loaded is an unknown option key and is ignored. `ApiDataFG` injects in-memory data passed through the API request and is not an HTTP client.
 
 ### Resolution of a pointed group vs feature-group resolution
 
@@ -206,7 +206,7 @@ These patterns are fundamental to how feature groups access data. For more detai
 
 ## Best Practices
 
-- Use source FeatureGroups for files, documents and databases, `ApiInputData` for runtime data and `DataCreator` for synthetic data.
+- Use source FeatureGroups for files, documents and databases, `ApiDataFG` for runtime data and `DataCreator` for synthetic data.
 - In a source group, focus on robust source discovery, error handling and performance.
 
 ## Related Documentation
@@ -219,4 +219,4 @@ These patterns are fundamental to how feature groups access data. For more detai
 
 ## Summary
 
-**Source FeatureGroups** are the way mloda reads files, documents, databases and custom sources. `DataCreator` and `ApiInputData` supply in-memory data.
+**Source FeatureGroups** are the way mloda reads files, documents, databases and custom sources. `DataCreator` and `ApiDataFG` supply in-memory data.

@@ -19,7 +19,6 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature import ApiInputDataFeature
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.interfaces.service.catalog import MAX_DESCRIPTION_LENGTH, Catalog, plugin_collector_for, sanitize_text
 from mloda.interfaces.service.config import Settings, SourceConfig
@@ -35,7 +34,7 @@ from mloda.interfaces.service.request import (
     validate_request,
 )
 from mloda.interfaces.service.sources import READER_ERRORS, data_access_collection, source_columns
-from mloda.provider import ReadFileFG, SourceMatch
+from mloda.provider import ApiDataFG, ReadFileFG, SourceMatch
 from mloda.steward import verified_context
 from mloda.user import (
     Feature,
@@ -104,9 +103,11 @@ def _alias_of(step: PlanStep, sources: Mapping[str, SourceConfig]) -> str | None
 
 
 def _inline_alias(step: PlanStep, inline: Mapping[str, Mapping[str, Any]]) -> str | None:
-    """The inline set owning the columns of an ApiInputDataFeature step."""
-    fg = step.feature_group
-    if not (isinstance(fg, type) and issubclass(fg, ApiInputDataFeature)):
+    """The inline set owning the columns of an api_data step."""
+    group = step.feature_group
+    if not (isinstance(group, type) and issubclass(group, ApiDataFG)):
+        return None
+    if not (step.data_access_identity or "").startswith("api_data:"):
         return None
     return next((name for name in sorted(inline) if set(step.feature_names) & set(inline[name])), None)
 

@@ -3,7 +3,7 @@ Regression guard for issue #828.
 
 Doc-example snippets are executed in-process, so feature resolution sees every
 FeatureGroup subclass alive in the pytest worker. A test-only data creator that
-exposes "customer_id" then collides with ApiInputDataFeature when a doc snippet
+exposes "customer_id" then collides with ApiDataFG when a doc snippet
 requests the bare root feature "customer_id" via api_data. This test simulates
 that leak and requires the doc snippet check to be unaffected by it.
 """

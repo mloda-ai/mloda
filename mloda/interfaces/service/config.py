@@ -182,6 +182,8 @@ def _build(raw: Mapping[str, Any], base_dir: Path) -> Settings:
     for key in ("compute_frameworks", "deny_feature_groups", "preview_allows"):
         if key in raw:
             kwargs[key] = _str_tuple(raw[key], key)
+    if "ApiInputDataFeature" in kwargs.get("deny_feature_groups", ()):
+        raise ConfigError("'deny_feature_groups' names the removed ApiInputDataFeature; use ApiDataFG instead")
     if raw.get("max_rows") is not None:
         kwargs["max_rows"] = _int(raw["max_rows"], "max_rows")
     if "max_preview_rows" in raw:

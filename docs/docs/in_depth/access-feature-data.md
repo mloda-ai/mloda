@@ -194,7 +194,9 @@ For this purpose, we have the ApiData.
 
 #### ApiData
 
-The ApiData can read data given to mlodaAPI at request time. The built-in `ApiInputDataFeature` handles this - it receives data from the `api_data` parameter and makes it available as features.
+The ApiData can read data given to mlodaAPI at request time. The built-in `ApiDataFG` (a `SourceFeatureGroup`) handles this. It claims a feature whose name is a column of a set in the `api_data` parameter, and loads it through the `INPUT_DATA_LOAD` hook with `data_access_identity` `api_data:<set key>`.
+
+`Options({"ApiDataFG": "<set key>"})` narrows a feature to one set; an unknown key aborts. `prepare()` fixes each set's columns, and `run(api_data=...)` must give the same set keys and the same column names per set (order may differ), otherwise a `ValueError` is raised before the run starts. A FeatureGroup computing a name that is also an `api_data` column is an ambiguity error. For a custom transport, subclass `ApiDataFG` and override `load_neutral`, reading the run's values with `cls.api_values(match)`.
 
 Use cases:
 
@@ -351,17 +353,17 @@ As the input features can be fulfilled by **multiple other features**, we can ha
 When input features come from different sources (e.g., ApiData and DataCreator), you can join them using Links. Create a `Link` in `input_features()` and attach it to a `Feature`:
 
 ```python
-from mloda.user import Link, Index, Feature
+from mloda.user import Link, Index, Feature, JoinSpec
 from mloda.provider import FeatureGroup, FeatureSet
-from mloda.provider import ApiInputDataFeature
+from mloda.provider import ApiDataFG
 
 class JoinedFeature(FeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         # Create a LEFT join between mloda data and Creator data
         link = Link.left(
-            (ApiInputDataFeature, Index(("api_id",))),
-            (CreatorDataFeature, Index(("creator_id",)))
+            JoinSpec(ApiDataFG, Index(("api_id",))),
+            JoinSpec(CreatorDataFeature, Index(("creator_id",)))
         )
 
         # Attach link to one feature, set index on both

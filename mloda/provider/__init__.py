@@ -60,10 +60,7 @@ from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery
 from mloda.core.abstract_plugins.components.input_data.read_document_fg import ReadDocumentFG
 from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature import ApiInputDataFeature
-from mloda.core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import ApiInputDataCollection
+from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 
 # Artifact
@@ -196,10 +193,7 @@ __all__ = [
     "ReadDocumentFG",
     "ReadFileFG",
     "InputDataDescriptor",
-    "ApiInputData",
-    "ApiInputDataFeature",
-    "BaseApiData",
-    "ApiInputDataCollection",
+    "ApiDataFG",
     "DataCreator",
     # Artifact
     "BaseArtifact",

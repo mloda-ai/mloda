@@ -65,7 +65,6 @@ MATCH_PATH_MODULES: dict[str, str] = {
     "mloda/core/abstract_plugins/components/property_spec.py": "the matcher reads the spec sentinel",
     "mloda/core/abstract_plugins/components/input_data/base_input_data.py": "the input-data matches hook",
     "mloda/core/abstract_plugins/components/input_data/reader_probe.py": "the extender-wrapped source group probe",
-    "mloda/core/abstract_plugins/components/input_data/api/api_input_data.py": "the api input data match hook",
     "mloda/core/abstract_plugins/components/input_data/creator/data_creator.py": "the data-creator match hook",
 }
 
@@ -84,7 +83,6 @@ SEEDS: dict[str, str] = {
 # Raising functions OUTSIDE the declared modules that the match path calls; the decision is recorded here
 # instead of at the raise. Resolution is by name, so an entry can be a name COLLISION, not a call edge.
 _CANDIDATE_OWN_DECLARATION = "contained: validates the requesting feature's own declaration during matching"
-_MATCHES_COLLISION = "name collision: the match path calls the input-data hooks named matches, not Link.matches"
 _JOIN_COLLISION = "name collision: str.join, not the runner's join"
 _FORK_COLLISION = (
     "real edge, collided verdict: Options._fork is a raise-free, swallow-free copy; its dict.update name collides with a "
@@ -122,7 +120,6 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/options.py", "_adopt"): _ADOPT_COLLISION,
     ("mloda/core/abstract_plugins/components/options.py", "get_in_features"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/feature.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
-    ("mloda/core/abstract_plugins/components/link.py", "matches"): _MATCHES_COLLISION,
     ("mloda/core/abstract_plugins/components/match_rejection.py", "context_forwarding_remedy"): (
         "real edge, collided verdict: it raises nothing itself; the str.join name collides with the runner's join"
     ),
@@ -2602,6 +2599,7 @@ _SOURCE_GROUP_MODULES = [
     pytest.param("mloda_plugins/feature_group/input_data/db_sources/sqlite_fg.py", id="sqlite_fg"),
     pytest.param("mloda/core/abstract_plugins/components/input_data/read_document_fg.py", id="read_document_fg"),
     pytest.param("mloda/core/abstract_plugins/components/input_data/file_source_fg.py", id="file_source_fg"),
+    pytest.param("mloda/core/abstract_plugins/components/input_data/api_data_fg.py", id="api_data_fg"),
     *(
         pytest.param(f"mloda_plugins/feature_group/input_data/document_formats/{name}.py", id=name)
         for name in ("text_fg", "markdown_fg", "yaml_fg", "json_document_fg")

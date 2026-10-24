@@ -19,7 +19,7 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature import ApiInputDataFeature
+from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -198,7 +198,7 @@ def _base(*extra: type[FeatureGroup]) -> PluginCollector:
         RunnerTypesMcp5,
         RunnerDeniedMcp5,
         RunnerRaiseMcp5,
-        ApiInputDataFeature,
+        ApiDataFG,
     }
     return PluginCollector.enabled_feature_groups(groups | set(extra))
 

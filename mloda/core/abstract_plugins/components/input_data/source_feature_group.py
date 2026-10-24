@@ -238,6 +238,11 @@ class SourceFeatureGroup(FeatureGroup):
         )
 
     @classmethod
+    def has_query_text(cls, options: Options) -> bool:
+        """True when the options carry a query_text."""
+        return QUERY_OPTION in options
+
+    @classmethod
     def foreign_pointer(cls, options: Options) -> str | None:
         """First option key naming a concrete source group that is not one of this group's pointer keys."""
         keys = sorted(key for key in options.keys() if isinstance(key, str))

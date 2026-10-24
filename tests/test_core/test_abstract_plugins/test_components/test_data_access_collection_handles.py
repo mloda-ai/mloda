@@ -913,3 +913,27 @@ class TestSecretLiterals:
 
     def test_no_credentials_gives_an_empty_set(self) -> None:
         assert DataAccessCollection().secret_literals() == frozenset()
+
+
+class TestApiDataColumnsAccessor:
+    """DataAccessCollection exposes api_data column specs through a public read-only accessor."""
+
+    def test_default_is_empty(self) -> None:
+        assert dict(DataAccessCollection().api_data_columns) == {}
+
+    def test_with_api_data_columns_returns_a_copy_carrying_the_spec(self) -> None:
+        base = DataAccessCollection(files={"tx": "/data/tx.csv"})
+        spec = {"Cols": ("dac_api_a", "dac_api_b")}
+
+        copy = base.with_api_data_columns(spec)
+
+        assert copy is not base
+        assert dict(copy.api_data_columns) == spec
+        assert dict(base.api_data_columns) == {}
+        assert copy.files == {"tx": "/data/tx.csv"}
+
+    def test_accessor_is_read_only(self) -> None:
+        dac = DataAccessCollection().with_api_data_columns({"Cols": ("dac_api_a",)})
+
+        with pytest.raises(AttributeError):
+            dac.api_data_columns = {}  # type: ignore[misc]

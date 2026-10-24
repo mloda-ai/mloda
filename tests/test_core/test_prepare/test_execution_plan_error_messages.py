@@ -4,13 +4,10 @@ These tests verify that error messages in execution_plan.py use the
 format_feature_group_class function to produce readable class names
 like "ClassName (module.path)" instead of raw "<class '...'>" format.
 
-Target errors:
-1. Line 230: "Feature group {ep.feature_group} has no uuid."
-2. Line 867: "Feature group {feature_group} has no feature set name."
-3. Line 874: "Feature group {feature_group} has no matching api data class for feature."
+Target error: "Feature group {ep.feature_group} has no uuid."
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -18,10 +15,6 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
-    ApiInputDataCollection,
-)
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -32,28 +25,6 @@ class MockComputeFramework(ComputeFramework):
     """Mock compute framework for testing."""
 
     pass
-
-
-class ApiInputDataFeatureGroupFixture(FeatureGroup):
-    """A feature group fixture that uses ApiInputData for testing error messages."""
-
-    @classmethod
-    def input_data(cls) -> ApiInputData | None:
-        return ApiInputData()
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-    ) -> bool:
-        if isinstance(feature_name, FeatureName):
-            feature_name = str(feature_name)
-        return feature_name == "test_api_feature"
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return None
 
 
 class NoUuidFeatureGroup(FeatureGroup):
@@ -72,193 +43,6 @@ class NoUuidFeatureGroup(FeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
-
-
-class TestNoFeatureSetNameErrorMessage:
-    """Tests for the 'no feature set name' error message format (Line 867).
-
-    This error is triggered in prepare_api_input_data when
-    feature_set.get_name_of_one_feature().name is None.
-
-    We mock get_name_of_one_feature to return a FeatureName with None
-    to bypass the validator and trigger the actual error.
-    """
-
-    def test_error_message_contains_class_name(self) -> None:
-        """Test that the 'no feature set name' error includes the class name.
-
-        The error message should contain the class name 'ApiInputDataFeatureGroupFixture'.
-        """
-        execution_plan = ExecutionPlan(
-            api_input_data_collection=ApiInputDataCollection(),
-        )
-
-        feature_set = FeatureSet()
-        feature = Feature("test_api_feature")
-        feature_set.add(feature)
-
-        with patch.object(feature_set, "get_name_of_one_feature", return_value=None):
-            with pytest.raises(ValueError) as exc_info:
-                execution_plan.prepare_api_input_data(ApiInputDataFeatureGroupFixture, feature_set)
-
-        error_message = str(exc_info.value)
-
-        assert "no feature set name" in error_message.lower(), (
-            f"Error should be about 'no feature set name', but got: {error_message}"
-        )
-        assert "ApiInputDataFeatureGroupFixture" in error_message, (
-            f"Error message should contain class name 'ApiInputDataFeatureGroupFixture', but got: {error_message}"
-        )
-
-    def test_error_message_contains_module_path(self) -> None:
-        """Test that the 'no feature set name' error includes module path.
-
-        The error message should contain the module path in parentheses like:
-          ApiInputDataFeatureGroupFixture (tests.test_core.test_prepare.test_execution_plan_error_messages)
-
-        """
-        execution_plan = ExecutionPlan(
-            api_input_data_collection=ApiInputDataCollection(),
-        )
-
-        feature_set = FeatureSet()
-        feature = Feature("test_api_feature")
-        feature_set.add(feature)
-
-        with patch.object(feature_set, "get_name_of_one_feature", return_value=None):
-            with pytest.raises(ValueError) as exc_info:
-                execution_plan.prepare_api_input_data(ApiInputDataFeatureGroupFixture, feature_set)
-
-        error_message = str(exc_info.value)
-
-        assert "no feature set name" in error_message.lower(), (
-            f"Error should be about 'no feature set name', but got: {error_message}"
-        )
-        assert "(tests.test_core.test_prepare.test_execution_plan_error_messages)" in error_message, (
-            f"Error message should contain module path in parentheses, but got: {error_message}"
-        )
-
-    def test_error_message_does_not_contain_raw_class_representation(self) -> None:
-        """Test that the error message does NOT contain raw class representation.
-
-        The raw representation looks like:
-            Feature group <class '...'> has no feature set name.
-
-        This raw '<class' representation should NOT appear in the formatted message.
-        """
-        execution_plan = ExecutionPlan(
-            api_input_data_collection=ApiInputDataCollection(),
-        )
-
-        feature_set = FeatureSet()
-        feature = Feature("test_api_feature")
-        feature_set.add(feature)
-
-        with patch.object(feature_set, "get_name_of_one_feature", return_value=None):
-            with pytest.raises(ValueError) as exc_info:
-                execution_plan.prepare_api_input_data(ApiInputDataFeatureGroupFixture, feature_set)
-
-        error_message = str(exc_info.value)
-
-        assert "no feature set name" in error_message.lower(), (
-            f"Error should be about 'no feature set name', but got: {error_message}"
-        )
-        assert "<class" not in error_message, (
-            f"Error message should NOT contain raw class representation '<class', but got: {error_message}"
-        )
-
-
-class TestNoMatchingApiDataClassErrorMessage:
-    """Tests for the 'no matching api data class' error message format (Line 874)."""
-
-    def test_error_message_contains_class_name(self) -> None:
-        """Test that the 'no matching api data class' error includes the class name.
-
-        The error message should contain the class name 'ApiInputDataFeatureGroupFixture'.
-        """
-        api_collection = ApiInputDataCollection()
-
-        execution_plan = ExecutionPlan(
-            api_input_data_collection=api_collection,
-        )
-
-        feature_set = FeatureSet()
-        feature = Feature("unmatched_feature")
-        feature_set.add(feature)
-
-        with patch.object(api_collection, "get_name_cls_by_matching_column_name", return_value=("test", None)):
-            with pytest.raises(ValueError) as exc_info:
-                execution_plan.prepare_api_input_data(ApiInputDataFeatureGroupFixture, feature_set)
-
-        error_message = str(exc_info.value)
-
-        assert "no matching api data class" in error_message.lower(), (
-            f"Error should be about 'no matching api data class', but got: {error_message}"
-        )
-        assert "ApiInputDataFeatureGroupFixture" in error_message, (
-            f"Error message should contain class name 'ApiInputDataFeatureGroupFixture', but got: {error_message}"
-        )
-
-    def test_error_message_contains_module_path(self) -> None:
-        """Test that the 'no matching api data class' error includes module path.
-
-        The error message should contain the module path in parentheses like:
-          ApiInputDataFeatureGroupFixture (tests.test_core.test_prepare.test_execution_plan_error_messages)
-
-        """
-        api_collection = ApiInputDataCollection()
-
-        execution_plan = ExecutionPlan(
-            api_input_data_collection=api_collection,
-        )
-
-        feature_set = FeatureSet()
-        feature = Feature("unmatched_feature")
-        feature_set.add(feature)
-
-        with patch.object(api_collection, "get_name_cls_by_matching_column_name", return_value=("test", None)):
-            with pytest.raises(ValueError) as exc_info:
-                execution_plan.prepare_api_input_data(ApiInputDataFeatureGroupFixture, feature_set)
-
-        error_message = str(exc_info.value)
-
-        assert "no matching api data class" in error_message.lower(), (
-            f"Error should be about 'no matching api data class', but got: {error_message}"
-        )
-        assert "(tests.test_core.test_prepare.test_execution_plan_error_messages)" in error_message, (
-            f"Error message should contain module path in parentheses, but got: {error_message}"
-        )
-
-    def test_error_message_does_not_contain_raw_class_representation(self) -> None:
-        """Test that the error message does NOT contain raw class representation.
-
-        The raw representation looks like:
-            Feature group <class '...'> has no matching api data class for feature.
-
-        This raw '<class' representation should NOT appear in the formatted message.
-        """
-        api_collection = ApiInputDataCollection()
-
-        execution_plan = ExecutionPlan(
-            api_input_data_collection=api_collection,
-        )
-
-        feature_set = FeatureSet()
-        feature = Feature("unmatched_feature")
-        feature_set.add(feature)
-
-        with patch.object(api_collection, "get_name_cls_by_matching_column_name", return_value=("test", None)):
-            with pytest.raises(ValueError) as exc_info:
-                execution_plan.prepare_api_input_data(ApiInputDataFeatureGroupFixture, feature_set)
-
-        error_message = str(exc_info.value)
-
-        assert "no matching api data class" in error_message.lower(), (
-            f"Error should be about 'no matching api data class', but got: {error_message}"
-        )
-        assert "<class" not in error_message, (
-            f"Error message should NOT contain raw class representation '<class', but got: {error_message}"
-        )
 
 
 class TestNoUuidErrorMessage:

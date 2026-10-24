@@ -244,3 +244,9 @@ def test_config_hash_ignores_mapping_insertion_order() -> None:
     one = Settings(classification={"a": "personal", "b": "public"})
     other = Settings(classification={"b": "public", "a": "personal"})
     assert one.config_hash() == other.config_hash()
+
+
+def test_removed_api_input_data_feature_in_deny_list_is_rejected_with_a_hint(tmp_path: Path) -> None:
+    path = _write(tmp_path, '[mcp]\ndeny_feature_groups = ["ApiInputDataFeature"]\n')
+    with pytest.raises(ConfigError, match="ApiDataFG"):
+        load_settings(path, env={})

@@ -12,7 +12,6 @@ from mloda.user import Feature, Options
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda.user import mloda
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
@@ -54,28 +53,28 @@ class TestInputData:
             "InputDataTestFeatureGroup_V2": [1, 2, 3],
         }
 
-    def test_api_input_data(self) -> None:
-        features = [f"ApiInputDataTestFeatureGroup_{f}" for f in self.feature_list]
+    def test_api_data(self) -> None:
+        features = [f"ApiDataTestFeatureGroup_{f}" for f in self.feature_list]
 
         result = mloda.run_all(
             features,
             compute_frameworks=["PyArrowTable"],
             api_data={
-                "TestApiInputData": {
-                    "ApiInputDataTestFeatureGroup_id": [12, 2, 3],
-                    "ApiInputDataTestFeatureGroup_V1": [1, 2, 3],
-                    "ApiInputDataTestFeatureGroup_V2": [1, 2, 3],
+                "TestApiData": {
+                    "ApiDataTestFeatureGroup_id": [12, 2, 3],
+                    "ApiDataTestFeatureGroup_V1": [1, 2, 3],
+                    "ApiDataTestFeatureGroup_V2": [1, 2, 3],
                 }
             },
         )
 
         assert result[0].to_pydict() == {
-            "ApiInputDataTestFeatureGroup_id": [12, 2, 3],
-            "ApiInputDataTestFeatureGroup_V1": [1, 2, 3],
-            "ApiInputDataTestFeatureGroup_V2": [1, 2, 3],
+            "ApiDataTestFeatureGroup_id": [12, 2, 3],
+            "ApiDataTestFeatureGroup_V1": [1, 2, 3],
+            "ApiDataTestFeatureGroup_V2": [1, 2, 3],
         }
 
-    def test_agg_creator_and_api_input_data(self) -> None:
+    def test_agg_creator_and_api_data(self) -> None:
         _agg_creator = Feature(
             name="sum_of_",
             options={
@@ -85,7 +84,7 @@ class TestInputData:
         _agg_api_input_feature = Feature(
             name="sum_of_",
             options={
-                "sum": ("ApiInputDataTestFeatureGroup_V1", "ApiInputDataTestFeatureGroup_V2"),
+                "sum": ("ApiDataTestFeatureGroup_V1", "ApiDataTestFeatureGroup_V2"),
             },
         )
 
@@ -93,10 +92,10 @@ class TestInputData:
             [_agg_creator, _agg_api_input_feature],
             compute_frameworks=["PyArrowTable"],
             api_data={
-                "TestApiInputData": {
-                    "ApiInputDataTestFeatureGroup_id": [12, 2, 3],
-                    "ApiInputDataTestFeatureGroup_V1": [1, 2, 3],
-                    "ApiInputDataTestFeatureGroup_V2": [1, 2, 3],
+                "TestApiData": {
+                    "ApiDataTestFeatureGroup_id": [12, 2, 3],
+                    "ApiDataTestFeatureGroup_V1": [1, 2, 3],
+                    "ApiDataTestFeatureGroup_V2": [1, 2, 3],
                 }
             },
         )
@@ -110,7 +109,7 @@ class TestInputData:
             ) or (
                 res.to_pydict()
                 == {
-                    "SumFeature_ApiInputDataTestFeatureGroup_V1ApiInputDataTestFeatureGroup_V2": [12, 12, 12],
+                    "SumFeature_ApiDataTestFeatureGroup_V1ApiDataTestFeatureGroup_V2": [12, 12, 12],
                 }
             )
 
@@ -154,7 +153,7 @@ _REMOVED_MODULE_SYMBOLS = [
 
 
 class TestBaseInputDataIsOnlyAMarker:
-    """BaseInputData keeps no reader path: data comes from a SourceFeatureGroup, a DataCreator or ApiInputData."""
+    """BaseInputData keeps no reader path: data comes from a SourceFeatureGroup, or a DataCreator."""
 
     @pytest.mark.parametrize("member", _REMOVED_BASE_INPUT_DATA_MEMBERS)
     def test_the_legacy_reader_member_is_gone(self, member: str) -> None:
@@ -226,12 +225,10 @@ class TestBaseInputDataIsOnlyAMarker:
 
         assert "load_data" in str(excinfo.value)
 
-    def test_data_creator_and_api_input_data_subclasses_still_define(self) -> None:
+    def test_data_creator_subclass_still_defines(self) -> None:
         creator = type("PlainCreator", (DataCreator,), {})
-        api = type("PlainApi", (ApiInputData,), {})
 
         assert issubclass(creator, BaseInputData)
-        assert issubclass(api, BaseInputData)
 
     def test_a_subclass_without_a_legacy_hook_still_defines(self) -> None:
         defined = type("PlainMarkerInputData", (BaseInputData,), {})

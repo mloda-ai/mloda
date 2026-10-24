@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature import ApiInputDataFeature
+from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.interfaces.cli.main import build_services, main
 from mloda.interfaces.service.catalog import Catalog
@@ -84,7 +84,7 @@ def _clock() -> float:
 
 
 def _base(*extra: type[FeatureGroup]) -> PluginCollector:
-    return PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, ApiInputDataFeature, *extra})
+    return PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, ApiDataFG, *extra})
 
 
 @dataclass(frozen=True)

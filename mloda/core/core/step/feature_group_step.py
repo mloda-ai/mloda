@@ -1,11 +1,11 @@
 from typing import Any
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
-from mloda.core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData
+from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef, api_data_scope
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.abstract_step import Step
-from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 
@@ -22,7 +22,6 @@ class FeatureGroupStep(Step):
         required_uuids: set[UUID],
         compute_framework: type[ComputeFramework],
         children_if_root: set[UUID] | None = None,
-        api_input_data: BaseApiData | bool = False,
     ) -> None:
         if children_if_root is None:
             children_if_root = set()
@@ -31,7 +30,6 @@ class FeatureGroupStep(Step):
         self.required_uuids = required_uuids
         self.compute_framework = compute_framework
         self.children_if_root = frozenset(children_if_root.union({f.uuid for f in features.features}))
-        self.api_input_data = api_input_data
 
         self.uuid = uuid4()
         features.step_uuid = self.uuid
@@ -60,10 +58,14 @@ class FeatureGroupStep(Step):
         if runtime_artifacts is not None and self.feature_group.artifact() is not None:
             self.features.resolve_artifact_for_runtime(runtime_artifacts)
 
-        if self.api_input_data:
-            data = self.get_api_input_data(data, cfw_register)
-
-        data = self.run_calculate_feature(cfw, data)
+        match = self.features.input_data_match
+        access = None if match is None else match[1].access
+        if isinstance(access, ApiDataRef):
+            key = access.key
+            with api_data_scope(lambda: cfw_register.get_api_data_by_name(key)):
+                data = self.run_calculate_feature(cfw, data)
+        else:
+            data = self.run_calculate_feature(cfw, data)
         self.save_artifact(self.features, cfw_register)
 
         # return_data_type_rule
@@ -120,26 +122,6 @@ class FeatureGroupStep(Step):
                 f"Artifact is not implemented for {self.feature_group}, but requested {features.artifact_to_save}"
             )
         return artifact
-
-    def get_api_input_data(self, data: Any, cfw_register: CfwManager) -> Any:
-        if data is not None:
-            raise ValueError(
-                f"Data is not None, but api_input_data is not False. {format_feature_group_class(self.feature_group)}."
-            )
-
-        if not isinstance(self.api_input_data, BaseApiData):
-            raise ValueError(f"Api input data is not a tuple. {format_feature_group_class(self.feature_group)}.")
-
-        api_data = cfw_register.get_api_data_by_name(self.api_input_data.get_api_input_name())
-
-        data = self.api_input_data.get_data_by_using_api_data(api_data)
-
-        if data is None:
-            raise ValueError(
-                f"Data is None: {self.feature_group} although we have an api_input_data {self.api_input_data.get_api_input_name()}."
-            )
-
-        return data
 
     def get_parallelization_mode(self) -> set[ParallelizationMode]:
         return self.compute_framework.supported_parallelization_modes()

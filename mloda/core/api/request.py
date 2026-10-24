@@ -8,9 +8,6 @@ from typing import Any, Callable, Generator, cast
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.credential_scrub import redact_exception, registered_secrets_scope
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
-    ApiInputDataCollection,
-)
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourcePointerError
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 
@@ -213,23 +210,15 @@ class mlodaAPI:
                 _requested_features, data_access_collection
             )
 
-            # Handle api_data: create ApiInputDataCollection if api_data provided
-            api_input_data_collection: ApiInputDataCollection | None = None
-            if api_data is not None and len(api_data) > 0:
-                api_input_data_collection = ApiInputDataCollection()
-                column_owner: dict[str, str] = {}
-                for key_name, key_data in api_data.items():
-                    for column in key_data:
-                        if column in column_owner:
-                            raise ValueError(
-                                f"Column '{column}' appears in api_data sets '{column_owner[column]}' and "
-                                f"'{key_name}'; column names must be unique across sets."
-                            )
-                        column_owner[column] = key_name
-                    api_input_data_collection.setup_key_class(key_name, list(key_data.keys()))
+            self._api_data_columns = self._api_data_spec(api_data)
+            if self._api_data_columns:
+                data_access_collection = (
+                    DataAccessCollection() if data_access_collection is None else data_access_collection.copy()
+                )
+                data_access_collection._api_data_columns = dict(self._api_data_columns)
 
             self.strict_type_enforcement = strict_type_enforcement
-            self.features = self._process_features(_requested_features, api_input_data_collection)
+            self.features = self._process_features(_requested_features)
             setup_compute_framework = SetupComputeFramework(
                 compute_frameworks,
                 self.features,
@@ -241,7 +230,6 @@ class mlodaAPI:
             self.links = links
             self.data_access_collection = data_access_collection
             self.global_filter = global_filter
-            self.api_input_data_collection = api_input_data_collection
             self.api_data = api_data
             self.output_framework = setup_compute_framework.output_framework
         except SetupConfigurationError:
@@ -251,6 +239,40 @@ class mlodaAPI:
 
         with self._credential_redaction():
             self.engine = self._create_engine()
+
+    @staticmethod
+    def _api_data_spec(api_data: dict[str, dict[str, Any]] | None) -> dict[str, tuple[str, ...]]:
+        """Column names per api_data set; a column may belong to one set only."""
+        spec: dict[str, tuple[str, ...]] = {}
+        column_owner: dict[str, str] = {}
+        for key_name, key_data in (api_data or {}).items():
+            for column in key_data:
+                if column in column_owner:
+                    raise ValueError(
+                        f"Column '{column}' appears in api_data sets '{column_owner[column]}' and "
+                        f"'{key_name}'; column names must be unique across sets."
+                    )
+                column_owner[column] = key_name
+            spec[key_name] = tuple(key_data)
+        return spec
+
+    def _validate_run_api_data(self, api_data: dict[str, Any] | None) -> None:
+        """Refuse run data whose sets or column names differ from the ones prepared."""
+        if not api_data:
+            return
+        prepared = self._api_data_columns
+        if set(api_data) != set(prepared):
+            raise ValueError(
+                f"api_data sets {sorted(api_data)} differ from the prepared sets {sorted(prepared)}: "
+                f"missing {sorted(set(prepared) - set(api_data))}, unexpected {sorted(set(api_data) - set(prepared))}."
+            )
+        for key, columns in prepared.items():
+            if set(api_data[key]) != set(columns):
+                raise ValueError(
+                    f"api_data set '{key}' differs from the prepared columns: "
+                    f"missing {sorted(set(columns) - set(api_data[key]))}, "
+                    f"unexpected {sorted(set(api_data[key]) - set(columns))}."
+                )
 
     def _secret_literals(self) -> frozenset[str]:
         dac = getattr(self, "data_access_collection", None)
@@ -290,16 +312,14 @@ class mlodaAPI:
     def _process_features(
         self,
         requested_features: Features | Sequence[Feature | str],
-        api_input_data_collection: ApiInputDataCollection | None,
     ) -> Features:
-        """Processes the requested features, ensuring they are in the correct format and adding API input data."""
+        """Processes the requested features, ensuring they are in the correct format."""
         features = requested_features if isinstance(requested_features, Features) else Features(requested_features)
 
         for feature in features:
             feature.initial_requested_data = True
             # Framework stamps below are never the feature's own declaration.
             feature.options.lock_own_keys()
-            self._add_api_input_data(feature, api_input_data_collection)
             # Propagate strict_type_enforcement to typed features only
             if self.strict_type_enforcement and feature.data_type is not None:
                 feature.options.add_to_group(DefaultOptionKeys.strict_type_enforcement, True)
@@ -762,6 +782,7 @@ class mlodaAPI:
     ) -> Generator[Any, None, None]:
         """Callers build ``run_context`` at call time; no yield here, so a refusal at run start raises at the call."""
         _api_data = api_data if api_data is not None else self.api_data
+        self._validate_run_api_data(_api_data)
         stream = self._stream_run_results(flight_server, parallelization_modes, _api_data, artifacts, run_context)
         # Primes the generator so a refusal at run start raises here, not on first iteration.
         next(stream)
@@ -859,6 +880,7 @@ class mlodaAPI:
         """Sets up the engine runner and runs the engine computation."""
         # Use stored api_data if not explicitly provided
         _api_data = api_data if api_data is not None else self.api_data
+        self._validate_run_api_data(_api_data)
         if run_context is None:
             run_context = self._build_run_context(None, None)
         outcome = LifecycleOutcome("succeeded")
@@ -935,7 +957,6 @@ class mlodaAPI:
             self.links,
             self.data_access_collection,
             self.global_filter,
-            self.api_input_data_collection,
             self.plugin_collector,
             column_ordering=self.column_ordering,
             function_extender=self._extenders,
@@ -983,11 +1004,3 @@ class mlodaAPI:
         if self.runner is None:
             raise ValueError("You need to run any run function beforehand.")
         return self.runner.get_artifacts()
-
-    def _add_api_input_data(self, feature: Feature, api_input_data_collection: ApiInputDataCollection | None) -> None:
-        """Adds API input data to the feature options if available."""
-        if api_input_data_collection:
-            api_input_data_column_names = api_input_data_collection.get_column_names()
-            if len(api_input_data_column_names.data) == 0:
-                raise ValueError("No entry names found in ApiInputDataCollection.")
-            feature.options.add_to_group("ApiInputData", api_input_data_collection.get_column_names())

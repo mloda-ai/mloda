@@ -12,7 +12,7 @@ them in its own ``__all__``, every shipped framework is covered by exactly one s
 the plugin modules never import back from them. The eager provider exports of #707/#713/#716/#719/#721
 and the lazy ``mloda.user`` exports of #649 are gone: the symbols are no longer attributes of any facade.
 
-ApiInputDataFeature is core, not a plugin: it lives in mloda.core.abstract_plugins.components and
+ApiDataFG is core, not a plugin: it lives in mloda.core.abstract_plugins.components and
 stays exported from mloda.provider. The old plugin module is deleted without a back-compat shim.
 """
 
@@ -215,34 +215,41 @@ class TestFrameworkSymbolsAreNotOnTheFacades:
         assert symbol not in module.__all__, f"{facade}.__all__ must NOT list '{symbol}'"
 
 
-_API_INPUT_DATA_FEATURE_MODULE = "mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature"
+_API_DATA_FG_MODULE = "mloda.core.abstract_plugins.components.input_data.api_data_fg"
 _OLD_API_DATA_MODULE = "mloda_plugins.feature_group.input_data.api_data.api_data"
 
 
-class TestApiInputDataFeatureIsCore:
+class TestApiDataFGIsCore:
     def test_provider_export_is_defined_in_core(self) -> None:
-        """ApiInputDataFeature is what makes mloda.provider import a plugin today; it belongs to core."""
-        assert hasattr(mloda.provider, "ApiInputDataFeature"), "mloda.provider must keep exporting ApiInputDataFeature"
-        assert mloda.provider.ApiInputDataFeature.__module__.startswith("mloda.core"), (
-            f"mloda.provider.ApiInputDataFeature must be defined under mloda.core, but its __module__ is "
-            f"'{mloda.provider.ApiInputDataFeature.__module__}'"
+        """ApiDataFG is a core group, not a plugin; mloda.provider exports it from mloda.core."""
+        assert hasattr(mloda.provider, "ApiDataFG"), "mloda.provider must keep exporting ApiDataFG"
+        assert mloda.provider.ApiDataFG.__module__.startswith("mloda.core"), (
+            f"mloda.provider.ApiDataFG must be defined under mloda.core, but its __module__ is "
+            f"'{mloda.provider.ApiDataFG.__module__}'"
         )
 
     def test_provider_export_is_identical_to_core_object(self) -> None:
-        source = importlib.import_module(_API_INPUT_DATA_FEATURE_MODULE)
-        assert mloda.provider.ApiInputDataFeature is source.ApiInputDataFeature, (
-            f"mloda.provider.ApiInputDataFeature must be the identical object from {_API_INPUT_DATA_FEATURE_MODULE}"
+        source = importlib.import_module(_API_DATA_FG_MODULE)
+        assert mloda.provider.ApiDataFG is source.ApiDataFG, (
+            f"mloda.provider.ApiDataFG must be the identical object from {_API_DATA_FG_MODULE}"
         )
 
     def test_export_stays_listed_in_provider_all(self) -> None:
-        assert "ApiInputDataFeature" in mloda.provider.__all__, (
-            "mloda.provider.__all__ must keep listing 'ApiInputDataFeature' (moved, not removed)"
-        )
+        assert "ApiDataFG" in mloda.provider.__all__, "mloda.provider.__all__ must keep listing 'ApiDataFG'"
 
     def test_old_plugin_module_is_gone(self) -> None:
         """The plugin module is deleted outright: no back-compat shim re-exporting the core class."""
         with pytest.raises(ModuleNotFoundError):
             importlib.import_module(_OLD_API_DATA_MODULE)
+
+    def test_removed_api_input_data_symbols_are_not_exported(self) -> None:
+        for symbol in ("ApiInputData", "ApiInputDataFeature", "BaseApiData", "ApiInputDataCollection"):
+            assert not hasattr(mloda.provider, symbol)
+            assert symbol not in mloda.provider.__all__
+
+    def test_old_core_api_package_is_gone(self) -> None:
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature")
 
 
 # Fresh-interpreter guard: importing a facade must pull in no plugin and no backend library at all.

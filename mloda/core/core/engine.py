@@ -14,9 +14,6 @@ from mloda.core.abstract_plugins.components.input_data.reader_probe import (
     probe_source_group,
     reader_probe_scope,
 )
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
-    ApiInputDataCollection,
-)
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.prepare.accessible_plugins import EnvironmentPreconditionError, PreFilterPlugins
@@ -83,7 +80,6 @@ class Engine:
         links: set[Link] | None,
         data_access_collection: DataAccessCollection | None = None,
         global_filter: GlobalFilter | None = None,
-        api_input_data_collection: ApiInputDataCollection | None = None,
         plugin_collector: PluginCollector | None = None,
         column_ordering: str | None = None,
         function_extender: set[Extender] | None = None,
@@ -127,9 +123,6 @@ class Engine:
         # get links
         LinkValidator.validate_links(links)
         self.links = set(links) if links is not None else None
-
-        # set api input collection if relevant
-        self.api_input_data_collection = api_input_data_collection
 
         self.plugin_collector = plugin_collector
 
@@ -314,7 +307,6 @@ class Engine:
 
         execution_planner = ExecutionPlan(
             self.global_filter,
-            self.api_input_data_collection,
             self.resolved_input_feature_names,
             {
                 uuid: tuple(f"{c.__module__}.{c.__qualname__}" for c in classes)

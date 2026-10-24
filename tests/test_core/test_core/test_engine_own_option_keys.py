@@ -2,7 +2,7 @@
 
 A matcher write (the linked-reader pattern) must never count as the feature's own declaration,
 whether the feature is requested directly or declared as an input feature. mlodaAPI's own
-pre-Engine intake stamps (strict_type_enforcement, ApiInputData) and any GlobalFilter twin
+pre-Engine intake stamps (strict_type_enforcement) and any GlobalFilter twin
 merged at engine intake must equally never read as own.
 """
 
@@ -126,7 +126,7 @@ class TestUserDeclarationStaysOwn:
 
 
 def _assert_no_framework_own_keys(options: Options) -> None:
-    for key in (DefaultOptionKeys.strict_type_enforcement, "ApiInputData", LINKED_KEY):
+    for key in (DefaultOptionKeys.strict_type_enforcement, LINKED_KEY):
         if key in options.group:
             assert key not in options.own_group_keys, (
                 f"framework key {key!r} must not count as own, got {options.own_group_keys}"
@@ -154,8 +154,7 @@ class TestApiIntakeStampsAreNeverOwn:
         assert DefaultOptionKeys.strict_type_enforcement not in options.own_group_keys, (
             f"an mlodaAPI-stamped framework key must not count as own, got {options.own_group_keys}"
         )
-        assert "ApiInputData" in options.group
-        assert "ApiInputData" not in options.own_group_keys
+        assert "ApiInputData" not in options.group
 
         assert options.is_own(USER_KEY) is True
 

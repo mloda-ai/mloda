@@ -7,7 +7,7 @@ import pytest
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import QUERY_OPTION
-from mloda.provider import ApiInputData, DataCreator
+from mloda.provider import ApiDataFG, DataCreator
 from mloda.user import PluginLoader
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda.interfaces.service.request import Problem, data_access_option_keys, data_access_violations
@@ -57,10 +57,14 @@ def test_option_keys_contain_query_option() -> None:
     assert QUERY_OPTION in data_access_option_keys()
 
 
-@pytest.mark.parametrize("reader", [ApiInputData, DataCreator])
-def test_option_keys_contain_base_input_data_names(reader: Any) -> None:
+def test_option_keys_contain_base_input_data_names() -> None:
     PluginLoader.all()
-    assert reader.data_access_name() in data_access_option_keys()
+    assert DataCreator.data_access_name() in data_access_option_keys()
+
+
+def test_option_keys_contain_api_data_pointer_key() -> None:
+    PluginLoader.all()
+    assert ApiDataFG.__name__ in data_access_option_keys()
 
 
 def test_option_keys_contain_reserved_reader_key() -> None:

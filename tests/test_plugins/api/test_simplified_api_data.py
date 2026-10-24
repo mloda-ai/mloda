@@ -2,7 +2,7 @@
 Test simplified mloda data parameter for mloda.run_all().
 
 These tests verify that run_all() accepts api_data as a simple dict.
-The ApiInputDataCollection is created automatically from the dict structure.
+The ApiDataFG source group serves the dict sets automatically.
 
 Simplified mloda:
     result = mloda.run_all(
@@ -24,11 +24,11 @@ from mloda.user import Index
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda.user import Link, JoinSpec
-from mloda.user import Options
+from mloda.user import GlobalFilter, Options
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from mloda.provider import ApiInputDataFeature
+from mloda.provider import ApiDataFG
 
 
 # ============================================================================
@@ -105,9 +105,7 @@ class SimplifiedApiJoinFeature(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Define input features with a LEFT join link."""
         # Create the link: LEFT join on api_id = creator_id
-        link = Link.left(
-            JoinSpec(ApiInputDataFeature, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
-        )
+        link = Link.left(JoinSpec(ApiDataFG, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",))))
 
         return {
             Feature(name="api_value", link=link, index=Index(("api_id",))),
@@ -133,21 +131,21 @@ class TestSimplifiedApiData:
 
     _enabled_simple = PluginCollector.enabled_feature_groups(
         {
-            ApiInputDataFeature,
+            ApiDataFG,
             SimpleApiFeature,
         }
     )
 
     _enabled_multikey = PluginCollector.enabled_feature_groups(
         {
-            ApiInputDataFeature,
+            ApiDataFG,
             MultiKeyApiFeature,
         }
     )
 
     _enabled_join = PluginCollector.enabled_feature_groups(
         {
-            ApiInputDataFeature,
+            ApiDataFG,
             CreatorDataFeature,
             SimplifiedApiJoinFeature,
         }
@@ -161,12 +159,11 @@ class TestSimplifiedApiData:
             api_data={"KeyName": {"col1": [...], "col2": [...]}}
 
         Instead of the OLD verbose mloda:
-            api_input_data_collection = ApiInputDataCollection()
-            api_data = api_input_data_collection.setup_key_api_data(...)
-            run_all(..., api_input_data_collection=..., api_data=...)
+            collection = <verbose collection setup>
+            run_all(..., <collection>, api_data=...)
 
         Expected behavior:
-        - run_all() should auto-create ApiInputDataCollection internally
+        - run_all() should serve the dict through ApiDataFG
         - api_data dict keys become the collection key names
         - api_data dict values contain the actual column data
         """
@@ -184,7 +181,7 @@ class TestSimplifiedApiData:
             feature_list,
             plugin_collector=self._enabled_simple,
             compute_frameworks=[PandasDataFrame],
-            api_data=api_data,  # No api_input_data_collection needed!
+            api_data=api_data,
         )
 
         # Validate result
@@ -264,13 +261,7 @@ class TestSimplifiedApiData:
             )
 
     def test_missing_links_error_ignores_unrelated_api_source_partition(self) -> None:
-        """Regression pin (codex finding): ApiInputDataFeature partitions its own bucket further by
-        API source key. MultiKeyApiFeature spans two source-key partitions of ApiInputDataFeature
-        that share identical Options (no option differs between 'First' and 'Second'); a third,
-        unrelated top-level request for 'first_id' with an actual option ('unit') creates a genuinely
-        differing bucket elsewhere. The resulting missing-Links error must not blame a differing
-        option, since the two partitions MultiKeyApiFeature itself spans never differed by Options,
-        only by source key."""
+        """The missing-Links error must not blame an option that the spanned source-key partitions never differed by."""
         with pytest.raises(ValueError, match=r"(?s)MultiKeyApiFeature.*missing Links") as exc_info:
             mloda.run_all(
                 [
@@ -283,7 +274,7 @@ class TestSimplifiedApiData:
             )
 
         assert "differing option" not in str(exc_info.value).lower(), (
-            "MultiKeyApiFeature spans two ApiInputDataFeature source-key partitions with identical "
+            "MultiKeyApiFeature spans two ApiDataFG source-key partitions with identical "
             "Options; the unrelated 'unit' bucket from a third, disjoint request must not be blamed"
         )
 
@@ -439,3 +430,111 @@ class TestSimplifiedApiData:
         df = result[0]
         assert "creator_id" in df.columns
         assert len(df) == 3
+
+
+class AmbiguousApiColumnFeature(FeatureGroup):
+    """Computes a name that an api_data set also provides."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"simplified_api_ambiguous_col"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"simplified_api_ambiguous_col": [9]}
+
+
+def _compute_step(session: Any) -> Any:
+    return next(step for step in session.resolved_plan() if step.step_kind == "compute")
+
+
+class TestApiDataSourceGroupBehavior:
+    """Resolution, introspection, filtering and sibling roots for api_data served by ApiDataFG."""
+
+    _api_only = PluginCollector.enabled_feature_groups({ApiDataFG})
+
+    def test_describe_columns_lists_the_prepare_time_columns(self) -> None:
+        session = mloda.prepare(
+            ["api_id"],
+            compute_frameworks=[PandasDataFrame],
+            api_data={"Cols": {"api_id": [1], "api_value": ["a"]}},
+            plugin_collector=self._api_only,
+        )
+
+        assert set(session.describe_columns(_compute_step(session))) == {"api_id", "api_value"}
+
+    def test_explain_resolves_api_data_features(self) -> None:
+        steps = mloda.explain(
+            ["api_id"],
+            compute_frameworks=[PandasDataFrame],
+            api_data={"Cols": {"api_id": [1], "api_value": ["a"]}},
+            plugin_collector=self._api_only,
+        )
+
+        assert any(step.feature_group is ApiDataFG and "api_id" in step.feature_names for step in steps)
+
+    def test_group_computing_an_api_column_name_is_ambiguous(self) -> None:
+        collector = PluginCollector.enabled_feature_groups({ApiDataFG, AmbiguousApiColumnFeature})
+
+        with pytest.raises(ValueError, match=r"(?s)(?=.*ApiDataFG)(?=.*AmbiguousApiColumnFeature)"):
+            mloda.run_all(
+                ["simplified_api_ambiguous_col"],
+                compute_frameworks=[PandasDataFrame],
+                api_data={"Cols": {"simplified_api_ambiguous_col": [1, 2]}},
+                plugin_collector=collector,
+            )
+
+    def test_column_in_no_api_data_set_fails_resolution_naming_the_column(self) -> None:
+        with pytest.raises(ValueError, match="missing_col"):
+            mloda.run_all(
+                ["missing_col"],
+                compute_frameworks=[PandasDataFrame],
+                api_data={"Cols": {"api_id": [1]}},
+                plugin_collector=self._api_only,
+            )
+
+    def test_pointer_narrows_to_the_named_set(self) -> None:
+        result = mloda.run_all(
+            [Feature(name="only_second", options=Options({"ApiDataFG": "second"}))],
+            compute_frameworks=[PythonDictFramework],
+            api_data={"first": {"other": [1]}, "second": {"only_second": [5, 6]}},
+        )
+
+        assert [dict(frame) for frame in result] == [{"only_second": [5, 6]}]
+
+    def test_unknown_pointer_key_aborts_naming_the_known_keys(self) -> None:
+        with pytest.raises(ValueError, match=r"(?s)(?=.*nope)(?=.*first)(?=.*second)"):
+            mloda.run_all(
+                [Feature(name="only_second", options=Options({"ApiDataFG": "nope"}))],
+                compute_frameworks=[PythonDictFramework],
+                api_data={"first": {"other": [1]}, "second": {"only_second": [5, 6]}},
+            )
+
+    def test_global_filter_filters_api_data_rows(self) -> None:
+        global_filter = GlobalFilter()
+        global_filter.add_filter("api_num", "min", {"value": 2})
+
+        result = mloda.run_all(
+            ["api_num"],
+            compute_frameworks=[PandasDataFrame],
+            api_data={"Nums": {"api_num": [1, 2, 3]}},
+            global_filter=global_filter,
+            plugin_collector=self._api_only,
+        )
+
+        assert result[0]["api_num"].tolist() == [2, 3]
+
+    def test_sibling_root_group_and_api_data_set_stay_in_separate_frames(self) -> None:
+        collector = PluginCollector.enabled_feature_groups({ApiDataFG, CreatorDataFeature})
+
+        result = mloda.run_all(
+            ["creator_id", "api_num"],
+            compute_frameworks=[PandasDataFrame],
+            api_data={"Nums": {"api_num": [7, 8]}},
+            plugin_collector=collector,
+        )
+
+        frames = {tuple(frame.columns): frame for frame in result}
+        assert set(frames) == {("creator_id",), ("api_num",)}
+        assert frames[("creator_id",)]["creator_id"].tolist() == [1, 2, 3]
+        assert frames[("api_num",)]["api_num"].tolist() == [7, 8]

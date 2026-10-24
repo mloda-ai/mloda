@@ -62,7 +62,7 @@ OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP: str = "mloda.optional_dependencies"
 # Plugin classes defined in mloda.core, not under the scanned mloda_plugins package. The loader
 # registers them explicitly so they are first-class registry entries like every bundled plugin.
 CORE_PLUGIN_MODULES: tuple[str, ...] = (
-    "mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature",
+    "mloda.core.abstract_plugins.components.input_data.api_data_fg",
     "mloda.core.abstract_plugins.operation_feature_group",
 )
 

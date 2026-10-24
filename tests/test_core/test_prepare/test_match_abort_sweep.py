@@ -65,7 +65,6 @@ MATCH_PATH_MODULES: dict[str, str] = {
     "mloda/core/abstract_plugins/components/property_spec.py": "the matcher reads the spec sentinel",
     "mloda/core/abstract_plugins/components/input_data/base_input_data.py": "the input-data matches hook",
     "mloda/core/abstract_plugins/components/input_data/reader_probe.py": "the extender-wrapped source group probe",
-    "mloda/core/abstract_plugins/components/input_data/api/api_input_data.py": "the api input data match hook",
     "mloda/core/abstract_plugins/components/input_data/creator/data_creator.py": "the data-creator match hook",
 }
 

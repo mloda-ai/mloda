@@ -5,7 +5,7 @@ This module is designed to be used as a mixin or inherited class for defining in
 
 It allows defining input features that originate from:
     - other feature
-    - ApiInputData
+    - ApiDataFG
     - DataCreator
     - Local Feature scope
     - Global Feature scope

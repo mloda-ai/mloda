@@ -12,7 +12,7 @@ import pytest
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.user import mloda, mlodaAPI, Feature, PluginCollector
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet, ApiInputDataFeature
+from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet, ApiDataFG
 from mloda.user import Options, FeatureName, Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -39,7 +39,7 @@ class PrepareRunApiFeature(FeatureGroup):
 
 _enabled = PluginCollector.enabled_feature_groups(
     {
-        ApiInputDataFeature,
+        ApiDataFG,
         PrepareRunApiFeature,
     }
 )
@@ -253,6 +253,82 @@ class TestFailedRerunDoesNotExposeStaleResults:
             session.get_result()
         with pytest.raises(ValueError, match="You need to run any run function beforehand."):
             session.get_artifacts()
+
+
+class _StartCountingExtender(Extender):
+    """Counts on_run_start calls."""
+
+    def __init__(self) -> None:
+        self.starts = 0
+
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        self.starts += 1
+
+
+class TestRunRefusesApiDataThatDiffersFromPrepare:
+    """run()/stream_run() refuse api_data whose sets differ from prepare() before the run starts."""
+
+    _prepared = {"PrepareExample": {"api_id": [1], "api_value": ["initial"]}}
+
+    def _prepare(self, extender: Any) -> Any:
+        features: list[Feature | str] = [Feature(name="PrepareRunApiFeature")]
+        return mloda.prepare(
+            features,
+            compute_frameworks=[PandasDataFrame],
+            api_data=self._prepared,
+            plugin_collector=_enabled,
+            function_extender={extender},
+        )
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_missing_set_key_is_refused(self, path: str) -> None:
+        extender = _StartCountingExtender()
+        session = self._prepare(extender)
+
+        with pytest.raises(ValueError, match="PrepareExample"):
+            _rerun(session, path, {"OtherKey": {"api_id": [1], "api_value": ["a"]}})
+
+        assert extender.starts == 0
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_different_column_names_are_refused(self, path: str) -> None:
+        extender = _StartCountingExtender()
+        session = self._prepare(extender)
+
+        with pytest.raises(ValueError, match=r"(?s)PrepareExample.*api_other"):
+            _rerun(session, path, {"PrepareExample": {"api_id": [1], "api_other": ["a"]}})
+
+        assert extender.starts == 0
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_api_data_for_a_plan_prepared_without_it_is_refused(self, path: str) -> None:
+        extender = _StartCountingExtender()
+        session = mloda.prepare(
+            [Feature(f"{_PFEXT_MARKER}_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_pfext_enabled,
+            function_extender={extender},
+        )
+
+        with pytest.raises(ValueError, match="PrepareExample"):
+            _rerun(session, path, {"PrepareExample": {"api_id": [1]}})
+
+        assert extender.starts == 0
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_column_order_alone_is_accepted(self, path: str) -> None:
+        extender = _StartCountingExtender()
+        session = self._prepare(extender)
+
+        _rerun(session, path, {"PrepareExample": {"api_value": ["a"], "api_id": [1]}})
+
+        assert extender.starts == 1
 
 
 class TestStepStateDoesNotLeakBetweenRuns:

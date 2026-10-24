@@ -15,7 +15,6 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature import ApiInputDataFeature
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -25,7 +24,7 @@ from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import ERROR_CODES, is_error
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.planner import MAX_PLAN_ID_LENGTH, PLAN_TOKEN_PREFIX, Planner
-from mloda.provider import BaseInputData, DataCreator, FeatureSet, ResolutionDiagnosis, SourceMatch
+from mloda.provider import ApiDataFG, BaseInputData, DataCreator, FeatureSet, ResolutionDiagnosis, SourceMatch
 from mloda.user import PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
@@ -175,7 +174,7 @@ def _base() -> PluginCollector:
             PlannerDeniedMcp4,
             PlannerInFeaturesMcp4,
             PlanRaiseMcp5,
-            ApiInputDataFeature,
+            ApiDataFG,
         }
     )
 
@@ -956,9 +955,9 @@ class TestInlineData:
         assert _has_detail(error, problem="unresolved")
         assert '"a"' not in json.dumps(result)
 
-    def test_api_input_data_option_stays_policy_denied(self, tmp_path: Path) -> None:
+    def test_api_data_fg_option_stays_policy_denied(self, tmp_path: Path) -> None:
         # Already denied before inline planning exists; this pins the guard.
-        key = "ApiInputData"
+        key = "ApiDataFG"
         request = {"features": [{"name": "token", "options": {key: {"Tokens": {"token": ["007"]}}}}]}
 
         result = _explain(tmp_path, request, inline_data=True)
@@ -1013,10 +1012,10 @@ class TestInlineData:
         error = _error(result, "validation_failed")
         assert _has_detail(error, path="/data/a~1b")
 
-    def test_denying_api_input_data_switches_inline_off(self, tmp_path: Path) -> None:
+    def test_denying_api_data_fg_switches_inline_off(self, tmp_path: Path) -> None:
         planner = _planner(
             Settings(
-                deny_feature_groups=(DENIED, "ApiInputDataFeature"),
+                deny_feature_groups=(DENIED, "ApiDataFG"),
                 sources={"sales": _source("sales", _write_sales(tmp_path))},
                 inline_data=True,
             )

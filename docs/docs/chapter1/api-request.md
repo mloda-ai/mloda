@@ -66,9 +66,10 @@ cheaply per request:
 
 ```python
 # 1. Prepare once (e.g. at server startup)
-session = mloda.prepare(feature_list, compute_frameworks=["PyArrowTable"], data_access_collection=data_access_collection)
+session = mloda.prepare(feature_list, compute_frameworks=["PyArrowTable"], data_access_collection=data_access_collection,
+                       api_data={"MyKey": {"col": [0]}})
 
-# 2. Execute per request with fresh data
+# 2. Execute per request with fresh data (same set keys and column names)
 result = session.run(api_data={"MyKey": {"col": [1, 2]}})
 ```
 

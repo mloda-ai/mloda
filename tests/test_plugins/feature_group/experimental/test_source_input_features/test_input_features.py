@@ -19,7 +19,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.source_input_feature import SourceInputFeature
 
-from mloda.provider import ApiInputDataFeature
+from mloda.provider import ApiDataFG
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 
@@ -60,7 +60,7 @@ class TestInputFeatures:
     _requested_name = "InputFeatureGroupTest"
     _enabled = PluginCollector.enabled_feature_groups(
         {
-            ApiInputDataFeature,
+            ApiDataFG,
             InputFeatureGroupTest,
             FeatureInputFeatureTest,
             FeatureInputCreatorTest,
@@ -99,7 +99,7 @@ class TestInputFeatures:
         """
         This test is a bit more complex, as it requires the use of the mloda.
 
-        We pass api_data directly to run_all() - the ApiInputDataCollection is created internally.
+        We pass api_data directly to run_all(); the api_data sets are served by ApiDataFG.
         """
         feature_list: list[Feature | str] = []
         feature_list.append(

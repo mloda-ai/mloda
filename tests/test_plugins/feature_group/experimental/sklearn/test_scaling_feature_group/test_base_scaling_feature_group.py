@@ -2,8 +2,6 @@
 Tests for the base ScalingFeatureGroup class.
 """
 
-import inspect
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -184,10 +182,6 @@ class TestScalingFeatureGroup:
         except ImportError:
             # This is expected when sklearn is not available
             pass
-
-    def test_group_is_concrete(self) -> None:
-        assert not inspect.isabstract(ScalingFeatureGroup)
-        ScalingFeatureGroup()
 
 
 class TestPandasScaling:

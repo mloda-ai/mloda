@@ -1,5 +1,5 @@
 """
-Base implementation for scikit-learn encoding feature groups.
+Scikit-learn encoding feature group.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import Sk
 
 class EncodingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     """
-    Base class for scikit-learn encoding feature groups.
+    Scikit-learn encoding feature group, served per compute framework by an Implementation.
 
     The EncodingFeatureGroup provides categorical encoding transformations for granular control
     over categorical data preprocessing, using scikit-learn's encoding implementations. Supports
@@ -235,10 +235,10 @@ class EncodingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
             base_source_feature = cls.get_column_base_feature(source_feature)
 
             available = columns(data)
-            missing = [f for f in [base_source_feature] if f not in available]
-            if missing:
+            if base_source_feature not in available:
                 raise ValueError(
-                    f"Source features not found in data: {missing}. Available columns: {sorted(available, key=str)}"
+                    f"Source features not found in data: {[base_source_feature]}. "
+                    f"Available columns: {sorted(available, key=str)}"
                 )
 
             # Create unique artifact key that includes encoder type and source feature

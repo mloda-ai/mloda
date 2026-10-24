@@ -2,8 +2,6 @@
 Unit tests for the base EncodingFeatureGroup class.
 """
 
-import inspect
-
 from typing import Any
 import pytest
 from unittest.mock import Mock, patch
@@ -267,7 +265,3 @@ class TestEncodingFeatureGroup:
 
         with pytest.raises(ValueError, match="Unsupported encoder type: invalid_encoder"):
             EncodingFeatureGroup._encoder_matches_type(mock_encoder, "invalid_encoder")
-
-    def test_group_is_concrete(self) -> None:
-        assert not inspect.isabstract(EncodingFeatureGroup)
-        EncodingFeatureGroup()

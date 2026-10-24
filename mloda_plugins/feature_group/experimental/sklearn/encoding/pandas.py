@@ -86,7 +86,7 @@ class PandasEncoding(Implementation[EncodingFeatureGroup]):
         # LabelEncoder expects 1D array, OneHotEncoder and OrdinalEncoder expect 2D array
         feature_values = feature_data.to_numpy()
 
-        # Return 1D array - the base class will handle reshaping based on encoder type
+        # Return 1D array - the group handles reshaping based on encoder type
         return feature_values
 
     @classmethod

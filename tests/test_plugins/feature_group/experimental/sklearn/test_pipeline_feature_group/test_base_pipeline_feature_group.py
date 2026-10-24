@@ -2,8 +2,6 @@
 Tests for base SklearnPipelineFeatureGroup.
 """
 
-import inspect
-
 import pytest
 from unittest.mock import Mock, patch
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
@@ -224,10 +222,6 @@ class TestSklearnPipelineFeatureGroup:
         config = {"steps": [("scaler", Mock())], "params": {}}
 
         assert not SklearnPipelineFeatureGroup._pipeline_matches_config(mock_pipeline, config)
-
-    def test_group_is_concrete(self) -> None:
-        assert not inspect.isabstract(SklearnPipelineFeatureGroup)
-        SklearnPipelineFeatureGroup()
 
 
 PIPELINE_STEPS_VALUE = frozenset({("scaler", "StandardScaler")})

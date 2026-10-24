@@ -1,5 +1,5 @@
 """
-Base implementation for scikit-learn pipeline feature groups.
+Scikit-learn pipeline feature group.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import Sk
 
 class SklearnPipelineFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     """
-    Base class for scikit-learn pipeline feature groups.
+    Scikit-learn pipeline feature group, served per compute framework by an Implementation.
 
     The SklearnPipelineFeatureGroup wraps entire scikit-learn pipelines as single features,
     demonstrating mloda's pipeline management capabilities compared to traditional scikit-learn usage.

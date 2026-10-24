@@ -1,5 +1,5 @@
 """
-Base implementation for scikit-learn scaling feature groups.
+Scikit-learn scaling feature group.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import Sk
 
 class ScalingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     """
-    Base class for scikit-learn scaling feature groups.
+    Scikit-learn scaling feature group, served per compute framework by an Implementation.
 
     The ScalingFeatureGroup provides individual scaling transformations for granular control
     over data preprocessing, demonstrating mloda's fine-grained transformation capabilities.
@@ -137,10 +137,10 @@ class ScalingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
             scaler_type, source_feature = cls._extract_scaler_type_and_source_feature(feature)
 
             available = columns(data)
-            missing = [f for f in [source_feature] if f not in available]
-            if missing:
+            if source_feature not in available:
                 raise ValueError(
-                    f"Source features not found in data: {missing}. Available columns: {sorted(available, key=str)}"
+                    f"Source features not found in data: {[source_feature]}. "
+                    f"Available columns: {sorted(available, key=str)}"
                 )
 
             # Create unique artifact key for this scaler

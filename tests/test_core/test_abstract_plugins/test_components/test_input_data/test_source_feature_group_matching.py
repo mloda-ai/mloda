@@ -832,6 +832,60 @@ class TestOpenClaimDefersToAComputingCandidate:
         assert set(result.identified) == {ToyOpenFG}
 
 
+_PART_BASE = "toyfmt_pbase"
+_PART_NAME = _PART_BASE + "~value"
+
+
+class _PartOnlyFG(FeatureGroup):
+    """Matches only the base name; the whole name is read as an output part."""
+
+    OUTPUT_PARTS = ("value",)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {_PART_BASE}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return set()
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+
+class TestSearchedRouteDefersToAComputingCandidate:
+    @staticmethod
+    def _dac() -> DataAccessCollection:
+        return toy_dac(h1={_DERIVED: [1], COL: [1, 2]})
+
+    def test_unpointed_searched_route_steps_aside_for_the_computing_group(self) -> None:
+        result = evaluate_or_raise(Feature(_DERIVED), _plugins(ToySourceFG, AggregatedFeatureGroup), None, self._dac())
+
+        assert set(result.identified) == {AggregatedFeatureGroup}
+
+    def test_source_still_serves_the_name_when_the_computing_group_is_eliminated(self) -> None:
+        plugins: FeatureGroupEnvironmentMapping = {
+            ToySourceFG: {PyArrowTable},
+            AggregatedFeatureGroup: {_ToyUnservedFramework},
+        }
+        result = evaluate_or_raise(Feature(_DERIVED), plugins, None, self._dac())
+
+        assert set(result.identified) == {ToySourceFG}
+        assert result.eliminations[AggregatedFeatureGroup].stage == "capability"
+
+    def test_a_data_access_handle_does_not_keep_the_source_in_play(self) -> None:
+        feature = Feature(_DERIVED, Options({"data_access_handle": "h1"}))
+        result = evaluate_or_raise(feature, _plugins(ToySourceFG, AggregatedFeatureGroup), None, self._dac())
+
+        assert set(result.identified) == {AggregatedFeatureGroup}
+
+    def test_a_group_matching_only_an_output_part_does_not_make_the_source_step_aside(self) -> None:
+        dac = toy_dac(h1={_PART_NAME: [1]})
+        result = evaluate_or_raise(Feature(_PART_NAME), _plugins(ToySourceFG, _PartOnlyFG), None, dac)
+
+        assert set(result.identified) == {ToySourceFG}
+
+
 class TestPointedRoutesDeclineWithReason:
     def test_pointed_route_without_a_source_records_an_input_data_rejection(self) -> None:
         result = _identify(Feature(COL, feature_group=ToySourceFG), None, ToySourceFG)

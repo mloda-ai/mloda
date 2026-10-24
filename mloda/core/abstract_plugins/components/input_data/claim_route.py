@@ -83,6 +83,24 @@ def open_claim_scope() -> Iterator[list[bool]]:
         _OPEN_CLAIM.reset(token)
 
 
+_COMPUTED_ELSEWHERE: ContextVar[str | None] = ContextVar("mloda_computed_elsewhere", default=None)
+
+
+def computed_elsewhere(name: str) -> bool:
+    """True when a non-source candidate computes name, the feature being matched."""
+    return _COMPUTED_ELSEWHERE.get() == name
+
+
+@contextmanager
+def computed_elsewhere_scope(name: str | None) -> Iterator[None]:
+    """Set the name a non-source candidate computes inside the block."""
+    token = _COMPUTED_ELSEWHERE.set(name)
+    try:
+        yield
+    finally:
+        _COMPUTED_ELSEWHERE.reset(token)
+
+
 _PIN_SCOPE: ContextVar[tuple[set[str], list[tuple[str, Any]]] | None] = ContextVar("mloda_pin_scope", default=None)
 
 

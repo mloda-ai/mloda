@@ -34,6 +34,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import (
 from mloda.core.abstract_plugins.components.declared_attributes import DeclarationRequirement
 from mloda.core.abstract_plugins.components.input_data.claim_route import (
     DataAccessReader,
+    computed_elsewhere_scope,
     feature_group_scope,
     open_claim_scope,
     pin_report_scope,
@@ -658,16 +659,15 @@ class IdentifyFeatureGroupClass:
                 live_prefixes.add(prefix)
         return frozenset(name for name in dead - live if not any(name.startswith(prefix) for prefix in live_prefixes))
 
-    def _filter_loop(
+    def _collect_candidates(
         self,
         feature: Feature,
-        accessible_plugins: FeatureGroupEnvironmentMapping,
+        candidates: list[tuple[type[FeatureGroup], set[type[ComputeFramework]]]],
         links: set[Link] | None,
-        data_access_collection: DataAccessCollection | None = None,
-    ) -> FeatureGroupEnvironmentMapping:
-        _identified_feature_groups: FeatureGroupEnvironmentMapping = {}
-
-        for feature_group, compute_frameworks in accessible_plugins.items():
+        data_access_collection: DataAccessCollection | None,
+        identified: FeatureGroupEnvironmentMapping,
+    ) -> None:
+        for feature_group, compute_frameworks in candidates:
             # An out-of-scope candidate is skipped silently: never probed, no elimination recorded.
             if not self._filter_feature_group_by_scope(feature_group, feature):
                 continue
@@ -777,7 +777,27 @@ class IdentifyFeatureGroupClass:
                     self._record_elimination(feature_group, "declarations", unmet)
                     continue
 
-            _identified_feature_groups[feature_group] = supported_frameworks
+            identified[feature_group] = supported_frameworks
+
+    def _filter_loop(
+        self,
+        feature: Feature,
+        accessible_plugins: FeatureGroupEnvironmentMapping,
+        links: set[Link] | None,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> FeatureGroupEnvironmentMapping:
+        identified: FeatureGroupEnvironmentMapping = {}
+        items = list(accessible_plugins.items())
+        others = [item for item in items if not issubclass(item[0], SourceFeatureGroup)]
+        sources = [item for item in items if issubclass(item[0], SourceFeatureGroup)]
+        # Non-source candidates go first so a searched source route can step aside for a name one of them computes.
+        self._collect_candidates(feature, others, links, data_access_collection, identified)
+        if sources:
+            computing = [fg for fg in identified if fg not in self._output_parts]
+            computed = any(self._computes(fg, feature) for fg in sorted(computing, key=_candidate_sort_key))
+            with computed_elsewhere_scope(str(feature.name) if computed else None):
+                self._collect_candidates(feature, sources, links, data_access_collection, identified)
+        _identified_feature_groups = identified
 
         candidates = set(_identified_feature_groups)
         _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)

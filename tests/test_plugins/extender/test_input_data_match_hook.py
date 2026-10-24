@@ -220,6 +220,24 @@ class ImdMatchComputingGroup(FeatureGroup):
         return pa.table({_COL_A: [6]})
 
 
+_DERIVED_IMD = f"{_COL_A}__imdmatch_derived"
+
+
+class ImdMatchDerivedGroup(FeatureGroup):
+    """Computing group for a derived name built on the column a searched source also serves."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {_DERIVED_IMD}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(_COL_A)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({_DERIVED_IMD: [7]})
+
+
 class ImdMatchPlainGroup(FeatureGroup):
     """Plain computing group for one name; no source involved."""
 
@@ -835,6 +853,26 @@ class TestSourceGroupHook:
         assert result[0].column_names == [_COL_P]
         assert ImdMatchGateSource.probes == 0
         assert ImdMatchGateSource.column_reads == 0
+
+    def test_a_searched_source_does_not_fire_the_hook_for_a_name_a_group_computes(self) -> None:
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateSource, ImdMatchDerivedGroup})
+        extender = _ImdRecordingExtender()
+
+        _prepare(Feature(_DERIVED_IMD), enabled, _global_access(), extender)
+
+        contexts = extender.for_reader(ImdMatchGateSource)
+        assert contexts
+        assert all(c.feature_names == (_COL_A,) for c in contexts)
+
+    @pytest.mark.parametrize("options", [None, {"data_access_handle": "imdmatch_handle"}], ids=["plain", "handle"])
+    def test_a_gate_refuses_only_the_input_column_of_a_computed_name(self, options: dict[str, Any] | None) -> None:
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateSource, ImdMatchDerivedGroup})
+        extender = _gate(ImdMatchGateSource)
+
+        with pytest.raises(FeatureResolutionError):
+            _prepare(Feature(_DERIVED_IMD, options=options or {}), enabled, _global_access(), extender)
+
+        assert len(extender.raised) == 1
 
     def test_a_refused_pointed_group_is_masked_by_a_computing_candidate(self) -> None:
         enabled = PluginCollector.enabled_feature_groups({ImdMatchGateSource, ImdMatchComputingGroup})

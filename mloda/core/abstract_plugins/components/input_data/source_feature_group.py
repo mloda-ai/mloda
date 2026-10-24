@@ -19,6 +19,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
     NamePolicy,
     SourceMatch,
     aborts_are_contained,
+    computed_elsewhere,
     current_feature_group_scope,
     note_open_claim,
 )
@@ -458,6 +459,8 @@ class SourceFeatureGroup(FeatureGroup):
                 continue
             if foreign is not None:
                 skipped = True
+                continue
+            if not unlocked and computed_elsewhere(name):
                 continue
             selected.append(route)
         fitting: dict[str, SourceMatch] = {}

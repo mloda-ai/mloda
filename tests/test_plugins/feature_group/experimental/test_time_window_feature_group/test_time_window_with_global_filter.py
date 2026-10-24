@@ -1,5 +1,5 @@
 import pandas as pd
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from mloda.user import mloda
@@ -77,8 +77,8 @@ class TestTimeWindowWithGlobalFilter:
         global_filter = GlobalFilter()
 
         # Define the time range for filtering (days 5-10)
-        event_from = datetime(2023, 1, 5, tzinfo=timezone.utc)  # 5th day
-        event_to = datetime(2023, 1, 11, tzinfo=timezone.utc)  # 11th day (exclusive)
+        event_from = datetime(2023, 1, 5, tzinfo=UTC)  # 5th day
+        event_to = datetime(2023, 1, 11, tzinfo=UTC)  # 11th day (exclusive)
 
         # Add the time filter
         global_filter.add_time_and_time_travel_filters(
@@ -123,8 +123,8 @@ class TestTimeWindowWithGlobalFilter:
 
         # Get the dates from the filtered DataFrame to verify the time range
         dates = time_filter_df[DefaultOptionKeys.reference_time]
-        min_date = min(dates).to_pydatetime().replace(tzinfo=timezone.utc)
-        max_date = max(dates).to_pydatetime().replace(tzinfo=timezone.utc)
+        min_date = min(dates).to_pydatetime().replace(tzinfo=UTC)
+        max_date = max(dates).to_pydatetime().replace(tzinfo=UTC)
 
         # Verify the date range matches our filter
         assert min_date >= event_from, f"Min date {min_date} should be >= {event_from}"
@@ -213,8 +213,8 @@ class TestTimeWindowWithGlobalFilter:
         global_filter = GlobalFilter()
 
         # Define the time range for filtering (days 5-10)
-        event_from = datetime(2023, 1, 5, tzinfo=timezone.utc)
-        event_to = datetime(2023, 1, 11, tzinfo=timezone.utc)
+        event_from = datetime(2023, 1, 5, tzinfo=UTC)
+        event_to = datetime(2023, 1, 11, tzinfo=UTC)
 
         # Add the time filter with the custom time filter feature name
         global_filter.add_time_and_time_travel_filters(

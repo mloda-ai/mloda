@@ -6,7 +6,7 @@ Because python_dict carries no schema, the function inspects the first non-null 
 Expected to fail at import time (ModuleNotFoundError) until Green implements it.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
@@ -20,8 +20,8 @@ class TestPythonDictColumnSemantics:
         return {
             "ts_naive": [datetime(2021, 1, 1), datetime(2021, 1, 2)],
             "ts_aware": [
-                datetime(2021, 1, 1, tzinfo=timezone.utc),
-                datetime(2021, 1, 2, tzinfo=timezone.utc),
+                datetime(2021, 1, 1, tzinfo=UTC),
+                datetime(2021, 1, 2, tzinfo=UTC),
             ],
             "num": [1, 2],
             "s": ["a", "b"],
@@ -114,8 +114,8 @@ class TestPythonDictDatetimeObjectRegression:
     def test_aware_datetime_objects_unchanged(self) -> None:
         data: dict[str, list[Any]] = {
             "ts": [
-                datetime(2021, 1, 1, tzinfo=timezone.utc),
-                datetime(2021, 1, 2, tzinfo=timezone.utc),
+                datetime(2021, 1, 1, tzinfo=UTC),
+                datetime(2021, 1, 2, tzinfo=UTC),
             ]
         }
         sem = column_semantics(data, "ts")

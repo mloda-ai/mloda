@@ -183,7 +183,7 @@ follow_imports = "skip"
 line-length = 120
 
 [tool.ruff.lint]
-extend-select = ["UP006", "UP007", "UP036", "UP045"]
+extend-select = ["UP006", "UP007", "UP017", "UP036", "UP045"]
 
 [tool.ruff.lint.per-file-ignores]
 # marimo notebook idioms static linting can't follow (cell imports, re-exports, cross-cell names).

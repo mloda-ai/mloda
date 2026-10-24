@@ -1,7 +1,7 @@
 """E2E tests for RunContext plumbing through mlodaAPI, CfwManager, and _build_run_context()."""
 
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -74,7 +74,7 @@ class TestSessionRunSetsRunContextOnCfwRegister:
 class TestBuildRunContextMintsRunIdAndCarriesPlanId:
     def test_build_run_context_with_no_carrier_or_bootstrap_carries_ids_and_started_at(self) -> None:
         session = _prepare_session()
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
 
         built = session._build_run_context(None, None)
 
@@ -82,7 +82,7 @@ class TestBuildRunContextMintsRunIdAndCarriesPlanId:
         assert built.plan_id == session.plan_id
         assert built.run_id != session.plan_id
         assert built.started_at is not None
-        assert before <= built.started_at <= datetime.now(timezone.utc)
+        assert before <= built.started_at <= datetime.now(UTC)
         assert built.carrier is None
         assert built.child_bootstrap is None
 

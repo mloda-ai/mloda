@@ -14,7 +14,7 @@ fixture is reused, so each consumer only adds:
 """
 
 from abc import abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -25,16 +25,16 @@ from mloda.user import SingleFilter
 
 
 SAMPLE_IDS: list[int] = [1, 2, 3, 4, 5, 6]
-SAMPLE_TIMESTAMPS: list[datetime] = [datetime(2023, 1, day, tzinfo=timezone.utc) for day in range(1, 7)]
+SAMPLE_TIMESTAMPS: list[datetime] = [datetime(2023, 1, day, tzinfo=UTC) for day in range(1, 7)]
 
-RANGE_MIN = datetime(2023, 1, 2, tzinfo=timezone.utc)
-RANGE_MAX = datetime(2023, 1, 5, tzinfo=timezone.utc)
+RANGE_MIN = datetime(2023, 1, 2, tzinfo=UTC)
+RANGE_MAX = datetime(2023, 1, 5, tzinfo=UTC)
 EXPECTED_IDS_RANGE_EXCLUSIVE: list[int] = [2, 3, 4]
 
-MIN_BOUND = datetime(2023, 1, 4, tzinfo=timezone.utc)
+MIN_BOUND = datetime(2023, 1, 4, tzinfo=UTC)
 EXPECTED_IDS_MIN: list[int] = [4, 5, 6]
 
-MAX_BOUND = datetime(2023, 1, 3, tzinfo=timezone.utc)
+MAX_BOUND = datetime(2023, 1, 3, tzinfo=UTC)
 EXPECTED_IDS_MAX: list[int] = [1, 2, 3]
 
 

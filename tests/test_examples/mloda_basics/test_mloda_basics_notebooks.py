@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import subprocess  # nosec B404
 import sys
 
@@ -96,18 +96,18 @@ class TestMlodaBasicsNotebooks:
 
         global_filter = GlobalFilter()
         global_filter.add_time_and_time_travel_filters(
-            event_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
-            event_to=datetime(2023, 1, 1, tzinfo=timezone.utc),
-            valid_from=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            valid_to=datetime(2024, 1, 15, tzinfo=timezone.utc),
+            event_from=datetime(2022, 1, 1, tzinfo=UTC),
+            event_to=datetime(2023, 1, 1, tzinfo=UTC),
+            valid_from=datetime(2024, 1, 1, tzinfo=UTC),
+            valid_to=datetime(2024, 1, 15, tzinfo=UTC),
             event_time_column=Feature("created_at", options=example_options),
             validity_time_column="valid_datetime",
         )
 
         # Currently, we do not support multiple names for the same filter.
         global_filter.add_time_and_time_travel_filters(
-            event_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
-            event_to=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            event_from=datetime(2022, 1, 1, tzinfo=UTC),
+            event_to=datetime(2023, 1, 1, tzinfo=UTC),
             event_time_column=Feature("update_date", options=example_options),
         )
 

@@ -5,7 +5,7 @@ Two classes: one for the eager PolarsMergeEngine (pl.DataFrame), one for the
 lazy PolarsLazyMergeEngine (pl.LazyFrame).
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -34,8 +34,8 @@ def _tz_aware_left_naive_right() -> tuple[Any, Any]:
         {
             "k": [1, 1],
             "t": [
-                datetime(2021, 1, 1, 0, 0, 10, tzinfo=timezone.utc),
-                datetime(2021, 1, 1, 0, 0, 20, tzinfo=timezone.utc),
+                datetime(2021, 1, 1, 0, 0, 10, tzinfo=UTC),
+                datetime(2021, 1, 1, 0, 0, 20, tzinfo=UTC),
             ],
             "lv": [1, 2],
         }
@@ -50,13 +50,13 @@ def _both_tz_aware() -> tuple[Any, Any]:
         {
             "k": [1, 1],
             "t": [
-                datetime(2021, 1, 1, 0, 0, 10, tzinfo=timezone.utc),
-                datetime(2021, 1, 1, 0, 0, 20, tzinfo=timezone.utc),
+                datetime(2021, 1, 1, 0, 0, 10, tzinfo=UTC),
+                datetime(2021, 1, 1, 0, 0, 20, tzinfo=UTC),
             ],
             "lv": [1, 2],
         }
     )
-    right = pl.DataFrame({"k": [1], "t": [datetime(2021, 1, 1, 0, 0, 8, tzinfo=timezone.utc)], "rv": [7.0]})
+    right = pl.DataFrame({"k": [1], "t": [datetime(2021, 1, 1, 0, 0, 8, tzinfo=UTC)], "rv": [7.0]})
     return left, right
 
 

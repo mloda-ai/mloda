@@ -29,7 +29,7 @@ so every negative fails today for the right reason.
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -74,15 +74,15 @@ except ImportError:
 
 
 IDS: list[int] = [1, 2, 3, 4, 5, 6]
-TS_AWARE: list[datetime] = [datetime(2023, 1, day, tzinfo=timezone.utc) for day in range(1, 7)]
+TS_AWARE: list[datetime] = [datetime(2023, 1, day, tzinfo=UTC) for day in range(1, 7)]
 TS_NAIVE: list[datetime] = [datetime(2023, 1, day) for day in range(1, 7)]
 AGES: list[int] = [10, 20, 30, 40, 50, 60]
 
-RANGE_MIN_AWARE = datetime(2023, 1, 2, tzinfo=timezone.utc)
-RANGE_MAX_AWARE = datetime(2023, 1, 5, tzinfo=timezone.utc)
+RANGE_MIN_AWARE = datetime(2023, 1, 2, tzinfo=UTC)
+RANGE_MAX_AWARE = datetime(2023, 1, 5, tzinfo=UTC)
 RANGE_MIN_NAIVE = datetime(2023, 1, 2)
 RANGE_MAX_NAIVE = datetime(2023, 1, 5)
-MIN_BOUND_AWARE = datetime(2023, 1, 4, tzinfo=timezone.utc)
+MIN_BOUND_AWARE = datetime(2023, 1, 4, tzinfo=UTC)
 MIN_BOUND_NAIVE = datetime(2023, 1, 4)
 
 EXPECTED_RANGE_IDS: list[int] = [2, 3, 4]

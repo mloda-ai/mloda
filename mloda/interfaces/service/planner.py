@@ -14,7 +14,7 @@ import secrets
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -453,7 +453,7 @@ class Planner:
         names = tuple(dict.fromkeys([*planned.names, *kept]))
         return {
             "plan_id": self._sign(planned.parsed.normalized, planned.digest, expires),
-            "expires_at": datetime.fromtimestamp(expires, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "expires_at": datetime.fromtimestamp(expires, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "normalized_request": planned.parsed.normalized,
             "steps": [_step_record(index, step, alias) for index, (step, alias) in enumerate(steps, 1)],
             "lineage": {name: sorted(self._lineage(name, planned.producers, frozenset())) for name in names},

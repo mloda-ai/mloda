@@ -102,14 +102,12 @@ class TestLifecycleOutcome:
 
 class TestBaseExtenderLifecycleDefaults:
     def test_all_four_hooks_are_noops_on_a_minimal_extender(self) -> None:
-        from datetime import datetime, timezone
+        from datetime import UTC, datetime
 
         from mloda.steward import LifecycleOutcome
 
         extender = _Minimal()
-        plan = PlanContext(
-            plan_id="p", tenant_id=None, project_id=None, principal=None, created_at=datetime.now(timezone.utc)
-        )
+        plan = PlanContext(plan_id="p", tenant_id=None, project_id=None, principal=None, created_at=datetime.now(UTC))
         run = RunContext(run_id="r", plan_id="p")
         outcome = LifecycleOutcome(status="succeeded", error_type=None)
 

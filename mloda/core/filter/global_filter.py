@@ -1,6 +1,6 @@
 from contextvars import ContextVar
 from copy import copy, deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from itertools import chain
 from typing import Any
 from uuid import UUID
@@ -637,4 +637,4 @@ class GlobalFilter:
         if time_with_tz.tzinfo is None:
             raise ValueError(f"Timezone information is missing in {time_with_tz}")
 
-        return time_with_tz.astimezone(timezone.utc)
+        return time_with_tz.astimezone(UTC)

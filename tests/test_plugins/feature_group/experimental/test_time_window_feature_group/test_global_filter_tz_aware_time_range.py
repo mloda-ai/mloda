@@ -19,7 +19,7 @@ dedicated pandas regression test would pass both before and after #435 and is
 omitted as redundant.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pyarrow as pa
@@ -46,11 +46,11 @@ except ImportError:
 
 # Timestamps Jan 1..Jan 12 at midnight UTC. Indices 4..9 (Jan 5..Jan 10) are the
 # only rows that must survive the [Jan 5, Jan 11) window with max_exclusive=True.
-TIMESTAMPS_UTC: list[datetime] = [datetime(2023, 1, day, tzinfo=timezone.utc) for day in range(1, 13)]
+TIMESTAMPS_UTC: list[datetime] = [datetime(2023, 1, day, tzinfo=UTC) for day in range(1, 13)]
 TEMPERATURES: list[int] = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
 
-EVENT_FROM = datetime(2023, 1, 5, tzinfo=timezone.utc)
-EVENT_TO = datetime(2023, 1, 11, tzinfo=timezone.utc)
+EVENT_FROM = datetime(2023, 1, 5, tzinfo=UTC)
+EVENT_TO = datetime(2023, 1, 11, tzinfo=UTC)
 
 EXPECTED_TEMPERATURES: list[int] = [14, 15, 16, 17, 18, 19]
 EXPECTED_ROW_COUNT: int = len(EXPECTED_TEMPERATURES)

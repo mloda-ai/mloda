@@ -1,6 +1,6 @@
 """Tests for mlodaAPI.plan_id/plan_context (minted once per session) and per-run run_id."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
 import pytest
@@ -36,14 +36,14 @@ class TestSessionPlanIdMintedAtConstruction:
 
 class TestSessionPlanContext:
     def test_plan_context_carries_plan_id_and_a_utc_created_at(self) -> None:
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):
             session = mlodaAPI(["some_feature"])
 
         assert isinstance(session.plan_context, PlanContext)
         assert session.plan_context.plan_id == session.plan_id
         assert session.plan_context.created_at.tzinfo is not None
-        assert before <= session.plan_context.created_at <= datetime.now(timezone.utc)
+        assert before <= session.plan_context.created_at <= datetime.now(UTC)
 
     def test_plan_context_reads_the_verified_identity_at_construction(self) -> None:
         with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):

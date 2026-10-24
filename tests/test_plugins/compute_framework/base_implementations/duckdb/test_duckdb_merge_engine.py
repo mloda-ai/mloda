@@ -422,9 +422,7 @@ class TestDuckDBEquiJoinTimezoneGuard:
 
         left_arrow = pa.table(
             {
-                "t": pa.array(
-                    [dt.datetime(2021, 1, 1, 12, 0, tzinfo=dt.timezone.utc)], type=pa.timestamp("us", tz="UTC")
-                ),
+                "t": pa.array([dt.datetime(2021, 1, 1, 12, 0, tzinfo=dt.UTC)], type=pa.timestamp("us", tz="UTC")),
                 "lv": ["a"],
             }
         )

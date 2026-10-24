@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 import pytest
@@ -162,14 +162,14 @@ class TestDuckDBFrameworkSessionTimezone:
 
     # A UTC instant a couple of hours past midnight: still 2023-01-01 in UTC, but rolls
     # back to the previous day once a negative-offset session tz leaks in.
-    KNOWN_INSTANT = datetime(2023, 1, 1, 2, 0, 0, tzinfo=timezone.utc)
-    EXPECTED_UTC_DAY_FLOOR = datetime(2023, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    KNOWN_INSTANT = datetime(2023, 1, 1, 2, 0, 0, tzinfo=UTC)
+    EXPECTED_UTC_DAY_FLOOR = datetime(2023, 1, 1, 0, 0, 0, tzinfo=UTC)
 
     # A mid-hour UTC instant: hour-flooring stays on 2023-01-01 06:00:00+00 in UTC and for
     # whole-hour zones, but a +5:30 session tz leaking in lands the hour boundary at the
     # :30 mark (06:30:00+00), a wrong absolute instant differing by the fractional offset.
-    KNOWN_INSTANT_SUBDAY = datetime(2023, 1, 1, 6, 42, 0, tzinfo=timezone.utc)
-    EXPECTED_UTC_HOUR_FLOOR = datetime(2023, 1, 1, 6, 0, 0, tzinfo=timezone.utc)
+    KNOWN_INSTANT_SUBDAY = datetime(2023, 1, 1, 6, 42, 0, tzinfo=UTC)
+    EXPECTED_UTC_HOUR_FLOOR = datetime(2023, 1, 1, 6, 0, 0, tzinfo=UTC)
 
     @pytest.fixture
     def duckdb_framework(self) -> DuckDBFramework:
@@ -198,7 +198,7 @@ class TestDuckDBFrameworkSessionTimezone:
         arrow_result = relation.to_arrow_table()
         value = arrow_result.column("ts").to_pylist()[0]
         assert isinstance(value, datetime)
-        return value.astimezone(timezone.utc)
+        return value.astimezone(UTC)
 
     def test_date_trunc_day_floor_is_utc_via_project(
         self, duckdb_framework: DuckDBFramework, non_utc_connection: Any, non_utc_zone: str

@@ -2,7 +2,7 @@ import contextlib
 import contextvars
 from copy import copy, deepcopy
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from collections.abc import Mapping, Sequence
 from typing import Any, Callable, Generator, cast
 from uuid import UUID
@@ -138,7 +138,7 @@ class mlodaAPI:
             tenant_id=verified.tenant_id if verified else None,
             project_id=verified.project_id if verified else None,
             principal=verified.principal if verified else None,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             origin=_PLAN_ORIGIN.get() or "prepare",
         )
         self.plan_id = self.plan_context.plan_id
@@ -706,7 +706,7 @@ class mlodaAPI:
         return replace(
             self.engine.run_context,
             run_id=generate_run_id(),
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             carrier=carrier,
             child_bootstrap=child_bootstrap,
             graceful_shutdown_timeout=graceful_shutdown_timeout,

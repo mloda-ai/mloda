@@ -3,7 +3,7 @@
 import dataclasses
 import json
 import pickle  # nosec B403
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from mloda.core.abstract_plugins.plan_context import PlanContext
@@ -50,7 +50,7 @@ class TestRunContextPlanIdAndStartedAt:
         assert ctx.structure_hash is None
 
     def test_plan_id_and_started_at_round_trip_through_constructor_and_pickle(self) -> None:
-        started = datetime.now(timezone.utc)
+        started = datetime.now(UTC)
         ctx = RunContext(run_id="r", plan_id="p", started_at=started, structure_hash="abc")
 
         restored = pickle.loads(pickle.dumps(ctx))  # nosec B301
@@ -76,7 +76,7 @@ def _plan_context(**overrides: object) -> PlanContext:
         "tenant_id": "acme",
         "project_id": "proj1",
         "principal": "hash123",
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
     }
     fields.update(overrides)
     return PlanContext(**fields)  # type: ignore[arg-type]
@@ -84,7 +84,7 @@ def _plan_context(**overrides: object) -> PlanContext:
 
 class TestPlanContext:
     def test_exposes_the_five_fields(self) -> None:
-        created = datetime.now(timezone.utc)
+        created = datetime.now(UTC)
 
         ctx = _plan_context(created_at=created)
 
@@ -115,7 +115,7 @@ class TestPlanContext:
         assert restored.structure_hash == "abc"
 
     def test_structure_hash_is_excluded_from_equality_and_hash(self) -> None:
-        created = datetime.now(timezone.utc)
+        created = datetime.now(UTC)
         plain = _plan_context(created_at=created)
         hashed = dataclasses.replace(plain, structure_hash="abc")
 

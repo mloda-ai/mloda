@@ -89,12 +89,12 @@ Result
 In this example, we show how one can manage datetime relations.
 
 ```python
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
-event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
-valid_from = datetime(2022, 1, 1, tzinfo=timezone.utc)
-valid_to = datetime(2022, 12, 31, tzinfo=timezone.utc)
+event_from = datetime(2023, 1, 1, tzinfo=UTC)
+event_to = datetime(2023, 12, 31, tzinfo=UTC)
+valid_from = datetime(2022, 1, 1, tzinfo=UTC)
+valid_to = datetime(2022, 12, 31, tzinfo=UTC)
 
 global_filter.add_time_and_time_travel_filters(event_from, event_to, valid_from, valid_to)
 

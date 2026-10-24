@@ -5,7 +5,7 @@ Consumes the shared AsofMergeEngineTestBase. PyArrow is both the framework
 under test and the interchange format used by the DataConverter.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -238,8 +238,8 @@ class TestPyArrowAsofMergeEngine(AsofMergeEngineTestBase):
                 "k": [1, 1],
                 "t": pa.array(
                     [
-                        datetime(2021, 1, 1, 0, 0, 10, tzinfo=timezone.utc),
-                        datetime(2021, 1, 1, 0, 0, 20, tzinfo=timezone.utc),
+                        datetime(2021, 1, 1, 0, 0, 10, tzinfo=UTC),
+                        datetime(2021, 1, 1, 0, 0, 20, tzinfo=UTC),
                     ],
                     type=pa.timestamp("us", tz="UTC"),
                 ),
@@ -265,14 +265,14 @@ class TestPyArrowAsofMergeEngine(AsofMergeEngineTestBase):
         left = pa.Table.from_pydict(
             {
                 "k": [1],
-                "t": pa.array([datetime(2021, 1, 1, 0, 0, 10, tzinfo=timezone.utc)], type=pa.timestamp("us", tz="UTC")),
+                "t": pa.array([datetime(2021, 1, 1, 0, 0, 10, tzinfo=UTC)], type=pa.timestamp("us", tz="UTC")),
                 "lv": [100],
             }
         )
         right = pa.Table.from_pydict(
             {
                 "k": [1],
-                "t": pa.array([datetime(2021, 1, 1, 0, 0, 8, tzinfo=timezone.utc)], type=pa.timestamp("us", tz="UTC")),
+                "t": pa.array([datetime(2021, 1, 1, 0, 0, 8, tzinfo=UTC)], type=pa.timestamp("us", tz="UTC")),
                 "rv": ["A"],
             }
         )

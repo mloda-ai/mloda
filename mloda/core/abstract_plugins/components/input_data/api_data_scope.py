@@ -6,7 +6,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
-_API_DATA_LOOKUP: ContextVar[Callable[[], Any] | None] = ContextVar("mloda_api_data_lookup", default=None)
+_API_DATA_LOOKUP: ContextVar[tuple[str, Callable[[], Any]] | None] = ContextVar("mloda_api_data_lookup", default=None)
 
 
 @dataclass(frozen=True)
@@ -18,9 +18,9 @@ class ApiDataRef:
 
 
 @contextmanager
-def api_data_scope(lookup: Callable[[], Any]) -> Iterator[None]:
-    """Make lookup, bound to one set, the reader of api_data inside the block."""
-    token = _API_DATA_LOOKUP.set(lookup)
+def api_data_scope(lookup: Callable[[], Any], key: str) -> Iterator[None]:
+    """Make lookup, bound to the set key, the reader of api_data inside the block."""
+    token = _API_DATA_LOOKUP.set((key, lookup))
     try:
         yield
     finally:
@@ -34,4 +34,7 @@ def read_api_data(key: str) -> Any:
         raise ValueError(
             f"api_data set '{key}' can only be read while its step runs; no api_data scope is active here."
         )
-    return lookup()
+    bound_key, reader = lookup
+    if key != bound_key:
+        raise ValueError(f"api_data set '{key}' cannot be read here; this scope is bound to set {bound_key!r}.")
+    return reader()

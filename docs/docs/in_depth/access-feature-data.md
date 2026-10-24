@@ -196,7 +196,7 @@ For this purpose, we have the ApiData.
 
 The ApiData can read data given to mlodaAPI at request time. The built-in `ApiDataFG` (a `SourceFeatureGroup`) handles this. It claims a feature whose name is a column of a set in the `api_data` parameter, and loads it through the `INPUT_DATA_LOAD` hook with `data_access_identity` `api_data:<set key>`.
 
-`Options({"ApiDataFG": "<set key>"})` narrows a feature to one set; an unknown key aborts. `prepare()` fixes each set's columns, and `run(api_data=...)` must give the same set keys and the same column names per set (order may differ), otherwise a `ValueError` is raised before the run starts. A FeatureGroup computing a name that is also an `api_data` column is an ambiguity error. For a custom transport, subclass `ApiDataFG` and override `load_neutral`.
+`Options({"ApiDataFG": "<set key>"})` narrows a feature to one set; an unknown key aborts. `prepare()` fixes each set's columns, and `run(api_data=...)` must give the same set keys and the same column names per set (order may differ), otherwise a `ValueError` is raised before the run starts. A FeatureGroup computing a name that is also an `api_data` column is an ambiguity error. For a custom transport, subclass `ApiDataFG` and override `load_neutral`, reading the run's values with `cls.api_values(match)`.
 
 Use cases:
 

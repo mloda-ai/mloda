@@ -330,6 +330,29 @@ class TestRunRefusesApiDataThatDiffersFromPrepare:
 
         assert extender.starts == 1
 
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_empty_run_data_is_refused_when_the_plan_has_sets(self, path: str) -> None:
+        extender = _StartCountingExtender()
+        session = self._prepare(extender)
+
+        with pytest.raises(ValueError, match="PrepareExample"):
+            _rerun(session, path, {})
+
+        assert extender.starts == 0
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_non_mapping_set_value_is_refused_without_leaking_it(self, path: str) -> None:
+        extender = _StartCountingExtender()
+        session = self._prepare(extender)
+        secret = "prepare_run_secret_value_q7"
+
+        with pytest.raises(ValueError, match="PrepareExample") as raised:
+            _rerun(session, path, {"PrepareExample": secret})
+
+        assert secret not in str(raised.value)
+        assert "str" in str(raised.value)
+        assert extender.starts == 0
+
 
 class TestStepStateDoesNotLeakBetweenRuns:
     """Test 5: Internal step state does not leak between runs."""

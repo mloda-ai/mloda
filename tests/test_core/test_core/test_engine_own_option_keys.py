@@ -154,7 +154,6 @@ class TestApiIntakeStampsAreNeverOwn:
         assert DefaultOptionKeys.strict_type_enforcement not in options.own_group_keys, (
             f"an mlodaAPI-stamped framework key must not count as own, got {options.own_group_keys}"
         )
-        assert "ApiInputData" not in options.group
 
         assert options.is_own(USER_KEY) is True
 

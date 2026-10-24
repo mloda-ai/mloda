@@ -3,7 +3,7 @@ import contextvars
 from copy import copy, deepcopy
 from dataclasses import replace
 from datetime import datetime, timezone
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Callable, Generator, cast
 from uuid import UUID
 
@@ -213,9 +213,8 @@ class mlodaAPI:
             self._api_data_columns = self._api_data_spec(api_data)
             if self._api_data_columns:
                 data_access_collection = (
-                    DataAccessCollection() if data_access_collection is None else data_access_collection.copy()
-                )
-                data_access_collection._api_data_columns = dict(self._api_data_columns)
+                    DataAccessCollection() if data_access_collection is None else data_access_collection
+                ).with_api_data_columns(self._api_data_columns)
 
             self.strict_type_enforcement = strict_type_enforcement
             self.features = self._process_features(_requested_features)
@@ -246,6 +245,10 @@ class mlodaAPI:
         spec: dict[str, tuple[str, ...]] = {}
         column_owner: dict[str, str] = {}
         for key_name, key_data in (api_data or {}).items():
+            if not isinstance(key_data, Mapping):
+                raise ValueError(
+                    f"api_data set '{key_name}' must be a mapping of column to values, got {type(key_data).__name__}."
+                )
             for column in key_data:
                 if column in column_owner:
                     raise ValueError(
@@ -258,20 +261,26 @@ class mlodaAPI:
 
     def _validate_run_api_data(self, api_data: dict[str, Any] | None) -> None:
         """Refuse run data whose sets or column names differ from the ones prepared."""
-        if not api_data:
+        if api_data is None:
             return
         prepared = self._api_data_columns
+        for key, values in api_data.items():
+            if not isinstance(values, Mapping):
+                raise ValueError(
+                    f"api_data set '{key}' must be a mapping of column to values, got {type(values).__name__}."
+                )
         if set(api_data) != set(prepared):
             raise ValueError(
-                f"api_data sets {sorted(api_data)} differ from the prepared sets {sorted(prepared)}: "
-                f"missing {sorted(set(prepared) - set(api_data))}, unexpected {sorted(set(api_data) - set(prepared))}."
+                f"api_data sets {sorted(map(str, api_data))} differ from the prepared sets "
+                f"{sorted(map(str, prepared))}: missing {sorted(map(str, set(prepared) - set(api_data)))}, "
+                f"unexpected {sorted(map(str, set(api_data) - set(prepared)))}."
             )
         for key, columns in prepared.items():
             if set(api_data[key]) != set(columns):
                 raise ValueError(
                     f"api_data set '{key}' differs from the prepared columns: "
-                    f"missing {sorted(set(columns) - set(api_data[key]))}, "
-                    f"unexpected {sorted(set(api_data[key]) - set(columns))}."
+                    f"missing {sorted(map(str, set(columns) - set(api_data[key])))}, "
+                    f"unexpected {sorted(map(str, set(api_data[key]) - set(columns)))}."
                 )
 
     def _secret_literals(self) -> frozenset[str]:

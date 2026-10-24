@@ -1,6 +1,6 @@
 """Source group serving the api_data sets of a request; subclass and override load_neutral for other transport."""
 
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from typing import Any
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -16,8 +16,8 @@ class ApiDataFG(SourceFeatureGroup):
     CLAIM_ROUTES = (ClaimRoute("api_data", NamePolicy.CHECKED, True),)
 
     @classmethod
-    def _spec(cls, data_access_collection: DataAccessCollection | None) -> dict[str, tuple[str, ...]]:
-        return {} if data_access_collection is None else data_access_collection._api_data_columns
+    def _spec(cls, data_access_collection: DataAccessCollection | None) -> Mapping[str, tuple[str, ...]]:
+        return {} if data_access_collection is None else data_access_collection.api_data_columns
 
     @classmethod
     def is_pointed(
@@ -26,6 +26,8 @@ class ApiDataFG(SourceFeatureGroup):
         """Also pointed when the name is a column of a set, so another group computing it stays ambiguous."""
         if super().is_pointed(feature_name, options, data_access_collection):
             return True
+        if cls.foreign_pointer(options) is not None or cls.has_query_text(options):
+            return False
         base_name = cls.get_column_base_feature(feature_name)
         return any(base_name in columns for columns in cls._spec(data_access_collection).values())
 
@@ -55,5 +57,12 @@ class ApiDataFG(SourceFeatureGroup):
         return match.access.columns if isinstance(match.access, ApiDataRef) else None
 
     @classmethod
-    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+    def api_values(cls, match: SourceMatch) -> Any:
+        """The run's raw values for the matched api_data set; for load_neutral overrides."""
+        if not isinstance(match.access, ApiDataRef):
+            raise ValueError(f"{cls.get_class_name()}.api_values needs an api_data match, got {match.source!r}.")
         return read_api_data(match.access.key)
+
+    @classmethod
+    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+        return cls.api_values(match)

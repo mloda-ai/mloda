@@ -88,6 +88,17 @@ class DataAccessCollection:
         self.column_to_file: dict[str, str] | None = self._normalize_column_to_file(column_to_file)
         self._api_data_columns: dict[str, tuple[str, ...]] = {}
 
+    @property
+    def api_data_columns(self) -> Mapping[str, tuple[str, ...]]:
+        """Column names per api_data set, frozen at prepare time."""
+        return self._api_data_columns
+
+    def with_api_data_columns(self, spec: Mapping[str, tuple[str, ...]]) -> "DataAccessCollection":
+        """A copy carrying the api_data column spec."""
+        duplicate = self.copy()
+        duplicate._api_data_columns = dict(spec)
+        return duplicate
+
     def copy(self) -> "DataAccessCollection":
         """Return an independent collection sharing the registered objects."""
         duplicate = _copy.copy(self)

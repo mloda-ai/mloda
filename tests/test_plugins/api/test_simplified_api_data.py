@@ -663,3 +663,80 @@ class TestApiDataScopeAndShapes:
         dac._api_data_columns = {"Cols": ("simplified_api_pointed_col",)}
 
         assert ApiDataFG.is_pointed("simplified_api_pointed_col", Options({}), dac) is True
+
+
+_IDX_API = {
+    "A": {"idx_a_id": [1, 2, 3], "idx_a_val": [10, 20, 30]},
+    "B": {"idx_b_id": [3, 2, 1], "idx_b_val": [300, 200, 100]},
+}
+_IDX_A = {"ApiDataFG": "A"}
+_IDX_B = {"ApiDataFG": "B"}
+
+
+def _idx_link(left: str, right: str, discriminated: bool = True) -> Link:
+    kw: dict[str, Any] = {"left_discriminator": _IDX_A, "right_discriminator": _IDX_B} if discriminated else {}
+    return Link.inner(JoinSpec(ApiDataFG, Index((left,))), JoinSpec(ApiDataFG, Index((right,))), **kw)
+
+
+class IdxJoinedFG(FeatureGroup):
+    """Joins idx_a_val (via the class-level link) with idx_b_val."""
+
+    link: Link | None = None
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature("idx_a_val", link=type(self).link, options=dict(_IDX_A)),
+            Feature("idx_b_val", options=dict(_IDX_B)),
+        }
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"IdxJoinedFG": data["idx_a_val"].astype(str) + "_" + data["idx_b_val"].astype(str)}
+
+
+class TestApiDataLinkIndexColumns:
+    """Link and keep_index columns must exist in the api_data set that the side or request selects."""
+
+    @staticmethod
+    def _prepare(features: list[Any], link: Link | None = None, **kwargs: Any) -> Any:
+        IdxJoinedFG.link = link
+        return mloda.prepare(
+            features,
+            compute_frameworks=[PandasDataFrame],
+            api_data=_IDX_API,
+            plugin_collector=PluginCollector.enabled_feature_groups({ApiDataFG, IdxJoinedFG}),
+            **kwargs,
+        )
+
+    @staticmethod
+    def _run(features: list[Any], link: Link | None = None, **kwargs: Any) -> list[Any]:
+        IdxJoinedFG.link = link
+        return list(
+            mloda.run_all(
+                features,
+                compute_frameworks=[PandasDataFrame],
+                api_data=_IDX_API,
+                plugin_collector=PluginCollector.enabled_feature_groups({ApiDataFG, IdxJoinedFG}),
+                **kwargs,
+            )
+        )
+
+    def test_swapped_index_on_discriminated_link_raises_at_prepare(self) -> None:
+        with pytest.raises(ValueError, match=r"(?s)idx_b_id.*api_data:A|api_data:A.*idx_b_id"):
+            self._prepare(["IdxJoinedFG"], _idx_link("idx_b_id", "idx_a_id"))
+
+    def test_swapped_index_on_global_link_raises_even_when_not_joined(self) -> None:
+        link = _idx_link("idx_b_id", "idx_a_id")
+        with pytest.raises(ValueError, match=r"(?s)idx_b_id.*api_data:A|api_data:A.*idx_b_id"):
+            self._prepare([Feature("idx_a_val", options=dict(_IDX_A))], links={link})
+
+    def test_global_link_without_discriminators_still_runs(self) -> None:
+        link = _idx_link("idx_a_id", "idx_b_id", discriminated=False)
+        res = self._run(["idx_a_val", "idx_b_val"], links={link})
+        cols = {c: sorted(r[c].tolist()) for r in res for c in r.columns}
+        assert cols == {"idx_a_val": [10, 20, 30], "idx_b_val": [100, 200, 300]}
+
+    def test_discriminated_link_with_correct_sides_joins(self) -> None:
+        res = self._run(["IdxJoinedFG"], _idx_link("idx_a_id", "idx_b_id"))
+        assert len(res) == 1
+        assert sorted(res[0]["IdxJoinedFG"].tolist()) == ["10_100", "20_200", "30_300"]

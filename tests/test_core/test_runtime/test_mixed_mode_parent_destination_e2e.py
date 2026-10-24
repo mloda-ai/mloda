@@ -286,6 +286,27 @@ class TestMixedModeParentDestinationE2E:
         assert len(result) == 1
         assert _extract_mixed_mode_doubled(result[0]) == [2, 4, 6]
 
+    @pytest.mark.skipif(duckdb is None, reason="DuckDB not installed.")
+    def test_pinned_connection_feeds_parent_duckdb_destination_beside_another_connection(
+        self, flight_server: Any
+    ) -> None:
+        plugin_collector = PluginCollector.enabled_feature_groups({TfsRawValPyArrowSource, _MixedModeDoubledDuckDBFG})
+        conn = duckdb.connect()
+        dac = DataAccessCollection(connections={"conn": conn, "other": duckdb.connect()})
+
+        result = mloda.run_all(
+            [Feature("mixed_mode_doubled", connection=conn)],
+            compute_frameworks=[PyArrowTable, DuckDBFramework],
+            plugin_collector=plugin_collector,
+            data_access_collection=dac,
+            parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+
+        assert result is not None
+        assert len(result) == 1
+        assert _extract_mixed_mode_doubled(result[0]) == [2, 4, 6]
+
     @pytest.mark.parametrize(
         "destination_framework,modes",
         [

@@ -350,4 +350,6 @@ def test_match_data_mixin_is_removed() -> None:
     import mloda.provider as provider_module
 
     assert not hasattr(provider_module, "MatchData")
-    assert importlib.util.find_spec("mloda.core.abstract_plugins.components.match_data") is None
+    package = "mloda.core.abstract_plugins.components.match_data"
+    # A stale untracked __pycache__ can leave the package importable as a namespace; only the submodule counts.
+    assert importlib.util.find_spec(package) is None or importlib.util.find_spec(f"{package}.match_data") is None

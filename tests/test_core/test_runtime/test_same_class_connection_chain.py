@@ -1,8 +1,6 @@
 """Regression: a same-class connection chain (a feature's input_features resolved by the SAME
-class) must keep receiving the framework connection on the upstream step. Blocking
-inherit_from from ever copying the connection key breaks this (the upstream step's
-run_calculation reads the key off its own Options), even though the connection must still
-never survive pickling into a multiprocessing worker."""
+class) must keep receiving the framework connection on the upstream step, bound by the
+framework from the DataAccessCollection."""
 
 import sqlite3
 from typing import Any
@@ -50,7 +48,7 @@ class ChainSameClassDuckDBFG(FeatureGroup):
 
 
 class ChainSameClassRootDuckDBFG(ChainSameClassDuckDBFG):
-    """Same shape, but chain_a is a DataCreator root, matched globally through a DataAccessCollection."""
+    """Same shape, but chain_a is a DataCreator root, matched by name; the framework binds the collection's connection."""
 
     @classmethod
     def input_data(cls) -> DataCreator:
@@ -93,7 +91,7 @@ class TestSameClassChainKeepsConnection:
         assert "connection_handle" in str(raised.value)
 
     def test_global_scope_dac_same_class_chain_resolves(self) -> None:
-        """chain_a is a DataCreator root matched via DataAccessCollection; chain_b needs the same connection."""
+        """chain_a is a DataCreator root matched by name; chain_b needs the same bound connection."""
         conn = duckdb.connect()
         plugin_collector = PluginCollector.enabled_feature_groups({ChainSameClassRootDuckDBFG})
 
@@ -146,13 +144,13 @@ class TwoClassDuckDBConsumerFG(FeatureGroup):
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed.")
 class TestTwoClassChain:
-    """Each class resolves its own connection; a handle only inherited from the consumer yields."""
+    """Each class resolves its own connection; the sqlite input inherits the consumer's duckdb handle and still binds its own connection."""
 
     def test_two_classes_on_two_connections_in_one_chain_run(self) -> None:
         access = DataAccessCollection(connections={"d": duckdb.connect(), "s": sqlite3.connect(":memory:")})
 
         result = mloda.run_all(
-            [Feature("two_class_x")],
+            [Feature("two_class_x", Options(group={"connection_handle": "d"}))],
             data_access_collection=access,
             compute_frameworks=[DuckDBFramework, SqliteFramework],
             plugin_collector=PluginCollector.enabled_feature_groups({TwoClassSqliteRootFG, TwoClassDuckDBConsumerFG}),

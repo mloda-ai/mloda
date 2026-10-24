@@ -143,14 +143,14 @@ Since group options forward to input features, a pointer on a derived feature bi
 
 ## Connections
 
-A connection lives in the DataAccessCollection, and the framework binds the single one it accepts. Pin one with `connection_handle` or `Feature(name, connection=conn)` (see [Selecting a connection](named-data-access-handles.md#selecting-a-connection-connection_handle) and [Framework Connection Object](framework-connection-object.md)). A source group that reads a connection declares `ClaimRoute("connection", ...)` and `match_connection` (see `DuckdbFG`); choosing a connection by its content belongs in `match_connection`.
+A connection lives in the DataAccessCollection, and the framework binds the single one it accepts. Pin one with `connection_handle` or `Feature(name, connection=conn)` (see [Selecting a connection](named-data-access-handles.md#selecting-a-connection-connection_handle) and [Framework Connection Object](framework-connection-object.md)). A source group that reads a connection declares `ClaimRoute("connection", ...)` and `match_connection` (see `DuckdbFG`); choosing a connection by its content happens in the source group's `find_sources` (see `DuckdbFG.find_sources`), while `match_connection` reports which connection a match reads.
 
 ## Practical Examples
 
 ### Scenario 1: Standard File Processing (Source FeatureGroup Only)
 
 **Use Case**: Reading CSV files with Pandas
-**Pattern**: Neither is needed; `CsvFG` claims the feature when a file has the column
+**Pattern**: Only a source FeatureGroup is needed; `CsvFG` claims the feature when a file has the column
 
 ```py
 Feature("id", options={"CsvFG": "data/people.csv"})
@@ -159,13 +159,17 @@ Feature("id", options={"CsvFG": "data/people.csv"})
 ### Scenario 2: DataCreator + Feature(connection=)
 
 **Use Case**: Analytics with DuckDB requiring a connection object
-**Pattern**: `DataCreator` supplies the data and the feature pins the connection
+**Pattern**: `DataCreator` supplies the data and the group is restricted to the DuckDB framework, which builds its frame on the connection the feature pins
 
 ```py
 class DuckDBAnalyticsFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -> BaseInputData | None:
         return DataCreator({"analytics_input"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {DuckDBFramework}
 
 Feature("analytics_input", connection=conn)
 ```

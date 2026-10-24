@@ -82,7 +82,7 @@ class TestAbstractBaseMatcher:
         )
 
     def test_concrete_root_still_matches(self) -> None:
-        """Rootness semantics stay unchanged for concrete root feature groups."""
+        """A concrete root feature group still matches by name."""
         assert ConcreteRootFeatureGroup.match_feature_group_criteria("issue692_root_feature", Options(), None) is True
         assert ConcreteRootFeatureGroup.match_feature_group_criteria("unrelated_name", Options(), None) is False
 

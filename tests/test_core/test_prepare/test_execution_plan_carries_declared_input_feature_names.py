@@ -41,8 +41,7 @@ class _CifDependentFeatureGroup(FeatureGroup):
         options: Options,
         data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
-        # A name-only match, bypassing the default is_root()/input_features() matching probe:
-        # this test counts input_features() calls, so resolution itself must not call it too.
+        # A name-only match: this test counts input_features() calls, so matching must not call it.
         name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
         return name == CIF_DEPENDENT_FEATURE
 

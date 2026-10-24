@@ -1,5 +1,5 @@
 from typing import Any
-from mloda.provider import FeatureGroup, GeneratedFeatureGroup
+from mloda.provider import BaseInputData, FeatureGroup, GeneratedFeatureGroup
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.user import FeatureName
@@ -19,6 +19,10 @@ from mloda_plugins.feature_group.experimental.source_input_feature import (
     SourceTuple,
 )
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+
+
+class _StubInputData(BaseInputData):
+    pass
 
 
 class _GeneratedFileFeatureBase(SourceInputFeature, GeneratedFeatureGroup):
@@ -73,6 +77,7 @@ class TestDynamicFeatureGroupFactory:
             "match_feature_group_criteria": lambda cls, feature_name, options, data_access_collection: (
                 feature_name == FeatureName("test_file_feature")
             ),
+            "input_data": lambda: _StubInputData(),
         }
 
         # Create a dynamic feature group
@@ -87,6 +92,9 @@ class TestDynamicFeatureGroupFactory:
 
         # Test generated names
         assert DynamicTestFeatureGroup.feature_names_supported() == {"test_file_feature"}
+
+        # Test input_data property passthrough
+        assert isinstance(DynamicTestFeatureGroup.input_data(), _StubInputData)
 
         # Test calculate feature
         features = FeatureSet()

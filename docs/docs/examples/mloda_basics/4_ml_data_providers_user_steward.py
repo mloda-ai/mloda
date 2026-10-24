@@ -112,7 +112,7 @@ def _(mo):
 
         # Root feature definition
         @classmethod
-        def input_data(...)
+        def feature_names_supported(...)  # names a root group serves
             ...
 
         # Features derived from other features

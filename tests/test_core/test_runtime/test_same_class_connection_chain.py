@@ -50,10 +50,6 @@ class ChainSameClassDuckDBFG(FeatureGroup):
 class ChainSameClassRootDuckDBFG(ChainSameClassDuckDBFG, GeneratedFeatureGroup):
     """Same shape, but chain_a is a generated root, matched by name; the framework binds the collection's connection."""
 
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"chain_a", "chain_b"}
-
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed.")
 class TestSameClassChainKeepsConnection:

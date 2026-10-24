@@ -12,11 +12,11 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 
 
 class PlkiBaseA(FeatureGroup):
-    """Base side A: no input_data, so it never resolves a requested feature on its own."""
+    """Base side A: declares no names, so it never resolves a requested feature on its own."""
 
 
 class PlkiBaseB(FeatureGroup):
-    """Base side B: no input_data, so it never resolves a requested feature on its own."""
+    """Base side B: declares no names, so it never resolves a requested feature on its own."""
 
 
 class PlkiSubA(PlkiBaseA, GeneratedFeatureGroup):

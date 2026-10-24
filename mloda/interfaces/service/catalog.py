@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import COLUMN_SEPARATOR
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.components.property_spec import is_no_default
@@ -295,6 +296,9 @@ class Catalog:
 
     def is_denied(self, name: str) -> bool:
         """Match ``name`` against denied FeatureGroups' class name, prefix and supported names, never their matchers."""
+        base, separator, index = name.rpartition(COLUMN_SEPARATOR)
+        if separator and index.isdigit() and self.is_denied(base):
+            return True
         enabled = self._collector.enabled_feature_group_classes
         for fg in self._collector.disabled_feature_group_classes:
             if fg.__name__ not in self._settings.deny_feature_groups or (enabled and fg not in enabled):

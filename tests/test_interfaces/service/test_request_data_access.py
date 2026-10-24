@@ -136,6 +136,26 @@ def test_key_in_nested_in_features_is_reported() -> None:
     _assert_no_secret(problems)
 
 
+def test_key_in_sibling_in_features_of_nested_dict_is_reported() -> None:
+    PluginLoader.all()
+    inner = {"name": "src", "in_features": {"name": "raw", "options": {KEY: SECRET}}}
+    request = {"features": [{"name": "b", "options": {"in_features": inner}}]}
+
+    problems = data_access_violations(request)
+
+    assert [p.path for p in problems] == [f"/features/0/options/in_features/in_features/options/{KEY}"]
+    assert problems[0].problem == "data_access_option"
+    _assert_no_secret(problems)
+
+
+@pytest.mark.parametrize("value", [5, [1, None], {"no_name": 1}, {"name": "src", "in_features": 5}])
+def test_odd_in_features_shapes_report_nothing(value: Any) -> None:
+    PluginLoader.all()
+    request = {"features": [{"name": "b", "options": {"in_features": value}}]}
+
+    assert data_access_violations(request) == []
+
+
 def test_key_in_nested_in_features_of_group_options_is_reported() -> None:
     PluginLoader.all()
     request = {"features": [{"name": "b", "group_options": {"in_features": {"name": "raw", "options": {KEY: SECRET}}}}]}

@@ -31,6 +31,7 @@ from mloda.interfaces.service.request import (
     build_request,
     _pointer,
     data_access_violations,
+    in_feature_sources,
     validate_request,
 )
 from mloda.interfaces.service.sources import READER_ERRORS, data_access_collection, source_columns
@@ -223,7 +224,11 @@ class Planner:
         if isinstance(parsed, list):
             return error_result("validation_failed", "A feature config is invalid.", problems_to_details(parsed))
         request_names = [_item_name(item) for item in request["features"]]
-        denied = self._denied(request_names, self._index_entries(request))
+        names = [(f"/features/{index}", name) for index, name in enumerate(request_names)]
+        filter_entries = [
+            (f"/filters/{i}/feature", item["feature"]) for i, item in enumerate(request.get("filters", []))
+        ]
+        denied = self._denied([*names, *self._index_entries(request), *in_feature_sources(request), *filter_entries])
         if denied is not None:
             return denied
         sources = self._sources(parsed.restrict_sources)
@@ -238,6 +243,9 @@ class Planner:
             return failure_result("Planning", error)
         if not diagnosis.complete:
             return self._unresolved(diagnosis, request_names, sources)
+        planned = self._denied([("/features", name) for step in steps for name in step.feature_names])
+        if planned is not None:
+            return planned
         filters = request.get("filters", [])
         unmatched = self._unmatched_filters(parsed, filters)
         if unmatched is not None:
@@ -362,14 +370,16 @@ class Planner:
             for j, column in enumerate(item.get("index", ()))
         ]
 
-    def _denied(self, names: Sequence[str], index_entries: Sequence[tuple[str, str]]) -> dict[str, Any] | None:
-        entries = [(f"/features/{index}", name) for index, name in enumerate(names)]
-        denied = [(path, name) for path, name in [*entries, *index_entries] if self._catalog.is_denied(name)]
+    def _denied(self, entries: Sequence[tuple[str, str]]) -> dict[str, Any] | None:
+        denied = [(path, name) for path, name in entries if self._catalog.is_denied(name)]
         if not denied:
             return None
         alternatives = [alt for _, name in denied for alt in self._settings.alternatives.get(name, ())]
         extra: dict[str, Any] = {"alternatives": list(dict.fromkeys(alternatives))} if alternatives else {}
-        details = [{"path": path, "problem": "policy_denied", "message": _DENIED_MESSAGE} for path, _ in denied]
+        details = [
+            {"path": path, "problem": "policy_denied", "message": _DENIED_MESSAGE}
+            for path in dict.fromkeys(p for p, _ in denied)
+        ]
         return error_result("policy_denied", _DENIED_MESSAGE, details, **extra)
 
     def _unresolved(
@@ -381,7 +391,11 @@ class Planner:
             detail = {"path": "/features", "problem": "unresolved", "message": _UNPLANNABLE_MESSAGE}
             return error_result("validation_failed", _UNPLANNABLE_MESSAGE, [detail])
         known = diagnosis.failed_result.facts.known_names if diagnosis.failed_result is not None else ()
-        candidates = [candidate for candidate in dict.fromkeys([*known, *source_columns(sources)]) if candidate != name]
+        candidates = [
+            candidate
+            for candidate in dict.fromkeys([*known, *source_columns(sources)])
+            if candidate != name and not self._catalog.is_denied(candidate)
+        ]
         close = difflib.get_close_matches(name, candidates, n=1)
         shown = sanitize_text(name, MAX_NAME_LENGTH)
         detail = {

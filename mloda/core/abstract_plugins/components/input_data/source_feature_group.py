@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import CHAIN_SEPARATOR
 from mloda.core.abstract_plugins.components.input_data.input_data_load import dispatch_input_data_load
 from mloda.core.abstract_plugins.components.input_data.claim_route import (
     ClaimRoute,
@@ -59,6 +60,11 @@ HANDLE_SPEC = PropertySpec(
     match_guard=lambda value: isinstance(value, str),
     expected="a str handle name",
 )
+
+
+def _prefix_claims(prefix: str, base_name: str) -> bool:
+    # Checked from the prefix's last character on, so `p___op` is rejected too.
+    return base_name.startswith(prefix) and CHAIN_SEPARATOR not in base_name[max(len(prefix) - 1, 0) :]
 
 
 def _clip(text: str, limit: int) -> str:
@@ -341,7 +347,7 @@ class SourceFeatureGroup(FeatureGroup):
     def _declared_name(cls, base_name: str) -> bool:
         return (
             base_name in cls.declared_names()
-            or any(base_name.startswith(prefix) for prefix in cls.declared_name_prefixes())
+            or any(_prefix_claims(prefix, base_name) for prefix in cls.declared_name_prefixes())
             or cls.feature_name_equal_to_class_name(base_name)
             or cls.feature_name_contains_class_name_as_prefix(base_name)
             or base_name in cls.feature_names_supported()

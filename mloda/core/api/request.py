@@ -14,6 +14,8 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 # Explicit alias re-exports Engine under no_implicit_reexport so tests can patch mloda.core.api.request.Engine.
 from mloda.core.core.engine import Engine as Engine
 from mloda.core.prepare.execution_plan import ExecutionPlan
+from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.api.plan_info import PlanStep, build_plan_steps, source_of
 from mloda.core.api.plan_lock import plan_content_hash, plan_structure_hash
 from mloda.core.prepare.identify_feature_group import (
@@ -211,10 +213,11 @@ class mlodaAPI:
             )
 
             self._api_data_columns = self._api_data_spec(api_data)
+            self._api_data_types = self._api_data_type_spec(api_data)
             if self._api_data_columns:
                 data_access_collection = (
                     DataAccessCollection() if data_access_collection is None else data_access_collection
-                ).with_api_data_columns(self._api_data_columns)
+                ).with_api_data_columns(self._api_data_columns, self._api_data_types)
 
             self.strict_type_enforcement = strict_type_enforcement
             self.features = self._process_features(_requested_features)
@@ -238,6 +241,7 @@ class mlodaAPI:
 
         with self._credential_redaction():
             self.engine = self._create_engine()
+        self._api_data_types = self._native_api_data_types()
 
     @staticmethod
     def _api_data_spec(api_data: dict[str, dict[str, Any]] | None) -> dict[str, tuple[str, ...]]:
@@ -258,6 +262,30 @@ class mlodaAPI:
                 column_owner[column] = key_name
             spec[key_name] = tuple(key_data)
         return spec
+
+    def _native_api_data_types(self) -> dict[str, type]:
+        """The recorded types of the sets whose step runs on a framework taking the neutral type as is."""
+        native: dict[str, type] = {}
+        for step in self._execution_plan():
+            if not isinstance(step, FeatureGroupStep):
+                continue
+            match = step.features.input_data_match
+            if match is None or not isinstance(match[1].access, ApiDataRef):
+                continue
+            neutral = match[0].neutral_type(match[1])
+            expected = step.compute_framework.expected_data_framework()
+            if isinstance(neutral, type) and isinstance(expected, type) and issubclass(neutral, expected):
+                native[match[1].access.key] = dict
+        return native
+
+    @staticmethod
+    def _api_data_type_spec(api_data: dict[str, dict[str, Any]] | None) -> dict[str, type]:
+        """The type of each api_data set given as a dict whose column values are all lists."""
+        return {
+            key: dict
+            for key, values in (api_data or {}).items()
+            if isinstance(values, dict) and all(isinstance(column_values, list) for column_values in values.values())
+        }
 
     def _validate_run_api_data(self, api_data: dict[str, Any] | None) -> None:
         """Refuse run data whose sets or column names differ from the ones prepared."""
@@ -282,6 +310,18 @@ class mlodaAPI:
                     f"missing {sorted(map(str, set(columns) - set(api_data[key])))}, "
                     f"unexpected {sorted(map(str, set(api_data[key]) - set(columns)))}."
                 )
+        for key in self._api_data_types:
+            values = api_data[key]
+            if not isinstance(values, dict):
+                raise ValueError(
+                    f"api_data set '{key}' must be a dict like the prepared set, got {type(values).__name__}."
+                )
+            for column, column_values in values.items():
+                if not isinstance(column_values, list):
+                    raise ValueError(
+                        f"api_data set '{key}' column '{column}' must be a list like the prepared set, "
+                        f"got {type(column_values).__name__}."
+                    )
 
     def _secret_literals(self) -> frozenset[str]:
         dac = getattr(self, "data_access_collection", None)

@@ -6,8 +6,11 @@ These tests define the contract for a two-phase execution model:
   2. run() - instance method that executes with fresh api_data, reusing the cached plan
 """
 
+from collections import OrderedDict
+from types import MappingProxyType
 from typing import Any
 
+import numpy as np
 import pytest
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
@@ -16,6 +19,7 @@ from mloda.provider import ApiDataFG, ComputeFramework, FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_plugins.api.test_simplified_api_data import ApiNeutralBoundedFG, ApiNeutralPandasOnlyFG
 
 
 class PrepareRunApiFeature(FeatureGroup):
@@ -352,6 +356,79 @@ class TestRunRefusesApiDataThatDiffersFromPrepare:
         assert secret not in str(raised.value)
         assert "str" in str(raised.value)
         assert extender.starts == 0
+
+
+class TestRunRefusesShapeThatDiffersFromDefaultPrepare:
+    """A default-prepared session records dict-of-list sets and refuses other shapes before the run starts."""
+
+    _lists = {"NeutralSet": {"api_neutral_id": [1], "api_neutral_val": ["initial"]}}
+
+    def _prepare(self, extender: Any, compute_frameworks: Any = None, group: Any = ApiNeutralBoundedFG) -> Any:
+        return mloda.prepare(
+            ["api_neutral_id"],
+            compute_frameworks=compute_frameworks,
+            api_data=self._lists,
+            plugin_collector=PluginCollector.enabled_feature_groups({group}),
+            function_extender={extender},
+        )
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_ndarray_column_is_refused_naming_set_and_column(self, path: str) -> None:
+        extender = _StartCountingExtender()
+        session = self._prepare(extender)
+
+        with pytest.raises(ValueError, match=r"(?s)NeutralSet.*api_neutral_id"):
+            _rerun(session, path, {"NeutralSet": {"api_neutral_id": np.array([1]), "api_neutral_val": ["a"]}})
+
+        assert extender.starts == 0
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_non_dict_mapping_is_refused_naming_the_set(self, path: str) -> None:
+        extender = _StartCountingExtender()
+        session = self._prepare(extender)
+
+        data = MappingProxyType({"api_neutral_id": [1], "api_neutral_val": ["a"]})
+        with pytest.raises(ValueError, match="NeutralSet"):
+            _rerun(session, path, {"NeutralSet": data})
+
+        assert extender.starts == 0
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_dict_subclass_with_lists_is_accepted(self, path: str) -> None:
+        extender = _StartCountingExtender()
+        session = self._prepare(extender)
+
+        _rerun(session, path, {"NeutralSet": OrderedDict(api_neutral_id=[1], api_neutral_val=["a"])})
+
+        assert extender.starts == 1
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_step_on_a_framework_not_taking_the_dict_accepts_an_ndarray_column(self, path: str) -> None:
+        extender = _StartCountingExtender()
+        session = self._prepare(extender, group=ApiNeutralPandasOnlyFG)
+
+        _rerun(session, path, {"NeutralSet": {"api_neutral_id": np.array([1]), "api_neutral_val": ["a"]}})
+
+        assert extender.starts == 1
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_explicit_dict_framework_session_refuses_an_ndarray_column(self, path: str) -> None:
+        extender = _StartCountingExtender()
+        session = self._prepare(extender, compute_frameworks=[PythonDictFramework])
+
+        with pytest.raises(ValueError, match=r"(?s)NeutralSet.*api_neutral_id"):
+            _rerun(session, path, {"NeutralSet": {"api_neutral_id": np.array([1]), "api_neutral_val": ["a"]}})
+
+        assert extender.starts == 0
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_explicit_list_session_accepts_a_tuple_column(self, path: str) -> None:
+        extender = _StartCountingExtender()
+        session = self._prepare(extender, compute_frameworks=[PandasDataFrame])
+
+        _rerun(session, path, {"NeutralSet": {"api_neutral_id": (1,), "api_neutral_val": ("a",)}})
+
+        assert extender.starts == 1
 
 
 class TestStepStateDoesNotLeakBetweenRuns:

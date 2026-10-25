@@ -50,7 +50,10 @@ class ApiDataFG(SourceFeatureGroup):
                 )
                 return []
             spec = {key: spec[key]}
-        return [SourceMatch(f"api_data:{key}", ApiDataRef(key, columns)) for key, columns in spec.items()]
+        types = {} if data_access_collection is None else data_access_collection.api_data_types
+        return [
+            SourceMatch(f"api_data:{key}", ApiDataRef(key, columns, types.get(key))) for key, columns in spec.items()
+        ]
 
     @classmethod
     def columns(cls, match: SourceMatch) -> Collection[str] | None:
@@ -62,6 +65,16 @@ class ApiDataFG(SourceFeatureGroup):
         if not isinstance(match.access, ApiDataRef):
             raise ValueError(f"{cls.get_class_name()}.api_values needs an api_data match, got {match.source!r}.")
         return read_api_data(match.access.key)
+
+    @classmethod
+    def neutral_type(cls, match: SourceMatch) -> type | None:
+        own_transport = any(
+            "load_neutral" in klass.__dict__ or "api_values" in klass.__dict__
+            for klass in cls.__mro__[: cls.__mro__.index(ApiDataFG)]
+        )
+        if own_transport or not isinstance(match.access, ApiDataRef):
+            return None
+        return match.access.value_type
 
     @classmethod
     def load_neutral(cls, match: SourceMatch, features: Any) -> Any:

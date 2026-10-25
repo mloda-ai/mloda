@@ -83,6 +83,8 @@ A dict returned by a non-root feature group is appended to the frame when its co
 
 A group whose result has fewer rows than its input overrides `reduces_rows()` to return True, and core then raises at plan time when its features cannot run as one step.
 
+A group that could not compute a value for some rows can say so with `report_failed_rows(column, rows, reason)` (import from `mloda.provider`) inside `calculate_feature`. `reason` is a short code, never row data; `rows` are positions in the group's own output. Entries reach `RunResult.failed_rows` of `run()` and `run_all()`; `stream_run` and `stream_all` do not collect them.
+
 #### 6. Advanced Feature Group Topics
 
 For more in-depth information about feature groups, check out these advanced topics:

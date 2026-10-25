@@ -5,6 +5,7 @@ from types import TracebackType
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
 from mloda.core.api.plan_info import PlanStep, _key_id, match_digests, snapshot_group
@@ -30,13 +31,20 @@ class RunResult(list[Any]):
         run_id: str | None = None,
         plan_id: str | None = None,
         connection_handles: dict[int, str] | None = None,
+        failed_rows: tuple[FailedRows, ...] = (),
     ) -> None:
         super().__init__(results)
+        self._failed_rows = failed_rows
         self._connection_handles = connection_handles or {}
         self._plan = plan
         self._result_items = tuple(result_items or ())
         self._run_id = run_id
         self._plan_id = plan_id
+
+    @property
+    def failed_rows(self) -> tuple[FailedRows, ...]:
+        """Rows feature groups reported as valueless in this run; empty when none."""
+        return self._failed_rows
 
     @property
     def run_id(self) -> str | None:

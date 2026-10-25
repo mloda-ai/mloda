@@ -795,6 +795,7 @@ class mlodaAPI:
             run_id=run_context.run_id,
             plan_id=self.plan_id,
             connection_handles=self._connection_handles,
+            failed_rows=runner.get_failed_rows(),
         )
 
     def stream_run(

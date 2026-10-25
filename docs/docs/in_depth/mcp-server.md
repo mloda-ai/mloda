@@ -153,4 +153,9 @@ local; `mloda mcp serve` does.
 
 `mloda run` executes regardless of `mode`, since you started it yourself, but applies the same limits and preview
 rules. Exit codes: `0` success, `2` an error result or nothing could run (bad config, bad request, policy, limit, or a
-FeatureGroup that failed while planning or running, reported as `internal`), `1` any other failure.
+FeatureGroup that failed while planning or running, reported as `internal`), `3` a completed run whose result
+carries `failed_rows`, `1` any other failure.
+
+A completed run result has a `failed_rows` list only when feature groups reported rows that got no value. Each entry has
+`column`, `reason` (a short code), `row_count`, `rows` and `truncated`; `rows` holds at most 1000 positions unless
+`--full` is used. The positions are rows of the feature group's own output.

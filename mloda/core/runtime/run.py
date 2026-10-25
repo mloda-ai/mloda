@@ -10,6 +10,7 @@ from uuid import UUID
 import logging
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, build_hook_extenders
+from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.run_context import RunContext
@@ -283,6 +284,7 @@ class ExecutionOrchestrator:
         try:
             if not in_other_process:
                 self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
+                self.data_lifecycle_manager.set_failed_rows(self.cfw_register.get_failed_rows())
         finally:
             self.join(abandon_threads=cancelled)
         if not in_other_process:
@@ -641,6 +643,10 @@ class ExecutionOrchestrator:
         Gets the artifacts.
         """
         return self.data_lifecycle_manager.get_artifacts()
+
+    def get_failed_rows(self) -> tuple[FailedRows, ...]:
+        """Gets the rows feature groups reported as valueless."""
+        return self.data_lifecycle_manager.get_failed_rows()
 
     def _cfw_to_occupy(self, step: Any) -> UUID | None:
         """Resolve the cfw a step needs exclusively, without creating one."""

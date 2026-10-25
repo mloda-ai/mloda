@@ -1197,6 +1197,7 @@ class TestFinalizeTouchesSharedStateOnlyInTheOwningProcess:
         orchestrator._owner_pid = os.getpid() + pid_offset
         orchestrator.location = "flight-location"
         orchestrator.cfw_register = Mock()
+        orchestrator.cfw_register.get_failed_rows.return_value = []
         orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
         orchestrator.join = Mock()  # type: ignore[method-assign]
         orchestrator.executor = Mock()

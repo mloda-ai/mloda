@@ -29,12 +29,14 @@ from mloda.interfaces.service.runner import Runner
 from mloda.user import PluginCollector, PluginLoader
 from tests.helpers.docs_scope import shipped_feature_group_walk
 from tests.test_interfaces.source_groups import (
+    FAILED,
     FILE_SOURCE_GROUPS,
     PLAN_RAISE,
     PLAN_RAISE_SECRET,
     RAISE,
     RAISE_SECRET,
     PlanRaiseMcp5,
+    RunnerFailedRowsMcp5,
     RunnerRaiseMcp5,
 )
 
@@ -523,6 +525,35 @@ class TestRunInlineData:
         assert outcome.code == 2
         assert _error_code(outcome) == "policy_denied"
         assert '"007"' not in outcome.out
+
+
+class TestRunFailedRows:
+    def test_failed_rows_are_printed_and_exit_3(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        request = _request_file(tmp_path, {"features": ["customer_id", FAILED]})
+
+        outcome = _cli(["run", str(request), "--config", str(config)], extra_groups=[RunnerFailedRowsMcp5])
+
+        assert outcome.code == 3, outcome.err
+        result = outcome.json()
+        assert result["status"] == "completed"
+        assert result["failed_rows"] == [
+            {"column": FAILED, "reason": "timeout", "row_count": 2, "rows": [1, 3], "truncated": False}
+        ]
+
+    def test_run_without_failed_rows_exits_0_and_has_no_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli(
+            ["run", str(_request_file(tmp_path)), "--config", str(config)], extra_groups=[RunnerFailedRowsMcp5]
+        )
+
+        assert outcome.code == 0, outcome.err
+        assert "failed_rows" not in outcome.json()
 
 
 class TestRunFeatureGroupFailure:

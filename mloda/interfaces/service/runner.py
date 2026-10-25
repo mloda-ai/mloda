@@ -4,14 +4,24 @@ The request is planned again first, so policy, data-access rules, filters and ro
 """
 
 import math
+import re
 import secrets
 from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Any
 
-from mloda.interfaces.service.errors import error_result, failure_result, is_error
+from mloda.core.abstract_plugins.components.failed_rows import FailedRows
+from mloda.interfaces.service.errors import error_result, failure_result, is_error, strip_control_characters
 from mloda.interfaces.service.planner import Planner
 from mloda.user import PlanStep
+
+FAILED_ROWS_CAP = 1000
+
+_WHITESPACE_CONTROLS = re.compile(r"[\t\n\r]")
+
+
+def _column_label(column: str) -> str:
+    return _WHITESPACE_CONTROLS.sub("", strip_control_characters(column))
 
 
 def _json_safe(value: Any) -> Any:
@@ -57,7 +67,30 @@ class Runner:
         if over:
             details = [{"reason": "result_over_limit", "rows": rows, "max_rows": max_rows} for rows in over]
             return error_result("limit_exceeded", f"A result table has more rows than max_rows ({max_rows}).", details)
-        return {"status": "completed", "tables": tables, "audit_id": f"run_{secrets.token_hex(8)}"}
+        completed: dict[str, Any] = {"status": "completed", "tables": tables, "audit_id": f"run_{secrets.token_hex(8)}"}
+        if result.failed_rows:
+            completed["failed_rows"] = self._failed_rows(result.failed_rows, full)
+        return completed
+
+    @staticmethod
+    def _failed_rows(entries: Sequence[FailedRows], full: bool) -> list[dict[str, Any]]:
+        merged: dict[tuple[str, str], list[int]] = {}
+        for entry in entries:
+            merged.setdefault((_column_label(entry.column), entry.reason), []).extend(entry.rows)
+        listed = []
+        for (column, reason), rows in merged.items():
+            ordered = sorted(set(rows))
+            shown = ordered if full else ordered[:FAILED_ROWS_CAP]
+            listed.append(
+                {
+                    "column": column,
+                    "reason": reason,
+                    "row_count": len(ordered),
+                    "rows": shown,
+                    "truncated": len(shown) < len(ordered),
+                }
+            )
+        return listed
 
     def _full_table(self, frame: Mapping[Any, Any], names: Sequence[str], steps: Sequence[PlanStep]) -> dict[str, Any]:
         data = {str(name): list(values) for name, values in frame.items()}

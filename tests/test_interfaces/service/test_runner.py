@@ -34,10 +34,15 @@ from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.plugin_stubs import StubFeatureGroup
 from tests.test_interfaces.source_groups import (
+    FAILED,
+    FAILED_CTRL,
+    FAILED_MANY,
+    FAILED_MANY_ROWS,
     FILE_SOURCE_GROUPS,
     PLAN_RAISE_SECRET,
     RAISE,
     RAISE_SECRET,
+    RunnerFailedRowsMcp5,
     RunnerRaiseMcp5,
 )
 
@@ -198,6 +203,7 @@ def _base(*extra: type[FeatureGroup]) -> PluginCollector:
         RunnerTypesMcp5,
         RunnerDeniedMcp5,
         RunnerRaiseMcp5,
+        RunnerFailedRowsMcp5,
         ApiDataFG,
     }
     return PluginCollector.enabled_feature_groups(groups | set(extra))
@@ -736,6 +742,47 @@ class TestFull:
 
         assert set(_only_table(explicit)) == TABLE_KEYS
         assert len(_only_table(explicit)["preview"]["rows"]) == 2
+
+
+class TestFailedRows:
+    ENTRY_KEYS = {"column", "reason", "row_count", "rows", "truncated"}
+
+    def test_reported_rows_are_listed(self, tmp_path: Path) -> None:
+        result = _success(_run(tmp_path, {"features": ["customer_id", FAILED]}))
+
+        assert result["failed_rows"] == [
+            {"column": FAILED, "reason": "timeout", "row_count": 2, "rows": [1, 3], "truncated": False}
+        ]
+        json.dumps(result, allow_nan=False)
+
+    def test_without_reports_the_key_is_absent(self, tmp_path: Path) -> None:
+        assert "failed_rows" not in _success(_run(tmp_path))
+
+    def test_rows_are_capped_at_1000_with_the_full_count(self, tmp_path: Path) -> None:
+        (entry,) = _success(_run(tmp_path, {"features": [FAILED_MANY]}))["failed_rows"]
+
+        assert set(entry) == self.ENTRY_KEYS
+        assert entry["row_count"] == FAILED_MANY_ROWS
+        assert entry["rows"] == list(range(1000))
+        assert entry["truncated"] is True
+
+    def test_full_lifts_the_cap(self, tmp_path: Path) -> None:
+        planner = _planner(_settings(tmp_path))
+        plan_id = _plan_id(planner, {"features": [FAILED_MANY]})
+
+        (entry,) = _success(Runner(planner).run(plan_id, full=True))["failed_rows"]
+
+        assert entry["rows"] == list(range(FAILED_MANY_ROWS))
+        assert entry["row_count"] == FAILED_MANY_ROWS
+        assert entry["truncated"] is False
+
+    def test_column_has_control_characters_stripped(self, tmp_path: Path) -> None:
+        (entry,) = _success(_run(tmp_path, {"features": [FAILED_CTRL]}))["failed_rows"]
+
+        assert entry["column"].startswith("bad")
+        assert entry["column"].endswith("col")
+        assert not any(ord(char) < 32 for char in entry["column"])
+        assert entry["reason"] == "ctrl"
 
 
 class TestLock:

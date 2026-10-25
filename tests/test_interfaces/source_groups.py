@@ -72,3 +72,46 @@ class PlanRaiseMcp5(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return data
+
+
+FAILED = "income__mcp5_failed"
+FAILED_MANY = "income__mcp5_failed_many"
+FAILED_CTRL = "income__mcp5_failed_ctrl"
+FAILED_COLUMN_CTRL = "bad\ncol"
+FAILED_MANY_ROWS = 1500
+
+
+class RunnerFailedRowsMcp5(FeatureGroup):
+    """Derives income and reports rows that got no value."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) in {FAILED, FAILED_MANY, FAILED_CTRL}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("income")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        from mloda.provider import report_failed_rows
+
+        columns: dict[str, list[Any]] = {}
+        for feature_name in features.get_all_names():
+            name = str(feature_name)
+            columns[name] = [int(value) for value in data["income"]]
+            if name == FAILED:
+                report_failed_rows(name, [1, 3], "timeout")
+            elif name == FAILED_MANY:
+                report_failed_rows(name, list(range(FAILED_MANY_ROWS)), "bulk")
+            else:
+                report_failed_rows(FAILED_COLUMN_CTRL, [0], "ctrl")
+        return columns

@@ -1,6 +1,7 @@
 """The ``mloda`` command line: explain and run feature requests through the service layer, or serve them over MCP.
 
-Results are printed as the services return them; exit code 2 means an error result or nothing could run.
+Results are printed as the services return them; exit code 2 means an error result or nothing could run,
+exit code 3 a completed run that reported failed rows.
 """
 
 import argparse
@@ -27,6 +28,7 @@ DEFAULT_CONFIG = "mloda.toml"
 SIGNING_KEY_ENV = "MLODA_MCP_SIGNING_KEY"
 FORMATS = ("json", "jsonl", "csv")
 FAILED = 2
+FAILED_ROWS = 3
 
 
 def build_services(
@@ -286,4 +288,6 @@ def main(
         err.write(f"mloda: error: csv output needs a single table, got {len(tables)}; use json or jsonl\n")
         return FAILED
     _write_result(result, output_format, out, full=args.command == "run" and args.full)
-    return FAILED if is_error(result) else 0
+    if is_error(result):
+        return FAILED
+    return FAILED_ROWS if result.get("failed_rows") else 0

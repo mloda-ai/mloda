@@ -26,7 +26,7 @@ from mloda.interfaces.service.planner import Planner  # noqa: E402
 from mloda.interfaces.service.request import MAX_FEATURES, SCHEMA_ID, request_schema  # noqa: E402
 from mloda.interfaces.service.runner import Runner  # noqa: E402
 from mloda.user import PluginCollector  # noqa: E402
-from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS  # noqa: E402
+from tests.test_interfaces.source_groups import FAILED, FILE_SOURCE_GROUPS, RunnerFailedRowsMcp5  # noqa: E402
 
 # The tools resolve real FeatureGroups and read source files; a cold cache under xdist load can exceed 10s.
 pytestmark = [pytest.mark.timeout(30), pytest.mark.anyio]
@@ -85,7 +85,7 @@ def _clock() -> float:
 
 
 def _base() -> PluginCollector:
-    return PluginCollector.enabled_feature_groups(set(FILE_SOURCE_GROUPS))
+    return PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, RunnerFailedRowsMcp5})
 
 
 def _settings(tmp_path: Path, mode: str = "plan") -> Settings:
@@ -449,6 +449,21 @@ class TestExecute:
         for text in _texts(explained) + _texts(ran):
             for customer_id in CUSTOMER_IDS:
                 assert customer_id not in text
+
+    async def test_run_result_carries_failed_rows_and_is_not_an_error(self, tmp_path: Path) -> None:
+        settings = _settings(tmp_path, "execute")
+        request = {"features": ["customer_id", FAILED]}
+
+        async with Client(_server(settings)) as client:
+            plan_id = _assert_envelope(await client.call_tool(EXPLAIN, {"request": request}))["plan_id"]
+            ran = await client.call_tool(RUN, {"plan_id": plan_id})
+
+        result = _assert_envelope(ran)
+        assert ran.is_error is False
+        assert result["status"] == "completed"
+        assert result["failed_rows"] == [
+            {"column": FAILED, "reason": "timeout", "row_count": 2, "rows": [1, 3], "truncated": False}
+        ]
 
     async def test_run_with_a_foreign_plan_id_is_plan_invalid(self, tmp_path: Path) -> None:
         result = await _call(_server(_settings(tmp_path, "execute")), RUN, {"plan_id": "mpl1.x.y"})

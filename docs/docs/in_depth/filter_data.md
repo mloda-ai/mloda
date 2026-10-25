@@ -327,6 +327,9 @@ def final_filters(cls) -> bool | None:
 | `False` | Skip row elimination. Use this when your FeatureGroup fully handles the filter itself. |
 | `True` | Force row elimination, even if the FilterEngine would skip it. |
 
+A group that serves the filter feature must return its column even when it applies
+the filter itself (`final_filters()` returns `False`).
+
 This method does **not** affect whether `features.filters` is populated or whether
 `features.mask_engine` is wired. Both are set independently of `final_filters()`.
 
@@ -419,7 +422,7 @@ return pa.table({
 | Your FeatureGroup... | `final_filters()` | Uses [mask engine](mask_engine.md)? | Must preserve filter column? |
 |---------------------|:-----------------:|:------------------------:|:---------------------------:|
 | Ignores filters | `None` (default) | No | Yes (elimination reads it from your output) |
-| Handles everything inline | `False` | Yes | No (elimination skipped) |
+| Handles everything inline | `False` | Yes | Only if your group serves the filter feature (it is then in the FeatureSet) |
 | Uses inline logic + elimination | `True` | Yes | **Yes** |
 | Just forces elimination | `True` | No | Yes |
 

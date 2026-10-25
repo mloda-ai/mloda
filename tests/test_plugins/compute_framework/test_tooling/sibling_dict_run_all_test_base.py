@@ -115,15 +115,23 @@ class PartialResultProbeFirstOnly(FeatureChainParserMixin, FeatureGroup):
         return {feature.name: [0, 0, 0]}
 
 
-class PartialResultProbeConsumer(FeatureGroup):
-    """Consumes two probe features served by ``PartialResultProbeFirstOnly`` in one FeatureSet."""
+class _InputsConsumer(FeatureGroup):
+    """Consumer of the features named in ``INPUTS``, returning a constant column."""
+
+    INPUTS: tuple[str, ...] = ()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("sd_a__partial_result_probe_first_1"), Feature("sd_a__partial_result_probe_first_2")}
+        return {Feature(n) for n in self.INPUTS}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [1, 1, 1]}
+
+
+class PartialResultProbeConsumer(_InputsConsumer):
+    """Consumes two probe features served by ``PartialResultProbeFirstOnly`` in one FeatureSet."""
+
+    INPUTS = ("sd_a__partial_result_probe_first_1", "sd_a__partial_result_probe_first_2")
 
 
 class SourceOmittingCreator(DataCreatorFeatureGroup):
@@ -138,15 +146,10 @@ class SourceOmittingCreator(DataCreatorFeatureGroup):
         return {"sd_src_kept": [1, 2, 3]}
 
 
-class SourceOmittingConsumer(FeatureGroup):
+class SourceOmittingConsumer(_InputsConsumer):
     """Consumes both names of ``SourceOmittingCreator``."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("sd_src_kept"), Feature("sd_src_omitted")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {cls.get_class_name(): [1, 1, 1]}
+    INPUTS = ("sd_src_kept", "sd_src_omitted")
 
 
 _ALL_FGS = {

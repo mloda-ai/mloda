@@ -881,9 +881,7 @@ class ComputeFramework(ABC):
         from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
         columns = set(self.column_names)
-        names = set(features.get_initial_requested_features()) | {
-            f.name for f in features.features if not f.link_key_only
-        }
+        names = {f.name for f in features.features if not f.link_key_only}
         missing = sorted(
             str(name)
             for name in names

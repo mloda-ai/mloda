@@ -16,6 +16,7 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.provider import DataCreatorFeatureGroup, FeatureGroup, PropertySpec
 from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -242,11 +243,13 @@ class TestDeclaredInputsReresolvedAfterOptionDefaultsMaterialize:
             feature_set.declared_input_features_resolved = True
             feature_set.declared_input_feature_names = frozenset({"stale"})
             feature_set.declared_input_feature_edges = {"my_feature": ("stale",)}
+            feature_set.declared_input_columns = {"my_feature": ("stale",)}
 
             feature_set.materialize_option_defaults(_EdgesMemoResetFeatureGroup)
 
             assert feature_set.declared_input_feature_names is None
             assert feature_set.declared_input_feature_edges is None
+            assert feature_set.declared_input_columns is None
         finally:
             del _EdgesMemoResetFeatureGroup
             gc.collect()
@@ -357,7 +360,7 @@ class TestInputFeatureEdgesPerOutputFeature:
             feature_set = FeatureSet([Feature("a")])
             extender = _AllHooksContextCapturingExtender()
             cfw = _build_framework({extender})
-            cfw.data = {"col": [1, 2, 3]}
+            cfw.data = {"col": [1, 2, 3], "src_a": [1, 2, 3]}
             cfw.set_column_names()
 
             cfw.run_validate_input_features(_MutationProbeFeatureGroup, feature_set)
@@ -404,7 +407,7 @@ class TestDeclaredInputsResolvedOncePerStep:
         try:
             extender = _AllHooksContextCapturingExtender()
             cfw = _build_framework({extender})
-            cfw.data = {"col": [1, 2, 3]}
+            cfw.data = {"col": [1, 2, 3], "x": [1, 2, 3]}
             cfw.set_column_names()
             feature_set = FeatureSet([Feature("col")])
 
@@ -778,3 +781,63 @@ class TestComputeHooksCarrySpecializedFrom:
 
         assert extender.captured
         assert all(context.specialized_from == () for context in extender.captured)
+
+
+class _InputCheckConsumerFeatureGroup(FeatureGroup):
+    """Non-root group declaring the input ``src``."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:
+        return {"src"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"col": [1, 2, 3]}
+
+
+class TestInputCheckState:
+    """The core input check stamps FeatureSet.input_check, which HookContext.input_check exposes."""
+
+    def _calculate_context(self, group: type[FeatureGroup], data: Any) -> HookContext:
+        extender = _TwoHookContextCapturingExtender()
+        cfw = _build_framework({extender})
+        cfw.data = data
+        feature_set = FeatureSet([Feature("col")])
+
+        cfw.run_validate_input_features(group, feature_set)
+        cfw.run_calculate_feature(group, feature_set)
+
+        return extender.captured_by_hook[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE]
+
+    def test_consumer_with_data_is_checked(self) -> None:
+        context = self._calculate_context(_InputCheckConsumerFeatureGroup, {"src": [1, 2, 3]})
+
+        assert context.input_check == "checked"
+
+    def test_root_without_data_is_skipped_source(self) -> None:
+        context = self._calculate_context(_InputCheckConsumerFeatureGroup, None)
+
+        assert context.input_check == "skipped_source"
+
+    def test_schemaless_empty_data_is_skipped_empty(self) -> None:
+        context = self._calculate_context(_InputCheckConsumerFeatureGroup, {})
+
+        assert context.input_check == "skipped_empty"
+
+    def test_hook_context_defaults_input_check_to_none(self) -> None:
+        extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        cfw = _build_framework({extender})
+
+        cfw.run_calculate_feature(_RootFeatureGroup, _build_feature_set())
+
+        assert extender.captured is not None
+        assert extender.captured.input_check is None
+
+    def test_unresolved_feature_set_on_a_run_framework_with_data_raises(self) -> None:
+        cfw = _build_framework(set())
+        cfw.run_context = RunContext(run_id="run-1")
+        cfw.data = {"src": [1, 2, 3]}
+        feature_set = FeatureSet([Feature("col")])
+        assert feature_set.declared_input_features_resolved is False
+
+        with pytest.raises(ValueError, match="declared_input"):
+            cfw.run_validate_input_features(_InputCheckConsumerFeatureGroup, feature_set)

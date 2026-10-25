@@ -65,6 +65,7 @@ class HookContext:
     specialized_from: tuple[str, ...] = ()
     input_features: frozenset[str] | None = None
     input_feature_edges: dict[str, tuple[str, ...]] | None = None
+    input_check: str | None = None
     compute_framework_name: str | None
     rows_in: int | None = None
     rows_out: int | None = None

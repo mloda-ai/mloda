@@ -384,6 +384,15 @@ An intermediate step must still return a column for every feature it computes.
 For full details on how the guard works and the schema-presence gate, see
 [Empty Results](../compute-framework-integration.md#empty-results).
 
+## MissingInputFeatureError
+
+A feature group declared an input (`input_features`) that is not a column of the data handed to
+`calculate_feature`. Core raises it before `validate_input_features` and any extender, so an
+extender cannot skip it. The error carries `feature_group`, `feature`, `missing_inputs` and
+`available_columns`, and is importable from `mloda.user`, `mloda.provider` and `mloda.steward`.
+A missing `x` next to columns `x_x` and `x_y` usually means a join between two inputs that both
+carry `x` renamed it.
+
 ## Related Documentation
 
 - [Feature Group Matching](../feature-group-matching.md)

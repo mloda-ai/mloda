@@ -135,6 +135,7 @@ class ExecutionPlan:
         specialized_from: dict[UUID, tuple[str, ...]] | None = None,
         implementations: Collection[type[Implementation[Any]]] | None = None,
         data_access_collection: Any = None,
+        input_feature_columns: dict[UUID, tuple[str, ...]] | None = None,
     ) -> None:
         self.implementations = () if implementations is None else implementations
         # Read only while building; cleared afterwards so a plan deepcopy never copies a connection.
@@ -145,6 +146,7 @@ class ExecutionPlan:
         self.global_filter = global_filter
         self.resolved_input_feature_names = resolved_input_feature_names
         self.specialized_from = specialized_from
+        self.input_feature_columns = input_feature_columns
 
         # Helper variable
         self.feature_set_collections: list[set[UUID]] = []
@@ -236,6 +238,7 @@ class ExecutionPlan:
         self.declared_frameworks = {}
         self.data_access_collection = None
         self.resolved_input_feature_names = None
+        self.input_feature_columns = None
         self.specialized_from = None
         self._feature_set_index_cache = {}
         self._feature_set_index_source = None
@@ -3669,6 +3672,16 @@ Available join types:
                     feature_set.declared_input_feature_names = frozenset(union) or None
                     feature_set.declared_input_feature_edges = merge_input_feature_edges(edge_pairs)
                     feature_set.declared_input_features_resolved = True
+
+                if self.input_feature_columns is not None:
+                    merged_columns: dict[str, set[str]] = {}
+                    for feature in sub_features:
+                        columns = self.input_feature_columns.get(feature.uuid)
+                        if columns:
+                            merged_columns.setdefault(str(feature.name), set()).update(columns)
+                    feature_set.declared_input_columns = {
+                        name: tuple(sorted(cols)) for name, cols in merged_columns.items()
+                    } or None
 
                 if self.specialized_from is not None:
                     feature_set.specialized_from = tuple(

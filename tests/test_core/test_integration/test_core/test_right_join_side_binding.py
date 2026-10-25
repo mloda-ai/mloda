@@ -369,7 +369,7 @@ class RightBindSideRight(DataCreatorFeatureGroup):
 
 class RightBindSideChild(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        names = ("left_key", "left_payload", "arrow_payload", "right_key", "right_payload")
+        names = ("left_payload", "arrow_payload", "right_key", "right_payload")
         return {Feature(name=f"rjsbs_{name}") for name in names}
 
     @classmethod

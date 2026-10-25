@@ -198,11 +198,27 @@ class _RequiredDeclaredFG(ToyDeclaredFG):
 
 
 class TestRequiredOptionRoute:
-    def test_declines_without_the_required_option(self) -> None:
-        result = _identify(Feature(COL), toy_dac(h1={COL: [1]}), ToyRequiredOptionFG)
+    @pytest.mark.parametrize(
+        ("feature", "groups", "checked", "dac"),
+        [
+            (Feature(COL), (ToyRequiredOptionFG,), ToyRequiredOptionFG, toy_dac(h1={COL: [1]})),
+            (
+                Feature("toyfmt_conn__knows", Options({"ToySourceFG": {"toyfmt_conn__knows": [1]}})),
+                (_RequiredDeclaredFG, ToySourceFG),
+                _RequiredDeclaredFG,
+                toy_dac(h1={"toyfmt_conn__knows": [1]}),
+            ),
+        ],
+        ids=["undeclared_name", "foreign_pointer"],
+    )
+    def test_declines_without_the_required_option(
+        self, feature: Feature, groups: tuple[type, ...], checked: type, dac: DataAccessCollection
+    ) -> None:
+        result = _identify(feature, dac, *groups)
 
-        assert result.identified == {}
-        assert ToyRequiredOptionFG not in result.eliminations
+        assert checked not in result.eliminations
+        if checked is ToyRequiredOptionFG:
+            assert result.identified == {}
 
     @pytest.mark.parametrize(
         ("feature", "group", "dac"),

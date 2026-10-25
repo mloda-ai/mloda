@@ -800,8 +800,15 @@ class TestSingleExtenderPathHonorsRaiseOnError:
         cf = self._make_compute_framework([MockExtender("soft", should_fail=False, raise_on_error=False)])
         fg = _KeyErrorFeatureGroup()
 
-        with pytest.raises(ValueError, match="failed with a KeyError"):
+        with pytest.raises(ValueError, match="failed with a KeyError") as exc_info:
             cf.run_calculate_feature(fg, "features")
+
+        message = str(exc_info.value)
+        assert "KeyErrorFeatureGroup" in message
+        assert "missing_col" in message
+        assert "input_features" in message
+        assert "missing Links" not in message
+        assert isinstance(exc_info.value.__cause__, KeyError)
 
         assert fg.calc_count == 1, (
             "calculate_feature must run exactly once; the warning-only fallback must not re-run it on inner KeyError"

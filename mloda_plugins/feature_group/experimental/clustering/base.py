@@ -269,10 +269,6 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
             for source_feature in source_features:
                 resolved.extend(cls.resolve_multi_column_feature(source_feature, available))
 
-            if not any(name in available for name in resolved):
-                listing = sorted(available, key=str)
-                raise ValueError(f"None of the source features {resolved} found in data. Available columns: {listing}")
-
             if feature.options.get(cls.OUTPUT_PROBABILITIES):
                 result, probabilities = perform_with_probabilities(data, algorithm, k_value, resolved)
                 data = add_column(data, feature.name, result)

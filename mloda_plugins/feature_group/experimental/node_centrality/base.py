@@ -224,7 +224,7 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup)
         add_column: Callable[[Any, str, Any, str | None], Any],
         columns: Callable[[Any], set[str]],
     ) -> Any:
-        """Shared loop: resolve each feature, check its source, compute centrality, add the column."""
+        """Shared loop: resolve each feature, compute centrality, add the column."""
         for feature in features.get_sorted_features():
             centrality_type, source_feature_str = cls._extract_centrality_and_source_feature(feature)
 
@@ -236,13 +236,6 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup)
             if graph_type not in cls.GRAPH_TYPES:
                 raise ValueError(
                     f"Unsupported graph type: {graph_type}. Supported types: {', '.join(cls.GRAPH_TYPES.keys())}"
-                )
-
-            available = columns(data)
-            if source_feature_str not in available:
-                raise ValueError(
-                    f"Source features not found in data: {[source_feature_str]}. "
-                    f"Available columns: {sorted(available, key=str)}"
                 )
 
             result = perform(data, centrality_type, source_feature_str, graph_type, weight_column)

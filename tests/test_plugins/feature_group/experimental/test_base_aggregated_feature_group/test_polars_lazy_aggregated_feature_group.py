@@ -1,6 +1,7 @@
 from typing import Any
 import pytest
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.provider import FeatureSet
@@ -229,13 +230,10 @@ class TestPolarsLazyAggregation:
 
     def test_calculate_feature_missing_source(self, sample_lazy_dataframe: Any) -> None:
         """Test calculate_feature method with missing source feature."""
-        feature_set = FeatureSet()
-        feature_set.add(Feature("missing__sum_aggr"))
-
-        with pytest.raises(ValueError, match="None of the source features") as exc_info:
-            PolarsLazyAggregation.calculate(AggregatedFeatureGroup, sample_lazy_dataframe, feature_set, None)
-        assert "Available columns" in str(exc_info.value)
-        assert "sales" in str(exc_info.value)
+        error = assert_core_rejects_missing_input(
+            PolarsLazyAggregation, sample_lazy_dataframe, "missing__sum_aggr", ("missing",)
+        )
+        assert "sales" in error.available_columns
 
     def test_calculate_feature_invalid_aggregation(self, sample_lazy_dataframe: Any) -> None:
         """Test calculate_feature method with invalid aggregation type."""

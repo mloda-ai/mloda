@@ -148,16 +148,9 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
         add_column: Callable[[Any, str, Any], Any],
         columns: Callable[[Any], set[str]],
     ) -> Any:
-        """Shared loop: check the source, validate the operations, clean in sequence, add the result."""
+        """Shared loop: validate the operations, clean in sequence, add the result."""
         for feature in features.get_sorted_features():
             operations, source_feature = cls._extract_operations_and_source_feature(feature)
-
-            available = columns(data)
-            if source_feature not in available:
-                raise ValueError(
-                    f"Source features not found in data: {[source_feature]}. "
-                    f"Available columns: {sorted(available, key=str)}"
-                )
 
             for operation in operations:
                 if operation not in cls.SUPPORTED_OPERATIONS:

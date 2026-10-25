@@ -11,6 +11,10 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+from tests.test_plugins.feature_group.experimental.core_input_check import (
+    assert_core_rejects_missing_input,
+    run_through_core,
+)
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import FeatureSet, SubtypeDeclaration
 from tests.test_plugins.feature_group.experimental.reference_contract import same, same_on_pandas
@@ -41,7 +45,10 @@ IMPL_DATA = [
     (PythonDictMissingValueImputation, lambda: {"b": [1.0], "a": [2.0]}),
 ]
 IMPL_IDS = ["pandas", "pyarrow", "python_dict"]
-SOURCE_ERROR = "Source features not found in data: {missing}. Available columns: ['a', 'b']"
+
+
+def _feature(name: str, **context: Any) -> Feature:
+    return Feature(name, options=Options(context=context))
 
 
 def _feature_set(name: str, **context: Any) -> FeatureSet:
@@ -219,42 +226,25 @@ class TestMissingValueFeatureGroup:
         group.impute.assert_not_called()
 
     @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
-    def test_impute_source_check_comes_first_and_lists_sorted_columns(self, impl: Any, make_data: Any) -> None:
-        feature_set = _feature_set("missing__mean_imputed", group_by_features=["g1", "g2"])
-        with pytest.raises(ValueError) as exc_info:
-            impl.calculate(MissingValueFeatureGroup, make_data(), feature_set, None)
-        assert str(exc_info.value) == SOURCE_ERROR.format(missing=["missing"])
+    def test_core_reports_all_missing_declared_inputs_sorted_in_one_error(self, impl: Any, make_data: Any) -> None:
+        feature = _feature("missing__mean_imputed", group_by_features=["g1", "g2"])
+        assert_core_rejects_missing_input(impl, make_data(), feature, ("g1", "g2", "missing"), ("a", "b"))
 
     @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
-    def test_impute_names_one_missing_group_by_feature_per_error(self, impl: Any, make_data: Any) -> None:
-        feature_set = _feature_set("a__mean_imputed", group_by_features=["g1", "g2"])
-        with pytest.raises(ValueError) as exc_info:
-            impl.calculate(MissingValueFeatureGroup, make_data(), feature_set, None)
-        assert str(exc_info.value) == SOURCE_ERROR.format(missing=["g1"])
+    def test_core_names_every_missing_group_by_feature_in_one_error(self, impl: Any, make_data: Any) -> None:
+        feature = _feature("a__mean_imputed", group_by_features=["g1", "g2"])
+        assert_core_rejects_missing_input(impl, make_data(), feature, ("g1", "g2"), ("a", "b"))
 
     @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
-    def test_impute_checks_the_constant_after_the_columns(self, impl: Any, make_data: Any) -> None:
+    def test_impute_rejects_missing_constant_and_core_rejects_missing_column(self, impl: Any, make_data: Any) -> None:
         with pytest.raises(ValueError, match="Constant value must be provided for constant imputation method"):
-            impl.calculate(MissingValueFeatureGroup, make_data(), _feature_set("a__constant_imputed"), None)
-        with pytest.raises(ValueError, match="Source features not found in data"):
-            impl.calculate(MissingValueFeatureGroup, make_data(), _feature_set("zzz__constant_imputed"), None)
+            run_through_core(impl, make_data(), _feature("a__constant_imputed"))
+        assert_core_rejects_missing_input(impl, make_data(), _feature("zzz__constant_imputed"), ("zzz",))
 
-    def test_impute_reports_all_missing_resolved_names_in_one_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        resolved = Mock(return_value=["x~0", "x~1", "a"])
-        monkeypatch.setattr(MissingValueFeatureGroup, "resolve_multi_column_feature", resolved)
-        perform = Mock()
-        add_column = Mock()
-        with pytest.raises(ValueError) as exc_info:
-            MissingValueFeatureGroup.impute(
-                object(),
-                _feature_set("x__mean_imputed"),
-                perform=perform,
-                add_column=add_column,
-                columns=Mock(return_value={"b", "a"}),
-            )
-        assert str(exc_info.value) == SOURCE_ERROR.format(missing=["x~0", "x~1"])
-        perform.assert_not_called()
-        add_column.assert_not_called()
+    @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
+    def test_core_reports_source_and_group_by_misses_together(self, impl: Any, make_data: Any) -> None:
+        feature = _feature("x__mean_imputed", group_by_features=["g1"])
+        assert_core_rejects_missing_input(impl, make_data(), feature, ("g1", "x"), ("a", "b"))
 
     def test_impute_hands_the_resolved_arguments_to_perform_and_add_column(self) -> None:
         data = object()

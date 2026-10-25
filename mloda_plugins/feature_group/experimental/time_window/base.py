@@ -306,11 +306,6 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
 
         reference_time_column = cls.get_reference_time_column(_options)
 
-        if reference_time_column not in columns(data):
-            raise ValueError(
-                f"Reference time column '{reference_time_column}' not found in data. "
-                f"Please ensure the data contains this column."
-            )
         cls._validate_reference_time_column(column_semantics(data, reference_time_column), reference_time_column)
 
         for feature in features.get_sorted_features():
@@ -319,9 +314,6 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
             )
             available = columns(data)
             resolved = cls.resolve_multi_column_feature(in_features, available)
-            if not any(name in available for name in resolved):
-                listing = sorted(available, key=str)
-                raise ValueError(f"None of the source features {resolved} found in data. Available columns: {listing}")
             span = cls._get_time_delta(window_size, time_unit)
             result = perform(data, window_function, span, resolved, reference_time_column)
             data = add_column(data, feature.name, result)

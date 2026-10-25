@@ -54,8 +54,7 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
         """Copy data with NaN-like cells replaced by None in the given columns."""
         normalized = dict(data)
         for name in columns:
-            if name in data:
-                normalized[name] = [None if cls._is_missing(v) else v for v in data[name]]
+            normalized[name] = [None if cls._is_missing(v) else v for v in data[name]]
         return normalized
 
     @staticmethod
@@ -120,7 +119,7 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
         if len(in_features) == 1:
             source_feature = in_features[0]
             # Extract the source feature values
-            source_values = list(data.get(source_feature, []))
+            source_values = list(data[source_feature])
 
             # If there are no missing values, return the original values
             if not any(value is None for value in source_values):
@@ -152,7 +151,7 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
             # For multi-column features, we compute imputation values across columns for each row
             result = []
             for i in range(row_count(data)):
-                row_values = [data[col][i] if col in data else None for col in in_features]
+                row_values = [data[col][i] for col in in_features]
 
                 if imputation_method == "mean":
                     non_null = [v for v in row_values if v is not None]
@@ -208,7 +207,7 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
         groups: dict[tuple[Any, ...], list[int]] = {}
         keyless: list[int] = []
         for i in range(row_count(data)):
-            group_key = tuple(data[feature][i] if feature in data else None for feature in group_by_features)
+            group_key = tuple(data[feature][i] for feature in group_by_features)
             if any(cls._is_missing(v) for v in group_key):
                 keyless.append(i)
                 continue
@@ -217,7 +216,7 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
             groups[group_key].append(i)
 
         # Initialize result with original values
-        result = list(data.get(in_features, []))
+        result = list(data[in_features])
 
         if imputation_method == "constant":
             # Constant imputation is the same regardless of groups

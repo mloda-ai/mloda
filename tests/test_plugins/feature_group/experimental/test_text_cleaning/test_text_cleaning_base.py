@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -98,10 +99,11 @@ class TestTextCleaningFeatureGroupBase:
         assert next(iter(input_features)).name == "sum_aggr__sales"
 
     @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
-    def test_clean_source_check_is_strict_and_lists_sorted_columns(self, impl: Any, make_data: Any) -> None:
-        with pytest.raises(ValueError) as exc_info:
-            impl.calculate(TextCleaningFeatureGroup, make_data(), _feature_set("nope__cleaned_text", "normalize"), None)
-        assert str(exc_info.value) == "Source features not found in data: ['nope']. Available columns: ['a', 'b']"
+    def test_clean_core_rejects_missing_input_and_lists_sorted_columns(self, impl: Any, make_data: Any) -> None:
+        feature = Feature(
+            FeatureName("nope__cleaned_text"), Options({TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize",)})
+        )
+        assert_core_rejects_missing_input(impl, make_data(), feature, ("nope",), ("a", "b"))
 
     @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
     def test_clean_rejects_an_unsupported_operation(self, impl: Any, make_data: Any) -> None:

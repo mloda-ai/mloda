@@ -313,18 +313,11 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, OperationFeat
         add_column: Callable[[Any, str, Any], Any],
         columns: Callable[[Any], set[str]],
     ) -> Any:
-        """Shared loop: resolve each feature's sources, check them, reduce, add the result columns."""
+        """Shared loop: resolve each feature's sources, reduce, add the result columns."""
         for feature in features.get_sorted_features():
             algorithm, dimension, source_features, options = cls._extract_algorithm_dimension_and_source_features(
                 feature
             )
-
-            available = columns(data)
-            missing = [n for n in source_features if n not in available]
-            if missing:
-                raise ValueError(
-                    f"Source features not found in data: {missing}. Available columns: {sorted(available, key=str)}"
-                )
 
             result = perform(data, algorithm, dimension, source_features, options)
             data = add_column(data, feature.name, result)

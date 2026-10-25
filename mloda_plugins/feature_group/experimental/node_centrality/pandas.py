@@ -105,15 +105,6 @@ class PandasNodeCentrality(Implementation[NodeCentralityFeatureGroup]):
         source_col = "source"
         target_col = "target"
 
-        # Check if the required columns exist
-        required_cols = [source_col, target_col]
-        if weight_column is not None:
-            required_cols.append(weight_column)
-
-        for col in required_cols:
-            if col not in df.columns:
-                raise ValueError(f"Required column '{col}' not found in the data")
-
         # Get unique nodes
         nodes = pd.concat([df[source_col], df[target_col]]).unique()
 

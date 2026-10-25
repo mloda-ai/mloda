@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mloda.provider import FeatureSet
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -190,20 +190,17 @@ class TestPandasScaling:
     @pytest.mark.parametrize(
         ("name", "missing", "available"),
         [
-            ("zz__standard_scaled", "['zz']", "['age', 'income']"),
-            ("zz__minmax_scaled", "['zz']", "['age', 'income']"),
+            ("zz__standard_scaled", ("zz",), ("age", "income")),
+            ("zz__minmax_scaled", ("zz",), ("age", "income")),
         ],
         ids=["standard", "minmax"],
     )
-    def test_source_check_is_strict_and_lists_sorted_columns(self, name: str, missing: str, available: str) -> None:
+    def test_core_rejects_missing_input_and_lists_sorted_columns(
+        self, name: str, missing: tuple[str, ...], available: tuple[str, ...]
+    ) -> None:
         df = pd.DataFrame({"income": [1.0, 2.0, 3.0], "age": [4.0, 5.0, 6.0]})
-        features = FeatureSet()
-        features.add(Feature(name))
 
-        with pytest.raises(ValueError) as exc_info:
-            PandasScaling.calculate(ScalingFeatureGroup, df, features, None)
-
-        assert str(exc_info.value) == f"Source features not found in data: {missing}. Available columns: {available}"
+        assert_core_rejects_missing_input(PandasScaling, df, name, missing, available)
 
     def test_add_result_to_data_1d_array(self) -> None:
         df = pd.DataFrame({"a": [1, 2, 3]})

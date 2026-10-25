@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 from unittest.mock import Mock, patch
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
@@ -24,22 +25,19 @@ class TestPandasEncoding:
     @pytest.mark.parametrize(
         ("name", "missing", "available"),
         [
-            ("nonexistent__onehot_encoded", "['nonexistent']", "['category', 'value']"),
-            ("nonexistent~1__onehot_encoded", "['nonexistent']", "['category', 'value']"),
+            ("nonexistent__onehot_encoded", ("nonexistent",), ("category", "value")),
+            ("nonexistent~1__onehot_encoded", ("nonexistent",), ("category", "value")),
         ],
         ids=["missing", "missing_with_part_suffix"],
     )
-    def test_source_check_is_strict_and_lists_sorted_columns(self, name: str, missing: str, available: str) -> None:
+    def test_core_rejects_missing_input_and_lists_sorted_columns(
+        self, name: str, missing: tuple[str, ...], available: tuple[str, ...]
+    ) -> None:
         data = pd.DataFrame({"value": [1, 2, 3], "category": ["A", "B", "C"]})
-        features = FeatureSet()
-        features.add(Feature(name))
 
-        with pytest.raises(ValueError) as exc_info:
-            PandasEncoding.calculate(EncodingFeatureGroup, data, features, None)
+        assert_core_rejects_missing_input(PandasEncoding, data, name, missing, available)
 
-        assert str(exc_info.value) == f"Source features not found in data: {missing}. Available columns: {available}"
-
-    def test_existing_source_passes_the_source_check(self) -> None:
+    def test_existing_sources_calculate_the_feature(self) -> None:
         pytest.importorskip("sklearn")
         data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
         features = FeatureSet()

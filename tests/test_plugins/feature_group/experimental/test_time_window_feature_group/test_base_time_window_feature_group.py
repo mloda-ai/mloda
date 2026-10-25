@@ -14,6 +14,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import FeatureSet, SubtypeDeclaration
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -285,26 +286,13 @@ class TestTimeWindowFeatureGroup:
         ids=["pandas", "pyarrow"],
     )
     def test_window_raises_when_no_source_exists_and_lists_sorted_columns(self, impl: Any, data: Any) -> None:
-        feature_set = FeatureSet()
-        feature_set.add(Feature("missing__sum_2_hour_window"))
-        expected = "None of the source features ['missing'] found in data. Available columns: "
-        with pytest.raises(ValueError) as exc_info:
-            impl.calculate(TimeWindowFeatureGroup, data, feature_set, None)
-        assert str(exc_info.value) == expected + str(sorted(["b", "a", REFERENCE_TIME], key=str))
+        assert_core_rejects_missing_input(
+            impl, data, "missing__sum_2_hour_window", ("missing",), tuple(sorted(["b", "a", REFERENCE_TIME]))
+        )
 
-    def test_window_raises_one_wording_for_a_missing_reference_time(self) -> None:
+    def test_core_rejects_a_missing_reference_time(self) -> None:
         df = pd.DataFrame({"x": [1.0]})
-        feature_set = FeatureSet()
-        feature_set.add(Feature("x__sum_2_hour_window"))
-        with pytest.raises(ValueError, match="Reference time column 'reference_time' not found in data. Please ensure"):
-            TimeWindowFeatureGroup.window(
-                df,
-                feature_set,
-                perform=Mock(),
-                add_column=Mock(),
-                columns=PandasDataFrame.extract_column_names,
-                column_semantics=pandas_type_semantics.column_semantics,
-            )
+        assert_core_rejects_missing_input(PandasTimeWindow, df, "x__sum_2_hour_window", (REFERENCE_TIME,), ("x",))
 
     def test_has_valid_time_window_suffix_valid(self) -> None:
         """Test that _has_valid_time_window_suffix returns True for valid feature names."""

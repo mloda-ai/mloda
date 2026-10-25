@@ -174,9 +174,6 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
             aggregation_type, source_feature_name = cls._extract_aggr_and_source_feature(feature)
             available = columns(data)
             resolved = cls.resolve_multi_column_feature(source_feature_name, available)
-            if not any(name in available for name in resolved):
-                listing = sorted(available, key=str)
-                raise ValueError(f"None of the source features {resolved} found in data. Available columns: {listing}")
             if aggregation_type not in cls.AGGREGATION_TYPES:
                 raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
             data = add_column(data, feature.name, perform(data, aggregation_type, resolved))

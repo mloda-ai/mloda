@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from typing import Any
 import pytest
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -788,13 +789,30 @@ class TestForecastingFeatureGroup:
         assert np.allclose(result[self.FEATURE_NAME].to_numpy(), expected[self.FEATURE_NAME].to_numpy())
 
     def test_all_sources_missing_raises_with_available_columns(self) -> None:
-        feature_set = FeatureSet()
-        feature_set.add(Feature("nonexistent__linear_forecast_7day", self.options))
-        with pytest.raises(ValueError, match="None of the source features") as excinfo:
-            self._calculate(self.df, feature_set)
-        assert "sales" in str(excinfo.value)
-        assert "time_filter" in str(excinfo.value)
+        error = assert_core_rejects_missing_input(
+            PandasForecasting,
+            self.df.copy(),
+            Feature("nonexistent__linear_forecast_7day", self.options),
+            ("nonexistent",),
+        )
+        assert "sales" in error.available_columns
+        assert "time_filter" in error.available_columns
 
     def test_missing_reference_time_raises(self) -> None:
-        with pytest.raises(ValueError, match="Reference time column 'time_filter' not found in data"):
-            self._calculate(self.df.drop(columns=["time_filter"]))
+        assert_core_rejects_missing_input(
+            PandasForecasting,
+            self.df.drop(columns=["time_filter"]),
+            Feature(self.FEATURE_NAME, self.options),
+            ("time_filter",),
+            ("sales",),
+        )
+
+    def test_only_bound_columns_raises_no_usable_source_column(self) -> None:
+        df = self.df[["time_filter"]].copy()
+        df["sales~0~lower"] = self.df["sales"] - 1.0
+        df["sales~0~upper"] = self.df["sales"] + 1.0
+
+        with pytest.raises(ValueError, match="No usable source column") as excinfo:
+            self._calculate(df)
+        assert "~lower/~upper" in str(excinfo.value)
+        assert "sales~0~lower" in str(excinfo.value)

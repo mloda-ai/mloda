@@ -847,7 +847,7 @@ class TestMissingLinksError:
         assert by_name["DtypeCombiner"] == [110, 220, 330]
         assert by_name["DtypeOptionSibling"] == [10, 20, 30]
 
-    def test_option_split_hint_does_not_blame_a_harmless_intermediate_split(self) -> None:
+    def test_key_error_names_the_undeclared_column_read_despite_a_harmless_intermediate_split(self) -> None:
         """Bug 2: X5Intermediate (non-root) splits into two option buckets, but that split causes no
         actual problem since the option is never forwarded (both buckets compute identical data and
         merge without a Link). The real failure is an unrelated typo'd column access. The error must
@@ -866,9 +866,12 @@ class TestMissingLinksError:
             "X5Intermediate's harmless option split (never forwarded, buckets compute identical "
             "data) must not be blamed for the unrelated typo'd column access"
         )
-        assert "X5Intermediate" not in error_message
+        assert "Z5UnrelatedTypo" in error_message
+        assert "column_that_does_not_exist" in error_message
+        assert "input_features" in error_message
+        assert "missing Links" not in error_message
 
-    def test_option_split_hint_does_not_blame_an_already_linked_split(self) -> None:
+    def test_key_error_names_the_undeclared_column_read_despite_an_already_linked_split(self) -> None:
         """Bug 3: LinkedSplitSource splits into two option buckets, but the user already added a
         Link that resolves the split (the run succeeds for that part). The real failure is an
         unrelated typo'd column access. The error must not claim the already-linked split is the
@@ -896,7 +899,10 @@ class TestMissingLinksError:
             "The split of LinkedSplitSource is already resolved by an explicit Link; it must not be "
             "named as the likely cause of the unrelated typo'd column access"
         )
-        assert "is the likely cause" not in error_message
+        assert "LinkedCombiner" in error_message
+        assert "column_that_does_not_exist" in error_message
+        assert "input_features" in error_message
+        assert "missing Links" not in error_message
 
     def test_option_split_hint_does_not_crash_on_non_str_option_key(self) -> None:
         """Bug 4: MixedKeySource splits by an int option key (1) and a str option key ('unit'). The

@@ -6,6 +6,7 @@ import pytest
 import pandas as pd
 from typing import Any
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.provider import FeatureSet
@@ -320,12 +321,41 @@ class TestPythonDictMissingValueImputation:
 
     def test_calculate_feature_missing_source(self, sample_data_with_missing: dict[str, Any]) -> None:
         """Test calculate method with missing source feature."""
-        feature_set = FeatureSet()
-        feature_set.add(Feature("missing__mean_imputed"))
-
         data_copy = _copy_columnar(sample_data_with_missing)
-        with pytest.raises(ValueError, match="Source features not found in data"):
-            PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set, None)
+        assert_core_rejects_missing_input(
+            PythonDictMissingValueImputation, data_copy, "missing__mean_imputed", ("missing",)
+        )
+
+    def test_calculate_absent_group_by_column_raises_key_error(self) -> None:
+        """Direct calls without core fail loudly on a declared group_by column that is absent."""
+        feature_set = FeatureSet()
+        feature_set.add(Feature("a__mean_imputed", Options(context={"group_by_features": ["g"]})))
+
+        with pytest.raises(KeyError):
+            PythonDictMissingValueImputation.calculate(
+                MissingValueFeatureGroup, {"a": [1.0, None, 3.0]}, feature_set, None
+            )
+
+    def test_calculate_absent_source_column_raises_key_error(self) -> None:
+        feature_set = FeatureSet()
+        feature_set.add(Feature("a__mean_imputed"))
+
+        with pytest.raises(KeyError):
+            PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, {"b": [1.0, None]}, feature_set, None)
+
+    def test_grouped_imputation_reads_source_strictly(self) -> None:
+        with pytest.raises(KeyError):
+            PythonDictMissingValueImputation._perform_grouped_imputation({"g": [1, 1]}, "mean", "a", None, ["g"])
+
+    def test_grouped_imputation_reads_group_by_strictly(self) -> None:
+        with pytest.raises(KeyError):
+            PythonDictMissingValueImputation._perform_grouped_imputation({"a": [1.0, None]}, "mean", "a", None, ["g"])
+
+    def test_multi_column_imputation_reads_columns_strictly(self) -> None:
+        with pytest.raises(KeyError):
+            PythonDictMissingValueImputation._perform_imputation(
+                {"x~0": [1.0, None]}, "mean", ["x~0", "x~1"], None, None
+            )
 
     def test_calculate_feature_constant_without_value(self, sample_data_with_missing: dict[str, Any]) -> None:
         """Test calculate method with constant imputation but no constant value."""

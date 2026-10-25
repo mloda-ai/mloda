@@ -7,6 +7,7 @@ from unittest.mock import Mock
 import pytest
 import pandas as pd
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.user.pandas import PandasDataFrame
@@ -53,12 +54,11 @@ class TestPandasNodeCentrality:
 
     def test_centrality_missing_source_raises(self, sample_data: pd.DataFrame) -> None:
         """A missing source raises while the other edge columns are present (partial presence)."""
-        with pytest.raises(ValueError, match="Source features not found in data:") as exc:
-            self._run_centrality(sample_data, "invalid_feature__degree_centrality")
-        assert "invalid_feature" in str(exc.value)
-        assert "Available columns" in str(exc.value)
-        assert "target" in str(exc.value)
-        assert "weight" in str(exc.value)
+        error = assert_core_rejects_missing_input(
+            PandasNodeCentrality, sample_data, "invalid_feature__degree_centrality", ("invalid_feature",)
+        )
+        assert "target" in error.available_columns
+        assert "weight" in error.available_columns
 
     @pytest.mark.parametrize(
         ("name", "expected"),

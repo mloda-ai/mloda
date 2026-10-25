@@ -7,6 +7,7 @@ import pytest
 import pandas as pd
 import numpy as np
 from unittest.mock import patch
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipeline
 from mloda.provider import FeatureSet
@@ -23,22 +24,19 @@ class TestPandasSklearnPipeline:
     @pytest.mark.parametrize(
         ("name", "missing", "available"),
         [
-            ("feature1,missing__sklearn_pipeline_scaling", "['missing']", "['feature1', 'feature2']"),
-            ("zz,yy__sklearn_pipeline_scaling", "['zz', 'yy']", "['feature1', 'feature2']"),
+            ("feature1,missing__sklearn_pipeline_scaling", ("missing",), ("feature1", "feature2")),
+            ("zz,yy__sklearn_pipeline_scaling", ("yy", "zz"), ("feature1", "feature2")),
         ],
         ids=["one_missing", "all_missing"],
     )
-    def test_source_check_is_strict_and_lists_sorted_columns(self, name: str, missing: str, available: str) -> None:
+    def test_core_rejects_missing_input_and_lists_sorted_columns(
+        self, name: str, missing: tuple[str, ...], available: tuple[str, ...]
+    ) -> None:
         df = pd.DataFrame({"feature2": [4, 5, 6], "feature1": [1, 2, 3]})
-        features = FeatureSet()
-        features.add(Feature(name))
 
-        with pytest.raises(ValueError) as exc_info:
-            PandasSklearnPipeline.calculate(SklearnPipelineFeatureGroup, df, features, None)
+        assert_core_rejects_missing_input(PandasSklearnPipeline, df, name, missing, available)
 
-        assert str(exc_info.value) == f"Source features not found in data: {missing}. Available columns: {available}"
-
-    def test_existing_sources_pass_the_source_check(self) -> None:
+    def test_existing_sources_calculate_the_feature(self) -> None:
         pytest.importorskip("sklearn")
         df = pd.DataFrame({"feature1": [1.0, 2.0, 3.0], "feature2": [4.0, 5.0, 6.0]})
         features = FeatureSet()
@@ -236,8 +234,6 @@ class TestPandasSklearnPipeline:
         """Test calculate_feature with missing source feature."""
         df = pd.DataFrame({"feature1": [1.0, 2.0, 3.0, 4.0]})
 
-        features = FeatureSet()
-        features.add(Feature("nonexistent__sklearn_pipeline_scaling"))
-
-        with pytest.raises(ValueError, match="Source features not found in data:"):
-            PandasSklearnPipeline.calculate(SklearnPipelineFeatureGroup, df, features, None)
+        assert_core_rejects_missing_input(
+            PandasSklearnPipeline, df, "nonexistent__sklearn_pipeline_scaling", ("nonexistent",), ("feature1",)
+        )

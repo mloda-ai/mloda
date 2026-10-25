@@ -153,16 +153,9 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
         add_column: Callable[[Any, str, Any], Any],
         columns: Callable[[Any], set[str]],
     ) -> Any:
-        """Shared loop: check the two sources, compute the distance, add the result."""
+        """Shared loop: compute the distance, add the result."""
         for feature in features.get_sorted_features():
             distance_type, point1_feature, point2_feature = cls._extract_geo_distance_parameters(feature)
-
-            available = columns(data)
-            missing = [f for f in (point1_feature, point2_feature) if f not in available]
-            if missing:
-                raise ValueError(
-                    f"Source features not found in data: {missing}. Available columns: {sorted(available, key=str)}"
-                )
 
             result = distance(data, distance_type, point1_feature, point2_feature)
             data = add_column(data, feature.name, result)

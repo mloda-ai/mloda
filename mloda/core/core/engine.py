@@ -621,12 +621,24 @@ class Engine:
             left, right = self._link_sides(link, feature_group_class, feature)
             if left and link.left_index == index:
                 self._create_and_add_index_feature(
-                    feature_group_class, feature_group, feature, features.child_uuid, index, link
+                    feature_group_class,
+                    feature_group,
+                    feature,
+                    features.child_uuid,
+                    index,
+                    link,
+                    self._link_may_raise(link, feature, link.left_discriminator, left != right),
                 )
 
             if right and link.right_index == index:
                 self._create_and_add_index_feature(
-                    feature_group_class, feature_group, feature, features.child_uuid, index, link
+                    feature_group_class,
+                    feature_group,
+                    feature,
+                    features.child_uuid,
+                    index,
+                    link,
+                    self._link_may_raise(link, feature, link.right_discriminator, left != right),
                 )
 
     def _create_and_add_index_feature(

@@ -431,6 +431,7 @@ class TestTimeWindowBehaviorNeutral:
 
 
 _NAN = float("nan")
+_INF = float("inf")
 _DAY = datetime.timedelta(days=1)
 _START = datetime.datetime(2024, 1, 1)
 
@@ -439,17 +440,24 @@ _DIVERGENT_DECLARATIONS: dict[type[Implementation[Any]], dict[str, str]] = {
     PyArrowTimeWindow: {},
 }
 
-# (columns, span in days): NaN and null inside windows; a NaN next to values; windows and rows with no value.
+# (columns, span in days): NaN, null and inf inside windows; NaN next to values; windows and rows with no value.
 _SHAPES: dict[str, tuple[dict[str, list[float | None]], int]] = {
     "single": ({"a": [1.0, 2.0, _NAN, None, 3.0, 4.0, None]}, 3),
     "multi_nan_beside_values": ({"a": [1.0, _NAN, 2.0, 3.0], "b": [10.0, 20.0, 30.0, 40.0]}, 2),
     "multi_rows_without_value": ({"a": [None, 1.0, None, 2.0], "b": [None, 3.0, None, None]}, 1),
     "single_windows_without_value": ({"a": [None, _NAN, 1.0, None]}, 1),
+    "single_with_infinities": ({"a": [_INF, 1.0, 2.0, _NAN, 3.0, -_INF, _INF, None]}, 3),
+    "multi_with_infinities": ({"a": [_INF, 1.0, -_INF], "b": [-_INF, 2.0, 5.0]}, 2),
 }
 
 
 def _is_missing(cell: float | None) -> bool:
     return cell is None or math.isnan(cell)
+
+
+def _ieee_mean(values: list[float]) -> float:
+    """Mean with IEEE infinities (statistics.fmean raises on [inf, -inf])."""
+    return statistics.fmean(values) if all(math.isfinite(v) for v in values) else sum(values) / len(values)
 
 
 def _column_window_result(window_function: str, window: list[float | None]) -> float | int | None:
@@ -471,9 +479,11 @@ def _column_window_result(window_function: str, window: list[float | None]) -> f
     if not clean:
         return None
     if window_function in ("avg", "mean"):
-        return statistics.fmean(clean)
+        return _ieee_mean(clean)
     if len(clean) < 2:
         return None
+    if any(math.isinf(v) for v in clean):
+        return _NAN
     return statistics.stdev(clean) if window_function == "std" else statistics.variance(clean)
 
 
@@ -487,11 +497,11 @@ def _across_columns(window_function: str, results: list[float | int | None]) -> 
     if not values:
         return _NAN
     if window_function in ("avg", "mean", "first", "last"):
-        return statistics.fmean(values)
+        return _ieee_mean(values)
     if window_function in ("min", "max", "median"):
         reducers: dict[str, Callable[[list[float]], float]] = {"min": min, "max": max, "median": statistics.median}
         return reducers[window_function](values)
-    if len(values) < 2:
+    if len(values) < 2 or any(math.isinf(v) for v in values):
         return _NAN
     return statistics.stdev(values) if window_function == "std" else statistics.variance(values)
 

@@ -15,8 +15,12 @@ import pyarrow as pa
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.provider import ClaimRoute, SourceFeatureGroup, NamePolicy, SourceMatch
 from mloda.user import PluginCollector
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 TOY_KEY = "toyfmt_columns"
 TOY_HANDLE_OPTION = "data_access_handle"
@@ -128,6 +132,14 @@ class ToyNeutralDictFG(ToySourceFG):
     @classmethod
     def neutral_type(cls, match: SourceMatch) -> type | None:
         return dict
+
+
+class ToyBoundedNeutralDictFG(ToyNeutralDictFG):
+    """ToyNeutralDictFG limited to three frameworks, so a default run ignores test-only frameworks."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame, PyArrowTable, PythonDictFramework}
 
 
 class ToyOtherSourceFG(ToySourceBase):

@@ -7,7 +7,7 @@ from itertools import combinations
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from functools import partial
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, get_origin
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
@@ -320,12 +320,14 @@ class ChooseComputeFrameworks:
         conn = block.fg.match_connection(match[1])
         if conn is not None:
             home = frozenset(fw for fw in block.domain if fw._connection_matches(conn) and self._serves(block, fw))
-            return home or None, READS_IN_PLACE
+            if home:
+                return home, READS_IN_PLACE
         neutral = None if self.positions else block.fg.neutral_type(match[1])
-        if neutral is None:
+        neutral = get_origin(neutral) or neutral
+        if not isinstance(neutral, type):
             return None, None
         loads = frozenset(fw for fw in block.domain if self._takes(fw, neutral) or self._serves(block, fw))
-        return loads or None, LOADS_NATIVELY
+        return (loads, LOADS_NATIVELY) if loads else (None, None)
 
     def _serves(self, block: _Block, framework: Framework) -> bool:
         return bool(serving_implementation(block.fg, framework, self.implementations, stop_after="load_neutral"))

@@ -43,6 +43,7 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_w
 )
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     ToyDeclaredFG,
+    ToyBoundedNeutralDictFG,
     ToySourceFG,
     column_values,
     neutral_csv_group,
@@ -1116,6 +1117,16 @@ class TestNeutralFallback:
         group = neutral_csv_group(tmp_path / "n.csv")
 
         assert column_values(_run(group), "toyfmt_ld") == [1, 2]
+
+    def test_a_default_run_loads_a_neutral_group_natively_for_mixed_types(self) -> None:
+        result = mloda.run_all(
+            ["toyfmt_mixed"],
+            plugin_collector=PluginCollector.enabled_feature_groups({ToyBoundedNeutralDictFG}),
+            data_access_collection=toy_dac(h1={"toyfmt_mixed": [1, "a"]}),
+        )
+
+        assert isinstance(result[0], dict)
+        assert result[0]["toyfmt_mixed"] == [1, "a"]
 
 
 class TestTools:

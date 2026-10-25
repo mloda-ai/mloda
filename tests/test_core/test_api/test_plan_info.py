@@ -94,7 +94,7 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_w
     ToyWorkerPythonDict,
 )
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
-    ToyNeutralDictFG,
+    ToyBoundedNeutralDictFG,
     ToySourceBase,
     neutral_csv_group,
     toy_dac,
@@ -2450,13 +2450,12 @@ class TestLeavesConnectionOnResult:
 def test_a_default_plan_reports_the_framework_a_neutral_source_loads_natively() -> None:
     plan = mloda.explain(
         [Feature("toyfmt_plan_nat")],
-        plugin_collector=PluginCollector.enabled_feature_groups({ToyNeutralDictFG}),
+        plugin_collector=PluginCollector.enabled_feature_groups({ToyBoundedNeutralDictFG}),
         data_access_collection=toy_dac(h1={"toyfmt_plan_nat": [1]}),
     )
     step = next(s for s in plan if s.step_kind == "compute")
 
-    assert step.compute_framework is not None
-    assert issubclass(dict, step.compute_framework.expected_data_framework())
+    assert step.compute_framework is PythonDictFramework
     assert step.compute_framework_reason == "loads natively"
 
 

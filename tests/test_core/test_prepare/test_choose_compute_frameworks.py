@@ -213,6 +213,12 @@ class ChooserNeutralFG(ChooserHomeFG):
         return dict
 
 
+class ChooserGenericNeutralFG(ChooserNeutralFG):
+    @classmethod
+    def neutral_type(cls, match: SourceMatch) -> Any:
+        return dict[str, list[Any]]
+
+
 H = ChooserHomeFramework
 
 
@@ -1227,6 +1233,29 @@ def _reason_neutral_implementation_framework_takes_no_charge(net: _Net) -> list[
     return [_home_root(net, "reason_neutral_impl", {D, H}, fg=ChooserNeutralFG, access=None)]
 
 
+def _reason_neutral_parameterized_generic(net: _Net) -> list[Feature]:
+    return [
+        _home_root(
+            net, "reason_neutral_generic", {P, A, D}, fg=ChooserGenericNeutralFG, access=None, implementations=()
+        )
+    ]
+
+
+def _reason_neutral_with_a_connection_no_framework_accepts(net: _Net) -> list[Feature]:
+    return [_home_root(net, "reason_neutral_unmatched_conn", {P, A, D}, fg=ChooserNeutralFG, implementations=())]
+
+
+def _reason_neutral_without_native_moved_by_a_connection_home(net: _Net) -> list[Feature]:
+    neutral = _home_root(
+        net, "reason_neutral_moved_source", {P, A}, fg=ChooserNeutralFG, access=None, implementations=()
+    )
+    home = _home_root(net, "reason_neutral_moved_home", {A, H})
+    consumer = net.add(ChooserLeafFG, "reason_neutral_moved_consumer", {A, P}, requested=True)
+    net.edge(neutral, consumer)
+    net.edge(home, consumer)
+    return [neutral, home, consumer]
+
+
 @pytest.mark.parametrize(
     ("build", "positions", "output", "expected", "frameworks"),
     [
@@ -1270,6 +1299,15 @@ def _reason_neutral_implementation_framework_takes_no_charge(net: _Net) -> list[
         (_reason_neutral_beats_a_first_sorted_non_native, None, None, [LOADS_NATIVELY], [D]),
         (_reason_neutral_implementation_framework_takes_no_charge, None, None, [DEFAULT_ORDER], [H]),
         (_reason_neutral_feeds_a_consumer_that_only_runs_on_pandas, None, None, [LOADS_NATIVELY], [D]),
+        (_reason_neutral_parameterized_generic, None, None, [LOADS_NATIVELY], [D]),
+        (_reason_neutral_with_a_connection_no_framework_accepts, None, None, [LOADS_NATIVELY], [D]),
+        (
+            _reason_neutral_without_native_moved_by_a_connection_home,
+            None,
+            None,
+            [READS_IN_PLACE] * 3,
+            [P, H, P],
+        ),
     ],
     ids=[
         "pinned",
@@ -1306,6 +1344,9 @@ def _reason_neutral_implementation_framework_takes_no_charge(net: _Net) -> list[
         "neutral_beats_a_first_sorted_non_native",
         "neutral_implementation_framework_takes_no_charge",
         "neutral_feeds_a_consumer_that_only_runs_on_pandas",
+        "neutral_parameterized_generic",
+        "neutral_with_a_connection_no_framework_accepts",
+        "neutral_without_native_moved_by_a_connection_home",
     ],
 )
 def test_the_reason_names_why_the_framework_was_chosen(

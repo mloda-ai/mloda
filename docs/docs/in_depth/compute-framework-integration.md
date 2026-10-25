@@ -263,7 +263,7 @@ When several frameworks can run a step, the choice order is: frameworks the step
 
 - `prefers a matching version`: a divergent implementation was skipped although it would otherwise have won.
 - `reads in place`: a source read from a connection in the collection costs one conversion when served off a framework that accepts that connection, so the work stays in the database ahead of list order.
-- `loads natively`: without a `compute_frameworks` list, a source whose group declares `neutral_type` pays one conversion off a framework that takes that type (or serves the group through an Implementation).
+- `loads natively`: without a `compute_frameworks` list, a source whose group declares `neutral_type` pays one conversion off a framework that takes that type (or serves the group through an Implementation); a step such a source pulls onto its framework reports it too.
 - `<reason>; runs a version that differs: skips NaN in sum`: the step runs a divergent implementation (only option, pinned, or no matching alternative).
 
 ### Pinning an implementation

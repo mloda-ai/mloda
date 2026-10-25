@@ -122,7 +122,14 @@ class TestCheckedNames:
 
 
 class TestDeclaredNames:
-    CLAIMED = ["ToyDeclaredFG", "toyfmt_declared_col", "toyfmt_pre_anything", "toyfmt_conn__knows", "toyfmt_pre_x~key"]
+    CLAIMED = [
+        "ToyDeclaredFG",
+        "toyfmt_declared_col",
+        "toyfmt_pre_anything",
+        "toyfmt_conn__knows",
+        "toyfmt_pre_x~key",
+        "ToyDeclaredFG_x",
+    ]
 
     @pytest.mark.parametrize("name", CLAIMED)
     def test_declared_name_with_a_source_matches(self, name: str) -> None:
@@ -141,13 +148,16 @@ class TestDeclaredNames:
             "toyfmt_pre__x",
             "toyfmt_conn__knows__sum_aggr",
             "toyfmt_conn___op",
+            "ToyDeclaredFG_x__sum_aggr",
+            "ToyDeclaredFG__x",
         ],
     )
     def test_undeclared_name_declines_even_with_a_source(self, name: str) -> None:
         assert not _claims(Feature(name), toy_dac(h1={name: [1]}), ToyDeclaredFG)
 
-    def test_pointed_group_does_not_claim_a_chain_shaped_name(self) -> None:
-        feature = Feature("toyfmt_conn__knows__sum_aggr", Options({"ToyDeclaredFG": {COL: [1, 2]}}))
+    @pytest.mark.parametrize("name", ["toyfmt_conn__knows__sum_aggr", "ToyDeclaredFG_x__sum_aggr"])
+    def test_pointed_group_does_not_claim_a_chain_shaped_name(self, name: str) -> None:
+        feature = Feature(name, Options({"ToyDeclaredFG": {COL: [1, 2]}}))
         result = evaluate_or_raise(feature, _plugins(ToyDeclaredFG, AggregatedFeatureGroup), None, None)
 
         assert set(result.identified) == {AggregatedFeatureGroup}
@@ -179,9 +189,38 @@ class TestOpenNames:
         assert ToySourceFG not in result.identified
 
 
+class _RequiredDeclaredFG(ToyDeclaredFG):
+    """Declared-name route that also needs an option."""
+
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
+        ClaimRoute("toy", NamePolicy.DECLARED, True, required_options=("toyfmt_required",)),
+    )
+
+
 class TestRequiredOptionRoute:
     def test_declines_without_the_required_option(self) -> None:
-        assert not _claims(Feature(COL), toy_dac(h1={COL: [1]}), ToyRequiredOptionFG)
+        result = _identify(Feature(COL), toy_dac(h1={COL: [1]}), ToyRequiredOptionFG)
+
+        assert result.identified == {}
+        assert ToyRequiredOptionFG not in result.eliminations
+
+    @pytest.mark.parametrize(
+        ("feature", "group", "dac"),
+        [
+            (Feature("toyfmt_conn__knows"), _RequiredDeclaredFG, toy_dac(h1={"toyfmt_conn__knows": [1]})),
+            (Feature(COL, feature_group=ToyRequiredOptionFG), ToyRequiredOptionFG, toy_dac(h1={COL: [1]})),
+        ],
+        ids=["declared_name", "pointed"],
+    )
+    def test_missing_required_option_records_an_input_data_rejection(
+        self, feature: Feature, group: type, dac: DataAccessCollection
+    ) -> None:
+        result = _identify(feature, dac, group)
+
+        assert result.identified == {}
+        elimination = result.eliminations[group]
+        assert elimination.stage == "input_data"
+        assert "needs the option 'toyfmt_required'" in elimination.reason
 
     def test_required_option_presence_points_the_route(self) -> None:
         feature = Feature(COL, Options({"toyfmt_required": "yes"}))
@@ -815,7 +854,11 @@ class TestOpenClaimDefersToAComputingCandidate:
     def _open_feature(self, name: str, **kwargs: Any) -> Feature:
         return Feature(name, Options({"ToyOpenFG": {COL: [1, 2]}}), **kwargs)
 
-    @pytest.mark.parametrize("name", [_DERIVED, "toyfmt_col__sum_aggr__max_aggr"], ids=["derived", "chained"])
+    @pytest.mark.parametrize(
+        "name",
+        [_DERIVED, "toyfmt_col__sum_aggr__max_aggr", "ToyOpenFG_x__sum_aggr"],
+        ids=["derived", "chained", "class_prefixed"],
+    )
     def test_pointed_open_group_steps_aside_for_the_aggregation(self, name: str) -> None:
         result = evaluate_or_raise(self._open_feature(name), _plugins(ToyOpenFG, AggregatedFeatureGroup), None, None)
 
@@ -906,14 +949,24 @@ class TestSearchedRouteDefersToAComputingCandidate:
         assert set(result.identified) == {ToySourceFG}
 
 
+class _TableAndOptionRouteFG(ToySourceBase):
+    """One route runs and finds nothing; the other is skipped for a missing option."""
+
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
+        ClaimRoute("toy", NamePolicy.CHECKED, True),
+        ClaimRoute("toy", NamePolicy.CHECKED, False, required_options=("toyfmt_required",)),
+    )
+
+
 class TestPointedRoutesDeclineWithReason:
-    def test_pointed_route_without_a_source_records_an_input_data_rejection(self) -> None:
-        result = _identify(Feature(COL, feature_group=ToySourceFG), None, ToySourceFG)
+    @pytest.mark.parametrize("group", [ToySourceFG, _TableAndOptionRouteFG])
+    def test_pointed_route_without_a_source_records_an_input_data_rejection(self, group: type) -> None:
+        result = _identify(Feature(COL, feature_group=group), None, group)
 
         assert result.identified == {}
-        elimination = result.eliminations[ToySourceFG]
+        elimination = result.eliminations[group]
         assert elimination.stage == "input_data"
-        assert "ToySourceFG was pointed at but found no source for 'toyfmt_col'" in elimination.reason
+        assert f"{group.__name__} was pointed at but found no source for 'toyfmt_col'" in elimination.reason
 
     def test_pointed_declared_route_with_an_undeclared_name_records_a_rejection(self) -> None:
         feature = Feature("toyfmt_undeclared", feature_group=ToyDeclaredFG)

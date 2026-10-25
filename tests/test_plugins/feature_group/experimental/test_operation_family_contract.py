@@ -391,7 +391,16 @@ def _variant_label(options: Options) -> str:
 
 
 LOOP_INPUT_PARAMS = [
-    pytest.param(name, impl, options, id=f"{name}-{impl.__name__}-{_variant_label(options)}")
+    pytest.param(
+        name,
+        impl,
+        options,
+        id=f"{name}-{impl.__name__}-{_variant_label(options)}",
+        marks=pytest.mark.skipif(
+            not impl.compute_framework.is_available(),
+            reason=f"{impl.compute_framework.__name__} dependency not installed",
+        ),
+    )
     for name, family in OPERATION_FAMILIES.items()
     for impl in family[1]
     for options in LOOP_INPUT_CASES.get(name, (None, []))[1]

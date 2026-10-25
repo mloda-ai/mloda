@@ -5,22 +5,30 @@ from __future__ import annotations
 import ast
 import importlib
 import inspect
+from collections.abc import Callable
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 
+import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.code_closure import closure_parts
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
-from mloda.provider import FeatureSet
-from mloda.user import Feature
+from mloda.provider import DefaultOptionKeys, FeatureSet
+from mloda.user import Feature, Options
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import PolarsLazyAggregation
@@ -53,6 +61,14 @@ from mloda_plugins.feature_group.experimental.text_cleaning.python_dict import P
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow
 from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
+
+from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import (
+    PandasZeroRowAdapter,
+    PolarsLazyZeroRowAdapter,
+    PyArrowZeroRowAdapter,
+    PythonDictZeroRowAdapter,
+    ZeroRowResultTypeTestMixin,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 SCAN_ROOT = _REPO_ROOT / "mloda_plugins" / "feature_group" / "experimental"
@@ -301,3 +317,117 @@ def test_calculate_delegates_to_the_group_it_is_handed(name: str, impl: type[Any
         data, feature_set, **{key: resolve(impl) for key, resolve in expected.items()}
     )
     assert result is getattr(group, loop).return_value
+
+
+_ROWS = 12
+_DAYS = [datetime(2024, 1, 1) + timedelta(days=i) for i in range(_ROWS)]
+_NUMBERS = [float(i + 1) for i in range(_ROWS)]
+_GEO_POINTS = [(50.0 + i * 0.1, 8.0 + i * 0.1) for i in range(_ROWS)]
+_NUMERIC_COLUMNS: dict[str, list[Any]] = {
+    "a": _NUMBERS,
+    "b": [float((i * 7) % 5) for i in range(_ROWS)],
+    "c": [float((i * 3) % 4) for i in range(_ROWS)],
+}
+
+
+def _numeric_table() -> pa.Table:
+    return pa.table(_NUMERIC_COLUMNS)
+
+
+def _time_table() -> pa.Table:
+    return pa.table({"temperature": _NUMBERS, "sales": _NUMBERS, "reference_time": _DAYS, "ts": _DAYS})
+
+
+def _node_table() -> pa.Table:
+    users = [f"u{i % 4}" for i in range(_ROWS)]
+    targets = [f"u{(i + 1) % 4}" for i in range(_ROWS)]
+    return pa.table({"user": users, "source": users, "target": targets, "w": _NUMBERS})
+
+
+def _missing_value_table() -> pa.Table:
+    income: list[Any] = [None if i % 4 == 0 else v for i, v in enumerate(_NUMBERS)]
+    return pa.table({"income": income, "region": ["n" if i % 2 else "s" for i in range(_ROWS)]})
+
+
+# One frame builder per family (a superset of columns) and the option variants that change the declared inputs.
+LOOP_INPUT_CASES: dict[str, tuple[Callable[[], pa.Table], list[Options]]] = {
+    "aggregation": (lambda: pa.table({"sales": _NUMBERS}), [Options()]),
+    "time_window": (
+        _time_table,
+        [Options(), Options({DefaultOptionKeys.reference_time: "ts"})],
+    ),
+    "clustering": (_numeric_table, [Options(), Options({"output_probabilities": True})]),
+    "forecasting": (
+        _time_table,
+        [
+            Options(),
+            Options({DefaultOptionKeys.reference_time: "ts"}),
+            Options({"output_confidence_intervals": True}),
+        ],
+    ),
+    "dimensionality_reduction": (_numeric_table, [Options()]),
+    "node_centrality": (_node_table, [Options(), Options({"weight_column": "w"})]),
+    "missing_value": (_missing_value_table, [Options(), Options({"group_by_features": ["region"]})]),
+    "text_cleaning": (
+        lambda: pa.table({"text": ["Hello, The World!"] * _ROWS}),
+        [Options({"cleaning_operations": ("normalize",)})],
+    ),
+    "geo_distance": (lambda: pa.table({"a": _GEO_POINTS, "b": list(reversed(_GEO_POINTS))}), [Options()]),
+    "scaling": (lambda: pa.table({"income": _NUMBERS}), [Options()]),
+    "encoding": (lambda: pa.table({"category": ["x", "y", "z"] * (_ROWS // 3)}), [Options()]),
+    "sklearn_pipeline": (_numeric_table, [Options()]),
+}
+
+_ADAPTERS: dict[type[ComputeFramework], ZeroRowResultTypeTestMixin] = {
+    PandasDataFrame: PandasZeroRowAdapter(),
+    PyArrowTable: PyArrowZeroRowAdapter(),
+    PolarsLazyDataFrame: PolarsLazyZeroRowAdapter(),
+    PythonDictFramework: PythonDictZeroRowAdapter(),
+}
+
+
+def _variant_label(options: Options) -> str:
+    return "+".join(sorted(str(key) for key in options.keys())) or "default"
+
+
+LOOP_INPUT_PARAMS = [
+    pytest.param(
+        name,
+        impl,
+        options,
+        id=f"{name}-{impl.__name__}-{_variant_label(options)}",
+        marks=pytest.mark.skipif(
+            not impl.compute_framework.is_available(),
+            reason=f"{impl.compute_framework.__name__} dependency not installed",
+        ),
+    )
+    for name, family in OPERATION_FAMILIES.items()
+    for impl in family[1]
+    for options in LOOP_INPUT_CASES.get(name, (None, []))[1]
+]
+
+
+def test_loop_input_cases_cover_every_operation_family() -> None:
+    assert set(LOOP_INPUT_CASES) == set(OPERATION_FAMILIES)
+    assert all(variants for _builder, variants in LOOP_INPUT_CASES.values())
+    frameworks = {impl.compute_framework for family in OPERATION_FAMILIES.values() for impl in family[1]}
+    assert frameworks <= set(_ADAPTERS)
+
+
+@pytest.mark.parametrize(("name", "impl", "options"), LOOP_INPUT_PARAMS)
+def test_loop_runs_on_declared_inputs_only(name: str, impl: type[Any], options: Options) -> None:
+    group = OPERATION_FAMILIES[name][0]
+    feature = Feature(OPERATION_FAMILIES[name][3], options)
+    declared = group.declared_input_features(feature.options, feature.name)
+    assert declared is not None
+    table = LOOP_INPUT_CASES[name][0]().select(sorted(str(f.name) for f in declared))
+    data = _ADAPTERS[impl.compute_framework].from_arrow(table)
+    feature_set = FeatureSet()
+    feature_set.add(feature)
+    feature_set.materialize_option_defaults(group)
+
+    result = impl.calculate(group, data, feature_set, None)
+
+    columns = {str(c) for c in impl.compute_framework.extract_column_names(result)}
+    output = str(feature.name)
+    assert any(c == output or c.startswith(f"{output}~") for c in columns), columns

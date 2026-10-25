@@ -140,6 +140,7 @@ from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseM
 
 # Feature resolution debugging
 from mloda.core.api.plugin_docs import resolve_feature
+from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.core.prepare.resolution_types import (
     ResolutionDiagnosis,
@@ -244,6 +245,7 @@ __all__ = [
     # Feature resolution debugging
     "resolve_feature",
     "FeatureResolutionError",
+    "MissingInputFeatureError",
     "ResolutionRecord",
     "ResolutionDiagnosis",
 ]

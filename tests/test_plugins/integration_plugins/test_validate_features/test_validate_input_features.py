@@ -12,9 +12,16 @@ from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Options
+from mloda.user import PluginCollector
 from mloda.user import ParallelizationMode
+from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
 from mloda.steward import ExtenderHook, Extender
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
+from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
+    SiblingDictAggregate,
+    SiblingDictLostInputConsumer,
+    SiblingDictRoot,
+)
 from tests.test_plugins.integration_plugins.test_validate_features.example_validator import ExamplePanderaValidator
 
 logger = logging.getLogger(__name__)
@@ -78,6 +85,16 @@ class ValidateInputFeatureExtender(Extender):
         result = func(*args, **kwargs)
         logger.error(f"Time taken: {time.time() - start}")
         return result
+
+
+class SkippingValidateInputExtender(Extender):
+    """Extender that returns without calling the wrapped validation."""
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.VALIDATE_INPUT_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return None
 
 
 class TrackingExtender(Extender):
@@ -201,3 +218,21 @@ class TestValidateInputFeatures:
         assert TrackingExtender.execution_log.index("low_priority") < TrackingExtender.execution_log.index(
             "high_priority"
         )
+
+    def test_extender_skipping_the_wrapped_validation_cannot_skip_the_core_input_check(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        features = self.get_features(["SiblingDictLostInputConsumer"])
+
+        with pytest.raises(MissingInputFeatureError) as excinfo:
+            MlodaTestRunner.run_api(
+                features,
+                parallelization_modes=modes,
+                flight_server=flight_server,
+                function_extender={SkippingValidateInputExtender()},
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {SiblingDictRoot, SiblingDictAggregate, SiblingDictLostInputConsumer}
+                ),
+            )
+
+        assert excinfo.value.missing_inputs == ("sd_a",)

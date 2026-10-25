@@ -15,6 +15,10 @@ from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseM
 from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
 from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.utils import as_str, safe_field
+from mloda.core.abstract_plugins.components.validators.missing_input_validator import (
+    InputCheck,
+    MissingInputFeatureError,
+)
 from mloda.core.abstract_plugins.function_extender import (
     Extender,
     ExtenderHook,
@@ -857,12 +861,58 @@ class ComputeFramework(ABC):
 
     @final
     def run_validate_input_features(self, feature_group: Any, features: Any) -> None:
+        self._check_declared_inputs(feature_group, features)
         if self.data is None:
             return
 
         self._run_hook(
             ExtenderHook.VALIDATE_INPUT_FEATURE, feature_group, feature_group.validate_input_features, features
         )
+
+    @final
+    def _check_declared_inputs(self, feature_group: Any, features: Any) -> None:
+        """Every input a feature declares must be a column of the incoming data; runs before any extender."""
+        from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+        from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+        if not isinstance(features, FeatureSet):
+            return
+        if self.data is None:
+            features.input_check = "skipped_source"
+            return
+        if not features.declared_input_features_resolved and self.run_context.run_id:
+            raise ValueError(
+                "Internal invariant violated: a planned step must carry resolved declared_input state "
+                f"(declared_input_features_resolved) before running {feature_group.get_class_name()}."
+            )
+
+        feature_group_cls: Any = feature_group if isinstance(feature_group, type) else type(feature_group)
+        self._declared_input_feature_names(feature_group_cls, features)
+        bound = features.declared_input_columns
+        if not bound:
+            features.input_check = "checked"
+            return
+
+        columns = self._extract_column_names(self.data)
+        if not columns and self._is_schemaless_empty(self.data):
+            features.input_check = "skipped_empty"
+            return
+        features.input_check = "checked"
+        for name in sorted(bound):
+            missing = tuple(
+                sorted(
+                    c
+                    for c in bound[name]
+                    if not any(col in columns for col in FeatureGroup.resolve_multi_column_feature(c, columns))
+                )
+            )
+            if missing:
+                raise MissingInputFeatureError(
+                    feature_group=feature_group.get_class_name(),
+                    feature=name,
+                    missing_inputs=missing,
+                    available_columns=tuple(sorted(columns)),
+                )
 
     def _validate_requested_parts(self, features: Any) -> None:
         """Every asked `<base>~<part>` column must exist in the result."""
@@ -1010,6 +1060,7 @@ class ComputeFramework(ABC):
         feature_names: tuple[str, ...] = ()
         input_features: frozenset[str] | None = None
         input_feature_edges: dict[str, tuple[str, ...]] | None = None
+        input_check: InputCheck | None = None
         specialized_from: tuple[str, ...] = ()
         step_uuid: UUID | None = None
         implementation: str | None = None
@@ -1025,6 +1076,7 @@ class ComputeFramework(ABC):
             feature_names = tuple(str(name) for name in features.get_all_names())
             input_features = self._declared_input_feature_names(feature_group_cls, features)
             input_feature_edges = getattr(features, "declared_input_feature_edges", None)
+            input_check = features.input_check
             specialized_from = getattr(features, "specialized_from", ())
 
         return HookContext(
@@ -1047,6 +1099,7 @@ class ComputeFramework(ABC):
             specialized_from=specialized_from,
             input_features=input_features,
             input_feature_edges=input_feature_edges,
+            input_check=input_check,
             compute_framework_name=self.get_class_name(),
             rows_in=safe_field(lambda: self._row_count(self.data), None),
             run_id=self.run_context.run_id,
@@ -1098,6 +1151,7 @@ class ComputeFramework(ABC):
 
         features.declared_input_feature_names = result
         features.declared_input_feature_edges = merge_input_feature_edges(pairs)
+        features.declared_input_columns = merge_input_feature_edges(pairs)
         features.declared_input_features_resolved = True
         return result
 

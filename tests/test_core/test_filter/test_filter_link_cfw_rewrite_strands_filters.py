@@ -222,6 +222,7 @@ def _bare_engine() -> Engine:
     engine.feature_group_collection = defaultdict(set)
     engine.specialized_from = {}
     engine.resolved_input_feature_names = {}
+    engine.input_feature_columns = {}
     engine._declared_options_by_uuid = {}
     engine.feature_link_parents = defaultdict(set)
     return engine

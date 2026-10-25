@@ -171,6 +171,104 @@ class NamedPartConsumerForSubColumnTest(FeatureGroup):
         return {PandasDataFrame}
 
 
+class RenamedInputProducer(DataCreatorFeatureGroup):
+    """Producer whose column is renamed from ``renamed_input`` to ``renamed_input_utc``."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"renamed_input"}
+
+    def set_feature_name(self, config: Options, feature_name: FeatureName) -> FeatureName:
+        return FeatureName("renamed_input_utc")
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({"renamed_input_utc": [1, 2, 3]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class RenamedInputConsumer(FeatureGroup):
+    """Declares the pre-rename input ``renamed_input`` and reads the renamed column."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"renamed_input_consumer_output"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("renamed_input")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data["renamed_input_consumer_output"] = data["renamed_input_utc"].values * 10
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class BareInputConsumer(FeatureGroup):
+    """Declares the bare ``base_feature``, satisfied by its ``base_feature~*`` columns."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"bare_input_consumer_output"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("base_feature")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data["bare_input_consumer_output"] = data["base_feature~2"].values + 1
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+def _declared_columns(session: Any, group: type[FeatureGroup]) -> dict[str, tuple[str, ...]] | None:
+    from mloda.core.core.step.feature_group_step import FeatureGroupStep
+
+    assert session.engine is not None
+    [step] = [
+        s for s in session.engine.execution_planner if isinstance(s, FeatureGroupStep) and s.feature_group is group
+    ]
+    columns: dict[str, tuple[str, ...]] | None = step.features.declared_input_columns
+    return columns
+
+
+class TestFeatureFormDeclaredInputBinding:
+    """Feature-form declared inputs are bound under their pre-recursion names."""
+
+    def test_feature_form_sub_column_is_stamped_with_its_part(self) -> None:
+        session = mloda.prepare(
+            [Feature("sub_column_consumer_output")],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_collector(MultiColumnProducerForSubColumnTest, SubColumnConsumer),
+        )
+
+        columns = _declared_columns(session, SubColumnConsumer)
+
+        assert columns is not None
+        assert columns["sub_column_consumer_output"] == ("base_feature~1",)
+
+    def test_feature_form_renamed_input_is_stamped_with_the_producer_name(self) -> None:
+        session = mloda.prepare(
+            [Feature("renamed_input_consumer_output")],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=PluginCollector.enabled_feature_groups({RenamedInputProducer, RenamedInputConsumer}),
+        )
+
+        columns = _declared_columns(session, RenamedInputConsumer)
+
+        assert columns is not None
+        assert columns["renamed_input_consumer_output"] == ("renamed_input_utc",)
+
+
 class TestSubColumnFeatureMatching:
     """Tests for match_feature_group_criteria() with sub-column names."""
 
@@ -432,6 +530,30 @@ class TestSubColumnIntegration:
                 "and multiply by 10 to get 200,400,600,800,1000"
             ),
         )
+
+    def test_consumer_of_a_renamed_input_succeeds(self) -> None:
+        plugin_collector = PluginCollector.enabled_feature_groups({RenamedInputProducer, RenamedInputConsumer})
+
+        result = mloda.run_all(
+            ["renamed_input_consumer_output"],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=plugin_collector,
+        )
+
+        assert result[0]["renamed_input_consumer_output"].tolist() == [10, 20, 30]
+
+    def test_consumer_of_a_bare_input_satisfied_by_part_columns_succeeds(self) -> None:
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {SubColumnTestDataCreator, MultiColumnProducerForSubColumnTest, BareInputConsumer}
+        )
+
+        result = mloda.run_all(
+            ["bare_input_consumer_output"],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=plugin_collector,
+        )
+
+        assert result[0]["bare_input_consumer_output"].tolist() == [31, 61, 91, 121, 151]
 
     def test_sub_column_dependency_does_not_pull_all_columns(self) -> None:
         """

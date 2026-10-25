@@ -106,6 +106,7 @@ def dispatch_input_data_load(
         specialized_from=calc_context.specialized_from,
         input_features=calc_context.input_features,
         input_feature_edges=calc_context.input_feature_edges,
+        input_check=calc_context.input_check,
         compute_framework_name=cfw.get_class_name(),
         run_id=calc_context.run_id,
         plan_id=calc_context.plan_id,

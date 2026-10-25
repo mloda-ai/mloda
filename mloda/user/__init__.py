@@ -52,6 +52,7 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
 )
 
 # Feature resolution
+from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.core.prepare.resolution_types import (
     ResolutionDiagnosis,
@@ -115,6 +116,7 @@ __all__ = [
     "register_plugin",
     # Feature resolution
     "FeatureResolutionError",
+    "MissingInputFeatureError",
     "ResolutionRecord",
     "ResolutionDiagnosis",
     # Streaming API

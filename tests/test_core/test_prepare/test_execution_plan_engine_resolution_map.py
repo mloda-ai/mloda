@@ -8,7 +8,7 @@ from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.resolve_links import LinkTrekker
 from mloda.provider import FeatureGroup
-from mloda.user import Feature
+from mloda.user import Feature, Options
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
@@ -161,6 +161,53 @@ class TestExecutionPlanEngineResolutionMap:
         )
         assert feature_set.declared_input_feature_names is None
         assert feature_set.declared_input_feature_edges is None
+        assert feature_set.declared_input_columns is None
+
+    def test_same_named_features_in_one_step_merge_their_columns(self) -> None:
+        framework_name = PythonDictFramework.get_class_name()
+        first = Feature("twin", options=Options(context={"variant": 1}), compute_framework=framework_name)
+        second = Feature("twin", options=Options(context={"variant": 2}), compute_framework=framework_name)
+        other = Feature("other", compute_framework=framework_name)
+        injected = Feature("injected", compute_framework=framework_name)
+
+        plan = ExecutionPlan(
+            input_feature_columns={
+                first.uuid: ("src_b", "src_a"),
+                second.uuid: ("src_c", "src_a"),
+                other.uuid: ("src_z",),
+            },
+        )
+        fg_steps = plan.run_feature_group(
+            (_ResolutionMapFeatureGroup, {first, second, other, injected}),
+            parent_to_children_mapping={},
+            pre_required_uuids=set(),
+        )
+
+        feature_set = next(iter(fg_steps.values())).features
+        assert feature_set.declared_input_columns == {
+            "twin": ("src_a", "src_b", "src_c"),
+            "other": ("src_z",),
+        }
+
+    def test_step_without_column_entries_has_no_declared_input_columns(self) -> None:
+        framework_name = PythonDictFramework.get_class_name()
+        root = Feature("root", compute_framework=framework_name)
+
+        plan = ExecutionPlan(resolved_input_feature_names={root.uuid: None}, input_feature_columns={})
+        fg_steps = plan.run_feature_group(
+            (_ResolutionMapFeatureGroup, {root}),
+            parent_to_children_mapping={},
+            pre_required_uuids=set(),
+        )
+
+        assert next(iter(fg_steps.values())).features.declared_input_columns is None
+
+    def test_plan_drops_the_columns_map_after_build(self) -> None:
+        plan = ExecutionPlan(input_feature_columns={Feature("x").uuid: ("src",)})
+
+        plan.create_execution_plan([], Graph(), LinkTrekker())
+
+        assert plan.input_feature_columns is None
 
     def test_feature_carries_no_engine_bookkeeping(self) -> None:
         feature = Feature("plain_feature")

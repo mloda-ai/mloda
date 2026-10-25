@@ -152,6 +152,12 @@ class SourceOmittingConsumer(_InputsConsumer):
     INPUTS = ("sd_src_kept", "sd_src_omitted")
 
 
+class SiblingDictLostInputConsumer(_InputsConsumer):
+    """Consumes ``sd_a`` and the aggregate whose one-row dict replaces the frame, so ``sd_a`` is gone."""
+
+    INPUTS = ("sd_a", "SiblingDictAggregate")
+
+
 _ALL_FGS = {
     SiblingDictRoot,
     SiblingDictCaseFold,
@@ -272,6 +278,23 @@ class SiblingDictRunAllTestBase(PolicyRunAllTestBase):
             mode=mode,
             flight_server=flight_server,
         )
+
+    def _run_declared_input_lost_at_runtime(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self.assert_policy_case(
+            feature_name=["SiblingDictLostInputConsumer"],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {SiblingDictRoot, SiblingDictAggregate, SiblingDictLostInputConsumer}
+            ),
+            expectation=PolicyRaises(match_substring="SiblingDictLostInputConsumer"),
+            mode=mode,
+            flight_server=flight_server,
+        )
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    def test_consumer_whose_declared_input_was_replaced_raises(
+        self, mode: ParallelizationMode, flight_server: Any
+    ) -> None:
+        self._run_declared_input_lost_at_runtime(mode, flight_server)
 
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
     def test_intermediate_group_missing_a_feature_raises(self, mode: ParallelizationMode, flight_server: Any) -> None:

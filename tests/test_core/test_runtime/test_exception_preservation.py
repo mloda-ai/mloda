@@ -28,6 +28,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.provider import FeatureSet, DataCreatorFeatureGroup, SourceMatch
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
@@ -36,6 +37,12 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_s
     TOY_TOKEN,
     ToySourceFG,
     toy_token_request,
+)
+
+from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
+    SiblingDictAggregate,
+    SiblingDictLostInputConsumer,
+    SiblingDictRoot,
 )
 
 # Importing the framework registers it as a ComputeFramework subclass so
@@ -467,6 +474,24 @@ def test_multiprocessing_preserves_picklable_exception_type(flight_server: Any) 
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
         )
+
+
+def test_multiprocessing_preserves_missing_input_feature_error(flight_server: Any) -> None:
+    """A declared input lost at runtime surfaces as MissingInputFeatureError with its fields intact."""
+    with pytest.raises(MissingInputFeatureError) as excinfo:
+        mloda.run_all(
+            [Feature(name="SiblingDictLostInputConsumer")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {SiblingDictRoot, SiblingDictAggregate, SiblingDictLostInputConsumer}
+            ),
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+    assert excinfo.value.feature == "SiblingDictLostInputConsumer"
+    assert excinfo.value.missing_inputs == ("sd_a",)
+    assert excinfo.value.available_columns == ("SiblingDictAggregate",)
+    assert "SiblingDictLostInputConsumer" in excinfo.value.feature_group
 
 
 @pytest.mark.timeout(15)

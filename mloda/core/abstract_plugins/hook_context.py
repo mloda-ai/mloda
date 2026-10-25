@@ -18,6 +18,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import redact_escap
 from mloda.core.abstract_plugins.components.declared_attributes import scalar_attributes
 from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.validators.missing_input_validator import InputCheck
 from mloda.core.abstract_plugins.function_extender import ExtenderHook
 
 if TYPE_CHECKING:
@@ -65,6 +66,7 @@ class HookContext:
     specialized_from: tuple[str, ...] = ()
     input_features: frozenset[str] | None = None
     input_feature_edges: dict[str, tuple[str, ...]] | None = None
+    input_check: InputCheck | None = None
     compute_framework_name: str | None
     rows_in: int | None = None
     rows_out: int | None = None

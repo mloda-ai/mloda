@@ -77,6 +77,12 @@ class TestSqliteSiblingDictRunAll(SiblingDictRunAllTestBase):
         self._run_overlap(mode, flight_server)
 
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
+    def test_consumer_whose_declared_input_was_replaced_raises(
+        self, mode: ParallelizationMode, flight_server: Any
+    ) -> None:
+        self._run_declared_input_lost_at_runtime(mode, flight_server)
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
     def test_different_row_count_dict_still_replaces_frame(self, mode: ParallelizationMode, flight_server: Any) -> None:
         self._run_aggregate(mode, flight_server)
 

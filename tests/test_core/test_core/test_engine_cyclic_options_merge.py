@@ -201,6 +201,7 @@ class TestDirectIntakeIgnoresCascadeGuard:
 
         assert engine.add_feature_to_collection(FeatureGroup, existing, None) is True
         engine.resolved_input_feature_names = {existing.uuid: frozenset({"some_input"})}
+        engine.input_feature_columns = {}
         assert engine.add_feature_to_collection(FeatureGroup, twin, None) is False
 
 
@@ -233,6 +234,7 @@ class TestLinkKeyOnlyMerge:
         engine = _intake_engine()
         engine.specialized_from = {}
         engine.resolved_input_feature_names = {}
+        engine.input_feature_columns = {}
         existing = Feature(name="k")
         existing.link_key_only = existing_link_only
         host = Feature(name="k")

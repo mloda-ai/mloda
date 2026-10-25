@@ -14,6 +14,8 @@ Input features are validated to ensure they conform to the expected formats, ran
 -   Validating data types and ranges.
 -   Ensuring data consistency and integrity.
 
+Before `validate_input_features` and any extender on that hook, core checks that every declared input exists in the incoming data and raises `MissingInputFeatureError` (a `ValueError`) otherwise. Root steps and schema-less empty data are skipped.
+
 Example: Input Feature Validation Using Custom Validators
 
 ###### Simple validator

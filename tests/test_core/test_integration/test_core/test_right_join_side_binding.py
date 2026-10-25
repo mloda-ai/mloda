@@ -13,6 +13,7 @@ from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Index
+from mloda.user import MissingInputFeatureError
 from mloda.user import JoinSpec, Link
 from mloda.user import Options
 from mloda.user import ParallelizationMode
@@ -369,7 +370,7 @@ class RightBindSideRight(DataCreatorFeatureGroup):
 
 class RightBindSideChild(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        names = ("left_key", "left_payload", "arrow_payload", "right_key", "right_payload")
+        names = ("left_payload", "arrow_payload", "right_key", "right_payload")
         return {Feature(name=f"rjsbs_{name}") for name in names}
 
     @classmethod
@@ -432,3 +433,24 @@ def test_right_join_destinations_hold_only_the_declared_right_group_and_the_link
         assert {group_by_uuid[uuid] for uuid in join_step.destination_framework_uuids} == {RightBindSideRight}
     first, second = join_steps
     assert first.uuid in second.required_uuids or second.uuid in first.required_uuids
+
+
+class RightBindSideKeyChild(RightBindSideChild):
+    """Also declares the shared left key, which the RIGHT join renames to rjsbs_left_key_x."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return (super().input_features(options, feature_name) or set()) | {Feature(name="rjsbs_left_key")}
+
+
+def test_right_join_declared_left_key_lost_to_the_swap_raises_with_join_hint() -> None:
+    args = _side_args({ParallelizationMode.SYNC})
+    args["plugin_collector"] = PluginCollector.enabled_feature_groups(
+        {RightBindSideBase, RightBindSideArrow, RightBindSideRight, RightBindSideKeyChild}
+    )
+
+    with pytest.raises(MissingInputFeatureError) as exc_info:
+        mloda.run_all([Feature(name=RightBindSideKeyChild.get_class_name())], **args)
+
+    assert exc_info.value.missing_inputs == ("rjsbs_left_key",)
+    assert "rjsbs_left_key_x" in str(exc_info.value)
+    assert "join" in str(exc_info.value)

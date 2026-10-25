@@ -7,6 +7,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.validators.feature_set_validator import FeatureSetValidator
+from mloda.core.abstract_plugins.components.validators.missing_input_validator import InputCheck
 from mloda.core.abstract_plugins.input_data_load_marker import InputDataLoadMarker, current_input_data_load_marker
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
@@ -58,6 +59,8 @@ class FeatureSet:
         self.declared_input_feature_names: frozenset[str] | None = None
         self.declared_input_features_resolved: bool = False
         self.declared_input_feature_edges: dict[str, tuple[str, ...]] | None = None
+        self.declared_input_columns: dict[str, tuple[str, ...]] | None = None
+        self.input_check: InputCheck | None = None
         self.specialized_from: tuple[str, ...] = ()
         self.implementation: type[Implementation[Any]] | None = None
         self.option_split_hint: tuple[str, frozenset[Any]] | None = None
@@ -209,6 +212,7 @@ class FeatureSet:
             self.declared_input_features_resolved = False
             self.declared_input_feature_names = None
             self.declared_input_feature_edges = None
+            self.declared_input_columns = None
 
     def get_all_feature_ids(self) -> set[UUID]:
         return {feature.uuid for feature in self.features}

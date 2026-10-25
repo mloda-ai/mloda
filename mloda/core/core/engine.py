@@ -140,6 +140,8 @@ class Engine:
         self._declared_options_by_uuid: dict[UUID, Options] = {}
         # Per feature uuid, _handle_input_features_recursion's result (None: root; injected filter/index: no entry).
         self.resolved_input_feature_names: dict[UUID, frozenset[str] | None] = {}
+        # Per feature uuid, the sorted columns its declared inputs bind to in the incoming data.
+        self.input_feature_columns: dict[UUID, tuple[str, ...]] = {}
         # Per feature uuid, the cascade_context_keys it had when its inputs were resolved.
         self._cascade_keys_at_resolution: dict[UUID, frozenset[str]] = {}
         # Per surviving feature uuid, the parents its winning group replaced, unioned over merged duplicates.
@@ -316,6 +318,7 @@ class Engine:
             },
             self.implementations,
             self.data_access_collection,
+            input_feature_columns=self.input_feature_columns,
         )
         execution_planner.create_execution_plan(
             planned_queue,
@@ -899,6 +902,9 @@ class Engine:
         if host.uuid in self.resolved_input_feature_names:
             self.resolved_input_feature_names.setdefault(existing.uuid, self.resolved_input_feature_names[host.uuid])
             del self.resolved_input_feature_names[host.uuid]
+        if host.uuid in self.input_feature_columns:
+            self.input_feature_columns.setdefault(existing.uuid, self.input_feature_columns[host.uuid])
+            del self.input_feature_columns[host.uuid]
         self._declared_options_by_uuid.pop(host.uuid, None)
         host_parents = self.feature_link_parents.pop(host.uuid, set())
         self.feature_link_parents[existing.uuid] |= host_parents - {existing.uuid}
@@ -1047,6 +1053,7 @@ class Engine:
             ordered.sort(key=lambda f: str(f.name) if isinstance(f, Feature) else str(f))
         # Captured before recursion renames digit-only ~N part requests to their base (issue #2031).
         declared_names = {str(entry) if isinstance(entry, str) else str(entry.name) for entry in ordered}
+        declared_order = [str(entry) if isinstance(entry, str) else str(entry.name) for entry in ordered]
         features = Features(ordered, child_options=options, child_uuid=uuid, parent_domain=parent_domain)
         consumer_name = feature_group_class.get_class_name()
         consumer_property_keys = self._property_mapping_keys(feature_group_class)
@@ -1059,6 +1066,12 @@ class Engine:
         self.setup_features_recursion(
             features, requested=False, depth=depth + 1, consumer=consumer_name, path=(*path, str(feature_name))
         )
+        columns: set[str] = set()
+        for declared, resolved in zip(declared_order, features.collection, strict=True):
+            renamed = str(resolved.name)
+            columns.add(declared if renamed == declared or declared.startswith(renamed + "~") else renamed)
+        if columns:
+            self.input_feature_columns[uuid] = tuple(sorted(columns))
         resolved_names = {str(f.name) for f in features.collection}
         evicted = {FeatureGroup.get_column_base_feature(name) for name in declared_names} - declared_names
         return frozenset((resolved_names - evicted) | declared_names)

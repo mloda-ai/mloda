@@ -26,7 +26,14 @@ from mloda.interfaces.service.planner import Planner  # noqa: E402
 from mloda.interfaces.service.request import MAX_FEATURES, SCHEMA_ID, request_schema  # noqa: E402
 from mloda.interfaces.service.runner import Runner  # noqa: E402
 from mloda.user import PluginCollector  # noqa: E402
-from tests.test_interfaces.source_groups import FAILED, FILE_SOURCE_GROUPS, RunnerFailedRowsMcp5  # noqa: E402
+from tests.test_interfaces.source_groups import (  # noqa: E402
+    FAILED,
+    FILE_SOURCE_GROUPS,
+    MISSING,
+    MISSING_INPUT,
+    RunnerFailedRowsMcp5,
+    RunnerMissingInputMcp5,
+)
 
 # The tools resolve real FeatureGroups and read source files; a cold cache under xdist load can exceed 10s.
 pytestmark = [pytest.mark.timeout(30), pytest.mark.anyio]
@@ -85,7 +92,7 @@ def _clock() -> float:
 
 
 def _base() -> PluginCollector:
-    return PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, RunnerFailedRowsMcp5})
+    return PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, RunnerFailedRowsMcp5, RunnerMissingInputMcp5})
 
 
 def _settings(tmp_path: Path, mode: str = "plan") -> Settings:
@@ -464,6 +471,18 @@ class TestExecute:
         assert result["failed_rows"] == [
             {"column": FAILED, "reason": "timeout", "row_count": 2, "rows": [1, 3], "truncated": False}
         ]
+
+    async def test_run_missing_input_is_an_error_with_its_own_code(self, tmp_path: Path) -> None:
+        settings = _settings(tmp_path, "execute")
+
+        async with Client(_server(settings)) as client:
+            explained = await client.call_tool(EXPLAIN, {"request": {"features": [MISSING]}})
+            ran = await client.call_tool(RUN, {"plan_id": _assert_envelope(explained)["plan_id"]})
+
+        assert _error_code(ran) == "missing_input_feature"
+        (detail,) = _structured(ran)["error"]["details"]
+        assert detail["missing_inputs"] == [MISSING_INPUT]
+        assert "available_columns" not in json.dumps(_structured(ran))
 
     async def test_run_with_a_foreign_plan_id_is_plan_invalid(self, tmp_path: Path) -> None:
         result = await _call(_server(_settings(tmp_path, "execute")), RUN, {"plan_id": "mpl1.x.y"})

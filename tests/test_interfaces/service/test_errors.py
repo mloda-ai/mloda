@@ -1,14 +1,46 @@
 """Service error results: a closed set of codes, a unique audit id, and Problem details."""
 
 import json
+import logging
 import re
+
+from typing import Any
 
 import pytest
 
-from mloda.interfaces.service.errors import ERROR_CODES, error_result, is_error, problems_to_details
+from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
+from mloda.interfaces.service.errors import ERROR_CODES, error_result, failure_result, is_error, problems_to_details
 from mloda.interfaces.service.request import Problem
 
 AUDIT_ID = re.compile(r"^aud_[0-9a-f]{16,}$")
+MAX_NAME_LENGTH = 200
+MAX_MISSING_INPUTS = 50
+
+
+def _missing(
+    group: str = "G", feature: str = "f", inputs: tuple[str, ...] = ("a",), available: tuple[str, ...] = ("secretcol",)
+) -> MissingInputFeatureError:
+    return MissingInputFeatureError(group, feature, inputs, available)
+
+
+def _caused_by(error: Exception) -> Exception:
+    try:
+        try:
+            raise error
+        except Exception as inner:
+            raise RuntimeError("wrapper") from inner
+    except RuntimeError as wrapper:
+        return wrapper
+
+
+def _context_of(error: Exception) -> Exception:
+    try:
+        try:
+            raise error
+        except Exception:
+            raise RuntimeError("wrapper")  # noqa: B904
+    except RuntimeError as wrapper:
+        return wrapper
 
 
 def test_error_codes() -> None:
@@ -18,6 +50,7 @@ def test_error_codes() -> None:
         "limit_exceeded",
         "plan_invalid",
         "plan_stale",
+        "missing_input_feature",
         "internal",
     )
 
@@ -98,3 +131,62 @@ def test_is_error() -> None:
     assert is_error(error_result("internal", "m")) is True
     assert is_error({"items": [], "next_cursor": None}) is False
     assert is_error({"error": None}) is True
+
+
+def test_missing_input_feature_code_matches_the_exception() -> None:
+    assert "missing_input_feature" in ERROR_CODES
+    assert MissingInputFeatureError.code == "missing_input_feature"
+
+
+@pytest.mark.parametrize("wrap", [lambda e: e, _caused_by], ids=["direct", "cause"])
+def test_failure_result_maps_missing_input(wrap: Any) -> None:
+    error = _missing("Grp", "feat", ("in1", "in2"))
+
+    result = failure_result("The run", wrap(error))
+
+    body = result["error"]
+    assert body["code"] == "missing_input_feature"
+    assert "Grp" in body["message"] and "feat" in body["message"]
+    assert str(error) not in body["message"]
+    assert body["details"] == [{"feature_group": "Grp", "feature": "feat", "missing_inputs": ["in1", "in2"]}]
+    assert "available_columns" not in json.dumps(result)
+    assert "secretcol" not in json.dumps(result)
+
+
+def test_failure_result_strips_control_characters_from_names() -> None:
+    result = failure_result("The run", _missing("G\x1b[31mr\x00p", "f\x07", ("a\x1b[31mb\x00c",)))
+
+    (detail,) = result["error"]["details"]
+    assert detail == {"feature_group": "Grp", "feature": "f", "missing_inputs": ["abc"]}
+    assert "\x1b" not in json.dumps(result) and "\\u001b" not in json.dumps(result)
+
+
+def test_failure_result_truncates_long_names_and_caps_missing_inputs() -> None:
+    long = "x" * (MAX_NAME_LENGTH + 50)
+    inputs = tuple(f"in{index}" for index in range(MAX_MISSING_INPUTS + 10))
+
+    (detail,) = failure_result("The run", _missing(long, long, (long, *inputs)))["error"]["details"]
+
+    assert detail["feature_group"] == "x" * MAX_NAME_LENGTH
+    assert detail["feature"] == "x" * MAX_NAME_LENGTH
+    assert len(detail["missing_inputs"]) == MAX_MISSING_INPUTS
+    assert detail["missing_inputs"][0] == "x" * MAX_NAME_LENGTH
+
+
+def test_failure_result_ignores_missing_input_only_in_context() -> None:
+    result = failure_result("The run", _context_of(_missing()))
+    assert result["error"]["code"] == "internal"
+    assert result["error"]["details"] == []
+
+
+def test_failure_result_other_exception_stays_internal() -> None:
+    assert failure_result("The run", ValueError("x"))["error"]["code"] == "internal"
+
+
+def test_failure_result_logs_the_audit_line_for_missing_input(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.ERROR, logger="mloda.interfaces.service"):
+        result = failure_result("The run", _missing())
+
+    records = [r for r in caplog.records if r.name == "mloda.interfaces.service"]
+    assert len(records) == 1
+    assert result["error"]["audit_id"] in records[0].getMessage()

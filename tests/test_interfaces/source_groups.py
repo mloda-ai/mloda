@@ -8,6 +8,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
 from mloda.provider import FeatureSet
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
@@ -115,3 +116,31 @@ class RunnerFailedRowsMcp5(FeatureGroup):
             else:
                 report_failed_rows(FAILED_COLUMN_CTRL, [0], "ctrl")
         return columns
+
+
+MISSING = "income__mcp5_missing"
+MISSING_INPUT = "mcp5_absent_input"
+
+
+class RunnerMissingInputMcp5(FeatureGroup):
+    """Fails while computing because a declared input is absent."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == MISSING
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("income")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise MissingInputFeatureError("RunnerMissingInputMcp5", MISSING, (MISSING_INPUT,), ("income",))

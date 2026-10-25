@@ -31,12 +31,14 @@ from tests.helpers.docs_scope import shipped_feature_group_walk
 from tests.test_interfaces.source_groups import (
     FAILED,
     FILE_SOURCE_GROUPS,
+    MISSING,
     PLAN_RAISE,
     PLAN_RAISE_SECRET,
     RAISE,
     RAISE_SECRET,
     PlanRaiseMcp5,
     RunnerFailedRowsMcp5,
+    RunnerMissingInputMcp5,
     RunnerRaiseMcp5,
 )
 
@@ -569,6 +571,16 @@ class TestRunFeatureGroupFailure:
         assert outcome.code == 2
         assert _error_code(outcome) == "internal"
         assert RAISE_SECRET not in outcome.out
+
+    def test_missing_input_has_its_own_code_with_exit_2(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        request = _request_file(tmp_path, {"features": ["customer_id", MISSING]})
+
+        outcome = _cli(["run", str(request), "--config", str(config)], extra_groups=[RunnerMissingInputMcp5])
+
+        assert outcome.code == 2
+        assert _error_code(outcome) == "missing_input_feature"
 
     @pytest.mark.parametrize("command", ["explain", "run"])
     def test_planning_failure_is_an_internal_result_with_exit_2(

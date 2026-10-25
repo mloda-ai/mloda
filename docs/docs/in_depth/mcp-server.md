@@ -100,8 +100,9 @@ before planning and again on run. Inline data is also capped by the plan id size
 
 Every result is a one-line summary followed by the result as JSON, which is also the structured content. A failed
 call has `isError` set and one error shape: `{"error": {"code", "message", "details", "audit_id"}}` with the codes
-`validation_failed`, `policy_denied`, `limit_exceeded`, `plan_invalid`, `plan_stale` and `internal`. Details point at
-the request by JSON pointer, with a suggestion when a close name exists.
+`validation_failed`, `policy_denied`, `limit_exceeded`, `plan_invalid`, `plan_stale`, `missing_input_feature` and `internal`. Details
+point at the request by JSON pointer, with a suggestion when a close name exists. A `missing_input_feature` detail
+holds `feature_group`, `feature` and `missing_inputs` (never the available columns).
 
 ## What stays on the server
 

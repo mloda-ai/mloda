@@ -40,9 +40,12 @@ from tests.test_interfaces.source_groups import (
     FAILED_MANY_ROWS,
     FILE_SOURCE_GROUPS,
     PLAN_RAISE_SECRET,
+    MISSING,
+    MISSING_INPUT,
     RAISE,
     RAISE_SECRET,
     RunnerFailedRowsMcp5,
+    RunnerMissingInputMcp5,
     RunnerRaiseMcp5,
 )
 
@@ -204,6 +207,7 @@ def _base(*extra: type[FeatureGroup]) -> PluginCollector:
         RunnerDeniedMcp5,
         RunnerRaiseMcp5,
         RunnerFailedRowsMcp5,
+        RunnerMissingInputMcp5,
         ApiDataFG,
     }
     return PluginCollector.enabled_feature_groups(groups | set(extra))
@@ -441,6 +445,16 @@ class TestFeatureGroupFailure:
         error = _error(result, "internal")
         assert "ValueError" in error["message"]
         assert RAISE_SECRET not in json.dumps(result)
+
+    def test_missing_input_has_its_own_code_with_the_missing_inputs(self, tmp_path: Path) -> None:
+        result = _run(tmp_path, {"features": ["customer_id", MISSING]})
+
+        error = _error(result, "missing_input_feature")
+        assert error["details"] == [
+            {"feature_group": "RunnerMissingInputMcp5", "feature": MISSING, "missing_inputs": [MISSING_INPUT]}
+        ]
+        assert "available_columns" not in json.dumps(result)
+        assert "status" not in result
 
     def test_failure_is_logged_once_with_audit_id_and_traceback_without_the_message(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture

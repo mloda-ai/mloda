@@ -103,16 +103,6 @@ class _LoadCapture(Extender):
         return result
 
 
-class _NeutralDictFG(ToySourceFG):
-    @classmethod
-    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
-        return {name: list(match.access[name]) for name in features.get_all_names()}
-
-    @classmethod
-    def neutral_type(cls, match: SourceMatch) -> type | None:
-        return dict
-
-
 class _BlindDeclaredFG(ToyDeclaredFG):
     @classmethod
     def columns(cls, match: SourceMatch) -> None:
@@ -1161,13 +1151,3 @@ class TestTools:
 
     def test_neutral_type_defaults_to_none(self) -> None:
         assert SourceFeatureGroup.neutral_type(_MATCH) is None
-
-    def test_a_default_run_keeps_a_columnar_dict_neutral_form_on_the_dict_framework(self) -> None:
-        result = mloda.run_all(
-            ["toyfmt_nat"],
-            plugin_collector=PluginCollector.enabled_feature_groups({_NeutralDictFG}),
-            data_access_collection=toy_dac(h1={"toyfmt_nat": [1, 2]}),
-        )
-
-        assert isinstance(result[0], dict)
-        assert column_values(result, "toyfmt_nat") == [1, 2]

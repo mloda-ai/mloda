@@ -118,6 +118,18 @@ class ToySourceSubFG(ToySourceFG):
     """Subclass of a source group; takes over its claims."""
 
 
+class ToyNeutralDictFG(ToySourceFG):
+    """A source group whose neutral form is a columnar dict, native to the dict framework."""
+
+    @classmethod
+    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+        return {name: list(match.access[name]) for name in features.get_all_names()}
+
+    @classmethod
+    def neutral_type(cls, match: SourceMatch) -> type | None:
+        return dict
+
+
 class ToyOtherSourceFG(ToySourceBase):
     """A second checked, searched group over the same toy sources."""
 

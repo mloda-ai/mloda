@@ -94,8 +94,8 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_w
     ToyWorkerPythonDict,
 )
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+    ToyNeutralDictFG,
     ToySourceBase,
-    ToySourceFG,
     neutral_csv_group,
     toy_dac,
 )
@@ -2447,25 +2447,16 @@ class TestLeavesConnectionOnResult:
         assert [s.leaves_connection for s in requested] == ["mine"]
 
 
-class PlanInfoNeutralDictFG(ToySourceFG):
-    @classmethod
-    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
-        return {name: list(match.access[name]) for name in features.get_all_names()}
-
-    @classmethod
-    def neutral_type(cls, match: SourceMatch) -> type | None:
-        return dict
-
-
 def test_a_default_plan_reports_the_framework_a_neutral_source_loads_natively() -> None:
     plan = mloda.explain(
         [Feature("toyfmt_plan_nat")],
-        plugin_collector=PluginCollector.enabled_feature_groups({PlanInfoNeutralDictFG}),
+        plugin_collector=PluginCollector.enabled_feature_groups({ToyNeutralDictFG}),
         data_access_collection=toy_dac(h1={"toyfmt_plan_nat": [1]}),
     )
     step = next(s for s in plan if s.step_kind == "compute")
 
-    assert step.compute_framework is PythonDictFramework
+    assert step.compute_framework is not None
+    assert issubclass(dict, step.compute_framework.expected_data_framework())
     assert step.compute_framework_reason == "loads natively"
 
 

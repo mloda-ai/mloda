@@ -221,7 +221,7 @@ class ChooseComputeFrameworks:
         self._penalty: list[dict[Framework, int]] = []
         self._free: dict[int, Framework] = {}
         self._home: list[frozenset[Framework] | None] = []
-        self._home_reason: list[str] = []
+        self._home_reason: list[str | None] = []
         self._homed = True
         self._unhomed: dict[int, Framework] = {}
         self.pin_frameworks = pin_frameworks or {}
@@ -312,18 +312,18 @@ class ChooseComputeFrameworks:
                 result[framework] = tuple(sorted(r for r in found if r is not None))
         return result
 
-    def _block_home(self, block: _Block) -> tuple[frozenset[Framework] | None, str]:
-        """Frameworks that read the block's source in place, or on a default run take its neutral type as is."""
+    def _block_home(self, block: _Block) -> tuple[frozenset[Framework] | None, str | None]:
+        """Frameworks that read the source in place, or on a default run take its neutral type, with the reason."""
         match = block.features[0].input_data_match
         if match is None or not issubclass(block.fg, SourceFeatureGroup):
-            return None, READS_IN_PLACE
+            return None, None
         conn = block.fg.match_connection(match[1])
         if conn is not None:
             home = frozenset(fw for fw in block.domain if fw._connection_matches(conn) and self._serves(block, fw))
             return home or None, READS_IN_PLACE
         neutral = None if self.positions else block.fg.neutral_type(match[1])
         if neutral is None:
-            return None, LOADS_NATIVELY
+            return None, None
         loads = frozenset(fw for fw in block.domain if self._takes(fw, neutral) or self._serves(block, fw))
         return loads or None, LOADS_NATIVELY
 
@@ -995,7 +995,12 @@ class ChooseComputeFrameworks:
         earlier = [fw for fw in alternatives if self.rank(fw) < chosen_rank]
         base = step_cost(None)
         if self._unhomed.get(index, chosen) is not chosen:
-            return self._home_reason[index] + suffix
+            moved = [
+                b
+                for b in assignment
+                if self._home_reason[b] == READS_IN_PLACE and self._unhomed[b] is not assignment[b]
+            ]
+            return (self._home_reason[index] or (READS_IN_PLACE if moved else LOADS_NATIVELY)) + suffix
         free = self._free.get(index)
         if free is not None and free is not chosen and not found and self._differs[index].get(free):
             return PREFERS_MATCHING

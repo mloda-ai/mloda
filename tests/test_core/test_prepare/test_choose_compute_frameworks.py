@@ -207,13 +207,13 @@ class ChooserHomeImpl(Implementation[ChooserHomeFG]):
         return None
 
 
-H = ChooserHomeFramework
-
-
 class ChooserNeutralFG(ChooserHomeFG):
     @classmethod
     def neutral_type(cls, match: SourceMatch) -> type | None:
         return dict
+
+
+H = ChooserHomeFramework
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -1141,10 +1141,23 @@ def _reason_mixed_members_prefer_matching(net: _Net) -> list[Feature]:
     return [_op(net, "chooser_op_sum_member", {P, A}), _op(net, "chooser_op_median_member", {P, A}, kind="median")]
 
 
-def _home_root(net: _Net, name: str, allowed: set[type[ComputeFramework]], pinned: bool = False) -> Feature:
-    net.implementations = [ChooserHomeImpl]
-    root = net.add(ChooserHomeFG, name, allowed, pinned=pinned, requested=True)
-    root.input_data_match = (ChooserHomeFG, SourceMatch(source=name, access=_HomeConn()))
+_HOME_ACCESS = object()
+
+
+def _home_root(
+    net: _Net,
+    name: str,
+    allowed: set[type[ComputeFramework]],
+    pinned: bool = False,
+    *,
+    fg: type[ChooserHomeFG] = ChooserHomeFG,
+    access: Any = _HOME_ACCESS,
+    implementations: tuple[type[Implementation[Any]], ...] = (ChooserHomeImpl,),
+) -> Feature:
+    if implementations:
+        net.implementations = list(implementations)
+    root = net.add(fg, name, allowed, pinned=pinned, requested=True)
+    root.input_data_match = (fg, SourceMatch(source=name, access=_HomeConn() if access is _HOME_ACCESS else access))
     return root
 
 
@@ -1175,50 +1188,43 @@ def _reason_home_pinned_off_home(net: _Net) -> list[Feature]:
     return [_home_root(net, "reason_home_pinned", {A}, pinned=True)]
 
 
-def _neutral_root(
-    net: _Net,
-    name: str,
-    allowed: set[type[ComputeFramework]],
-    pinned: bool = False,
-    implementations: list[type[Implementation[Any]]] | None = None,
-) -> Feature:
-    if implementations is not None:
-        net.implementations = implementations
-    root = net.add(ChooserNeutralFG, name, allowed, pinned=pinned, requested=True)
-    root.input_data_match = (ChooserNeutralFG, SourceMatch(source=name, access=None))
-    return root
-
-
 def _reason_neutral_alone(net: _Net) -> list[Feature]:
-    return [_neutral_root(net, "reason_neutral_alone", {P, A, D})]
+    return [_home_root(net, "reason_neutral_alone", {P, A, D}, fg=ChooserNeutralFG, access=None, implementations=())]
 
 
 def _reason_neutral_feeds_a_consumer(net: _Net) -> list[Feature]:
-    root = _neutral_root(net, "reason_neutral_consumer_source", {P, A, D})
-    net.edge(root, net.add(ChooserLeafFG, "reason_neutral_consumer", {P, A, D}, requested=True))
-    return [root]
+    root = _home_root(
+        net, "reason_neutral_consumer_source", {P, A, D}, fg=ChooserNeutralFG, access=None, implementations=()
+    )
+    consumer = net.add(ChooserLeafFG, "reason_neutral_consumer", {P, A, D}, requested=True)
+    net.edge(root, consumer)
+    return [root, consumer]
 
 
 def _reason_neutral_feeds_a_consumer_that_only_runs_on_pandas(net: _Net) -> list[Feature]:
-    root = _neutral_root(net, "reason_neutral_pandas_source", {P, A, D})
+    root = _home_root(
+        net, "reason_neutral_pandas_source", {P, A, D}, fg=ChooserNeutralFG, access=None, implementations=()
+    )
     net.edge(root, net.add(ChooserLeafFG, "reason_neutral_pandas_consumer", {P}, requested=True))
     return [root]
 
 
 def _reason_neutral_pinned_off_native(net: _Net) -> list[Feature]:
-    return [_neutral_root(net, "reason_neutral_pinned", {A}, pinned=True)]
+    return [
+        _home_root(net, "reason_neutral_pinned", {A}, pinned=True, fg=ChooserNeutralFG, access=None, implementations=())
+    ]
 
 
 def _reason_neutral_without_a_native_framework(net: _Net) -> list[Feature]:
-    return [_neutral_root(net, "reason_neutral_no_native", {P, A})]
+    return [_home_root(net, "reason_neutral_no_native", {P, A}, fg=ChooserNeutralFG, access=None, implementations=())]
 
 
 def _reason_neutral_beats_a_first_sorted_non_native(net: _Net) -> list[Feature]:
-    return [_neutral_root(net, "reason_neutral_over_home", {D, H})]
+    return [_home_root(net, "reason_neutral_over_home", {D, H}, fg=ChooserNeutralFG, access=None, implementations=())]
 
 
-def _reason_neutral_native_through_an_implementation(net: _Net) -> list[Feature]:
-    return [_neutral_root(net, "reason_neutral_impl", {D, H}, implementations=[ChooserHomeImpl])]
+def _reason_neutral_implementation_framework_takes_no_charge(net: _Net) -> list[Feature]:
+    return [_home_root(net, "reason_neutral_impl", {D, H}, fg=ChooserNeutralFG, access=None)]
 
 
 @pytest.mark.parametrize(
@@ -1257,12 +1263,12 @@ def _reason_neutral_native_through_an_implementation(net: _Net) -> list[Feature]
         (_reason_home_with_two_off_home_consumers, {H: 0, A: 1}, None, [SAVES_TWO], [A]),
         (_reason_home_pinned_off_home, {H: 0, A: 1}, None, [PINNED], [A]),
         (_reason_neutral_alone, None, None, [LOADS_NATIVELY], [D]),
-        (_reason_neutral_feeds_a_consumer, None, None, [LOADS_NATIVELY], [D]),
+        (_reason_neutral_feeds_a_consumer, None, None, [LOADS_NATIVELY, LOADS_NATIVELY], [D, D]),
         (_reason_neutral_alone, {A: 0, D: 1}, None, [LIST_ORDER], [A]),
         (_reason_neutral_pinned_off_native, None, None, [PINNED], [A]),
         (_reason_neutral_without_a_native_framework, None, None, [DEFAULT_ORDER], [P]),
         (_reason_neutral_beats_a_first_sorted_non_native, None, None, [LOADS_NATIVELY], [D]),
-        (_reason_neutral_native_through_an_implementation, None, None, [DEFAULT_ORDER], [H]),
+        (_reason_neutral_implementation_framework_takes_no_charge, None, None, [DEFAULT_ORDER], [H]),
         (_reason_neutral_feeds_a_consumer_that_only_runs_on_pandas, None, None, [LOADS_NATIVELY], [D]),
     ],
     ids=[
@@ -1298,7 +1304,7 @@ def _reason_neutral_native_through_an_implementation(net: _Net) -> list[Feature]
         "neutral_pinned_off_native",
         "neutral_without_a_native_framework",
         "neutral_beats_a_first_sorted_non_native",
-        "neutral_native_through_an_implementation",
+        "neutral_implementation_framework_takes_no_charge",
         "neutral_feeds_a_consumer_that_only_runs_on_pandas",
     ],
 )
@@ -1318,19 +1324,6 @@ def test_the_reason_names_why_the_framework_was_chosen(
     for feature, framework in zip(judged, frameworks):
         if framework is not None:
             assert feature.chosen_compute_framework is framework
-
-
-def test_a_consumer_follows_a_neutral_source_onto_its_native_framework() -> None:
-    net = _Net()
-    consumer = net.add(ChooserLeafFG, "neutral_follow_consumer", {P, A, D}, requested=True)
-    source = _neutral_root(net, "neutral_follow_source", {P, A, D})
-    net.edge(source, consumer)
-
-    net.choose()
-
-    assert source.chosen_compute_framework is D
-    assert consumer.chosen_compute_framework is D
-    assert net.conversions() == 0
 
 
 def test_an_implementation_pin_keeps_the_divergent_framework_and_tags_the_reason() -> None:

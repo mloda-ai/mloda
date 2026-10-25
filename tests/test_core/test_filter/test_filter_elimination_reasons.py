@@ -382,6 +382,8 @@ def _make_capability_reject_fg() -> type[FeatureGroup]:
             feature_name: FeatureName | str,
             options: Options,
             compute_framework: type[ComputeFramework],
+            *,
+            part: str | None = None,
         ) -> bool:
             return False
 

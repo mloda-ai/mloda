@@ -18,6 +18,8 @@ from typing import Any, ClassVar
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.compute as pc
 import pytest
 
 from mloda.provider import ANY_OUTPUT_PART
@@ -42,6 +44,8 @@ from mloda.user import PluginLoader
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
 class SubColumnTestDataCreator(DataCreatorFeatureGroup):
@@ -961,6 +965,67 @@ class MeasureConsumer(FeatureGroup):
         return {PandasDataFrame}
 
 
+class PartAwareProducer(DataCreatorFeatureGroup):
+    """Declares part v; its whole value holds Python objects, so only PythonDict may compute the whole."""
+
+    OUTPUT_PARTS = ("v",)
+    calls = 0
+    ran_on: list[str] = []
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"pmeasure"}
+
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
+    ) -> bool:
+        return part is not None or compute_framework is PythonDictFramework
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework, PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        cls.calls += 1
+        chosen = next(iter(features.features)).chosen_compute_framework
+        cls.ran_on.append("" if chosen is None else chosen.get_class_name())
+        parts_only = all(f.parts_only for f in features.features)
+        if chosen is PyArrowTable:
+            assert parts_only, "the whole value cannot be held by PyArrow"
+            return pa.table({"pmeasure~v": [1, 2, 3]})
+        rows: list[dict[str, Any]] = [{"pmeasure~v": i} for i in (1, 2, 3)]
+        if not parts_only:
+            for row in rows:
+                row["pmeasure"] = object()
+        return rows
+
+
+class PyArrowPartConsumer(FeatureGroup):
+    """PyArrow-only consumer of Feature("pmeasure~v")."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"pmeasure_consumer_output"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("pmeasure~v")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column("pmeasure_consumer_output", pc.multiply(data["pmeasure~v"], 2))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
 def _has_input_data_rejection() -> bool:
     reasons = MATCH_REJECTION_REASONS.get()
     return reasons is not None and any(r.stage == INPUT_DATA_STAGE for r in reasons.values())
@@ -971,23 +1036,39 @@ def _reset_measure_state() -> None:
     MeasureProducer.calls = 0
     MeasureProducer.seen_parts = []
     MeasureProducer.captured = []
+    PartAwareProducer.calls = 0
+    PartAwareProducer.ran_on = []
 
 
 def _collector(*groups: type[FeatureGroup]) -> PluginCollector:
     return PluginCollector.enabled_feature_groups({SubColumnTestDataCreator, *groups})
 
 
-def _run(features: list[Feature | str], *groups: type[FeatureGroup]) -> Any:
+def _run(
+    features: list[Feature | str],
+    *groups: type[FeatureGroup],
+    frameworks: list[type[ComputeFramework]] | None = None,
+) -> Any:
     return mloda.run_all(
         features,
-        compute_frameworks=[PandasDataFrame],
+        compute_frameworks=frameworks or [PandasDataFrame],
         plugin_collector=_collector(*groups),
         parallelization_modes={ParallelizationMode.SYNC},
     )
 
 
+def _frame_column_names(frame: Any) -> list[str]:
+    if isinstance(frame, pa.Table):
+        return list(frame.column_names)
+    if isinstance(frame, dict):
+        return list(frame)
+    if isinstance(frame, list):
+        return [key for row in frame for key in row]
+    return list(frame.columns)
+
+
 def _columns(results: Any) -> set[str]:
-    return {c for frame in results for c in frame.columns}
+    return {c for frame in results for c in _frame_column_names(frame)}
 
 
 class TestDeclaredOutputParts:
@@ -1542,3 +1623,56 @@ class TestArtifactKeyedByBaseName:
             api.run(artifacts={"measure~value": "model"})
 
         assert "'measure'" in str(exc_info.value)
+
+
+class TestPartAwareFrameworkCheck:
+    """supports_compute_framework receives the requested part, so a part can run where the whole cannot."""
+
+    @pytest.mark.parametrize("consumer", [False, True], ids=["top_level_part", "part_as_dependency"])
+    def test_part_runs_on_pyarrow_when_the_whole_is_refused(self, consumer: bool) -> None:
+        request = "pmeasure_consumer_output" if consumer else "pmeasure~v"
+        groups: tuple[type[FeatureGroup], ...] = (PartAwareProducer,)
+        if consumer:
+            groups += (PyArrowPartConsumer,)
+
+        results = _run([request], *groups, frameworks=[PyArrowTable])
+
+        assert [sorted(_columns([f])) for f in results] == [[request]]
+        assert PartAwareProducer.ran_on == ["PyArrowTable"]
+
+    def test_whole_on_pyarrow_alone_is_still_refused(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            _run(["pmeasure"], PartAwareProducer, frameworks=[PyArrowTable])
+
+        assert "supports_compute_framework rejected" in str(exc_info.value)
+        assert PartAwareProducer.calls == 0
+
+    def test_whole_and_unpinned_part_fold_into_one_step_on_the_narrower_framework(self) -> None:
+        results = _run(["pmeasure", "pmeasure~v"], PartAwareProducer, frameworks=[PythonDictFramework, PyArrowTable])
+
+        assert PartAwareProducer.calls == 1
+        assert PartAwareProducer.ran_on == ["PythonDictFramework"]
+        assert [sorted(_columns([f])) for f in results] == [["pmeasure", "pmeasure~v"]]
+
+    def test_whole_and_part_pinned_to_different_frameworks_stay_two_steps(self) -> None:
+        features: list[Feature | str] = [
+            Feature("pmeasure", compute_framework="PythonDictFramework"),
+            Feature("pmeasure~v", compute_framework="PyArrowTable"),
+        ]
+
+        results = _run(features, PartAwareProducer, frameworks=[PythonDictFramework, PyArrowTable])
+
+        assert PartAwareProducer.calls == 2
+        assert sorted(PartAwareProducer.ran_on) == ["PyArrowTable", "PythonDictFramework"]
+        assert sorted(sorted(_columns([f])) for f in results) == [["pmeasure", "pmeasure~v"], ["pmeasure~v"]]
+
+    def test_whole_and_part_consumer_unpinned_compute_the_producer_once_per_step(self) -> None:
+        _run(
+            ["pmeasure", "pmeasure_consumer_output"],
+            PartAwareProducer,
+            PyArrowPartConsumer,
+            frameworks=[PythonDictFramework, PyArrowTable],
+        )
+
+        assert PartAwareProducer.calls == 2
+        assert sorted(PartAwareProducer.ran_on) == ["PyArrowTable", "PythonDictFramework"]

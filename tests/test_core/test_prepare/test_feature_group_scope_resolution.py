@@ -358,6 +358,8 @@ class RejectAllScopedSource(StubFeatureGroup):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         return False
 

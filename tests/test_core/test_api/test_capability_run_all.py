@@ -42,6 +42,8 @@ class E2ECapRunAllFeatureGroup(DataCreatorFeatureGroup):
         feature_name: Any,
         options: Any,
         compute_framework: Any,
+        *,
+        part: str | None = None,
     ) -> bool:
         return compute_framework is not PythonDictFramework
 

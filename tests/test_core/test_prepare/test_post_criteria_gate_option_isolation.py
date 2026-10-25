@@ -504,7 +504,12 @@ class TestCapabilityHookSeesTheCandidatesOwnWrites:
         candidate = _make_candidate("CapabilityFG_winner_iso", _Writes({CAPABILITY_KEY: "v"}, {}, frozenset()), [])
 
         def supports(
-            cls: type[FeatureGroup], feature_name: FeatureName | str, options: Options, framework: Any
+            cls: type[FeatureGroup],
+            feature_name: FeatureName | str,
+            options: Options,
+            framework: Any,
+            *,
+            part: str | None = None,
         ) -> bool:
             return bool(options.get(CAPABILITY_KEY) == "v")
 

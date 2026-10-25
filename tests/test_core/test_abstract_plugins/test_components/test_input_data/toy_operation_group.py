@@ -83,6 +83,8 @@ class OpToyHookFG(OpToyFG):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         return True
 
@@ -107,7 +109,7 @@ class OpToyPandas(Implementation[OpToyFG]):
     served_by: ClassVar[list[Any]] = []
 
     @classmethod
-    def accepts(cls, feature_name: str, options: Options) -> bool:
+    def accepts(cls, feature_name: str, options: Options, *, part: str | None = None) -> bool:
         return options.get(OPTOY_PANDAS_OFF) is None
 
     @classmethod

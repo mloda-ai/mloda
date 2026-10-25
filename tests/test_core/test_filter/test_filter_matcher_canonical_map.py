@@ -212,6 +212,8 @@ def _make_capability_reject_fg() -> tuple[type[FeatureGroup], Callable[[], int]]
             feature_name: FeatureName | str,
             options: Options,
             compute_framework: type[ComputeFramework],
+            *,
+            part: str | None = None,
         ) -> bool:
             cls.calls += 1
             return False
@@ -236,6 +238,8 @@ def _make_capability_accept_fg() -> tuple[type[FeatureGroup], Callable[[], int]]
             feature_name: FeatureName | str,
             options: Options,
             compute_framework: type[ComputeFramework],
+            *,
+            part: str | None = None,
         ) -> bool:
             cls.calls += 1
             return True
@@ -260,6 +264,8 @@ def _make_capability_reject_pythondict_fg() -> tuple[type[FeatureGroup], Callabl
             feature_name: FeatureName | str,
             options: Options,
             compute_framework: type[ComputeFramework],
+            *,
+            part: str | None = None,
         ) -> bool:
             cls.calls += 1
             return compute_framework is not PythonDictFramework
@@ -286,6 +292,8 @@ def _make_capability_filter_reject_fg(
             feature_name: FeatureName | str,
             options: Options,
             compute_framework: type[ComputeFramework],
+            *,
+            part: str | None = None,
         ) -> bool:
             if str(feature_name) != FILTER_FEATURE:
                 return True
@@ -310,6 +318,8 @@ def _make_capability_raising_fg() -> type[FeatureGroup]:
             feature_name: FeatureName | str,
             options: Options,
             compute_framework: type[ComputeFramework],
+            *,
+            part: str | None = None,
         ) -> bool:
             raise RuntimeError(CAPABILITY_RAISE_TEXT)
 
@@ -333,6 +343,8 @@ def _make_capability_option_recorder_fg() -> tuple[type[FeatureGroup], Callable[
             feature_name: FeatureName | str,
             options: Options,
             compute_framework: type[ComputeFramework],
+            *,
+            part: str | None = None,
         ) -> bool:
             if str(feature_name) == FILTER_FEATURE:
                 keys = (SHARED_KEY_728, GROUP_ONLY_KEY_728, CONTEXT_ONLY_KEY_728)

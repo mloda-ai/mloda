@@ -140,6 +140,8 @@ class _ElimBaseFG(FeatureGroup):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         if cls.SUPPORTED_FRAMEWORKS is None:
             return True

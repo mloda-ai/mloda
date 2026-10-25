@@ -1,4 +1,4 @@
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from copy import copy, deepcopy
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Generator, NamedTuple
@@ -738,6 +738,7 @@ class ExecutionPlan:
         features: set[Feature],
         parent_to_children_mapping: dict[UUID, set[UUID]],
         nodes: dict[UUID, NodeProperties],
+        raise_if_blocked: bool = True,
     ) -> list[set[Feature]]:
         """Bucket members so none holds two that read one name from differing variants of one source class."""
         producer_index = self._feature_set_index()
@@ -791,7 +792,7 @@ class ExecutionPlan:
             else:
                 bucket_of[feature.uuid] = len(buckets)
                 buckets.append([(feature, parents)])
-        if len(buckets) > 1:
+        if len(buckets) > 1 and raise_if_blocked:
             blocked = sorted(
                 str(f.name)
                 for f in features
@@ -3584,6 +3585,22 @@ Available join types:
         features_grouped_by_framework_and_options: dict[Any, set[Feature]] = (
             self.group_features_by_compute_framework_and_options(features)
         )
+
+        def no_variant_conflict(members: set[Feature]) -> bool:
+            assert nodes is not None
+            return (
+                len(
+                    self._split_by_variant_conflicts(members, parent_to_children_mapping, nodes, raise_if_blocked=False)
+                )
+                == 1
+            )
+
+        features_grouped_by_framework_and_options = self._merge_same_framework_groups(
+            feature_group,
+            features_grouped_by_framework_and_options,
+            self.global_filter,
+            None if nodes is None else no_variant_conflict,
+        )
         # Only a root feature group (no upstream ancestors) can be the actual cause of a
         # missing-Links error: a split with ancestors of its own is never the source read directly.
         is_root = not any(parent_to_children_mapping.get(feature.uuid) for feature in features)
@@ -3802,6 +3819,69 @@ Available join types:
             if feature.uuid in parent_to_children_mapping:
                 new_set.update(parent_to_children_mapping[feature.uuid])
         return new_set
+
+    @staticmethod
+    def _merge_same_framework_groups(
+        feature_group: type[FeatureGroup],
+        groups: dict[int, set[Feature]],
+        global_filter: GlobalFilter | None,
+        can_merge: Callable[[set[Feature]], bool] | None = None,
+    ) -> dict[int, set[Feature]]:
+        """Greedily merge groups on one chosen framework that differ only in data type or allowed frameworks.
+
+        A row-reducing group replaces the framework data, so a second step would run on the reduced frame.
+        Merged groups keep the first group's key; artifact groups are skipped (artifact is keyed by the set).
+        """
+        if len(groups) < 2 or feature_group.artifact() is not None:
+            return groups
+        split_keys = frozenset(
+            key for group in groups.values() for f in group for key in f.options.inherited_context_keys
+        )
+        collection = global_filter.collection if global_filter is not None else {}
+        filters_by_name = {
+            name: single_filters for (fg, name), single_filters in collection.items() if fg == feature_group
+        }
+
+        def sort_key(group: set[Feature]) -> tuple[tuple[Any, ...], ...]:
+            return tuple(
+                sorted(
+                    (
+                        str(f.name),
+                        str(f.data_type),
+                        stable_text(f.options),
+                        tuple(sorted(c.get_class_name() for c in f.compute_frameworks or ())),
+                        str(f.uuid),
+                    )
+                    for f in group
+                )
+            )
+
+        def signature(group: set[Feature]) -> Any:
+            chosen = {f.get_compute_framework() for f in group}
+            if len(chosen) != 1:
+                return None
+            rep = next(iter(group))
+            filters = frozenset(single_filter for f in group for single_filter in filters_by_name.get(f.name, ()))
+            match = None if rep.input_data_match is None else _deep_hashable(rep.input_data_match)
+            return (next(iter(chosen)), rep.options, rep._split_context_hashable(split_keys), match, filters)
+
+        merged: list[tuple[int, set[Feature], Any]] = []
+        for key, group in sorted(groups.items(), key=lambda item: sort_key(item[1])):
+            sig = signature(group)
+            names = {f.name for f in group}
+            for index, (first_key, members, member_sig) in enumerate(merged):
+                union = members | group
+                if (
+                    sig is not None
+                    and sig == member_sig
+                    and not names & {f.name for f in members}
+                    and (can_merge is None or can_merge(union))
+                ):
+                    merged[index] = (first_key, union, member_sig)
+                    break
+            else:
+                merged.append((key, set(group), sig))
+        return {key: members for key, members, _ in merged}
 
     @staticmethod
     def group_features_by_compute_framework_and_options(features: set[Feature]) -> dict[int, set[Feature]]:

@@ -13,8 +13,18 @@ context suites). Only context entries recorded in options.inherited_context_keys
 participate.
 """
 
+import itertools
+from collections.abc import Callable
+from typing import Any
+
+import pytest
+
+from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.prepare.execution_plan import ExecutionPlan
-from mloda.user import DataType, Feature, Options
+from mloda.provider import BaseArtifact, ComputeFramework, FeatureGroup
+from mloda.user import DataType, Feature, FeatureName, FilterType, Options, SingleFilter
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
 def _group(features: set[Feature]) -> dict[int, set[Feature]]:
@@ -337,3 +347,201 @@ def test_grouping_is_callable_on_the_class() -> None:
     groups = ExecutionPlan.group_features_by_compute_framework_and_options(features)
 
     assert sum(len(group) for group in groups.values()) == 2
+
+
+class MergeProbeFG(FeatureGroup):
+    """Plain feature group (no artifact) for the same-framework merge helper tests."""
+
+
+class MergeArtifactProbeFG(FeatureGroup):
+    """Feature group with an artifact, which must never merge."""
+
+    @staticmethod
+    def artifact() -> type[BaseArtifact] | None:
+        return BaseArtifact
+
+
+def _chosen(feature: Feature, framework: type[ComputeFramework] = PyArrowTable) -> Feature:
+    feature.chosen_compute_framework = framework
+    return feature
+
+
+def _merge(
+    groups: dict[int, set[Feature]],
+    feature_group: type[FeatureGroup] = MergeProbeFG,
+    global_filter: GlobalFilter | None = None,
+    can_merge: Callable[[set[Feature]], bool] | None = None,
+) -> dict[int, set[Feature]]:
+    return ExecutionPlan._merge_same_framework_groups(feature_group, groups, global_filter, can_merge)
+
+
+def _names_per_group(groups: dict[int, set[Feature]]) -> list[list[str]]:
+    return sorted(sorted(str(f.name) for f in group) for group in groups.values())
+
+
+MergeCase = tuple[dict[int, set[Feature]], dict[str, Any]]
+
+
+def _case(*features: Feature, **merge_kwargs: Any) -> MergeCase:
+    return _group(set(features)), merge_kwargs
+
+
+def _filter_for(*names: str, same: bool = True) -> GlobalFilter:
+    global_filter = GlobalFilter()
+    for name in names:
+        column = "merge_col" if same else f"merge_col_{name}"
+        single_filter = SingleFilter(Feature(column), FilterType.EQUAL, {"value": 1})
+        global_filter.add_filter_to_collection(MergeProbeFG, FeatureName(name), single_filter)
+    return global_filter
+
+
+def _merges_data_types() -> MergeCase:
+    return _case(_chosen(Feature("m_a", data_type=DataType.INT32)), _chosen(Feature("m_b", data_type=DataType.INT64)))
+
+
+def _merges_allowed_sets() -> MergeCase:
+    return _case(_chosen(Feature("m_a", compute_framework="PyArrowTable")), _chosen(Feature("m_b")))
+
+
+def _merges_typed_and_untyped() -> MergeCase:
+    return _case(
+        _chosen(Feature("m_a", data_type=DataType.INT32)), _chosen(Feature("m_b", compute_framework="PyArrowTable"))
+    )
+
+
+def _merges_identical_filters() -> MergeCase:
+    return _case(
+        _chosen(Feature("m_a", data_type=DataType.INT32)),
+        _chosen(Feature("m_b", data_type=DataType.INT64)),
+        global_filter=_filter_for("m_a", "m_b"),
+    )
+
+
+def _merges_when_can_merge_accepts() -> MergeCase:
+    return _case(
+        _chosen(Feature("m_a", data_type=DataType.INT32)),
+        _chosen(Feature("m_b", data_type=DataType.INT64)),
+        can_merge=lambda members: True,
+    )
+
+
+def _keeps_same_name_variants() -> MergeCase:
+    return _case(_chosen(Feature("m_a", data_type=DataType.INT32)), _chosen(Feature("m_a", data_type=DataType.INT64)))
+
+
+def _keeps_different_frameworks() -> MergeCase:
+    return _case(
+        _chosen(Feature("m_a", data_type=DataType.INT32), PyArrowTable),
+        _chosen(Feature("m_b", data_type=DataType.INT64), PandasDataFrame),
+    )
+
+
+def _keeps_different_options() -> MergeCase:
+    return _case(
+        _chosen(Feature("m_a", options={"unit": "x"}, data_type=DataType.INT32)),
+        _chosen(Feature("m_b", options={"unit": "y"}, data_type=DataType.INT64)),
+    )
+
+
+def _keeps_different_split_context() -> MergeCase:
+    return _case(
+        _chosen(Feature("m_a", options=_options_with_inherited_tenant("acme"), data_type=DataType.INT32)),
+        _chosen(Feature("m_b", options=_options_with_inherited_tenant("beta"), data_type=DataType.INT64)),
+    )
+
+
+def _keeps_differing_filters() -> MergeCase:
+    return _case(
+        _chosen(Feature("m_a", data_type=DataType.INT32)),
+        _chosen(Feature("m_b", data_type=DataType.INT64)),
+        global_filter=_filter_for("m_a"),
+    )
+
+
+def _keeps_artifact_group() -> MergeCase:
+    return _case(
+        _chosen(Feature("m_a", data_type=DataType.INT32)),
+        _chosen(Feature("m_b", data_type=DataType.INT64)),
+        feature_group=MergeArtifactProbeFG,
+    )
+
+
+def _keeps_when_can_merge_rejects() -> MergeCase:
+    return _case(
+        _chosen(Feature("m_a", data_type=DataType.INT32)),
+        _chosen(Feature("m_b", data_type=DataType.INT64)),
+        can_merge=lambda members: False,
+    )
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        _merges_data_types,
+        _merges_allowed_sets,
+        _merges_typed_and_untyped,
+        _merges_identical_filters,
+        _merges_when_can_merge_accepts,
+    ],
+)
+def test_merge_same_framework_groups_merges(build: Callable[[], MergeCase]) -> None:
+    groups, kwargs = build()
+    assert len(groups) == 2
+
+    merged = _merge(groups, **kwargs)
+
+    assert _names_per_group(merged) == [["m_a", "m_b"]]
+
+
+@pytest.mark.parametrize(
+    "build, expected",
+    [
+        (_keeps_same_name_variants, [["m_a"], ["m_a"]]),
+        (_keeps_different_frameworks, [["m_a"], ["m_b"]]),
+        (_keeps_different_options, [["m_a"], ["m_b"]]),
+        (_keeps_different_split_context, [["m_a"], ["m_b"]]),
+        (_keeps_differing_filters, [["m_a"], ["m_b"]]),
+        (_keeps_artifact_group, [["m_a"], ["m_b"]]),
+        (_keeps_when_can_merge_rejects, [["m_a"], ["m_b"]]),
+    ],
+)
+def test_merge_same_framework_groups_keeps_separate(build: Callable[[], MergeCase], expected: list[list[str]]) -> None:
+    groups, kwargs = build()
+
+    merged = _merge(groups, **kwargs)
+
+    assert _names_per_group(merged) == expected
+
+
+def test_merge_three_groups_is_deterministic_across_input_orders() -> None:
+    x32 = _chosen(Feature("merge_x", data_type=DataType.INT32))
+    x64 = _chosen(Feature("merge_x", data_type=DataType.INT64))
+    y = _chosen(Feature("merge_y", compute_framework="PyArrowTable"))
+    items = list(_group({x32, x64, y}).items())
+    assert len(items) == 3
+
+    outcomes = set()
+    for order in itertools.permutations(items):
+        merged = _merge(dict(order))
+        assert len(merged) == 2
+        with_y = next(group for group in merged.values() if y in group)
+        outcomes.add(next(f.data_type for f in with_y if f.name == FeatureName("merge_x")))
+
+    assert len(outcomes) == 1
+
+
+def test_merge_tie_on_allowed_framework_sets_is_deterministic() -> None:
+    """Same-name groups differing only in allowed frameworks: y merges with the first sorted set."""
+    for _ in range(20):
+        x_pandas = _chosen(Feature("merge_x", compute_framework="PandasDataFrame"))
+        x_arrow = _chosen(Feature("merge_x", compute_framework="PyArrowTable"))
+        y = _chosen(Feature("merge_y"))
+        groups = _group({x_pandas, x_arrow, y})
+        assert len(groups) == 3
+
+        merged = _merge(groups)
+
+        assert len(merged) == 2
+        with_y = next(group for group in merged.values() if y in group)
+        assert x_pandas in with_y
+        assert x_arrow not in with_y

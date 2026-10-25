@@ -69,7 +69,16 @@ The stdlib reader does not yet cover pyarrow's full surface. Where they differ, 
 
 `describe_columns(match)` maps column name to `DataType` (`None` where unknown) and raises `NotImplementedError` when the group cannot enumerate columns, `ImportError` when a backend it needs is missing, and `OSError` or `ValueError` for an unreadable source. `ReadFileFG` lists the names from `column_names`; `ParquetFG`, `FeatherFG` and `OrcFG` report the types stored in the file's schema, `JsonFG` the types pyarrow infers while parsing, and `SqliteFG` SQLite's declared (unenforced) column types. A document group reports its three names as strings.
 
-`count_rows(match, compute_framework)` returns the row count of the source without loading it, or `None` when only a read can tell (the default). `ParquetFG`, `OrcFG` and `FeatherFG` count from file metadata for every compute framework; `CsvFG` only under PythonDict, since other frameworks read CSV through pyarrow, whose row split can differ; a document group counts one. The count is of the source itself, not of the step's output: filters, extenders and feature-group logic may change what the step reports. Both are called on the group with the `SourceMatch`; from a prepared session use `session.describe_columns(step)` and `session.count_rows(step)` (see the mloda API page).
+`count_rows(match, compute_framework)` returns the row count of the source without loading it, or `None` when only a read can tell (the default). `ParquetFG`, `OrcFG` and `FeatherFG` count from file metadata for every compute framework; `CsvFG` only under PythonDict, since other frameworks read CSV through pyarrow, whose row split can differ; a document group counts one, and `TextFG` counts `max(1, non-blank lines)`, an upper bound for row limits since it cannot see options. The count is of the source itself, not of the step's output: filters, extenders and feature-group logic may change what the step reports. Both are called on the group with the `SourceMatch`; from a prepared session use `session.describe_columns(step)` and `session.count_rows(step)` (see the mloda API page).
+
+### Documents as features
+
+A chained feature can read a document group. `TextFG` returns the whole text in one row; `text_lines` turns that into one row per non-blank line, with `~source` and `~file_type` repeated per row. Chained features such as `TextFG__upper` pass the option on to `TextFG`.
+
+```text
+Feature("TextFG__upper", options=Options(group={"text_lines": True}))
+Feature("TextFG~source", options=Options(group={"text_lines": True}))
+```
 
 ### Pointing a feature at a source
 

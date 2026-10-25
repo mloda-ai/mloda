@@ -19,7 +19,7 @@ from mloda.provider import ApiDataFG, ComputeFramework, FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.test_plugins.api.test_simplified_api_data import ApiNeutralBoundedFG
+from tests.test_plugins.api.test_simplified_api_data import ApiNeutralBoundedFG, ApiNeutralPandasOnlyFG
 
 
 class PrepareRunApiFeature(FeatureGroup):
@@ -363,12 +363,12 @@ class TestRunRefusesShapeThatDiffersFromDefaultPrepare:
 
     _lists = {"NeutralSet": {"api_neutral_id": [1], "api_neutral_val": ["initial"]}}
 
-    def _prepare(self, extender: Any, compute_frameworks: Any = None) -> Any:
+    def _prepare(self, extender: Any, compute_frameworks: Any = None, group: Any = ApiNeutralBoundedFG) -> Any:
         return mloda.prepare(
             ["api_neutral_id"],
             compute_frameworks=compute_frameworks,
             api_data=self._lists,
-            plugin_collector=PluginCollector.enabled_feature_groups({ApiNeutralBoundedFG}),
+            plugin_collector=PluginCollector.enabled_feature_groups({group}),
             function_extender={extender},
         )
 
@@ -401,6 +401,25 @@ class TestRunRefusesShapeThatDiffersFromDefaultPrepare:
         _rerun(session, path, {"NeutralSet": OrderedDict(api_neutral_id=[1], api_neutral_val=["a"])})
 
         assert extender.starts == 1
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_step_on_a_framework_not_taking_the_dict_accepts_an_ndarray_column(self, path: str) -> None:
+        extender = _StartCountingExtender()
+        session = self._prepare(extender, group=ApiNeutralPandasOnlyFG)
+
+        _rerun(session, path, {"NeutralSet": {"api_neutral_id": np.array([1]), "api_neutral_val": ["a"]}})
+
+        assert extender.starts == 1
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_explicit_dict_framework_session_refuses_an_ndarray_column(self, path: str) -> None:
+        extender = _StartCountingExtender()
+        session = self._prepare(extender, compute_frameworks=[PythonDictFramework])
+
+        with pytest.raises(ValueError, match=r"(?s)NeutralSet.*api_neutral_id"):
+            _rerun(session, path, {"NeutralSet": {"api_neutral_id": np.array([1]), "api_neutral_val": ["a"]}})
+
+        assert extender.starts == 0
 
     @pytest.mark.parametrize("path", ["batch", "stream"])
     def test_explicit_list_session_accepts_a_tuple_column(self, path: str) -> None:

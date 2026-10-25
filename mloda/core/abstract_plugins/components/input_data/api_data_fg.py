@@ -68,7 +68,11 @@ class ApiDataFG(SourceFeatureGroup):
 
     @classmethod
     def neutral_type(cls, match: SourceMatch) -> type | None:
-        if cls.overrides_load_neutral(ApiDataFG) or not isinstance(match.access, ApiDataRef):
+        own_transport = any(
+            "load_neutral" in klass.__dict__ or "api_values" in klass.__dict__
+            for klass in cls.__mro__[: cls.__mro__.index(ApiDataFG)]
+        )
+        if own_transport or not isinstance(match.access, ApiDataRef):
             return None
         return match.access.value_type
 

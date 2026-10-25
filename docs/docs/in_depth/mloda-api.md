@@ -100,7 +100,7 @@ result_2 = session.run(api_data={"MyKey": {"col": [3.0, 4.0]}})
 `run()` also accepts an `artifacts` parameter for switching between artifact
 save and load modes across calls. See [Artifacts](artifacts.md#run-time-artifact-switching-with-preparerun) for details.
 
-`run(api_data=...)` needs the same set keys and the same column names per set as `prepare()` (order may differ); otherwise it raises a `ValueError` before the run starts. Each set must be a mapping of column to values. A session prepared from dict-of-list sets without a `compute_frameworks` list also requires dict sets with list columns.
+`run(api_data=...)` needs the same set keys and the same column names per set as `prepare()` (order may differ); otherwise it raises a `ValueError` before the run starts. Each set must be a mapping of column to values. A set whose step loads natively as a dict must stay a dict of lists.
 
 `run_all()` is equivalent to `prepare()` followed by a single `run()`.
 `stream_all()` is equivalent to `prepare()` followed by a single `stream_run()`.

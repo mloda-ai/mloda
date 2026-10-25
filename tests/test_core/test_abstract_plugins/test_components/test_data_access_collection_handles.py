@@ -941,8 +941,9 @@ class TestApiDataColumnsAccessor:
         assert dict(dac.copy().api_data_types) == {"Cols": dict}
         assert dict(dac.copy().api_data_columns) == {"Cols": ("dac_api_a",)}
 
-    def test_accessor_is_read_only(self) -> None:
-        dac = DataAccessCollection().with_api_data_columns({"Cols": ("dac_api_a",)})
+    @pytest.mark.parametrize("accessor", ["api_data_columns", "api_data_types"])
+    def test_accessor_is_read_only(self, accessor: str) -> None:
+        dac = DataAccessCollection().with_api_data_columns({"Cols": ("dac_api_a",)}, types={"Cols": dict})
 
         with pytest.raises(AttributeError):
-            dac.api_data_columns = {}  # type: ignore[misc]
+            setattr(dac, accessor, {})

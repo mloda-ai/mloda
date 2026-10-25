@@ -14,7 +14,6 @@ Simplified mloda:
 from typing import Any, ClassVar
 
 import numpy as np
-
 import pyarrow as pa
 import pytest
 
@@ -509,6 +508,34 @@ class ApiNeutralBoundedFG(ApiDataFG):
         return super().find_sources(route, feature_name, options, data_access_collection)
 
 
+class ApiNeutralPandasOnlyFG(ApiNeutralBoundedFG):
+    """ApiNeutralBoundedFG limited to the pandas framework."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame}
+
+
+class ApiNeutralValuesFG(ApiDataFG):
+    """Overrides only api_values; limited to api_neutral_values_ names."""
+
+    @classmethod
+    def is_pointed(cls, feature_name: str, options: Any, data_access_collection: Any) -> bool:
+        return feature_name.startswith("api_neutral_values_")
+
+    @classmethod
+    def find_sources(
+        cls, route: Any, feature_name: str, options: Any, data_access_collection: Any
+    ) -> list[SourceMatch]:
+        if not feature_name.startswith("api_neutral_values_"):
+            return []
+        return super().find_sources(route, feature_name, options, data_access_collection)
+
+    @classmethod
+    def api_values(cls, match: SourceMatch) -> Any:
+        return super().api_values(match)
+
+
 _neutral_only = PluginCollector.enabled_feature_groups({ApiNeutralBoundedFG})
 
 
@@ -672,12 +699,15 @@ class TestApiDataNeutralType:
         assert ApiDataFG.neutral_type(typed) is dict
         assert ApiDataFG.neutral_type(untyped) is None
 
-    def test_neutral_type_is_none_for_a_subclass_overriding_load_neutral(self) -> None:
-        dac = DataAccessCollection().with_api_data_columns({"Neu": ("simplified_api_double_a",)}, types={"Neu": dict})
-        route = SimplifiedApiDoublingFG.CLAIM_ROUTES[0]
-        match = SimplifiedApiDoublingFG.find_sources(route, "simplified_api_double_a", Options(), dac)[0]
+    @pytest.mark.parametrize(
+        "group, name",
+        [(SimplifiedApiDoublingFG, "simplified_api_double_a"), (ApiNeutralValuesFG, "api_neutral_values_a")],
+    )
+    def test_neutral_type_is_none_for_a_subclass_with_its_own_transport(self, group: Any, name: str) -> None:
+        dac = DataAccessCollection().with_api_data_columns({"Neu": (name,)}, types={"Neu": dict})
+        match = group.find_sources(group.CLAIM_ROUTES[0], name, Options(), dac)[0]
 
-        assert SimplifiedApiDoublingFG.neutral_type(match) is None
+        assert group.neutral_type(match) is None
 
 
 class TestApiDataScopeAndShapes:

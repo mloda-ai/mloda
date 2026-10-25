@@ -968,16 +968,20 @@ class TestImplementationIdentityOnCalculateFeature:
         )
         impl: Any = getattr(toy, impl_name)
         extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        validate_output = _ContextCapturingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
 
         mloda.run_all(
             [Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"}, compute_framework=framework_name)],
             compute_frameworks=["PandasDataFrame", "PyArrowTable"],
             plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyFG}),
             parallelization_modes={ParallelizationMode.SYNC},
-            function_extender={extender},
+            function_extender={extender, validate_output},
         )
 
         assert extender.captured is not None
-        assert extender.captured.feature_group_class.endswith(toy.OpToyFG.__qualname__)
+        assert extender.captured.feature_group_class == f"{toy.OpToyFG.__module__}.{toy.OpToyFG.__qualname__}"
         assert extender.captured.implementation == f"{impl.__module__}:{impl.__qualname__}"
         assert extender.captured.implementation_version == impl.version()
+        assert validate_output.captured is not None
+        assert validate_output.captured.implementation == extender.captured.implementation
+        assert validate_output.captured.implementation_version == extender.captured.implementation_version

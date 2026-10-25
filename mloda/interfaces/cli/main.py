@@ -114,7 +114,7 @@ def _parser() -> argparse.ArgumentParser:
         _add_config_options(command)
     mcp = commands.add_parser("mcp", help="Serve the feature catalog, explain and run to MCP clients.")
     serve = mcp.add_subparsers(dest="mcp_command", required=True).add_parser(
-        "serve", help="Serve over stdio; settings from the config file, then MLODA_MCP_* env vars."
+        "serve", help="Serve over stdio or http; settings from the config file, then MLODA_MCP_* env vars."
     )
     _add_config_options(serve)
     serve.add_argument(
@@ -180,6 +180,7 @@ def _serve_mcp(args: argparse.Namespace, env: Mapping[str, str], err: TextIO) ->
 def _is_loopback(host: str) -> bool:
     if host == "localhost":
         return True
+    # ip_address signals a non-IP host only by raising.
     try:
         return ipaddress.ip_address(host).is_loopback
     except ValueError:
@@ -216,7 +217,7 @@ def _parse_pair(pair: str) -> tuple[str, Any, str | None]:
         # json.loads signals bad JSON only by raising.
         try:
             return key, json.loads(text), None
-        except ValueError:
+        except (ValueError, RecursionError):
             return key, None, f"the value of option '{key}' is not valid JSON"
     if text.startswith("@"):
         path = Path(text[1:])
@@ -255,15 +256,30 @@ def _load_request(args: argparse.Namespace, stdin: TextIO) -> tuple[Any, str | N
     return _read_request(args.targets[0], stdin)
 
 
-def _write_result(result: Mapping[str, Any], output_format: str, stdout: TextIO, full: bool = False) -> None:
+def _write_failed_rows_summary(result: Mapping[str, Any], stderr: TextIO) -> None:
+    for entry in result.get("failed_rows", ()):
+        rows = ",".join(str(row) for row in entry["rows"])
+        stderr.write(
+            f"mloda: failed rows: column {entry['column']}, reason {entry['reason']}, "
+            f"row_count {entry['row_count']}, rows {rows}\n"
+        )
+
+
+def _write_result(
+    result: Mapping[str, Any], output_format: str, stdout: TextIO, full: bool = False, stderr: TextIO | None = None
+) -> None:
     tables: list[dict[str, Any]] = result.get("tables", [])
     if is_error(result) or output_format == "json":
         stdout.write(json.dumps(result, indent=2) + "\n")
     elif output_format == "jsonl":
+        if stderr is not None:
+            _write_failed_rows_summary(result, stderr)
         for table in tables:
             for row in table["rows"] if full else table["preview"]["rows"]:
                 stdout.write(json.dumps(row) + "\n")
     else:
+        if stderr is not None:
+            _write_failed_rows_summary(result, stderr)
         writer = csv.writer(stdout, lineterminator="\n")
         for table in tables:
             header = [column["name"] for column in table["columns"] if full or column["in_preview"]]
@@ -310,7 +326,7 @@ def main(
     if output_format == "csv" and len(tables) > 1:
         err.write(f"mloda: error: csv output needs a single table, got {len(tables)}; use json or jsonl\n")
         return FAILED
-    _write_result(result, output_format, out, full=args.command == "run" and args.full)
+    _write_result(result, output_format, out, full=args.command == "run" and args.full, stderr=err)
     if is_error(result):
         return FAILED
     return FAILED_ROWS if result.get("failed_rows") else 0

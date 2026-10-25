@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 from typing import Any
 
+import numpy as np
 import pytest
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
@@ -17,7 +18,7 @@ pytestmark = pytest.mark.timeout(30)
 
 
 class _ReportingBase(DataCreatorFeatureGroup):
-    REPORTS: tuple[tuple[list[int], str], ...] = ()
+    REPORTS: tuple[tuple[Any, str], ...] = ()
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -45,6 +46,10 @@ class FrMany(_ReportingBase):
 
 class FrOther(_ReportingBase):
     REPORTS = (([2], "quota"),)
+
+
+class FrNumpy(_ReportingBase):
+    REPORTS = ((np.array([1, 3]), "timeout"),)
 
 
 class FrNone(_ReportingBase):
@@ -82,6 +87,17 @@ class TestReportFailedRowsValidation:
         with pytest.raises(TypeError):
             report_failed_rows("c", rows, "r")
 
+    @pytest.mark.parametrize("rows", [np.array([0, 2]), [np.int64(0), np.int64(2)], (0, 2), range(0, 4, 2), {0, 2}])
+    def test_integral_iterables_are_accepted(self, rows: Any) -> None:
+        report_failed_rows("c", rows, "r")
+
+    @pytest.mark.parametrize(
+        "rows", [np.array([0, -1]), [np.int64(-1)], np.array([True]), [np.bool_(True)], "12", b"12"]
+    )
+    def test_numpy_negatives_bools_and_strings_are_refused(self, rows: Any) -> None:
+        with pytest.raises((TypeError, ValueError)):
+            report_failed_rows("c", rows, "r")
+
     def test_negative_row_is_a_value_error(self) -> None:
         with pytest.raises(ValueError):
             report_failed_rows("c", [0, -1], "r")
@@ -105,6 +121,12 @@ class TestRunResultFailedRows:
             FailedRows(feature_group="FrOne", column="frone_col", rows=(1, 3), reason="timeout"),
         )
         assert isinstance(result.failed_rows, tuple)
+
+    def test_numpy_rows_are_stored_as_plain_ints(self, mode: ParallelizationMode) -> None:
+        (entry,) = _run(FrNumpy, modes={mode}).failed_rows
+
+        assert entry.rows == (1, 3)
+        assert all(type(row) is int for row in entry.rows)
 
     def test_no_report_is_an_empty_tuple(self, mode: ParallelizationMode) -> None:
         assert _run(FrNone, modes={mode}).failed_rows == ()

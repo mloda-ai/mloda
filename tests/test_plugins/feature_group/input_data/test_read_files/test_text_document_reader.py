@@ -244,17 +244,16 @@ class TestTextLinesOption:
             "TextFG~file_type": ["txt"] * 3,
         }
 
-    def test_without_the_option_the_whole_text_is_one_row(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("value", [None, False], ids=["without_the_option", "option_set_false"])
+    def test_without_the_option_or_set_false_the_whole_text_is_one_row(
+        self, tmp_path: Path, value: bool | None
+    ) -> None:
         path = _write(tmp_path, self.TEXT)
+        feature: str | Feature = (
+            "TextFG" if value is None else Feature("TextFG", options=Options({"text_lines": value}))
+        )
 
-        assert _run_collection(path, ["TextFG"]) == {"TextFG": [self.TEXT]}
-
-    def test_the_option_set_false_keeps_one_row(self, tmp_path: Path) -> None:
-        path = _write(tmp_path, self.TEXT)
-
-        columns = _run_collection(path, [Feature("TextFG", options=Options({"text_lines": False}))])
-
-        assert columns == {"TextFG": [self.TEXT]}
+        assert _run_collection(path, [feature]) == {"TextFG": [self.TEXT]}
 
     def test_the_option_reaches_the_source_through_a_chained_feature(self, tmp_path: Path) -> None:
         path = _write(tmp_path, self.TEXT)
@@ -276,16 +275,11 @@ class TestTextLinesOption:
 
 
 class TestTextCountRows:
-    @pytest.mark.parametrize(
-        ("text", "expected"),
-        [("one line", 1), ("a\n\n  \nb\nc\n", 3), ("", 1), ("\n \n", 1)],
-    )
-    def test_count_rows_is_the_non_blank_line_count_with_a_floor_of_one(
-        self, tmp_path: Path, text: str, expected: int
-    ) -> None:
+    @pytest.mark.parametrize("text", ["one line", "a\n\n  \nb\nc\n", "", "\n \n"])
+    def test_count_rows_is_the_base_one_without_reading_the_file(self, tmp_path: Path, text: str) -> None:
         path = _write(tmp_path, text)
         group = load_document_group("text_fg", "TextFG")
 
         count = group.count_rows(SourceMatch(source=str(path), access=str(path)), PythonDictFramework)
 
-        assert count == expected
+        assert count == 1

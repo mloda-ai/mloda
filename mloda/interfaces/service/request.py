@@ -384,25 +384,32 @@ def _scan_data_access(item: Mapping[str, Any], path: str, keys: frozenset[str]) 
     return _scan_feature_config(item, path, keys.__contains__, "data_access_option", _DATA_ACCESS_MESSAGE)
 
 
+def _unlisted_scan(item: Mapping[str, Any], path: str, allowed: Collection[str]) -> list[Problem]:
+    skipped = data_access_option_keys() | {str(DefaultOptionKeys.in_features)}
+    return _scan_feature_config(
+        item,
+        path,
+        lambda key: str(key) not in skipped and key not in allowed,
+        "option_not_allowed",
+        _NOT_ALLOWED_MESSAGE,
+    )
+
+
 def unlisted_option_violations(request: Any, allowed: Collection[str]) -> list[Problem]:
     """Report every option key outside ``allowed`` by path, never by value; data-access keys are left out."""
     features = request.get("features") if isinstance(request, dict) else None
     if not isinstance(features, list):
         return []
-    skipped = data_access_option_keys() | {str(DefaultOptionKeys.in_features)}
     problems: list[Problem] = []
     for index, item in enumerate(features):
         if isinstance(item, dict):
-            problems.extend(
-                _scan_feature_config(
-                    item,
-                    _pointer("features", index),
-                    lambda key: str(key) not in skipped and key not in allowed,
-                    "option_not_allowed",
-                    _NOT_ALLOWED_MESSAGE,
-                )
-            )
+            problems.extend(_unlisted_scan(item, _pointer("features", index), allowed))
     return problems
+
+
+def unlisted_group_option_violations(options: Mapping[str, Any], allowed: Collection[str]) -> list[Problem]:
+    """Report every key of a group ``options`` mapping outside ``allowed`` as ``/options/<key>``."""
+    return _unlisted_scan({"options": dict(options)}, "", allowed)
 
 
 def data_access_violations(request: Any) -> list[Problem]:
@@ -473,8 +480,18 @@ def _with_defaults(item: str | dict[str, Any], settings: Settings | None) -> str
     if settings is None or not (settings.options or settings.context_options):
         return item
     config: dict[str, Any] = {"name": item} if isinstance(item, str) else dict(item)
-    group = {**settings.options, **config.pop("options", {}), **config.get("group_options", {})}
-    context = {**settings.context_options, **config.get("context_options", {})}
+    if "options" in config and ("group_options" in config or "context_options" in config):
+        return config
+    own = {key for container in _OPTION_CONTAINERS for key in config.get(container) or {}}
+    group = {
+        **{key: value for key, value in settings.options.items() if key not in own},
+        **config.pop("options", {}),
+        **config.get("group_options", {}),
+    }
+    context = {
+        **{key: value for key, value in settings.context_options.items() if key not in own},
+        **config.get("context_options", {}),
+    }
     if group:
         config["group_options"] = group
     if context:

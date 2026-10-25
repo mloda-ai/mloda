@@ -48,7 +48,7 @@ def error_result(
 
 
 def _clean(name: str) -> str:
-    return strip_control_characters(name)[:MAX_NAME_LENGTH]
+    return re.sub(r"[\t\n\r]", " ", strip_control_characters(name))[:MAX_NAME_LENGTH]
 
 
 def _missing_input(error: BaseException) -> MissingInputFeatureError | None:

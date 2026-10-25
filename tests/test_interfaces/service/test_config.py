@@ -269,8 +269,8 @@ def test_default_classification_toml_loads(tmp_path: Path) -> None:
     assert load_settings(path, env={}).default_classification == "internal"
 
 
-@pytest.mark.parametrize("value", ["1", "true", '["internal"]'])
-def test_non_string_default_classification_is_config_error(tmp_path: Path, value: str) -> None:
+@pytest.mark.parametrize("value", ["1", "true", '["internal"]', '""'])
+def test_non_string_or_empty_default_classification_is_config_error(tmp_path: Path, value: str) -> None:
     with pytest.raises(ConfigError, match="default_classification"):
         load_settings(_write(tmp_path, f"[mcp]\ndefault_classification = {value}\n"), env={})
 
@@ -356,9 +356,10 @@ def test_config_hash_changes_with_default_options() -> None:
 
 
 @pytest.mark.parametrize("table", ["options", "context_options"])
-def test_in_features_default_option_is_config_error(tmp_path: Path, table: str) -> None:
-    with pytest.raises(ConfigError, match="in_features"):
-        load_settings(_write(tmp_path, f'[mcp.{table}]\nin_features = "x"\n'), env={})
+@pytest.mark.parametrize("key", ["in_features", "feature_group"])
+def test_reserved_default_option_key_is_config_error(tmp_path: Path, table: str, key: str) -> None:
+    with pytest.raises(ConfigError, match=key):
+        load_settings(_write(tmp_path, f'[mcp.{table}]\n{key} = "x"\n'), env={})
 
 
 @pytest.mark.parametrize("key", ["max_inline_values", "max_inline_chars"])

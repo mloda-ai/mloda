@@ -4,6 +4,7 @@ Every call goes through the SDK's in-process client; results must be exactly wha
 """
 
 import json
+import dataclasses
 import logging
 from collections.abc import Iterator, Mapping
 from pathlib import Path
@@ -642,5 +643,54 @@ class TestCreateApp:
     def test_loopback_origin_is_accepted(self, tmp_path: Path) -> None:
         assert _initialize(tmp_path, {"Host": "localhost:8000", "Origin": "http://localhost:8000"}) == 200
 
+    @pytest.mark.parametrize(
+        "headers", [{"Host": "127.0.0.2:8000"}, {"Host": "127.0.0.2", "Origin": "http://127.0.0.2:8000"}]
+    )
+    def test_other_loopback_bind_accepts_its_own_host_and_origin(
+        self, tmp_path: Path, headers: Mapping[str, str]
+    ) -> None:
+        assert _initialize(tmp_path, headers, host="127.0.0.2") == 200
+
+    def test_other_loopback_bind_still_refuses_a_foreign_host(self, tmp_path: Path) -> None:
+        assert _initialize(tmp_path, {"Host": "evil.example:8000"}, host="127.0.0.2") == 421
+
+    def test_create_app_forces_trusted_caller_off(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from mloda.interfaces.mcp.server import create_app
+
+        seen: list[Settings] = []
+        real = build_services
+
+        def spy(settings: Settings, **kwargs: Any) -> Any:
+            seen.append(settings)
+            return real(settings, **kwargs)
+
+        monkeypatch.setattr("mloda.interfaces.cli.main.build_services", spy)
+
+        create_app(dataclasses.replace(_settings(tmp_path), trusted_caller=True), env=ENV)
+
+        assert [s.trusted_caller for s in seen] == [False]
+
     def test_non_loopback_bind_does_not_restrict_the_host(self, tmp_path: Path) -> None:
         assert _initialize(tmp_path, {"Host": "evil.example:8000"}, host="0.0.0.0") == 200  # nosec B104
+
+
+class TestServeTrustedCaller:
+    def test_stdio_serve_forces_trusted_caller_off(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from mloda.interfaces.mcp import main as mcp_main
+
+        seen: list[Settings] = []
+
+        class _Stub:
+            def run(self, transport: str) -> None:
+                return None
+
+        def fake_services(settings: Settings, **kwargs: Any) -> tuple[Any, ...]:
+            seen.append(settings)
+            return ()
+
+        monkeypatch.setattr("mloda.interfaces.cli.main.build_services", fake_services)
+        monkeypatch.setattr("mloda.interfaces.mcp.server.build_server", lambda *services: _Stub())
+
+        mcp_main.serve(dataclasses.replace(_settings(tmp_path), trusted_caller=True), env=ENV)
+
+        assert [s.trusted_caller for s in seen] == [False]

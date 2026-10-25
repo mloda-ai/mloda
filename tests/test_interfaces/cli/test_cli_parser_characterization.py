@@ -100,7 +100,7 @@ usage: mloda mcp [-h] {serve} ...
 
 positional arguments:
   {serve}
-    serve     Serve over stdio; settings from the config file, then MLODA_MCP_* env vars.
+    serve     Serve over stdio or http; settings from the config file, then MLODA_MCP_* env vars.
 
 options:
   -h, --help  show this help message and exit

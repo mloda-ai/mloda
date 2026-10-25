@@ -1,12 +1,11 @@
 from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from mloda.provider import ComputeFramework, PropertySpec, ReadDocumentFG
+from mloda.core.abstract_plugins.components.input_data.read_document_fg import FILE_TYPE_SUFFIX, SOURCE_SUFFIX
+from mloda.provider import PropertySpec, ReadDocumentFG
 from mloda_plugins.feature_group.input_data.file_suffixes import TEXT_SUFFIXES, PY_SUFFIXES
 
 TEXT_LINES_OPTION = "text_lines"
-_SOURCE_SUFFIX = "~source"
-_FILE_TYPE_SUFFIX = "~file_type"
 
 
 class TextFG(ReadDocumentFG):
@@ -33,17 +32,13 @@ class TextFG(ReadDocumentFG):
         lines = cls._non_blank_lines(match.access)
         out: dict[str, list[str]] = {}
         for name in sorted(features.get_all_names()):
-            if name.endswith(_SOURCE_SUFFIX):
+            if name.endswith(SOURCE_SUFFIX):
                 out[name] = [match.access] * len(lines)
-            elif name.endswith(_FILE_TYPE_SUFFIX):
+            elif name.endswith(FILE_TYPE_SUFFIX):
                 out[name] = [cls.file_type(match.access)] * len(lines)
             else:
                 out[name] = list(lines)
         return out
-
-    @classmethod
-    def count_rows(cls, match: SourceMatch, compute_framework: type[ComputeFramework]) -> int | None:
-        return max(1, len(cls._non_blank_lines(match.access)))
 
 
 class PyFG(ReadDocumentFG):

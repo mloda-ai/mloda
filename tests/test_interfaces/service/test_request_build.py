@@ -209,3 +209,33 @@ def test_normalized_request_keeps_only_the_callers_request() -> None:
 
 def test_no_defaults_keeps_features_unchanged() -> None:
     assert _defaulted({"features": FEATURES}, Settings()).features == load_features_from_config(json.dumps(FEATURES))
+
+
+def test_feature_group_option_wins_over_a_context_default_of_the_same_key() -> None:
+    settings = Settings(context_options={"model": "x"})
+
+    feature = _feature(_defaulted({"features": [{"name": "a", "group_options": {"model": "y"}}]}, settings))
+
+    assert feature.options.group == {"model": "y"}
+    assert "model" not in feature.options.context
+
+
+def test_feature_context_option_wins_over_a_group_default_of_the_same_key() -> None:
+    settings = Settings(options={"model": "x"})
+
+    feature = _feature(_defaulted({"features": [{"name": "a", "context_options": {"model": "y"}}]}, settings))
+
+    assert feature.options.context == {"model": "y"}
+    assert "model" not in feature.options.group
+
+
+@pytest.mark.parametrize("other", ["group_options", "context_options"])
+def test_options_with_group_or_context_options_is_refused_with_or_without_defaults(other: str) -> None:
+    request = {"features": [{"name": "a", "options": {"x": 1}, other: {"y": 1}}]}
+
+    plain = build_request(request)
+    defaulted = build_request(request, settings=_settings())
+
+    assert isinstance(plain, list)
+    assert isinstance(defaulted, list)
+    assert [(p.path, p.problem) for p in defaulted] == [(p.path, p.problem) for p in plain]

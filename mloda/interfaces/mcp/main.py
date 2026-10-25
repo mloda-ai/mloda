@@ -1,4 +1,4 @@
-"""``mloda-mcp``: serve the mloda services over MCP stdio, the same as ``mloda mcp serve``.
+"""``mloda-mcp``: serve the mloda services over MCP (stdio or local http), the same as ``mloda mcp serve``.
 
 The ``mcp`` package is an optional extra, imported only once ``serve`` runs.
 """
@@ -6,7 +6,8 @@ The ``mcp`` package is an optional extra, imported only once ``serve`` runs.
 import importlib.util
 import sys
 from collections.abc import Mapping, Sequence
-from typing import TextIO
+from dataclasses import replace
+from typing import Literal, TextIO
 
 from mloda.core.optional_dependency import require
 from mloda.interfaces.cli import main as cli_main
@@ -21,10 +22,16 @@ def mcp_available() -> bool:
 
 
 def serve(
-    settings: Settings, *, env: Mapping[str, str], transport: str = "stdio", host: str = "127.0.0.1", port: int = 8000
+    settings: Settings,
+    *,
+    env: Mapping[str, str],
+    transport: Literal["stdio", "http"] = "stdio",
+    host: str = "127.0.0.1",
+    port: int = 8000,
 ) -> int:
     """Build the services for ``settings`` and serve them over stdio, or over local http, until stopped."""
     require("mcp", "the mloda MCP server")
+    settings = replace(settings, trusted_caller=False)
     from mloda.interfaces.mcp import server
 
     if transport == "http":

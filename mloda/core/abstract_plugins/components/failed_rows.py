@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import contextvars
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass
+from numbers import Integral
 
 _REASON = re.compile(r"[A-Za-z0-9_.-]{1,64}")
 
@@ -50,23 +51,25 @@ def current_failed_rows_collector() -> FailedRowsCollector | None:
     return _COLLECTOR.get()
 
 
-def report_failed_rows(column: str, rows: Sequence[int], reason: str) -> None:
+def report_failed_rows(column: str, rows: Iterable[int], reason: str) -> None:
     """Report rows of column that got no value. reason is a short code, never row data."""
     if not isinstance(column, str):
         raise TypeError("column must be a str")
-    if isinstance(rows, (str, bytes)) or not isinstance(rows, Sequence):
-        raise TypeError("rows must be a sequence of ints")
+    if isinstance(rows, (str, bytes)) or not isinstance(rows, Iterable):
+        raise TypeError("rows must be an iterable of ints")
+    normalized: list[int] = []
     for row in rows:
-        if isinstance(row, bool) or not isinstance(row, int):
+        if isinstance(row, bool) or not isinstance(row, Integral):
             raise TypeError("rows must contain only ints")
         if row < 0:
             raise ValueError("rows must be non-negative")
+        normalized.append(int(row))
     if not isinstance(reason, str) or not _REASON.fullmatch(reason):
         raise ValueError("reason must be a short code of 1 to 64 characters from [A-Za-z0-9_.-]")
     collector = _COLLECTOR.get()
-    if collector is None or not rows:
+    if collector is None or not normalized:
         return
-    collector.entries.append(FailedRows(collector.feature_group, column, tuple(rows), reason))
+    collector.entries.append(FailedRows(collector.feature_group, column, tuple(normalized), reason))
 
 
 def collect_failed_rows(feature_group: str) -> FailedRowsCollector:

@@ -112,7 +112,7 @@ call has `isError` set and one error shape: `{"error": {"code", "message", "deta
   `group_options` or `context_options`, nested `in_features` configs included, is refused as `policy_denied` by
   JSON pointer, never by value. Data-access keys stay refused even when listed. Options encoded in a chained feature
   name are not covered. `mloda explain` and `mloda run` are local and not restricted. `mloda_describe_feature` shows
-  `caller_settable` for each option.
+  `caller_settable` for each option and refuses option keys not in `allow_options`.
 - Denied FeatureGroups are disabled before matching, so their code does not run; the agent sees `policy_denied` and
   the alternatives you configured. Requested names, `index` columns, `in_features` source names and filter columns are
   checked before planning. Any planned feature name the deny list matches, such as a chained name over a denied
@@ -178,4 +178,5 @@ carries `failed_rows`, `1` any other failure.
 
 A completed run result has a `failed_rows` list only when feature groups reported rows that got no value. Each entry has
 `column`, `reason` (a short code), `row_count`, `rows` and `truncated`; `rows` holds at most 1000 positions unless
-`--full` is used. The positions are rows of the feature group's own output.
+`--full` is used, and at most 100 entries are listed. The positions are rows of the feature group's own output. With
+`--format jsonl` or `csv` the entries go to stderr as a short summary and stdout is unchanged.

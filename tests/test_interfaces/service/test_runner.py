@@ -28,14 +28,19 @@ from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import ERROR_CODES, is_error
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.planner import Planner
-from mloda.interfaces.service.runner import Runner
+from mloda.interfaces.service.request import MAX_NAME_LENGTH
+from mloda.interfaces.service.runner import MAX_FAILED_ROW_ENTRIES, Runner
 from mloda.provider import FeatureSet
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.plugin_stubs import StubFeatureGroup
 from tests.test_interfaces.source_groups import (
     FAILED,
+    FAILED_COLUMN_LONG,
     FAILED_CTRL,
+    FAILED_ENTRIES,
+    FAILED_ENTRY_COUNT,
+    FAILED_LONG,
     FAILED_MANY,
     FAILED_MANY_ROWS,
     FILE_SOURCE_GROUPS,
@@ -699,7 +704,7 @@ class TestFull:
     FULL_KEYS = {"row_count", "columns", "rows"}
 
     def _full(self, tmp_path: Path, request: Mapping[str, Any] = REQUEST, **kwargs: Any) -> dict[str, Any]:
-        planner = _planner(_settings(tmp_path, **kwargs))
+        planner = _planner(_settings(tmp_path, **{"trusted_caller": True, **kwargs}))
         plan_id = _plan_id(planner, request)
         _write_sales(tmp_path / "sales.csv", rows=20)
         result: dict[str, Any] = Runner(planner).run(plan_id, full=True)
@@ -748,6 +753,16 @@ class TestFull:
     def test_max_rows_still_applies_under_full(self, tmp_path: Path) -> None:
         _error(self._full(tmp_path, max_rows=10), "limit_exceeded")
 
+    def test_full_is_policy_denied_for_an_untrusted_caller(self, tmp_path: Path) -> None:
+        planner = _planner(_settings(tmp_path))
+        plan_id = _plan_id(planner)
+
+        result = Runner(planner).run(plan_id, full=True)
+
+        _error(result, "policy_denied")
+        assert "tables" not in result
+        assert set(_only_table(Runner(planner).run(plan_id))) == TABLE_KEYS
+
     def test_default_run_is_unchanged(self, tmp_path: Path) -> None:
         planner = _planner(_settings(tmp_path, max_preview_rows=2))
         plan_id = _plan_id(planner)
@@ -781,7 +796,7 @@ class TestFailedRows:
         assert entry["truncated"] is True
 
     def test_full_lifts_the_cap(self, tmp_path: Path) -> None:
-        planner = _planner(_settings(tmp_path))
+        planner = _planner(_settings(tmp_path, trusted_caller=True))
         plan_id = _plan_id(planner, {"features": [FAILED_MANY]})
 
         (entry,) = _success(Runner(planner).run(plan_id, full=True))["failed_rows"]
@@ -789,6 +804,21 @@ class TestFailedRows:
         assert entry["rows"] == list(range(FAILED_MANY_ROWS))
         assert entry["row_count"] == FAILED_MANY_ROWS
         assert entry["truncated"] is False
+
+    def test_long_column_label_is_truncated_to_the_name_limit(self, tmp_path: Path) -> None:
+        (entry,) = _success(_run(tmp_path, {"features": [FAILED_LONG]}))["failed_rows"]
+
+        assert entry["column"] == FAILED_COLUMN_LONG[:MAX_NAME_LENGTH]
+
+    @pytest.mark.parametrize("trusted", [False, True])
+    def test_entries_are_capped_at_100(self, tmp_path: Path, trusted: bool) -> None:
+        planner = _planner(_settings(tmp_path, trusted_caller=trusted))
+        plan_id = _plan_id(planner, {"features": [FAILED_ENTRIES]})
+
+        entries = _success(Runner(planner).run(plan_id, full=trusted))["failed_rows"]
+
+        assert FAILED_ENTRY_COUNT > MAX_FAILED_ROW_ENTRIES
+        assert len(entries) == MAX_FAILED_ROW_ENTRIES
 
     def test_column_has_control_characters_stripped(self, tmp_path: Path) -> None:
         (entry,) = _success(_run(tmp_path, {"features": [FAILED_CTRL]}))["failed_rows"]

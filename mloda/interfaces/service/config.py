@@ -165,8 +165,9 @@ def _json_safe(value: Any) -> bool:
 
 def _default_options(value: Any, key: str) -> dict[str, Any]:
     table = _str_mapping(value, key)
-    if "in_features" in table:
-        raise ConfigError(f"'{key}' must not set in_features")
+    for reserved in ("in_features", "feature_group"):
+        if reserved in table:
+            raise ConfigError(f"'{key}' must not set {reserved}")
     if not _json_safe(table):
         raise ConfigError(f"'{key}' values must be strings, numbers, booleans, lists or tables")
     return table
@@ -232,8 +233,8 @@ def _build(raw: Mapping[str, Any], base_dir: Path) -> Settings:
             raise ConfigError("'inline_data' must be true or false")
         kwargs["inline_data"] = raw["inline_data"]
     if raw.get("default_classification") is not None:
-        if not isinstance(raw["default_classification"], str):
-            raise ConfigError("'default_classification' must be a string")
+        if not isinstance(raw["default_classification"], str) or not raw["default_classification"]:
+            raise ConfigError("'default_classification' must be a non-empty string")
         kwargs["default_classification"] = raw["default_classification"]
     for key in ("options", "context_options"):
         if key in raw:

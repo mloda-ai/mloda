@@ -13,15 +13,17 @@ from typing import Any
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.interfaces.service.errors import error_result, failure_result, is_error, strip_control_characters
 from mloda.interfaces.service.planner import Planner
+from mloda.interfaces.service.request import MAX_NAME_LENGTH
 from mloda.user import PlanStep
 
 FAILED_ROWS_CAP = 1000
+MAX_FAILED_ROW_ENTRIES = 100
 
 _WHITESPACE_CONTROLS = re.compile(r"[\t\n\r]")
 
 
 def _column_label(column: str) -> str:
-    return _WHITESPACE_CONTROLS.sub("", strip_control_characters(column))
+    return _WHITESPACE_CONTROLS.sub("", strip_control_characters(column)).strip()[:MAX_NAME_LENGTH]
 
 
 def _json_safe(value: Any) -> Any:
@@ -44,6 +46,8 @@ class Runner:
         """Run the plan behind ``plan_id``; ``full`` returns every row and column instead of the preview."""
         if self._planner.settings.mode != "execute":
             return error_result("policy_denied", "Execution is disabled; the service is in plan mode.")
+        if full and not self._planner.settings.trusted_caller:
+            return error_result("policy_denied", "Returning every row and column is not allowed for this caller.")
         verified = self._planner.verify_plan_id(plan_id)
         if is_error(verified):
             return verified
@@ -75,7 +79,7 @@ class Runner:
         for entry in entries:
             merged.setdefault((_column_label(entry.column), entry.reason), []).extend(entry.rows)
         listed = []
-        for (column, reason), rows in merged.items():
+        for (column, reason), rows in list(merged.items())[:MAX_FAILED_ROW_ENTRIES]:
             ordered = sorted(set(rows))
             shown = ordered if full else ordered[:FAILED_ROWS_CAP]
             listed.append(
@@ -89,11 +93,16 @@ class Runner:
             )
         return listed
 
-    def _full_table(self, frame: Mapping[Any, Any], names: Sequence[str], steps: Sequence[PlanStep]) -> dict[str, Any]:
+    def _frame_parts(
+        self, frame: Mapping[Any, Any], names: Sequence[str], steps: Sequence[PlanStep]
+    ) -> tuple[dict[str, list[Any]], list[str], dict[str, str], int]:
         data = {str(name): list(values) for name, values in frame.items()}
         ordered = [name for name in names if name in data] + sorted(set(data) - set(names))
         labels = self._planner.classifications(ordered, steps)
-        row_count = len(next(iter(data.values()), []))
+        return data, ordered, labels, len(next(iter(data.values()), []))
+
+    def _full_table(self, frame: Mapping[Any, Any], names: Sequence[str], steps: Sequence[PlanStep]) -> dict[str, Any]:
+        data, ordered, labels, row_count = self._frame_parts(frame, names, steps)
         return {
             "row_count": row_count,
             "columns": [{"name": name, "classification": labels[name]} for name in ordered],
@@ -102,11 +111,8 @@ class Runner:
 
     def _table(self, frame: Mapping[Any, Any], names: Sequence[str], steps: Sequence[PlanStep]) -> dict[str, Any]:
         settings = self._planner.settings
-        data = {str(name): list(values) for name, values in frame.items()}
-        ordered = [name for name in names if name in data] + sorted(set(data) - set(names))
-        labels = self._planner.classifications(ordered, steps)
+        data, ordered, labels, row_count = self._frame_parts(frame, names, steps)
         allowed = [name for name in ordered if labels[name] in settings.preview_allows]
-        row_count = len(next(iter(data.values()), []))
         rows = [
             {name: _json_safe(data[name][index]) for name in allowed}
             for index in range(min(row_count, settings.max_preview_rows) if allowed else 0)

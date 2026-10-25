@@ -576,3 +576,31 @@ class TestDescribe:
         assert _error_code(result) == "policy_denied"
         assert [detail["path"] for detail in result["error"]["details"]] == [f"/options/{key}"]
         assert SECRET not in json.dumps(result)
+
+
+class TestDescribeOptionAllowList:
+    OPTIONS: ClassVar[dict[str, Any]] = {"mcp3_mode": "sum"}
+
+    def test_unlisted_option_key_is_refused_by_pointer(self, catalog: Catalog) -> None:
+        result = catalog.describe("mcp3_alpha_total", options=self.OPTIONS)
+
+        assert _error_code(result) == "policy_denied"
+        (detail,) = result["error"]["details"]
+        assert detail["path"] == "/options/mcp3_mode"
+        assert detail["problem"] == "option_not_allowed"
+
+    def test_listed_option_key_is_accepted(self, tmp_path: Path) -> None:
+        catalog = Catalog.build(_settings(tmp_path, allow_options=("mcp3_mode",)), _base())
+
+        assert not is_error(catalog.describe("mcp3_alpha_total", options=self.OPTIONS))
+
+    def test_trusted_caller_may_set_any_option(self, tmp_path: Path) -> None:
+        catalog = Catalog.build(_settings(tmp_path, trusted_caller=True), _base())
+
+        assert not is_error(catalog.describe("mcp3_alpha_total", options=self.OPTIONS))
+
+    def test_data_access_check_comes_first(self, catalog: Catalog) -> None:
+        result = catalog.describe("mcp3_alpha_total", options={"CsvFG": SECRET, "mcp3_mode": "sum"})
+
+        assert [detail["problem"] for detail in result["error"]["details"]] != ["option_not_allowed"]
+        assert SECRET not in json.dumps(result)

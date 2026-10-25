@@ -25,7 +25,12 @@ from mloda.core.api.plugin_info import FeatureGroupInfo, ResolvedFeature
 from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import error_result, problems_to_details, strip_control_characters
 from mloda.interfaces.service.lock import MLODA_LOCK
-from mloda.interfaces.service.request import MAX_NAME_LENGTH, Problem, option_data_access_violations
+from mloda.interfaces.service.request import (
+    MAX_NAME_LENGTH,
+    Problem,
+    option_data_access_violations,
+    unlisted_group_option_violations,
+)
 from mloda.interfaces.service.sources import data_access_collection, source_columns
 from mloda.steward import verified_context
 
@@ -237,6 +242,11 @@ class Catalog:
         if violations:
             details = problems_to_details(violations)
             return error_result("policy_denied", "A request may not set data-access options.", details)
+        if not self._settings.trusted_caller:
+            unlisted = unlisted_group_option_violations(group, self._settings.allow_options)
+            if unlisted:
+                message = "A request may only set options listed in allow_options."
+                return error_result("policy_denied", message, problems_to_details(unlisted))
         with verified_context(principal=self._principal), MLODA_LOCK:
             resolved = resolve_feature(
                 name,

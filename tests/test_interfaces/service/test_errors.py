@@ -9,12 +9,17 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
-from mloda.interfaces.service.errors import ERROR_CODES, error_result, failure_result, is_error, problems_to_details
-from mloda.interfaces.service.request import Problem
+from mloda.interfaces.service.errors import (
+    ERROR_CODES,
+    MAX_MISSING_INPUTS,
+    error_result,
+    failure_result,
+    is_error,
+    problems_to_details,
+)
+from mloda.interfaces.service.request import MAX_NAME_LENGTH, Problem
 
 AUDIT_ID = re.compile(r"^aud_[0-9a-f]{16,}$")
-MAX_NAME_LENGTH = 200
-MAX_MISSING_INPUTS = 50
 
 
 def _missing(
@@ -159,6 +164,17 @@ def test_failure_result_strips_control_characters_from_names() -> None:
     (detail,) = result["error"]["details"]
     assert detail == {"feature_group": "Grp", "feature": "f", "missing_inputs": ["abc"]}
     assert "\x1b" not in json.dumps(result) and "\\u001b" not in json.dumps(result)
+
+
+def test_failure_result_removes_tab_newline_and_carriage_return_from_names() -> None:
+    result = failure_result("The run", _missing("G\trp", "f\ne", ("a\rb",)))
+
+    (detail,) = result["error"]["details"]
+    for value in (detail["feature_group"], detail["feature"], *detail["missing_inputs"]):
+        assert not any(char in value for char in "\t\n\r")
+    assert detail["feature_group"] in {"G rp", "Grp"}
+    assert detail["feature"] in {"f e", "fe"}
+    assert detail["missing_inputs"][0] in {"a b", "ab"}
 
 
 def test_failure_result_truncates_long_names_and_caps_missing_inputs() -> None:

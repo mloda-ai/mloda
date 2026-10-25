@@ -78,8 +78,12 @@ class PlanRaiseMcp5(FeatureGroup):
 FAILED = "income__mcp5_failed"
 FAILED_MANY = "income__mcp5_failed_many"
 FAILED_CTRL = "income__mcp5_failed_ctrl"
+FAILED_LONG = "income__mcp5_failed_long"
+FAILED_ENTRIES = "income__mcp5_failed_entries"
 FAILED_COLUMN_CTRL = "bad\ncol"
+FAILED_COLUMN_LONG = "c" * 250
 FAILED_MANY_ROWS = 1500
+FAILED_ENTRY_COUNT = 120
 
 
 class RunnerFailedRowsMcp5(FeatureGroup):
@@ -92,7 +96,7 @@ class RunnerFailedRowsMcp5(FeatureGroup):
         options: Options,
         data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
-        return str(feature_name) in {FAILED, FAILED_MANY, FAILED_CTRL}
+        return str(feature_name) in {FAILED, FAILED_MANY, FAILED_CTRL, FAILED_LONG, FAILED_ENTRIES}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
@@ -113,6 +117,11 @@ class RunnerFailedRowsMcp5(FeatureGroup):
                 report_failed_rows(name, [1, 3], "timeout")
             elif name == FAILED_MANY:
                 report_failed_rows(name, list(range(FAILED_MANY_ROWS)), "bulk")
+            elif name == FAILED_LONG:
+                report_failed_rows(FAILED_COLUMN_LONG, [0], "long")
+            elif name == FAILED_ENTRIES:
+                for index in range(FAILED_ENTRY_COUNT):
+                    report_failed_rows(f"col{index}", [0], "many")
             else:
                 report_failed_rows(FAILED_COLUMN_CTRL, [0], "ctrl")
         return columns

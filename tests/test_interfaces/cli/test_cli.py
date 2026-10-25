@@ -544,6 +544,24 @@ class TestRunFailedRows:
             {"column": FAILED, "reason": "timeout", "row_count": 2, "rows": [1, 3], "truncated": False}
         ]
 
+    @pytest.mark.parametrize("output_format", ["jsonl", "csv"])
+    def test_failed_rows_summary_goes_to_stderr_for_row_formats(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, output_format: str
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        request = _request_file(tmp_path, {"features": [FAILED]})
+        argv = ["run", str(request), "--config", str(config), "--format", output_format]
+
+        outcome = _cli(argv, extra_groups=[RunnerFailedRowsMcp5])
+
+        assert outcome.code == 3, outcome.err
+        lines = outcome.err.strip().splitlines()
+        assert len(lines) == 1
+        for part in (FAILED, "timeout", "2", "1", "3"):
+            assert part in lines[0]
+        assert "failed_rows" not in outcome.out
+
     def test_run_without_failed_rows_exits_0_and_has_no_key(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -642,39 +660,30 @@ class TestRunFormats:
         assert outcome.out == ""
         assert outcome.err.strip()
 
-    def test_full_json_prints_every_row_and_column(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    @pytest.mark.parametrize("output_format", ["json", "jsonl", "csv"])
+    def test_full_prints_every_row_and_column(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, output_format: str
+    ) -> None:
         config = _config(tmp_path, CONFIG.replace('mode = "plan"', 'mode = "plan"\nmax_preview_rows = 2'))
         _elsewhere(tmp_path, monkeypatch)
+        argv = ["run", str(_request_file(tmp_path)), "--config", str(config), "--full", "--format", output_format]
 
-        outcome = _cli(["run", str(_request_file(tmp_path)), "--config", str(config), "--full", "--format", "json"])
-
-        assert outcome.code == 0, outcome.err
-        (table,) = outcome.json()["tables"]
-        assert "preview" not in table
-        assert table["row_count"] == 5
-        assert table["rows"] == [{"customer_id": CUSTOMER_IDS[i], **PREVIEW_ROWS[i]} for i in range(5)]
-
-    def test_full_jsonl_prints_every_row_and_column(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        config = _config(tmp_path, CONFIG.replace('mode = "plan"', 'mode = "plan"\nmax_preview_rows = 2'))
-        _elsewhere(tmp_path, monkeypatch)
-
-        outcome = _cli(["run", str(_request_file(tmp_path)), "--config", str(config), "--full", "--format", "jsonl"])
+        outcome = _cli(argv)
 
         assert outcome.code == 0, outcome.err
-        rows = [json.loads(line) for line in outcome.out.splitlines()]
-        assert rows == [{"customer_id": CUSTOMER_IDS[i], **PREVIEW_ROWS[i]} for i in range(5)]
-
-    def test_full_csv_prints_every_row_and_column(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        config = _config(tmp_path, CONFIG.replace('mode = "plan"', 'mode = "plan"\nmax_preview_rows = 2'))
-        _elsewhere(tmp_path, monkeypatch)
-
-        outcome = _cli(["run", str(_request_file(tmp_path)), "--config", str(config), "--full", "--format", "csv"])
-
-        assert outcome.code == 0, outcome.err
-        rows = list(csv.reader(io.StringIO(outcome.out)))
-        assert rows == [["customer_id", "income", "segment"]] + [
-            [CUSTOMER_IDS[i], str(PREVIEW_ROWS[i]["income"]), str(PREVIEW_ROWS[i]["segment"])] for i in range(5)
-        ]
+        expected = [{"customer_id": CUSTOMER_IDS[i], **PREVIEW_ROWS[i]} for i in range(5)]
+        if output_format == "json":
+            (table,) = outcome.json()["tables"]
+            assert "preview" not in table
+            assert table["row_count"] == 5
+            assert table["rows"] == expected
+        elif output_format == "jsonl":
+            assert [json.loads(line) for line in outcome.out.splitlines()] == expected
+        else:
+            rows = list(csv.reader(io.StringIO(outcome.out)))
+            assert rows == [["customer_id", "income", "segment"]] + [
+                [CUSTOMER_IDS[i], str(PREVIEW_ROWS[i]["income"]), str(PREVIEW_ROWS[i]["segment"])] for i in range(5)
+            ]
 
     def test_full_still_enforces_max_rows(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         config = _config(tmp_path)
@@ -957,6 +966,7 @@ class TestFeatureArguments:
             ["-o", "k:=" + SECRET + " {"],
             ["-o", "k=@" + SECRET + "_missing.txt"],
             ["-c", "k:=[" + SECRET],
+            ["-o", "k:=" + "[" * 200_000 + SECRET],
         ],
     )
     def test_malformed_pair_is_a_stderr_error_that_never_echoes_the_value(

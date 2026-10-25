@@ -137,8 +137,6 @@ class SecondTransformFeatureGroup(FeatureGroup):
 
 
 class PolarsUndeclaredColumnFeatureGroup(FeatureGroup):
-    """Reads a column that input_features does not declare."""
-
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PolarsDataFrame, PolarsLazyDataFrame}

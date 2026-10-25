@@ -75,7 +75,7 @@ class _OldStyleExtender(Extender):
 
 
 def _build_feature_set() -> FeatureSet:
-    return FeatureSet([Feature("my_feature")])
+    return FeatureSet([Feature("col")])
 
 
 def _build_framework(extenders: set[Extender]) -> PythonDictFramework:
@@ -130,8 +130,8 @@ class TestValidateOutputFeatureHookContext:
         feature_set = _build_feature_set()
         extender = _ContextCapturingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
         cfw = _build_framework({extender})
-        # Preconditions: data isn't None; either no feature is initial_requested_data (as here)
-        # or column_names is populated; features carry no data_type so DataTypeValidator no-ops.
+        # Preconditions: data isn't None; every feature in the set is a produced column ("col");
+        # features carry no data_type so DataTypeValidator no-ops.
         cfw.data = {"col": [1, 2, 3]}
         cfw.set_column_names()
 

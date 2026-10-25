@@ -379,6 +379,7 @@ directly. When calling `mloda.run_all`, worker errors are wrapped in a generic
 The check applies only to features that were explicitly requested by the caller.
 Intermediate feature groups, meaning those whose output feeds another feature
 group rather than the final result, are never subject to `EmptyResultError`.
+An intermediate step must still return a column for every feature it computes.
 
 For full details on how the guard works and the schema-presence gate, see
 [Empty Results](../compute-framework-integration.md#empty-results).

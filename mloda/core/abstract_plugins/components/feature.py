@@ -231,6 +231,8 @@ class Feature:
         # Engine-stamped output parts (requested, selected by the initial request, parts-only); not in eq/hash.
         self.requested_parts: frozenset[str] = frozenset()
         self.result_parts: frozenset[str] | None = None
+        # Engine-stamped: added only as a link's join key; the planner, not the output check, owns its presence.
+        self.link_key_only: bool = False
         self.parts_only: bool = False
 
         # forward_group, forward_group_exclude and inherit_context_keys are merge directives

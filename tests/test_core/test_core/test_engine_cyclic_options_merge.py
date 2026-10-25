@@ -202,3 +202,42 @@ class TestDirectIntakeIgnoresCascadeGuard:
         assert engine.add_feature_to_collection(FeatureGroup, existing, None) is True
         engine.resolved_input_feature_names = {existing.uuid: frozenset({"some_input"})}
         assert engine.add_feature_to_collection(FeatureGroup, twin, None) is False
+
+
+class TestLinkKeyOnlyMerge:
+    def test_normal_declaration_clears_link_key_only_on_twin(self) -> None:
+        engine = _intake_engine()
+        twin = Feature(name="k")
+        twin.link_key_only = True
+        declared = Feature(name="k")
+
+        assert engine.add_feature_to_collection(FeatureGroup, twin, None) is True
+        assert engine.add_feature_to_collection(FeatureGroup, declared, None) is False
+        assert twin.link_key_only is False
+
+    def test_link_key_only_stays_when_merged_with_another_link_key(self) -> None:
+        engine = _intake_engine()
+        first = Feature(name="k")
+        first.link_key_only = True
+        second = Feature(name="k")
+        second.link_key_only = True
+
+        engine.add_feature_to_collection(FeatureGroup, first, None)
+        engine.add_feature_to_collection(FeatureGroup, second, None)
+        assert first.link_key_only is True
+
+    @pytest.mark.parametrize("existing_link_only, host_link_only", [(True, False), (False, True)])
+    def test_merge_host_into_ends_false_unless_both_link_key_only(
+        self, existing_link_only: bool, host_link_only: bool
+    ) -> None:
+        engine = _intake_engine()
+        engine.specialized_from = {}
+        engine.resolved_input_feature_names = {}
+        existing = Feature(name="k")
+        existing.link_key_only = existing_link_only
+        host = Feature(name="k")
+        host.link_key_only = host_link_only
+
+        engine._merge_host_into(existing, host)
+
+        assert existing.link_key_only is False

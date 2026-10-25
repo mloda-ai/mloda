@@ -161,7 +161,8 @@ EmptyResultError: Result carries no schema (no columns): <FeatureGroupClassName>
 `EmptyResultError` is a `ValueError` subclass and is importable from the public
 API: `from mloda.provider import EmptyResultError`. Intermediate feature groups
 (those whose output feeds another feature group rather than the caller directly)
-are never subject to this check.
+are never subject to this check, but an intermediate step must still return a
+column for every feature it computes.
 
 #### The schema-presence gate
 

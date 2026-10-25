@@ -93,3 +93,11 @@ class TestSqliteSiblingDictRunAll(SiblingDictRunAllTestBase):
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
     def test_group_missing_a_requested_feature_raises(self, mode: ParallelizationMode, flight_server: Any) -> None:
         self._run_partial_result(mode, flight_server)
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
+    def test_intermediate_group_missing_a_feature_raises(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self._run_intermediate_partial_result(mode, flight_server)
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
+    def test_source_group_missing_a_feature_raises(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self._run_source_partial_result(mode, flight_server)

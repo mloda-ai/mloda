@@ -115,6 +115,43 @@ class PartialResultProbeFirstOnly(FeatureChainParserMixin, FeatureGroup):
         return {feature.name: [0, 0, 0]}
 
 
+class _InputsConsumer(FeatureGroup):
+    """Consumer of the features named in ``INPUTS``, returning a constant column."""
+
+    INPUTS: tuple[str, ...] = ()
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(n) for n in self.INPUTS}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): [1, 1, 1]}
+
+
+class PartialResultProbeConsumer(_InputsConsumer):
+    """Consumes two probe features served by ``PartialResultProbeFirstOnly`` in one FeatureSet."""
+
+    INPUTS = ("sd_a__partial_result_probe_first_1", "sd_a__partial_result_probe_first_2")
+
+
+class SourceOmittingCreator(DataCreatorFeatureGroup):
+    """Source supporting two names but returning only ``sd_src_kept``."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"sd_src_kept", "sd_src_omitted"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"sd_src_kept": [1, 2, 3]}
+
+
+class SourceOmittingConsumer(_InputsConsumer):
+    """Consumes both names of ``SourceOmittingCreator``."""
+
+    INPUTS = ("sd_src_kept", "sd_src_omitted")
+
+
 _ALL_FGS = {
     SiblingDictRoot,
     SiblingDictCaseFold,
@@ -203,13 +240,46 @@ class SiblingDictRunAllTestBase(PolicyRunAllTestBase):
             plugin_collector=PluginCollector.enabled_feature_groups({SiblingDictRoot, PartialResultProbeFirstOnly}),
             expectation=PolicyRaises(
                 match_substring=(
-                    "PartialResultProbeFirstOnly did not produce the requested feature(s) "
-                    "['sd_a__partial_result_probe_first_2']"
+                    "PartialResultProbeFirstOnly did not produce the feature(s) ['sd_a__partial_result_probe_first_2']"
                 )
             ),
             mode=mode,
             flight_server=flight_server,
         )
+
+    def _run_intermediate_partial_result(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self.assert_policy_case(
+            feature_name=["PartialResultProbeConsumer"],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {SiblingDictRoot, PartialResultProbeFirstOnly, PartialResultProbeConsumer}
+            ),
+            expectation=PolicyRaises(
+                match_substring=(
+                    "PartialResultProbeFirstOnly did not produce the feature(s) ['sd_a__partial_result_probe_first_2']"
+                )
+            ),
+            mode=mode,
+            flight_server=flight_server,
+        )
+
+    def _run_source_partial_result(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self.assert_policy_case(
+            feature_name=["SourceOmittingConsumer"],
+            plugin_collector=PluginCollector.enabled_feature_groups({SourceOmittingCreator, SourceOmittingConsumer}),
+            expectation=PolicyRaises(
+                match_substring="SourceOmittingCreator did not produce the feature(s) ['sd_src_omitted']"
+            ),
+            mode=mode,
+            flight_server=flight_server,
+        )
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    def test_intermediate_group_missing_a_feature_raises(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self._run_intermediate_partial_result(mode, flight_server)
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    def test_source_group_missing_a_feature_raises(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self._run_source_partial_result(mode, flight_server)
 
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
     def test_group_missing_a_requested_feature_raises(self, mode: ParallelizationMode, flight_server: Any) -> None:

@@ -10,13 +10,18 @@ from mloda.provider import ComputeFramework, ConnectionRequirement
 from mloda.provider import OutputSchema
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda.user import FeatureName, ParallelizationMode
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import fold_identifier
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    MissingRelationColumnError,
+    fold_identifier,
+)
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_filter_engine import SqliteFilterEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_mask_engine import SqliteMaskEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine import SqliteMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 
 logger = logging.getLogger(__name__)
+
+_SQLITE_MISSING_COLUMN_PREFIX = "no such column"
 
 
 def _regexp(pattern: str, string: str | None) -> bool:
@@ -67,6 +72,12 @@ class SqliteFramework(ComputeFramework):
     @classmethod
     def expected_data_framework(cls) -> Any:
         return SqliteRelation
+
+    @classmethod
+    def is_missing_column_error(cls, error: Exception) -> bool:
+        if isinstance(error, MissingRelationColumnError):
+            return True
+        return isinstance(error, sqlite3.OperationalError) and str(error).startswith(_SQLITE_MISSING_COLUMN_PREFIX)
 
     @classmethod
     def result_framework(cls) -> type[ComputeFramework]:

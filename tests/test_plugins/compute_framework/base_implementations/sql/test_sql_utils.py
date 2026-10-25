@@ -10,6 +10,7 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     pick_rename_prefix,
     quote_ident,
     quote_value,
+    require_exact_columns,
 )
 
 
@@ -202,3 +203,16 @@ class TestPickRenamePrefix:
 
     def test_default_ascii_fold_ignores_non_ascii_case_variant(self) -> None:
         assert pick_rename_prefix("_mloda_r", ["é"], reserved=["_MLODA_R0_É"]) == "_mloda_r0_"
+
+
+class TestRequireExactColumns:
+    def test_missing_column_raises_missing_relation_column_error(self) -> None:
+        from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import MissingRelationColumnError
+
+        with pytest.raises(MissingRelationColumnError, match="not a column of the relation"):
+            require_exact_columns(["a"], ["b"])
+
+    def test_missing_relation_column_error_is_a_value_error(self) -> None:
+        from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import MissingRelationColumnError
+
+        assert issubclass(MissingRelationColumnError, ValueError)

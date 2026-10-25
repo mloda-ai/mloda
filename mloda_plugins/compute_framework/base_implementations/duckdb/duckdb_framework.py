@@ -4,7 +4,10 @@ from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.hook_context import OutputSchema
 from mloda.provider import BaseMergeEngine
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import fold_identifier
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    MissingRelationColumnError,
+    fold_identifier,
+)
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
 from mloda.user import FeatureName, ParallelizationMode
 from mloda.provider import ComputeFramework, ConnectionRequirement
@@ -24,6 +27,8 @@ except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
 logger = logging.getLogger(__name__)
+
+_DUCKDB_MISSING_COLUMN_FRAGMENTS = ("not found in FROM clause", "does not have a column named")
 
 
 _DUCKDB_TYPE_MAP: dict[str, DataType] = {
@@ -107,6 +112,16 @@ class DuckDBFramework(ComputeFramework):
     @classmethod
     def expected_data_framework(cls) -> Any:
         return cls.duckdb_relation()
+
+    @classmethod
+    def is_missing_column_error(cls, error: Exception) -> bool:
+        if isinstance(error, MissingRelationColumnError):
+            return True
+        return (
+            duckdb is not None
+            and isinstance(error, duckdb.BinderException)
+            and any(fragment in str(error) for fragment in _DUCKDB_MISSING_COLUMN_FRAGMENTS)
+        )
 
     @classmethod
     def result_framework(cls) -> type[ComputeFramework]:

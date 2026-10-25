@@ -14,6 +14,11 @@ from tests.test_plugins.compute_framework.base_implementations.spark.conftest im
     PYSPARK_AVAILABLE,
     SKIP_REASON,
 )
+from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
+    MissingColumnConsumer,
+    MissingColumnRunAllTestBase,
+    UNDECLARED_COLUMN,
+)
 from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
     SiblingDictRunAllTestBase,
 )
@@ -46,3 +51,30 @@ class TestSparkSiblingDictRunAll(SiblingDictRunAllTestBase):
     _bind_spark_session = TestSparkAllowEmptyResultRunAll._bind_spark_session
     compute_framework_name = TestSparkAllowEmptyResultRunAll.compute_framework_name
     get_connection = TestSparkAllowEmptyResultRunAll.get_connection
+
+
+class SparkColReadConsumer(MissingColumnConsumer):
+    @classmethod
+    def read_undeclared(cls, data: Any) -> Any:
+        from pyspark.sql import functions as F
+
+        return data.select(F.col(UNDECLARED_COLUMN))
+
+    @classmethod
+    def cause_type(cls) -> Any:
+        from pyspark.errors import AnalysisException
+
+        return AnalysisException
+
+
+@pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
+class TestSparkMissingColumnRunAll(MissingColumnRunAllTestBase):
+    """Undeclared column reads on Spark raise an explanatory error."""
+
+    _bind_spark_session = TestSparkAllowEmptyResultRunAll._bind_spark_session
+    compute_framework_name = TestSparkAllowEmptyResultRunAll.compute_framework_name
+    get_connection = TestSparkAllowEmptyResultRunAll.get_connection
+
+    @classmethod
+    def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
+        return [SparkColReadConsumer]

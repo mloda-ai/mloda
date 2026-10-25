@@ -5,6 +5,9 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 
 
@@ -19,6 +22,31 @@ class DictComputeFramework(ComputeFramework):
 def _make_cfw() -> DictComputeFramework:
     cfw = DictComputeFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
     return cfw
+
+
+class _UnrelatedError(Exception):
+    pass
+
+
+_UNRAISED = _UnrelatedError("not a missing column")
+
+
+class _RaisingFeatureGroup(FeatureGroup):
+    @classmethod
+    def calculate_feature(cls, data: Any, features: Any) -> Any:
+        raise _UNRAISED
+
+
+class TestIsMissingColumnError:
+    def test_default_is_false(self) -> None:
+        assert ComputeFramework.is_missing_column_error(KeyError("x")) is False
+        assert DictComputeFramework.is_missing_column_error(_UnrelatedError("x")) is False
+
+    def test_non_matching_error_from_calculate_feature_passes_through_unchanged(self) -> None:
+        cfw = _make_cfw()
+        with pytest.raises(_UnrelatedError) as excinfo:
+            cfw.run_calculation(_RaisingFeatureGroup, FeatureSet([Feature("a")]), location=None)
+        assert excinfo.value is _UNRAISED
 
 
 class TestValidateExpectedFrameworkErrorMessage:

@@ -9,6 +9,12 @@ IcebergTable (schema) branch is covered by the unit mixin test.
 
 import pytest
 
+from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
+    MissingColumnConsumer,
+    MissingColumnRunAllTestBase,
+    PyArrowFilterReadConsumer,
+    PyArrowKeyReadConsumer,
+)
 from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
     SiblingDictRunAllTestBase,
 )
@@ -49,3 +55,18 @@ class TestIcebergSiblingDictRunAll(SiblingDictRunAllTestBase):
     @classmethod
     def compute_framework_name(cls) -> str:
         return "IcebergFramework"
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
+class TestIcebergMissingColumnRunAll(MissingColumnRunAllTestBase):
+    """Undeclared column reads on the PyArrow table Iceberg hands to consumers raise an explanatory error."""
+
+    @classmethod
+    def compute_framework_name(cls) -> str:
+        return "IcebergFramework"
+
+    @classmethod
+    def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
+        return [PyArrowKeyReadConsumer, PyArrowFilterReadConsumer]

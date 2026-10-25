@@ -358,3 +358,8 @@ class TestSqliteEmptyResult(
         left = SqliteRelation.from_arrow(connection, pa.table({"a": [1, 2, 3]})).set_alias("l")
         right = SqliteRelation.from_arrow(connection, pa.table({"a": [3, 1, 2], "b": [30, 10, 20]})).set_alias("r")
         return left.join(right, "a")
+
+
+class TestSqliteIsMissingColumnError:
+    def test_unknown_function_is_not_a_missing_column(self) -> None:
+        assert SqliteFramework.is_missing_column_error(sqlite3.OperationalError("no such function: f")) is False

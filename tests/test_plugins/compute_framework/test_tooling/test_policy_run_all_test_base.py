@@ -9,6 +9,9 @@ and exercise both the success and raises expectations, in SYNC and in a worker-b
 
 from typing import Any
 
+import pytest
+
+from mloda.core.abstract_plugins.compute_framework import EmptyResultError
 from mloda.user import ParallelizationMode
 
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
@@ -48,7 +51,7 @@ def test_policy_base_drives_success_case(flight_server: Any) -> None:
         flight_server=flight_server,
     )
 
-    assert result is not None
+    assert isinstance(result, list)
     _assert_single_empty(result)
 
 
@@ -64,7 +67,7 @@ def test_policy_base_drives_raises_case(flight_server: Any) -> None:
         flight_server=flight_server,
     )
 
-    assert result is None
+    assert isinstance(result, BaseException)
 
 
 def test_policy_base_drives_worker_mode(flight_server: Any) -> None:
@@ -79,5 +82,34 @@ def test_policy_base_drives_worker_mode(flight_server: Any) -> None:
         flight_server=flight_server,
     )
 
-    assert result is not None
+    assert isinstance(result, list)
     _assert_single_empty(result)
+
+
+def _assert_schemaless(flight_server: Any, **expectation_fields: Any) -> None:
+    _PythonDictPolicyConformance().assert_policy_case(
+        feature_name="empty_result_schemaless_col",
+        plugin_collector=_ENABLED_SCHEMALESS_ALLOWED,
+        expectation=PolicyRaises(match_substring="Result carries no schema", **expectation_fields),
+        mode=ParallelizationMode.SYNC,
+        flight_server=flight_server,
+    )
+
+
+def test_policy_raises_checks_error_type_and_also_contains(flight_server: Any) -> None:
+    _assert_schemaless(flight_server, error_type=EmptyResultError, also_contains=("schema",))
+
+
+def test_policy_raises_wrong_error_type_fails(flight_server: Any) -> None:
+    with pytest.raises(AssertionError):
+        _assert_schemaless(flight_server, error_type=KeyError)
+
+
+def test_policy_raises_wrong_cause_type_fails(flight_server: Any) -> None:
+    with pytest.raises(AssertionError):
+        _assert_schemaless(flight_server, cause_type=KeyError)
+
+
+def test_policy_raises_missing_also_contains_fails(flight_server: Any) -> None:
+    with pytest.raises(AssertionError):
+        _assert_schemaless(flight_server, also_contains=("no such text",))

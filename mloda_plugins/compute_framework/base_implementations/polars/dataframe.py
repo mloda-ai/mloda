@@ -32,6 +32,10 @@ class PolarsDataFrame(ComputeFramework):
         return cls.pl_dataframe()
 
     @classmethod
+    def is_missing_column_error(cls, error: Exception) -> bool:
+        return pl is not None and isinstance(error, pl.exceptions.ColumnNotFoundError)
+
+    @classmethod
     def merge_engine(cls) -> type[BaseMergeEngine]:
         return PolarsMergeEngine
 

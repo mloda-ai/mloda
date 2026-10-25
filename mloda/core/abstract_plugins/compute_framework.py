@@ -439,30 +439,36 @@ class ComputeFramework(ABC):
         features = self.set_filter_engine(features)
         features = self.set_mask_engine(features)
         self._adopt_connection(self.data)
-        data = self.run_calculate_feature(feature_group, features)
-        data = self._append_dict_to_frame(feature_group, data)
+        # spans to set_column_names: a lazy frame may first resolve its schema in filter validation or there
+        try:
+            data = self.run_calculate_feature(feature_group, features)
+            data = self._append_dict_to_frame(feature_group, data)
 
-        names = features.get_all_names()
+            names = features.get_all_names()
 
-        if not isinstance(data, self.expected_data_framework()):
-            # if data is not in the expected data framework, we need to transform it and for this, we may need the framework connection object
-            if self.framework_connection_object is None:
-                self.set_framework_connection_object(self.fallback_connection_object)
-            data = self.transform(data, names)
-            self._pinned_frame = data
-        else:
-            self._adopt_connection(data)
-            # already the native type: transform is skipped, so enforce the framework's
-            # native-representation contract here before it is stored / filtered.
-            self.validate_native_data(data)
+            if not isinstance(data, self.expected_data_framework()):
+                # if data is not in the expected data framework, we need to transform it and for this, we may need the framework connection object
+                if self.framework_connection_object is None:
+                    self.set_framework_connection_object(self.fallback_connection_object)
+                data = self.transform(data, names)
+                self._pinned_frame = data
+            else:
+                self._adopt_connection(data)
+                # already the native type: transform is skipped, so enforce the framework's
+                # native-representation contract here before it is stored / filtered.
+                self.validate_native_data(data)
 
-        # filter runs on the normalized native representation, not the raw FG output
-        was_pinned = data is self._pinned_frame
-        data = self.run_final_filter(data, features, feature_group)
-        self._pinned_frame = data if was_pinned else None
-        self.data = data
+            # filter runs on the normalized native representation, not the raw FG output
+            was_pinned = data is self._pinned_frame
+            data = self.run_final_filter(data, features, feature_group)
+            self._pinned_frame = data if was_pinned else None
+            self.data = data
 
-        self.set_column_names()
+            self.set_column_names()
+        except Exception as e:
+            if not self.is_missing_column_error(e):
+                raise
+            self._raise_helpful_missing_column_error(feature_group, e)
 
         self.run_validate_output_features(feature_group, features)
 
@@ -659,6 +665,11 @@ class ComputeFramework(ABC):
     def extract_column_names(cls, data: Any) -> set[str]:
         """Column names of framework-native data, callable without an instance."""
         raise NotImplementedError(f"{cls.__name__} must implement the extract_column_names classmethod")
+
+    @classmethod
+    def is_missing_column_error(cls, error: Exception) -> bool:
+        """True if error is this framework's undeclared-column read error; must not raise."""
+        return False
 
     def _extract_column_names(self, data: Any) -> set[str]:
         """Extract column names from the framework's data after transform.
@@ -1179,12 +1190,12 @@ class ComputeFramework(ABC):
             # Provide helpful error message for missing columns
             self._raise_helpful_missing_column_error(feature_group, e)
 
-    def _raise_helpful_missing_column_error(self, feature_group: Any, error: KeyError) -> NoReturn:
-        """Raises a ValueError explaining that the KeyError may come from an undeclared column read."""
+    def _raise_helpful_missing_column_error(self, feature_group: Any, error: Exception) -> NoReturn:
+        """Raises a ValueError explaining that the error may come from an undeclared column read."""
         feature_name = feature_group.get_class_name()
         error_message = (
-            f"Feature '{feature_name}' failed with a KeyError: {error}\n"
-            "If the key is a column, declare it in input_features(); calculate_feature may only read declared columns."
+            f"Feature '{feature_name}' failed with a {type(error).__name__}: {error}\n"
+            "If it names a column, declare it in input_features(); calculate_feature may only read declared columns."
         )
         raise ValueError(error_message) from error
 

@@ -10,6 +10,12 @@ import pytest
 
 from mloda.user import ParallelizationMode
 
+from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
+    MissingColumnConsumer,
+    MissingColumnRunAllTestBase,
+    SelectReadConsumer,
+    UNDECLARED_COLUMN,
+)
 from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
     SiblingDictRunAllTestBase,
 )
@@ -107,3 +113,36 @@ class TestDuckDBSiblingDictRunAll(SiblingDictRunAllTestBase):
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
     def test_source_group_missing_a_feature_raises(self, mode: ParallelizationMode, flight_server: Any) -> None:
         self._run_source_partial_result(mode, flight_server)
+
+
+class DuckDBProjectReadConsumer(MissingColumnConsumer):
+    @classmethod
+    def read_undeclared(cls, data: Any) -> Any:
+        return data.project(f"{UNDECLARED_COLUMN} * 2 AS mc_doubled")
+
+    @classmethod
+    def cause_type(cls) -> Any:
+        return duckdb.BinderException
+
+
+class DuckDBFilterReadConsumer(MissingColumnConsumer):
+    @classmethod
+    def read_undeclared(cls, data: Any) -> Any:
+        return data.filter(f"{UNDECLARED_COLUMN} > 0")
+
+    @classmethod
+    def cause_type(cls) -> Any:
+        return duckdb.BinderException
+
+
+@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
+class TestDuckDBMissingColumnRunAll(MissingColumnRunAllTestBase):
+    """Undeclared column reads on DuckDB raise an explanatory error (SYNC only)."""
+
+    compute_framework_name = TestDuckDBAllowEmptyResultRunAll.compute_framework_name
+    get_connection = TestDuckDBAllowEmptyResultRunAll.get_connection
+    teardown_method = TestDuckDBAllowEmptyResultRunAll.teardown_method
+
+    @classmethod
+    def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
+        return [SelectReadConsumer, DuckDBProjectReadConsumer, DuckDBFilterReadConsumer]

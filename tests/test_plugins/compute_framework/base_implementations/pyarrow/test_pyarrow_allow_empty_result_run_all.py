@@ -12,6 +12,12 @@ from mloda.core.abstract_plugins.compute_framework import EmptyResultError
 from mloda.user import Feature
 from mloda.user import ParallelizationMode
 from mloda.user import mloda
+from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
+    MissingColumnConsumer,
+    MissingColumnRunAllTestBase,
+    PyArrowFilterReadConsumer,
+    PyArrowKeyReadConsumer,
+)
 from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
     SiblingDictRunAllTestBase,
 )
@@ -68,3 +74,16 @@ class TestPyArrowSiblingDictRunAll(SiblingDictRunAllTestBase):
     @classmethod
     def compute_framework_name(cls) -> str:
         return "PyArrowTable"
+
+
+@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
+class TestPyArrowMissingColumnRunAll(MissingColumnRunAllTestBase):
+    """Undeclared column reads on PyArrow raise an explanatory error."""
+
+    @classmethod
+    def compute_framework_name(cls) -> str:
+        return "PyArrowTable"
+
+    @classmethod
+    def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
+        return [PyArrowKeyReadConsumer, PyArrowFilterReadConsumer]

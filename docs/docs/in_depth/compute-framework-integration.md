@@ -196,6 +196,26 @@ elimination has anything to do. Data on which the framework cannot see columns
 but that is not an empty result still fails the missing-filter-column check
 loudly.
 
+#### Undeclared column reads
+
+A `KeyError` from `calculate_feature`, or an exception for which a framework's
+`is_missing_column_error()` returns true (it must not raise), becomes a
+`ValueError` pointing at `input_features()`, with the original as `__cause__`.
+Code that caught the backend exception around `run_all` now gets that `ValueError`.
+Matched errors are translated from `calculate_feature` through final-filter validation and column-name resolution, so lazy plans failing on schema resolution are covered.
+
+Matched per framework:
+
+-   Polars (eager and lazy): `ColumnNotFoundError`; execution errors at the final collect are not translated.
+-   Pandas: `UndefinedVariableError` from `query` / `eval`, except local-variable references.
+-   PyArrow and Iceberg: `ArrowInvalid` for an unmatched field reference.
+-   DuckDB: `BinderException` for a column missing from the relation, and `MissingRelationColumnError`.
+-   SQLite: `OperationalError` for a missing column, and `MissingRelationColumnError`.
+-   Spark: `AnalysisException` with an `UNRESOLVED_COLUMN` condition.
+-   PythonDict: only the `KeyError` path.
+
+Native Iceberg scan errors and attribute-style reads (`df.x`) are not translated.
+
 ### Column name case sensitivity
 
 mloda matches column and feature names exactly (case-sensitive) in every lookup, match and presence check; engines that resolve names differently add the rules below.

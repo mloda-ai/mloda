@@ -9,6 +9,7 @@ below exercise the end-to-end behavior through ``run_all`` (they do not assert a
 representation).
 """
 
+import traceback
 from typing import Any
 
 import pytest
@@ -17,6 +18,7 @@ from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
+from mloda.user import GlobalFilter
 from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
@@ -26,6 +28,11 @@ from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base 
     PolicyRunAllTestBase,
     PolicySuccess,
     records_from_frame,
+)
+from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
+    MissingColumnConsumer,
+    MissingColumnRunAllTestBase,
+    UNDECLARED_COLUMN,
 )
 from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
     SiblingDictRoot,
@@ -80,6 +87,49 @@ class TestPolarsLazySiblingDictRunAll(SiblingDictRunAllTestBase):
     @classmethod
     def compute_framework_name(cls) -> str:
         return "PolarsLazyDataFrame"
+
+
+class PolarsWithColumnsReadConsumer(MissingColumnConsumer):
+    @classmethod
+    def read_undeclared(cls, data: Any) -> Any:
+        return data.with_columns(pl.col(UNDECLARED_COLUMN))
+
+    @classmethod
+    def cause_type(cls) -> Any:
+        return pl.exceptions.ColumnNotFoundError
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsMissingColumnRunAll(MissingColumnRunAllTestBase):
+    """Undeclared column reads on eager polars raise an explanatory error."""
+
+    @classmethod
+    def compute_framework_name(cls) -> str:
+        return "PolarsDataFrame"
+
+    @classmethod
+    def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
+        return [PolarsWithColumnsReadConsumer]
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsLazyMissingColumnRunAll(TestPolarsMissingColumnRunAll):
+    """Undeclared column reads on lazy polars raise an explanatory error."""
+
+    @classmethod
+    def compute_framework_name(cls) -> str:
+        return "PolarsLazyDataFrame"
+
+    def test_undeclared_column_read_with_global_filter_raises_explanatory_error(self, flight_server: Any) -> None:
+        global_filter = GlobalFilter()
+        global_filter.add_filter(PolarsWithColumnsReadConsumer.get_class_name(), "min", {"mc_declared": 0})
+        error = self.assert_undeclared_read_raises(
+            PolarsWithColumnsReadConsumer, ParallelizationMode.SYNC, flight_server, global_filter
+        )
+        cause = error.__cause__
+        assert cause is not None
+        frames = [frame.name for frame in traceback.extract_tb(cause.__traceback__)]
+        assert "_validate_filter_columns" in frames
 
 
 class SingleSeriesOnRoot(FeatureGroup):

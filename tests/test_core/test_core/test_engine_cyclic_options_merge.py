@@ -202,3 +202,26 @@ class TestDirectIntakeIgnoresCascadeGuard:
         assert engine.add_feature_to_collection(FeatureGroup, existing, None) is True
         engine.resolved_input_feature_names = {existing.uuid: frozenset({"some_input"})}
         assert engine.add_feature_to_collection(FeatureGroup, twin, None) is False
+
+
+class TestLinkKeyOnlyMerge:
+    def test_normal_declaration_clears_link_key_only_on_twin(self) -> None:
+        engine = _intake_engine()
+        twin = Feature(name="k")
+        twin.link_key_only = True
+        declared = Feature(name="k")
+
+        assert engine.add_feature_to_collection(FeatureGroup, twin, None) is True
+        assert engine.add_feature_to_collection(FeatureGroup, declared, None) is False
+        assert twin.link_key_only is False
+
+    def test_link_key_only_stays_when_merged_with_another_link_key(self) -> None:
+        engine = _intake_engine()
+        first = Feature(name="k")
+        first.link_key_only = True
+        second = Feature(name="k")
+        second.link_key_only = True
+
+        engine.add_feature_to_collection(FeatureGroup, first, None)
+        engine.add_feature_to_collection(FeatureGroup, second, None)
+        assert first.link_key_only is True

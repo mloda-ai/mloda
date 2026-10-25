@@ -465,7 +465,7 @@ class _HookCapturingExtender(Extender):
 
 
 def _build_feature_set() -> FeatureSet:
-    return FeatureSet([Feature("my_feature")])
+    return FeatureSet([Feature("col")])
 
 
 def _build_framework(extenders: set[Extender]) -> PythonDictFramework:
@@ -709,7 +709,7 @@ class TestDuckDBOutputSchemaStaysLazy:
 
         monkeypatch.setattr(DuckdbRelation, "__len__", _raise_if_called)
 
-        feature_set = _build_feature_set()
+        feature_set = FeatureSet([Feature("a")])
         extender = _HookCapturingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
         cfw = DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset(), function_extender={extender})
         cfw.data = relation
@@ -791,7 +791,7 @@ class TestOutputSchemaCalculateVsValidateOutput:
     VALIDATE_OUTPUT_FEATURE sees the finalized native-shape schema after transform."""
 
     def test_calculate_and_validate_output_hooks_see_different_schemas(self) -> None:
-        feature_set = _build_feature_set()
+        feature_set = FeatureSet([Feature("a")])
         calculate_extender = _HookCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
         validate_output_extender = _HookCapturingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
         cfw = PandasDataFrame(

@@ -115,7 +115,7 @@ class TestRootFeatureGroupLogsNoWarning:
     """A root FeatureGroup must not emit a 'Degraded field' WARNING for input_features."""
 
     def test_root_feature_group_produces_no_degraded_field_warning(self, caplog: pytest.LogCaptureFixture) -> None:
-        feature_set = _build_feature_set()
+        feature_set = FeatureSet([Feature("col")])
         extender = _AllHooksContextCapturingExtender()
         cfw = _build_framework({extender})
         cfw.data = {"col": [1, 2, 3]}
@@ -406,7 +406,7 @@ class TestDeclaredInputsResolvedOncePerStep:
             cfw = _build_framework({extender})
             cfw.data = {"col": [1, 2, 3]}
             cfw.set_column_names()
-            feature_set = FeatureSet([Feature("my_feature")])
+            feature_set = FeatureSet([Feature("col")])
 
             cfw.run_validate_input_features(_CountingFeatureGroup, feature_set)
             cfw.run_calculate_feature(_CountingFeatureGroup, feature_set)
@@ -466,7 +466,7 @@ class TestWarningOnlyExtenderOnValidateHooksDoesNotBreakRun:
 
     def test_validate_output_extender_raising_before_delegating_still_runs_validation(self) -> None:
         _ValidateOutputTrackingFeatureGroup.executed = False
-        feature_set = _build_feature_set()
+        feature_set = FeatureSet([Feature("col")])
         extender = _RaisesBeforeDelegatingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
         cfw = _build_framework({extender})
         cfw.data = {"col": [1, 2, 3]}
@@ -497,7 +497,7 @@ class TestValidateHooksRowsOutStaysNone:
                 return {"col": [1, 2, 3]}
 
         try:
-            feature_set = _build_feature_set()
+            feature_set = FeatureSet([Feature("col")])
             input_extender = _ContextCapturingExtender(ExtenderHook.VALIDATE_INPUT_FEATURE)
             output_extender = _ContextCapturingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
             cfw = _build_framework({input_extender, output_extender})

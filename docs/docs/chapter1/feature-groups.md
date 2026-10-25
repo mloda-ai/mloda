@@ -76,6 +76,8 @@ PythonDict framework this means a row-oriented `[]` is *not* a valid empty
 result: return `{"my_feature": []}` instead, keeping the column and dropping the
 rows. See [Empty Result Handling](../in_depth/compute-framework-integration.md#empty-results).
 
+Every feature in the FeatureSet, including intermediate ones consumed by another group, must come back as a column, otherwise the step raises a `ValueError` naming the group and the missing features.
+
 A dict returned by a non-root feature group is appended to the frame when its columns are all new and its length matches; otherwise it replaces the frame. Appended columns are aligned by position, so a feature group that reorders or drops rows should return the full frame. On DuckDB, Spark and lazy Polars a dict is only appended onto a frame mloda built itself; there, return the frame with the column added instead. A single returned column (list or Series) follows the same rule and raises otherwise.
 
 #### 6. Advanced Feature Group Topics

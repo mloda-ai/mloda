@@ -655,6 +655,7 @@ class Engine:
                         f"{outcome.refused}"
                     ) from outcome.error
         new_index_feature = create_index_feature(index, feature_group, feature)
+        new_index_feature.link_key_only = link is not None
         self.add_feature_to_collection(feature_group_class, new_index_feature, child_uuid, True)
         if feature.uuid in self.connection_dropped:
             self.connection_dropped[new_index_feature.uuid] = self.connection_dropped[feature.uuid]
@@ -873,6 +874,8 @@ class Engine:
         """Folds a displaced host into its equal feature, as the duplicate path of add_feature_to_collection does."""
         existing.options.union_own_keys(host.options)
         existing.absorb_parts(host)
+        if not host.link_key_only:
+            existing.link_key_only = False
         existing.absorb_result_index_columns(host)
         for name, keys in host.consumer_attributions:
             existing.add_consumer_attribution(name, keys)
@@ -960,6 +963,8 @@ class Engine:
                 self.specialized_from[existing_feature.uuid] = tuple(sorted(merged, key=_candidate_sort_key))
             existing_feature.options.union_own_keys(feature.options)
             existing_feature.absorb_parts(feature)
+            if not feature.link_key_only:
+                existing_feature.link_key_only = False
             existing_feature.absorb_result_index_columns(feature)
             for name, keys in feature.consumer_attributions:
                 existing_feature.add_consumer_attribution(name, keys)

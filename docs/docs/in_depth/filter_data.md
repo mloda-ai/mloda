@@ -148,12 +148,11 @@ class ExampleOrderFilter(DataCreatorFeatureGroup):
         filtered_data = {
             key: [value[i] for i in order_id_filter]
             for key, value in _data_creator.items()
-            if key != filter_name
         }
         return filtered_data
     @classmethod
     def final_filters(cls) -> bool | None:
-        # This group applies the filter itself and drops the filter column, so framework row elimination must not run.
+        # This group applies the filter itself, so framework row elimination must not run.
         return False
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

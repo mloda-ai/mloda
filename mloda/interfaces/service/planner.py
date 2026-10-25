@@ -30,6 +30,7 @@ from mloda.interfaces.service.request import (
     build_request,
     _pointer,
     data_access_violations,
+    unlisted_option_violations,
     in_feature_sources,
     validate_request,
 )
@@ -221,6 +222,11 @@ class Planner:
         if violations:
             details = problems_to_details(violations)
             return error_result("policy_denied", "A request may not set data-access options.", details)
+        if not self._settings.trusted_caller:
+            unlisted = unlisted_option_violations(request, self._settings.allow_options)
+            if unlisted:
+                details = problems_to_details(unlisted)
+                return error_result("policy_denied", "A request may only set options listed in allow_options.", details)
         parsed = build_request(request)
         if isinstance(parsed, list):
             return error_result("validation_failed", "A feature config is invalid.", problems_to_details(parsed))

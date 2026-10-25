@@ -42,6 +42,7 @@ max_preview_rows = 20
 inline_data = false                    # allow inline request data (trusted callers only)
 plan_ttl = "24h"
 # default_classification = "internal"  # label for unlisted leaf columns (default: unclassified)
+# allow_options = ["window"]           # option keys a request may set (default: none)
 
 [mcp.sources.sales]
 files = ["data/sales.csv"]
@@ -91,6 +92,11 @@ the request by JSON pointer, with a suggestion when a close name exists.
 
 - Sources are named by alias only. Paths, connection details, data-access objects and option values never appear in a
   result, and a request cannot set data-access options.
+- A request may set only the option keys listed in `allow_options` (default: none). Any other key in `options`,
+  `group_options` or `context_options`, nested `in_features` configs included, is refused as `policy_denied` by
+  JSON pointer, never by value. Data-access keys stay refused even when listed. Options encoded in a chained feature
+  name are not covered. `mloda explain` and `mloda run` are local and not restricted. `mloda_describe_feature` shows
+  `caller_settable` for each option.
 - Denied FeatureGroups are disabled before matching, so their code does not run; the agent sees `policy_denied` and
   the alternatives you configured. Requested names, `index` columns, `in_features` source names and filter columns are
   checked before planning. Any planned feature name the deny list matches, such as a chained name over a denied
@@ -111,6 +117,8 @@ the request by JSON pointer, with a suggestion when a close name exists.
 `default_classification` replaces `unclassified` for every leaf column without its own entry, including columns a
 FeatureGroup loads itself; derived features still take the strictest input. A permissive label such as `public` exposes
 all of them in the preview, so prefer listing columns in `[mcp.classification]`.
+
+Upgrade note: MCP callers that set options are refused until you list the keys in `allow_options`.
 
 Not yet: paging through full results, approvals, cancellation, and remote HTTP with OAuth.
 

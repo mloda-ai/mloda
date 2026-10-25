@@ -24,6 +24,7 @@ _MCP_KEYS = frozenset(
         "classification",
         "inline_data",
         "default_classification",
+        "allow_options",
     }
 )
 _SOURCE_KEYS = frozenset({"files", "folders"})
@@ -64,6 +65,7 @@ class Settings:
     classification: Mapping[str, str] = field(default_factory=dict)
     inline_data: bool = False
     default_classification: str | None = None
+    allow_options: tuple[str, ...] = ()
     trusted_caller: bool = False
 
     def __post_init__(self) -> None:
@@ -175,7 +177,7 @@ def _build(raw: Mapping[str, Any], base_dir: Path) -> Settings:
     kwargs: dict[str, Any] = {}
     if "mode" in raw:
         kwargs["mode"] = raw["mode"]
-    for key in ("compute_frameworks", "deny_feature_groups", "preview_allows"):
+    for key in ("compute_frameworks", "deny_feature_groups", "preview_allows", "allow_options"):
         if key in raw:
             kwargs[key] = _str_tuple(raw[key], key)
     if "ApiInputDataFeature" in kwargs.get("deny_feature_groups", ()):

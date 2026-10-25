@@ -279,6 +279,23 @@ class TestExplainErrors:
         assert _error_code(outcome) == "limit_exceeded"
 
 
+class TestUnlistedOption:
+    REQUEST_WITH_OPTION: dict[str, Any] = {"features": [{"name": "income", "options": {"unlisted_key": 1}}]}
+
+    @pytest.mark.parametrize("command", ["explain", "run"])
+    def test_cli_accepts_an_option_that_is_not_allow_listed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        path = _request_file(tmp_path, self.REQUEST_WITH_OPTION)
+
+        outcome = _cli([command, str(path), "--config", str(config)])
+
+        assert "option_not_allowed" not in outcome.out
+        assert outcome.code == 0, outcome.out
+
+
 class TestRequestInput:
     def test_missing_request_file_is_a_stderr_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         config = _config(tmp_path)

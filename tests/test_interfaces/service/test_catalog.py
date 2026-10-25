@@ -498,6 +498,22 @@ class TestDescribe:
         assert note["required"] is False
         assert note["default"] == "none"
 
+    def test_options_are_not_caller_settable_by_default(self, catalog: Catalog) -> None:
+        options = catalog.describe("mcp3_alpha_total")["options"]
+
+        assert [entry["caller_settable"] for entry in options] == [False, False, False]
+
+    def test_listed_options_are_caller_settable(self, tmp_path: Path) -> None:
+        listed = Catalog.build(_settings(tmp_path, allow_options=("mcp3_mode", "mcp3_window")), _base())
+
+        options = listed.describe("mcp3_alpha_total")["options"]
+
+        assert {entry["name"]: entry["caller_settable"] for entry in options} == {
+            "mcp3_mode": True,
+            "mcp3_note": False,
+            "mcp3_window": True,
+        }
+
     def test_metadata_missing_flags_empty_explanation(self, catalog: Catalog) -> None:
         result = catalog.describe("mcp3_alpha_total")
         assert result["metadata_missing"] == ["explanation for option 'mcp3_note'"]

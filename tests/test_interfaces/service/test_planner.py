@@ -356,9 +356,98 @@ class TestRequestChecks:
     def test_semantic_feature_config_error_is_validation_failed(self, tmp_path: Path) -> None:
         request = {"features": [{"name": "income", "options": {"x": 1}, "group_options": {"y": 1}}]}
 
-        error = _error(_explain(tmp_path, request), "validation_failed")
+        error = _error(_explain(tmp_path, request, allow_options=("x", "y")), "validation_failed")
 
         assert _has_detail(error, path="/features/0", problem="invalid_feature_config")
+
+
+NESTED_OPTION_CASES: list[tuple[dict[str, Any], str]] = [
+    ({"name": "income", "options": {"k": SECRET}}, "/features/0/options/k"),
+    ({"name": "income", "group_options": {"k": SECRET}}, "/features/0/group_options/k"),
+    ({"name": "income", "context_options": {"k": SECRET}}, "/features/0/context_options/k"),
+    (
+        {"name": "income", "options": {"in_features": {"name": "raw", "options": {"k": SECRET}}}},
+        "/features/0/options/in_features/options/k",
+    ),
+    (
+        {"name": "income", "group_options": {"in_features": {"name": "raw", "context_options": {"k": SECRET}}}},
+        "/features/0/group_options/in_features/context_options/k",
+    ),
+    (
+        {
+            "name": "income",
+            "options": {
+                "in_features": {
+                    "name": "a",
+                    "options": {
+                        "in_features": {
+                            "name": "b",
+                            "group_options": {"in_features": {"name": "c", "options": {"k": SECRET}}},
+                        }
+                    },
+                }
+            },
+        },
+        "/features/0/options/in_features/options/in_features/group_options/in_features/options/k",
+    ),
+]
+
+
+class TestOptionAllowlist:
+    @pytest.mark.parametrize(("feature", "path"), NESTED_OPTION_CASES)
+    def test_unlisted_key_is_policy_denied_by_pointer_without_value(
+        self, tmp_path: Path, feature: dict[str, Any], path: str
+    ) -> None:
+        result = _explain(tmp_path, {"features": [feature]})
+
+        error = _error(result, "policy_denied")
+        assert [detail["path"] for detail in error["details"]] == [path]
+        assert _has_detail(error, problem="option_not_allowed")
+        assert SECRET not in json.dumps(result)
+
+    @pytest.mark.parametrize(("feature", "path"), NESTED_OPTION_CASES)
+    def test_listed_key_passes(self, tmp_path: Path, feature: dict[str, Any], path: str) -> None:
+        result = _explain(tmp_path, {"features": [feature]}, allow_options=("k",))
+
+        if is_error(result):
+            assert not _has_detail(result["error"], problem="option_not_allowed")
+
+    @pytest.mark.parametrize(("feature", "path"), NESTED_OPTION_CASES)
+    def test_trusted_caller_may_set_unlisted_keys(self, tmp_path: Path, feature: dict[str, Any], path: str) -> None:
+        result = _explain(tmp_path, {"features": [feature]}, trusted_caller=True)
+
+        if is_error(result):
+            assert not _has_detail(result["error"], problem="option_not_allowed")
+
+    def test_every_unlisted_key_is_reported_and_listed_ones_are_not(self, tmp_path: Path) -> None:
+        feature = {"name": "income", "options": {"a": 1, "b": 2, "ok": 3}, "context_options": {"c": 4}}
+
+        error = _error(_explain(tmp_path, {"features": [feature]}, allow_options=("ok",)), "policy_denied")
+
+        assert sorted(detail["path"] for detail in error["details"]) == [
+            "/features/0/context_options/c",
+            "/features/0/options/a",
+            "/features/0/options/b",
+        ]
+
+    def test_in_features_key_itself_is_not_refused(self, tmp_path: Path) -> None:
+        feature = {"name": "income", "options": {"in_features": "customer_id"}}
+
+        result = _explain(tmp_path, {"features": [feature]})
+
+        if is_error(result):
+            assert not _has_detail(result["error"], problem="option_not_allowed")
+
+    @pytest.mark.parametrize("key", ["CsvFG", RESERVED_READER_OPTION_KEY])
+    def test_listed_data_access_key_stays_a_data_access_problem(self, tmp_path: Path, key: str) -> None:
+        request = {"features": [{"name": "income", "options": {key: SECRET}}]}
+
+        result = _explain(tmp_path, request, allow_options=(key,))
+
+        error = _error(result, "policy_denied")
+        assert [detail["path"] for detail in error["details"]] == [f"/features/0/options/{key}"]
+        assert _has_detail(error, problem="data_access_option")
+        assert SECRET not in json.dumps(result)
 
 
 class TestUnresolved:

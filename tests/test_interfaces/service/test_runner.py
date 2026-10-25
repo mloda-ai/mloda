@@ -422,6 +422,11 @@ class TestRunTimeChecks:
         _error(result, "policy_denied")
         assert denied_calls == []
 
+    def test_listed_option_runs(self, tmp_path: Path) -> None:
+        request = {"features": [{"name": "income", "options": {"k": 1}}]}
+
+        assert _only_table(_run(tmp_path, request, allow_options=("k",)))["row_count"] == 5
+
 
 class TestFeatureGroupFailure:
     def test_exception_becomes_an_internal_error_without_its_text(self, tmp_path: Path) -> None:

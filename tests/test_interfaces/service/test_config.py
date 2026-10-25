@@ -277,6 +277,25 @@ def test_config_hash_changes_with_default_classification() -> None:
     assert Settings().config_hash() != Settings(default_classification="internal").config_hash()
 
 
+def test_allow_options_defaults_to_empty_tuple() -> None:
+    assert Settings().allow_options == ()
+
+
+def test_allow_options_toml_loads(tmp_path: Path) -> None:
+    path = _write(tmp_path, '[mcp]\nallow_options = ["k", "other"]\n')
+    assert load_settings(path, env={}).allow_options == ("k", "other")
+
+
+@pytest.mark.parametrize("value", ['"k"', "1", "[1]", '["k", 2]', "{k = 1}"])
+def test_bad_allow_options_is_config_error(tmp_path: Path, value: str) -> None:
+    with pytest.raises(ConfigError, match="allow_options"):
+        load_settings(_write(tmp_path, f"[mcp]\nallow_options = {value}\n"), env={})
+
+
+def test_config_hash_changes_with_allow_options() -> None:
+    assert Settings().config_hash() != Settings(allow_options=("k",)).config_hash()
+
+
 def test_config_hash_ignores_mapping_insertion_order() -> None:
     one = Settings(classification={"a": "personal", "b": "public"})
     other = Settings(classification={"b": "public", "a": "personal"})

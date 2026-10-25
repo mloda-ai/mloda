@@ -8,7 +8,7 @@ import difflib
 import hashlib
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -133,7 +133,7 @@ def _json_value(value: Any) -> Any:
     return value if value is None or isinstance(value, (str, int, float, bool)) else str(value)
 
 
-def _options(fg: type[FeatureGroup]) -> tuple[list[dict[str, Any]], list[str]]:
+def _options(fg: type[FeatureGroup], allowed: Collection[str]) -> tuple[list[dict[str, Any]], list[str]]:
     options: list[dict[str, Any]] = []
     missing: list[str] = []
     mapping = fg.PROPERTY_MAPPING or {}
@@ -143,6 +143,7 @@ def _options(fg: type[FeatureGroup]) -> tuple[list[dict[str, Any]], list[str]]:
             "name": str(key),
             "explanation": sanitize_text(spec.explanation),
             "required": is_no_default(spec.default),
+            "caller_settable": str(key) in allowed,
         }
         if not is_no_default(spec.default):
             entry["default"] = _json_value(spec.default)
@@ -274,7 +275,7 @@ class Catalog:
             if entry is not None
             else _description(fg_name, safe_field(lambda: as_str(fg.description()), fg_name))
         )
-        options, missing = _options(fg)
+        options, missing = _options(fg, self._settings.allow_options)
         in_features = None
         if issubclass(fg, FeatureChainParserMixin):
             in_features = {"min": fg.MIN_IN_FEATURES, "max": fg.MAX_IN_FEATURES}

@@ -534,6 +534,18 @@ class TestAuditLog:
         for record, (name, _) in zip(records, CALLS):
             assert name in record.getMessage()
 
+    async def test_default_server_refuses_an_unlisted_option(self, tmp_path: Path) -> None:
+        request = {"features": [{"name": "income", "options": {"opt": SECRET_OPTION}}]}
+
+        result = await _call(_server(_settings(tmp_path)), EXPLAIN, {"request": request})
+
+        assert result.is_error is True
+        structured = _structured(result)
+        assert structured["error"]["code"] == "policy_denied"
+        assert [detail["path"] for detail in structured["error"]["details"]] == ["/features/0/options/opt"]
+        assert structured["error"]["details"][0]["problem"] == "option_not_allowed"
+        assert SECRET_OPTION not in json.dumps(structured)
+
     @pytest.mark.parametrize(
         ("name", "arguments"),
         [

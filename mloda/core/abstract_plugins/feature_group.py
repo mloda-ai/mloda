@@ -462,8 +462,7 @@ class FeatureGroup(ABC):
 
     @classmethod
     def reduces_rows(cls) -> bool:
-        """True when calculate_feature replaces the frame with fewer rows; such a group must run as one step
-        per framework, so a split (data types, options, filters, dependency levels, an artifact) raises at plan time."""
+        """True when calculate_feature returns fewer rows than it got; it must then run as one step per framework."""
         return False
 
     @staticmethod

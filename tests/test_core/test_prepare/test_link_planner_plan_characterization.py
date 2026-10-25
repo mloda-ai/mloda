@@ -433,7 +433,6 @@ def test_swapped_discriminators_bind_the_other_node_as_the_left_side(
     modes: set[ParallelizationMode], flight_server: Any
 ) -> None:
     """The bound left node then lacks the left index column, and the run says so."""
-    # JoinStep's pre-merge key check names the left side and the missing column, as a ValueError.
     with pytest.raises(ValueError, match=rf"(?s)(?=.*\bleft\b)(?=.*{SELF_LEFT_KEY})"):
         _run_self_join("right", "left", modes, flight_server)
 

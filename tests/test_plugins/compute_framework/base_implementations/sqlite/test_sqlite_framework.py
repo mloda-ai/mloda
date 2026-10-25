@@ -1,4 +1,5 @@
 import sqlite3
+import sys
 from decimal import Decimal
 from typing import Any
 
@@ -52,6 +53,9 @@ class TestSqliteFrameworkBasics:
         fw = SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         fw.set_framework_connection_object(connection)
         assert fw.framework_connection_object is connection
+        if sys.version_info >= (3, 12):
+            with pytest.raises(sqlite3.OperationalError, match="no such column"):
+                connection.execute('SELECT "no_such_col"')
 
     def test_set_framework_connection_object_invalid(self) -> None:
         fw = SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
@@ -363,3 +367,7 @@ class TestSqliteEmptyResult(
 class TestSqliteIsMissingColumnError:
     def test_unknown_function_is_not_a_missing_column(self) -> None:
         assert SqliteFramework.is_missing_column_error(sqlite3.OperationalError("no such function: f")) is False
+
+    def test_quoted_string_literal_hint_is_a_missing_column(self) -> None:
+        error = sqlite3.OperationalError('no such column: "x" - should this be a string literal in single-quotes?')
+        assert SqliteFramework.is_missing_column_error(error) is True

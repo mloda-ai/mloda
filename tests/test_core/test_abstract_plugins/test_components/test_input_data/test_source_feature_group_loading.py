@@ -676,6 +676,8 @@ class TestImplementationDefinition:
                     return None
 
     def test_subclass_leaving_calculate_abstract_is_not_validated(self, make_implementation: Any) -> None:
+        loaded_implementations()
+
         class _IntermediateBase(Implementation[Any]):
             pass
 
@@ -712,6 +714,36 @@ class TestImplementationDefinition:
         assert {_HelperPythonDict, _HelperPyArrow} <= set(loaded_implementations())
         assert PreFilterPlugins({PythonDictFramework, PyArrowTable}).implementations is not None
         del _HelperPythonDict, _HelperPyArrow, _HelperBase
+        gc.collect()
+
+    def test_loaded_implementations_does_not_rescan_known_classes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import mloda.core.abstract_plugins.implementation as impl_module
+
+        original = impl_module._has_abstract_member
+        calls: list[type] = []
+
+        def counting(cls: type) -> bool:
+            calls.append(cls)
+            return bool(original(cls))
+
+        monkeypatch.setattr(impl_module, "_has_abstract_member", counting)
+        loaded_implementations()
+        calls.clear()
+        loaded_implementations()
+        assert calls == []
+
+    def test_class_made_concrete_by_a_decorator_is_loaded(self) -> None:
+        def add_calculate(cls: Any) -> Any:
+            cls.calculate = classmethod(lambda c, serving, data, features, framework: None)
+            return cls
+
+        @add_calculate
+        class _Decorated(Implementation[Any]):
+            feature_group = ToySourceFG
+            compute_framework = PyArrowTable
+
+        assert _Decorated in loaded_implementations()
+        del _Decorated
         gc.collect()
 
 

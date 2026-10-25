@@ -3695,7 +3695,27 @@ Available join types:
                 )
 
                 fg_steps[(f_hash, bucket_idx, level_idx)] = feature_group_step
+        if feature_group.reduces_rows() and not is_root:
+            self._raise_if_row_reducing_group_split(feature_group, fg_steps)
         return fg_steps
+
+    @staticmethod
+    def _raise_if_row_reducing_group_split(
+        feature_group: type[FeatureGroup], fg_steps: dict[Any, FeatureGroupStep]
+    ) -> None:
+        by_framework: dict[type[ComputeFramework], list[list[str]]] = defaultdict(list)
+        for step in fg_steps.values():
+            by_framework[step.compute_framework].append(sorted(str(f.name) for f in step.features.features))
+        for framework, step_names in by_framework.items():
+            if len(step_names) > 1:
+                ordered = sorted(step_names)
+                raise ValueError(
+                    f"{feature_group.get_class_name()} declares reduces_rows(), but its features need "
+                    f"{len(ordered)} steps on {framework.get_class_name()} ({ordered}); a later step would run on "
+                    "the reduced frame. Request them so they batch into one step (one data type per feature "
+                    "name, the same options and filters, and no feature of the group depending on another of "
+                    "its features), or split the logic into separate feature groups."
+                )
 
     def add_artifact_to_feature_set(self, feature_group: type[FeatureGroup], feature_set: FeatureSet) -> None:
         if feature_group.artifact() is None:

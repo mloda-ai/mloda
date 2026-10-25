@@ -4,6 +4,7 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import ExtenderHook, _invoke_extender
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
 from mloda.core.core.cfw_manager import CfwManager
@@ -117,10 +118,30 @@ class JoinStep(Step):
 
         # Link indices are bound to the feature groups, so the left group's data must stay the left argument.
         if self.swap_merge_sides:
-            cfw.data = merge_engine_instance.merge(from_cfw_data, cfw.data, self.link)
+            left_data, right_data = from_cfw_data, cfw.data
         else:
-            cfw.data = merge_engine_instance.merge(cfw.data, from_cfw_data, self.link)
+            left_data, right_data = cfw.data, from_cfw_data
+
+        if self.link.jointype not in (JoinType.APPEND, JoinType.UNION):
+            self._check_link_keys(cfw, "left", left_data, self.link.left_index.index, self.link.left_feature_group)
+            self._check_link_keys(cfw, "right", right_data, self.link.right_index.index, self.link.right_feature_group)
+
+        cfw.data = merge_engine_instance.merge(left_data, right_data, self.link)
         cfw.set_column_names()
+
+    def _check_link_keys(
+        self, cfw: ComputeFramework, side: str, data: Any, index: tuple[str, ...], feature_group: type[FeatureGroup]
+    ) -> None:
+        """Raise if a schema-bearing side lacks a column of its link index."""
+        available = set(cfw._extract_column_names(data))
+        if not available:
+            return
+        missing = [column for column in index if column not in available]
+        if missing:
+            raise ValueError(
+                f"Link {self.link}: {side} side ({feature_group.get_class_name()}) lacks link key columns {missing}; "
+                f"available columns: {sorted(available)}"
+            )
 
     def _upload_data_if_needed(self, cfw: ComputeFramework, cfw_register: CfwManager) -> None:
         """Uploads the merged data to the flight server if a location is configured."""

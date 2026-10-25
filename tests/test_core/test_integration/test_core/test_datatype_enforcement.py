@@ -3,6 +3,7 @@ import pyarrow as pa
 import pytest
 from mloda.provider import FeatureGroup
 from mloda.provider import DataCreatorFeatureGroup
+from mloda.user import mloda
 from mloda.user import Feature
 from mloda.user import Features
 from mloda.user import FeatureName
@@ -10,6 +11,7 @@ from mloda.provider import FeatureSet
 from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.user import DataType
 from mloda.user import Options
 from mloda.user import ParallelizationMode
@@ -91,6 +93,10 @@ class RowReducer(FeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {PyArrowTable, PythonDictFramework}
+
+    @classmethod
+    def reduces_rows(cls) -> bool:
+        return True
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("raw_key"), Feature("raw_val")}
@@ -461,6 +467,75 @@ class TestRowReducingGroupBatching:
 
         assert out["red_sum"] == [30, 40]
         assert out["red_max"] == [20, 40]
+
+
+class NonReducingReducer(RowReducer):
+    """Same logic as RowReducer but does not declare that it reduces rows."""
+
+    @classmethod
+    def reduces_rows(cls) -> bool:
+        return False
+
+
+class ReducingRawSource(ReducerRawSource):
+    """Root group that declares reduces_rows."""
+
+    @classmethod
+    def reduces_rows(cls) -> bool:
+        return True
+
+
+def _plan_reducer(group: type[FeatureGroup], features: list[Feature]) -> Any:
+    return mloda.prepare(
+        features,
+        compute_frameworks=[PyArrowTable, PythonDictFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({ReducerRawSource, group}),
+    )
+
+
+class TestRowReducingGroupPlanTimeGuard:
+    """A row-reducing group split over several steps on one framework fails at plan time."""
+
+    @pytest.mark.parametrize(
+        "features",
+        [
+            [Feature.int32_of("red_sum"), Feature.int64_of("red_sum")],
+            [Feature("red_sum", options=Options({"k": 1})), Feature("red_max", options=Options({"k": 2}))],
+        ],
+        ids=["same_name_two_data_types", "different_options"],
+    )
+    def test_split_steps_raise_at_prepare(self, features: list[Feature]) -> None:
+        with pytest.raises(ValueError, match="RowReducer") as exc_info:
+            _plan_reducer(RowReducer, features)
+
+        message = str(exc_info.value)
+        assert "PyArrowTable" in message
+        assert "one step" in message
+        assert "depend" in message
+
+    def test_non_reducing_group_with_same_split_plans(self) -> None:
+        session = _plan_reducer(NonReducingReducer, [Feature.int32_of("red_sum"), Feature.int64_of("red_sum")])
+
+        assert session.engine is not None
+        steps = [
+            s
+            for s in session.engine.execution_planner
+            if isinstance(s, FeatureGroupStep) and s.feature_group is NonReducingReducer
+        ]
+        assert len(steps) == 2
+        assert all(s.compute_framework is PyArrowTable for s in steps)
+
+    def test_root_group_declaring_reduces_rows_with_split_plans(self) -> None:
+        session = _plan_reducer(ReducingRawSource, [Feature.int32_of("raw_val"), Feature.int64_of("raw_val")])
+
+        assert session.engine is not None
+        steps = [
+            s
+            for s in session.engine.execution_planner
+            if isinstance(s, FeatureGroupStep) and s.feature_group is ReducingRawSource
+        ]
+        assert len(steps) == 2
+        assert len({s.compute_framework for s in steps}) == 1
 
 
 class TestValidatorEdgeCases:

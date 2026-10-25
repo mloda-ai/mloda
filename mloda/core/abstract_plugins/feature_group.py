@@ -460,6 +460,11 @@ class FeatureGroup(ABC):
         """
         return None
 
+    @classmethod
+    def reduces_rows(cls) -> bool:
+        """True when calculate_feature returns fewer rows than it got; any split into steps on one framework raises."""
+        return False
+
     @staticmethod
     def artifact() -> type[BaseArtifact] | None:
         """

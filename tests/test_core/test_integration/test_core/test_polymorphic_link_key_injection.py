@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, FeatureName, JoinSpec, Link, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
 _PLKIR_A = {"plkir_a_key": [1, 2, 3, 4], "plkir_a_val": [10, 20, 30, 40]}
@@ -85,3 +88,72 @@ def test_base_class_link_joins_concrete_subclasses_end_to_end() -> None:
 
     values = sorted(results[0].to_pydict()[PlkirJoinedFG.get_class_name()])
     assert values == [220, 330, 440]
+
+
+class PlkirBaseC(FeatureGroup):
+    """Base side C of a link whose concrete subclass never produces the key."""
+
+
+class PlkirBaseD(FeatureGroup):
+    """Base side D of the same link."""
+
+
+class PlkirSubC(PlkirBaseC, DataCreatorFeatureGroup):
+    """Concrete side C: declares plkir_c_key but its data omits the column."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"plkir_c_key", "plkir_c_val"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"plkir_c_val": [10, 20, 30]}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+
+class PlkirSubD(PlkirBaseD, DataCreatorFeatureGroup):
+    """Concrete side D: produces its key."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"plkir_d_key", "plkir_d_val"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"plkir_d_key": [1, 2, 3], "plkir_d_val": [100, 200, 300]}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+
+class PlkirMissingKeyConsumerFG(FeatureGroup):
+    """Consumer needing one value column from each side of the missing-key link."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("plkir_c_val"), Feature("plkir_d_val")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): [1] * len(data)}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+
+def test_subclass_side_missing_its_link_key_raises_naming_side_and_link() -> None:
+    """A subclass that never produces the injected key fails the join check, not a silent None join."""
+    link = Link.inner(JoinSpec(PlkirBaseC, "plkir_c_key"), JoinSpec(PlkirBaseD, "plkir_d_key"))
+
+    with pytest.raises(ValueError, match=r"(?s)(?=.*\bleft\b)(?=.*PlkirBaseC)(?=.*plkir_c_key)(?=.*plkir_c_val)"):
+        mloda.run_all(
+            [Feature(PlkirMissingKeyConsumerFG.get_class_name())],
+            links={link},
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({PlkirSubC, PlkirSubD, PlkirMissingKeyConsumerFG}),
+            parallelization_modes={ParallelizationMode.SYNC},
+        )

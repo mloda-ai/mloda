@@ -53,6 +53,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimR
 from mloda.core.abstract_plugins.components.input_data.reader_probe import SourceProbeOutcome
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import (
     HANDLE_OPTION,
+    HANDLE_SPEC,
     QUERY_OPTION,
     SourceFeatureGroup,
 )
@@ -179,6 +180,7 @@ __all__ = [
     "ImplementationPinError",
     "OperationFeatureGroup",
     "HANDLE_OPTION",
+    "HANDLE_SPEC",
     "QUERY_OPTION",
     "DBQuery",
     "DBTable",

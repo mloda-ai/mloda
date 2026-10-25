@@ -210,6 +210,11 @@ def test_import_provider_base_classes() -> None:
     assert SourceProbeOutcome is CoreOutcome
     assert SourceProbeOutcome(None, 1).result == 1
     assert "SourceProbeOutcome" in provider_module.__all__
+    from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_SPEC as CoreHandleSpec
+    from mloda.provider import HANDLE_SPEC
+
+    assert HANDLE_SPEC is CoreHandleSpec
+    assert "HANDLE_SPEC" in provider_module.__all__
 
 
 # =============================================================================

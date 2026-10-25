@@ -821,14 +821,17 @@ class TestApiDataIndexColumnsAcrossSets:
         with pytest.raises(ValueError, match=r"(?s)idx_b_id.*api_data:A|api_data:A.*idx_b_id"):
             self._prepare([Feature("idx_a_val", options=dict(_IDX_A))], links={link}, extra=extra)
 
-    def test_undiscriminated_one_sided_link_with_index_from_another_set_raises_at_prepare(self) -> None:
+    @_IDX_EXTRA
+    def test_undiscriminated_one_sided_link_with_index_from_another_set_raises_at_prepare(
+        self, extra: set[type[FeatureGroup]] | None
+    ) -> None:
         link = Link.inner(JoinSpec(ApiDataFG, Index(("idx_b_id",))), JoinSpec(IdxOtherCreatorFG, Index(("idx_cr_id",))))
         with pytest.raises(ValueError, match="idx_b_id"):
             mloda.prepare(
                 [Feature("idx_a_val", link=link)],
                 compute_frameworks=[PandasDataFrame],
                 api_data=_IDX_API,
-                plugin_collector=PluginCollector.enabled_feature_groups({ApiDataFG, IdxOtherCreatorFG}),
+                plugin_collector=PluginCollector.enabled_feature_groups({ApiDataFG, IdxOtherCreatorFG, *(extra or ())}),
             )
 
     def test_global_link_without_discriminators_still_runs(self) -> None:

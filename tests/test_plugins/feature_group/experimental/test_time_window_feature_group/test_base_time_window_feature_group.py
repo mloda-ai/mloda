@@ -440,7 +440,7 @@ _DIVERGENT_DECLARATIONS: dict[type[Implementation[Any]], dict[str, str]] = {
     PyArrowTimeWindow: {},
 }
 
-# (columns, span in days): NaN, null and infinities inside windows; a NaN next to values; windows and rows with no value.
+# (columns, span in days): NaN, null and inf inside windows; NaN next to values; windows and rows with no value.
 _SHAPES: dict[str, tuple[dict[str, list[float | None]], int]] = {
     "single": ({"a": [1.0, 2.0, _NAN, None, 3.0, 4.0, None]}, 3),
     "multi_nan_beside_values": ({"a": [1.0, _NAN, 2.0, 3.0], "b": [10.0, 20.0, 30.0, 40.0]}, 2),

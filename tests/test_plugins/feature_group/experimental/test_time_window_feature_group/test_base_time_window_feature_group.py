@@ -290,7 +290,7 @@ class TestTimeWindowFeatureGroup:
             impl, data, "missing__sum_2_hour_window", ("missing",), tuple(sorted(["b", "a", REFERENCE_TIME]))
         )
 
-    def test_window_raises_one_wording_for_a_missing_reference_time(self) -> None:
+    def test_core_rejects_a_missing_reference_time(self) -> None:
         df = pd.DataFrame({"x": [1.0]})
         assert_core_rejects_missing_input(PandasTimeWindow, df, "x__sum_2_hour_window", (REFERENCE_TIME,), ("x",))
 

@@ -195,7 +195,7 @@ class TestPandasScaling:
         ],
         ids=["standard", "minmax"],
     )
-    def test_source_check_is_strict_and_lists_sorted_columns(
+    def test_core_rejects_missing_input_and_lists_sorted_columns(
         self, name: str, missing: tuple[str, ...], available: tuple[str, ...]
     ) -> None:
         df = pd.DataFrame({"income": [1.0, 2.0, 3.0], "age": [4.0, 5.0, 6.0]})

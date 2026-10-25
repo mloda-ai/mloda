@@ -217,7 +217,7 @@ class TestPandasGeoDistance:
         ],
         ids=["one_missing", "both_missing"],
     )
-    def test_source_check_is_strict_and_lists_sorted_columns(
+    def test_core_rejects_missing_input_and_lists_sorted_columns(
         self, name: str, missing: tuple[str, ...], available: tuple[str, ...]
     ) -> None:
         assert_core_rejects_missing_input(PandasGeoDistance, self.df.copy(), name, missing, available)

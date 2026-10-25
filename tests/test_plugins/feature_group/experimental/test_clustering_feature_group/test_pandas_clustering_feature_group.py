@@ -62,8 +62,8 @@ class TestPandasClustering:
         )
         return result
 
-    def test_cluster_loop_partial_source_presence_passes(self, sample_data: pd.DataFrame) -> None:
-        """One of two source names present does not raise."""
+    def test_cluster_loop_leaves_the_source_check_to_core(self, sample_data: pd.DataFrame) -> None:
+        """The loop itself does not reject a partially present source; core does."""
         result = self._run_loop(sample_data, "feature1&invalid_feature__cluster_kmeans_2")
         assert "feature1&invalid_feature__cluster_kmeans_2" in result.columns
 

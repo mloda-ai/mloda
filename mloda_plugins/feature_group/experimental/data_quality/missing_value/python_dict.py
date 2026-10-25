@@ -54,8 +54,7 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
         """Copy data with NaN-like cells replaced by None in the given columns."""
         normalized = dict(data)
         for name in columns:
-            if name in data:
-                normalized[name] = [None if cls._is_missing(v) else v for v in data[name]]
+            normalized[name] = [None if cls._is_missing(v) else v for v in data[name]]
         return normalized
 
     @staticmethod

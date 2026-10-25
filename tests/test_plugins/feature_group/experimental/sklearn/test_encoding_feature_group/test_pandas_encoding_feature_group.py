@@ -30,14 +30,14 @@ class TestPandasEncoding:
         ],
         ids=["missing", "missing_with_part_suffix"],
     )
-    def test_source_check_is_strict_and_lists_sorted_columns(
+    def test_core_rejects_missing_input_and_lists_sorted_columns(
         self, name: str, missing: tuple[str, ...], available: tuple[str, ...]
     ) -> None:
         data = pd.DataFrame({"value": [1, 2, 3], "category": ["A", "B", "C"]})
 
         assert_core_rejects_missing_input(PandasEncoding, data, name, missing, available)
 
-    def test_existing_source_passes_the_source_check(self) -> None:
+    def test_existing_sources_calculate_the_feature(self) -> None:
         pytest.importorskip("sklearn")
         data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
         features = FeatureSet()

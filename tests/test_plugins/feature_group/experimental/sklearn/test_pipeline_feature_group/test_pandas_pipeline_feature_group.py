@@ -29,14 +29,14 @@ class TestPandasSklearnPipeline:
         ],
         ids=["one_missing", "all_missing"],
     )
-    def test_source_check_is_strict_and_lists_sorted_columns(
+    def test_core_rejects_missing_input_and_lists_sorted_columns(
         self, name: str, missing: tuple[str, ...], available: tuple[str, ...]
     ) -> None:
         df = pd.DataFrame({"feature2": [4, 5, 6], "feature1": [1, 2, 3]})
 
         assert_core_rejects_missing_input(PandasSklearnPipeline, df, name, missing, available)
 
-    def test_existing_sources_pass_the_source_check(self) -> None:
+    def test_existing_sources_calculate_the_feature(self) -> None:
         pytest.importorskip("sklearn")
         df = pd.DataFrame({"feature1": [1.0, 2.0, 3.0], "feature2": [4.0, 5.0, 6.0]})
         features = FeatureSet()
@@ -190,8 +190,8 @@ class TestPandasSklearnPipeline:
         """Test end-to-end feature calculation."""
         # Skip test if sklearn not available
         try:
-            from sklearn.pipeline import Pipeline  # noqa: F401
             from sklearn.preprocessing import StandardScaler  # noqa: F401
+            from sklearn.pipeline import Pipeline  # noqa: F401
         except ImportError:
             pytest.skip("scikit-learn not available")
 

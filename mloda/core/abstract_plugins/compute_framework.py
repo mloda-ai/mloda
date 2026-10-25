@@ -4,7 +4,7 @@ from abc import ABC
 from collections.abc import Callable, Generator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from contextvars import ContextVar
-from typing import Any, final
+from typing import Any, NoReturn, final
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -1170,9 +1170,9 @@ class ComputeFramework(ABC):
             )
         except KeyError as e:
             # Provide helpful error message for missing columns
-            self._raise_helpful_missing_column_error(feature_group, e, features)
+            self._raise_helpful_missing_column_error(feature_group, e)
 
-    def _raise_helpful_missing_column_error(self, feature_group: Any, error: KeyError, features: Any) -> None:
+    def _raise_helpful_missing_column_error(self, feature_group: Any, error: KeyError) -> NoReturn:
         """Raises a ValueError explaining that the KeyError may come from an undeclared column read."""
         feature_name = feature_group.get_class_name()
         error_message = (

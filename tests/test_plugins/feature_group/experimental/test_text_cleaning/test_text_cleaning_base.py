@@ -99,7 +99,7 @@ class TestTextCleaningFeatureGroupBase:
         assert next(iter(input_features)).name == "sum_aggr__sales"
 
     @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
-    def test_clean_source_check_is_strict_and_lists_sorted_columns(self, impl: Any, make_data: Any) -> None:
+    def test_clean_core_rejects_missing_input_and_lists_sorted_columns(self, impl: Any, make_data: Any) -> None:
         feature = Feature(
             FeatureName("nope__cleaned_text"), Options({TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize",)})
         )

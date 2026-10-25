@@ -236,7 +236,7 @@ class TestMissingValueFeatureGroup:
         assert_core_rejects_missing_input(impl, make_data(), feature, ("g1", "g2"), ("a", "b"))
 
     @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
-    def test_impute_checks_the_constant_after_the_columns(self, impl: Any, make_data: Any) -> None:
+    def test_impute_rejects_missing_constant_and_core_rejects_missing_column(self, impl: Any, make_data: Any) -> None:
         with pytest.raises(ValueError, match="Constant value must be provided for constant imputation method"):
             run_through_core(impl, make_data(), _feature("a__constant_imputed"))
         assert_core_rejects_missing_input(impl, make_data(), _feature("zzz__constant_imputed"), ("zzz",))

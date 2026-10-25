@@ -84,10 +84,7 @@ class PolicySuccess:
 
 @dataclass(frozen=True)
 class PolicyRaises:
-    """run_all raises an Exception whose ``str()`` contains ``match_substring`` (and ``also_contains``).
-
-    ``error_type`` and ``cause_type`` optionally pin the raised type and its ``__cause__``.
-    """
+    """run_all raises an Exception whose ``str()`` contains ``match_substring`` (and ``also_contains``)."""
 
     match_substring: str
     error_type: type[BaseException] | None = None

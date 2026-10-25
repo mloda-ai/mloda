@@ -200,13 +200,12 @@ loudly.
 
 A `KeyError` from `calculate_feature`, or an exception for which a framework's
 `is_missing_column_error()` returns true (it must not raise), becomes a
-`ValueError` pointing at `input_features()`, chained from the original as
-`__cause__`. Code that caught the backend exception around `run_all` now gets
-that `ValueError` instead.
+`ValueError` pointing at `input_features()`, with the original as `__cause__`.
+Code that caught the backend exception around `run_all` now gets that `ValueError`.
 
 Matched per framework:
 
--   Polars (eager and lazy): `ColumnNotFoundError`, including a lazy frame's schema resolution after `calculate_feature`, not execution errors at the final collect.
+-   Polars (eager and lazy): `ColumnNotFoundError`; execution errors at the final collect are not translated.
 -   Pandas: `UndefinedVariableError` from `query` / `eval`, except local-variable references.
 -   PyArrow and Iceberg: `ArrowInvalid` for an unmatched field reference.
 -   DuckDB: `BinderException` for a column missing from the relation, and `MissingRelationColumnError`.

@@ -1,8 +1,4 @@
-"""Shared base for undeclared column reads driven through ``mloda.run_all``.
-
-Not collected as tests (no ``Test`` prefix). Each framework file subclasses
-``MissingColumnConsumer`` per read style and lists them in ``consumer_fgs``.
-"""
+"""Shared base for undeclared column reads driven through ``mloda.run_all``."""
 
 from typing import Any
 
@@ -49,7 +45,7 @@ class MissingColumnConsumer(FeatureGroup):
 
     @classmethod
     def cause_type(cls) -> Any:
-        """Original exception type the framework raises for this read style."""
+        """Original exception type for this read style."""
         raise NotImplementedError
 
     @classmethod

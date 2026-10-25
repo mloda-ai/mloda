@@ -18,6 +18,8 @@ try:
 except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
+_ARROW_MISSING_FIELD_FRAGMENT = "No match for FieldRef"
+
 
 def arrow_schema_output_schema(schema: Any) -> OutputSchema | None:
     """Read a pyarrow Schema's names/types once and zip them, rather than calling schema.field()
@@ -68,6 +70,10 @@ class PyArrowTable(ComputeFramework):
     @classmethod
     def expected_data_framework(cls) -> Any:
         return pa.Table
+
+    @classmethod
+    def is_missing_column_error(cls, error: Exception) -> bool:
+        return pa is not None and isinstance(error, pa.ArrowInvalid) and _ARROW_MISSING_FIELD_FRAGMENT in str(error)
 
     @classmethod
     def merge_engine(cls) -> type[BaseMergeEngine]:

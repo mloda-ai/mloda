@@ -84,9 +84,15 @@ class PolicySuccess:
 
 @dataclass(frozen=True)
 class PolicyRaises:
-    """run_all raises an Exception whose ``str()`` contains ``match_substring``."""
+    """run_all raises an Exception whose ``str()`` contains ``match_substring`` (and ``also_contains``).
+
+    ``error_type`` and ``cause_type`` optionally pin the raised type and its ``__cause__``.
+    """
 
     match_substring: str
+    error_type: type[BaseException] | None = None
+    cause_type: type[BaseException] | None = None
+    also_contains: tuple[str, ...] = ()
 
 
 PolicyExpectation = PolicySuccess | PolicyRaises
@@ -145,6 +151,12 @@ class PolicyRunAllTestBase(ABC):
                     global_filter=global_filter,
                 )
             assert expectation.match_substring in str(excinfo.value)
+            for substring in expectation.also_contains:
+                assert substring in str(excinfo.value)
+            if expectation.error_type is not None:
+                assert isinstance(excinfo.value, expectation.error_type)
+            if expectation.cause_type is not None:
+                assert isinstance(excinfo.value.__cause__, expectation.cause_type)
             return None
 
         result = mloda.run_all(

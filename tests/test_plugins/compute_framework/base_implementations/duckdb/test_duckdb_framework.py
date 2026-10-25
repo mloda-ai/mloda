@@ -400,3 +400,16 @@ class TestDuckDBTfsConnectionInit(TfsConnectionInitMixin):
         dac = DataAccessCollection(connections={object()})
         with patch.object(duckdb_framework_module, "duckdb", None):
             assert framework_class.pick_connection_from_dac(dac) is None
+
+
+@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
+class TestDuckDBIsMissingColumnError:
+    def test_catalog_exception_is_not_a_missing_column(self) -> None:
+        assert (
+            DuckDBFramework.is_missing_column_error(duckdb.CatalogException("Table with name t does not exist"))
+            is False
+        )
+
+    def test_binder_exception_about_a_function_is_not_a_missing_column(self) -> None:
+        error = duckdb.BinderException("No function matches the given name and argument types 'f(INTEGER)'")
+        assert DuckDBFramework.is_missing_column_error(error) is False

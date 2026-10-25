@@ -19,7 +19,9 @@ try:
     from pyspark.sql import SparkSession, DataFrame
     from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, BooleanType
     import pyspark.sql.functions as F
+    from pyspark.errors import AnalysisException
 except ImportError:
+    AnalysisException = None
     SparkSession = None
     DataFrame = None
     StructType = None
@@ -31,6 +33,8 @@ except ImportError:
     F = None
 
 logger = logging.getLogger(__name__)
+
+_SPARK_MISSING_COLUMN_CONDITION = "UNRESOLVED_COLUMN"
 
 
 class SparkFramework(ComputeFramework):
@@ -86,6 +90,13 @@ class SparkFramework(ComputeFramework):
     @classmethod
     def expected_data_framework(cls) -> Any:
         return cls.spark_dataframe()
+
+    @classmethod
+    def is_missing_column_error(cls, error: Exception) -> bool:
+        if AnalysisException is None or not isinstance(error, AnalysisException):
+            return False
+        condition = error.getCondition() if hasattr(error, "getCondition") else error.getErrorClass()
+        return condition is not None and condition.startswith(_SPARK_MISSING_COLUMN_CONDITION)
 
     @classmethod
     def merge_engine(cls) -> type[BaseMergeEngine]:

@@ -27,6 +27,11 @@ from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base 
     PolicySuccess,
     records_from_frame,
 )
+from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
+    MissingColumnConsumer,
+    MissingColumnRunAllTestBase,
+    UNDECLARED_COLUMN,
+)
 from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
     SiblingDictRoot,
     SiblingDictRunAllTestBase,
@@ -76,6 +81,38 @@ class TestPolarsSiblingDictRunAll(SiblingDictRunAllTestBase):
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 class TestPolarsLazySiblingDictRunAll(SiblingDictRunAllTestBase):
     """Dict-returning sibling consumers end-to-end through run_all on lazy polars."""
+
+    @classmethod
+    def compute_framework_name(cls) -> str:
+        return "PolarsLazyDataFrame"
+
+
+class PolarsWithColumnsReadConsumer(MissingColumnConsumer):
+    @classmethod
+    def read_undeclared(cls, data: Any) -> Any:
+        return data.with_columns(pl.col(UNDECLARED_COLUMN))
+
+    @classmethod
+    def cause_type(cls) -> Any:
+        return pl.exceptions.ColumnNotFoundError
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsMissingColumnRunAll(MissingColumnRunAllTestBase):
+    """Undeclared column reads on eager polars raise an explanatory error."""
+
+    @classmethod
+    def compute_framework_name(cls) -> str:
+        return "PolarsDataFrame"
+
+    @classmethod
+    def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
+        return [PolarsWithColumnsReadConsumer]
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsLazyMissingColumnRunAll(TestPolarsMissingColumnRunAll):
+    """Undeclared column reads on lazy polars raise an explanatory error."""
 
     @classmethod
     def compute_framework_name(cls) -> str:

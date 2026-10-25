@@ -140,7 +140,7 @@ class SecondTransformFeatureGroup(FeatureGroup):
 class PolarsUndeclaredColumnFeatureGroup(FeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PolarsDataFrame, PolarsLazyDataFrame}
+        return {PolarsLazyDataFrame}
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("value")}
@@ -158,24 +158,16 @@ class PolarsUndeclaredColumnFeatureGroup(FeatureGroup):
 class TestPolarsLazyIntegrationWithMlodaAPI:
     """Integration tests for PolarsLazyDataFrame with mloda."""
 
-    @pytest.mark.parametrize(
-        "creator, cfw, with_filter",
-        [
-            pytest.param(PolarsEagerTestDataCreator, PolarsDataFrame, False, id="eager"),
-            pytest.param(PolarsLazyTestDataCreator, PolarsLazyDataFrame, False, id="lazy"),
-            pytest.param(PolarsLazyTestDataCreator, PolarsLazyDataFrame, True, id="lazy_global_filter"),
-        ],
-    )
-    def test_undeclared_column_read_raises_explanatory_error(self, creator: Any, cfw: Any, with_filter: bool) -> None:
-        global_filter = None
-        if with_filter:
-            global_filter = GlobalFilter()
-            global_filter.add_filter("polars_undeclared_read", "min", {"value": 0})
+    def test_undeclared_column_read_with_global_filter_raises_explanatory_error(self) -> None:
+        global_filter = GlobalFilter()
+        global_filter.add_filter("polars_undeclared_read", "min", {"value": 0})
         with pytest.raises(ValueError) as excinfo:
             mloda.run_all(
                 ["polars_undeclared_read"],
-                compute_frameworks=[cfw],
-                plugin_collector=PluginCollector.enabled_feature_groups({creator, PolarsUndeclaredColumnFeatureGroup}),
+                compute_frameworks=[PolarsLazyDataFrame],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {PolarsLazyTestDataCreator, PolarsUndeclaredColumnFeatureGroup}
+                ),
                 global_filter=global_filter,
             )
 

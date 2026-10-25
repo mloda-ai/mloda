@@ -13,6 +13,8 @@ try:
 except ImportError:
     pd = None
 
+_PANDAS_LOCAL_VARIABLE_PREFIX = "local variable"
+
 
 class PandasDataFrame(ComputeFramework):
     @staticmethod
@@ -28,6 +30,14 @@ class PandasDataFrame(ComputeFramework):
     @classmethod
     def expected_data_framework(cls) -> Any:
         return cls.pd_dataframe()
+
+    @classmethod
+    def is_missing_column_error(cls, error: Exception) -> bool:
+        return (
+            pd is not None
+            and isinstance(error, pd.errors.UndefinedVariableError)
+            and not str(error).startswith(_PANDAS_LOCAL_VARIABLE_PREFIX)
+        )
 
     @classmethod
     def merge_engine(cls) -> type[BaseMergeEngine]:

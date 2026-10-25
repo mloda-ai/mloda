@@ -483,3 +483,12 @@ class TestSparkTfsConnectionInit(TfsConnectionInitMixin):
         from unittest.mock import Mock
 
         return Mock(spec=SparkSession)
+
+
+@pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
+class TestSparkIsMissingColumnError:
+    def test_analysis_error_without_unresolved_column_condition_is_not_a_missing_column(self) -> None:
+        from pyspark.errors import AnalysisException
+
+        error = AnalysisException(message="boom")
+        assert SparkFramework.is_missing_column_error(error) is False

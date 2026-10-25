@@ -225,3 +225,13 @@ class TestPandasEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFramewor
     @pytest.fixture
     def non_empty_data(self) -> Any:
         return pd.DataFrame({"a": [1]})
+
+
+@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
+class TestPandasIsMissingColumnError:
+    def test_local_variable_undefined_is_not_a_missing_column(self) -> None:
+        from pandas.errors import UndefinedVariableError
+
+        error = UndefinedVariableError("@x", is_local=True)
+        assert str(error).startswith("local variable")
+        assert PandasDataFrame.is_missing_column_error(error) is False

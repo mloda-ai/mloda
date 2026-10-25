@@ -13,6 +13,11 @@ from mloda.user import Feature
 from mloda.user import ParallelizationMode
 from mloda.user import mloda
 
+from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
+    MissingColumnConsumer,
+    MissingColumnRunAllTestBase,
+    UNDECLARED_COLUMN,
+)
 from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
     SiblingDictRunAllTestBase,
 )
@@ -81,3 +86,37 @@ class TestPandasSiblingDictRunAll(SiblingDictRunAllTestBase):
     @classmethod
     def compute_framework_name(cls) -> str:
         return "PandasDataFrame"
+
+
+class PandasKeyReadConsumer(MissingColumnConsumer):
+    @classmethod
+    def read_undeclared(cls, data: Any) -> Any:
+        return data[UNDECLARED_COLUMN]
+
+    @classmethod
+    def cause_type(cls) -> Any:
+        return KeyError
+
+
+class PandasQueryReadConsumer(MissingColumnConsumer):
+    @classmethod
+    def read_undeclared(cls, data: Any) -> Any:
+        return data.query(f"{UNDECLARED_COLUMN} > 0")
+
+    @classmethod
+    def cause_type(cls) -> Any:
+        from pandas.errors import UndefinedVariableError
+
+        return UndefinedVariableError
+
+
+class TestPandasMissingColumnRunAll(MissingColumnRunAllTestBase):
+    """Undeclared column reads on pandas raise an explanatory error."""
+
+    @classmethod
+    def compute_framework_name(cls) -> str:
+        return "PandasDataFrame"
+
+    @classmethod
+    def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
+        return [PandasKeyReadConsumer, PandasQueryReadConsumer]

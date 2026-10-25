@@ -465,7 +465,9 @@ class ComputeFramework(ABC):
             self.data = data
 
             self.set_column_names()
-        except self.missing_column_error_types() as e:
+        except Exception as e:
+            if not self.is_missing_column_error(e):
+                raise
             self._raise_helpful_missing_column_error(feature_group, e)
 
         self.run_validate_output_features(feature_group, features)
@@ -665,9 +667,9 @@ class ComputeFramework(ABC):
         raise NotImplementedError(f"{cls.__name__} must implement the extract_column_names classmethod")
 
     @classmethod
-    def missing_column_error_types(cls) -> tuple[type[Exception], ...]:
-        """Framework exception types raised when calculate_feature reads a column the data lacks."""
-        return ()
+    def is_missing_column_error(cls, error: Exception) -> bool:
+        """True if error is this framework's undeclared-column read error; must not raise."""
+        return False
 
     def _extract_column_names(self, data: Any) -> set[str]:
         """Extract column names from the framework's data after transform.

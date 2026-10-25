@@ -275,3 +275,8 @@ class TestPyArrowEmptyResultGuard:
 
         # Must not raise.
         framework.run_validate_output_features(_FakeGuardFeatureGroup(), _FakeGuardFeatures())
+
+
+class TestPyArrowIsMissingColumnError:
+    def test_other_arrow_invalid_is_not_a_missing_column(self) -> None:
+        assert PyArrowTable.is_missing_column_error(pa.ArrowInvalid("Could not convert 'a' with type str")) is False

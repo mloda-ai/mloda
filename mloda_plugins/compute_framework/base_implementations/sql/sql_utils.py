@@ -99,6 +99,10 @@ def pick_rename_prefix(
     return f"{stem}{n}_"
 
 
+class MissingRelationColumnError(ValueError):
+    """A named column is not a column of the relation."""
+
+
 def require_exact_columns(
     columns: Iterable[str], names: Iterable[str], pseudo_columns: frozenset[str] = frozenset()
 ) -> None:
@@ -106,7 +110,9 @@ def require_exact_columns(
     existing = set(columns)
     for name in names:
         if name not in existing and fold_identifier(name) not in pseudo_columns:
-            raise ValueError(f"Column {name!r} is not a column of the relation; column names are case-sensitive")
+            raise MissingRelationColumnError(
+                f"Column {name!r} is not a column of the relation; column names are case-sensitive"
+            )
 
 
 def pick_helper_column_name(taken: set[str], prefix: str = "__mloda_rn") -> str:

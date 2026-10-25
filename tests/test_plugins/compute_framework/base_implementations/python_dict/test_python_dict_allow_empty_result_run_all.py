@@ -18,6 +18,11 @@ from mloda.user import Feature
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import mloda
+from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
+    MissingColumnConsumer,
+    MissingColumnRunAllTestBase,
+    UNDECLARED_COLUMN,
+)
 from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
     SiblingDictRunAllTestBase,
 )
@@ -125,3 +130,25 @@ class TestPythonDictSiblingDictRunAll(SiblingDictRunAllTestBase):
     @classmethod
     def compute_framework_name(cls) -> str:
         return "PythonDictFramework"
+
+
+class PythonDictKeyReadConsumer(MissingColumnConsumer):
+    @classmethod
+    def read_undeclared(cls, data: Any) -> Any:
+        return data[UNDECLARED_COLUMN]
+
+    @classmethod
+    def cause_type(cls) -> Any:
+        return KeyError
+
+
+class TestPythonDictMissingColumnRunAll(MissingColumnRunAllTestBase):
+    """Undeclared column reads on PythonDict raise an explanatory error."""
+
+    @classmethod
+    def compute_framework_name(cls) -> str:
+        return "PythonDictFramework"
+
+    @classmethod
+    def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
+        return [PythonDictKeyReadConsumer]

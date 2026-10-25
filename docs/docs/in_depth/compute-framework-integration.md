@@ -198,11 +198,23 @@ loudly.
 
 #### Undeclared column reads
 
-A `KeyError` from `calculate_feature`, or an exception type a framework names in
-`missing_column_error_types()` (Polars: `ColumnNotFoundError`, including a lazy
-frame's schema resolution after `calculate_feature`, not execution errors at the
-final collect), becomes a `ValueError` pointing at `input_features()`, chained
-from the original.
+A `KeyError` from `calculate_feature`, or an exception for which a framework's
+`is_missing_column_error()` returns true (it must not raise), becomes a
+`ValueError` pointing at `input_features()`, chained from the original as
+`__cause__`. Code that caught the backend exception around `run_all` now gets
+that `ValueError` instead.
+
+Matched per framework:
+
+-   Polars (eager and lazy): `ColumnNotFoundError`, including a lazy frame's schema resolution after `calculate_feature`, not execution errors at the final collect.
+-   Pandas: `UndefinedVariableError` from `query` / `eval`, except local-variable references.
+-   PyArrow and Iceberg: `ArrowInvalid` for an unmatched field reference.
+-   DuckDB: `BinderException` for a column missing from the relation, and `MissingRelationColumnError`.
+-   SQLite: `OperationalError` for a missing column, and `MissingRelationColumnError`.
+-   Spark: `AnalysisException` with an `UNRESOLVED_COLUMN` condition.
+-   PythonDict: only the `KeyError` path.
+
+Native Iceberg scan errors and attribute-style reads (`df.x`) are not translated.
 
 ### Column name case sensitivity
 

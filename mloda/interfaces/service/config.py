@@ -23,6 +23,8 @@ _MCP_KEYS = frozenset(
         "sources",
         "classification",
         "inline_data",
+        "max_inline_values",
+        "max_inline_chars",
         "default_classification",
         "allow_options",
         "options",
@@ -31,7 +33,8 @@ _MCP_KEYS = frozenset(
 )
 _SOURCE_KEYS = frozenset({"files", "folders"})
 _ENV_PREFIX = "MLODA_MCP_"
-_ENV_INT_KEYS = frozenset({"max_rows"})
+_INLINE_LIMIT_KEYS = ("max_inline_values", "max_inline_chars")
+_ENV_INT_KEYS = frozenset({"max_rows", *_INLINE_LIMIT_KEYS})
 _ENV_LIST_KEYS = frozenset({"compute_frameworks"})
 _ENV_STR_KEYS = frozenset({"mode"})
 _TTL_PATTERN = re.compile(r"(\d+)([hms])")
@@ -66,6 +69,8 @@ class Settings:
     sources: Mapping[str, SourceConfig] = field(default_factory=dict)
     classification: Mapping[str, str] = field(default_factory=dict)
     inline_data: bool = False
+    max_inline_values: int | None = None
+    max_inline_chars: int | None = None
     default_classification: str | None = None
     allow_options: tuple[str, ...] = ()
     trusted_caller: bool = False
@@ -205,6 +210,11 @@ def _build(raw: Mapping[str, Any], base_dir: Path) -> Settings:
         raise ConfigError("'deny_feature_groups' names the removed ApiInputDataFeature; use ApiDataFG instead")
     if raw.get("max_rows") is not None:
         kwargs["max_rows"] = _int(raw["max_rows"], "max_rows")
+    for key in _INLINE_LIMIT_KEYS:
+        if raw.get(key) is not None:
+            kwargs[key] = _int(raw[key], key)
+            if kwargs[key] < 1:
+                raise ConfigError(f"'{key}' must be an integer of at least 1")
     if "max_preview_rows" in raw:
         kwargs["max_preview_rows"] = _int(raw["max_preview_rows"], "max_preview_rows")
     if "plan_ttl" in raw:

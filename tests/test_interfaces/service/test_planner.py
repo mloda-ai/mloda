@@ -1327,3 +1327,48 @@ class TestDefaultOptions:
 
         assert [step["feature_group"] for step in result["steps"]] == ["CsvFG", "PlannerDoubleMcp4"]
         assert DEFAULT_VALUE not in json.dumps(result)
+
+
+class TestInlineLimits:
+    DATA: ClassVar[dict[str, Any]] = {
+        "A": {"x": ["ab", "cd", None, 12345]},
+        "B": {"y": [1.5, "e"]},
+    }  # 6 values, 5 chars
+
+    def _request(self) -> dict[str, Any]:
+        return {"features": ["x"], "data": self.DATA}
+
+    def test_values_over_limit(self, tmp_path: Path) -> None:
+        result = _explain(tmp_path, self._request(), inline_data=True, max_inline_values=5)
+
+        error = _error(result, "limit_exceeded")
+        assert _has_detail(error, reason="inline_values_over_limit", count=6, limit=5)
+        assert "ab" not in json.dumps(result)
+
+    def test_chars_over_limit(self, tmp_path: Path) -> None:
+        result = _explain(tmp_path, self._request(), inline_data=True, max_inline_chars=4)
+
+        error = _error(result, "limit_exceeded")
+        assert _has_detail(error, reason="inline_chars_over_limit", count=5, limit=4)
+        assert "ab" not in json.dumps(result)
+
+    def test_both_over_limit_report_both(self, tmp_path: Path) -> None:
+        result = _explain(tmp_path, self._request(), inline_data=True, max_inline_values=2, max_inline_chars=1)
+
+        error = _error(result, "limit_exceeded")
+        assert _has_detail(error, reason="inline_values_over_limit", count=6, limit=2)
+        assert _has_detail(error, reason="inline_chars_over_limit", count=5, limit=1)
+
+    def test_exactly_at_limit_passes(self, tmp_path: Path) -> None:
+        request = {"features": ["x"], "data": {"A": {"x": ["ab", "cd", None, 12345]}}}
+        _success(_explain(tmp_path, request, inline_data=True, max_inline_values=4, max_inline_chars=4))
+
+    def test_limit_is_checked_before_planning(self, tmp_path: Path) -> None:
+        request = {"features": ["no_such_column"], "data": self.DATA}
+
+        result = _explain(tmp_path, request, inline_data=True, max_inline_values=1)
+
+        _error(result, "limit_exceeded")
+
+    def test_disabled_inline_data_stays_policy_denied(self, tmp_path: Path) -> None:
+        _error(_explain(tmp_path, self._request(), max_inline_values=1), "policy_denied")

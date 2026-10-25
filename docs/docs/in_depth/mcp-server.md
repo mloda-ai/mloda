@@ -40,6 +40,8 @@ alternatives = { customer_email = ["customer_id"] }
 preview_allows = ["public", "internal"]
 max_preview_rows = 20
 inline_data = false                    # allow inline request data (trusted callers only)
+# max_inline_values = 1000             # refuse inline data with more values (default: no limit)
+# max_inline_chars = 10000             # refuse inline data with more string characters (default: no limit)
 plan_ttl = "24h"
 # default_classification = "internal"  # label for unlisted leaf columns (default: unclassified)
 # allow_options = ["window"]           # option keys a request may set (default: none)
@@ -59,7 +61,8 @@ model = "small"
 timeout = 30
 ```
 
-`MLODA_MCP_MODE`, `MLODA_MCP_MAX_ROWS` and `MLODA_MCP_COMPUTE_FRAMEWORKS` override the file. `MLODA_MCP_SIGNING_KEY`
+`MLODA_MCP_MODE`, `MLODA_MCP_MAX_ROWS`, `MLODA_MCP_MAX_INLINE_VALUES`, `MLODA_MCP_MAX_INLINE_CHARS` and
+`MLODA_MCP_COMPUTE_FRAMEWORKS` override the file. `MLODA_MCP_SIGNING_KEY`
 signs plan ids; without it every process uses a random key, so a plan id is valid only in the process that issued it.
 
 `[mcp.options]` and `[mcp.context_options]` are operator defaults merged under each requested feature; a feature's own
@@ -92,6 +95,8 @@ The resource `mloda://schema/feature-request` is the JSON Schema of a request. A
 columns are unclassified, so the preview is empty unless you classify them in `[mcp.classification]`. Use it for trusted
 callers only, since row counts over caller-chosen values can reveal plugin data;
 `deny_feature_groups = ["ApiDataFG"]` turns it off entirely.
+`max_inline_values` and `max_inline_chars` (integers, at least 1) refuse oversized inline data as `limit_exceeded`
+before planning and again on run. Inline data is also capped by the plan id size (16384 JSON characters).
 
 Every result is a one-line summary followed by the result as JSON, which is also the structured content. A failed
 call has `isError` set and one error shape: `{"error": {"code", "message", "details", "audit_id"}}` with the codes

@@ -1,6 +1,8 @@
 """Settings loading for the MCP service layer: TOML file, env vars, overrides, strictness, config hash."""
 
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -357,3 +359,31 @@ def test_config_hash_changes_with_default_options() -> None:
 def test_in_features_default_option_is_config_error(tmp_path: Path, table: str) -> None:
     with pytest.raises(ConfigError, match="in_features"):
         load_settings(_write(tmp_path, f'[mcp.{table}]\nin_features = "x"\n'), env={})
+
+
+@pytest.mark.parametrize("key", ["max_inline_values", "max_inline_chars"])
+class TestInlineLimits:
+    def test_default_is_none(self, key: str) -> None:
+        assert getattr(Settings(), key) is None
+
+    def test_toml_loads(self, tmp_path: Path, key: str) -> None:
+        assert getattr(load_settings(_write(tmp_path, f"[mcp]\n{key} = 5\n"), env={}), key) == 5
+
+    @pytest.mark.parametrize("value", ["0", "-1", "true", '"5"', "1.5"])
+    def test_bad_toml_value_is_config_error(self, tmp_path: Path, key: str, value: str) -> None:
+        with pytest.raises(ConfigError, match=f"'{key}' must be"):
+            load_settings(_write(tmp_path, f"[mcp]\n{key} = {value}\n"), env={})
+
+    def test_env_loads_and_wins_over_file(self, tmp_path: Path, key: str) -> None:
+        env = {f"MLODA_MCP_{key.upper()}": "7"}
+        assert getattr(load_settings(None, env=env), key) == 7
+        assert getattr(load_settings(_write(tmp_path, f"[mcp]\n{key} = 5\n"), env=env), key) == 7
+
+    @pytest.mark.parametrize("value", ["0", "-3", "many", "1.5", ""])
+    def test_bad_env_value_is_config_error(self, key: str, value: str) -> None:
+        with pytest.raises(ConfigError):
+            load_settings(None, env={f"MLODA_MCP_{key.upper()}": value})
+
+    def test_config_hash_changes(self, key: str) -> None:
+        changes: dict[str, Any] = {key: 5}
+        assert Settings().config_hash() != replace(Settings(), **changes).config_hash()

@@ -834,3 +834,28 @@ class TestDefaultOptions:
     def test_plain_request_runs_with_context_defaults(self, tmp_path: Path) -> None:
         result = _success(_run(tmp_path, context_options={"dctx": 1}))
         assert result["status"] == "completed"
+
+
+class TestInlineLimits:
+    REQUEST: ClassVar[dict[str, Any]] = {"features": ["token"], "data": {"Tokens": {"token": ["007", "", None]}}}
+
+    def test_plan_at_the_limit_runs(self, tmp_path: Path) -> None:
+        result = _run(tmp_path, self.REQUEST, inline_data=True, max_inline_values=3, max_inline_chars=3)
+
+        assert _only_table(result)["row_count"] == 3
+
+    def test_run_replans_through_the_inline_limit_check(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        planner = _planner(_settings(tmp_path, inline_data=True, max_inline_values=3))
+        plan_id = _plan_id(planner, self.REQUEST)
+        calls: list[str] = []
+        original = Planner._inline_refusal
+
+        def spy(self: Planner, request: Any) -> dict[str, Any] | None:
+            calls.append("checked")
+            return original(self, request)
+
+        monkeypatch.setattr(Planner, "_inline_refusal", spy)
+
+        _success(Runner(planner).run(plan_id))
+
+        assert calls

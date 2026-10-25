@@ -6,6 +6,7 @@ from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
+from mloda.user import GlobalFilter
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
@@ -158,18 +159,24 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
     """Integration tests for PolarsLazyDataFrame with mloda."""
 
     @pytest.mark.parametrize(
-        "creator, cfw",
+        "creator, cfw, with_filter",
         [
-            (PolarsEagerTestDataCreator, PolarsDataFrame),
-            (PolarsLazyTestDataCreator, PolarsLazyDataFrame),
+            pytest.param(PolarsEagerTestDataCreator, PolarsDataFrame, False, id="eager"),
+            pytest.param(PolarsLazyTestDataCreator, PolarsLazyDataFrame, False, id="lazy"),
+            pytest.param(PolarsLazyTestDataCreator, PolarsLazyDataFrame, True, id="lazy_global_filter"),
         ],
     )
-    def test_undeclared_column_read_raises_explanatory_error(self, creator: Any, cfw: Any) -> None:
+    def test_undeclared_column_read_raises_explanatory_error(self, creator: Any, cfw: Any, with_filter: bool) -> None:
+        global_filter = None
+        if with_filter:
+            global_filter = GlobalFilter()
+            global_filter.add_filter("polars_undeclared_read", "min", {"value": 0})
         with pytest.raises(ValueError) as excinfo:
             mloda.run_all(
                 ["polars_undeclared_read"],
                 compute_frameworks=[cfw],
                 plugin_collector=PluginCollector.enabled_feature_groups({creator, PolarsUndeclaredColumnFeatureGroup}),
+                global_filter=global_filter,
             )
 
         message = str(excinfo.value)

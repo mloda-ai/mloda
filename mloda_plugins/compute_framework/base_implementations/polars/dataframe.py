@@ -33,7 +33,7 @@ class PolarsDataFrame(ComputeFramework):
 
     @classmethod
     def missing_column_error_types(cls) -> tuple[type[Exception], ...]:
-        return (pl.exceptions.ColumnNotFoundError,)
+        return () if pl is None else (pl.exceptions.ColumnNotFoundError,)
 
     @classmethod
     def merge_engine(cls) -> type[BaseMergeEngine]:

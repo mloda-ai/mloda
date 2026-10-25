@@ -439,6 +439,7 @@ class ComputeFramework(ABC):
         features = self.set_filter_engine(features)
         features = self.set_mask_engine(features)
         self._adopt_connection(self.data)
+        # spans to set_column_names: a lazy frame may first resolve its schema in filter validation or there
         try:
             data = self.run_calculate_feature(feature_group, features)
             data = self._append_dict_to_frame(feature_group, data)
@@ -463,7 +464,6 @@ class ComputeFramework(ABC):
             self._pinned_frame = data if was_pinned else None
             self.data = data
 
-            # a lazy frame only resolves its schema here
             self.set_column_names()
         except self.missing_column_error_types() as e:
             self._raise_helpful_missing_column_error(feature_group, e)
@@ -1193,7 +1193,7 @@ class ComputeFramework(ABC):
         feature_name = feature_group.get_class_name()
         error_message = (
             f"Feature '{feature_name}' failed with a {type(error).__name__}: {error}\n"
-            "If the key is a column, declare it in input_features(); calculate_feature may only read declared columns."
+            "If it names a column, declare it in input_features(); calculate_feature may only read declared columns."
         )
         raise ValueError(error_message) from error
 

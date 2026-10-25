@@ -199,9 +199,10 @@ loudly.
 #### Undeclared column reads
 
 A `KeyError` from `calculate_feature`, or an exception type a framework names in
-`missing_column_error_types()` (Polars: `ColumnNotFoundError`, also when a lazy
-frame only resolves its schema later), becomes a `ValueError` pointing at
-`input_features()`, chained from the original.
+`missing_column_error_types()` (Polars: `ColumnNotFoundError`, including a lazy
+frame's schema resolution after `calculate_feature`, not execution errors at the
+final collect), becomes a `ValueError` pointing at `input_features()`, chained
+from the original.
 
 ### Column name case sensitivity
 

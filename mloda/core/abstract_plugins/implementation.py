@@ -3,6 +3,7 @@
 import inspect
 import types
 import typing
+import weakref
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
@@ -24,9 +25,19 @@ from mloda.core.abstract_plugins.operation_feature_group import OperationFeature
 G = TypeVar("G", bound=FeatureGroup)
 
 
+_CONCRETE_VERDICTS: weakref.WeakKeyDictionary[type, bool] = weakref.WeakKeyDictionary()
+
+
+def _has_abstract_member(cls: Any) -> bool:
+    """Any abstract member left; checked by hand because ABCMeta sets the flag after __init_subclass__."""
+    return any(getattr(inspect.getattr_static(cls, name, None), "__isabstractmethod__", False) for name in dir(cls))
+
+
 def _is_concrete(cls: Any) -> bool:
-    """No abstract member left; checked by hand because ABCMeta sets the flag after __init_subclass__."""
-    return not any(getattr(inspect.getattr_static(cls, name, None), "__isabstractmethod__", False) for name in dir(cls))
+    """No abstract member left; the verdict is fixed once the class exists, so it is cached."""
+    if cls not in _CONCRETE_VERDICTS:
+        _CONCRETE_VERDICTS[cls] = not _has_abstract_member(cls)
+    return _CONCRETE_VERDICTS[cls]
 
 
 def _serves_groups(group: Any) -> bool:

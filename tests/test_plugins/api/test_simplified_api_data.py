@@ -724,6 +724,25 @@ class IdxCorrectLinkFG(IdxJoinedBase):
     LINK = _idx_link("idx_a_id", "idx_b_id")
 
 
+class IdxIndexedApiDataFG(ApiDataFG):
+    """ApiDataFG subclass declaring index_columns() for the idx_ api_data sets; inert for other names."""
+
+    @classmethod
+    def find_sources(
+        cls, route: Any, feature_name: str, options: Any, data_access_collection: Any
+    ) -> list[SourceMatch]:
+        if not feature_name.startswith("idx_"):
+            return []
+        return super().find_sources(route, feature_name, options, data_access_collection)
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [Index(("idx_a_id",)), Index(("idx_b_id",))]
+
+
+_IDX_EXTRA = pytest.mark.parametrize("extra", [None, {IdxIndexedApiDataFG}], ids=["plain", "index_columns"])
+
+
 class AaIdxUnknownSourceFG(SourceFeatureGroup):
     """Pointed-only source that cannot list its columns, claims any name, and supplies only idx_u_id and idx_u_val."""
 
@@ -789,14 +808,18 @@ class TestApiDataIndexColumnsAcrossSets:
     def _run(self, features: list[Any], joined: type[FeatureGroup] = IdxNoLinkFG, **kwargs: Any) -> list[Any]:
         return list(self._call(mloda.run_all, features, joined, **kwargs))
 
-    def test_swapped_index_on_discriminated_link_raises_at_prepare(self) -> None:
+    @_IDX_EXTRA
+    def test_swapped_index_on_discriminated_link_raises_at_prepare(self, extra: set[type[FeatureGroup]] | None) -> None:
         with pytest.raises(ValueError, match=r"(?s)idx_b_id.*api_data:A|api_data:A.*idx_b_id"):
-            self._prepare(["IdxSwappedLinkFG"], IdxSwappedLinkFG)
+            self._prepare(["IdxSwappedLinkFG"], IdxSwappedLinkFG, extra=extra)
 
-    def test_swapped_index_on_global_link_raises_even_when_not_joined(self) -> None:
+    @_IDX_EXTRA
+    def test_swapped_index_on_global_link_raises_even_when_not_joined(
+        self, extra: set[type[FeatureGroup]] | None
+    ) -> None:
         link = _idx_link("idx_b_id", "idx_a_id")
         with pytest.raises(ValueError, match=r"(?s)idx_b_id.*api_data:A|api_data:A.*idx_b_id"):
-            self._prepare([Feature("idx_a_val", options=dict(_IDX_A))], links={link})
+            self._prepare([Feature("idx_a_val", options=dict(_IDX_A))], links={link}, extra=extra)
 
     def test_undiscriminated_one_sided_link_with_index_from_another_set_raises_at_prepare(self) -> None:
         link = Link.inner(JoinSpec(ApiDataFG, Index(("idx_b_id",))), JoinSpec(IdxOtherCreatorFG, Index(("idx_cr_id",))))
@@ -814,8 +837,9 @@ class TestApiDataIndexColumnsAcrossSets:
         cols = {c: sorted(r[c].tolist()) for r in res for c in r.columns}
         assert cols == {"idx_a_val": [10, 20, 30], "idx_b_val": [100, 200, 300]}
 
-    def test_discriminated_link_with_correct_sides_joins(self) -> None:
-        res = self._run(["IdxCorrectLinkFG"], IdxCorrectLinkFG)
+    @_IDX_EXTRA
+    def test_discriminated_link_with_correct_sides_joins(self, extra: set[type[FeatureGroup]] | None) -> None:
+        res = self._run(["IdxCorrectLinkFG"], IdxCorrectLinkFG, extra=extra)
         assert len(res) == 1
         assert sorted(res[0]["IdxCorrectLinkFG"].tolist()) == ["10_100", "20_200", "30_300"]
 

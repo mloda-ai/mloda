@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -41,6 +42,47 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         """Add the result to the DataFrame."""
         data[feature_name] = result
         return data
+
+    _WINDOW_FUNCTIONS = ("sum", "min", "max", "avg", "mean", "count", "std", "var", "median", "first", "last")
+
+    @classmethod
+    def _roll_column(cls, col: pd.Series, window_function: str, span: pd.Timedelta, starts: np.ndarray) -> pd.Series:
+        """Rolling aggregate of one column; unlike pandas rolling, +-inf stay values (only NaN is missing)."""
+        if window_function in ("first", "last"):
+            values = col.to_numpy(dtype="float64", na_value=np.nan)
+            picked = values[starts] if window_function == "first" else values
+            return pd.Series(picked, index=col.index)
+
+        rolling = col.rolling(window=span, min_periods=0 if window_function == "sum" else 1, closed="right")
+        if window_function == "count":
+            return rolling.count()
+        result = getattr(rolling, {"avg": "mean"}.get(window_function, window_function))()
+
+        values = col.to_numpy(dtype="float64", na_value=np.nan)
+        inf_cum = np.concatenate(([0], np.cumsum(np.isinf(values))))
+        affected = np.flatnonzero(inf_cum[1:] - inf_cum[starts] > 0)
+        if len(affected) == 0:
+            return result
+
+        fixed = result.to_numpy(dtype="float64", na_value=np.nan, copy=True)
+        funcs: dict[str, Callable[[np.ndarray], Any]] = {
+            "sum": np.sum,
+            "min": np.min,
+            "max": np.max,
+            "mean": np.mean,
+            "avg": np.mean,
+            "median": np.median,
+        }
+        with np.errstate(invalid="ignore"):
+            for i in affected:
+                window = values[starts[i] : i + 1]
+                window = window[~np.isnan(window)]
+                if window_function in ("std", "var"):
+                    if len(window) >= 2:
+                        fixed[i] = np.nan
+                else:
+                    fixed[i] = funcs[window_function](window)
+        return pd.Series(fixed, index=col.index)
 
     @classmethod
     def _perform_window_operation(
@@ -93,32 +135,19 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         # Pass a Timedelta, not an offset string: aliases like "3M"/"3Y" raise
         # "passed window 3M is not compatible with a datetimelike index".
         span_delta = pd.Timedelta(span)
-        rolling_window = selected_data.rolling(
-            window=span_delta, min_periods=0 if window_function == "sum" else 1, closed="right"
-        )
-
-        if window_function == "sum":
-            result = rolling_window.sum()
-        elif window_function == "min":
-            result = rolling_window.min()
-        elif window_function == "max":
-            result = rolling_window.max()
-        elif window_function in ["avg", "mean"]:
-            result = rolling_window.mean()
-        elif window_function == "count":
-            result = rolling_window.count()
-        elif window_function == "std":
-            result = rolling_window.std()
-        elif window_function == "var":
-            result = rolling_window.var()
-        elif window_function == "median":
-            result = rolling_window.median()
-        elif window_function == "first":
-            result = rolling_window.apply(lambda x: x.iloc[0] if len(x) > 0 else None, raw=False)
-        elif window_function == "last":
-            result = rolling_window.apply(lambda x: x.iloc[-1] if len(x) > 0 else None, raw=False)
-        else:
+        if window_function not in cls._WINDOW_FUNCTIONS:
             raise ValueError(f"Unsupported window function: {window_function}")
+
+        # Window start per sorted row; the window ends at the current row (duplicates included).
+        ns = sorted_index.as_unit("ns").asi8
+        starts = np.searchsorted(ns, ns - span_delta.value, side="right")
+
+        if isinstance(selected_data, pd.Series):
+            result = cls._roll_column(selected_data, window_function, span_delta, starts)
+        else:
+            result = pd.DataFrame(
+                {c: cls._roll_column(selected_data[c], window_function, span_delta, starts) for c in selected_data}
+            )
 
         # For multi-column, aggregate across columns (axis=1) after rolling window
         if len(in_features) > 1:

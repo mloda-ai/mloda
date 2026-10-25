@@ -95,6 +95,7 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_w
 )
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     ToySourceBase,
+    ToySourceFG,
     neutral_csv_group,
     toy_dac,
 )
@@ -2444,6 +2445,28 @@ class TestLeavesConnectionOnResult:
         requested = [s for s in plan if s.step_kind == "compute" and s.requested_feature_names]
         assert [s.feature_group for s in requested] == [LeaveSqliteChain]
         assert [s.leaves_connection for s in requested] == ["mine"]
+
+
+class PlanInfoNeutralDictFG(ToySourceFG):
+    @classmethod
+    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+        return {name: list(match.access[name]) for name in features.get_all_names()}
+
+    @classmethod
+    def neutral_type(cls, match: SourceMatch) -> type | None:
+        return dict
+
+
+def test_a_default_plan_reports_the_framework_a_neutral_source_loads_natively() -> None:
+    plan = mloda.explain(
+        [Feature("toyfmt_plan_nat")],
+        plugin_collector=PluginCollector.enabled_feature_groups({PlanInfoNeutralDictFG}),
+        data_access_collection=toy_dac(h1={"toyfmt_plan_nat": [1]}),
+    )
+    step = next(s for s in plan if s.step_kind == "compute")
+
+    assert step.compute_framework is PythonDictFramework
+    assert step.compute_framework_reason == "loads natively"
 
 
 class DuckSourceOpFG(OperationFeatureGroup):

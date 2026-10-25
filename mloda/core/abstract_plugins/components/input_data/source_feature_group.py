@@ -187,6 +187,11 @@ class SourceFeatureGroup(FeatureGroup):
         return None
 
     @classmethod
+    def neutral_type(cls, match: SourceMatch) -> type | None:
+        """The type load_neutral returns, None when unknown; a default run prefers frameworks taking it as is."""
+        return None
+
+    @classmethod
     def unknown_columns_reason(cls, match: SourceMatch) -> str | None:
         """Why the source cannot enumerate its columns, None when no reason is known."""
         return None

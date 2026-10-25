@@ -72,6 +72,7 @@ LIST_ORDER = "your list order"
 DEFAULT_ORDER = "default order"
 CONVERTS_LATER = "converts later"
 READS_IN_PLACE = "reads in place"
+LOADS_NATIVELY = "loads natively"
 PREFERS_MATCHING = "prefers a matching version"
 DIFFERS = "runs a version that differs"
 
@@ -220,6 +221,7 @@ class ChooseComputeFrameworks:
         self._penalty: list[dict[Framework, int]] = []
         self._free: dict[int, Framework] = {}
         self._home: list[frozenset[Framework] | None] = []
+        self._home_reason: list[str] = []
         self._homed = True
         self._unhomed: dict[int, Framework] = {}
         self.pin_frameworks = pin_frameworks or {}
@@ -250,7 +252,9 @@ class ChooseComputeFrameworks:
             {} if self._is_pinned(block) else {fw: 1 for fw, found in differs.items() if found}
             for block, differs in zip(blocks, self._differs)
         ]
-        self._home = [self._block_home(block) for block in blocks]
+        homes = [self._block_home(block) for block in blocks]
+        self._home = [home for home, _ in homes]
+        self._home_reason = [why for _, why in homes]
         rules = self._rules(blocks, owner) + borrowed
         groups = self._cost_groups(blocks, owner)
         depth = self._feature_depths()
@@ -308,21 +312,28 @@ class ChooseComputeFrameworks:
                 result[framework] = tuple(sorted(r for r in found if r is not None))
         return result
 
-    def _block_home(self, block: _Block) -> frozenset[Framework] | None:
-        """Frameworks that accept the connection the block's source is read from and can serve its source group."""
+    def _block_home(self, block: _Block) -> tuple[frozenset[Framework] | None, str]:
+        """Frameworks that read the block's source in place, or on a default run take its neutral type as is."""
         match = block.features[0].input_data_match
         if match is None or not issubclass(block.fg, SourceFeatureGroup):
-            return None
+            return None, READS_IN_PLACE
         conn = block.fg.match_connection(match[1])
-        if conn is None:
-            return None
-        home = frozenset(
-            fw
-            for fw in block.domain
-            if fw._connection_matches(conn)
-            and serving_implementation(block.fg, fw, self.implementations, stop_after="load_neutral")
-        )
-        return home or None
+        if conn is not None:
+            home = frozenset(fw for fw in block.domain if fw._connection_matches(conn) and self._serves(block, fw))
+            return home or None, READS_IN_PLACE
+        neutral = None if self.positions else block.fg.neutral_type(match[1])
+        if neutral is None:
+            return None, LOADS_NATIVELY
+        loads = frozenset(fw for fw in block.domain if self._takes(fw, neutral) or self._serves(block, fw))
+        return loads or None, LOADS_NATIVELY
+
+    def _serves(self, block: _Block, framework: Framework) -> bool:
+        return bool(serving_implementation(block.fg, framework, self.implementations, stop_after="load_neutral"))
+
+    @staticmethod
+    def _takes(framework: Framework, neutral: type) -> bool:
+        expected = framework.expected_data_framework()
+        return isinstance(expected, type) and issubclass(neutral, expected)
 
     def _is_pinned(self, block: _Block) -> bool:
         return any(f.framework_pinned or f.uuid in self.pinned for f in block.features)
@@ -984,7 +995,7 @@ class ChooseComputeFrameworks:
         earlier = [fw for fw in alternatives if self.rank(fw) < chosen_rank]
         base = step_cost(None)
         if self._unhomed.get(index, chosen) is not chosen:
-            return READS_IN_PLACE + suffix
+            return self._home_reason[index] + suffix
         free = self._free.get(index)
         if free is not None and free is not chosen and not found and self._differs[index].get(free):
             return PREFERS_MATCHING

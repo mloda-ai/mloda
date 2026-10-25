@@ -58,7 +58,7 @@ class PythonDictTextCleaning(Implementation[TextCleaningFeatureGroup]):
         Returns:
             The source text as a list of strings
         """
-        return ["" if cls._is_missing(value) else str(value) for value in data.get(feature_name, [])]
+        return ["" if cls._is_missing(value) else str(value) for value in data[feature_name]]
 
     @staticmethod
     def _is_missing(value: Any) -> bool:

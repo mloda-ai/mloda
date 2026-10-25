@@ -5,6 +5,7 @@ Tests for the GeoDistanceFeatureGroup.
 import pandas as pd
 import pytest
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 
 from mloda.user import Feature
@@ -211,19 +212,15 @@ class TestPandasGeoDistance:
     @pytest.mark.parametrize(
         ("name", "missing", "available"),
         [
-            ("sf&invalid__haversine_distance", "['invalid']", "['la', 'nyc', 'point1', 'point2', 'sf']"),
-            ("zz&yy__haversine_distance", "['zz', 'yy']", "['la', 'nyc', 'point1', 'point2', 'sf']"),
+            ("sf&invalid__haversine_distance", ("invalid",), ("la", "nyc", "point1", "point2", "sf")),
+            ("zz&yy__haversine_distance", ("yy", "zz"), ("la", "nyc", "point1", "point2", "sf")),
         ],
         ids=["one_missing", "both_missing"],
     )
-    def test_source_check_is_strict_and_lists_sorted_columns(self, name: str, missing: str, available: str) -> None:
-        feature_set = FeatureSet()
-        feature_set.add(Feature(name))
-
-        with pytest.raises(ValueError) as exc_info:
-            PandasGeoDistance.calculate(GeoDistanceFeatureGroup, self.df.copy(), feature_set, None)
-
-        assert str(exc_info.value) == f"Source features not found in data: {missing}. Available columns: {available}"
+    def test_source_check_is_strict_and_lists_sorted_columns(
+        self, name: str, missing: tuple[str, ...], available: tuple[str, ...]
+    ) -> None:
+        assert_core_rejects_missing_input(PandasGeoDistance, self.df.copy(), name, missing, available)
 
     def test_haversine_distance(self) -> None:
         """Test calculation of haversine distance."""

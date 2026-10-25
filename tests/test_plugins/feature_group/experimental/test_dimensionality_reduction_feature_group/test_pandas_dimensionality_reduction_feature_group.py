@@ -8,6 +8,7 @@ import pytest
 import pandas as pd
 import numpy as np
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.user import Options
@@ -70,18 +71,19 @@ class TestPandasDimensionalityReduction:
 
     def test_reduce_partial_source_presence_raises(self, sample_data: pd.DataFrame) -> None:
         """One missing source name raises even when another is present."""
-        with pytest.raises(ValueError, match="Source features not found in data:") as exc:
-            self._run_reduce(sample_data, "feature0,invalid_feature__pca_2d")
-        assert "invalid_feature" in str(exc.value)
-        assert "Available columns" in str(exc.value)
-        assert "feature1" in str(exc.value)
+        error = assert_core_rejects_missing_input(
+            PandasDimensionalityReduction, sample_data, "feature0,invalid_feature__pca_2d", ("invalid_feature",)
+        )
+        assert "feature1" in error.available_columns
 
     def test_reduce_lists_every_missing_source(self, sample_data: pd.DataFrame) -> None:
         """Every missing source name appears in the message."""
-        with pytest.raises(ValueError, match="Source features not found in data:") as exc:
-            self._run_reduce(sample_data, "missing_a,feature0,missing_b__pca_2d")
-        assert "missing_a" in str(exc.value)
-        assert "missing_b" in str(exc.value)
+        assert_core_rejects_missing_input(
+            PandasDimensionalityReduction,
+            sample_data,
+            "missing_a,feature0,missing_b__pca_2d",
+            ("missing_a", "missing_b"),
+        )
 
     def test_add_result_to_data(self, sample_data: pd.DataFrame) -> None:
         """Test the _add_result_to_data method."""
@@ -257,13 +259,9 @@ class TestPandasDimensionalityReduction:
 
     def test_missing_source_feature(self, sample_data: pd.DataFrame) -> None:
         """Test with a missing source feature."""
-        # Create a feature set with a missing source feature
-        feature_set = FeatureSet()
-        feature_set.add(Feature("missing_feature__pca_2d"))
-
-        # Calculate the feature (should raise an error)
-        with pytest.raises(ValueError, match="Source features not found in data:"):
-            PandasDimensionalityReduction.calculate(DimensionalityReductionFeatureGroup, sample_data, feature_set, None)
+        assert_core_rejects_missing_input(
+            PandasDimensionalityReduction, sample_data, "missing_feature__pca_2d", ("missing_feature",)
+        )
 
     def test_unsupported_algorithm(self, sample_data: pd.DataFrame) -> None:
         """Test with an unsupported algorithm."""

@@ -226,20 +226,13 @@ class EncodingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
         add_column: Callable[[Any, str, Any], Any],
         columns: Callable[[Any], set[str]],
     ) -> Any:
-        """Shared loop: check the source, load or fit the encoder, apply it, add the result."""
+        """Shared loop: load or fit the encoder, apply it, add the result."""
         # Process each requested feature
         for feature in features.get_sorted_features():
             encoder_type, source_feature = cls._extract_encoder_type_and_source_feature(feature)
 
             # Remove ~suffix if present (for OneHot column patterns like category~1)
             base_source_feature = cls.get_column_base_feature(source_feature)
-
-            available = columns(data)
-            if base_source_feature not in available:
-                raise ValueError(
-                    f"Source features not found in data: {[base_source_feature]}. "
-                    f"Available columns: {sorted(available, key=str)}"
-                )
 
             # Create unique artifact key that includes encoder type and source feature
             # This ensures different encoders on different features get separate artifacts

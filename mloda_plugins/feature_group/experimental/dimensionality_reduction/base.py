@@ -319,13 +319,6 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, OperationFeat
                 feature
             )
 
-            available = columns(data)
-            missing = [n for n in source_features if n not in available]
-            if missing:
-                raise ValueError(
-                    f"Source features not found in data: {missing}. Available columns: {sorted(available, key=str)}"
-                )
-
             result = perform(data, algorithm, dimension, source_features, options)
             data = add_column(data, feature.name, result)
         return data

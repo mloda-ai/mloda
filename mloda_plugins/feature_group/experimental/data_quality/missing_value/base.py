@@ -275,7 +275,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
         add_column: Callable[[Any, str, Any], Any],
         columns: Callable[[Any], set[str]],
     ) -> Any:
-        """Shared loop: resolve each feature's sources, check them, run perform, add the result."""
+        """Shared loop: resolve each feature's sources, run perform, add the result."""
         for feature in features.get_sorted_features():
             imputation_method, source_feature = cls._extract_imputation_method_and_source_feature(feature)
 
@@ -285,21 +285,9 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
             constant_value = feature.options.get("constant_value")
             group_by_features = feature.options.get("group_by_features")
 
-            cls._require_columns(available, resolved_columns)
-            for group_feature in group_by_features or []:
-                cls._require_columns(available, [group_feature])
-
             if imputation_method == "constant" and constant_value is None:
                 raise ValueError("Constant value must be provided for constant imputation method")
 
             result = perform(data, imputation_method, resolved_columns, constant_value, group_by_features)
             data = add_column(data, feature.name, result)
         return data
-
-    @classmethod
-    def _require_columns(cls, available: set[str], names: list[str]) -> None:
-        missing = [name for name in names if name not in available]
-        if missing:
-            raise ValueError(
-                f"Source features not found in data: {missing}. Available columns: {sorted(available, key=str)}"
-            )

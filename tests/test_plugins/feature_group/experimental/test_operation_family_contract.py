@@ -62,6 +62,7 @@ from mloda_plugins.feature_group.experimental.time_window.base import TimeWindow
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow
 from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import (
     PandasZeroRowAdapter,
     PolarsLazyZeroRowAdapter,
@@ -431,3 +432,27 @@ def test_loop_runs_on_declared_inputs_only(name: str, impl: type[Any], options: 
     columns = {str(c) for c in impl.compute_framework.extract_column_names(result)}
     output = str(feature.name)
     assert any(c == output or c.startswith(f"{output}~") for c in columns), columns
+
+
+def _dropped_input_cases() -> list[Any]:
+    cases = []
+    for name, family in OPERATION_FAMILIES.items():
+        for impl in family[1]:
+            skip = pytest.mark.skipif(not impl.compute_framework.is_available(), reason="dependency not installed")
+            for options in LOOP_INPUT_CASES[name][1]:
+                declared = family[0].declared_input_features(options, family[3])
+                assert declared is not None
+                for dropped in sorted(str(f.name) for f in declared):
+                    label = f"{name}-{impl.__name__}-{_variant_label(options)}-{dropped}"
+                    cases.append(pytest.param(name, impl, options, dropped, id=label, marks=skip))
+    return cases
+
+
+@pytest.mark.parametrize(("name", "impl", "options", "dropped"), _dropped_input_cases())
+def test_core_rejects_each_dropped_declared_input(name: str, impl: type[Any], options: Options, dropped: str) -> None:
+    feature = Feature(OPERATION_FAMILIES[name][3], options)
+    table = LOOP_INPUT_CASES[name][0]()
+    table = table.append_column("spare", pa.array([0] * table.num_rows)).drop_columns([dropped])
+    data = _ADAPTERS[impl.compute_framework].from_arrow(table)
+
+    assert_core_rejects_missing_input(impl, data, feature, (dropped,))

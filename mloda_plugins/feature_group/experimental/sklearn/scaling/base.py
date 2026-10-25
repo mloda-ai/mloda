@@ -132,16 +132,9 @@ class ScalingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
         add_column: Callable[[Any, str, Any], Any],
         columns: Callable[[Any], set[str]],
     ) -> Any:
-        """Shared loop: check the source, load or fit the scaler, apply it, add the result."""
+        """Shared loop: load or fit the scaler, apply it, add the result."""
         for feature in features.get_sorted_features():
             scaler_type, source_feature = cls._extract_scaler_type_and_source_feature(feature)
-
-            available = columns(data)
-            if source_feature not in available:
-                raise ValueError(
-                    f"Source features not found in data: {[source_feature]}. "
-                    f"Available columns: {sorted(available, key=str)}"
-                )
 
             # Create unique artifact key for this scaler
             artifact_key = f"{source_feature}__{scaler_type}_scaled"

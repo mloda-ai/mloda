@@ -1173,58 +1173,14 @@ class ComputeFramework(ABC):
             self._raise_helpful_missing_column_error(feature_group, e, features)
 
     def _raise_helpful_missing_column_error(self, feature_group: Any, error: KeyError, features: Any) -> None:
-        """
-        Raises a helpful ValueError suggesting the KeyError might be due to missing Links.
-        """
-        # Local import: feature_set -> feature -> compute_framework would cycle at module level.
-        from mloda.core.abstract_plugins.components.feature_set import FeatureSet, option_split_paragraph
-
+        """Raises a ValueError explaining that the KeyError may come from an undeclared column read."""
         feature_name = feature_group.get_class_name()
-        error_str = str(error)
-
-        paragraph = ""
-        if isinstance(features, FeatureSet):
-            paragraph = option_split_paragraph(features.option_split_hint)
-
-        error_message = f"""
-Feature '{feature_name}' failed with a KeyError: {error_str}
-{paragraph}
-This might be caused by missing Links when your feature has multiple dependencies.
-
-When a feature depends on multiple input features, you must provide explicit Links to specify
-how to merge them. Without Links, the framework cannot determine how to combine the data.
-
-Option 1: Explicit JoinSpec (works with any feature group):
-    from mloda.user import Link, JoinSpec
-
-    links = {{
-        Link.inner(
-            JoinSpec(RootFeatureA, "shared_column"),
-            JoinSpec(RootFeatureB, "shared_column"),
+        error_message = (
+            f"Feature '{feature_name}' failed with a KeyError: {error}\n"
+            "If the key is a column, the group read a column it did not declare in input_features(). "
+            "Every column calculate_feature reads must be declared in input_features()."
         )
-    }}
-
-Option 2: Shorthand via index_columns() (requires feature groups to define index_columns()):
-    from mloda.user import Link
-
-    links = {{
-        Link.inner_on(RootFeatureA, RootFeatureB)
-    }}
-
-    mloda.run_all(
-        features=[Feature.int32_of("{feature_name}")],
-        links=links,
-        ...
-    )
-
-Available join types:
-- Link.inner(left, right)    - Keep only matching rows from both sides
-- Link.left(left, right)     - Keep all rows from left, matching from right
-- Link.right(left, right)    - Keep all rows from right, matching from left
-- Link.outer(left, right)    - Keep all rows from both sides
-- Link.inner_on(left, right) - Shorthand using index_columns() definitions
-"""
-        raise ValueError(error_message.strip())
+        raise ValueError(error_message) from error
 
     @final
     def _set_pinned_data(self, data: Any) -> None:

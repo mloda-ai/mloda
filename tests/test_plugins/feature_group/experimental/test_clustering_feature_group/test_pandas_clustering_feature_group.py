@@ -8,6 +8,7 @@ import pytest
 import pandas as pd
 import numpy as np
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
@@ -67,11 +68,17 @@ class TestPandasClustering:
         assert "feature1&invalid_feature__cluster_kmeans_2" in result.columns
 
     def test_cluster_loop_all_sources_missing_raises(self, sample_data: pd.DataFrame) -> None:
-        """No source name present raises ValueError listing available columns."""
-        with pytest.raises(ValueError, match="None of the source features") as exc:
-            self._run_loop(sample_data, "invalid1&invalid2__cluster_kmeans_2")
-        assert "Available columns" in str(exc.value)
-        assert "feature1" in str(exc.value)
+        """No source name present: core names every missing input and the available columns."""
+        error = assert_core_rejects_missing_input(
+            PandasClustering, sample_data, "invalid1&invalid2__cluster_kmeans_2", ("invalid1", "invalid2")
+        )
+        assert "feature1" in error.available_columns
+
+    def test_cluster_partial_source_presence_rejected_by_core(self, sample_data: pd.DataFrame) -> None:
+        """Core requires every declared source, so one absent source of two is rejected."""
+        assert_core_rejects_missing_input(
+            PandasClustering, sample_data, "feature1&invalid_feature__cluster_kmeans_2", ("invalid_feature",)
+        )
 
     def test_add_result_to_data(self, sample_data: pd.DataFrame) -> None:
         """Test the _add_result_to_data method."""

@@ -867,6 +867,10 @@ class TestMissingLinksError:
             "data) must not be blamed for the unrelated typo'd column access"
         )
         assert "X5Intermediate" not in error_message
+        assert "Z5UnrelatedTypo" in error_message
+        assert "column_that_does_not_exist" in error_message
+        assert "input_features" in error_message
+        assert "missing Links" not in error_message
 
     def test_option_split_hint_does_not_blame_an_already_linked_split(self) -> None:
         """Bug 3: LinkedSplitSource splits into two option buckets, but the user already added a
@@ -897,6 +901,10 @@ class TestMissingLinksError:
             "named as the likely cause of the unrelated typo'd column access"
         )
         assert "is the likely cause" not in error_message
+        assert "LinkedCombiner" in error_message
+        assert "column_that_does_not_exist" in error_message
+        assert "input_features" in error_message
+        assert "missing Links" not in error_message
 
     def test_option_split_hint_does_not_crash_on_non_str_option_key(self) -> None:
         """Bug 4: MixedKeySource splits by an int option key (1) and a str option key ('unit'). The

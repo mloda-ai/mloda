@@ -1,6 +1,7 @@
 import pandas as pd
 import pytest
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 
 from mloda.user import mloda
@@ -278,13 +279,10 @@ class TestPandasAggregation:
 
     def test_calculate_feature_missing_source(self, sample_dataframe: pd.DataFrame) -> None:
         """Test calculate_feature method with missing source feature."""
-        feature_set = FeatureSet()
-        feature_set.add(Feature("missing__sum_aggr"))
-
-        with pytest.raises(ValueError, match="None of the source features") as exc_info:
-            PandasAggregation.calculate(AggregatedFeatureGroup, sample_dataframe, feature_set, None)
-        assert "Available columns" in str(exc_info.value)
-        assert "sales" in str(exc_info.value)
+        error = assert_core_rejects_missing_input(
+            PandasAggregation, sample_dataframe, "missing__sum_aggr", ("missing",)
+        )
+        assert "sales" in error.available_columns
 
     def test_calculate_feature_invalid_aggregation(self, sample_dataframe: pd.DataFrame) -> None:
         """Test calculate_feature method with invalid aggregation type."""

@@ -6,7 +6,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
-from mloda.user import Feature
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.provider import FeatureSet
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.provider import DefaultOptionKeys
@@ -110,11 +110,10 @@ class TestPandasTimeWindow:
 
     def test_calculate_feature_missing_source(self, sample_time_dataframe: pd.DataFrame) -> None:
         """Test calculate_feature method with missing source feature."""
-        feature_set = FeatureSet()
-        feature_set.add(Feature("missing__avg_3_day_window"))
-
-        with pytest.raises(ValueError, match="None of the source features .* found in data"):
-            PandasTimeWindow.calculate(TimeWindowFeatureGroup, sample_time_dataframe, feature_set, None)
+        error = assert_core_rejects_missing_input(
+            PandasTimeWindow, sample_time_dataframe, "missing__avg_3_day_window", ("missing",)
+        )
+        assert "temperature" in error.available_columns
 
     def test_calculate_feature_missing_time_filter(self) -> None:
         """Test calculate_feature method with DataFrame that has no time filter feature."""
@@ -126,14 +125,13 @@ class TestPandasTimeWindow:
             }
         )
 
-        feature_set = FeatureSet()
-        feature_set.add(Feature("avg_3_day_window_temperature"))
-
-        with pytest.raises(
-            ValueError,
-            match=f"Reference time column '{DefaultOptionKeys.reference_time}' not found in data.*",
-        ):
-            PandasTimeWindow.calculate(TimeWindowFeatureGroup, df, feature_set, None)
+        assert_core_rejects_missing_input(
+            PandasTimeWindow,
+            df,
+            "temperature__avg_3_day_window",
+            (DefaultOptionKeys.reference_time.value,),
+            ("humidity", "temperature"),
+        )
 
 
 class TestPandasTimeWindowZeroRow(PandasZeroRowAdapter, TimeWindowZeroRowTestMixin):

@@ -6,6 +6,7 @@ import pytest
 from typing import Any
 from unittest.mock import Mock
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
@@ -263,15 +264,19 @@ class TestPythonDictTextCleaning:
                 }
             ),
         )
+        assert_core_rejects_missing_input(PythonDictTextCleaning, _copy_columnar(self.data), feature, ("nonexistent",))
+
+    def test_calculate_missing_source_reads_strictly(self) -> None:
+        """Called directly without core, an absent source raises KeyError instead of cleaning nothing."""
+        feature = Feature(
+            FeatureName("nonexistent__cleaned_text"),
+            Options({TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize",)}),
+        )
         feature_set = FeatureSet()
         feature_set.add(feature)
 
-        # Apply feature
-        data_copy = _copy_columnar(self.data)
-        with pytest.raises(ValueError) as excinfo:
-            PythonDictTextCleaning.calculate(TextCleaningFeatureGroup, data_copy, feature_set, None)
-
-        assert "Source features not found in data:" in str(excinfo.value)
+        with pytest.raises(KeyError):
+            PythonDictTextCleaning.calculate(TextCleaningFeatureGroup, _copy_columnar(self.data), feature_set, None)
 
     def test_calculate_invalid_operation(self) -> None:
         """Test calculate with an invalid operation."""

@@ -1,6 +1,7 @@
 import pandas as pd
 import pytest
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.provider import FeatureSet
@@ -274,13 +275,9 @@ class TestPandasMissingValueImputation:
 
     def test_calculate_feature_missing_source(self, sample_dataframe_with_missing: pd.DataFrame) -> None:
         """Test calculate method with missing source feature."""
-        feature_set = FeatureSet()
-        feature_set.add(Feature("missing__mean_imputed"))
-
-        with pytest.raises(ValueError, match="Source features not found in data"):
-            PandasMissingValueImputation.calculate(
-                MissingValueFeatureGroup, sample_dataframe_with_missing, feature_set, None
-            )
+        assert_core_rejects_missing_input(
+            PandasMissingValueImputation, sample_dataframe_with_missing, "missing__mean_imputed", ("missing",)
+        )
 
     def test_calculate_feature_constant_without_value(self, sample_dataframe_with_missing: pd.DataFrame) -> None:
         """Test calculate method with constant imputation but no constant value."""

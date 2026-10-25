@@ -5,6 +5,7 @@ Tests for the PandasTextCleaning implementation.
 import pandas as pd
 import pytest
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
@@ -183,14 +184,7 @@ class TestPandasTextCleaning:
                 }
             ),
         )
-        feature_set = FeatureSet()
-        feature_set.add(feature)
-
-        # Apply feature
-        with pytest.raises(ValueError) as excinfo:
-            PandasTextCleaning.calculate(TextCleaningFeatureGroup, self.df.copy(), feature_set, None)
-
-        assert "Source features not found in data:" in str(excinfo.value)
+        assert_core_rejects_missing_input(PandasTextCleaning, self.df.copy(), feature, ("nonexistent",))
 
     def test_calculate_invalid_operation(self) -> None:
         """Test calculate with an invalid operation."""

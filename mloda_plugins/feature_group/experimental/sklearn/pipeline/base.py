@@ -172,17 +172,10 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup
         add_column: Callable[[Any, str, Any], Any],
         columns: Callable[[Any], set[str]],
     ) -> Any:
-        """Shared loop: check the sources, load or fit the pipeline, apply it, add the result."""
+        """Shared loop: load or fit the pipeline, apply it, add the result."""
         # Process each requested feature
         for feature in features.get_sorted_features():
             pipeline_name, source_features = cls._extract_pipeline_name_and_source_features(feature)
-
-            available = columns(data)
-            missing = [f for f in source_features if f not in available]
-            if missing:
-                raise ValueError(
-                    f"Source features not found in data: {missing}. Available columns: {sorted(available, key=str)}"
-                )
 
             # Get pipeline configuration from options or create default
             pipeline_config = cls._get_pipeline_config_from_feature(feature, pipeline_name)

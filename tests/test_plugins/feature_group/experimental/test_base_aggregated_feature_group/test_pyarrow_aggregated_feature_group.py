@@ -5,6 +5,7 @@ import pyarrow as pa
 import pandas as pd
 import pytest
 
+from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.provider import FeatureSet
@@ -215,13 +216,8 @@ class TestPyArrowAggregation:
 
     def test_calculate_feature_missing_source(self, sample_table: pa.Table) -> None:
         """Test calculate_feature method with missing source feature."""
-        feature_set = FeatureSet()
-        feature_set.add(Feature("missing__sum_aggr"))
-
-        with pytest.raises(ValueError, match="None of the source features") as exc_info:
-            PyArrowAggregation.calculate(AggregatedFeatureGroup, sample_table, feature_set, None)
-        assert "Available columns" in str(exc_info.value)
-        assert "sales" in str(exc_info.value)
+        error = assert_core_rejects_missing_input(PyArrowAggregation, sample_table, "missing__sum_aggr", ("missing",))
+        assert "sales" in error.available_columns
 
     def test_calculate_feature_invalid_aggregation(self, sample_table: pa.Table) -> None:
         """Test calculate_feature method with invalid aggregation type."""

@@ -262,11 +262,6 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Opera
 
         reference_time_column = cls.get_reference_time_column(_options)
 
-        if reference_time_column not in columns(data):
-            raise ValueError(
-                f"Reference time column '{reference_time_column}' not found in data. "
-                f"Please ensure the DataFrame contains this column."
-            )
         cls._validate_reference_time_column(column_semantics(data, reference_time_column), reference_time_column)
 
         # Store the original clean data
@@ -289,10 +284,9 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Opera
                 if c == in_features or not c.removeprefix(f"{in_features}~").endswith(("~lower", "~upper"))
             ]
 
-            # Check that resolved columns exist
-            if all(c not in available_columns for c in resolved_columns):
+            if not resolved_columns:
                 raise ValueError(
-                    f"None of the source features {resolved_columns} found in data. "
+                    f"No usable source column for '{in_features}': only ~lower/~upper bound columns found. "
                     f"Available columns: {sorted(available_columns, key=str)}"
                 )
 

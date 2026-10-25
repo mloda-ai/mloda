@@ -146,7 +146,6 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
         source_text: Callable[[Any, str], Any],
         apply: Callable[[Any, Any, str], Any],
         add_column: Callable[[Any, str, Any], Any],
-        columns: Callable[[Any], set[str]],
     ) -> Any:
         """Shared loop: validate the operations, clean in sequence, add the result."""
         for feature in features.get_sorted_features():

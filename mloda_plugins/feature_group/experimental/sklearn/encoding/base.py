@@ -224,7 +224,6 @@ class EncodingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
         training_data: Callable[[Any, str], Any],
         apply: Callable[[Any, str, Any], Any],
         add_column: Callable[[Any, str, Any], Any],
-        columns: Callable[[Any], set[str]],
     ) -> Any:
         """Shared loop: load or fit the encoder, apply it, add the result."""
         # Process each requested feature

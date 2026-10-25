@@ -151,7 +151,6 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
         *,
         distance: Callable[[Any, str, str, str], Any],
         add_column: Callable[[Any, str, Any], Any],
-        columns: Callable[[Any], set[str]],
     ) -> Any:
         """Shared loop: compute the distance, add the result."""
         for feature in features.get_sorted_features():

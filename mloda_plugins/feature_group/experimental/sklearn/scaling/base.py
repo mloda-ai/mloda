@@ -130,7 +130,6 @@ class ScalingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
         training_data: Callable[[Any, str], Any],
         apply: Callable[[Any, str, Any], Any],
         add_column: Callable[[Any, str, Any], Any],
-        columns: Callable[[Any], set[str]],
     ) -> Any:
         """Shared loop: load or fit the scaler, apply it, add the result."""
         for feature in features.get_sorted_features():

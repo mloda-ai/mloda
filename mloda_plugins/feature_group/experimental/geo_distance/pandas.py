@@ -29,7 +29,6 @@ class PandasGeoDistance(Implementation[GeoDistanceFeatureGroup]):
             features,
             distance=cls._calculate_distance,
             add_column=cls._add_result_to_data,
-            columns=cls.compute_framework.extract_column_names,
         )
 
     @classmethod

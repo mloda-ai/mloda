@@ -222,7 +222,6 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup)
         *,
         perform: Callable[[Any, str, str, str, str | None], Any],
         add_column: Callable[[Any, str, Any, str | None], Any],
-        columns: Callable[[Any], set[str]],
     ) -> Any:
         """Shared loop: resolve each feature, compute centrality, add the column."""
         for feature in features.get_sorted_features():

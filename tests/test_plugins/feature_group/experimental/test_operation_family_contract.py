@@ -142,11 +142,12 @@ def _perform(name: str) -> Any:
     return lambda impl: getattr(impl, name)
 
 
+def _columns(impl: Any) -> Any:
+    return impl.compute_framework.extract_column_names
+
+
 def _kwargs(**extra: Any) -> dict[str, Any]:
-    spec: dict[str, Any] = {
-        "add_column": _perform("_add_result_to_data"),
-        "columns": lambda impl: impl.compute_framework.extract_column_names,
-    }
+    spec: dict[str, Any] = {"add_column": _perform("_add_result_to_data")}
     spec.update(extra)
     return spec
 
@@ -160,7 +161,7 @@ OPERATION_FAMILIES: dict[str, tuple[type[Any], list[type[Any]], str, str, list[d
         [PandasAggregation, PyArrowAggregation, PolarsLazyAggregation],
         "aggregate",
         "sales__sum_aggr",
-        [_kwargs(perform=_perform("_perform_aggregation"))] * 3,
+        [_kwargs(columns=_columns, perform=_perform("_perform_aggregation"))] * 3,
     ),
     "time_window": (
         TimeWindowFeatureGroup,
@@ -169,10 +170,12 @@ OPERATION_FAMILIES: dict[str, tuple[type[Any], list[type[Any]], str, str, list[d
         "temperature__avg_3_day_window",
         [
             _kwargs(
+                columns=_columns,
                 perform=_perform("_perform_window_operation"),
                 column_semantics=lambda _impl: pandas_type_semantics.column_semantics,
             ),
             _kwargs(
+                columns=_columns,
                 perform=_perform("_perform_window_operation"),
                 column_semantics=lambda _impl: pyarrow_type_semantics.column_semantics,
             ),
@@ -185,6 +188,7 @@ OPERATION_FAMILIES: dict[str, tuple[type[Any], list[type[Any]], str, str, list[d
         "a__cluster_kmeans_2",
         [
             _kwargs(
+                columns=_columns,
                 perform=_perform("_perform_clustering"),
                 perform_with_probabilities=_perform("_perform_clustering_with_probabilities"),
             )
@@ -197,6 +201,7 @@ OPERATION_FAMILIES: dict[str, tuple[type[Any], list[type[Any]], str, str, list[d
         "sales__linear_forecast_7day",
         [
             _kwargs(
+                columns=_columns,
                 perform=_perform("_perform_forecasting"),
                 perform_with_confidence=_perform("_perform_forecasting_with_confidence"),
                 column_semantics=lambda _impl: pandas_type_semantics.column_semantics,
@@ -222,7 +227,7 @@ OPERATION_FAMILIES: dict[str, tuple[type[Any], list[type[Any]], str, str, list[d
         [PandasMissingValueImputation, PyArrowMissingValueImputation, PythonDictMissingValueImputation],
         "impute",
         "income__mean_imputed",
-        [_kwargs(perform=_perform("_perform_imputation"))] * 3,
+        [_kwargs(columns=_columns, perform=_perform("_perform_imputation"))] * 3,
     ),
     "text_cleaning": (
         TextCleaningFeatureGroup,

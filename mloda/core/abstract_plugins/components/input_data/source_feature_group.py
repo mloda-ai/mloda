@@ -349,7 +349,7 @@ class SourceFeatureGroup(FeatureGroup):
             base_name in cls.declared_names()
             or any(_prefix_claims(prefix, base_name) for prefix in cls.declared_name_prefixes())
             or cls.feature_name_equal_to_class_name(base_name)
-            or cls.feature_name_contains_class_name_as_prefix(base_name)
+            or (cls.feature_name_contains_class_name_as_prefix(base_name) and _prefix_claims(cls.prefix(), base_name))
             or base_name in cls.feature_names_supported()
         )
 
@@ -495,9 +495,12 @@ class SourceFeatureGroup(FeatureGroup):
         if pointed and query_declined:
             return cls._abort(ValueError(query_reason), deferrable=True)
         skipped = False
+        missing: set[str] = set()
         selected: list[ClaimRoute] = []
         for route in cls.CLAIM_ROUTES:
             if not all(key in options for key in route.required_options):
+                if foreign is None:
+                    missing.update(key for key in route.required_options if key not in options)
                 continue
             unlocked = pointed or bool(route.required_options)
             if not (route.searched or unlocked):
@@ -611,6 +614,11 @@ class SourceFeatureGroup(FeatureGroup):
                     deferrable=True,
                 )
             replace_probe_match_rejection(cls.get_class_name(), reason, known_owners, stage=INPUT_DATA_STAGE)
+        elif missing and not selected and (pointed or cls._declared_name(base_name)):
+            plural = "s" if len(missing) > 1 else ""
+            keys = ", ".join(repr(key) for key in sorted(missing))
+            reason = f"{cls.get_class_name()} needs the option{plural} {keys} for '{name}'"
+            record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
         elif skipped:
             reason = f"options point at {foreign}, so {cls.get_class_name()} does not search the collection"
             record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)

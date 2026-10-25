@@ -3674,14 +3674,9 @@ Available join types:
                     feature_set.declared_input_features_resolved = True
 
                 if self.input_feature_columns is not None:
-                    merged_columns: dict[str, set[str]] = {}
-                    for feature in sub_features:
-                        columns = self.input_feature_columns.get(feature.uuid)
-                        if columns:
-                            merged_columns.setdefault(str(feature.name), set()).update(columns)
-                    feature_set.declared_input_columns = {
-                        name: tuple(sorted(cols)) for name, cols in merged_columns.items()
-                    } or None
+                    feature_set.declared_input_columns = merge_input_feature_edges(
+                        (str(f.name), self.input_feature_columns.get(f.uuid, ())) for f in sub_features
+                    )
 
                 if self.specialized_from is not None:
                     feature_set.specialized_from = tuple(

@@ -15,6 +15,10 @@ from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseM
 from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
 from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.utils import as_str, safe_field
+from mloda.core.abstract_plugins.components.validators.missing_input_validator import (
+    InputCheck,
+    MissingInputFeatureError,
+)
 from mloda.core.abstract_plugins.function_extender import (
     Extender,
     ExtenderHook,
@@ -869,7 +873,6 @@ class ComputeFramework(ABC):
     def _check_declared_inputs(self, feature_group: Any, features: Any) -> None:
         """Every input a feature declares must be a column of the incoming data; runs before any extender."""
         from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-        from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
         from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
         if not isinstance(features, FeatureSet):
@@ -1057,7 +1060,7 @@ class ComputeFramework(ABC):
         feature_names: tuple[str, ...] = ()
         input_features: frozenset[str] | None = None
         input_feature_edges: dict[str, tuple[str, ...]] | None = None
-        input_check: str | None = None
+        input_check: InputCheck | None = None
         specialized_from: tuple[str, ...] = ()
         step_uuid: UUID | None = None
         implementation: str | None = None
@@ -1148,10 +1151,7 @@ class ComputeFramework(ABC):
 
         features.declared_input_feature_names = result
         features.declared_input_feature_edges = merge_input_feature_edges(pairs)
-        merged: dict[str, set[str]] = {}
-        for name, entries in pairs:
-            merged.setdefault(name, set()).update(entries)
-        features.declared_input_columns = {name: tuple(sorted(cols)) for name, cols in merged.items()} or None
+        features.declared_input_columns = merge_input_feature_edges(pairs)
         features.declared_input_features_resolved = True
         return result
 

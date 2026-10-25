@@ -61,7 +61,9 @@ class TestEngineDomainPropagation:
 
             with patch.object(BaseTestFeatureGroup1, "__new__", return_value=mock_feature_group):
                 with patch("mloda.core.core.engine.Features") as MockFeatures:
-                    MockFeatures.return_value = MagicMock(child_uuid=test_uuid, parent_uuids=set())
+                    MockFeatures.return_value = MagicMock(
+                        child_uuid=test_uuid, parent_uuids=set(), collection=[Feature(name="ChildFeature")]
+                    )
 
                     engine._handle_input_features_recursion(
                         BaseTestFeatureGroup1,

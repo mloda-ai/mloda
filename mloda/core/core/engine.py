@@ -1053,6 +1053,7 @@ class Engine:
             ordered.sort(key=lambda f: str(f.name) if isinstance(f, Feature) else str(f))
         # Captured before recursion renames digit-only ~N part requests to their base (issue #2031).
         declared_names = {str(entry) if isinstance(entry, str) else str(entry.name) for entry in ordered}
+        declared_order = [str(entry) if isinstance(entry, str) else str(entry.name) for entry in ordered]
         features = Features(ordered, child_options=options, child_uuid=uuid, parent_domain=parent_domain)
         consumer_name = feature_group_class.get_class_name()
         consumer_property_keys = self._property_mapping_keys(feature_group_class)
@@ -1066,8 +1067,7 @@ class Engine:
             features, requested=False, depth=depth + 1, consumer=consumer_name, path=(*path, str(feature_name))
         )
         columns: set[str] = set()
-        for declared_entry, resolved in zip(ordered, features.collection):
-            declared = declared_entry if isinstance(declared_entry, str) else str(declared_entry.name)
+        for declared, resolved in zip(declared_order, features.collection, strict=True):
             renamed = str(resolved.name)
             columns.add(declared if renamed == declared or declared.startswith(renamed + "~") else renamed)
         if columns:

@@ -1,5 +1,7 @@
 from collections.abc import Collection
-from typing import Any
+from typing import Any, Literal
+
+InputCheck = Literal["checked", "skipped_source", "skipped_empty"]
 
 JOIN_SUFFIXES = ("_x", "_y", "_right")
 

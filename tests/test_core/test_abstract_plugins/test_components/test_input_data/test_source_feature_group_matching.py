@@ -122,17 +122,35 @@ class TestCheckedNames:
 
 
 class TestDeclaredNames:
-    @pytest.mark.parametrize("name", ["ToyDeclaredFG", "toyfmt_declared_col", "toyfmt_pre_anything"])
+    CLAIMED = ["ToyDeclaredFG", "toyfmt_declared_col", "toyfmt_pre_anything", "toyfmt_conn__knows", "toyfmt_pre_x~key"]
+
+    @pytest.mark.parametrize("name", CLAIMED)
     def test_declared_name_with_a_source_matches(self, name: str) -> None:
         assert _claims(Feature(name), toy_dac(h1={"x": [1]}), ToyDeclaredFG)
 
-    @pytest.mark.parametrize("name", ["ToyDeclaredFG", "toyfmt_declared_col", "toyfmt_pre_anything"])
+    @pytest.mark.parametrize("name", CLAIMED)
     def test_declared_name_without_a_source_declines(self, name: str) -> None:
         assert not _claims(Feature(name), None, ToyDeclaredFG)
         assert not _claims(Feature(name), foreign_dac(), ToyDeclaredFG)
 
-    def test_undeclared_name_declines_even_with_a_source(self) -> None:
-        assert not _claims(Feature("toyfmt_undeclared"), toy_dac(h1={"toyfmt_undeclared": [1]}), ToyDeclaredFG)
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "toyfmt_undeclared",
+            "toyfmt_pre_x__sum_aggr",
+            "toyfmt_pre__x",
+            "toyfmt_conn__knows__sum_aggr",
+            "toyfmt_conn___op",
+        ],
+    )
+    def test_undeclared_name_declines_even_with_a_source(self, name: str) -> None:
+        assert not _claims(Feature(name), toy_dac(h1={name: [1]}), ToyDeclaredFG)
+
+    def test_pointed_group_does_not_claim_a_chain_shaped_name(self) -> None:
+        feature = Feature("toyfmt_conn__knows__sum_aggr", Options({"ToyDeclaredFG": {COL: [1, 2]}}))
+        result = evaluate_or_raise(feature, _plugins(ToyDeclaredFG, AggregatedFeatureGroup), None, None)
+
+        assert set(result.identified) == {AggregatedFeatureGroup}
 
 
 class TestOpenNames:

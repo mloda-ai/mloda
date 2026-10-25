@@ -149,4 +149,4 @@ class ToyDeclaredFG(ToySourceBase):
 
     @classmethod
     def declared_name_prefixes(cls) -> tuple[str, ...]:
-        return ("toyfmt_pre_",)
+        return ("toyfmt_pre_", "toyfmt_conn__")

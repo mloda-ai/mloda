@@ -326,16 +326,11 @@ class ChooseComputeFrameworks:
         neutral = get_origin(neutral) or neutral
         if not isinstance(neutral, type):
             return None, None
-        loads = frozenset(fw for fw in block.domain if self._takes(fw, neutral) or self._serves(block, fw))
+        loads = frozenset(fw for fw in block.domain if fw._takes_as_is(neutral) or self._serves(block, fw))
         return (loads, LOADS_NATIVELY) if loads else (None, None)
 
     def _serves(self, block: _Block, framework: Framework) -> bool:
         return bool(serving_implementation(block.fg, framework, self.implementations, stop_after="load_neutral"))
-
-    @staticmethod
-    def _takes(framework: Framework, neutral: type) -> bool:
-        expected = framework.expected_data_framework()
-        return isinstance(expected, type) and issubclass(neutral, expected)
 
     def _is_pinned(self, block: _Block) -> bool:
         return any(f.framework_pinned or f.uuid in self.pinned for f in block.features)

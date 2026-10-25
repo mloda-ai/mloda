@@ -83,7 +83,7 @@ class ReadFileFG(_FileSourceFG):
     @classmethod
     def overrides_load_neutral(cls, base: type) -> bool:
         """True when a class below ``base`` in the MRO defines its own load_neutral."""
-        return any("load_neutral" in klass.__dict__ for klass in cls.__mro__[: cls.__mro__.index(base)])
+        return cls._overrides_below(base, "load_neutral")
 
     @classmethod
     def _listing(cls, kind: str, match: SourceMatch) -> Collection[str] | None:

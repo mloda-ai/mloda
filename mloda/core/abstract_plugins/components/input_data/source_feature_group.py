@@ -192,6 +192,11 @@ class SourceFeatureGroup(FeatureGroup):
         return None
 
     @classmethod
+    def _overrides_below(cls, base: type, *names: str) -> bool:
+        """True when a class below ``base``, an ancestor of cls, in the MRO defines any of ``names``."""
+        return any(name in klass.__dict__ for klass in cls.__mro__[: cls.__mro__.index(base)] for name in names)
+
+    @classmethod
     def unknown_columns_reason(cls, match: SourceMatch) -> str | None:
         """Why the source cannot enumerate its columns, None when no reason is known."""
         return None

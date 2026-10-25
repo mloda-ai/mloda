@@ -272,9 +272,7 @@ class mlodaAPI:
             match = step.features.input_data_match
             if match is None or not isinstance(match[1].access, ApiDataRef):
                 continue
-            neutral = match[0].neutral_type(match[1])
-            expected = step.compute_framework.expected_data_framework()
-            if isinstance(neutral, type) and isinstance(expected, type) and issubclass(neutral, expected):
+            if step.compute_framework._takes_as_is(match[0].neutral_type(match[1])):
                 native[match[1].access.key] = dict
         return native
 

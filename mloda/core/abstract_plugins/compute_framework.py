@@ -4,7 +4,7 @@ from abc import ABC
 from collections.abc import Callable, Generator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from contextvars import ContextVar
-from typing import Any, NoReturn, final
+from typing import Any, NoReturn, final, get_origin
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -372,6 +372,13 @@ class ComputeFramework(ABC):
         the surrounding fail-fast policy lives in `pick_connection_from_dac`.
         """
         return False
+
+    @classmethod
+    def _takes_as_is(cls, neutral: Any) -> bool:
+        """True when the framework takes a source's neutral type, or its generic origin, as is."""
+        neutral = get_origin(neutral) or neutral
+        expected = cls.expected_data_framework()
+        return isinstance(neutral, type) and isinstance(expected, type) and issubclass(neutral, expected)
 
     @classmethod
     def connection_of(cls, data: Any) -> Any | None:

@@ -1,6 +1,7 @@
 import logging
 import re
 import sqlite3
+import sys
 from collections.abc import Sequence
 from typing import Any
 
@@ -45,6 +46,9 @@ class SqliteFramework(ComputeFramework):
                 raise ValueError("A different connection is already set. Cannot replace an existing connection.")
             return  # same connection passed again — safe no-op
         framework_connection_object.create_function("REGEXP", 2, _regexp, deterministic=True)
+        # Quoted unknown columns raise instead of reading as string literals; Connection.setconfig needs 3.12+.
+        if sys.version_info >= (3, 12) and hasattr(sqlite3, "SQLITE_DBCONFIG_DQS_DML"):
+            framework_connection_object.setconfig(sqlite3.SQLITE_DBCONFIG_DQS_DML, False)
         self.framework_connection_object = framework_connection_object
 
     @classmethod

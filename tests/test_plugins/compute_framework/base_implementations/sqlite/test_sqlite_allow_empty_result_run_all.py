@@ -6,6 +6,7 @@ transformer requires pyarrow, so the class is guarded with a skipif on ``pa``.
 """
 
 import sqlite3
+import sys
 from typing import Any
 
 import pytest
@@ -116,11 +117,23 @@ class TestSqliteSiblingDictRunAll(SiblingDictRunAllTestBase):
 
 
 class SqliteFilterReadConsumer(MissingColumnConsumer):
-    """Unquoted identifier: a double-quoted unknown identifier is a string literal in SQLite."""
+    """Reads the undeclared column as an unquoted identifier."""
 
     @classmethod
     def read_undeclared(cls, data: Any) -> Any:
         return data.filter(f"{UNDECLARED_COLUMN} > 0")
+
+    @classmethod
+    def cause_type(cls) -> Any:
+        return sqlite3.OperationalError
+
+
+class SqliteQuotedFilterReadConsumer(MissingColumnConsumer):
+    """Reads the undeclared column as a double-quoted identifier (needs DQS off, Python 3.12+)."""
+
+    @classmethod
+    def read_undeclared(cls, data: Any) -> Any:
+        return data.filter(f'"{UNDECLARED_COLUMN}" > 0')
 
     @classmethod
     def cause_type(cls) -> Any:
@@ -137,4 +150,7 @@ class TestSqliteMissingColumnRunAll(MissingColumnRunAllTestBase):
 
     @classmethod
     def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
-        return [SelectReadConsumer, SqliteFilterReadConsumer]
+        consumers: list[type[MissingColumnConsumer]] = [SelectReadConsumer, SqliteFilterReadConsumer]
+        if sys.version_info >= (3, 12):
+            consumers.append(SqliteQuotedFilterReadConsumer)
+        return consumers

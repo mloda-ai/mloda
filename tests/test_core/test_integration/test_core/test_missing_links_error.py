@@ -1011,3 +1011,27 @@ class TestMissingLinksError:
 
         assert "LinkSideConsumer" in str(exc_info.value)
         assert "cannot be split" in str(exc_info.value)
+
+    def test_merge_guard_keeps_data_type_groups_with_conflicting_variants_apart(self) -> None:
+        features = [Feature.int32_of("cons_x"), Feature.int64_of("cons_plain")]
+        plugins = PluginCollector.enabled_feature_groups({ScalingSource, ScalingConsumer})
+
+        session = mloda.prepare(
+            features=features, links=set(), compute_frameworks=[PyArrowTable], plugin_collector=plugins
+        )
+        assert session.engine is not None
+        plan = session.engine.execution_planner.execution_plan
+        consumer_steps = [
+            step for step in plan if isinstance(step, FeatureGroupStep) and step.feature_group is ScalingConsumer
+        ]
+        assert len(consumer_steps) == 2
+
+        results = mloda.run_all(
+            features=[Feature.int32_of("cons_x"), Feature.int64_of("cons_plain")],
+            links=set(),
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=plugins,
+        )
+        by_name = {name: table.column(name).to_pylist() for table in results for name in table.column_names}
+        assert by_name["cons_x"] == [1000, 2000, 3000]
+        assert by_name["cons_plain"] == [1, 2, 3]

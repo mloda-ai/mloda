@@ -21,7 +21,7 @@ import pytest
 
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.prepare.execution_plan import ExecutionPlan
-from mloda.provider import BaseArtifact, FeatureGroup
+from mloda.provider import BaseArtifact, ComputeFramework, FeatureGroup
 from mloda.user import DataType, Feature, FeatureName, FilterType, Options, SingleFilter
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -361,7 +361,7 @@ class MergeArtifactProbeFG(FeatureGroup):
         return BaseArtifact
 
 
-def _chosen(feature: Feature, framework: type = PyArrowTable) -> Feature:
+def _chosen(feature: Feature, framework: type[ComputeFramework] = PyArrowTable) -> Feature:
     feature.chosen_compute_framework = framework
     return feature
 
@@ -528,3 +528,20 @@ def test_merge_three_groups_is_deterministic_across_input_orders() -> None:
         outcomes.add(next(f.data_type for f in with_y if f.name == FeatureName("merge_x")))
 
     assert len(outcomes) == 1
+
+
+def test_merge_tie_on_allowed_framework_sets_is_deterministic() -> None:
+    """Same-name groups differing only in allowed frameworks: y merges with the first sorted set."""
+    for _ in range(20):
+        x_pandas = _chosen(Feature("merge_x", compute_framework="PandasDataFrame"))
+        x_arrow = _chosen(Feature("merge_x", compute_framework="PyArrowTable"))
+        y = _chosen(Feature("merge_y"))
+        groups = _group({x_pandas, x_arrow, y})
+        assert len(groups) == 3
+
+        merged = _merge(groups)
+
+        assert len(merged) == 2
+        with_y = next(group for group in merged.values() if y in group)
+        assert x_pandas in with_y
+        assert x_arrow not in with_y

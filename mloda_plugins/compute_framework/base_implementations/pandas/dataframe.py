@@ -4,6 +4,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseFilterEngine, BaseMaskEngine, BaseMergeEngine, ComputeFramework, OutputSchema
 from mloda.user import FeatureName
+from mloda_plugins.compute_framework.base_implementations.attribute_column_read import is_attribute_column_read
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_engine import PandasFilterEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_mask_engine import PandasMaskEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_engine import PandasMergeEngine
@@ -33,11 +34,11 @@ class PandasDataFrame(ComputeFramework):
 
     @classmethod
     def is_missing_column_error(cls, error: Exception) -> bool:
-        return (
-            pd is not None
-            and isinstance(error, pd.errors.UndefinedVariableError)
-            and not str(error).startswith(_PANDAS_LOCAL_VARIABLE_PREFIX)
-        )
+        if pd is None:
+            return False
+        if isinstance(error, pd.errors.UndefinedVariableError):
+            return not str(error).startswith(_PANDAS_LOCAL_VARIABLE_PREFIX)
+        return is_attribute_column_read(error, (pd.DataFrame,))
 
     @classmethod
     def merge_engine(cls) -> type[BaseMergeEngine]:

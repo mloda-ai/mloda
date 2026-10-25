@@ -2,6 +2,7 @@ import logging
 from decimal import Decimal
 from typing import Any
 
+import pandas as pd
 import pyarrow as pa
 import pytest
 
@@ -235,3 +236,37 @@ class TestPandasIsMissingColumnError:
         error = UndefinedVariableError("@x", is_local=True)
         assert str(error).startswith("local variable")
         assert PandasDataFrame.is_missing_column_error(error) is False
+
+    def test_attribute_read_of_an_unknown_name_is_a_missing_column(self) -> None:
+        df = pd.DataFrame({"a": [1]})
+        with pytest.raises(AttributeError) as excinfo:
+            df.x  # noqa: B018
+        assert PandasDataFrame.is_missing_column_error(excinfo.value) is True
+
+    def test_misspelled_method_is_not_a_missing_column(self) -> None:
+        df = pd.DataFrame({"a": [1]})
+        with pytest.raises(AttributeError) as excinfo:
+            df.fliter  # noqa: B018
+        assert PandasDataFrame.is_missing_column_error(excinfo.value) is False
+
+    @pytest.mark.parametrize("name", ["value", "date"])
+    def test_short_name_near_a_method_is_a_missing_column(self, name: str) -> None:
+        df = pd.DataFrame({"a": [1]})
+        with pytest.raises(AttributeError) as excinfo:
+            getattr(df, name)
+        assert PandasDataFrame.is_missing_column_error(excinfo.value) is True
+
+    def test_private_attribute_is_not_a_missing_column(self) -> None:
+        df = pd.DataFrame({"a": [1]})
+        with pytest.raises(AttributeError) as excinfo:
+            df._private  # noqa: B018
+        assert PandasDataFrame.is_missing_column_error(excinfo.value) is False
+
+    def test_attribute_error_on_a_series_is_not_a_missing_column(self) -> None:
+        series = pd.Series([1])
+        with pytest.raises(AttributeError) as excinfo:
+            series.x  # noqa: B018
+        assert PandasDataFrame.is_missing_column_error(excinfo.value) is False
+
+    def test_bare_attribute_error_is_not_a_missing_column(self) -> None:
+        assert PandasDataFrame.is_missing_column_error(AttributeError("x")) is False

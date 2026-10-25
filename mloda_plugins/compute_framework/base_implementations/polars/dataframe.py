@@ -7,6 +7,7 @@ from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_en
 from mloda.user import FeatureName
 from mloda.provider import ComputeFramework
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
+from mloda_plugins.compute_framework.base_implementations.attribute_column_read import is_attribute_column_read
 from mloda_plugins.compute_framework.base_implementations.polars.polars_filter_engine import PolarsFilterEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_mask_engine import PolarsMaskEngine
 
@@ -33,7 +34,14 @@ class PolarsDataFrame(ComputeFramework):
 
     @classmethod
     def is_missing_column_error(cls, error: Exception) -> bool:
-        return pl is not None and isinstance(error, pl.exceptions.ColumnNotFoundError)
+        if pl is None:
+            return False
+        if isinstance(error, pl.exceptions.ColumnNotFoundError):
+            return True
+        if not is_attribute_column_read(error, (pl.DataFrame, pl.LazyFrame)):
+            return False
+        obj = getattr(error, "obj", None)
+        return not (isinstance(obj, pl.DataFrame) and getattr(error, "name", None) in obj.columns)
 
     @classmethod
     def merge_engine(cls) -> type[BaseMergeEngine]:

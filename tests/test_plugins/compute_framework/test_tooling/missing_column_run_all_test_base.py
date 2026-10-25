@@ -108,8 +108,37 @@ class PyArrowFilterReadConsumer(MissingColumnConsumer):
         return pa.ArrowInvalid
 
 
+class AttributeReadConsumer(MissingColumnConsumer):
+    """Reads the undeclared column as an attribute (``df.x``)."""
+
+    @classmethod
+    def read_undeclared(cls, data: Any) -> Any:
+        return getattr(data, UNDECLARED_COLUMN)
+
+    @classmethod
+    def cause_type(cls) -> Any:
+        return AttributeError
+
+
+class MisspelledMethodConsumer(MissingColumnConsumer):
+    """Calls a misspelled method (``data.fliter``), which is a typo and not a column read."""
+
+    @classmethod
+    def read_undeclared(cls, data: Any) -> Any:
+        return data.fliter
+
+    @classmethod
+    def cause_type(cls) -> Any:
+        return AttributeError
+
+
 class MissingColumnRunAllTestBase(PolicyRunAllTestBase):
     """Each consumer FG from ``consumer_fgs`` raises an explanatory ``ValueError`` through ``run_all``."""
+
+    @classmethod
+    def root_fg(cls) -> type[FeatureGroup]:
+        """Root FeatureGroup producing ``mc_declared``; override for a framework-native root."""
+        return MissingColumnRoot
 
     @classmethod
     def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
@@ -127,6 +156,17 @@ class MissingColumnRunAllTestBase(PolicyRunAllTestBase):
     ) -> None:
         self.assert_undeclared_read_raises(consumer_fg, mode, flight_server)
 
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
+    def test_misspelled_method_is_not_translated(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        error = self.assert_policy_case(
+            feature_name=MisspelledMethodConsumer.__name__,
+            plugin_collector=PluginCollector.enabled_feature_groups({self.root_fg(), MisspelledMethodConsumer}),
+            expectation=PolicyRaises(match_substring="fliter", error_type=AttributeError),
+            mode=mode,
+            flight_server=flight_server,
+        )
+        assert "input_features" not in str(error)
+
     def assert_undeclared_read_raises(
         self,
         consumer_fg: type[MissingColumnConsumer],
@@ -136,7 +176,7 @@ class MissingColumnRunAllTestBase(PolicyRunAllTestBase):
     ) -> BaseException:
         error = self.assert_policy_case(
             feature_name=consumer_fg.__name__,
-            plugin_collector=PluginCollector.enabled_feature_groups({MissingColumnRoot, consumer_fg}),
+            plugin_collector=PluginCollector.enabled_feature_groups({self.root_fg(), consumer_fg}),
             expectation=PolicyRaises(
                 match_substring=consumer_fg.__name__,
                 error_type=ValueError,

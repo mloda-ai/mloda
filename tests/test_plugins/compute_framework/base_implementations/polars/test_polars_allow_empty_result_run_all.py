@@ -30,6 +30,7 @@ from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base 
     records_from_frame,
 )
 from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
+    AttributeReadConsumer,
     MissingColumnConsumer,
     MissingColumnRunAllTestBase,
     UNDECLARED_COLUMN,
@@ -109,7 +110,7 @@ class TestPolarsMissingColumnRunAll(MissingColumnRunAllTestBase):
 
     @classmethod
     def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
-        return [PolarsWithColumnsReadConsumer]
+        return [PolarsWithColumnsReadConsumer, AttributeReadConsumer]
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")

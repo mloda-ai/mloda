@@ -15,6 +15,7 @@ from tests.test_plugins.compute_framework.base_implementations.spark.conftest im
     SKIP_REASON,
 )
 from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
+    AttributeReadConsumer,
     MissingColumnConsumer,
     MissingColumnRunAllTestBase,
     UNDECLARED_COLUMN,
@@ -77,4 +78,4 @@ class TestSparkMissingColumnRunAll(MissingColumnRunAllTestBase):
 
     @classmethod
     def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
-        return [SparkColReadConsumer]
+        return [SparkColReadConsumer, AttributeReadConsumer]

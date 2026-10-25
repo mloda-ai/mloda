@@ -132,7 +132,7 @@ class PolicyRunAllTestBase(ABC):
         mode: ParallelizationMode,
         flight_server: Any,
         global_filter: GlobalFilter | None = None,
-    ) -> RunResult | None:
+    ) -> RunResult | BaseException:
         names = [feature_name] if isinstance(feature_name, str) else list(feature_name)
         features, dac = self._features_and_dac(names)
 
@@ -154,7 +154,7 @@ class PolicyRunAllTestBase(ABC):
                 assert isinstance(excinfo.value, expectation.error_type)
             if expectation.cause_type is not None:
                 assert isinstance(excinfo.value.__cause__, expectation.cause_type)
-            return None
+            return excinfo.value
 
         result = mloda.run_all(
             features,

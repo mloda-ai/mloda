@@ -51,7 +51,7 @@ def test_policy_base_drives_success_case(flight_server: Any) -> None:
         flight_server=flight_server,
     )
 
-    assert result is not None
+    assert isinstance(result, list)
     _assert_single_empty(result)
 
 
@@ -67,7 +67,7 @@ def test_policy_base_drives_raises_case(flight_server: Any) -> None:
         flight_server=flight_server,
     )
 
-    assert result is None
+    assert isinstance(result, BaseException)
 
 
 def test_policy_base_drives_worker_mode(flight_server: Any) -> None:
@@ -82,7 +82,7 @@ def test_policy_base_drives_worker_mode(flight_server: Any) -> None:
         flight_server=flight_server,
     )
 
-    assert result is not None
+    assert isinstance(result, list)
     _assert_single_empty(result)
 
 

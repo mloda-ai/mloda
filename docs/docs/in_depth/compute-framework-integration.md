@@ -202,6 +202,7 @@ A `KeyError` from `calculate_feature`, or an exception for which a framework's
 `is_missing_column_error()` returns true (it must not raise), becomes a
 `ValueError` pointing at `input_features()`, with the original as `__cause__`.
 Code that caught the backend exception around `run_all` now gets that `ValueError`.
+Matched errors are translated from `calculate_feature` through final-filter validation and column-name resolution, so lazy plans failing on schema resolution are covered.
 
 Matched per framework:
 

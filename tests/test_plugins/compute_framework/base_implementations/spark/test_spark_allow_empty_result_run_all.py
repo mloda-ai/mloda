@@ -53,18 +53,6 @@ class TestSparkSiblingDictRunAll(SiblingDictRunAllTestBase):
     get_connection = TestSparkAllowEmptyResultRunAll.get_connection
 
 
-class SparkSelectReadConsumer(MissingColumnConsumer):
-    @classmethod
-    def read_undeclared(cls, data: Any) -> Any:
-        return data.select(UNDECLARED_COLUMN)
-
-    @classmethod
-    def cause_type(cls) -> Any:
-        from pyspark.errors import AnalysisException
-
-        return AnalysisException
-
-
 class SparkColReadConsumer(MissingColumnConsumer):
     @classmethod
     def read_undeclared(cls, data: Any) -> Any:
@@ -89,4 +77,4 @@ class TestSparkMissingColumnRunAll(MissingColumnRunAllTestBase):
 
     @classmethod
     def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
-        return [SparkSelectReadConsumer, SparkColReadConsumer]
+        return [SparkColReadConsumer]

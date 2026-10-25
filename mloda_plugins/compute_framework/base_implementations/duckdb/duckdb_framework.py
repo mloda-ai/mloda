@@ -28,7 +28,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-_DUCKDB_MISSING_COLUMN_FRAGMENT = "not found in FROM clause"
+_DUCKDB_MISSING_COLUMN_FRAGMENTS = ("not found in FROM clause", "does not have a column named")
 
 
 _DUCKDB_TYPE_MAP: dict[str, DataType] = {
@@ -120,7 +120,7 @@ class DuckDBFramework(ComputeFramework):
         return (
             duckdb is not None
             and isinstance(error, duckdb.BinderException)
-            and _DUCKDB_MISSING_COLUMN_FRAGMENT in str(error)
+            and any(fragment in str(error) for fragment in _DUCKDB_MISSING_COLUMN_FRAGMENTS)
         )
 
     @classmethod

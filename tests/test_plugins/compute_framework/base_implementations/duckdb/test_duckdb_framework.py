@@ -413,3 +413,8 @@ class TestDuckDBIsMissingColumnError:
     def test_binder_exception_about_a_function_is_not_a_missing_column(self) -> None:
         error = duckdb.BinderException("No function matches the given name and argument types 'f(INTEGER)'")
         assert DuckDBFramework.is_missing_column_error(error) is False
+
+    def test_qualified_missing_column_is_a_missing_column(self) -> None:
+        with pytest.raises(duckdb.BinderException) as excinfo:
+            duckdb.connect().sql("select t.x from (select 1 as a) t")
+        assert DuckDBFramework.is_missing_column_error(excinfo.value) is True

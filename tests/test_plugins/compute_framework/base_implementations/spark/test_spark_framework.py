@@ -485,6 +485,36 @@ class TestSparkTfsConnectionInit(TfsConnectionInitMixin):
         return Mock(spec=SparkSession)
 
 
+class _Spark35AnalysisException(Exception):
+    """Stand-in for a Spark 3.5 AnalysisException, which has getErrorClass but no getCondition."""
+
+    def __init__(self, error_class: str | None) -> None:
+        super().__init__("boom")
+        self._error_class = error_class
+
+    def getErrorClass(self) -> str | None:
+        return self._error_class
+
+
+class TestSparkIsMissingColumnErrorLegacyApi:
+    @pytest.fixture(autouse=True)
+    def _patch_analysis_exception(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "mloda_plugins.compute_framework.base_implementations.spark.spark_framework.AnalysisException",
+            _Spark35AnalysisException,
+        )
+
+    def test_unresolved_column_error_class_is_a_missing_column(self) -> None:
+        error = _Spark35AnalysisException("UNRESOLVED_COLUMN.WITH_SUGGESTION")
+        assert SparkFramework.is_missing_column_error(error) is True
+
+    def test_other_error_class_is_not_a_missing_column(self) -> None:
+        assert SparkFramework.is_missing_column_error(_Spark35AnalysisException("TABLE_OR_VIEW_NOT_FOUND")) is False
+
+    def test_missing_error_class_is_not_a_missing_column(self) -> None:
+        assert SparkFramework.is_missing_column_error(_Spark35AnalysisException(None)) is False
+
+
 @pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
 class TestSparkIsMissingColumnError:
     def test_analysis_error_without_unresolved_column_condition_is_not_a_missing_column(self) -> None:

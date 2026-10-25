@@ -80,6 +80,34 @@ class SelectReadConsumer(MissingColumnConsumer):
         return MissingRelationColumnError
 
 
+class PyArrowKeyReadConsumer(MissingColumnConsumer):
+    """Reads the undeclared column from a PyArrow table by name."""
+
+    @classmethod
+    def read_undeclared(cls, data: Any) -> Any:
+        return data.column(UNDECLARED_COLUMN)
+
+    @classmethod
+    def cause_type(cls) -> Any:
+        return KeyError
+
+
+class PyArrowFilterReadConsumer(MissingColumnConsumer):
+    """Filters a PyArrow table on the undeclared column."""
+
+    @classmethod
+    def read_undeclared(cls, data: Any) -> Any:
+        import pyarrow.compute as pc
+
+        return data.filter(pc.field(UNDECLARED_COLUMN) > 0)
+
+    @classmethod
+    def cause_type(cls) -> Any:
+        import pyarrow as pa
+
+        return pa.ArrowInvalid
+
+
 class MissingColumnRunAllTestBase(PolicyRunAllTestBase):
     """Each consumer FG from ``consumer_fgs`` raises an explanatory ``ValueError`` through ``run_all``."""
 
@@ -105,8 +133,8 @@ class MissingColumnRunAllTestBase(PolicyRunAllTestBase):
         mode: ParallelizationMode,
         flight_server: Any,
         global_filter: GlobalFilter | None = None,
-    ) -> None:
-        self.assert_policy_case(
+    ) -> BaseException:
+        error = self.assert_policy_case(
             feature_name=consumer_fg.__name__,
             plugin_collector=PluginCollector.enabled_feature_groups({MissingColumnRoot, consumer_fg}),
             expectation=PolicyRaises(
@@ -119,3 +147,5 @@ class MissingColumnRunAllTestBase(PolicyRunAllTestBase):
             flight_server=flight_server,
             global_filter=global_filter,
         )
+        assert isinstance(error, BaseException)
+        return error

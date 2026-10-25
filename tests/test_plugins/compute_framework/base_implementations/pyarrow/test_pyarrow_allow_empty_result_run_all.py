@@ -15,7 +15,8 @@ from mloda.user import mloda
 from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
     MissingColumnConsumer,
     MissingColumnRunAllTestBase,
-    UNDECLARED_COLUMN,
+    PyArrowFilterReadConsumer,
+    PyArrowKeyReadConsumer,
 )
 from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
     SiblingDictRunAllTestBase,
@@ -73,28 +74,6 @@ class TestPyArrowSiblingDictRunAll(SiblingDictRunAllTestBase):
     @classmethod
     def compute_framework_name(cls) -> str:
         return "PyArrowTable"
-
-
-class PyArrowKeyReadConsumer(MissingColumnConsumer):
-    @classmethod
-    def read_undeclared(cls, data: Any) -> Any:
-        return data.column(UNDECLARED_COLUMN)
-
-    @classmethod
-    def cause_type(cls) -> Any:
-        return KeyError
-
-
-class PyArrowFilterReadConsumer(MissingColumnConsumer):
-    @classmethod
-    def read_undeclared(cls, data: Any) -> Any:
-        import pyarrow.compute as pc
-
-        return data.filter(pc.field(UNDECLARED_COLUMN) > 0)
-
-    @classmethod
-    def cause_type(cls) -> Any:
-        return pa.ArrowInvalid
 
 
 @pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")

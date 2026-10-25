@@ -12,8 +12,6 @@ import pytest
 from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
     MissingColumnConsumer,
     MissingColumnRunAllTestBase,
-)
-from tests.test_plugins.compute_framework.base_implementations.pyarrow.test_pyarrow_allow_empty_result_run_all import (
     PyArrowFilterReadConsumer,
     PyArrowKeyReadConsumer,
 )

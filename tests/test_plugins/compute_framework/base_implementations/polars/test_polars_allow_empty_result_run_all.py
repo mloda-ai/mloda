@@ -9,6 +9,7 @@ below exercise the end-to-end behavior through ``run_all`` (they do not assert a
 representation).
 """
 
+import traceback
 from typing import Any
 
 import pytest
@@ -122,9 +123,13 @@ class TestPolarsLazyMissingColumnRunAll(TestPolarsMissingColumnRunAll):
     def test_undeclared_column_read_with_global_filter_raises_explanatory_error(self, flight_server: Any) -> None:
         global_filter = GlobalFilter()
         global_filter.add_filter(PolarsWithColumnsReadConsumer.get_class_name(), "min", {"mc_declared": 0})
-        self.assert_undeclared_read_raises(
+        error = self.assert_undeclared_read_raises(
             PolarsWithColumnsReadConsumer, ParallelizationMode.SYNC, flight_server, global_filter
         )
+        cause = error.__cause__
+        assert cause is not None
+        frames = [frame.name for frame in traceback.extract_tb(cause.__traceback__)]
+        assert "_validate_filter_columns" in frames
 
 
 class SingleSeriesOnRoot(FeatureGroup):

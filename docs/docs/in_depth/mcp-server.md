@@ -100,9 +100,9 @@ before planning and again on run. Inline data is also capped by the plan id size
 
 Every result is a one-line summary followed by the result as JSON, which is also the structured content. A failed
 call has `isError` set and one error shape: `{"error": {"code", "message", "details", "audit_id"}}` with the codes
-`validation_failed`, `policy_denied`, `limit_exceeded`, `plan_invalid`, `plan_stale`, `missing_input_feature` and `internal`. Details
-point at the request by JSON pointer, with a suggestion when a close name exists. A `missing_input_feature` detail
-holds `feature_group`, `feature` and `missing_inputs` (never the available columns).
+`validation_failed`, `policy_denied`, `limit_exceeded`, `plan_invalid`, `plan_stale`, `missing_input_feature` and
+`internal`. Details point at the request by JSON pointer, with a suggestion when a close name exists. A
+`missing_input_feature` detail holds `feature_group`, `feature` and `missing_inputs` (never the available columns).
 
 ## What stays on the server
 
@@ -144,9 +144,11 @@ mloda-mcp --transport http --host 127.0.0.1 --port 8000
 
 The server is at `/mcp`. Bound to loopback, it accepts only loopback `Host` and `Origin` headers.
 
-The HTTP server has no authentication. Binding a non-loopback host exposes it to the network, and the CLI warns about it. All HTTP clients share one principal (the OS user) and one set of plan ids.
+There is no authentication: a non-loopback host exposes the server to the network (the CLI warns). All clients share one
+principal (the OS user) and one set of plan ids.
 
-To embed the server, call `mloda.interfaces.mcp.server.create_app(settings, env=env, host=...)`. It returns a Starlette app. A mounted sub-app's lifespan does not run, so the embedding app must run the returned app's lifespan, or serve it directly.
+To embed it, call `mloda.interfaces.mcp.server.create_app(settings, env=env, host=...)`, which returns a Starlette app.
+A mounted sub-app's lifespan does not run, so run the returned app's lifespan or serve it directly.
 
 Not yet: paging through full results, approvals, cancellation, and remote HTTP with OAuth.
 
@@ -165,9 +167,9 @@ mloda run income segment -o model=small -c timeout:=30
 `KEY=@FILE` (file text). A single target that is `-`, an existing file or ends in `.json` is a request file instead,
 and `-o` or `-c` with it is an error.
 
-`--full` returns every row and all columns, withheld ones included, with no preview. `max_rows` still applies. The
-server never offers it. `mloda explain` and `mloda run` do not refuse filters on withheld columns, since the caller is
-local; `mloda mcp serve` does.
+`--full` returns every row and all columns, withheld ones included. `max_rows` still applies. The server never offers
+it. `mloda explain` and `mloda run` do not refuse filters on withheld columns (the caller is local); `mloda mcp serve`
+does.
 
 `mloda run` executes regardless of `mode`, since you started it yourself, but applies the same limits and preview
 rules. Exit codes: `0` success, `2` an error result or nothing could run (bad config, bad request, policy, limit, or a

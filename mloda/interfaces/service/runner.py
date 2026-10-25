@@ -41,10 +41,7 @@ class Runner:
         self._planner = planner
 
     def run(self, plan_id: Any, full: bool = False) -> dict[str, Any]:
-        """Execute the plan behind ``plan_id`` and return its tables, or an error result.
-
-        With ``full`` each table holds every row and column instead of the classified preview.
-        """
+        """Run the plan behind ``plan_id``; ``full`` returns every row and column instead of the preview."""
         if self._planner.settings.mode != "execute":
             return error_result("policy_denied", "Execution is disabled; the service is in plan mode.")
         verified = self._planner.verify_plan_id(plan_id)

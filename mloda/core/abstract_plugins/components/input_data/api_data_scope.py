@@ -15,6 +15,7 @@ class ApiDataRef:
 
     key: str
     columns: tuple[str, ...]
+    value_type: type | None = None
 
 
 @contextmanager

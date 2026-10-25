@@ -187,6 +187,11 @@ class SourceFeatureGroup(FeatureGroup):
         return None
 
     @classmethod
+    def overrides_load_neutral(cls, base: type) -> bool:
+        """True when a class below ``base`` in the MRO defines its own load_neutral."""
+        return any("load_neutral" in klass.__dict__ for klass in cls.__mro__[: cls.__mro__.index(base)])
+
+    @classmethod
     def neutral_type(cls, match: SourceMatch) -> type | None:
         """The type load_neutral returns, None when unknown; a default run prefers frameworks taking it as is."""
         return None

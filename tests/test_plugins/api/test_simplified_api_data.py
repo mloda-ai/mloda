@@ -13,11 +13,13 @@ Simplified mloda:
 
 from typing import Any, ClassVar
 
+import numpy as np
+
 import pyarrow as pa
 import pytest
 
 from mloda.user import mloda
-from mloda.provider import FeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
@@ -27,6 +29,7 @@ from mloda.user import Link, JoinSpec
 from mloda.user import GlobalFilter, Options
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda.provider import ApiDataFG, ClaimRoute, NamePolicy, SourceFeatureGroup, SourceMatch
 from mloda.user import ParallelizationMode
@@ -486,6 +489,29 @@ class SimplifiedApiDoublingFG(ApiDataFG):
         return {name: [v * 2 for v in column] for name, column in values.items()}
 
 
+class ApiNeutralBoundedFG(ApiDataFG):
+    """ApiDataFG limited to three frameworks and to api_neutral_ names, for default-run tests."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame, PyArrowTable, PythonDictFramework}
+
+    @classmethod
+    def is_pointed(cls, feature_name: str, options: Any, data_access_collection: Any) -> bool:
+        return feature_name.startswith("api_neutral_")
+
+    @classmethod
+    def find_sources(
+        cls, route: Any, feature_name: str, options: Any, data_access_collection: Any
+    ) -> list[SourceMatch]:
+        if not feature_name.startswith("api_neutral_"):
+            return []
+        return super().find_sources(route, feature_name, options, data_access_collection)
+
+
+_neutral_only = PluginCollector.enabled_feature_groups({ApiNeutralBoundedFG})
+
+
 def _compute_step(session: Any) -> Any:
     return next(step for step in session.resolved_plan() if step.step_kind == "compute")
 
@@ -580,6 +606,78 @@ class TestApiDataSourceGroupBehavior:
         assert set(frames) == {("creator_id",), ("api_num",)}
         assert frames[("creator_id",)]["creator_id"].tolist() == [1, 2, 3]
         assert frames[("api_num",)]["api_num"].tolist() == [7, 8]
+
+
+class TestApiDataNeutralType:
+    """A default run loads a dict-of-lists set natively on the dict framework; a compute_frameworks list decides."""
+
+    _lists = {"Neu": {"api_neutral_a": [1, 2], "api_neutral_b": [3, 4]}}
+
+    @pytest.mark.parametrize("path", ["run_all", "prepare_run", "stream_all"])
+    def test_default_run_with_list_columns_returns_a_dict_on_the_dict_framework(self, path: str) -> None:
+        kwargs: dict[str, Any] = {"api_data": self._lists, "plugin_collector": _neutral_only}
+        features: list[Feature | str] = ["api_neutral_a"]
+        result: list[Any]
+        if path == "run_all":
+            result = mloda.run_all(features, **kwargs)
+        elif path == "prepare_run":
+            result = mloda.prepare(features, **kwargs).run(api_data=self._lists)
+        else:
+            result = list(mloda.stream_all(features, **kwargs))
+
+        assert [dict(frame) for frame in result] == [{"api_neutral_a": [1, 2]}]
+        assert all(isinstance(frame, dict) for frame in result)
+
+    def test_explain_reports_loads_natively_on_the_dict_framework(self) -> None:
+        steps = mloda.explain(["api_neutral_a"], api_data=self._lists, plugin_collector=_neutral_only)
+        step = next(s for s in steps if s.step_kind == "compute")
+
+        assert step.compute_framework is PythonDictFramework
+        assert step.compute_framework_reason == "loads natively"
+
+    @pytest.mark.parametrize("make", [tuple, np.array], ids=["tuple", "ndarray"])
+    def test_default_run_with_non_list_columns_keeps_todays_framework(self, make: Any) -> None:
+        data = {"Neu": {"api_neutral_a": make([1, 2])}}
+        steps = mloda.explain(["api_neutral_a"], api_data=data, plugin_collector=_neutral_only)
+        step = next(s for s in steps if s.step_kind == "compute")
+        assert step.compute_framework is not PythonDictFramework
+        assert step.compute_framework_reason != "loads natively"
+
+        result = mloda.run_all(["api_neutral_a"], api_data=data, plugin_collector=_neutral_only)
+        assert not isinstance(result[0], dict)
+
+    def test_a_compute_frameworks_list_still_decides(self) -> None:
+        kwargs: dict[str, Any] = {
+            "compute_frameworks": [PandasDataFrame],
+            "api_data": self._lists,
+            "plugin_collector": _neutral_only,
+        }
+        step = next(s for s in mloda.explain(["api_neutral_a"], **kwargs) if s.step_kind == "compute")
+        assert step.compute_framework is PandasDataFrame
+        assert step.compute_framework_reason != "loads natively"
+
+        result = mloda.run_all(["api_neutral_a"], **kwargs)
+        assert result[0]["api_neutral_a"].tolist() == [1, 2]
+
+    def test_neutral_type_is_the_recorded_type_else_none(self) -> None:
+        default = DataAccessCollection().with_api_data_columns({"Neu": ("api_neutral_a",)}, types={"Neu": dict})
+        plain = DataAccessCollection().with_api_data_columns({"Neu": ("api_neutral_a",)})
+        route = ApiDataFG.CLAIM_ROUTES[0]
+
+        typed = ApiDataFG.find_sources(route, "api_neutral_a", Options(), default)[0]
+        untyped = ApiDataFG.find_sources(route, "api_neutral_a", Options(), plain)[0]
+
+        assert isinstance(typed.access, ApiDataRef)
+        assert typed.access.value_type is dict
+        assert ApiDataFG.neutral_type(typed) is dict
+        assert ApiDataFG.neutral_type(untyped) is None
+
+    def test_neutral_type_is_none_for_a_subclass_overriding_load_neutral(self) -> None:
+        dac = DataAccessCollection().with_api_data_columns({"Neu": ("simplified_api_double_a",)}, types={"Neu": dict})
+        route = SimplifiedApiDoublingFG.CLAIM_ROUTES[0]
+        match = SimplifiedApiDoublingFG.find_sources(route, "simplified_api_double_a", Options(), dac)[0]
+
+        assert SimplifiedApiDoublingFG.neutral_type(match) is None
 
 
 class TestApiDataScopeAndShapes:

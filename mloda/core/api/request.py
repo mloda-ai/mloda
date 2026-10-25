@@ -211,10 +211,11 @@ class mlodaAPI:
             )
 
             self._api_data_columns = self._api_data_spec(api_data)
+            self._api_data_types = {} if compute_frameworks else self._api_data_type_spec(api_data)
             if self._api_data_columns:
                 data_access_collection = (
                     DataAccessCollection() if data_access_collection is None else data_access_collection
-                ).with_api_data_columns(self._api_data_columns)
+                ).with_api_data_columns(self._api_data_columns, self._api_data_types)
 
             self.strict_type_enforcement = strict_type_enforcement
             self.features = self._process_features(_requested_features)
@@ -259,6 +260,15 @@ class mlodaAPI:
             spec[key_name] = tuple(key_data)
         return spec
 
+    @staticmethod
+    def _api_data_type_spec(api_data: dict[str, dict[str, Any]] | None) -> dict[str, type]:
+        """The type of each api_data set given as a dict whose column values are all lists."""
+        return {
+            key: type(values)
+            for key, values in (api_data or {}).items()
+            if isinstance(values, dict) and all(isinstance(column, list) for column in values.values())
+        }
+
     def _validate_run_api_data(self, api_data: dict[str, Any] | None) -> None:
         """Refuse run data whose sets or column names differ from the ones prepared."""
         if api_data is None:
@@ -282,6 +292,18 @@ class mlodaAPI:
                     f"missing {sorted(map(str, set(columns) - set(api_data[key])))}, "
                     f"unexpected {sorted(map(str, set(api_data[key]) - set(columns)))}."
                 )
+        for key in self._api_data_types:
+            values = api_data[key]
+            if not isinstance(values, dict):
+                raise ValueError(
+                    f"api_data set '{key}' must be a dict like the prepared set, got {type(values).__name__}."
+                )
+            for column, column_values in values.items():
+                if not isinstance(column_values, list):
+                    raise ValueError(
+                        f"api_data set '{key}' column '{column}' must be a list like the prepared set, "
+                        f"got {type(column_values).__name__}."
+                    )
 
     def _secret_literals(self) -> frozenset[str]:
         dac = getattr(self, "data_access_collection", None)

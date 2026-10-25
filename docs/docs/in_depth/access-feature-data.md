@@ -196,7 +196,9 @@ For this purpose, mloda accepts request data through the `api_data` parameter.
 
 The built-in `ApiDataFG` (a `SourceFeatureGroup`) reads data given to mloda at request time. It claims a feature whose name is a column of a set in the `api_data` parameter, and loads it through the `INPUT_DATA_LOAD` hook with `data_access_identity` `api_data:<set key>`.
 
-`Options({"ApiDataFG": "<set key>"})` narrows a feature to one set; an unknown key aborts. `prepare()` fixes each set's columns, and `run(api_data=...)` must give the same set keys and the same column names per set (order may differ), otherwise a `ValueError` is raised before the run starts. A FeatureGroup computing a name that is also an `api_data` column is an ambiguity error. For a custom transport, subclass `ApiDataFG` and override `load_neutral`, reading the run's values with `cls.api_values(match)`.
+`Options({"ApiDataFG": "<set key>"})` narrows a feature to one set; an unknown key aborts. `prepare()` fixes each set's columns, and `run(api_data=...)` must give the same set keys and the same column names per set (order may differ), otherwise a `ValueError` is raised before the run starts. A FeatureGroup computing a name that is also an `api_data` column is an ambiguity error. For a custom transport, subclass `ApiDataFG` and override `load_neutral`, reading the run's values with `cls.api_values(match)`. A subclass overriding `load_neutral` declares `neutral_type` itself; one building its own `ApiDataRef` passes `value_type`.
+
+Without a `compute_frameworks` list, a set given as a dict of lists runs on `PythonDictFramework` (reason `loads natively`), and consumers that can run there follow, so the result is a dict. A pandas-style group without `compute_framework_rule` then also runs on dicts: declare the rule or pass `compute_frameworks`. Such a session's `run(api_data=...)` must keep dict-of-list sets. Plan locks of default api_data runs written before this release no longer match; rewrite them with `write_plan_lock`.
 
 Use cases:
 

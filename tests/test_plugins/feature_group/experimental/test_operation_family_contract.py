@@ -18,11 +18,11 @@ from mloda.core.abstract_plugins.components.code_closure import closure_parts
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.provider import DefaultOptionKeys, FeatureSet
 from mloda.user import Feature, Options
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
@@ -356,10 +356,14 @@ LOOP_INPUT_CASES: dict[str, tuple[Callable[[], pa.Table], list[Options]]] = {
         _time_table,
         [Options(), Options({DefaultOptionKeys.reference_time: "ts"})],
     ),
-    "clustering": (_numeric_table, [Options()]),
+    "clustering": (_numeric_table, [Options(), Options({"output_probabilities": True})]),
     "forecasting": (
         _time_table,
-        [Options(), Options({DefaultOptionKeys.reference_time: "ts"})],
+        [
+            Options(),
+            Options({DefaultOptionKeys.reference_time: "ts"}),
+            Options({"output_confidence_intervals": True}),
+        ],
     ),
     "dimensionality_reduction": (_numeric_table, [Options()]),
     "node_centrality": (_node_table, [Options(), Options({"weight_column": "w"})]),
@@ -381,17 +385,24 @@ _ADAPTERS: dict[type[ComputeFramework], ZeroRowResultTypeTestMixin] = {
     PythonDictFramework: PythonDictZeroRowAdapter(),
 }
 
+
+def _variant_label(options: Options) -> str:
+    return "+".join(sorted(str(key) for key in options.keys())) or "default"
+
+
 LOOP_INPUT_PARAMS = [
-    pytest.param(name, impl, options, id=f"{name}-{impl.__name__}-{index}")
+    pytest.param(name, impl, options, id=f"{name}-{impl.__name__}-{_variant_label(options)}")
     for name, family in OPERATION_FAMILIES.items()
     for impl in family[1]
-    for index, options in enumerate(LOOP_INPUT_CASES.get(name, (None, []))[1])
+    for options in LOOP_INPUT_CASES.get(name, (None, []))[1]
 ]
 
 
 def test_loop_input_cases_cover_every_operation_family() -> None:
     assert set(LOOP_INPUT_CASES) == set(OPERATION_FAMILIES)
     assert all(variants for _builder, variants in LOOP_INPUT_CASES.values())
+    frameworks = {impl.compute_framework for family in OPERATION_FAMILIES.values() for impl in family[1]}
+    assert frameworks <= set(_ADAPTERS)
 
 
 @pytest.mark.parametrize(("name", "impl", "options"), LOOP_INPUT_PARAMS)

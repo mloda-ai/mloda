@@ -595,7 +595,7 @@ class SinglePassStrictFG_782(FeatureChainParserMixin, FeatureGroup):
     ) -> bool:
         _record(cls.get_class_name(), "supports_compute_framework")
         _record_pair(cls.get_class_name(), compute_framework.get_class_name())
-        return super().supports_compute_framework(feature_name, options, compute_framework)
+        return super().supports_compute_framework(feature_name, options, compute_framework, part=part)
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:

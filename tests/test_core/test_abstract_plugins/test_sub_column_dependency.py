@@ -1665,3 +1665,14 @@ class TestPartAwareFrameworkCheck:
         assert PartAwareProducer.calls == 2
         assert sorted(PartAwareProducer.ran_on) == ["PyArrowTable", "PythonDictFramework"]
         assert sorted(sorted(_columns([f])) for f in results) == [["pmeasure", "pmeasure~v"], ["pmeasure~v"]]
+
+    def test_whole_and_part_consumer_unpinned_compute_the_producer_once_per_step(self) -> None:
+        _run(
+            ["pmeasure", "pmeasure_consumer_output"],
+            PartAwareProducer,
+            PyArrowPartConsumer,
+            frameworks=[PythonDictFramework, PyArrowTable],
+        )
+
+        assert PartAwareProducer.calls == 2
+        assert sorted(PartAwareProducer.ran_on) == ["PyArrowTable", "PythonDictFramework"]

@@ -137,7 +137,7 @@ class CountingStubFeatureGroup(StubFeatureGroup):
     ) -> bool:
         cls._enter_hook("supports_compute_framework", compute_framework)
         if cls.SUPPORTED_FRAMEWORKS is None:
-            return super().supports_compute_framework(feature_name, options, compute_framework)
+            return super().supports_compute_framework(feature_name, options, compute_framework, part=part)
         return compute_framework.get_class_name() in cls.SUPPORTED_FRAMEWORKS
 
     @classmethod

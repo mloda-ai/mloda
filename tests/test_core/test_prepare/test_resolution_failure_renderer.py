@@ -440,7 +440,7 @@ class RendererStrictFG791(FeatureChainParserMixin, FeatureGroup):
         part: str | None = None,
     ) -> bool:
         HOOK_COUNTER_791.record(cls.get_class_name(), "supports_compute_framework")
-        return super().supports_compute_framework(feature_name, options, compute_framework)
+        return super().supports_compute_framework(feature_name, options, compute_framework, part=part)
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:

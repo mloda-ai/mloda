@@ -31,6 +31,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.implementation import Implementation, accessible_implementations
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import ANY_OUTPUT_PART
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.steward import get_feature_group_docs
 from mloda.user import PluginCollector, mloda
@@ -411,6 +412,14 @@ class PartRecordingFeatureGroup(FeatureGroup):
         return None
 
 
+class AnyPartRecordingFeatureGroup(PartRecordingFeatureGroup):
+    OUTPUT_PARTS = (ANY_OUTPUT_PART,)
+
+
+class NestedPartRecordingFeatureGroup(PartRecordingFeatureGroup):
+    OUTPUT_PARTS = ("0~lower",)
+
+
 @pytest.fixture(autouse=True)
 def _reset_part_recording() -> None:
     PartRecordingFeatureGroup.seen = []
@@ -420,12 +429,20 @@ class TestPartDispatch:
     """Core passes the base name and the requested part to the capability hook."""
 
     @pytest.mark.parametrize(
-        ("requested", "expected_part"),
-        [(f"{CAPABILITY_FEATURE}~v", "v"), (CAPABILITY_FEATURE, None)],
-        ids=["part", "whole"],
+        ("group", "requested", "expected_part"),
+        [
+            (PartRecordingFeatureGroup, f"{CAPABILITY_FEATURE}~v", "v"),
+            (PartRecordingFeatureGroup, CAPABILITY_FEATURE, None),
+            (AnyPartRecordingFeatureGroup, f"{CAPABILITY_FEATURE}~k", "k"),
+            (AnyPartRecordingFeatureGroup, f"{CAPABILITY_FEATURE}~0~lower", "0~lower"),
+            (NestedPartRecordingFeatureGroup, f"{CAPABILITY_FEATURE}~0~lower", "0~lower"),
+        ],
+        ids=["part", "whole", "any_concrete_part", "any_nested_part", "declared_nested_part"],
     )
-    def test_hook_receives_base_name_and_part(self, requested: str, expected_part: str | None) -> None:
-        plugins: FeatureGroupEnvironmentMapping = {PartRecordingFeatureGroup: {CapabilityFwA}}
+    def test_hook_receives_base_name_and_part(
+        self, group: type[PartRecordingFeatureGroup], requested: str, expected_part: str | None
+    ) -> None:
+        plugins: FeatureGroupEnvironmentMapping = {group: {CapabilityFwA}}
 
         identify_winner(feature=Feature(requested), accessible_plugins=plugins)
 

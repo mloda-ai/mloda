@@ -846,7 +846,8 @@ class FeatureGroup(ABC):
     ) -> bool:
         """Per-feature, per-framework capability check evaluated at match time.
 
-        ``feature_name`` is the base name; ``part`` is the requested declared output part, None for the whole.
+        ``part`` is the requested declared output part, None for the whole. ``feature_name`` is the base name
+        when ``part`` is set, otherwise the requested name (a ``~`` name can arrive whole).
         ``subtype_support_matrix`` reflects base-name capability only.
 
         Returns ``True`` (the default) to allow the framework. Override to declare

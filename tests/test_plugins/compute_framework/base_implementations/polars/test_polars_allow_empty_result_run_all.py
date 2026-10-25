@@ -17,6 +17,7 @@ from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
+from mloda.user import GlobalFilter
 from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
@@ -117,6 +118,13 @@ class TestPolarsLazyMissingColumnRunAll(TestPolarsMissingColumnRunAll):
     @classmethod
     def compute_framework_name(cls) -> str:
         return "PolarsLazyDataFrame"
+
+    def test_undeclared_column_read_with_global_filter_raises_explanatory_error(self, flight_server: Any) -> None:
+        global_filter = GlobalFilter()
+        global_filter.add_filter(PolarsWithColumnsReadConsumer.get_class_name(), "min", {"mc_declared": 0})
+        self.assert_undeclared_read_raises(
+            PolarsWithColumnsReadConsumer, ParallelizationMode.SYNC, flight_server, global_filter
+        )
 
 
 class SingleSeriesOnRoot(FeatureGroup):

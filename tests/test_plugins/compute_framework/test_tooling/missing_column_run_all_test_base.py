@@ -8,6 +8,7 @@ from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
+from mloda.user import GlobalFilter
 from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
@@ -53,6 +54,32 @@ class MissingColumnConsumer(FeatureGroup):
         return cls.read_undeclared(data)
 
 
+class KeyReadConsumer(MissingColumnConsumer):
+    """Subscripts the undeclared column (dict or pandas frame)."""
+
+    @classmethod
+    def read_undeclared(cls, data: Any) -> Any:
+        return data[UNDECLARED_COLUMN]
+
+    @classmethod
+    def cause_type(cls) -> Any:
+        return KeyError
+
+
+class SelectReadConsumer(MissingColumnConsumer):
+    """Selects the undeclared column on a SQL relation."""
+
+    @classmethod
+    def read_undeclared(cls, data: Any) -> Any:
+        return data.select(UNDECLARED_COLUMN)
+
+    @classmethod
+    def cause_type(cls) -> Any:
+        from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import MissingRelationColumnError
+
+        return MissingRelationColumnError
+
+
 class MissingColumnRunAllTestBase(PolicyRunAllTestBase):
     """Each consumer FG from ``consumer_fgs`` raises an explanatory ``ValueError`` through ``run_all``."""
 
@@ -70,6 +97,15 @@ class MissingColumnRunAllTestBase(PolicyRunAllTestBase):
     def test_undeclared_column_read_raises_explanatory_error(
         self, consumer_fg: type[MissingColumnConsumer], mode: ParallelizationMode, flight_server: Any
     ) -> None:
+        self.assert_undeclared_read_raises(consumer_fg, mode, flight_server)
+
+    def assert_undeclared_read_raises(
+        self,
+        consumer_fg: type[MissingColumnConsumer],
+        mode: ParallelizationMode,
+        flight_server: Any,
+        global_filter: GlobalFilter | None = None,
+    ) -> None:
         self.assert_policy_case(
             feature_name=consumer_fg.__name__,
             plugin_collector=PluginCollector.enabled_feature_groups({MissingColumnRoot, consumer_fg}),
@@ -81,4 +117,5 @@ class MissingColumnRunAllTestBase(PolicyRunAllTestBase):
             ),
             mode=mode,
             flight_server=flight_server,
+            global_filter=global_filter,
         )

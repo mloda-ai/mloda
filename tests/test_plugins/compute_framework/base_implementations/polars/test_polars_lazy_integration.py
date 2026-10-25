@@ -6,7 +6,6 @@ from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda.user import GlobalFilter
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
@@ -137,46 +136,9 @@ class SecondTransformFeatureGroup(FeatureGroup):
         return set(["quadrupled_value"])
 
 
-class PolarsUndeclaredColumnFeatureGroup(FeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PolarsLazyDataFrame}
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("value")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return data.with_columns(pl.col("undeclared_polars_col").alias("polars_undeclared_read"))
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"polars_undeclared_read"}
-
-
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 class TestPolarsLazyIntegrationWithMlodaAPI:
     """Integration tests for PolarsLazyDataFrame with mloda."""
-
-    def test_undeclared_column_read_with_global_filter_raises_explanatory_error(self) -> None:
-        global_filter = GlobalFilter()
-        global_filter.add_filter("polars_undeclared_read", "min", {"value": 0})
-        with pytest.raises(ValueError) as excinfo:
-            mloda.run_all(
-                ["polars_undeclared_read"],
-                compute_frameworks=[PolarsLazyDataFrame],
-                plugin_collector=PluginCollector.enabled_feature_groups(
-                    {PolarsLazyTestDataCreator, PolarsUndeclaredColumnFeatureGroup}
-                ),
-                global_filter=global_filter,
-            )
-
-        message = str(excinfo.value)
-        assert "PolarsUndeclaredColumnFeatureGroup" in message
-        assert "ColumnNotFoundError" in message
-        assert "undeclared_polars_col" in message
-        assert "input_features" in message
-        assert isinstance(excinfo.value.__cause__, pl.exceptions.ColumnNotFoundError)
 
     @pytest.mark.parametrize(
         "modes",

@@ -7,14 +7,15 @@ is a zero-row PyArrow table that still carries its column (state C -> success). 
 IcebergTable (schema) branch is covered by the unit mixin test.
 """
 
-from typing import Any
-
 import pytest
 
 from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
     MissingColumnConsumer,
     MissingColumnRunAllTestBase,
-    UNDECLARED_COLUMN,
+)
+from tests.test_plugins.compute_framework.base_implementations.pyarrow.test_pyarrow_allow_empty_result_run_all import (
+    PyArrowFilterReadConsumer,
+    PyArrowKeyReadConsumer,
 )
 from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
     SiblingDictRunAllTestBase,
@@ -58,28 +59,6 @@ class TestIcebergSiblingDictRunAll(SiblingDictRunAllTestBase):
         return "IcebergFramework"
 
 
-class IcebergKeyReadConsumer(MissingColumnConsumer):
-    @classmethod
-    def read_undeclared(cls, data: Any) -> Any:
-        return data.column(UNDECLARED_COLUMN)
-
-    @classmethod
-    def cause_type(cls) -> Any:
-        return KeyError
-
-
-class IcebergFilterReadConsumer(MissingColumnConsumer):
-    @classmethod
-    def read_undeclared(cls, data: Any) -> Any:
-        import pyarrow.compute as pc
-
-        return data.filter(pc.field(UNDECLARED_COLUMN) > 0)
-
-    @classmethod
-    def cause_type(cls) -> Any:
-        return pa.ArrowInvalid
-
-
 @pytest.mark.skipif(
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
@@ -92,4 +71,4 @@ class TestIcebergMissingColumnRunAll(MissingColumnRunAllTestBase):
 
     @classmethod
     def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
-        return [IcebergKeyReadConsumer, IcebergFilterReadConsumer]
+        return [PyArrowKeyReadConsumer, PyArrowFilterReadConsumer]

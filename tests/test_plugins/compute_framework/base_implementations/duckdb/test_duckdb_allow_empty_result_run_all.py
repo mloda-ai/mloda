@@ -13,6 +13,7 @@ from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
     MissingColumnConsumer,
     MissingColumnRunAllTestBase,
+    SelectReadConsumer,
     UNDECLARED_COLUMN,
 )
 from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
@@ -114,18 +115,6 @@ class TestDuckDBSiblingDictRunAll(SiblingDictRunAllTestBase):
         self._run_source_partial_result(mode, flight_server)
 
 
-class DuckDBSelectReadConsumer(MissingColumnConsumer):
-    @classmethod
-    def read_undeclared(cls, data: Any) -> Any:
-        return data.select(UNDECLARED_COLUMN)
-
-    @classmethod
-    def cause_type(cls) -> Any:
-        from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import MissingRelationColumnError
-
-        return MissingRelationColumnError
-
-
 class DuckDBProjectReadConsumer(MissingColumnConsumer):
     @classmethod
     def read_undeclared(cls, data: Any) -> Any:
@@ -156,4 +145,4 @@ class TestDuckDBMissingColumnRunAll(MissingColumnRunAllTestBase):
 
     @classmethod
     def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
-        return [DuckDBSelectReadConsumer, DuckDBProjectReadConsumer, DuckDBFilterReadConsumer]
+        return [SelectReadConsumer, DuckDBProjectReadConsumer, DuckDBFilterReadConsumer]

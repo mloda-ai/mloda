@@ -38,6 +38,12 @@ class TestPolarsDataFrameAvailability:
         assert_unavailable_when_import_blocked(PolarsDataFrame, ["polars"])
 
 
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsMissingColumnErrorTypes:
+    def test_missing_column_error_types(self) -> None:
+        assert pl.exceptions.ColumnNotFoundError in PolarsDataFrame.missing_column_error_types()
+
+
 class TestPolarsInstallation:
     @pytest.mark.skipif(
         os.getenv("SKIP_POLARS_INSTALLATION_TEST", "false").lower() == "true",

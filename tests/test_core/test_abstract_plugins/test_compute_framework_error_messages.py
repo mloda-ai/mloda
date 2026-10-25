@@ -21,6 +21,11 @@ def _make_cfw() -> DictComputeFramework:
     return cfw
 
 
+class TestMissingColumnErrorTypes:
+    def test_default_is_empty_tuple(self) -> None:
+        assert ComputeFramework.missing_column_error_types() == ()
+
+
 class TestValidateExpectedFrameworkErrorMessage:
     """Tests for validate_expected_framework error message clarity."""
 

@@ -196,6 +196,13 @@ elimination has anything to do. Data on which the framework cannot see columns
 but that is not an empty result still fails the missing-filter-column check
 loudly.
 
+#### Undeclared column reads
+
+A `KeyError` from `calculate_feature`, or an exception type a framework names in
+`missing_column_error_types()` (Polars: `ColumnNotFoundError`, also when a lazy
+frame only resolves its schema later), becomes a `ValueError` pointing at
+`input_features()`, chained from the original.
+
 ### Column name case sensitivity
 
 mloda matches column and feature names exactly (case-sensitive) in every lookup, match and presence check; engines that resolve names differently add the rules below.

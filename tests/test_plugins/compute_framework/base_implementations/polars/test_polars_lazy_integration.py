@@ -136,9 +136,50 @@ class SecondTransformFeatureGroup(FeatureGroup):
         return set(["quadrupled_value"])
 
 
+class PolarsUndeclaredColumnFeatureGroup(FeatureGroup):
+    """Reads a column that input_features does not declare."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PolarsDataFrame, PolarsLazyDataFrame}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("value")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.with_columns(pl.col("undeclared_polars_col").alias("polars_undeclared_read"))
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"polars_undeclared_read"}
+
+
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 class TestPolarsLazyIntegrationWithMlodaAPI:
     """Integration tests for PolarsLazyDataFrame with mloda."""
+
+    @pytest.mark.parametrize(
+        "creator, cfw",
+        [
+            (PolarsEagerTestDataCreator, PolarsDataFrame),
+            (PolarsLazyTestDataCreator, PolarsLazyDataFrame),
+        ],
+    )
+    def test_undeclared_column_read_raises_explanatory_error(self, creator: Any, cfw: Any) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            mloda.run_all(
+                ["polars_undeclared_read"],
+                compute_frameworks=[cfw],
+                plugin_collector=PluginCollector.enabled_feature_groups({creator, PolarsUndeclaredColumnFeatureGroup}),
+            )
+
+        message = str(excinfo.value)
+        assert "PolarsUndeclaredColumnFeatureGroup" in message
+        assert "ColumnNotFoundError" in message
+        assert "undeclared_polars_col" in message
+        assert "input_features" in message
+        assert isinstance(excinfo.value.__cause__, pl.exceptions.ColumnNotFoundError)
 
     @pytest.mark.parametrize(
         "modes",

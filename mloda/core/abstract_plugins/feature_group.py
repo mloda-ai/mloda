@@ -460,6 +460,12 @@ class FeatureGroup(ABC):
         """
         return None
 
+    @classmethod
+    def reduces_rows(cls) -> bool:
+        """True when calculate_feature replaces the frame with fewer rows; such a group must run as one step
+        per framework, so a split (data types, options, filters, dependency levels, an artifact) raises at plan time."""
+        return False
+
     @staticmethod
     def artifact() -> type[BaseArtifact] | None:
         """

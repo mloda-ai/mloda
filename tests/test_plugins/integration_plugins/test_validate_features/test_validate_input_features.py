@@ -12,10 +12,16 @@ from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import Options
+from mloda.user import PluginCollector
 from mloda.user import ParallelizationMode
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
 from mloda.steward import ExtenderHook, Extender
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
+from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
+    SiblingDictAggregate,
+    SiblingDictLostInputConsumer,
+    SiblingDictRoot,
+)
 from tests.test_plugins.integration_plugins.test_validate_features.example_validator import ExamplePanderaValidator
 
 logger = logging.getLogger(__name__)
@@ -89,31 +95,6 @@ class SkippingValidateInputExtender(Extender):
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         return None
-
-
-class LostInputAggregate(FeatureGroup):
-    """One-row dict that replaces the frame, dropping its own input column."""
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {cls.get_class_name(): [6]}
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature(name="BaseValidateInputFeaturesBase", options=options)}
-
-
-class LostInputConsumer(FeatureGroup):
-    """Declares an input that the aggregate replaced, so it is missing at runtime."""
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {cls.get_class_name(): [1]}
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {
-            Feature(name="BaseValidateInputFeaturesBase", options=options),
-            Feature(name="LostInputAggregate", options=options),
-        }
 
 
 class TrackingExtender(Extender):
@@ -241,14 +222,17 @@ class TestValidateInputFeatures:
     def test_extender_skipping_the_wrapped_validation_cannot_skip_the_core_input_check(
         self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
-        features = self.get_features(["LostInputConsumer"])
+        features = self.get_features(["SiblingDictLostInputConsumer"])
 
         with pytest.raises(MissingInputFeatureError) as excinfo:
-            MlodaTestRunner.run_api_simple(
+            MlodaTestRunner.run_api(
                 features,
                 parallelization_modes=modes,
                 flight_server=flight_server,
                 function_extender={SkippingValidateInputExtender()},
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {SiblingDictRoot, SiblingDictAggregate, SiblingDictLostInputConsumer}
+                ),
             )
 
-        assert excinfo.value.missing_inputs == ("BaseValidateInputFeaturesBase",)
+        assert excinfo.value.missing_inputs == ("sd_a",)

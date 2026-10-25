@@ -160,6 +160,15 @@ class UpperChainedFG(FeatureChainParserMixin, FeatureGroup):
     PROPERTY_MAPPING = {DefaultOptionKeys.in_features: PropertySpec("Source feature", context=True)}
 
     @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: Any, options: Options, data_access_collection: Any = None
+    ) -> bool:
+        """Name-only match so config-based matching never claims other tests' features."""
+        if not str(feature_name).endswith("__upper"):
+            return False
+        return super().match_feature_group_criteria(feature_name, options, data_access_collection)
+
+    @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PythonDictFramework, PandasDataFrame}
 

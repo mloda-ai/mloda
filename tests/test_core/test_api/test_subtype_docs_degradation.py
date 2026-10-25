@@ -55,6 +55,8 @@ class SbfixRaisingHookFG(FeatureGroup):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         raise RuntimeError("sbfix hook exploded")
 
@@ -84,6 +86,8 @@ class Sbfix852EmptyHookFG(FeatureGroup):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         raise RuntimeError()
 

@@ -716,10 +716,14 @@ class IdentifyFeatureGroupClass:
             self._criteria_matched_feature_groups.add(feature_group)
             options = self._matched_options[feature_group]
 
+            matched_part = self._output_parts.get(feature_group)
+            requested_part = matched_part[1] if matched_part is not None else None
             supported_frameworks = {
                 cfw
                 for cfw in compute_frameworks
-                if feature_group.supports_compute_framework(self._hook_name(feature_group, feature), options, cfw)
+                if feature_group.supports_compute_framework(
+                    self._hook_name(feature_group, feature), options, cfw, part=requested_part
+                )
             }
 
             # The split the capability hook just produced over this candidate's own accessible frameworks:

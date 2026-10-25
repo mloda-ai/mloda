@@ -102,8 +102,9 @@ class Implementation(ABC, Generic[G]):
         return ThirdPartyVersionMode.INCLUDE
 
     @classmethod
-    def accepts(cls, feature_name: str, options: Options) -> bool:
+    def accepts(cls, feature_name: str, options: Options, *, part: str | None = None) -> bool:
         """Whether this implementation can compute the concrete feature; True by default.
+        ``part`` is the requested declared output part, None for the whole feature.
         A rejection here is per feature and does not show in subtype_support_matrix()."""
         return True
 

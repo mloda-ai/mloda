@@ -174,6 +174,9 @@ If the parts depend on the feature name or options, override the classmethod `ou
 - Groups that declare nothing still resolve `vec~1`, which now returns only `vec~1`; a missing index fails after the computation.
 - `match_feature_group_criteria` matches the base name only; the part rule applies during feature resolution, not in global filters.
 - Artifacts are keyed by the base feature name, not a part column.
+- `supports_compute_framework` and `Implementation.accepts` take a keyword-only `part`. `feature_name` stays the base name; `part` is the requested declared output part, so a part can run on a framework that refuses the whole.
+- `part` is `None` for whole requests, for the implicit `vec~N` path of a group declaring no parts, for a group that matches `x~k` as a whole name, and in global filters.
+- An unpinned whole and part request fold onto the framework both allow. Pinned to different frameworks, they run as two steps, each computing the base (honor `parts_only`).
 - A trailing `~N` is also read against the declared parts: `measure~0` fails at resolution unless `0` is declared.
 - A part's declared data type is checked on its own column (`measure~value`).
 

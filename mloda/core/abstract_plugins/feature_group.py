@@ -841,8 +841,13 @@ class FeatureGroup(ABC):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         """Per-feature, per-framework capability check evaluated at match time.
+
+        ``feature_name`` is the base name; ``part`` is the requested declared output part, None for the whole.
+        ``subtype_support_matrix`` reflects base-name capability only.
 
         Returns ``True`` (the default) to allow the framework. Override to declare
         that a specific operation (encoded in ``feature_name``/``options``) is

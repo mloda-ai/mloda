@@ -6,8 +6,8 @@ feature -> feature-group resolution.
 
 Contract under test (to be implemented by the Green agent):
 
-1. ``FeatureGroup.supports_compute_framework(feature_name, options, compute_framework) -> bool``
-   classmethod, default ``True``. Arg order mirrors ``match_feature_group_criteria``.
+1. ``FeatureGroup.supports_compute_framework(feature_name, options, compute_framework, *, part=None) -> bool``
+   classmethod, default ``True``; ``part`` is the requested output part (``None``: the whole feature). Arg order mirrors ``match_feature_group_criteria``.
 2. ``IdentifyFeatureGroupClass._filter_loop`` narrows the candidate compute-framework
    set per feature using the hook (route-around when an unsupported framework is not
    the only candidate).
@@ -28,12 +28,15 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.implementation import accessible_implementations
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.implementation import Implementation, accessible_implementations
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.steward import get_feature_group_docs
 from mloda.user import PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
+from tests.test_core.test_abstract_plugins.test_components.test_input_data import toy_operation_group
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise, identify_winner
 
 
@@ -96,6 +99,8 @@ class RejectBCapabilityFeatureGroup(FeatureGroup):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         return compute_framework is not CapabilityFwB
 
@@ -123,6 +128,8 @@ class RejectAllCapabilityFeatureGroup(FeatureGroup):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         return False
 
@@ -160,6 +167,8 @@ class DualDeclaringFG_782(FeatureGroup):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         return compute_framework is not CapabilityFwB
 
@@ -371,6 +380,58 @@ class TestComputeFrameworkCapabilityHook:
         )
 
 
+class PartRecordingFeatureGroup(FeatureGroup):
+    """Declares part v and records every (feature_name, part) the capability hook receives."""
+
+    OUTPUT_PARTS = ("v",)
+    seen: list[tuple[str, str | None]] = []
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == CAPABILITY_FEATURE
+
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
+    ) -> bool:
+        cls.seen.append((str(feature_name), part))
+        return True
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+@pytest.fixture(autouse=True)
+def _reset_part_recording() -> None:
+    PartRecordingFeatureGroup.seen = []
+
+
+class TestPartDispatch:
+    """Core passes the base name and the requested part to the capability hook."""
+
+    @pytest.mark.parametrize(
+        ("requested", "expected_part"),
+        [(f"{CAPABILITY_FEATURE}~v", "v"), (CAPABILITY_FEATURE, None)],
+        ids=["part", "whole"],
+    )
+    def test_hook_receives_base_name_and_part(self, requested: str, expected_part: str | None) -> None:
+        plugins: FeatureGroupEnvironmentMapping = {PartRecordingFeatureGroup: {CapabilityFwA}}
+
+        identify_winner(feature=Feature(requested), accessible_plugins=plugins)
+
+        assert set(PartRecordingFeatureGroup.seen) == {(CAPABILITY_FEATURE, expected_part)}
+
+
 def _toy_operation() -> Any:
     """Imported lazily so a missing OperationFeatureGroup fails only the tests that need it."""
     return importlib.import_module(
@@ -422,7 +483,7 @@ class TestOperationGroupImplementationCapability:
             lambda g, m, f: pd.DataFrame({toy.OPTOY_FEATURE: [toy.PANDAS_MARK]}),
             base=toy.OpToyPandas,
         )
-        child.accepts = classmethod(lambda cls, feature_name, options: child_accepts)
+        child.accepts = classmethod(lambda cls, feature_name, options, *, part=None: child_accepts)
         collector = PluginCollector.enabled_feature_groups({toy.OpToyFG})
         collector.add_disabled_implementation_classes({child})
         feature = Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum", **parent_options})
@@ -482,7 +543,7 @@ class TestOperationGroupImplementationCapability:
             base=toy.OpToyPandas,
         )
         child.accepts = classmethod(
-            lambda cls, feature_name, options: (
+            lambda cls, feature_name, options, *, part=None: (
                 not (options.get(toy.OPTOY_KEY) == "median" and options.get(toy.OPTOY_PANDAS_OFF) is not None)
             )
         )
@@ -497,3 +558,41 @@ class TestOperationGroupImplementationCapability:
             assert probe("median", True) is False
             assert probe("sum", True) is True
             assert probe("median", False) is True
+
+
+class OpToyPartFG(toy_operation_group.OpToyFG):
+    """Operation group declaring part v."""
+
+    FEATURE = "optoy_part_value"
+    OUTPUT_PARTS = ("v",)
+
+
+class OpToyPartPandas(Implementation[OpToyPartFG]):
+    feature_group = OpToyPartFG
+    compute_framework = PandasDataFrame
+
+    @classmethod
+    def accepts(cls, feature_name: str, options: Options, *, part: str | None = None) -> bool:
+        return part is not None
+
+    @classmethod
+    def calculate(
+        cls, group: type[OpToyPartFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        return data
+
+
+class TestOperationGroupPartAwareAccepts:
+    """Implementation.accepts receives the requested part."""
+
+    def test_accepts_allowing_only_parts_resolves_the_part_and_refuses_the_whole(self) -> None:
+        options = {toy_operation_group.OPTOY_KEY: "sum"}
+        pandas = PandasDataFrame
+        plugins: FeatureGroupEnvironmentMapping = {OpToyPartFG: {pandas}}
+
+        _, winners = identify_winner(feature=Feature("optoy_part_value~v", options), accessible_plugins=plugins)
+        assert winners == {pandas}
+
+        with pytest.raises(ValueError) as exc_info:
+            evaluate_or_raise(feature=Feature("optoy_part_value", options), accessible_plugins=plugins)
+        assert exc_info.value.result.eliminations[OpToyPartFG].stage == "capability"  # type: ignore[attr-defined]

@@ -106,6 +106,8 @@ class SubDeclExplicitOverrideFG(SubDeclWindowFG):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         return True
 
@@ -235,6 +237,8 @@ class SubDeclHookMatrixPlainFG(FeatureGroup):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         return True
 

@@ -132,6 +132,8 @@ class CountingStubFeatureGroup(StubFeatureGroup):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         cls._enter_hook("supports_compute_framework", compute_framework)
         if cls.SUPPORTED_FRAMEWORKS is None:

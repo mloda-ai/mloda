@@ -67,18 +67,20 @@ class OperationFeatureGroup(FeatureGroup):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         """The serving implementation's supported subtypes and accepts decide, after the SUBTYPES gate."""
         from mloda.core.abstract_plugins.implementation import current_implementations, serving_implementation
 
         impl = serving_implementation(cls, compute_framework, current_implementations())
-        if impl is None or not super().supports_compute_framework(feature_name, options, compute_framework):
+        if impl is None or not super().supports_compute_framework(feature_name, options, compute_framework, part=part):
             return False
         if impl.supported is not None:
             canonical = impl.canonical_subtype(cls, str(feature_name), options)
             if canonical is not None and canonical not in impl.supported:
                 return False
-        return impl.accepts(str(feature_name), options)
+        return impl.accepts(str(feature_name), options, part=part)
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

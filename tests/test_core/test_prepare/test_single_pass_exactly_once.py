@@ -196,6 +196,8 @@ class CountingSinglePassFG_782(FeatureGroup):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         _record(cls.get_class_name(), "supports_compute_framework")
         _record_pair(cls.get_class_name(), compute_framework.get_class_name())
@@ -370,6 +372,8 @@ class SinglePassStatefulSupportFG_782(CountingSinglePassFG_782):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         _record(cls.get_class_name(), "supports_compute_framework")
         _record_pair(cls.get_class_name(), compute_framework.get_class_name())
@@ -586,6 +590,8 @@ class SinglePassStrictFG_782(FeatureChainParserMixin, FeatureGroup):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         _record(cls.get_class_name(), "supports_compute_framework")
         _record_pair(cls.get_class_name(), compute_framework.get_class_name())

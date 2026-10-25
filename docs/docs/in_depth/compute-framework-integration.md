@@ -27,7 +27,7 @@ per-feature hook evaluated at match time:
 
 ```py
 @classmethod
-def supports_compute_framework(cls, feature_name, options, compute_framework) -> bool:
+def supports_compute_framework(cls, feature_name, options, compute_framework, *, part=None) -> bool:
     """Reject an operation on a specific framework. Default returns True."""
     if compute_framework is SqliteFramework and is_median_op(feature_name, options):
         return False  # median is unsupported on SQLite
@@ -252,7 +252,7 @@ An `Implementation[G]` serves both operation groups (`data` is the input frame) 
 
 - **Framework set**: the frameworks that have an implementation (a framework subclass is served by its parent's implementation), intersected with `compute_framework_rule()`. A group with no implementation has no framework and never matches.
 - **Shared loop**: put the shared per-feature loop on the group as a classmethod that takes the per-framework pieces as keyword-only callables (`AggregatedFeatureGroup.aggregate(data, features, perform=..., add_column=..., columns=...)`). Each implementation's `calculate` hands its own methods over through the `group` it is called with, never through `cls.feature_group`, so a subclass of the group is served with its overrides. An `Implementation` subclass that leaves `calculate` abstract is ignored when implementations are loaded.
-- **Capability**: `supported` (a frozenset of subtypes, `None` means all) and the classmethod `accepts(feature_name, options)` (default `True`) decide whether an implementation can run a feature. A framework whose implementation rejects it is not a candidate for that feature. `subtype_support_matrix()` reflects the implementations' `supported` and the group's `SUBTYPES.supported`, but not `accepts`, so a restriction made in `accepts` (e.g. on a second option) does not show there; `resolve_feature(name, options=...)` gives the exact answer.
+- **Capability**: `supported` (a frozenset of subtypes, `None` means all) and the classmethod `accepts(feature_name, options, *, part=None)` (default `True`) decide whether an implementation can run a feature. A framework whose implementation rejects it is not a candidate for that feature. `subtype_support_matrix()` reflects the implementations' `supported` and the group's `SUBTYPES.supported`, but not `accepts`, so a restriction made in `accepts` (e.g. on a second option) does not show there; `resolve_feature(name, options=...)` gives the exact answer.
 - **Divergence**: `divergent` maps a subtype to a short reason when the implementation's result differs from the group's reference contract (for example `{"sum": "skips NaN in sum"}`). The contract is documented on the group; implementations that follow it declare nothing. Divergence is declared per operation, not detected from the data: data without the affected case still prefers the matching implementation.
 - **Loading**: an operation group's implementations are found by import, so call `PluginLoader.all()` (or import the implementation modules) before running.
 - **Contract**: the loop's keyword-only callables are the group's contract and mypy checks the `aggregate`, `window`, `impute`, `clean`, `measure`, `scale`, `encode`, `run_pipeline`, `cluster`, `reduce`, `centrality` or `forecast` call inside each implementation's `calculate`.

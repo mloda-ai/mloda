@@ -83,6 +83,8 @@ class SplitCapResolveFeatureGroup(FeatureGroup):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         return compute_framework is not PythonDictFramework
 
@@ -114,6 +116,8 @@ class AllRejectedCapResolveFeatureGroup(FeatureGroup):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         return False
 
@@ -169,6 +173,8 @@ class OptionCapResolveFeatureGroup(FeatureGroup):
         feature_name: FeatureName | str,
         options: Options,
         compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
     ) -> bool:
         if compute_framework is PythonDictFramework:
             return bool(options.get(ALLOW_PYTHON_DICT_KEY))

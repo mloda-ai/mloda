@@ -30,8 +30,11 @@ class Runner:
     def __init__(self, planner: Planner) -> None:
         self._planner = planner
 
-    def run(self, plan_id: Any) -> dict[str, Any]:
-        """Execute the plan behind ``plan_id`` and return its tables, or an error result."""
+    def run(self, plan_id: Any, full: bool = False) -> dict[str, Any]:
+        """Execute the plan behind ``plan_id`` and return its tables, or an error result.
+
+        With ``full`` each table holds every row and column instead of the classified preview.
+        """
         if self._planner.settings.mode != "execute":
             return error_result("policy_denied", "Execution is disabled; the service is in plan mode.")
         verified = self._planner.verify_plan_id(plan_id)
@@ -47,13 +50,25 @@ class Runner:
             result = self._planner.execute(planned)
         except Exception as error:  # plugin boundary: the exception text may hold data, so only the type is reported
             return failure_result("The run", error)
-        tables = [self._table(frame, planned.names, result.plan) for frame in result]
+        build = self._full_table if full else self._table
+        tables = [build(frame, planned.names, result.plan) for frame in result]
         max_rows = self._planner.settings.max_rows
         over = [table["row_count"] for table in tables if max_rows is not None and table["row_count"] > max_rows]
         if over:
             details = [{"reason": "result_over_limit", "rows": rows, "max_rows": max_rows} for rows in over]
             return error_result("limit_exceeded", f"A result table has more rows than max_rows ({max_rows}).", details)
         return {"status": "completed", "tables": tables, "audit_id": f"run_{secrets.token_hex(8)}"}
+
+    def _full_table(self, frame: Mapping[Any, Any], names: Sequence[str], steps: Sequence[PlanStep]) -> dict[str, Any]:
+        data = {str(name): list(values) for name, values in frame.items()}
+        ordered = [name for name in names if name in data] + sorted(set(data) - set(names))
+        labels = self._planner.classifications(ordered, steps)
+        row_count = len(next(iter(data.values()), []))
+        return {
+            "row_count": row_count,
+            "columns": [{"name": name, "classification": labels[name]} for name in ordered],
+            "rows": [{name: _json_safe(data[name][index]) for name in ordered} for index in range(row_count)],
+        }
 
     def _table(self, frame: Mapping[Any, Any], names: Sequence[str], steps: Sequence[PlanStep]) -> dict[str, Any]:
         settings = self._planner.settings

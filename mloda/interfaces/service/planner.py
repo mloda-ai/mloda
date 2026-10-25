@@ -253,7 +253,7 @@ class Planner:
             return unmatched
         aliases = tuple(_alias_of(step, sources) or _inline_alias(step, parsed.inline_data) for step in steps)
         producers = _producers(steps, aliases)
-        withheld = self._withheld_filters(filters, producers)
+        withheld = None if self._settings.trusted_caller else self._withheld_filters(filters, producers)
         if withheld is not None:
             return withheld
         estimate = self._estimate(steps, aliases, parsed.inline_data)
@@ -483,7 +483,7 @@ class Planner:
             return explicit
         inputs = _inputs(producers[name][0], name) if name in producers and name not in seen else ()
         if not inputs:
-            return UNCLASSIFIED
+            return self._settings.default_classification or UNCLASSIFIED
         labels = [self._classification(source, producers, seen | {name}) for source in inputs]
         return max(labels, key=_strictness)
 

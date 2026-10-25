@@ -541,6 +541,26 @@ class TestFilters:
         assert result["normalized_request"] == request
 
 
+class TestTrustedCaller:
+    REQUEST = {"features": ["customer_id"], "filters": [{"feature": "segment", "op": "in", "values": ["a"]}]}
+
+    def test_untrusted_caller_is_refused_a_filter_on_a_withheld_column(self, tmp_path: Path) -> None:
+        error = _error(_explain(tmp_path, self.REQUEST), "policy_denied")
+
+        assert _has_detail(error, path="/filters/0", problem="filter_on_withheld_column")
+
+    def test_trusted_caller_may_filter_on_a_withheld_column(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, self.REQUEST, trusted_caller=True))
+
+        assert result["policy"] == {"verdict": "allowed"}
+        assert result["normalized_request"] == self.REQUEST
+
+    def test_trusted_caller_keeps_the_egress_report(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, self.REQUEST, trusted_caller=True))
+
+        assert result["egress"]["withheld"] == [{"column": "customer_id", "reason": "classification: unclassified"}]
+
+
 class TestSuccess:
     def test_result_keys(self, tmp_path: Path) -> None:
         result = _success(_explain(tmp_path, {"features": ["customer_id", "income"]}))
@@ -688,6 +708,57 @@ class TestEgress:
         result = _explain(tmp_path, {"features": ["customer_id", DERIVED]}, classification=classification)
 
         assert _success(result)["egress"] == {"preview_columns": ["customer_id", DERIVED], "withheld": []}
+
+    def test_default_classification_labels_unlisted_leaf_columns(self, tmp_path: Path) -> None:
+        classification = {"customer_id": "personal"}
+        request = {"features": ["customer_id", "income", "segment"]}
+
+        egress = _success(
+            _explain(tmp_path, request, classification=classification, default_classification="internal")
+        )["egress"]
+
+        assert egress["preview_columns"] == ["income", "segment"]
+        assert egress["withheld"] == [{"column": "customer_id", "reason": "classification: personal"}]
+
+    def test_default_classification_does_not_override_an_explicit_label(self, tmp_path: Path) -> None:
+        classification = {"income": "internal"}
+
+        egress = _success(
+            _explain(
+                tmp_path,
+                {"features": ["income", "segment"]},
+                classification=classification,
+                default_classification="personal",
+            )
+        )["egress"]
+
+        assert egress["preview_columns"] == ["income"]
+        assert egress["withheld"] == [{"column": "segment", "reason": "classification: personal"}]
+
+    def test_derived_feature_takes_the_strictest_input_with_a_default_classification(self, tmp_path: Path) -> None:
+        classification = {"customer_id": "internal"}
+
+        egress = _success(
+            _explain(
+                tmp_path,
+                {"features": ["customer_id", DERIVED]},
+                classification=classification,
+                default_classification="personal",
+            )
+        )["egress"]
+
+        assert egress["preview_columns"] == ["customer_id"]
+        assert egress["withheld"] == [{"column": DERIVED, "reason": "classification: personal"}]
+
+    def test_derived_feature_is_not_labelled_by_the_default(self, tmp_path: Path) -> None:
+        classification = {"income": "personal"}
+
+        egress = _success(
+            _explain(tmp_path, {"features": [DERIVED]}, classification=classification, default_classification="public")
+        )["egress"]
+
+        assert egress["preview_columns"] == []
+        assert egress["withheld"] == [{"column": DERIVED, "reason": "classification: personal"}]
 
     def test_keep_index_index_column_is_listed_and_withheld_by_classification(self, tmp_path: Path) -> None:
         classification = {"customer_id": "personal", "income": "internal"}

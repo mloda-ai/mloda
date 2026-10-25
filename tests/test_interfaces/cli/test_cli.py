@@ -11,7 +11,7 @@ import io
 import json
 import tomllib
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -144,8 +144,10 @@ def _elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return cwd
 
 
-def _services(config: Path | None, overrides: Mapping[str, Any] | None = None) -> tuple[Catalog, Planner, Runner]:
-    settings = load_settings(config, ENV, overrides)
+def _services(
+    config: Path | None, overrides: Mapping[str, Any] | None = None, trusted: bool = True
+) -> tuple[Catalog, Planner, Runner]:
+    settings = replace(load_settings(config, ENV, overrides), trusted_caller=trusted)
     services: tuple[Catalog, Planner, Runner] = build_services(
         settings, env=ENV, plugin_collector=_base(), clock=_clock
     )
@@ -580,6 +582,50 @@ class TestRunFormats:
         assert outcome.out == ""
         assert outcome.err.strip()
 
+    def test_full_json_prints_every_row_and_column(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path, CONFIG.replace('mode = "plan"', 'mode = "plan"\nmax_preview_rows = 2'))
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli(["run", str(_request_file(tmp_path)), "--config", str(config), "--full", "--format", "json"])
+
+        assert outcome.code == 0, outcome.err
+        (table,) = outcome.json()["tables"]
+        assert "preview" not in table
+        assert table["row_count"] == 5
+        assert table["rows"] == [{"customer_id": CUSTOMER_IDS[i], **PREVIEW_ROWS[i]} for i in range(5)]
+
+    def test_full_jsonl_prints_every_row_and_column(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path, CONFIG.replace('mode = "plan"', 'mode = "plan"\nmax_preview_rows = 2'))
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli(["run", str(_request_file(tmp_path)), "--config", str(config), "--full", "--format", "jsonl"])
+
+        assert outcome.code == 0, outcome.err
+        rows = [json.loads(line) for line in outcome.out.splitlines()]
+        assert rows == [{"customer_id": CUSTOMER_IDS[i], **PREVIEW_ROWS[i]} for i in range(5)]
+
+    def test_full_csv_prints_every_row_and_column(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path, CONFIG.replace('mode = "plan"', 'mode = "plan"\nmax_preview_rows = 2'))
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli(["run", str(_request_file(tmp_path)), "--config", str(config), "--full", "--format", "csv"])
+
+        assert outcome.code == 0, outcome.err
+        rows = list(csv.reader(io.StringIO(outcome.out)))
+        assert rows == [["customer_id", "income", "segment"]] + [
+            [CUSTOMER_IDS[i], str(PREVIEW_ROWS[i]["income"]), str(PREVIEW_ROWS[i]["segment"])] for i in range(5)
+        ]
+
+    def test_full_still_enforces_max_rows(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        argv = ["run", str(_request_file(tmp_path)), "--config", str(config), "--max-rows", "3", "--full"]
+
+        outcome = _cli(argv)
+
+        assert outcome.code == 2
+        assert _error_code(outcome) == "limit_exceeded"
+
     @pytest.mark.parametrize("output_format", ["json", "jsonl", "csv"])
     def test_withheld_values_never_appear(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, output_format: str
@@ -595,27 +641,37 @@ class TestRunFormats:
 
 
 class TestWithheldFilters:
+    REQUEST: dict[str, Any] = {
+        "features": ["segment"],
+        "filters": [{"feature": "customer_id", "op": "eq", "value": CUSTOMER_IDS[2]}],
+    }
+
+    def test_service_built_for_mcp_refuses_a_filter_on_a_withheld_column(self, tmp_path: Path) -> None:
+        _, planner, _ = _services(_config(tmp_path), trusted=False)
+
+        result = planner.explain(self.REQUEST)
+
+        assert planner.settings.trusted_caller is False
+        assert is_error(result)
+        assert result["error"]["code"] == "policy_denied"
+        details = result["error"]["details"]
+        assert [(detail["path"], detail["problem"]) for detail in details] == [
+            ("/filters/0", "filter_on_withheld_column")
+        ]
+
     @pytest.mark.parametrize("command", ["explain", "run"])
-    def test_filter_on_withheld_column_is_policy_denied(
+    def test_cli_accepts_a_filter_on_a_withheld_column(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
     ) -> None:
         config = _config(tmp_path)
         _elsewhere(tmp_path, monkeypatch)
-        request = {
-            "features": ["segment"],
-            "filters": [{"feature": "customer_id", "op": "eq", "value": CUSTOMER_IDS[2]}],
-        }
 
-        outcome = _cli([command, str(_request_file(tmp_path, request)), "--config", str(config)])
+        outcome = _cli([command, str(_request_file(tmp_path, self.REQUEST)), "--config", str(config)])
 
-        assert outcome.code == 2
-        assert _error_code(outcome) == "policy_denied"
-        details = outcome.json()["error"]["details"]
-        assert [(detail["path"], detail["problem"]) for detail in details] == [
-            ("/filters/0", "filter_on_withheld_column")
-        ]
-        assert "tables" not in outcome.json()
-        _assert_no_withheld_values(outcome)
+        assert outcome.code == 0, outcome.out + outcome.err
+        assert outcome.json()["status" if command == "run" else "plan_id"]
+        if command == "run":
+            _assert_no_withheld_values(outcome)
 
 
 class TestBuildServices:

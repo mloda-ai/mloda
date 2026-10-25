@@ -12,6 +12,7 @@ import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -60,6 +61,10 @@ COMMANDS: tuple[tuple[str, str, tuple[tuple[str, dict[str, Any]], ...]], ...] = 
             REQUEST,
             ("--max-rows", {"type": int, "help": "Refuse sources and results over this, and uncountable reads."}),
             ("--format", {"choices": FORMATS, "default": "json", "help": "Output format of the result."}),
+            (
+                "--full",
+                {"action": "store_true", "help": "Return every row and column, not the classified preview."},
+            ),
         ),
     ),
 )
@@ -146,20 +151,21 @@ def _read_request(source: str, stdin: TextIO) -> tuple[Any, str | None]:
         return None, f"request is not valid JSON ({error.msg} at line {error.lineno} column {error.colno})"
 
 
-def _write_result(result: Mapping[str, Any], output_format: str, stdout: TextIO) -> None:
+def _write_result(result: Mapping[str, Any], output_format: str, stdout: TextIO, full: bool = False) -> None:
     tables: list[dict[str, Any]] = result.get("tables", [])
     if is_error(result) or output_format == "json":
         stdout.write(json.dumps(result, indent=2) + "\n")
     elif output_format == "jsonl":
         for table in tables:
-            for row in table["preview"]["rows"]:
+            for row in table["rows"] if full else table["preview"]["rows"]:
                 stdout.write(json.dumps(row) + "\n")
     else:
         writer = csv.writer(stdout, lineterminator="\n")
         for table in tables:
-            header = [column["name"] for column in table["columns"] if column["in_preview"]]
+            header = [column["name"] for column in table["columns"] if full or column["in_preview"]]
             writer.writerow(header)
-            writer.writerows([row.get(name) for name in header] for row in table["preview"]["rows"])
+            rows = table["rows"] if full else table["preview"]["rows"]
+            writer.writerows([row.get(name) for name in header] for row in rows)
 
 
 def main(
@@ -185,6 +191,7 @@ def main(
     if isinstance(settings, str):
         err.write(f"mloda: error: {settings}\n")
         return FAILED
+    settings = replace(settings, trusted_caller=True)
     request, problem = _read_request(args.request, sys.stdin if stdin is None else stdin)
     if problem is not None:
         err.write(f"mloda: error: {problem}\n")
@@ -193,11 +200,11 @@ def main(
     result = planner.explain(request)
     output_format = "json"
     if args.command == "run" and not is_error(result):
-        result = runner.run(result["plan_id"])
+        result = runner.run(result["plan_id"], full=args.full)
         output_format = args.format
     tables = result.get("tables", [])
     if output_format == "csv" and len(tables) > 1:
         err.write(f"mloda: error: csv output needs a single table, got {len(tables)}; use json or jsonl\n")
         return FAILED
-    _write_result(result, output_format, out)
+    _write_result(result, output_format, out, full=args.command == "run" and args.full)
     return FAILED if is_error(result) else 0

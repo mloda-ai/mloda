@@ -23,6 +23,7 @@ _MCP_KEYS = frozenset(
         "sources",
         "classification",
         "inline_data",
+        "default_classification",
     }
 )
 _SOURCE_KEYS = frozenset({"files", "folders"})
@@ -62,6 +63,8 @@ class Settings:
     sources: Mapping[str, SourceConfig] = field(default_factory=dict)
     classification: Mapping[str, str] = field(default_factory=dict)
     inline_data: bool = False
+    default_classification: str | None = None
+    trusted_caller: bool = False
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -195,6 +198,10 @@ def _build(raw: Mapping[str, Any], base_dir: Path) -> Settings:
         if not isinstance(raw["inline_data"], bool):
             raise ConfigError("'inline_data' must be true or false")
         kwargs["inline_data"] = raw["inline_data"]
+    if raw.get("default_classification") is not None:
+        if not isinstance(raw["default_classification"], str):
+            raise ConfigError("'default_classification' must be a string")
+        kwargs["default_classification"] = raw["default_classification"]
     if "sources" in raw:
         sources = _str_mapping(raw["sources"], "sources")
         kwargs["sources"] = {alias: _build_source(alias, v, base_dir) for alias, v in sources.items()}

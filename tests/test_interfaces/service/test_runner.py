@@ -670,6 +670,69 @@ class TestJsonSafety:
         assert all(value is None or isinstance(value, (str, int, float, bool)) for value in values)
 
 
+class TestFull:
+    FULL_KEYS = {"row_count", "columns", "rows"}
+
+    def _full(self, tmp_path: Path, request: Mapping[str, Any] = REQUEST, **kwargs: Any) -> dict[str, Any]:
+        planner = _planner(_settings(tmp_path, **kwargs))
+        plan_id = _plan_id(planner, request)
+        _write_sales(tmp_path / "sales.csv", rows=20)
+        result: dict[str, Any] = Runner(planner).run(plan_id, full=True)
+        return result
+
+    def _full_table(self, result: Mapping[str, Any]) -> dict[str, Any]:
+        tables = _success(result)["tables"]
+        assert len(tables) == 1
+        table: dict[str, Any] = tables[0]
+        assert set(table) == self.FULL_KEYS
+        return table
+
+    def test_full_returns_every_row_and_column_including_withheld(self, tmp_path: Path) -> None:
+        table = self._full_table(self._full(tmp_path, max_preview_rows=3))
+
+        assert table["row_count"] == 20
+        assert len(table["rows"]) == 20
+        assert all(set(row) == set(FEATURES) for row in table["rows"])
+        assert [row["customer_id"] for row in table["rows"]] == CUSTOMER_IDS
+        assert [row["income"] for row in table["rows"]] == [10 * i for i in range(1, 21)]
+
+    def test_full_columns_carry_name_and_classification_only(self, tmp_path: Path) -> None:
+        table = self._full_table(self._full(tmp_path))
+
+        assert table["columns"] == [
+            {"name": "customer_id", "classification": "personal"},
+            {"name": "income", "classification": "internal"},
+            {"name": "segment", "classification": "public"},
+        ]
+
+    def test_full_includes_unclassified_columns(self, tmp_path: Path) -> None:
+        table = self._full_table(self._full(tmp_path, classification={}))
+
+        assert {column["classification"] for column in table["columns"]} == {"unclassified"}
+        assert all(set(row) == set(FEATURES) for row in table["rows"])
+
+    def test_full_values_are_json_safe(self, tmp_path: Path) -> None:
+        result = self._full(tmp_path, {"features": TYPED}, classification={"income": "internal"})
+
+        rows = self._full_table(result)["rows"]
+        assert len(rows) == 20
+        assert rows[0][TYPED_PREFIX + "decimal"] == str(Decimal(10) / Decimal(4))
+        assert rows[-1][TYPED_PREFIX + "nan"] is None
+        json.dumps(result, allow_nan=False)
+
+    def test_max_rows_still_applies_under_full(self, tmp_path: Path) -> None:
+        _error(self._full(tmp_path, max_rows=10), "limit_exceeded")
+
+    def test_default_run_is_unchanged(self, tmp_path: Path) -> None:
+        planner = _planner(_settings(tmp_path, max_preview_rows=2))
+        plan_id = _plan_id(planner)
+
+        explicit = Runner(planner).run(plan_id, full=False)
+
+        assert set(_only_table(explicit)) == TABLE_KEYS
+        assert len(_only_table(explicit)["preview"]["rows"]) == 2
+
+
 class TestLock:
     def test_run_holds_the_lock_while_mloda_runs_and_releases_it(self, tmp_path: Path, lock_probes: list[bool]) -> None:
         _success(_run(tmp_path, {"features": [PROBE]}))

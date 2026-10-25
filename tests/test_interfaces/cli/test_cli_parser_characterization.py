@@ -45,13 +45,13 @@ options:
 
 if sys.version_info >= (3, 13):
     RUN_USAGE = """\
-usage: mloda run [-h] [--max-rows MAX_ROWS] [--format {json,jsonl,csv}] [--config CONFIG |
-                 --no-config]
+usage: mloda run [-h] [--max-rows MAX_ROWS] [--format {json,jsonl,csv}] [--full]
+                 [--config CONFIG | --no-config]
                  request
 """
 else:
     RUN_USAGE = """\
-usage: mloda run [-h] [--max-rows MAX_ROWS] [--format {json,jsonl,csv}]
+usage: mloda run [-h] [--max-rows MAX_ROWS] [--format {json,jsonl,csv}] [--full]
                  [--config CONFIG | --no-config]
                  request
 """
@@ -67,6 +67,7 @@ options:
   --max-rows MAX_ROWS   Refuse sources and results over this, and uncountable reads.
   --format {json,jsonl,csv}
                         Output format of the result.
+  --full                Return every row and column, not the classified preview.
   --config CONFIG       Settings file (default: ./mloda.toml if present).
   --no-config           Ignore any settings file.
 """
@@ -138,6 +139,7 @@ def test_help_output_is_pinned(argv: list[str], expected: str) -> None:
                 "request": "req.json",
                 "max_rows": 5,
                 "format": "csv",
+                "full": False,
                 "config": None,
                 "no_config": True,
             },
@@ -149,6 +151,19 @@ def test_help_output_is_pinned(argv: list[str], expected: str) -> None:
                 "request": "req.json",
                 "max_rows": None,
                 "format": "json",
+                "full": False,
+                "config": None,
+                "no_config": False,
+            },
+        ),
+        (
+            ["run", "req.json", "--full"],
+            {
+                "command": "run",
+                "request": "req.json",
+                "max_rows": None,
+                "format": "json",
+                "full": True,
                 "config": None,
                 "no_config": False,
             },

@@ -240,6 +240,43 @@ def test_non_bool_inline_data_is_config_error(tmp_path: Path, value: str) -> Non
         load_settings(_write(tmp_path, f"[mcp]\ninline_data = {value}\n"), env={})
 
 
+def test_trusted_caller_defaults_to_false() -> None:
+    assert Settings().trusted_caller is False
+
+
+def test_config_hash_changes_with_trusted_caller() -> None:
+    assert Settings().config_hash() != Settings(trusted_caller=True).config_hash()
+
+
+def test_trusted_caller_is_not_a_toml_key(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match="trusted_caller"):
+        load_settings(_write(tmp_path, "[mcp]\ntrusted_caller = true\n"), env={})
+
+
+def test_trusted_caller_is_not_an_override() -> None:
+    with pytest.raises(ConfigError, match="trusted_caller"):
+        load_settings(None, env={}, overrides={"trusted_caller": True})
+
+
+def test_default_classification_defaults_to_none() -> None:
+    assert Settings().default_classification is None
+
+
+def test_default_classification_toml_loads(tmp_path: Path) -> None:
+    path = _write(tmp_path, '[mcp]\ndefault_classification = "internal"\n')
+    assert load_settings(path, env={}).default_classification == "internal"
+
+
+@pytest.mark.parametrize("value", ["1", "true", '["internal"]'])
+def test_non_string_default_classification_is_config_error(tmp_path: Path, value: str) -> None:
+    with pytest.raises(ConfigError, match="default_classification"):
+        load_settings(_write(tmp_path, f"[mcp]\ndefault_classification = {value}\n"), env={})
+
+
+def test_config_hash_changes_with_default_classification() -> None:
+    assert Settings().config_hash() != Settings(default_classification="internal").config_hash()
+
+
 def test_config_hash_ignores_mapping_insertion_order() -> None:
     one = Settings(classification={"a": "personal", "b": "public"})
     other = Settings(classification={"b": "public", "a": "personal"})

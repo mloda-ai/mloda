@@ -41,6 +41,7 @@ preview_allows = ["public", "internal"]
 max_preview_rows = 20
 inline_data = false                    # allow inline request data (trusted callers only)
 plan_ttl = "24h"
+# default_classification = "internal"  # label for unlisted leaf columns (default: unclassified)
 
 [mcp.sources.sales]
 files = ["data/sales.csv"]
@@ -107,6 +108,10 @@ the request by JSON pointer, with a suggestion when a close name exists.
 - Each call writes one audit record to the `mloda.interfaces.mcp` logger, without argument values. The principal is the
   local OS user. Unexpected failures log a traceback without exception messages.
 
+`default_classification` replaces `unclassified` for every leaf column without its own entry, including columns a
+FeatureGroup loads itself; derived features still take the strictest input. A permissive label such as `public` exposes
+all of them in the preview, so prefer listing columns in `[mcp.classification]`.
+
 Not yet: paging through full results, approvals, cancellation, and remote HTTP with OAuth.
 
 ## Command line
@@ -115,7 +120,12 @@ Not yet: paging through full results, approvals, cancellation, and remote HTTP w
 mloda explain request.json        # the same JSON as mloda_explain_request
 mloda run request.json --max-rows 100000 --format jsonl
 cat request.json | mloda explain -
+mloda run request.json --full --format csv
 ```
+
+`--full` returns every row and all columns, withheld ones included, with no preview. `max_rows` still applies. The
+server never offers it. `mloda explain` and `mloda run` do not refuse filters on withheld columns, since the caller is
+local; `mloda mcp serve` does.
 
 `mloda run` executes regardless of `mode`, since you started it yourself, but applies the same limits and preview
 rules. Exit codes: `0` success, `2` an error result or nothing could run (bad config, bad request, policy, limit, or a

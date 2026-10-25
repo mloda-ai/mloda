@@ -1177,8 +1177,7 @@ class ComputeFramework(ABC):
         feature_name = feature_group.get_class_name()
         error_message = (
             f"Feature '{feature_name}' failed with a KeyError: {error}\n"
-            "If the key is a column, the group read a column it did not declare in input_features(). "
-            "Every column calculate_feature reads must be declared in input_features()."
+            "If the key is a column, declare it in input_features(); calculate_feature may only read declared columns."
         )
         raise ValueError(error_message) from error
 

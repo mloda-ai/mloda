@@ -3713,7 +3713,8 @@ Available join types:
                     f"{feature_group.get_class_name()} declares reduces_rows(), but its features need "
                     f"{len(ordered)} steps on {framework.get_class_name()} ({ordered}); a later step would run on "
                     "the reduced frame. Request them so they batch into one step (one data type per feature "
-                    "name, the same options and filters), or split the logic into separate feature groups."
+                    "name, the same options and filters, and no feature of the group depending on another of "
+                    "its features), or split the logic into separate feature groups."
                 )
 
     def add_artifact_to_feature_set(self, feature_group: type[FeatureGroup], feature_set: FeatureSet) -> None:

@@ -34,7 +34,7 @@ def _has_abstract_member(cls: Any) -> bool:
 
 
 def _is_concrete(cls: Any) -> bool:
-    """No abstract member left; the verdict is fixed once the class exists, so it is cached."""
+    """No abstract member left; the verdict is cached after class creation."""
     if cls not in _CONCRETE_VERDICTS:
         _CONCRETE_VERDICTS[cls] = not _has_abstract_member(cls)
     return _CONCRETE_VERDICTS[cls]
@@ -85,7 +85,7 @@ class Implementation(ABC, Generic[G]):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        if not _is_concrete(cls):
+        if _has_abstract_member(cls):
             return
         group: Any = getattr(cls, "feature_group", None)
         framework = getattr(cls, "compute_framework", None)

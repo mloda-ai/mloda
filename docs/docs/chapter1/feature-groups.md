@@ -81,7 +81,7 @@ raises a `ValueError` naming the group and the missing features.
 
 A dict returned by a non-root feature group is appended to the frame when its columns are all new and its length matches; otherwise it replaces the frame. Appended columns are aligned by position, so a feature group that reorders or drops rows should return the full frame. On DuckDB, Spark and lazy Polars a dict is only appended onto a frame mloda built itself; there, return the frame with the column added instead. A single returned column (list or Series) follows the same rule and raises otherwise.
 
-A group whose result has fewer rows than its input declares `reduces_rows()`, and core then raises at plan time when its features cannot run as one step.
+A group whose result has fewer rows than its input overrides `reduces_rows()` to return True, and core then raises at plan time when its features cannot run as one step.
 
 #### 6. Advanced Feature Group Topics
 

@@ -732,6 +732,20 @@ class TestImplementationDefinition:
         loaded_implementations()
         assert calls == []
 
+    def test_class_made_concrete_by_a_decorator_is_loaded(self) -> None:
+        def add_calculate(cls: Any) -> Any:
+            cls.calculate = classmethod(lambda c, serving, data, features, framework: None)
+            return cls
+
+        @add_calculate
+        class _Decorated(Implementation[Any]):
+            feature_group = ToySourceFG
+            compute_framework = PyArrowTable
+
+        assert _Decorated in loaded_implementations()
+        del _Decorated
+        gc.collect()
+
 
 @pytest.fixture(autouse=True, scope="module")
 def _collect_local_classes() -> Iterator[None]:

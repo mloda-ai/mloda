@@ -227,7 +227,7 @@ class Planner:
             if unlisted:
                 details = problems_to_details(unlisted)
                 return error_result("policy_denied", "A request may only set options listed in allow_options.", details)
-        parsed = build_request(request)
+        parsed = build_request(request, settings=self._settings)
         if isinstance(parsed, list):
             return error_result("validation_failed", "A feature config is invalid.", problems_to_details(parsed))
         request_names = [_item_name(item) for item in request["features"]]

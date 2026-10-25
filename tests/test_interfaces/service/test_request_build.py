@@ -10,6 +10,7 @@ from mloda.core.api.feature_config.loader import load_features_from_config
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.filter.single_filter import SingleFilter
+from mloda.interfaces.service.config import Settings
 from mloda.interfaces.service.request import ParsedRequest, Problem, build_request
 
 FEATURES: list[Any] = [
@@ -148,3 +149,63 @@ def test_inconsistent_inline_data_is_a_problem_without_values(data: dict[str, An
     assert [(p.path, p.problem) for p in result] == [(path, "invalid_inline_data")]
     assert result[0].message
     assert "s3cr3t" not in result[0].message
+
+
+def _settings() -> Settings:
+    return Settings(options={"model": "m", "retries": 3}, context_options={"timeout": 30})
+
+
+def _defaulted(request: dict[str, Any], settings: Settings | None = None) -> ParsedRequest:
+    result = build_request(request, settings=settings or _settings())
+    assert isinstance(result, ParsedRequest), result
+    return result
+
+
+def _feature(parsed: ParsedRequest, index: int = 0) -> Feature:
+    feature = parsed.features[index]
+    assert isinstance(feature, Feature), feature
+    return feature
+
+
+def test_defaults_land_on_a_string_feature_as_group_and_context_options() -> None:
+    feature = _feature(_defaulted({"features": ["a"]}))
+
+    assert feature.name == "a"
+    assert feature.options.group == {"model": "m", "retries": 3}
+    assert feature.options.context == {"timeout": 30}
+
+
+def test_config_feature_own_value_wins_over_the_default() -> None:
+    request = {"features": [{"name": "a", "group_options": {"model": "own"}, "context_options": {"timeout": 5}}]}
+
+    feature = _feature(_defaulted(request))
+
+    assert feature.options.group == {"model": "own", "retries": 3}
+    assert feature.options.context == {"timeout": 5}
+
+
+def test_flat_options_combine_with_context_defaults() -> None:
+    feature = _feature(_defaulted({"features": [{"name": "a", "options": {"model": "own", "extra": 1}}]}))
+
+    assert feature.options.group == {"model": "own", "retries": 3, "extra": 1}
+    assert feature.options.context == {"timeout": 30}
+
+
+def test_defaults_apply_to_every_top_level_feature() -> None:
+    parsed = _defaulted({"features": ["a", {"name": "b", "group_options": {"x": 1}}]})
+
+    assert [_feature(parsed, i).options.context for i in range(2)] == [{"timeout": 30}, {"timeout": 30}]
+    assert _feature(parsed, 1).options.group == {"model": "m", "retries": 3, "x": 1}
+
+
+def test_normalized_request_keeps_only_the_callers_request() -> None:
+    request = {"features": ["a", {"name": "b", "options": {"x": 1}}]}
+
+    parsed = _defaulted(request)
+
+    assert parsed.normalized == json.loads(json.dumps(request, sort_keys=True))
+    assert "30" not in json.dumps(parsed.normalized)
+
+
+def test_no_defaults_keeps_features_unchanged() -> None:
+    assert _defaulted({"features": FEATURES}, Settings()).features == load_features_from_config(json.dumps(FEATURES))

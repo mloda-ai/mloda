@@ -28,39 +28,47 @@ options:
   -h, --help         show this help message and exit
 """
 
-EXPLAIN_USAGE = "usage: mloda explain [-h] [--config CONFIG | --no-config] request\n"
+EXPLAIN_USAGE = """\
+usage: mloda explain [-h] [-o KEY=VALUE] [-c KEY=VALUE] [--config CONFIG | --no-config]
+                     TARGET [TARGET ...]
+"""
 
 EXPLAIN_HELP = (
     EXPLAIN_USAGE
     + """
 positional arguments:
-  request          Path to a JSON feature request, or - for stdin.
+  TARGET                Feature names, or one request file (a path, a .json name, or - for stdin).
 
 options:
-  -h, --help       show this help message and exit
-  --config CONFIG  Settings file (default: ./mloda.toml if present).
-  --no-config      Ignore any settings file.
+  -h, --help            show this help message and exit
+  -o, --option KEY=VALUE
+                        Group option for every feature; KEY:=JSON parses JSON, KEY=@FILE reads a
+                        file.
+  -c, --context-option KEY=VALUE
+                        Context option for every feature; same value forms as --option.
+  --config CONFIG       Settings file (default: ./mloda.toml if present).
+  --no-config           Ignore any settings file.
 """
 )
 
 if sys.version_info >= (3, 13):
     RUN_USAGE = """\
-usage: mloda run [-h] [--max-rows MAX_ROWS] [--format {json,jsonl,csv}] [--full]
-                 [--config CONFIG | --no-config]
-                 request
+usage: mloda run [-h] [--max-rows MAX_ROWS] [--format {json,jsonl,csv}] [--full] [-o KEY=VALUE]
+                 [-c KEY=VALUE] [--config CONFIG | --no-config]
+                 TARGET [TARGET ...]
 """
 else:
     RUN_USAGE = """\
-usage: mloda run [-h] [--max-rows MAX_ROWS] [--format {json,jsonl,csv}] [--full]
-                 [--config CONFIG | --no-config]
-                 request
+usage: mloda run [-h] [--max-rows MAX_ROWS] [--format {json,jsonl,csv}] [--full] [-o KEY=VALUE]
+                 [-c KEY=VALUE] [--config CONFIG | --no-config]
+                 TARGET [TARGET ...]
 """
 
 RUN_HELP = (
     RUN_USAGE
     + """
 positional arguments:
-  request               Path to a JSON feature request, or - for stdin.
+  TARGET                Feature names, or one request file (a path, a .json name, or - for stdin).
 
 options:
   -h, --help            show this help message and exit
@@ -68,10 +76,24 @@ options:
   --format {json,jsonl,csv}
                         Output format of the result.
   --full                Return every row and column, not the classified preview.
+  -o, --option KEY=VALUE
+                        Group option for every feature; KEY:=JSON parses JSON, KEY=@FILE reads a
+                        file.
+  -c, --context-option KEY=VALUE
+                        Context option for every feature; same value forms as --option.
   --config CONFIG       Settings file (default: ./mloda.toml if present).
   --no-config           Ignore any settings file.
 """
 )
+
+if sys.version_info < (3, 13):
+    # Before 3.13 argparse repeats the metavar after every flag.
+    EXPLAIN_HELP = EXPLAIN_HELP.replace("-o, --option KEY=VALUE", "-o KEY=VALUE, --option KEY=VALUE").replace(
+        "-c, --context-option KEY=VALUE", "-c KEY=VALUE, --context-option KEY=VALUE"
+    )
+    RUN_HELP = RUN_HELP.replace("-o, --option KEY=VALUE", "-o KEY=VALUE, --option KEY=VALUE").replace(
+        "-c, --context-option KEY=VALUE", "-c KEY=VALUE, --context-option KEY=VALUE"
+    )
 
 MCP_HELP = """\
 usage: mloda mcp [-h] {serve} ...
@@ -127,16 +149,35 @@ def test_help_output_is_pinned(argv: list[str], expected: str) -> None:
 @pytest.mark.parametrize(
     ("argv", "expected"),
     [
-        (["explain", "req.json"], {"command": "explain", "request": "req.json", "config": None, "no_config": False}),
+        (
+            ["explain", "req.json"],
+            {
+                "command": "explain",
+                "targets": ["req.json"],
+                "option": None,
+                "context_option": None,
+                "config": None,
+                "no_config": False,
+            },
+        ),
         (
             ["explain", "-", "--config", "c.toml"],
-            {"command": "explain", "request": "-", "config": "c.toml", "no_config": False},
+            {
+                "command": "explain",
+                "targets": ["-"],
+                "option": None,
+                "context_option": None,
+                "config": "c.toml",
+                "no_config": False,
+            },
         ),
         (
             ["run", "req.json", "--max-rows", "5", "--format", "csv", "--no-config"],
             {
                 "command": "run",
-                "request": "req.json",
+                "targets": ["req.json"],
+                "option": None,
+                "context_option": None,
                 "max_rows": 5,
                 "format": "csv",
                 "full": False,
@@ -148,7 +189,9 @@ def test_help_output_is_pinned(argv: list[str], expected: str) -> None:
             ["run", "req.json"],
             {
                 "command": "run",
-                "request": "req.json",
+                "targets": ["req.json"],
+                "option": None,
+                "context_option": None,
                 "max_rows": None,
                 "format": "json",
                 "full": False,
@@ -160,7 +203,34 @@ def test_help_output_is_pinned(argv: list[str], expected: str) -> None:
             ["run", "req.json", "--full"],
             {
                 "command": "run",
-                "request": "req.json",
+                "targets": ["req.json"],
+                "option": None,
+                "context_option": None,
+                "max_rows": None,
+                "format": "json",
+                "full": True,
+                "config": None,
+                "no_config": False,
+            },
+        ),
+        (
+            ["explain", "income", "segment", "-o", "a=1", "--option", "b:=2", "-c", "c=@f.txt"],
+            {
+                "command": "explain",
+                "targets": ["income", "segment"],
+                "option": ["a=1", "b:=2"],
+                "context_option": ["c=@f.txt"],
+                "config": None,
+                "no_config": False,
+            },
+        ),
+        (
+            ["run", "income", "--context-option", "c=1", "--full"],
+            {
+                "command": "run",
+                "targets": ["income"],
+                "option": None,
+                "context_option": ["c=1"],
                 "max_rows": None,
                 "format": "json",
                 "full": True,
@@ -191,6 +261,7 @@ def test_parsed_namespace_is_pinned(argv: list[str], expected: dict[str, Any]) -
             ["run", "req.json", "--format", "xml"],
             RUN_USAGE + "mloda run: error: argument --format: invalid choice: xml (choose from json, jsonl, csv)\n",
         ),
+        (["run"], RUN_USAGE + "mloda run: error: the following arguments are required: TARGET\n"),
         (
             ["explain", "a", "--config", "x", "--no-config"],
             EXPLAIN_USAGE + "mloda explain: error: argument --no-config: not allowed with argument --config\n",

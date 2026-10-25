@@ -770,3 +770,20 @@ class TestResultsAreJson:
         assert is_error(result)
         assert result["error"]["code"] in ERROR_CODES
         json.dumps(result, allow_nan=False)
+
+
+class TestDefaultOptions:
+    DEFAULTS: ClassVar[dict[str, Any]] = {"options": {"dkey": "DEFAULT_VALUE_mcp5_8c2e"}}
+
+    def test_source_column_and_chained_feature_run_together_without_leaking_defaults(self, tmp_path: Path) -> None:
+        request = {"features": ["customer_id", PROBE]}
+
+        result = _success(_run(tmp_path, request, **self.DEFAULTS))
+
+        assert result["status"] == "completed"
+        assert sum(table["row_count"] for table in result["tables"]) >= 5
+        assert "DEFAULT_VALUE_mcp5_8c2e" not in json.dumps(result)
+
+    def test_plain_request_runs_with_context_defaults(self, tmp_path: Path) -> None:
+        result = _success(_run(tmp_path, context_options={"dctx": 1}))
+        assert result["status"] == "completed"

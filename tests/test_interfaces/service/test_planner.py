@@ -46,6 +46,9 @@ DENIED = "PlannerDeniedMcp4"
 DOUBLE_SUFFIX = "__mcp4_double"
 DERIVED = "income" + DOUBLE_SUFFIX
 IN_SUFFIX = "_mcp4_in"
+OPTS = "income__mcp4_opts"
+DEFAULT_VALUE = "DEFAULT_VALUE_mcp4_3f9a"
+SEEN_OPTIONS: list[tuple[dict[str, Any], dict[str, Any]]] = []
 CLOCK_START = 1_800_000_000.0
 KEY = b"k" * 32
 STEP_KEYS = {
@@ -172,6 +175,31 @@ class PlannerInFeaturesMcp4(FeatureGroup):
         return {str(features.get_name_of_one_feature()): [1]}
 
 
+class PlannerOptionsProbeMcp4(FeatureGroup):
+    """Derives ``income`` and records the group and context options it was planned with."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == OPTS
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        SEEN_OPTIONS.append((dict(options.group), dict(options.context)))
+        return {Feature("income")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {OPTS: list(data["income"])}
+
+
 def _base() -> PluginCollector:
     return PluginCollector.enabled_feature_groups(
         {
@@ -179,6 +207,7 @@ def _base() -> PluginCollector:
             PlannerDoubleMcp4,
             PlannerDeniedMcp4,
             PlannerInFeaturesMcp4,
+            PlannerOptionsProbeMcp4,
             PlanRaiseMcp5,
             ApiDataFG,
         }
@@ -1246,3 +1275,55 @@ class TestKeepIndex:
         assert "tables" not in result
         json.dumps(result)
         _assert_no_paths(result, tmp_path, "sales.csv")
+
+
+class TestDefaultOptions:
+    DEFAULTS: ClassVar[dict[str, Any]] = {
+        "options": {"dkey": DEFAULT_VALUE},
+        "context_options": {"dctx": DEFAULT_VALUE},
+    }
+
+    def test_defaults_reach_the_feature_group_and_stay_out_of_the_result(self, tmp_path: Path) -> None:
+        SEEN_OPTIONS.clear()
+
+        result = _success(_explain(tmp_path, {"features": [OPTS]}, **self.DEFAULTS))
+
+        assert SEEN_OPTIONS
+        assert all(group == {"dkey": DEFAULT_VALUE} for group, _ in SEEN_OPTIONS)
+        assert all(context == {"dctx": DEFAULT_VALUE} for _, context in SEEN_OPTIONS)
+        assert DEFAULT_VALUE not in json.dumps(result)
+        assert result["normalized_request"] == {"features": [OPTS]}
+
+    def test_flat_options_config_combines_with_context_defaults(self, tmp_path: Path) -> None:
+        SEEN_OPTIONS.clear()
+        feature = {"name": OPTS, "options": {"dkey": "own", "extra": 1}}
+
+        result = _success(_explain(tmp_path, {"features": [feature]}, allow_options=("dkey", "extra"), **self.DEFAULTS))
+
+        assert all(group == {"dkey": "own", "extra": 1} for group, _ in SEEN_OPTIONS)
+        assert all(context == {"dctx": DEFAULT_VALUE} for _, context in SEEN_OPTIONS)
+        assert result["normalized_request"] == {"features": [feature]}
+
+    def test_request_without_options_still_plans_when_defaults_are_unlisted(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, {"features": ["customer_id", "income"]}, **self.DEFAULTS))
+        assert DEFAULT_VALUE not in json.dumps(result)
+
+    def test_caller_may_not_set_a_defaulted_key_that_is_not_listed(self, tmp_path: Path) -> None:
+        feature = {"name": "income", "options": {"dkey": "mine"}}
+
+        error = _error(_explain(tmp_path, {"features": [feature]}, **self.DEFAULTS), "policy_denied")
+
+        assert _has_detail(error, path="/features/0/options/dkey", problem="option_not_allowed")
+
+    def test_caller_may_set_a_defaulted_key_that_is_listed(self, tmp_path: Path) -> None:
+        feature = {"name": "income", "options": {"dkey": "mine"}}
+
+        result = _explain(tmp_path, {"features": [feature]}, allow_options=("dkey",), **self.DEFAULTS)
+
+        _success(result)
+
+    def test_source_column_and_chained_feature_together_with_group_defaults(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, {"features": ["customer_id", DERIVED]}, options={"dkey": DEFAULT_VALUE}))
+
+        assert [step["feature_group"] for step in result["steps"]] == ["CsvFG", "PlannerDoubleMcp4"]
+        assert DEFAULT_VALUE not in json.dumps(result)

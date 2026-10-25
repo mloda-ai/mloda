@@ -306,3 +306,54 @@ def test_removed_api_input_data_feature_in_deny_list_is_rejected_with_a_hint(tmp
     path = _write(tmp_path, '[mcp]\ndeny_feature_groups = ["ApiInputDataFeature"]\n')
     with pytest.raises(ConfigError, match="ApiDataFG"):
         load_settings(path, env={})
+
+
+def test_default_options_default_to_empty() -> None:
+    assert dict(Settings().options) == {}
+    assert dict(Settings().context_options) == {}
+
+
+def test_default_option_tables_load(tmp_path: Path) -> None:
+    text = '[mcp.options]\nmodel = "m"\nretries = 3\nratio = 0.5\non = true\nbook = ["a", {b = [1, 2]}]\n'
+    text += '[mcp.context_options]\ntimeout = 30\nnested = {x = {y = "z"}}\n'
+
+    settings = load_settings(_write(tmp_path, text), env={})
+
+    assert dict(settings.options) == {
+        "model": "m",
+        "retries": 3,
+        "ratio": 0.5,
+        "on": True,
+        "book": ["a", {"b": [1, 2]}],
+    }
+    assert dict(settings.context_options) == {"timeout": 30, "nested": {"x": {"y": "z"}}}
+
+
+@pytest.mark.parametrize("table", ["options", "context_options"])
+@pytest.mark.parametrize(
+    "body",
+    ["when = 2020-01-01T00:00:00Z", "day = 2020-01-01", "deep = [{at = 12:30:00}]", 'in_features = "x"'],
+)
+def test_bad_default_option_values_are_config_errors(tmp_path: Path, table: str, body: str) -> None:
+    with pytest.raises(ConfigError, match=table):
+        load_settings(_write(tmp_path, f"[mcp.{table}]\n{body}\n"), env={})
+
+
+@pytest.mark.parametrize("table", ["options", "context_options"])
+@pytest.mark.parametrize("value", ['"x"', "1", '["a"]'])
+def test_non_table_default_options_is_config_error(tmp_path: Path, table: str, value: str) -> None:
+    with pytest.raises(ConfigError, match=table):
+        load_settings(_write(tmp_path, f"[mcp]\n{table} = {value}\n"), env={})
+
+
+def test_config_hash_changes_with_default_options() -> None:
+    base = Settings().config_hash()
+    assert base != Settings(options={"k": 1}).config_hash()
+    assert base != Settings(context_options={"k": 1}).config_hash()
+    assert Settings(options={"k": 1}).config_hash() != Settings(context_options={"k": 1}).config_hash()
+
+
+@pytest.mark.parametrize("table", ["options", "context_options"])
+def test_in_features_default_option_is_config_error(tmp_path: Path, table: str) -> None:
+    with pytest.raises(ConfigError, match="in_features"):
+        load_settings(_write(tmp_path, f'[mcp.{table}]\nin_features = "x"\n'), env={})

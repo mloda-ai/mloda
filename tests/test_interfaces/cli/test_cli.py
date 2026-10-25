@@ -817,3 +817,139 @@ class TestPackaging:
                 modules.append(node.module)
 
         assert not [name for name in modules if name == "mcp" or name.startswith("mcp.")]
+
+
+class TestFeatureArguments:
+    def _explain(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *args: str) -> _Outcome:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        return _cli(["explain", *args, "--config", str(config)])
+
+    def test_features_without_flags_build_a_plain_request(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        outcome = self._explain(tmp_path, monkeypatch, "customer_id", "income")
+
+        assert outcome.code == 0, outcome.err
+        assert outcome.json()["normalized_request"] == {"features": [{"name": "customer_id"}, {"name": "income"}]}
+
+    def test_option_and_context_flags_build_the_request(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        outcome = self._explain(tmp_path, monkeypatch, "income", "segment", "-o", "a=1", "-c", "b=two")
+
+        assert outcome.code == 0, outcome.err
+        expected = {"group_options": {"a": "1"}, "context_options": {"b": "two"}}
+        assert outcome.json()["normalized_request"] == {
+            "features": [{"name": "income", **expected}, {"name": "segment", **expected}]
+        }
+
+    def test_flags_are_repeatable_and_empty_containers_are_omitted(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        outcome = self._explain(tmp_path, monkeypatch, "income", "--option", "a=1", "-o", "b=2")
+
+        assert outcome.code == 0, outcome.err
+        assert outcome.json()["normalized_request"] == {
+            "features": [{"name": "income", "group_options": {"a": "1", "b": "2"}}]
+        }
+
+    def test_json_and_file_values(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        note = tmp_path / "note.txt"
+        note.write_text("line one\nline two", encoding="utf-8")
+
+        outcome = self._explain(
+            tmp_path, monkeypatch, "income", "-o", 'l:=[1, {"x": true}]', "-o", f"t=@{note}", "-o", "n:=5", "-o", "e="
+        )
+
+        assert outcome.code == 0, outcome.err
+        (feature,) = outcome.json()["normalized_request"]["features"]
+        assert feature["group_options"] == {"l": [1, {"x": True}], "t": "line one\nline two", "n": 5, "e": ""}
+
+    def test_value_may_contain_equals(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        outcome = self._explain(tmp_path, monkeypatch, "income", "-o", "k=a=b")
+
+        (feature,) = outcome.json()["normalized_request"]["features"]
+        assert feature["group_options"] == {"k": "a=b"}
+
+    def test_run_builds_the_request_too(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli(["run", "income", "segment", "-o", "a=1", "--config", str(config)])
+
+        assert outcome.code == 0, outcome.err
+        assert outcome.json()["status"] == "completed"
+
+    @pytest.mark.parametrize("command", ["explain", "run"])
+    def test_a_json_name_that_does_not_exist_is_still_a_missing_request_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli([command, "x.json", "--config", str(config)])
+
+        assert outcome.code == 2
+        assert outcome.out == ""
+        assert "request file not found" in outcome.err
+
+    def test_an_existing_file_without_json_suffix_is_a_request_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        path = tmp_path / "request.txt"
+        path.write_text(json.dumps(REQUEST), encoding="utf-8")
+
+        outcome = _cli(["explain", str(path), "--config", str(config)])
+
+        assert outcome.code == 0, outcome.err
+        assert outcome.json()["normalized_request"] == REQUEST
+
+    @pytest.mark.parametrize("command", ["explain", "run"])
+    @pytest.mark.parametrize(
+        "flags",
+        [
+            ["-o", "no_equals_" + SECRET],
+            ["-c", "no_equals_" + SECRET],
+            ["-o", "k:=" + SECRET + " {"],
+            ["-o", "k=@" + SECRET + "_missing.txt"],
+            ["-c", "k:=[" + SECRET],
+        ],
+    )
+    def test_malformed_pair_is_a_stderr_error_that_never_echoes_the_value(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str, flags: list[str]
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli([command, "income", *flags, "--config", str(config)])
+
+        assert outcome.code == 2
+        assert outcome.out == ""
+        assert outcome.err.strip()
+        assert SECRET not in outcome.err
+
+    @pytest.mark.parametrize("flag", ["-o", "-c"])
+    @pytest.mark.parametrize("command", ["explain", "run"])
+    def test_flags_with_a_request_file_are_a_stderr_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str, flag: str
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli([command, str(_request_file(tmp_path)), flag, "k=" + SECRET, "--config", str(config)])
+
+        assert outcome.code == 2
+        assert outcome.out == ""
+        assert outcome.err.strip()
+        assert SECRET not in outcome.err
+
+    def test_flags_with_stdin_request_are_a_stderr_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli(["explain", "-", "-o", "k=v", "--config", str(config)], stdin_text=json.dumps(REQUEST))
+
+        assert outcome.code == 2
+        assert outcome.out == ""
+        assert outcome.err.strip()

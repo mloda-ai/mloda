@@ -51,10 +51,20 @@ files = ["data/sales.csv"]
 customer_id = "personal"
 income = "internal"
 segment = "public"
+
+[mcp.options]                          # default group options for every requested feature
+model = "small"
+
+[mcp.context_options]                  # default context options for every requested feature
+timeout = 30
 ```
 
 `MLODA_MCP_MODE`, `MLODA_MCP_MAX_ROWS` and `MLODA_MCP_COMPUTE_FRAMEWORKS` override the file. `MLODA_MCP_SIGNING_KEY`
 signs plan ids; without it every process uses a random key, so a plan id is valid only in the process that issued it.
+
+`[mcp.options]` and `[mcp.context_options]` are operator defaults merged under each requested feature; a feature's own
+value wins. They are not subject to `allow_options` and their values never appear in results. Values are strings,
+numbers, booleans, lists or tables (no TOML dates or times), and `in_features` is not allowed.
 
 ## Tools
 
@@ -129,7 +139,13 @@ mloda explain request.json        # the same JSON as mloda_explain_request
 mloda run request.json --max-rows 100000 --format jsonl
 cat request.json | mloda explain -
 mloda run request.json --full --format csv
+mloda run income segment -o model=small -c timeout:=30
 ```
+
+`mloda run FEATURE ... -o KEY=VALUE -c KEY=VALUE` builds the request from feature names: `-o` sets group options and
+`-c` context options on every feature, and both repeat. A value is `KEY=VALUE` (string), `KEY:=JSON` (parsed JSON) or
+`KEY=@FILE` (file text). A single target that is `-`, an existing file or ends in `.json` is a request file instead,
+and `-o` or `-c` with it is an error.
 
 `--full` returns every row and all columns, withheld ones included, with no preview. `max_rows` still applies. The
 server never offers it. `mloda explain` and `mloda run` do not refuse filters on withheld columns, since the caller is

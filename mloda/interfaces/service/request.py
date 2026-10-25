@@ -468,11 +468,26 @@ def _inline_data_problems(data: Mapping[str, Mapping[str, list[Any]]]) -> list[P
     return problems
 
 
-def build_request(request: Mapping[str, Any]) -> ParsedRequest | list[Problem]:
+def _with_defaults(item: str | dict[str, Any], settings: Settings | None) -> str | dict[str, Any]:
+    """Merge the operator default options under a feature; the feature's own values win."""
+    if settings is None or not (settings.options or settings.context_options):
+        return item
+    config: dict[str, Any] = {"name": item} if isinstance(item, str) else dict(item)
+    group = {**settings.options, **config.pop("options", {}), **config.get("group_options", {})}
+    context = {**settings.context_options, **config.get("context_options", {})}
+    if group:
+        config["group_options"] = group
+    if context:
+        config["context_options"] = context
+    return config
+
+
+def build_request(request: Mapping[str, Any], *, settings: Settings | None = None) -> ParsedRequest | list[Problem]:
     """Build a structurally valid request; semantic feature-config errors come back as problems."""
     features: list[Feature | str] = []
     problems: list[Problem] = []
-    for index, item in enumerate(request["features"]):
+    for index, original in enumerate(request["features"]):
+        item = _with_defaults(original, settings)
         if isinstance(item, str):
             features.append(item)
             continue

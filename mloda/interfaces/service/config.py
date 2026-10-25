@@ -25,6 +25,8 @@ _MCP_KEYS = frozenset(
         "inline_data",
         "default_classification",
         "allow_options",
+        "options",
+        "context_options",
     }
 )
 _SOURCE_KEYS = frozenset({"files", "folders"})
@@ -67,6 +69,8 @@ class Settings:
     default_classification: str | None = None
     allow_options: tuple[str, ...] = ()
     trusted_caller: bool = False
+    options: Mapping[str, Any] = field(default_factory=dict)
+    context_options: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -146,6 +150,23 @@ def _str_mapping(value: Any, key: str) -> dict[str, Any]:
     return dict(value)
 
 
+def _json_safe(value: Any) -> bool:
+    if isinstance(value, dict):
+        return all(isinstance(k, str) and _json_safe(v) for k, v in value.items())
+    if isinstance(value, list):
+        return all(_json_safe(item) for item in value)
+    return isinstance(value, (str, int, float, bool))
+
+
+def _default_options(value: Any, key: str) -> dict[str, Any]:
+    table = _str_mapping(value, key)
+    if "in_features" in table:
+        raise ConfigError(f"'{key}' must not set in_features")
+    if not _json_safe(table):
+        raise ConfigError(f"'{key}' values must be strings, numbers, booleans, lists or tables")
+    return table
+
+
 def _int(value: Any, key: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise ConfigError(f"'{key}' must be an integer")
@@ -204,6 +225,9 @@ def _build(raw: Mapping[str, Any], base_dir: Path) -> Settings:
         if not isinstance(raw["default_classification"], str):
             raise ConfigError("'default_classification' must be a string")
         kwargs["default_classification"] = raw["default_classification"]
+    for key in ("options", "context_options"):
+        if key in raw:
+            kwargs[key] = _default_options(raw[key], key)
     if "sources" in raw:
         sources = _str_mapping(raw["sources"], "sources")
         kwargs["sources"] = {alias: _build_source(alias, v, base_dir) for alias, v in sources.items()}

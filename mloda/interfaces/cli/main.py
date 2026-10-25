@@ -51,20 +51,45 @@ def build_services(
     return catalog, planner, Runner(planner)
 
 
-REQUEST = ("request", {"help": "Path to a JSON feature request, or - for stdin."})
-COMMANDS: tuple[tuple[str, str, tuple[tuple[str, dict[str, Any]], ...]], ...] = (
-    ("explain", "Plan a feature request and print the plan.", (REQUEST,)),
+TARGETS = (
+    ("targets",),
+    {
+        "nargs": "+",
+        "metavar": "TARGET",
+        "help": "Feature names, or one request file (a path, a .json name, or - for stdin).",
+    },
+)
+OPTION = (
+    ("-o", "--option"),
+    {
+        "action": "append",
+        "metavar": "KEY=VALUE",
+        "help": "Group option for every feature; KEY:=JSON parses JSON, KEY=@FILE reads a file.",
+    },
+)
+CONTEXT_OPTION = (
+    ("-c", "--context-option"),
+    {
+        "action": "append",
+        "metavar": "KEY=VALUE",
+        "help": "Context option for every feature; same value forms as --option.",
+    },
+)
+COMMANDS: tuple[tuple[str, str, tuple[tuple[tuple[str, ...], dict[str, Any]], ...]], ...] = (
+    ("explain", "Plan a feature request and print the plan.", (TARGETS, OPTION, CONTEXT_OPTION)),
     (
         "run",
         "Plan and execute a feature request and print its preview.",
         (
-            REQUEST,
-            ("--max-rows", {"type": int, "help": "Refuse sources and results over this, and uncountable reads."}),
-            ("--format", {"choices": FORMATS, "default": "json", "help": "Output format of the result."}),
+            TARGETS,
+            (("--max-rows",), {"type": int, "help": "Refuse sources and results over this, and uncountable reads."}),
+            (("--format",), {"choices": FORMATS, "default": "json", "help": "Output format of the result."}),
             (
-                "--full",
+                ("--full",),
                 {"action": "store_true", "help": "Return every row and column, not the classified preview."},
             ),
+            OPTION,
+            CONTEXT_OPTION,
         ),
     ),
 )
@@ -81,8 +106,8 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     for name, help_text, arguments in COMMANDS:
         command = commands.add_parser(name, help=help_text)
-        for flag, options in arguments:
-            command.add_argument(flag, **options)
+        for flags, options in arguments:
+            command.add_argument(*flags, **options)
         _add_config_options(command)
     mcp = commands.add_parser("mcp", help="Serve the feature catalog, explain and run to MCP clients.")
     serve = mcp.add_subparsers(dest="mcp_command", required=True).add_parser(
@@ -151,6 +176,60 @@ def _read_request(source: str, stdin: TextIO) -> tuple[Any, str | None]:
         return None, f"request is not valid JSON ({error.msg} at line {error.lineno} column {error.colno})"
 
 
+def _is_request_file(targets: Sequence[str]) -> bool:
+    return len(targets) == 1 and (targets[0] == "-" or targets[0].endswith(".json") or Path(targets[0]).is_file())
+
+
+def _parse_pair(pair: str) -> tuple[str, Any, str | None]:
+    """Key, value and None, or an error message that never quotes the value."""
+    key, separator, text = pair.partition("=")
+    as_json = key.endswith(":")
+    key = key.removesuffix(":")
+    if not separator or not key:
+        return "", None, "an option must be written KEY=VALUE"
+    if as_json:
+        # json.loads signals bad JSON only by raising.
+        try:
+            return key, json.loads(text), None
+        except ValueError:
+            return key, None, f"the value of option '{key}' is not valid JSON"
+    if text.startswith("@"):
+        path = Path(text[1:])
+        if not path.is_file() or not os.access(path, os.R_OK):
+            return key, None, f"the file of option '{key}' was not found or is not readable"
+        return key, path.read_text(encoding="utf-8", errors="replace"), None
+    return key, text, None
+
+
+def _parse_pairs(pairs: Sequence[str] | None) -> tuple[dict[str, Any], str | None]:
+    parsed: dict[str, Any] = {}
+    for pair in pairs or ():
+        key, value, problem = _parse_pair(pair)
+        if problem is not None:
+            return {}, problem
+        parsed[key] = value
+    return parsed, None
+
+
+def _build_feature_request(args: argparse.Namespace) -> tuple[dict[str, Any], str | None]:
+    group, problem = _parse_pairs(args.option)
+    if problem is not None:
+        return {}, problem
+    context, problem = _parse_pairs(args.context_option)
+    if problem is not None:
+        return {}, problem
+    extra = {**({"group_options": group} if group else {}), **({"context_options": context} if context else {})}
+    return {"features": [{"name": name, **extra} for name in args.targets]}, None
+
+
+def _load_request(args: argparse.Namespace, stdin: TextIO) -> tuple[Any, str | None]:
+    if not _is_request_file(args.targets):
+        return _build_feature_request(args)
+    if args.option or args.context_option:
+        return None, "--option and --context-option apply to feature names, not to a request file"
+    return _read_request(args.targets[0], stdin)
+
+
 def _write_result(result: Mapping[str, Any], output_format: str, stdout: TextIO, full: bool = False) -> None:
     tables: list[dict[str, Any]] = result.get("tables", [])
     if is_error(result) or output_format == "json":
@@ -192,7 +271,7 @@ def main(
         err.write(f"mloda: error: {settings}\n")
         return FAILED
     settings = replace(settings, trusted_caller=True)
-    request, problem = _read_request(args.request, sys.stdin if stdin is None else stdin)
+    request, problem = _load_request(args, sys.stdin if stdin is None else stdin)
     if problem is not None:
         err.write(f"mloda: error: {problem}\n")
         return FAILED

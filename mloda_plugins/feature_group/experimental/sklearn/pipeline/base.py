@@ -170,7 +170,6 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup
         training_data: Callable[[Any, list[Any]], Any],
         apply: Callable[[Any, list[Any], Any], Any],
         add_column: Callable[[Any, str, Any], Any],
-        columns: Callable[[Any], set[str]],
     ) -> Any:
         """Shared loop: load or fit the pipeline, apply it, add the result."""
         # Process each requested feature

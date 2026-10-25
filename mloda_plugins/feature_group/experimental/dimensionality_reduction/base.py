@@ -311,7 +311,6 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, OperationFeat
         *,
         perform: Callable[[Any, str, int, list[str], Options], Any],
         add_column: Callable[[Any, str, Any], Any],
-        columns: Callable[[Any], set[str]],
     ) -> Any:
         """Shared loop: resolve each feature's sources, reduce, add the result columns."""
         for feature in features.get_sorted_features():

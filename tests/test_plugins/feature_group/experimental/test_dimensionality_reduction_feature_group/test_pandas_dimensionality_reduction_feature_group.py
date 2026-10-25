@@ -14,7 +14,6 @@ from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import PandasDimensionalityReduction
-from mloda.user.pandas import PandasDataFrame
 
 
 class TestPandasDimensionalityReduction:
@@ -59,7 +58,6 @@ class TestPandasDimensionalityReduction:
             feature_set,
             perform=Mock(return_value=np.zeros((len(data), 2))),
             add_column=PandasDimensionalityReduction._add_result_to_data,
-            columns=PandasDataFrame.extract_column_names,
         )
         return result
 

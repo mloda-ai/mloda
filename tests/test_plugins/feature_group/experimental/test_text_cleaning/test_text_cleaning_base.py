@@ -123,7 +123,6 @@ class TestTextCleaningFeatureGroupBase:
             source_text=source_text,
             apply=apply,
             add_column=add_column,
-            columns=Mock(return_value={"a"}),
         )
 
         source_text.assert_called_once_with(data, "a")

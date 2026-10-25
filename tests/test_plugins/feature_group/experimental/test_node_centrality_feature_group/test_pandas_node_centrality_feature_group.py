@@ -10,7 +10,6 @@ import pandas as pd
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import Feature
 from mloda.provider import FeatureSet
-from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
 from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentrality
 
@@ -43,7 +42,6 @@ class TestPandasNodeCentrality:
             feature_set,
             perform=Mock(return_value=scores),
             add_column=PandasNodeCentrality._add_result_to_data,
-            columns=PandasDataFrame.extract_column_names,
         )
         return result
 

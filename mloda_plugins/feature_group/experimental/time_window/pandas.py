@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -43,13 +42,11 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         data[feature_name] = result
         return data
 
-    _WINDOW_FUNCTIONS = ("sum", "min", "max", "avg", "mean", "count", "std", "var", "median", "first", "last")
-
     @classmethod
     def _roll_column(cls, col: pd.Series, window_function: str, span: pd.Timedelta, starts: np.ndarray) -> pd.Series:
         """Rolling aggregate of one column; unlike pandas rolling, +-inf stay values (only NaN is missing)."""
+        values = col.to_numpy(dtype="float64", na_value=np.nan)
         if window_function in ("first", "last"):
-            values = col.to_numpy(dtype="float64", na_value=np.nan)
             picked = values[starts] if window_function == "first" else values
             return pd.Series(picked, index=col.index)
 
@@ -58,30 +55,38 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
             return rolling.count()
         result = getattr(rolling, {"avg": "mean"}.get(window_function, window_function))()
 
-        values = col.to_numpy(dtype="float64", na_value=np.nan)
-        inf_cum = np.concatenate(([0], np.cumsum(np.isinf(values))))
-        affected = np.flatnonzero(inf_cum[1:] - inf_cum[starts] > 0)
-        if len(affected) == 0:
+        def window_count(flags: np.ndarray) -> np.ndarray:
+            cum = np.concatenate(([0], np.cumsum(flags)))
+            counts: np.ndarray = cum[1:] - cum[starts]
+            return counts
+
+        pos = window_count(values == np.inf)
+        neg = window_count(values == -np.inf)
+        affected = (pos + neg) > 0
+        if not affected.any():
             return result
 
         fixed = result.to_numpy(dtype="float64", na_value=np.nan, copy=True)
-        funcs: dict[str, Callable[[np.ndarray], Any]] = {
-            "sum": np.sum,
-            "min": np.min,
-            "max": np.max,
-            "mean": np.mean,
-            "avg": np.mean,
-            "median": np.median,
-        }
-        with np.errstate(invalid="ignore"):
-            for i in affected:
-                window = values[starts[i] : i + 1]
-                window = window[~np.isnan(window)]
-                if window_function in ("std", "var"):
-                    if len(window) >= 2:
-                        fixed[i] = np.nan
-                else:
-                    fixed[i] = funcs[window_function](window)
+        has_pos = pos > 0
+        has_neg = neg > 0
+        if window_function in ("sum", "avg", "mean"):
+            inf_result = np.where(has_pos & ~has_neg, np.inf, np.where(has_neg & ~has_pos, -np.inf, np.nan))
+            fixed = np.where(affected, inf_result, fixed)
+        elif window_function == "min":
+            fixed = np.where(has_pos & np.isnan(fixed), np.inf, fixed)
+            fixed = np.where(has_neg, -np.inf, fixed)
+        elif window_function == "max":
+            fixed = np.where(has_neg & np.isnan(fixed), -np.inf, fixed)
+            fixed = np.where(has_pos, np.inf, fixed)
+        elif window_function in ("std", "var"):
+            n = window_count(~np.isnan(values))
+            fixed = np.where(affected & (n >= 2), np.nan, fixed)
+        else:
+            # median recomputes inf windows per row
+            with np.errstate(invalid="ignore"):
+                for i in np.flatnonzero(affected):
+                    window = values[starts[i] : i + 1]
+                    fixed[i] = np.median(window[~np.isnan(window)])
         return pd.Series(fixed, index=col.index)
 
     @classmethod
@@ -135,7 +140,7 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         # Pass a Timedelta, not an offset string: aliases like "3M"/"3Y" raise
         # "passed window 3M is not compatible with a datetimelike index".
         span_delta = pd.Timedelta(span)
-        if window_function not in cls._WINDOW_FUNCTIONS:
+        if window_function not in TimeWindowFeatureGroup.WINDOW_FUNCTIONS:
             raise ValueError(f"Unsupported window function: {window_function}")
 
         # Window start per sorted row; the window ends at the current row (duplicates included).
@@ -151,25 +156,26 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
 
         # For multi-column, aggregate across columns (axis=1) after rolling window
         if len(in_features) > 1:
-            if window_function == "sum":
-                result = result.sum(axis=1)
-            elif window_function == "min":
-                result = result.min(axis=1)
-            elif window_function == "max":
-                result = result.max(axis=1)
-            elif window_function in ["avg", "mean"]:
-                result = result.mean(axis=1)
-            elif window_function == "count":
-                result = result.count(axis=1)
-            elif window_function == "std":
-                result = result.std(axis=1)
-            elif window_function == "var":
-                result = result.var(axis=1)
-            elif window_function == "median":
-                result = result.median(axis=1)
-            elif window_function in ["first", "last"]:
-                # For first/last, already computed on each column, now aggregate across columns
-                result = result.mean(axis=1)  # Use mean as aggregation for first/last
+            with np.errstate(invalid="ignore"):
+                if window_function == "sum":
+                    result = result.sum(axis=1)
+                elif window_function == "min":
+                    result = result.min(axis=1)
+                elif window_function == "max":
+                    result = result.max(axis=1)
+                elif window_function in ["avg", "mean"]:
+                    result = result.mean(axis=1)
+                elif window_function == "count":
+                    result = result.count(axis=1)
+                elif window_function == "std":
+                    result = result.std(axis=1)
+                elif window_function == "var":
+                    result = result.var(axis=1)
+                elif window_function == "median":
+                    result = result.median(axis=1)
+                elif window_function in ["first", "last"]:
+                    # For first/last, already computed on each column, now aggregate across columns
+                    result = result.mean(axis=1)  # Use mean as aggregation for first/last
 
         # Scatter the time-sorted results back to the ORIGINAL row order.
         sorted_values = np.asarray(result)

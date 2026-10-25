@@ -107,13 +107,27 @@ options:
 """
 
 MCP_SERVE_HELP = """\
-usage: mloda mcp serve [-h] [--config CONFIG | --no-config]
+usage: mloda mcp serve [-h] [--config CONFIG | --no-config] [--transport {stdio,http}]
+                       [--host HOST] [--port PORT]
 
 options:
-  -h, --help       show this help message and exit
-  --config CONFIG  Settings file (default: ./mloda.toml if present).
-  --no-config      Ignore any settings file.
+  -h, --help            show this help message and exit
+  --config CONFIG       Settings file (default: ./mloda.toml if present).
+  --no-config           Ignore any settings file.
+  --transport {stdio,http}
+                        Transport to serve over (default: stdio).
+  --host HOST           Address to bind for the http transport (default: 127.0.0.1).
+  --port PORT           Port to bind for the http transport (default: 8000).
 """
+
+MCP_SERVE_DEFAULTS: dict[str, Any] = {
+    "command": "mcp",
+    "mcp_command": "serve",
+    "config": None,
+    "transport": "stdio",
+    "host": "127.0.0.1",
+    "port": 8000,
+}
 
 ROOT_USAGE = "usage: mloda [-h] {explain,run,mcp} ...\n"
 
@@ -238,10 +252,11 @@ def test_help_output_is_pinned(argv: list[str], expected: str) -> None:
                 "no_config": False,
             },
         ),
-        (["mcp", "serve"], {"command": "mcp", "mcp_command": "serve", "config": None, "no_config": False}),
+        (["mcp", "serve"], {**MCP_SERVE_DEFAULTS, "no_config": False}),
+        (["mcp", "serve", "--no-config"], {**MCP_SERVE_DEFAULTS, "no_config": True}),
         (
-            ["mcp", "serve", "--no-config"],
-            {"command": "mcp", "mcp_command": "serve", "config": None, "no_config": True},
+            ["mcp", "serve", "--transport", "http", "--host", "0.0.0.0", "--port", "9000"],  # nosec B104
+            {**MCP_SERVE_DEFAULTS, "no_config": False, "transport": "http", "host": "0.0.0.0", "port": 9000},  # nosec B104
         ),
     ],
 )

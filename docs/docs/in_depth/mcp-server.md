@@ -135,6 +135,18 @@ all of them in the preview, so prefer listing columns in `[mcp.classification]`.
 
 Upgrade note: MCP callers that set options are refused until you list the keys in `allow_options`.
 
+## Local HTTP
+
+```bash
+mloda-mcp --transport http --host 127.0.0.1 --port 8000
+```
+
+The server is at `/mcp`. Bound to loopback, it accepts only loopback `Host` and `Origin` headers.
+
+The HTTP server has no authentication. Binding a non-loopback host exposes it to the network, and the CLI warns about it. All HTTP clients share one principal (the OS user) and one set of plan ids.
+
+To embed the server, call `mloda.interfaces.mcp.server.create_app(settings, env=env, host=...)`. It returns a Starlette app. A mounted sub-app's lifespan does not run, so the embedding app must run the returned app's lifespan, or serve it directly.
+
 Not yet: paging through full results, approvals, cancellation, and remote HTTP with OAuth.
 
 ## Command line

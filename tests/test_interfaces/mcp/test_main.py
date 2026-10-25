@@ -409,3 +409,94 @@ class TestCliMcpServe:
         assert outcome.code == 0
         assert "--config" in outcome.out
         assert "--no-config" in outcome.out
+
+
+@dataclass(frozen=True)
+class _Uvicorn:
+    app: Any
+    host: str
+    port: int
+
+
+def _fake_uvicorn(monkeypatch: pytest.MonkeyPatch) -> list[_Uvicorn]:
+    """Capture uvicorn.run and replace create_app with a sentinel, so nothing is built or bound."""
+    pytest.importorskip("mcp")
+    pytest.importorskip("uvicorn")
+    runs: list[_Uvicorn] = []
+    app = object()
+
+    def fake_run(application: Any, *, host: str, port: int, **kwargs: Any) -> None:
+        runs.append(_Uvicorn(application, host, port))
+
+    monkeypatch.setattr("uvicorn.run", fake_run)
+    monkeypatch.setattr("mloda.interfaces.mcp.server.create_app", lambda settings, *, env, host="127.0.0.1": app)
+    monkeypatch.setattr(mcp_main, "mcp_available", lambda: True)
+    runs.append(_Uvicorn(app, "", 0))
+    return runs
+
+
+class TestHttpTransport:
+    @pytest.mark.parametrize("entry", ["mcp_main", "cli"])
+    def test_parser_accepts_transport_host_and_port(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, entry: str
+    ) -> None:
+        runs = _fake_uvicorn(monkeypatch)
+        _elsewhere(tmp_path, monkeypatch)
+        flags = ["--no-config", "--transport", "http", "--host", "127.0.0.1", "--port", "9123"]
+
+        outcome = _mcp(flags) if entry == "mcp_main" else _cli(["mcp", "serve", *flags])
+
+        assert outcome.code == 0, outcome.err
+        assert runs[1:] == [_Uvicorn(runs[0].app, "127.0.0.1", 9123)]
+
+    def test_defaults_are_loopback_port_8000(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        runs = _fake_uvicorn(monkeypatch)
+        _elsewhere(tmp_path, monkeypatch)
+
+        assert _mcp(["--no-config", "--transport", "http"]).code == 0
+        assert runs[1:] == [_Uvicorn(runs[0].app, "127.0.0.1", 8000)]
+
+    def test_serve_http_runs_the_created_app(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        runs = _fake_uvicorn(monkeypatch)
+
+        code = mcp_main.serve(load_settings(None, ENV), env=ENV, transport="http", host="127.0.0.1", port=8123)
+
+        assert code == 0
+        assert runs[1:] == [_Uvicorn(runs[0].app, "127.0.0.1", 8123)]
+
+    def test_stdio_is_the_default_and_never_starts_uvicorn(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, served: list[_Served]
+    ) -> None:
+        _elsewhere(tmp_path, monkeypatch)
+        runs = _fake_uvicorn(monkeypatch)
+        monkeypatch.setattr(mcp_main, "serve", lambda settings, *, env: 0)
+
+        assert _mcp(["--no-config"]).code == 0
+        assert runs[1:] == []
+
+    def test_unknown_transport_is_a_usage_error(self, served: list[_Served]) -> None:
+        assert _mcp(["--no-config", "--transport", "ws"]).code == 2
+        assert served == []
+
+    @pytest.mark.parametrize("host", ["0.0.0.0", "192.168.1.5"])  # nosec B104
+    def test_non_loopback_host_warns_about_missing_authentication(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, host: str
+    ) -> None:
+        runs = _fake_uvicorn(monkeypatch)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _mcp(["--no-config", "--transport", "http", "--host", host])
+
+        assert outcome.code == 0, outcome.err
+        assert "no authentication" in outcome.err
+        assert runs[1].host == host
+
+    @pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1"])
+    def test_loopback_host_does_not_warn(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, host: str) -> None:
+        _fake_uvicorn(monkeypatch)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _mcp(["--no-config", "--transport", "http", "--host", host])
+
+        assert outcome.code == 0, outcome.err
+        assert "no authentication" not in outcome.err

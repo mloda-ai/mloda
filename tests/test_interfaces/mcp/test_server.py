@@ -581,3 +581,47 @@ class TestAuditLog:
         assert len(_audit_records(caplog)) == 1
         for record in caplog.records:
             assert SECRET_OPTION not in record.getMessage()
+
+
+INITIALIZE: dict[str, Any] = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}},
+}
+MCP_HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+
+
+def _initialize(tmp_path: Path, headers: Mapping[str, str], host: str = "127.0.0.1") -> int:
+    from starlette.testclient import TestClient
+
+    from mloda.interfaces.mcp.server import create_app
+
+    app = create_app(_settings(tmp_path), env=ENV, host=host)
+    with TestClient(app, base_url="http://testserver") as client:
+        return client.post("/mcp", json=INITIALIZE, headers={**MCP_HEADERS, **headers}).status_code
+
+
+class TestCreateApp:
+    def test_returns_a_starlette_app(self, tmp_path: Path) -> None:
+        from starlette.applications import Starlette
+
+        from mloda.interfaces.mcp.server import create_app
+
+        assert isinstance(create_app(_settings(tmp_path), env=ENV), Starlette)
+
+    @pytest.mark.parametrize("host", ["127.0.0.1:8000", "localhost:8000", "localhost"])
+    def test_loopback_host_is_accepted(self, tmp_path: Path, host: str) -> None:
+        assert _initialize(tmp_path, {"Host": host}) == 200
+
+    def test_foreign_host_is_refused_with_421(self, tmp_path: Path) -> None:
+        assert _initialize(tmp_path, {"Host": "evil.example:8000"}) == 421
+
+    def test_foreign_origin_is_refused_with_403(self, tmp_path: Path) -> None:
+        assert _initialize(tmp_path, {"Host": "localhost:8000", "Origin": "http://evil.example"}) == 403
+
+    def test_loopback_origin_is_accepted(self, tmp_path: Path) -> None:
+        assert _initialize(tmp_path, {"Host": "localhost:8000", "Origin": "http://localhost:8000"}) == 200
+
+    def test_non_loopback_bind_does_not_restrict_the_host(self, tmp_path: Path) -> None:
+        assert _initialize(tmp_path, {"Host": "evil.example:8000"}, host="0.0.0.0") == 200  # nosec B104

@@ -3,18 +3,22 @@
 Each tool returns a one-line summary and the service result as JSON; the result is also its structured content.
 """
 
+import ipaddress
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Annotated, Any
 
 from mcp.server import MCPServer
 from mcp.server.mcpserver.tools import Tool
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.applications import Starlette
 
 from mloda.core.abstract_plugins.components.utils import failure_report
 from mloda.interfaces.service.catalog import DEFAULT_SEARCH_LIMIT, Catalog
+from mloda.interfaces.service.config import Settings
 from mloda.interfaces.service.errors import error_result
 from mloda.interfaces.service.planner import Planner
 from mloda.interfaces.service.request import SCHEMA_ID, request_schema
@@ -158,3 +162,29 @@ def build_server(catalog: Catalog, planner: Planner, runner: Runner) -> MCPServe
         return json.dumps(request_schema())
 
     return server
+
+
+def create_app(settings: Settings, *, env: Mapping[str, str], host: str = "127.0.0.1") -> Starlette:
+    """The streamable HTTP app at /mcp; bound to loopback it accepts only loopback Host and Origin headers."""
+    from mloda.interfaces.cli.main import build_services
+
+    security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+    if _is_loopback(host):
+        security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=["127.0.0.1", "127.0.0.1:*", "localhost", "localhost:*", "[::1]", "[::1]:*"],
+            allowed_origins=[
+                f"http://{name}"
+                for name in ("127.0.0.1", "127.0.0.1:*", "localhost", "localhost:*", "[::1]", "[::1]:*")
+            ],
+        )
+    return build_server(*build_services(settings, env=env)).streamable_http_app(host=host, transport_security=security)
+
+
+def _is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False

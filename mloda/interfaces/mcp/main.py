@@ -20,12 +20,19 @@ def mcp_available() -> bool:
     return importlib.util.find_spec("mcp") is not None
 
 
-def serve(settings: Settings, *, env: Mapping[str, str]) -> int:
-    """Build the services for ``settings`` and serve them over stdio until the client disconnects."""
+def serve(
+    settings: Settings, *, env: Mapping[str, str], transport: str = "stdio", host: str = "127.0.0.1", port: int = 8000
+) -> int:
+    """Build the services for ``settings`` and serve them over stdio, or over local http, until stopped."""
     require("mcp", "the mloda MCP server")
-    from mloda.interfaces.mcp.server import build_server
+    from mloda.interfaces.mcp import server
 
-    build_server(*cli_main.build_services(settings, env=env)).run("stdio")
+    if transport == "http":
+        import uvicorn
+
+        uvicorn.run(server.create_app(settings, env=env, host=host), host=host, port=port)
+        return 0
+    server.build_server(*cli_main.build_services(settings, env=env)).run("stdio")
     return 0
 
 

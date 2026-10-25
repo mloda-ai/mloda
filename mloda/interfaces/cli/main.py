@@ -7,6 +7,7 @@ exit code 3 a completed run that reported failed rows.
 import argparse
 import csv
 import getpass
+import ipaddress
 import json
 import os
 import sys
@@ -116,6 +117,13 @@ def _parser() -> argparse.ArgumentParser:
         "serve", help="Serve over stdio; settings from the config file, then MLODA_MCP_* env vars."
     )
     _add_config_options(serve)
+    serve.add_argument(
+        "--transport", choices=("stdio", "http"), default="stdio", help="Transport to serve over (default: stdio)."
+    )
+    serve.add_argument(
+        "--host", default="127.0.0.1", help="Address to bind for the http transport (default: 127.0.0.1)."
+    )
+    serve.add_argument("--port", type=int, default=8000, help="Port to bind for the http transport (default: 8000).")
     return parser
 
 
@@ -160,7 +168,22 @@ def _serve_mcp(args: argparse.Namespace, env: Mapping[str, str], err: TextIO) ->
     if isinstance(settings, str):
         err.write(f"mloda: error: {settings}\n")
         return FAILED
-    return mcp_main.serve(settings, env=env)
+    if args.transport == "stdio":
+        return mcp_main.serve(settings, env=env)
+    if not _is_loopback(args.host):
+        err.write(
+            f"mloda: warning: serving over http on {args.host} with no authentication; the network can reach it.\n"
+        )
+    return mcp_main.serve(settings, env=env, transport="http", host=args.host, port=args.port)
+
+
+def _is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def _read_request(source: str, stdin: TextIO) -> tuple[Any, str | None]:

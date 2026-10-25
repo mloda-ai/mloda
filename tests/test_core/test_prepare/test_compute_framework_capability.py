@@ -559,6 +559,18 @@ class TestOperationGroupImplementationCapability:
             assert probe("sum", True) is True
             assert probe("median", False) is True
 
+    def test_accepts_allowing_only_parts_resolves_the_part_and_refuses_the_whole(self) -> None:
+        options = {toy_operation_group.OPTOY_KEY: "sum"}
+        pandas = PandasDataFrame
+        plugins: FeatureGroupEnvironmentMapping = {OpToyPartFG: {pandas}}
+
+        _, winners = identify_winner(feature=Feature("optoy_part_value~v", options), accessible_plugins=plugins)
+        assert winners == {pandas}
+
+        with pytest.raises(ValueError) as exc_info:
+            evaluate_or_raise(feature=Feature("optoy_part_value", options), accessible_plugins=plugins)
+        assert exc_info.value.result.eliminations[OpToyPartFG].stage == "capability"  # type: ignore[attr-defined]
+
 
 class OpToyPartFG(toy_operation_group.OpToyFG):
     """Operation group declaring part v."""
@@ -580,19 +592,3 @@ class OpToyPartPandas(Implementation[OpToyPartFG]):
         cls, group: type[OpToyPartFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
     ) -> Any:
         return data
-
-
-class TestOperationGroupPartAwareAccepts:
-    """Implementation.accepts receives the requested part."""
-
-    def test_accepts_allowing_only_parts_resolves_the_part_and_refuses_the_whole(self) -> None:
-        options = {toy_operation_group.OPTOY_KEY: "sum"}
-        pandas = PandasDataFrame
-        plugins: FeatureGroupEnvironmentMapping = {OpToyPartFG: {pandas}}
-
-        _, winners = identify_winner(feature=Feature("optoy_part_value~v", options), accessible_plugins=plugins)
-        assert winners == {pandas}
-
-        with pytest.raises(ValueError) as exc_info:
-            evaluate_or_raise(feature=Feature("optoy_part_value", options), accessible_plugins=plugins)
-        assert exc_info.value.result.eliminations[OpToyPartFG].stage == "capability"  # type: ignore[attr-defined]

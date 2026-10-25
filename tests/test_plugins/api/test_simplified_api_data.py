@@ -516,6 +516,14 @@ class ApiNeutralPandasOnlyFG(ApiNeutralBoundedFG):
         return {PandasDataFrame}
 
 
+class ApiNeutralGenericFG(ApiNeutralBoundedFG):
+    """ApiNeutralBoundedFG declaring a parameterized generic neutral type."""
+
+    @classmethod
+    def neutral_type(cls, match: SourceMatch) -> Any:
+        return dict[str, list[Any]] if isinstance(match.access, ApiDataRef) else None
+
+
 class ApiNeutralValuesFG(ApiDataFG):
     """Overrides only api_values; limited to api_neutral_values_ names."""
 

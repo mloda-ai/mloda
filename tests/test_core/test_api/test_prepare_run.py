@@ -19,7 +19,11 @@ from mloda.provider import ApiDataFG, ComputeFramework, FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.test_plugins.api.test_simplified_api_data import ApiNeutralBoundedFG, ApiNeutralPandasOnlyFG
+from tests.test_plugins.api.test_simplified_api_data import (
+    ApiNeutralBoundedFG,
+    ApiNeutralGenericFG,
+    ApiNeutralPandasOnlyFG,
+)
 
 
 class PrepareRunApiFeature(FeatureGroup):
@@ -372,10 +376,11 @@ class TestRunRefusesShapeThatDiffersFromDefaultPrepare:
             function_extender={extender},
         )
 
+    @pytest.mark.parametrize("group", [ApiNeutralBoundedFG, ApiNeutralGenericFG])
     @pytest.mark.parametrize("path", ["batch", "stream"])
-    def test_ndarray_column_is_refused_naming_set_and_column(self, path: str) -> None:
+    def test_ndarray_column_is_refused_naming_set_and_column(self, path: str, group: Any) -> None:
         extender = _StartCountingExtender()
-        session = self._prepare(extender)
+        session = self._prepare(extender, group=group)
 
         with pytest.raises(ValueError, match=r"(?s)NeutralSet.*api_neutral_id"):
             _rerun(session, path, {"NeutralSet": {"api_neutral_id": np.array([1]), "api_neutral_val": ["a"]}})

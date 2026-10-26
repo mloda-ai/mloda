@@ -194,12 +194,12 @@ class ComputeFrameworkExecutor:
     def _prepare_own_frame(
         self, step: FeatureGroupStep, parallelization_mode: ParallelizationMode, source_uuid: UUID | None
     ) -> UUID:
-        """Create the frame a row-reducing step writes, seeded from the frame holding its inputs."""
+        """Create the frame a row-reducing step runs on, starting from the source frame's data by reference."""
         cls_name = step.compute_framework.get_class_name()
-        if source_uuid is None and step.features.any_uuid is not None:
-            source_uuid = self.cfw_register.get_cfw_uuid(cls_name, step.features.any_uuid)
         if source_uuid is None:
-            raise ValueError(internal_invariant_error("an own frame step has no source frame", f"step={step}"))
+            raise ValueError(
+                internal_invariant_error("an own-frame step has no source frame to seed its own frame", f"step={step}")
+            )
         children = set(step.children_if_root)
         with self._cfw_lock:
             cfw_uuid = self.init_compute_framework(step.compute_framework, parallelization_mode, children, step.uuid)

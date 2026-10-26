@@ -12,6 +12,7 @@ from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.user import DataType
 from mloda.user import Options
 from mloda.user import ParallelizationMode
@@ -181,6 +182,23 @@ class ReducedJoinConsumer(FeatureGroup):
         labels = data.column("dim_label").to_pylist()
         sums = data.column("red_sum").to_pylist()
         return {cls.get_class_name(): [f"{label}:{value}" for label, value in zip(labels, sums)]}
+
+
+class ReducedJoinedBack(FeatureGroup):
+    """Consumer reading a raw input and the reduced output of the same source."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PyArrowTable}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("raw_val"), Feature("red_sum")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        values = data.column("raw_val").to_pylist()
+        sums = data.column("red_sum").to_pylist()
+        return {cls.get_class_name(): [v + s for v, s in zip(values, sums)]}
 
 
 class ReducedAfterJoin(FeatureGroup):
@@ -588,6 +606,29 @@ class TestRowReducingGroupJoins(_ReducerRunHelpers):
 
         assert [sorted(c) for c in self._column(frames, ReducedJoinConsumer.get_class_name())] == [["a:30", "b:40"]]
 
+    def _assert_joined_back(self, link: Link, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        frames = self._run(
+            [Feature(ReducedJoinedBack.get_class_name())],
+            modes,
+            flight_server,
+            links={link},
+            extra_groups={ReducedJoinedBack},
+        )
+
+        assert [sorted(c) for c in self._column(frames, ReducedJoinedBack.get_class_name())] == [[40, 50, 80]]
+
+    def test_reduced_output_joined_back_onto_its_input(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        link = Link.inner(JoinSpec(ReducerRawSource, "raw_key"), JoinSpec(RowReducer, "raw_key"))
+        self._assert_joined_back(link, modes, flight_server)
+
+    def test_reduced_output_joined_back_onto_its_input_reversed(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        link = Link.inner(JoinSpec(RowReducer, "raw_key"), JoinSpec(ReducerRawSource, "raw_key"))
+        self._assert_joined_back(link, modes, flight_server)
+
     def test_joined_consumer_of_reduced_output(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         self._assert_consumer(_REDUCER_DIM_LINK, modes, flight_server)
 
@@ -622,7 +663,8 @@ class TestRowReducingGroupBatching(_ReducerRunHelpers):
     def test_same_name_two_data_types_return_both_results(
         self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
-        frames = self._run([Feature.int32_of("red_sum"), Feature.int64_of("red_sum")], modes, flight_server)
+        features = [Feature.int32_of("red_sum"), Feature.int64_of("red_sum")]
+        frames = self._run(features, modes, flight_server)
 
         assert len(frames) == 2
         assert [frame["red_sum"] for frame in frames] == [[30, 40], [30, 40]]
@@ -648,8 +690,20 @@ class TestRowReducingGroupBatching(_ReducerRunHelpers):
         assert self._column(frames, "red_sum") == [[30, 40]]
 
     def test_non_reducing_sibling_reads_unreduced_input(
-        self, modes: set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        seen: list[Any] = []
+
+        def _defer_ready_step(orchestrator: Any, step: Any, made_progress: bool) -> bool:
+            if not isinstance(step, FeatureGroupStep):
+                return False
+            if step.feature_group is RowReducer:
+                seen.append(step)
+            if step.feature_group is not RawPlusOne or not made_progress:
+                return False
+            return not any(s.step_is_done for s in seen)
+
+        monkeypatch.setattr(ExecutionOrchestrator, "_defer_ready_step", _defer_ready_step)
         frames = self._run(
             [Feature("red_sum"), Feature("raw_plus_one")], modes, flight_server, extra_groups={RawPlusOne}
         )
@@ -689,6 +743,7 @@ class TestRowReducingGroupBatching(_ReducerRunHelpers):
         run_result = self._run_result(features, modes, flight_server, extra_groups={RawPlusOne})
 
         assert all(cfw.data is None for cfw in run_result.runner.executor.cfw_collection.values())
+        MlodaTestRunner.assert_flight_server_clean(modes, flight_server)
 
 
 class NonReducingReducer(RowReducer):

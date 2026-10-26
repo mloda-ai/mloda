@@ -30,6 +30,7 @@ from mloda.core.runtime.run import ExecutionOrchestrator, planned_worker_count
 from mloda.core.runtime.worker_manager import WorkerManager
 from tests.test_core.test_prepare.test_multi_link_group_resolution import SidePathPandasP, _side_path_prepare
 import mloda.core.core.cfw_manager as cfw_manager_module
+from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
 from mloda.core.core.cfw_manager import CfwManager, shared_manager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
@@ -1011,6 +1012,8 @@ class TestMarkChildrenAndTrackNeverBlocksOnWorkerOwnedCfw:
 
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
+        orchestrator.executor = Mock(spec=ComputeFrameworkExecutor)
+        orchestrator.executor.own_frame_sources = {}
 
         process, command_queue, result_queue = Mock(), Mock(), Mock()
         orchestrator.worker_manager.process_register[cfw_uuid] = (process, command_queue, result_queue)

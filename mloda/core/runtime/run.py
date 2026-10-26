@@ -457,9 +457,6 @@ class ExecutionOrchestrator:
                 )
             self.add_to_result_data_collection(cfw, step.features, step.uuid)
             self._drop_data_if_possible(cfw, step)
-            if step.own_frame:
-                source = self.executor.cfw_collection[self.executor.own_frame_sources[step.uuid]]
-                self._mark_children_and_track(source, set(step.children_if_root))
 
         return True
 
@@ -515,8 +512,15 @@ class ExecutionOrchestrator:
         Records newly-finished children on a CFW and, if not yet fully satisfied, tracks the
         remaining wait-condition so a later `_drop_data_for_finished_cfws` pass can flush it. The
         worker-owned branch always tracks, since that later flush is a safe no-op if the worker
-        already resolved and exited on its own.
+        already resolved and exited on its own. Own-frame sources up the chain are credited too.
         """
+        self._mark_children(cfw, children)
+        source_uuid = self.executor.own_frame_sources.get(cfw.uuid)
+        while source_uuid is not None:
+            self._mark_children(self.executor.cfw_collection[source_uuid], children)
+            source_uuid = self.executor.own_frame_sources.get(source_uuid)
+
+    def _mark_children(self, cfw: ComputeFramework, children: set[UUID]) -> None:
         _, command_queue, _ = self.worker_manager.process_register.get(cfw.uuid, (None, None, None))
 
         if command_queue is None:

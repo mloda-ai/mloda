@@ -7,7 +7,6 @@ from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.runtime.flight.flight_server import FlightServer
 
 
 class DataLifecycleManager:
@@ -145,8 +144,7 @@ class DataLifecycleManager:
         if cfw.data is not None:
             data = cfw.data
         elif location:
-            data = FlightServer.download_table(location, str(cfw.uuid))
-            data = cfw.convert_flight_server_data_back(data, self.transformer)
+            data = cfw.download_frame(location, cfw.uuid)
         else:
             raise NotImplementedError(
                 "Cannot retrieve result data: the compute framework has no local data "

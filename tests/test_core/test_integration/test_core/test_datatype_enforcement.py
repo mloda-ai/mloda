@@ -215,6 +215,8 @@ class SplitFrameConsumer(FeatureGroup):
     _INPUTS = {
         "count_and_sum": {"red_count", "red_sum"},
         "sum_and_key": {"red_sum", "raw_key"},
+        "sum_and_plus_one": {"red_sum", "raw_plus_one"},
+        "joined_and_plus_one": {ReducedJoinedBack.get_class_name(), "raw_plus_one"},
     }
 
     @classmethod
@@ -230,6 +232,10 @@ class SplitFrameConsumer(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        if "joined_and_plus_one" in {str(n) for n in features.get_all_names()}:
+            joined = data.column(ReducedJoinedBack.get_class_name()).to_pylist()
+            plus_one = data.column("raw_plus_one").to_pylist()
+            return {"joined_and_plus_one": [f"{a}:{b}" for a, b in zip(joined, plus_one)]}
         return {name: [] for name in cls._INPUTS}
 
 
@@ -653,6 +659,22 @@ class TestRowReducingGroupJoins(_ReducerRunHelpers):
 
         assert [sorted(c) for c in self._column(frames, ReducedJoinedBack.get_class_name())] == [[40, 50, 80]]
 
+    @pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
+    def test_consumer_of_joined_back_and_sibling_downstream_of_join(
+        self, reverse: bool, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        left, right = (RowReducer, ReducerRawSource) if reverse else (ReducerRawSource, RowReducer)
+        link = Link.inner(JoinSpec(left, "raw_key"), JoinSpec(right, "raw_key"))
+        frames = self._run(
+            [Feature("joined_and_plus_one")],
+            modes,
+            flight_server,
+            links={link},
+            extra_groups={SplitFrameConsumer, ReducedJoinedBack, RawPlusOne},
+        )
+
+        assert [sorted(c) for c in self._column(frames, "joined_and_plus_one")] == [["40:11", "50:21", "80:41"]]
+
     def test_reduced_output_joined_back_onto_its_input(
         self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
@@ -885,22 +907,53 @@ class TestRowReducingGroupPlan:
         assert all(s.own_frame is False for s in steps)
 
     @pytest.mark.parametrize(
-        "feature, extra_group, parents",
+        "feature, extra_groups, consumer, parents, hint",
         [
-            (Feature("count_and_sum"), SplitFrameConsumer, ("red_count", "red_sum")),
-            (Feature(ReducedJoinedBack.get_class_name()), ReducedJoinedBack, ("red_sum", "raw_val")),
-            (Feature("sum_and_key"), SplitFrameConsumer, ("red_sum", "raw_key")),
+            (
+                Feature("count_and_sum"),
+                {SplitFrameConsumer},
+                SplitFrameConsumer,
+                ("red_count", "red_sum"),
+                "separate feature groups",
+            ),
+            (
+                Feature(ReducedJoinedBack.get_class_name()),
+                {ReducedJoinedBack},
+                ReducedJoinedBack,
+                ("red_sum", "raw_val"),
+                "expose the needed column",
+            ),
+            (
+                Feature("sum_and_key"),
+                {SplitFrameConsumer},
+                SplitFrameConsumer,
+                ("red_sum", "raw_key"),
+                "expose the needed column",
+            ),
+            (
+                Feature("sum_and_plus_one"),
+                {SplitFrameConsumer, RawPlusOne},
+                SplitFrameConsumer,
+                ("red_sum", "raw_plus_one"),
+                "expose the needed column",
+            ),
         ],
-        ids=["two_reducing_steps", "reduced_and_unreduced_input", "reduced_and_group_key"],
+        ids=["two_reducing_steps", "reduced_and_unreduced_input", "reduced_and_group_key", "reduced_and_sibling"],
     )
     def test_consumer_reading_two_frames_raises_at_prepare(
-        self, feature: Feature, extra_group: type[FeatureGroup], parents: tuple[str, str]
+        self,
+        feature: Feature,
+        extra_groups: set[type[FeatureGroup]],
+        consumer: type[FeatureGroup],
+        parents: tuple[str, str],
+        hint: str,
     ) -> None:
         with pytest.raises(ValueError) as exc_info:
-            _plan_reducer(RowReducer, [feature], extra_groups={extra_group})
+            _plan_reducer(RowReducer, [feature], extra_groups=extra_groups)
 
         message = str(exc_info.value)
-        assert extra_group.get_class_name() in message
+        assert consumer.get_class_name() in message
+        assert hint in message
         assert all(parent in message for parent in parents)
         assert "Link" in message
 

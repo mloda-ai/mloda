@@ -152,6 +152,21 @@ class TestPandasNodeCentrality:
         assert centrality["C"] > 0
         assert centrality["D"] > 0
 
+    @pytest.mark.parametrize(
+        ("graph_type", "expected"),
+        [
+            ("undirected", {"A": 0.25, "B": 1.5, "C": 1.25}),
+            ("directed", {"A": 0.25, "B": 1.5, "C": 1.25}),
+        ],
+    )
+    def test_calculate_degree_centrality_fractional_weights(self, graph_type: str, expected: dict[str, float]) -> None:
+        """Fractional edge weights are kept as weights (they used to raise on pandas 3's int64 matrix)."""
+        data = pd.DataFrame({"source": ["A", "B"], "target": ["B", "C"], "w": [0.5, 2.5]})
+
+        centrality = PandasNodeCentrality._calculate_centrality(data, "degree", "source", graph_type, "w")
+
+        assert centrality.to_dict() == pytest.approx(expected)
+
     @pytest.mark.parametrize("algorithm", ["closeness", "betweenness", "eigenvector", "pagerank"])
     def test_calculate_bounded_centrality(self, sample_data: pd.DataFrame, algorithm: str) -> None:
         """These take (adj_matrix, nodes) and score every node within [0, 1]; degree is separate, it may exceed 1."""

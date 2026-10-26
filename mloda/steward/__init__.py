@@ -36,6 +36,7 @@ from mloda.core.abstract_plugins.function_extender import (
 from mloda.core.abstract_plugins.plan_context import PlanContext
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema
+from mloda.core.abstract_plugins.components.failed_rows import collect_failed_rows
 from mloda.core.abstract_plugins.close_context import CloseContext
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 
@@ -102,6 +103,7 @@ __all__ = [
     "Extender",
     "ExtenderHook",
     "HookContext",
+    "collect_failed_rows",
     "OutputSchema",
     "CompositeExtender",
     "GateBypassError",

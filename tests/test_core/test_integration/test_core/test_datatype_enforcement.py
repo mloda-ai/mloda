@@ -220,6 +220,8 @@ class SplitFrameConsumer(FeatureGroup):
         "sum_and_plus_one": {"red_sum", "raw_plus_one"},
         "joined_and_plus_one": {ReducedJoinedBack.get_class_name(), "raw_plus_one"},
         "count_and_val": {"red_count", "raw_val"},
+        "count_sum_and_key": {"red_count", "red_sum", "raw_key"},
+        "joined_and_count": {ReducedJoinedBack.get_class_name(), "red_count"},
     }
 
     @classmethod
@@ -707,6 +709,7 @@ class TestRowReducingGroupJoins(_ReducerRunHelpers):
 
         assert [sorted(c) for c in self._column(frames, ReducedJoinedBack.get_class_name())] == [[40, 50, 80]]
         assert self._column(frames, "red_count") == [[2]]
+        MlodaTestRunner.assert_flight_server_clean(modes, flight_server)
 
     def test_consumer_of_reduced_output_and_key_with_link(
         self, modes: set[ParallelizationMode], flight_server: Any
@@ -1024,6 +1027,22 @@ class TestRowReducingGroupPlan:
                 "expose the needed column",
                 {_RAW_REDUCER_LINK},
             ),
+            (
+                Feature("count_sum_and_key"),
+                {SplitFrameConsumer},
+                SplitFrameConsumer,
+                ("red_count",),
+                "expose the needed column",
+                {_RAW_REDUCER_LINK},
+            ),
+            (
+                Feature("joined_and_count"),
+                {SplitFrameConsumer, ReducedJoinedBack},
+                SplitFrameConsumer,
+                ("red_count",),
+                "expose the needed column",
+                {_RAW_REDUCER_LINK},
+            ),
         ],
         ids=[
             "two_reducing_steps",
@@ -1032,6 +1051,8 @@ class TestRowReducingGroupPlan:
             "reduced_and_sibling",
             "cross_framework_pinned",
             "linked_reduced_and_unreduced",
+            "linked_count_sum_and_key",
+            "linked_joined_and_count",
         ],
     )
     def test_consumer_reading_two_frames_raises_at_prepare(
@@ -1039,7 +1060,7 @@ class TestRowReducingGroupPlan:
         feature: Feature,
         extra_groups: set[type[FeatureGroup]],
         consumer: type[FeatureGroup],
-        parents: tuple[str, str],
+        parents: tuple[str, ...],
         hint: str,
         links: set[Link] | None,
     ) -> None:
@@ -1053,7 +1074,7 @@ class TestRowReducingGroupPlan:
         if links is None:
             assert "Link" in message
         else:
-            assert "Link.inner(JoinSpec(RowReducer" not in message
+            assert "A Link already joins" in message
 
 
 class TestValidatorEdgeCases:

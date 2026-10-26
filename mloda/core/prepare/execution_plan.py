@@ -1433,8 +1433,15 @@ Available join types:
             ep.uuid for ep in execution_plan if isinstance(ep, FeatureGroupStep) and ep.own_frame
         }
 
+        blind_cache: dict[UUID, set[UUID]] = {}
+
         def own_frame_blind(ep: FeatureGroupStep) -> set[UUID]:
             """Required uuids reached only through an own-frame parent, whose frame hides them from ep."""
+            if ep.uuid not in blind_cache:
+                blind_cache[ep.uuid] = _own_frame_blind(ep)
+            return blind_cache[ep.uuid]
+
+        def _own_frame_blind(ep: FeatureGroupStep) -> set[UUID]:
             parents_of = memo.edge_parents(graph)
             direct: set[UUID] = set()
             hidden: set[UUID] = set()
@@ -1470,10 +1477,8 @@ Available join types:
         producer_of: dict[UUID, UUID] = {token: ep.uuid for ep in execution_plan for token in ep.get_uuids()}
 
         join_side_uuids: set[UUID] = set()
-        join_frame_uuids: set[UUID] = set()
         for js in left_join_frameworks:
             join_side_uuids |= js.destination_framework_uuids | js.source_framework_uuids
-            join_frame_uuids |= js.destination_framework_uuids | js.source_framework_uuids | js.carriers
         positions_holding: dict[UUID, list[int]] = defaultdict(list)
         required_by: dict[UUID, list[int]] = defaultdict(list)
         if join_side_uuids:
@@ -2080,19 +2085,23 @@ Available join types:
                     serving_frame_uuids: set[UUID] = set()
                     for js in serving:
                         serving_frame_uuids |= js.destination_framework_uuids | js.source_framework_uuids | js.carriers
+                    serving_owners = {owning_step_of.get(u, u) for u in serving_frame_uuids}
+                    joined_key = frozenset({ep.uuid})
                     for parent_uuid in set().union(*(edge_parents.get(m, set()) for m in ep.get_uuids())):
                         parent_framework = nodes[parent_uuid].feature.get_compute_framework()
                         if parent_framework == ep.compute_framework and any(
                             js in serving and js.matched(ep.compute_framework, parent_uuid, ep.required_uuids)
                             for js in joins_by_feature.get(parent_uuid, ())
                         ):
+                            frames_by_framework[parent_framework][joined_key].append(parent_uuid)
                             continue
                         lineage = self._same_framework_lineage(parent_uuid, graph, memo)
-                        if lineage & serving_frame_uuids:
-                            continue
                         frame_key = frozenset(
                             owner for owner in (owning_step_of.get(u, u) for u in lineage) if owner in own_frame_steps
                         )
+                        if lineage & serving_frame_uuids and frame_key <= serving_owners:
+                            frames_by_framework[parent_framework][joined_key].append(parent_uuid)
+                            continue
                         frames_by_framework[parent_framework][frame_key].append(parent_uuid)
                     for frame_parents in frames_by_framework.values():
                         if len(frame_parents) < 2:
@@ -2107,9 +2116,16 @@ Available join types:
                             ),
                             key=lambda item: (item[0], item[1].get_class_name()),
                         )
-                        linked = any(
-                            {js.link.left_feature_group, js.link.right_feature_group}
-                            == {reps_by_frame[0][1], reps_by_frame[1][1]}
+                        rep_a, rep_b = reps_by_frame[0][1], reps_by_frame[1][1]
+                        linked = (joined_key in frame_parents and bool(serving)) or any(
+                            (
+                                issubclass(rep_a, js.link.left_feature_group)
+                                and issubclass(rep_b, js.link.right_feature_group)
+                            )
+                            or (
+                                issubclass(rep_b, js.link.left_feature_group)
+                                and issubclass(rep_a, js.link.right_feature_group)
+                            )
                             for js in left_join_frameworks
                         )
                         raise ValueError(self._split_frame_error(ep, reps_by_frame[0], reps_by_frame[1], linked))

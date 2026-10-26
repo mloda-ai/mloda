@@ -1,9 +1,9 @@
 import inspect
 import os
-from collections.abc import Mapping, Sequence
-from copy import deepcopy
+from collections.abc import Callable, Mapping, Sequence
+from copy import copy, deepcopy
 from difflib import get_close_matches
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -31,6 +31,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.declared_attributes import DeclarationRequirement
 from mloda.core.abstract_plugins.components.input_data.claim_route import (
     DataAccessReader,
+    computed_elsewhere,
     computed_elsewhere_scope,
     feature_group_scope,
     open_claim_scope,
@@ -44,7 +45,20 @@ from mloda.core.abstract_plugins.components.input_data.source_feature_group impo
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options, reject_reserved_reader_key
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
-from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
+from mloda.core.abstract_plugins.components.match_hook import CriteriaProbeOutcome, probe_match_criteria
+from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
+from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
+from mloda.core.prepare.input_chain import (
+    EnvironmentKey,
+    InputChainOutcome,
+    cached_input_fact,
+    declared_inputs,
+    input_chain_state,
+    input_features_collection,
+    normalize_input_name,
+    resolution_environment,
+    resolution_key,
+)
 from mloda.core.abstract_plugins.components.utils import (
     as_str,
     contained_raise_log_level,
@@ -80,6 +94,27 @@ def _operation_implementation_reason(feature_group: type[FeatureGroup]) -> str |
 
 
 logger = logging.getLogger(__name__)
+
+
+InputResolver = Callable[[Feature, set[Link] | None, int], EvaluationResult]
+
+
+@dataclass(frozen=True)
+class _CriteriaAttempt:
+    probe: CriteriaProbeOutcome
+    options: Options
+    open_claim: bool
+    pending_pins: tuple[tuple[str, Any], ...]
+
+
+def _unique_refusals(refusals: Sequence[Exception]) -> tuple[Exception, ...]:
+    seen: set[int] = set()
+    unique: list[Exception] = []
+    for refusal in refusals:
+        if id(refusal) not in seen:
+            seen.add(id(refusal))
+            unique.append(refusal)
+    return tuple(unique)
 
 
 class FeatureResolutionError(ValueError):
@@ -279,6 +314,12 @@ class IdentifyFeatureGroupClass:
         self._reported_pins = set()
         self._partial_records = ()
         self._data_access_collection = data_access_collection
+        self._accessible_plugins: FeatureGroupEnvironmentMapping = {}
+        self._links: set[Link] | None = None
+        self._environment: EnvironmentKey = ()
+        self._input_resolver: InputResolver | None = None
+        self._input_depth = 0
+        self._input_refusals: dict[type[FeatureGroup], tuple[Exception, ...]] = {}
 
     @classmethod
     def evaluate(
@@ -303,8 +344,35 @@ class IdentifyFeatureGroupClass:
         *,
         excluded: Mapping[type[FeatureGroup], str] | None = None,
         partial_records: Sequence[ResolutionRecord] = (),
+        _input_resolver: InputResolver | None = None,
+        _input_depth: int = 0,
     ) -> tuple[EvaluationResult, tuple[Exception, ...]]:
         """evaluate plus the extender refusals of the refused candidates, kept out of the result."""
+        with run_match_cache():
+            return cls._evaluate_once(
+                feature,
+                accessible_plugins,
+                links,
+                data_access_collection,
+                excluded=excluded,
+                partial_records=partial_records,
+                _input_resolver=_input_resolver,
+                _input_depth=_input_depth,
+            )
+
+    @classmethod
+    def _evaluate_once(
+        cls,
+        feature: Feature,
+        accessible_plugins: FeatureGroupEnvironmentMapping,
+        links: set[Link] | None,
+        data_access_collection: DataAccessCollection | None = None,
+        *,
+        excluded: Mapping[type[FeatureGroup], str] | None = None,
+        partial_records: Sequence[ResolutionRecord] = (),
+        _input_resolver: InputResolver | None = None,
+        _input_depth: int = 0,
+    ) -> tuple[EvaluationResult, tuple[Exception, ...]]:
         refusals: tuple[Exception, ...] = ()
         reject_reserved_reader_key(feature.options)
         # Pre-matching guard: a >1 pin fires regardless of whether any candidate matches (the old check
@@ -314,6 +382,8 @@ class IdentifyFeatureGroupClass:
         self = cls(data_access_collection)
         self._partial_records = partial_records
         self._excluded = excluded or {}
+        self._input_resolver = _input_resolver
+        self._input_depth = _input_depth
         try:
             identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
             # A single survivor means every dropped candidate is its ancestor (issubclass is transitive).
@@ -339,13 +409,15 @@ class IdentifyFeatureGroupClass:
                 # this only captures the non-elimination facts the messages still need.
                 result = replace(result, facts=self._capture_render_facts(result, accessible_plugins, feature, links))
                 if result.failure_kind != "multiple":
-                    refusals = tuple(
-                        rejection.refusal
-                        for fg, rejection in sorted(
-                            self._match_rejections.items(), key=lambda item: _candidate_sort_key(item[0])
-                        )
-                        if fg not in self._matcher_errors and rejection.refusal is not None
-                    )
+                    collected: list[Exception] = []
+                    for fg in sorted(
+                        self._match_rejections.keys() | self._input_refusals.keys(), key=_candidate_sort_key
+                    ):
+                        rejection = self._match_rejections.get(fg)
+                        if fg not in self._matcher_errors and rejection is not None and rejection.refusal is not None:
+                            collected.append(rejection.refusal)
+                        collected.extend(self._input_refusals.get(fg, ()))
+                    refusals = _unique_refusals(collected)
         finally:
             self._match_rejections.clear()
             # A captured exception pins its traceback, whose frames pin this instance: a refcount cycle that would
@@ -358,6 +430,7 @@ class IdentifyFeatureGroupClass:
             self._deferred_aborts.clear()
             self._input_data_matches.clear()
             self._open_claims.clear()
+            self._input_refusals.clear()
         return result, refusals
 
     def _capture_render_facts(
@@ -663,6 +736,7 @@ class IdentifyFeatureGroupClass:
         data_access_collection: DataAccessCollection | None,
         identified: FeatureGroupEnvironmentMapping,
     ) -> None:
+        request_key = resolution_key(feature)
         for feature_group, compute_frameworks in candidates:
             # An out-of-scope candidate is skipped silently: never probed, no elimination recorded.
             if not self._filter_feature_group_by_scope(feature_group, feature):
@@ -675,7 +749,7 @@ class IdentifyFeatureGroupClass:
             # never probed. Recorded regardless of domain or of the overall outcome (a sibling may win).
             try:
                 criteria_matched = self._filter_feature_group_by_criteria(
-                    feature_group, feature, data_access_collection
+                    feature_group, feature, data_access_collection, request_key
                 )
             except Exception as exc:  # noqa: BLE001  (only a marked abort of a gated-out candidate is absorbed)
                 if not is_match_abort(exc):
@@ -786,6 +860,9 @@ class IdentifyFeatureGroupClass:
         links: set[Link] | None,
         data_access_collection: DataAccessCollection | None = None,
     ) -> FeatureGroupEnvironmentMapping:
+        self._accessible_plugins = accessible_plugins
+        self._links = links
+        self._environment = resolution_environment(accessible_plugins, links, data_access_collection, self._excluded)
         identified: FeatureGroupEnvironmentMapping = {}
         items = list(accessible_plugins.items())
         others = [item for item in items if not issubclass(item[0], SourceFeatureGroup)]
@@ -797,6 +874,8 @@ class IdentifyFeatureGroupClass:
             computed = any(self._computes(fg, feature) for fg in sorted(computing, key=_candidate_sort_key))
             with computed_elsewhere_scope(str(feature.name) if computed else None):
                 self._collect_candidates(feature, sources, links, data_access_collection, identified)
+        if len(identified) > 1:
+            self._filter_input_chains(feature, identified)
         _identified_feature_groups = identified
 
         candidates = set(_identified_feature_groups)
@@ -844,9 +923,13 @@ class IdentifyFeatureGroupClass:
         ]
         if not remaining:
             return
-        # Every criteria match counts as computing, so a computing group eliminated later still masks the abort;
-        # only survivors count as reading, because one of them would win.
-        computing = bool(self._computing_groups(feature))
+        # Earlier gates do not unmask the consumer's pointed-source abort. An explicitly failed
+        # competing chain does; only survivors count as reading, because one of them would win.
+        computing = any(
+            self._declares_inputs(fg, feature)
+            for fg in sorted(self._criteria_matched_feature_groups, key=_candidate_sort_key)
+            if fg not in self._input_refusals
+        )
         reading = [
             fg
             for fg in sorted(identified, key=_candidate_sort_key)
@@ -897,19 +980,141 @@ class IdentifyFeatureGroupClass:
                 f"pass feature_group={fg.__name__} to read it from this source",
             )
 
-    def _computes(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
-        """True when input_features returned a value; a raise is not computing, a marked abort still propagates."""
+    def _declares_inputs(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
+        """A pointed source's missing output must still defer to the consumer that declares its inputs."""
         try:
             return (
-                feature_group().input_features(
-                    self._matched_options[feature_group], FeatureName(self._hook_name(feature_group, feature))
+                declared_inputs(
+                    self._environment,
+                    feature_group,
+                    self._matched_options[feature_group]._fork(),
+                    FeatureName(self._hook_name(feature_group, feature)),
                 )
                 is not None
             )
-        except Exception as exc:  # noqa: BLE001  (an unmarked raise only says this candidate does not compute)
+        except Exception as exc:  # noqa: BLE001  (an unmarked declaration failure does not compute the name)
             if is_match_abort(exc):
                 raise
             return False
+
+    def _computes(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
+        """Only a non-root whose entire input chain resolves can make a source step aside."""
+        outcome = self._input_chain(feature_group, feature)
+        return outcome.viable and outcome.computing
+
+    def _filter_input_chains(self, feature: Feature, identified: FeatureGroupEnvironmentMapping) -> None:
+        for feature_group in sorted(tuple(identified), key=_candidate_sort_key):
+            outcome = self._input_chain(feature_group, feature)
+            if not outcome.viable:
+                del identified[feature_group]
+                self._record_elimination(feature_group, "inputs", outcome.reason)
+                self._input_refusals[feature_group] = outcome.refusals
+
+    @staticmethod
+    def _input_failure(error: Exception) -> InputChainOutcome:
+        refusals: tuple[Exception, ...] = ()
+        if isinstance(error, FeatureResolutionError):
+            refusals = error.refusals
+        elif is_match_abort(error) and isinstance(error.__cause__, Exception):
+            refusals = (error.__cause__,)
+        return InputChainOutcome(False, True, contained_raise_reason(error), refusals)
+
+    def _input_chain(self, feature_group: type[FeatureGroup], feature: Feature) -> InputChainOutcome:
+        """Try a candidate without adding graph nodes; a match abort only rejects this attempt."""
+        attempted = copy(feature)
+        attempted.options = self._matched_options.get(feature_group, feature.options)._fork()
+        output_part = self._output_parts.get(feature_group)
+        feature_key = resolution_key(attempted)
+        key = feature_group, feature_key, output_part
+        state = input_chain_state(self._environment)
+        if key in state.completed:
+            return state.completed[key]
+        if key in state.active:
+            return InputChainOutcome(True, True, pending=frozenset({key}))
+        state.active.add(key)
+        state.active_features.setdefault(feature_key, set()).add(key)
+        try:
+            normalize_input_name(self._environment, attempted, feature_group(), output_part)
+            try:
+                entries = declared_inputs(self._environment, feature_group, attempted.options, attempted.name)
+            except NotImplementedError as exc:
+                if is_match_abort(exc):
+                    raise
+                entries = None
+            if entries is None:
+                outcome = InputChainOutcome(True, False)
+            else:
+                inputs = input_features_collection(feature_group, entries, attempted)
+                links = None if self._links is None else set(self._links)
+                for input_feature in inputs:
+                    if input_feature.link is not None:
+                        links = {input_feature.link} if links is None else links | {input_feature.link}
+                if links is not None:
+                    LinkValidator.validate_links(links)
+                pending: set[Any] = set()
+                outcome = InputChainOutcome(True, True)
+                for input_feature in inputs:
+                    input_feature.options.lock_own_keys()
+                    input_feature.resolving_consumer = feature_group.get_class_name()
+                    # Relative paths belong to the candidate, not the outer request that first filled the memo.
+                    input_feature.resolving_path = (str(attempted.name),)
+                    child = self._probe_input(input_feature, links)
+                    if not child.viable:
+                        outcome = InputChainOutcome(
+                            False, True, f"input '{input_feature.name}': {child.reason}", child.refusals
+                        )
+                        break
+                    pending.update(child.pending)
+                if outcome.viable:
+                    outcome = replace(outcome, pending=frozenset(pending))
+        except Exception as exc:  # noqa: BLE001  (speculative chain boundary; final resolution still raises)
+            outcome = self._input_failure(exc)
+        finally:
+            state.active.remove(key)
+            state.active_features[feature_key].remove(key)
+            if not state.active_features[feature_key]:
+                del state.active_features[feature_key]
+        # A provisional back-edge success must not outlive a later failure elsewhere in that cycle.
+        if not outcome.pending:
+            state.completed[key] = outcome
+        return outcome
+
+    def _probe_input(self, feature: Feature, links: set[Link] | None) -> InputChainOutcome:
+        environment = resolution_environment(
+            self._accessible_plugins, links, self._data_access_collection, self._excluded
+        )
+        active = input_chain_state(environment).active_features.get(resolution_key(feature))
+        if active:
+            # Do not re-run name disambiguation for a back edge; the outer attempt owns that choice.
+            return InputChainOutcome(True, True, pending=frozenset(active))
+        try:
+            if self._input_resolver is None:
+                result, refusals = type(self)._evaluate(
+                    feature,
+                    self._accessible_plugins,
+                    links,
+                    self._data_access_collection,
+                    excluded=self._excluded,
+                    _input_depth=self._input_depth + 1,
+                )
+                message = render_resolution_failure(result, feature)
+                if message is not None:
+                    return InputChainOutcome(False, True, message, refusals)
+            else:
+                result = self._input_resolver(feature, links, self._input_depth + 1)
+            winner = next(iter(result.identified))
+            child = type(self)(self._data_access_collection)
+            child._accessible_plugins = self._accessible_plugins
+            child._excluded = self._excluded
+            child._links = links
+            child._environment = environment
+            child._input_resolver = self._input_resolver
+            child._input_depth = self._input_depth + 1
+            child._matched_options[winner] = feature.options
+            child._output_parts = result.output_parts
+            return child._input_chain(winner, feature)
+        except Exception as exc:  # noqa: BLE001  (a failed input must not abort another candidate's attempt)
+            return self._input_failure(exc)
 
     def _declaration_requirement(
         self, feature_group: type[FeatureGroup], feature: Feature
@@ -1000,6 +1205,7 @@ class IdentifyFeatureGroupClass:
         feature_group: type[FeatureGroup],
         feature: Feature,
         data_access_collection: DataAccessCollection | None,
+        request_key: Any = None,
     ) -> bool:
         """A raise out of the match hook is a non-match for that candidate only, not a run-wide abort (#845).
 
@@ -1009,23 +1215,38 @@ class IdentifyFeatureGroupClass:
 
         Mark-or-contain policy: see call_match_hook.
         """
-        options = feature.options._fork()
-        with (
-            feature_group_scope(feature.feature_group_scope),
-            open_claim_scope() as open_claim,
-            pin_report_scope(self._reported_pins) as pending_pins,
-        ):
-            probe = probe_match_criteria(feature_group, feature.name, options, data_access_collection, True)
+
+        def compute() -> _CriteriaAttempt:
+            options = feature.options._fork()
+            with (
+                feature_group_scope(feature.feature_group_scope),
+                open_claim_scope() as open_claim,
+                pin_report_scope(self._reported_pins) as pending_pins,
+            ):
+                probe = probe_match_criteria(feature_group, feature.name, options, data_access_collection, True)
+            return _CriteriaAttempt(probe, options, bool(open_claim), tuple(pending_pins))
+
+        if request_key is None:
+            request_key = resolution_key(feature)
+        key = (
+            feature_group,
+            request_key,
+            computed_elsewhere(str(feature.name)),
+            frozenset(self._reported_pins),
+        )
+        attempt = cached_input_fact(self._environment, "criteria", key, compute)
+        probe = attempt.probe
+        pending_pins = attempt.pending_pins
         if not probe.matched and probe.matcher_error is None:
             self._reported_pins |= {
                 path for path, record in pending_pins if record is not None and record is probe.rejection
             }
-        if probe.matched and open_claim:
+        if probe.matched and attempt.open_claim:
             self._open_claims |= {feature_group}
         # The pair carries credentials: it never stays in options, only in this evaluation's per-candidate map.
         written = probe.written
         if probe.matched:
-            self._matched_options[feature_group] = options
+            self._matched_options[feature_group] = attempt.options._fork()
             if probe.part is not None:
                 self._output_parts[feature_group] = probe.part
             if written is not None:
@@ -1124,10 +1345,19 @@ def resolve_or_raise(
     partial_records: Sequence[ResolutionRecord] = (),
     *,
     excluded: Mapping[type[FeatureGroup], str] | None = None,
+    _input_resolver: InputResolver | None = None,
+    _input_depth: int = 0,
 ) -> EvaluationResult:
     """Evaluate one feature and raise the typed FeatureResolutionError on failure."""
     result, refusals = IdentifyFeatureGroupClass._evaluate(
-        feature, accessible_plugins, links, data_access_collection, excluded=excluded, partial_records=partial_records
+        feature,
+        accessible_plugins,
+        links,
+        data_access_collection,
+        excluded=excluded,
+        partial_records=partial_records,
+        _input_resolver=_input_resolver,
+        _input_depth=_input_depth,
     )
     message = render_resolution_failure(result, feature)
     if message is not None:

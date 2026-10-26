@@ -127,6 +127,10 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/declaration_surface.py", "validate_property_spec"): (
         _VALIDATE_PROPERTY_SPEC_RAISES
     ),
+    ("mloda/core/prepare/input_chain.py", "cached_input_fact"): (
+        "real edge: replays the exact cached exception with its abort marker intact; call_match_hook still "
+        "decides whether the original matcher failure is contained"
+    ),
 }
 
 # Swallowing functions OUTSIDE the declared modules that the match path calls; the containment there is decided
@@ -169,6 +173,14 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
         "which renders discriminators through safe_field"
     ),
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
+    ("mloda/core/prepare/input_chain.py", "cached_input_fact"): (
+        "real edge: the capture closure temporarily stores the original exception; the enclosing helper "
+        "immediately re-raises it on both cache misses and hits, preserving its abort marker"
+    ),
+    ("mloda/core/prepare/input_chain.py", "resolution_key"): (
+        "real edge: only guards hash(value) while constructing an optional memo key; a raising __hash__ "
+        "falls back to object identity and does not change a match-hook outcome"
+    ),
 }
 
 _ESCALATION = "escalate_match_abort"

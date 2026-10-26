@@ -18,7 +18,6 @@ from mloda.core.abstract_plugins.components.input_data.reader_probe import (
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.prepare.accessible_plugins import EnvironmentPreconditionError, PreFilterPlugins
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import COLUMN_SEPARATOR
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.data_access_collection import (
     DataAccessCollection,
@@ -53,6 +52,13 @@ from mloda.core.prepare.resolve_implementation_pins import ResolveImplementation
 from mloda.core.prepare.resolution_failure_renderer import _candidate_sort_key
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
+from mloda.core.prepare.input_chain import (
+    EnvironmentKey,
+    declared_inputs,
+    input_resolution_scope,
+    normalize_input_name,
+    resolution_environment,
+)
 from mloda.core.prepare.resolution_types import (
     EvaluationResult,
     ResolutionRecord,
@@ -147,7 +153,7 @@ class Engine:
         # Per surviving feature uuid, the parents its winning group replaced, unioned over merged duplicates.
         self.specialized_from: dict[UUID, tuple[type[FeatureGroup], ...]] = {}
         self.resolution_records: list[ResolutionRecord] = []
-        with run_match_cache(), accessible_implementations(self.implementations):
+        with run_match_cache(), accessible_implementations(self.implementations), input_resolution_scope(self):
             self.execution_planner = self.create_setup_execution_plan(features)
         if self.function_extender:
             self.run_context = replace(self.run_context, plugin_versions=self._resolve_plugin_versions())
@@ -402,14 +408,12 @@ class Engine:
         self, feature: Feature, feature_group: FeatureGroup, output_part: tuple[str, str] | None
     ) -> None:
         """Rename the feature to its base name and record the requested output part."""
-        requested = feature.name
-        if output_part is not None:
-            feature.name = FeatureName(output_part[0])
-        feature.name = feature_group.set_feature_name(feature.options, feature.name)
-        if output_part is not None:
-            feature.record_part(output_part[1])
-        elif feature.name != requested and requested.startswith(f"{feature.name}{COLUMN_SEPARATOR}"):
-            feature.record_part(requested[len(feature.name) + 1 :])
+        normalize_input_name(self._input_environment(), feature, feature_group, output_part)
+
+    def _input_environment(self) -> EnvironmentKey:
+        return resolution_environment(
+            self.accessible_plugins, self.links, self.data_access_collection, self.excluded_feature_groups
+        )
 
     def _set_compute_framework_and_data_type(
         self,
@@ -466,13 +470,38 @@ class Engine:
                 self.data_access_collection,
                 partial_records=self.resolution_records,
                 excluded=self.excluded_feature_groups,
+                _input_resolver=self._resolve_input_candidate,
+                _input_depth=depth,
             )
         else:
             result = self._resolve_with_match_hook(extender, feature, depth)
         feature_group_class, compute_frameworks = next(iter(result.identified.items()))
         return feature_group_class, compute_frameworks, result
 
-    def _resolve_with_match_hook(self, extender: Extender, feature: Feature, depth: int) -> EvaluationResult:
+    def _resolve_input_candidate(self, feature: Feature, links: set[Link] | None, depth: int) -> EvaluationResult:
+        """Use the run's match extender for an input attempt, without committing nodes or records."""
+        extender = self.get_function_extender(ExtenderHook.FEATURE_GROUP_MATCHED)
+        if extender is not None:
+            return self._resolve_with_match_hook(extender, feature, depth, probe=True, links=links)
+        return resolve_or_raise(
+            feature,
+            self.accessible_plugins,
+            links,
+            self.data_access_collection,
+            excluded=self.excluded_feature_groups,
+            _input_resolver=self._resolve_input_candidate,
+            _input_depth=depth,
+        )
+
+    def _resolve_with_match_hook(
+        self,
+        extender: Extender,
+        feature: Feature,
+        depth: int,
+        *,
+        probe: bool = False,
+        links: set[Link] | None = None,
+    ) -> EvaluationResult:
         """Run resolve_or_raise through the extender under a HookContext.
         feature_group_class is None until the match resolves, then written post-hoc."""
         plan = self.plan_context
@@ -516,10 +545,12 @@ class Engine:
                     instrument(context, _resolve, row_count=_no_rows),
                     feature,
                     self.accessible_plugins,
-                    self.links,
+                    links if probe else self.links,
                     self.data_access_collection,
-                    partial_records=self.resolution_records,
+                    partial_records=() if probe else self.resolution_records,
                     excluded=self.excluded_feature_groups,
+                    _input_resolver=self._resolve_input_candidate,
+                    _input_depth=depth,
                 ),
             )
 
@@ -1029,12 +1060,10 @@ class Engine:
         path: tuple[str, ...] = (),
     ) -> frozenset[str] | None:
         """Handles recursion for input features of a feature group."""
-        feature_group = feature_group_class()
-
-        # options = deepcopy(options)
-
         try:
-            input_features = feature_group.input_features(options, feature_name)
+            input_features = declared_inputs(
+                self._input_environment(), feature_group_class, options, feature_name, materialize=True
+            )
         except NotImplementedError:  # This means, it is a root feature.
             input_features = None
 

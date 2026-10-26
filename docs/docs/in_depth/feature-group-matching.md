@@ -8,6 +8,14 @@ The mloda framework uses a sophisticated matching system to determine which feat
 
 When a feature is requested, the system checks all available feature groups to find the one that should handle the feature. This is done through the `match_feature_group_criteria` method in each feature group, which now typically uses the unified parser approach. Feature and column names match case-sensitively; see [Column name case sensitivity](compute-framework-integration.md#column-name-case-sensitivity).
 
+`match_feature_group_criteria` answers whether the name and options fit the group. Declare dependencies in `input_features` and let resolution check whether they are available; a derived group's match hook does not need to scan readers or call `has_source` before claiming a plain name.
+
+When several candidates survive the matching gates, resolution checks each candidate's entire input chain in the run's enabled plugin environment. A candidate with an unresolvable input is eliminated with stage `inputs` and the input's reason. One viable candidate wins; several viable candidates retain the existing subclass, output-part and source-route preferences, and any remaining ambiguity is reported. Scope and source pointers narrow matching first. A sole candidate retains the existing behavior: if its dependency fails, the failure names that dependency.
+
+Input attempts use the same name normalization, declared options, forwarding rules, domains and declaration requirements as graph construction. Matching and dependency declarations are cached within the run, including source refusals, and graph construction reuses the winner's options and reader match. Speculative attempts use copies; the first real expansion retains the provider's input objects so existing references observe inherited options, renames and framework selection. Replaying a cached declaration for another parent creates distinct input objects and UUIDs before the usual equality-based merging. An input already on the active chain is provisionally resolvable so the existing graph cycle check remains responsible for cycles. Attempts do not add nodes or resolution records for losing candidates.
+
+`FEATURE_GROUP_MATCHED` extenders observe speculative input matching as well as final resolution. Resolution records include only the final resolution used to build the graph, so an extender can observe more matching attempts than the records contain.
+
 ## Modern Unified Matching
 
 The recommended approach uses `FeatureChainParserMixin`, whose default `match_feature_group_criteria` already does this. Override it only to add your own checks, and reach the parser through `cls.match_parser_criteria`, which reads `PROPERTY_MAPPING` (configuration-based matching) and `PREFIX_PATTERN` / `SUFFIX_PATTERN` (string-based matching) off the class:
@@ -30,6 +38,8 @@ Do not call `FeatureChainParser.match_configuration_feature_chain_parser` direct
 To report why a `match_guard` declined a value without overriding `match_feature_group_criteria`, declare `expected` on the spec instead; see [PROPERTY_MAPPING Configuration](property-mapping.md).
 
 Containment covers plugin raises only: a framework-owned raise (a forwarded value contradicting the feature name, a rejected effective-options build) still aborts the whole resolution, because it reports a misconfiguration you have to fix. To make a plugin raise behave like one, `escalate_match_abort(exc)` marks the raise and returns the same exception, and `is_match_abort(exc)` reports whether the mark is present (both from `mloda.provider`); this is the supported way to escalate a match-time misconfiguration.
+
+During a candidate's speculative input-chain attempt, a dependency rejection or marked abort instead makes that candidate unresolvable, leaving its competitors available. This containment does not change the normal failure of a sole or explicitly selected candidate. If every competing chain fails, the resolution error reports each chain and retains any `INPUT_DATA_MATCH` refusal exceptions.
 
 Filter matching contains the same way: a raise is a non-match for that probe, like a `False` return, and is recorded in `GlobalFilter.dropped_filters` as a `match hook` near-miss, as is a typed decline the matcher records; a framework-owned raise still aborts. Every entry names the gate that dropped the filter and that gate's reason. [How filters reach your FeatureGroup](filter_data.md#how-filters-reach-your-featuregroup) tables the gates the two paths share and where filter policy differs.
 

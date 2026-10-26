@@ -321,27 +321,22 @@ class TestDataLifecycleManagerGetResultData:
         mock_cfw.uuid = uuid4()
         mock_cfw.data = None
 
-        downloaded_data = Mock()
         converted_data = {"feature1": [1, 2, 3]}
         selected_data = {"feature1": [1, 2, 3]}
 
-        mock_cfw.convert_flight_server_data_back.return_value = converted_data
+        mock_cfw.download_frame.return_value = converted_data
         mock_cfw.select_data_by_column_names.return_value = selected_data
 
         feature_name = Mock(spec=FeatureName)
         selected_feature_names = [feature_name]
 
-        with patch("mloda.core.runtime.data_lifecycle_manager.FlightServer") as mock_flight_server:
-            mock_flight_server.download_table.return_value = downloaded_data
+        result = manager.get_result_data(mock_cfw, selected_feature_names, location=location)
 
-            result = manager.get_result_data(mock_cfw, selected_feature_names, location=location)
-
-            mock_flight_server.download_table.assert_called_once_with(location, str(mock_cfw.uuid))
-            mock_cfw.convert_flight_server_data_back.assert_called_once_with(downloaded_data, manager.transformer)
-            mock_cfw.select_data_by_column_names.assert_called_once_with(
-                converted_data, selected_feature_names, column_ordering=None, request_feature_order=None
-            )
-            assert result == selected_data
+        mock_cfw.download_frame.assert_called_once_with(location, mock_cfw.uuid)
+        mock_cfw.select_data_by_column_names.assert_called_once_with(
+            converted_data, selected_feature_names, column_ordering=None, request_feature_order=None
+        )
+        assert result == selected_data
 
     def test_get_result_data_raises_error_when_no_data_and_no_location(self) -> None:
         """Should raise NotImplementedError when CFW has no data and no location is provided."""
@@ -447,7 +442,7 @@ class TestDataLifecycleManagerOutputFramework:
         manager = DataLifecycleManager(output_framework=PandasDataFrame, output_connection=None)
         cfw = self._arrow_cfw(None)
 
-        with patch("mloda.core.runtime.data_lifecycle_manager.FlightServer") as mock_flight_server:
+        with patch("mloda.core.abstract_plugins.compute_framework.FlightServer") as mock_flight_server:
             mock_flight_server.download_table.return_value = pa.table({"feature1": [1, 2]})
             result = manager.get_result_data(cfw, [FeatureName("feature1")], location="grpc://localhost:8815")
 
@@ -781,7 +776,7 @@ class TestDataLifecycleManagerIntegration:
         mock_cfw2 = Mock(spec=ComputeFramework)
         mock_cfw2.uuid = cfw_uuid2
         mock_cfw2.data = None
-        mock_cfw2.convert_flight_server_data_back.return_value = {"feature2": [4, 5, 6]}
+        mock_cfw2.download_frame.return_value = {"feature2": [4, 5, 6]}
         mock_cfw2.select_data_by_column_names.return_value = {"feature2": [4, 5, 6]}
 
         _cfw_collection = {cfw_uuid1: mock_cfw1, cfw_uuid2: mock_cfw2}
@@ -798,10 +793,7 @@ class TestDataLifecycleManagerIntegration:
 
         # Add results with different locations
         manager.add_to_result_data_collection(mock_cfw1, features1, step_uuid1)
-
-        with patch("mloda.core.runtime.data_lifecycle_manager.FlightServer") as mock_flight_server:
-            mock_flight_server.download_table.return_value = Mock()
-            manager.add_to_result_data_collection(mock_cfw2, features2, step_uuid2, location=location)
+        manager.add_to_result_data_collection(mock_cfw2, features2, step_uuid2, location=location)
 
         results = manager.get_results()
         assert len(results) == 2

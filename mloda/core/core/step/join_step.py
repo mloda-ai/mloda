@@ -1,6 +1,5 @@
 from typing import Any
 from uuid import UUID, uuid4
-from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -11,7 +10,6 @@ from mloda.core.core.cfw_manager import CfwManager
 
 from mloda.core.core.step.abstract_step import Step
 from mloda.core.abstract_plugins.components.link import JoinType, Link
-from mloda.core.runtime.flight.flight_server import FlightServer
 
 
 def resolve_join_source_cfw(step: "JoinStep", cfw_register: CfwManager) -> UUID:
@@ -167,7 +165,7 @@ class JoinStep(Step):
 
         if self.location and isinstance(cfw.data, str):
             # the destination frame's worker already handed its data to the flight server
-            cfw.set_data(self._download_frame(self.location, cfw, cfw.data))
+            cfw.set_data(cfw.download_frame(self.location, cfw.data))
 
         from_cfw_data, from_cfw_uuid = self.get_data(from_cfw, cfw)
 
@@ -184,11 +182,6 @@ class JoinStep(Step):
 
         return None
 
-    @staticmethod
-    def _download_frame(location: str, cfw: ComputeFramework, object_id: str) -> Any:
-        table = FlightServer.download_table(location, object_id)
-        return cfw.convert_flight_server_data_back(table, ComputeFrameworkTransformer())
-
     def get_data(self, from_cfw: UUID | ComputeFramework, cfw: ComputeFramework) -> Any:
         """
         This method is used to get the data from the compute framework.
@@ -197,7 +190,7 @@ class JoinStep(Step):
         If we are not using multiprocessing, we just get the data from the compute framework.
         """
         if self.location and isinstance(from_cfw, UUID):
-            return self._download_frame(self.location, cfw, str(from_cfw)), from_cfw
+            return cfw.download_frame(self.location, from_cfw), from_cfw
         if isinstance(from_cfw, UUID):
             raise ValueError("From_cfw is a UUID, but we are not using flightserver.")
         return from_cfw.get_data(), from_cfw.uuid

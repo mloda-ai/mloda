@@ -1,11 +1,14 @@
 import threading
 from typing import Any
 from unittest.mock import MagicMock
+from uuid import uuid4
 
+import pandas as pd
 import pytest
 import pyarrow as pa
 import pyarrow.flight as flight
 from mloda.core.runtime.flight.flight_server import FlightServer, create_location
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
 class TestFlightServerUnit:
@@ -115,3 +118,14 @@ class TestFlightServerIntegration:
         FlightServer.drop_tables(self.location, {table_key})
         with pytest.raises(ValueError):
             FlightServer.download_table(self.location, table_key)
+
+    def test_download_frame_converts_to_the_native_framework(self) -> None:
+        table = pa.table({"a": [1, 2, 3]})
+        object_id = uuid4()
+        FlightServer.upload_table(self.location, table, str(object_id))
+
+        frame = PandasDataFrame().download_frame(self.location, object_id)
+        FlightServer.drop_tables(self.location, {str(object_id)})
+
+        assert isinstance(frame, pd.DataFrame)
+        assert frame.equals(table.to_pandas())

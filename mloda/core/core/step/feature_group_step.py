@@ -7,8 +7,6 @@ from mloda.core.abstract_plugins.components.failed_rows import collect_failed_ro
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
-from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
-from mloda.core.runtime.flight.flight_server import FlightServer
 from mloda.core.core.step.abstract_step import Step
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -98,8 +96,7 @@ class FeatureGroupStep(Step):
         if isinstance(from_cfw, ComputeFramework):
             return from_cfw.get_data()
         if isinstance(from_cfw, UUID) and self.location:
-            table = FlightServer.download_table(self.location, str(from_cfw))
-            return cfw.convert_flight_server_data_back(table, ComputeFrameworkTransformer())
+            return cfw.download_frame(self.location, from_cfw)
         raise ValueError(internal_invariant_error("an own-frame step has no source frame to read", f"step={self.uuid}"))
 
     def run_calculate_feature(self, cfw: ComputeFramework, data: Any | None = None) -> Any:

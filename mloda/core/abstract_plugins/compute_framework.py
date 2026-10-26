@@ -1268,6 +1268,13 @@ class ComputeFramework(ABC):
         )
 
     @final
+    def download_frame(self, location: str, object_id: UUID | str) -> Any:
+        """Downloads a flight table and converts it back to this framework's native type."""
+        return self.convert_flight_server_data_back(
+            FlightServer.download_table(location, str(object_id)), self.transformer
+        )
+
+    @final
     def drop_data(self, table_keys: set[str], location: str) -> None:
         FlightServer.drop_tables(location, table_keys)
 

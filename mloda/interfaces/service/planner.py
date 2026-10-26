@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.interfaces.service.catalog import MAX_DESCRIPTION_LENGTH, Catalog, plugin_collector_for, sanitize_text
 from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import error_result, failure_result, problems_to_details
@@ -28,6 +29,7 @@ from mloda.interfaces.service.request import (
     MAX_NAME_LENGTH,
     ParsedRequest,
     build_request,
+    caller_refused_option_keys,
     _pointer,
     data_access_violations,
     refused_option_violations,
@@ -258,6 +260,10 @@ class Planner:
         planned = self._denied([("/features", name) for step in steps for name in step.feature_names])
         if planned is not None:
             return planned
+        if not self._settings.trusted_caller:
+            bound = self._name_bound_refusal(steps, request_names)
+            if bound is not None:
+                return bound
         filters = request.get("filters", [])
         unmatched = self._unmatched_filters(parsed, filters)
         if unmatched is not None:
@@ -442,6 +448,32 @@ class Planner:
         if close:
             detail["suggestion"] = close[0]
         return error_result("validation_failed", detail["message"], [detail])
+
+    def _name_bound_refusal(self, steps: Sequence[PlanStep], request_names: Sequence[str]) -> dict[str, Any] | None:
+        """Refuse a planned feature name that binds an option a plugin marks as not caller-settable."""
+        keys = caller_refused_option_keys()
+        if not keys:
+            return None
+        details: list[dict[str, str]] = []
+        for step in steps:
+            group = step.feature_group
+            if step.step_kind != "compute" or not (isinstance(group, type) and issubclass(group, FeatureGroup)):
+                continue
+            for name in step.feature_names:
+                path = f"/features/{request_names.index(name)}" if name in request_names else "/features"
+                for key in sorted(set(group.name_bindings(name)) & keys):
+                    detail = {
+                        "path": path,
+                        "problem": "option_not_caller_settable",
+                        "message": f"Option key '{key}' is bound from a feature name and not caller-settable.",
+                    }
+                    if detail not in details:
+                        details.append(detail)
+        if not details:
+            return None
+        return error_result(
+            "policy_denied", "A feature name may not bind options a plugin marks as not caller-settable.", details
+        )
 
     def _unmatched_filters(self, parsed: ParsedRequest, filters: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
         if parsed.global_filter is None:

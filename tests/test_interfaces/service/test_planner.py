@@ -30,7 +30,15 @@ from mloda.interfaces.service.planner import (
     Planner,
     _inline_alias,
 )
-from mloda.provider import ApiDataFG, DataCreatorFeatureGroup, FeatureSet, ResolutionDiagnosis, SourceMatch
+from mloda.provider import (
+    ApiDataFG,
+    DataCreatorFeatureGroup,
+    FeatureChainParserMixin,
+    FeatureSet,
+    ResolutionDiagnosis,
+    SourceMatch,
+    property_spec,
+)
 from mloda.user import PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
@@ -208,10 +216,36 @@ class PlannerOptionsProbeMcp4(FeatureGroup):
         return {OPTS: list(data["income"])}
 
 
+BIND_PREFIX = "income__mcp4_bind_"
+LOCKED_NAME = BIND_PREFIX + "a_url_zq7x"
+
+
+class PlannerNameBoundMcp4(FeatureChainParserMixin, FeatureGroup):
+    """Binds a settable key and a caller-locked key from the requested name."""
+
+    PREFIX_PATTERN = rf"income__mcp4_bind_(?P<mcp4_mode>[a-z0-9]+)(?:_url_(?P<{CALLER_LOCKED_KEY}>[a-z0-9]+))?"
+    NAME_ONLY_MATCH = True
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1
+    PROPERTY_MAPPING = {
+        "mcp4_mode": property_spec("Settable mode.", default=None),
+        CALLER_LOCKED_KEY: property_spec("Operator-only base URL.", default=None, caller_settable=False),
+    }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {str(feature.name): list(data["income"]) for feature in features.features}
+
+
 def _base() -> PluginCollector:
     return PluginCollector.enabled_feature_groups(
         {
             *FILE_SOURCE_GROUPS,
+            PlannerNameBoundMcp4,
             PlannerDoubleMcp4,
             PlannerDeniedMcp4,
             PlannerInFeaturesMcp4,
@@ -556,6 +590,42 @@ class TestCallerSettable:
 
         assert _has_detail(error, problem="data_access_option")
         assert not _has_detail(error, problem="option_not_caller_settable")
+
+    @pytest.mark.parametrize(
+        ("feature", "paths"),
+        [
+            (LOCKED_NAME, ["/features/0"]),
+            (LOCKED_NAME + DOUBLE_SUFFIX, ["/features"]),
+            ({"name": LOCKED_NAME}, ["/features/0"]),
+        ],
+    )
+    @pytest.mark.parametrize("listed", [False, True])
+    def test_name_bound_flagged_key_is_refused(
+        self, tmp_path: Path, feature: str | dict[str, Any], paths: list[str], listed: bool
+    ) -> None:
+        allow = (CALLER_LOCKED_KEY,) if listed else ()
+        name = feature if isinstance(feature, str) else feature["name"]
+
+        result = _explain(tmp_path, {"features": [feature]}, allow_options=allow)
+
+        error = _error(result, "policy_denied")
+        assert [detail["path"] for detail in error["details"]] == paths
+        assert _has_detail(error, problem="option_not_caller_settable")
+        dumped = json.dumps(result)
+        assert "zq7x" not in dumped
+        assert name not in dumped
+
+    def test_name_binding_only_a_settable_key_is_not_refused(self, tmp_path: Path) -> None:
+        _success(_explain(tmp_path, {"features": [BIND_PREFIX + "a"]}))
+
+    def test_trusted_caller_may_bind_flagged_key_by_name(self, tmp_path: Path) -> None:
+        _success(_explain(tmp_path, {"features": [LOCKED_NAME]}, trusted_caller=True))
+
+    def test_operator_default_does_not_excuse_a_flagged_name(self, tmp_path: Path) -> None:
+        result = _explain(tmp_path, {"features": [LOCKED_NAME]}, options={CALLER_LOCKED_KEY: "zq7x"})
+
+        error = _error(result, "policy_denied")
+        assert _has_detail(error, problem="option_not_caller_settable")
 
     def test_other_unlisted_key_is_still_option_not_allowed(self, tmp_path: Path) -> None:
         feature = {"name": "income", "options": {CALLER_LOCKED_KEY: SECRET, "other": 1}}

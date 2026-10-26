@@ -843,11 +843,11 @@ class ExecutionPlan:
             f"'{format_feature_group_class(ep.feature_group)}' reads '{first[0]}' "
             f"('{format_feature_group_class(first[1])}') and '{second[0]}' "
             f"('{format_feature_group_class(second[1])}'), which are on different frames "
-            "(a row-reducing group's output lives on its own frame).\n"
+            "(a replaces_rows() group's output lives on its own frame).\n"
         )
         if first[1] is second[1]:
             return (
-                head + f"Both are steps of the row-reducing group '{format_feature_group_class(first[1])}'; "
+                head + f"Both are steps of the replaces_rows() group '{format_feature_group_class(first[1])}'; "
                 "split the logic into separate feature groups and join them with a Link."
             )
         return head + (
@@ -855,7 +855,7 @@ class ExecutionPlan:
             "    from mloda.user import Link, JoinSpec\n\n"
             f'    Link.inner(JoinSpec({first[1].get_class_name()}, "key"), '
             f'JoinSpec({second[1].get_class_name()}, "key"))\n'
-            "or expose the needed column as a feature of the row-reducing group."
+            "or expose the needed column as a feature of the replaces_rows() group."
         )
 
     @staticmethod
@@ -2030,7 +2030,7 @@ Available join types:
                     raise ValueError(self._conflicting_transform_hops_error(ep, reps[0], reps[1], reps[2:]))
 
                 if own_frame_steps:
-                    # Same-framework parents on different frames (row-reducing outputs) cannot be read together.
+                    # Same-framework parents on different frames (replaces_rows() outputs) cannot be read together.
                     frame_parents: dict[frozenset[UUID], list[UUID]] = defaultdict(list)
                     for parent_uuid in set().union(*(edge_parents.get(m, set()) for m in ep.get_uuids())):
                         if nodes[parent_uuid].feature.get_compute_framework() != ep.compute_framework or any(

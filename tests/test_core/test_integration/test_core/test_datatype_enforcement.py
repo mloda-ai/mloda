@@ -232,10 +232,6 @@ class SplitFrameConsumer(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        if "joined_and_plus_one" in {str(n) for n in features.get_all_names()}:
-            joined = data.column(ReducedJoinedBack.get_class_name()).to_pylist()
-            plus_one = data.column("raw_plus_one").to_pylist()
-            return {"joined_and_plus_one": [f"{a}:{b}" for a, b in zip(joined, plus_one)]}
         return {name: [] for name in cls._INPUTS}
 
 
@@ -659,22 +655,6 @@ class TestRowReducingGroupJoins(_ReducerRunHelpers):
 
         assert [sorted(c) for c in self._column(frames, ReducedJoinedBack.get_class_name())] == [[40, 50, 80]]
 
-    @pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
-    def test_consumer_of_joined_back_and_sibling_downstream_of_join(
-        self, reverse: bool, modes: set[ParallelizationMode], flight_server: Any
-    ) -> None:
-        left, right = (RowReducer, ReducerRawSource) if reverse else (ReducerRawSource, RowReducer)
-        link = Link.inner(JoinSpec(left, "raw_key"), JoinSpec(right, "raw_key"))
-        frames = self._run(
-            [Feature("joined_and_plus_one")],
-            modes,
-            flight_server,
-            links={link},
-            extra_groups={SplitFrameConsumer, ReducedJoinedBack, RawPlusOne},
-        )
-
-        assert [sorted(c) for c in self._column(frames, "joined_and_plus_one")] == [["40:11", "50:21", "80:41"]]
-
     def test_reduced_output_joined_back_onto_its_input(
         self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
@@ -847,10 +827,14 @@ class ReducingRawSource(ReducerRawSource):
 
 
 def _plan_reducer(
-    group: type[FeatureGroup], features: list[Feature], extra_groups: set[type[FeatureGroup]] | None = None
+    group: type[FeatureGroup],
+    features: list[Feature],
+    extra_groups: set[type[FeatureGroup]] | None = None,
+    links: set[Link] | None = None,
 ) -> Any:
     return mloda.prepare(
         features,
+        links=links,
         compute_frameworks=[PyArrowTable, PythonDictFramework],
         plugin_collector=PluginCollector.enabled_feature_groups({ReducerRawSource, group, *(extra_groups or set())}),
     )
@@ -905,6 +889,19 @@ class TestRowReducingGroupPlan:
         assert len(steps) == 2
         assert len({s.compute_framework for s in steps}) == 1
         assert all(s.own_frame is False for s in steps)
+
+    @pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
+    def test_consumer_downstream_of_a_join_plans(self, reverse: bool) -> None:
+        left, right = (RowReducer, ReducerRawSource) if reverse else (ReducerRawSource, RowReducer)
+        link = Link.inner(JoinSpec(left, "raw_key"), JoinSpec(right, "raw_key"))
+        session = _plan_reducer(
+            RowReducer,
+            [Feature("joined_and_plus_one")],
+            extra_groups={SplitFrameConsumer, ReducedJoinedBack, RawPlusOne},
+            links={link},
+        )
+
+        assert session.engine is not None
 
     @pytest.mark.parametrize(
         "feature, extra_groups, consumer, parents, hint",

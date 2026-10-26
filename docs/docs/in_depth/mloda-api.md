@@ -77,6 +77,10 @@ result = mloda.run_all(
 )
 ```
 
+For reported execution failures, the runner logs the scrubbed traceback at `DEBUG` when it re-raises the original
+exception, avoiding duplicate error-level tracebacks. If no original exception is available, it logs at `ERROR` and
+raises `MlodaRunError` with the reported message.
+
 #### Two-Phase Execution: prepare() + run()
 
 For realtime or inference scenarios, split configuration from execution.

@@ -16,6 +16,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from mloda.core.abstract_plugins.components.error_utils import MlodaRunError
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.run_context import RunContext
@@ -434,8 +435,9 @@ class TestComputeStreamErrorHandling:
             gen = orchestrator.compute_stream()
             next(gen)
 
-    def test_raises_exception_on_cfw_error(self) -> None:
-        """compute_stream should raise an exception when cfw_register reports an error."""
+    @pytest.mark.parametrize("has_original", [True, False], ids=["original", "fallback"])
+    def test_raises_exception_on_cfw_error(self, has_original: bool, caplog: pytest.LogCaptureFixture) -> None:
+        """Streaming propagates original exceptions and logs only typed fallbacks at ERROR."""
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -443,6 +445,8 @@ class TestComputeStreamErrorHandling:
         mock_cfw_register.get_error.return_value = True
         mock_cfw_register.get_error_exc_info.return_value = "error info"
         mock_cfw_register.get_error_msg.return_value = "error message"
+        original = ValueError("original worker failure") if has_original else None
+        mock_cfw_register.take_error_exception.return_value = original
         mock_cfw_register.get_artifacts.return_value = {}
         orchestrator.cfw_register = mock_cfw_register
 
@@ -452,11 +456,15 @@ class TestComputeStreamErrorHandling:
         orchestrator.data_lifecycle_manager.pop_result_data_collection = Mock(return_value=iter([]))
         orchestrator.join = Mock()
 
-        import pytest
-
-        # First verify compute_stream exists (will fail until implemented)
-        assert hasattr(orchestrator, "compute_stream"), "compute_stream method must exist"
-
-        with pytest.raises(Exception):
+        error_type = ValueError if has_original else MlodaRunError
+        with pytest.raises(error_type) as excinfo:
             gen = orchestrator.compute_stream()
             list(gen)
+
+        error_records = [r for r in caplog.records if r.name == "mloda.core.runtime.run" and r.levelno >= logging.ERROR]
+        if original is not None:
+            assert excinfo.value is original
+            assert not error_records
+        else:
+            assert str(excinfo.value) == "error message"
+            assert [(r.levelno, r.getMessage()) for r in error_records] == [(logging.ERROR, "error info")]

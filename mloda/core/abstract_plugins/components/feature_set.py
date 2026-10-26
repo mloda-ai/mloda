@@ -1,6 +1,4 @@
 from collections import Counter
-from collections.abc import Iterator
-from contextlib import contextmanager
 from copy import copy
 from typing import TYPE_CHECKING, Any, Iterable
 from uuid import UUID
@@ -43,6 +41,24 @@ def option_split_paragraph(hint: tuple[str, frozenset[Any]] | None) -> str:
 in this run, which is the likely cause. Align the differing option(s) across the requests, or add
 a Link if the split is intentional.
 """
+
+
+class _FeaturesSwap:
+    """Context manager swapping FeatureSet.features and restoring it, leaving exceptions untouched."""
+
+    def __init__(self, feature_set: "FeatureSet", replacement: set[Feature] | None) -> None:
+        self._feature_set = feature_set
+        self._replacement = replacement
+        self._original: set[Feature] | None = None
+
+    def __enter__(self) -> None:
+        if self._replacement is not None:
+            self._original = self._feature_set.features
+            self._feature_set.features = self._replacement
+
+    def __exit__(self, *exc_info: object) -> None:
+        if self._original is not None:
+            self._feature_set.features = self._original
 
 
 class FeatureSet:
@@ -217,25 +233,18 @@ class FeatureSet:
             self.declared_input_feature_edges = None
             self.declared_input_columns = None
 
-    @contextmanager
-    def one_feature_per_name(self) -> Iterator[None]:
+    def one_feature_per_name(self) -> "_FeaturesSwap":
         """Temporarily collapse same-named features into one merged stand-in; self.features is restored on exit."""
         by_name: dict[str, list[Feature]] = {}
         for feature in self.features:
             by_name.setdefault(str(feature.name), []).append(feature)
         if all(len(twins) == 1 for twins in by_name.values()):
-            yield
-            return
+            return _FeaturesSwap(self, None)
         collapsed: set[Feature] = set()
         for twins in by_name.values():
             merged = self._merge_twins(twins) if len(twins) > 1 else None
             collapsed.update(twins if merged is None else [merged])
-        original = self.features
-        self.features = collapsed
-        try:
-            yield
-        finally:
-            self.features = original
+        return _FeaturesSwap(self, collapsed)
 
     @staticmethod
     def _merge_twins(twins: list[Feature]) -> Feature | None:

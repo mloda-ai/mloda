@@ -25,6 +25,7 @@ from uuid import uuid4
 
 import pytest
 
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
@@ -34,7 +35,6 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.provider import DataCreatorFeatureGroup, PropertySpec
 from mloda.user import PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from mloda.core.abstract_plugins.components.data_types import DataType
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
 
 
@@ -299,11 +299,13 @@ class TestRuntimeDefaultMaterializationEndToEnd:
 
     def test_direct_and_chained_request_reach_calculate_feature_once_per_name(self) -> None:
         calls: list[list[str]] = []
-        results = _run_direct_and_chained(calls)
-        assert calls
-        for names in calls:
-            assert len(names) == len(set(names)), f"repeated name in one calculate_feature call: {names}"
-        assert any(MDB_DIRECT in names for names in calls)
+        extender = _CapturingExtender()
+        results = _run_direct_and_chained(calls, extender=extender)
+        for recorded in (calls, extender.names):
+            assert recorded
+            for names in recorded:
+                assert len(names) == len(set(names)), f"repeated name in one calculate_feature call: {names}"
+            assert any(MDB_DIRECT in names for names in recorded)
         direct_frames = [r for r in results if MDB_DIRECT in (r if isinstance(r, dict) else r[0])]
         assert len(direct_frames) == 1
 
@@ -318,6 +320,7 @@ class _CapturingExtender(Extender):
 
     def __init__(self) -> None:
         self.captured: list[Any] = []
+        self.names: list[list[str]] = []
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
@@ -325,6 +328,8 @@ class _CapturingExtender(Extender):
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         # _invoke_extender passes (data, features); capture the FeatureSet the plugin will see.
         self.captured.append(args[1])
+        # The FeatureSet is restored in place after the call, so snapshot the names now.
+        self.names.append([str(f.name) for f in args[1].features])
         return func(*args, **kwargs)
 
 
@@ -361,41 +366,15 @@ class TestExtenderPathObservesMaterializedOptions:
         assert ("q", "b") in observed
 
 
-class _NameSnapshotExtender(Extender):
-    """Snapshots feature names inside the call, since the FeatureSet is restored in place afterwards."""
-
-    def __init__(self) -> None:
-        self.names: list[list[str]] = []
-
-    def wraps(self) -> set[ExtenderHook]:
-        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
-
-    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        self.names.append([str(f.name) for f in args[1].features])
-        return func(*args, **kwargs)
-
-
-class TestExtenderSeesEachNameOnce:
-    """An extender on FEATURE_GROUP_CALCULATE_FEATURE sees one Feature per name."""
-
-    def test_extender_sees_direct_and_chained_names_once(self) -> None:
-        extender = _NameSnapshotExtender()
-        _run_direct_and_chained([], extender=extender)
-        assert extender.names
-        for names in extender.names:
-            assert len(names) == len(set(names)), f"extender saw a repeated name: {names}"
-        assert any(MDB_DIRECT in names for names in extender.names)
+def _plain(name: str = "mdb_twin", options: Options | None = None, **kwargs: Any) -> Feature:
+    return Feature(name, options if options is not None else Options(), **kwargs)
 
 
 def _twin(name: str = "mdb_twin", options: Options | None = None, **kwargs: Any) -> Feature:
     """A Feature carrying a stamped child_options so it coexists with an otherwise equal twin."""
-    feature = Feature(name, options if options is not None else Options(), **kwargs)
+    feature = _plain(name, options, **kwargs)
     feature.child_options = Options()
     return feature
-
-
-def _plain(name: str = "mdb_twin", options: Options | None = None, **kwargs: Any) -> Feature:
-    return Feature(name, options if options is not None else Options(), **kwargs)
 
 
 class TestFeatureSetOneFeaturePerName:
@@ -449,13 +428,6 @@ class TestFeatureSetOneFeaturePerName:
         assert a.result_index_columns == ("i1",)
         assert b.requested_parts == frozenset({"p2"})
 
-    def test_none_data_type_defers_to_typed_twin(self) -> None:
-        feature_set = FeatureSet([_plain(), _plain(data_type=DataType.INT32)])
-        assert len(feature_set.features) == 2
-        with feature_set.one_feature_per_name():
-            (stand_in,) = feature_set.features
-            assert stand_in.data_type == DataType.INT32
-
     @pytest.mark.parametrize(
         "make_pair",
         [
@@ -476,43 +448,58 @@ class TestFeatureSetOneFeaturePerName:
             assert any(f is b for f in feature_set.features)
         assert feature_set.features is original
 
-    def test_disjoint_context_keys_collapse_into_union(self) -> None:
-        a = _plain(options=Options(context={"mdb_k": "1"}))
-        b = _twin(options=Options(context={"mdb_j": "2"}))
+    @pytest.mark.parametrize(
+        "make_pair, check",
+        [
+            (
+                lambda: (
+                    _plain(options=Options(context={"mdb_k": "1"})),
+                    _twin(options=Options(context={"mdb_j": "2"})),
+                ),
+                lambda s, a: s.options.context == {"mdb_k": "1", "mdb_j": "2"},
+            ),
+            (
+                lambda: (
+                    _plain(options=Options(context={"mdb_k": 1, "mdb_j": 2})),
+                    _twin(options=Options(context={"mdb_k": 1})),
+                ),
+                lambda s, a: s.options.context == {"mdb_k": 1, "mdb_j": 2},
+            ),
+            (
+                lambda: (_plain(domain="mdb_d1", initial_requested_data=True), _twin(domain="mdb_d2")),
+                lambda s, a: s.domain == a.domain,
+            ),
+            (
+                lambda: (
+                    _plain(implementation="mdb_impl1", initial_requested_data=True),
+                    _twin(implementation="mdb_impl2"),
+                ),
+                lambda s, a: s.implementation_pin == ("mdb_impl1",),
+            ),
+            (
+                lambda: (_plain(), _plain(data_type=DataType.INT32)),
+                lambda s, a: s.data_type == DataType.INT32,
+            ),
+        ],
+        ids=[
+            "test_disjoint_context_keys_collapse_into_union",
+            "test_superset_context_collapses_with_union",
+            "test_domain_difference_collapses_to_initially_requested_twin",
+            "test_implementation_pin_difference_collapses_to_initially_requested_twin",
+            "test_none_data_type_defers_to_typed_twin",
+        ],
+    )
+    def test_compatible_twins_collapse_into_one_merged_stand_in(
+        self, make_pair: Callable[[], tuple[Feature, Feature]], check: Callable[[Feature, Feature], bool]
+    ) -> None:
+        a, b = make_pair()
+        contexts_before = (dict(a.options.context), dict(b.options.context))
         feature_set = FeatureSet([a, b])
         assert len(feature_set.features) == 2
         with feature_set.one_feature_per_name():
             (stand_in,) = feature_set.features
-            assert stand_in.options.context == {"mdb_k": "1", "mdb_j": "2"}
-        assert a.options.context == {"mdb_k": "1"}
-        assert b.options.context == {"mdb_j": "2"}
-
-    def test_superset_context_collapses_with_union(self) -> None:
-        a = _plain(options=Options(context={"mdb_k": 1, "mdb_j": 2}))
-        b = _twin(options=Options(context={"mdb_k": 1}))
-        feature_set = FeatureSet([a, b])
-        assert len(feature_set.features) == 2
-        with feature_set.one_feature_per_name():
-            (stand_in,) = feature_set.features
-            assert stand_in.options.context == {"mdb_k": 1, "mdb_j": 2}
-        assert b.options.context == {"mdb_k": 1}
-
-    def test_domain_difference_collapses_to_initially_requested_twin(self) -> None:
-        a, b = _plain(domain="mdb_d1", initial_requested_data=True), _twin(domain="mdb_d2")
-        feature_set = FeatureSet([a, b])
-        assert len(feature_set.features) == 2
-        with feature_set.one_feature_per_name():
-            (stand_in,) = feature_set.features
-            assert stand_in.domain == a.domain
-
-    def test_implementation_pin_difference_collapses_to_initially_requested_twin(self) -> None:
-        a = _plain(implementation="mdb_impl1", initial_requested_data=True)
-        b = _twin(implementation="mdb_impl2")
-        feature_set = FeatureSet([a, b])
-        assert len(feature_set.features) == 2
-        with feature_set.one_feature_per_name():
-            (stand_in,) = feature_set.features
-            assert stand_in.implementation_pin == ("mdb_impl1",)
+            assert check(stand_in, a)
+        assert (a.options.context, b.options.context) == contexts_before
 
     def test_exception_inside_block_restores_full_set(self) -> None:
         feature_set = FeatureSet([_plain(), _twin()])

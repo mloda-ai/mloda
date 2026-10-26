@@ -32,6 +32,7 @@ EliminationStage = Literal[
     "framework_pin",
     "links",
     "declarations",
+    "inputs",
 ]
 
 # A stage belongs here when its gate's hook cannot receive the feature name, so the outcome is the same for

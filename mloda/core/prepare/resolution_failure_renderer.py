@@ -70,6 +70,7 @@ _STAGE_LABELS: dict[EliminationStage, str] = {
     "framework_pin": "compute framework pin",
     "links": "links",
     "declarations": "declarations",
+    "inputs": "inputs",
 }
 
 

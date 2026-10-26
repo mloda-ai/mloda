@@ -318,6 +318,7 @@ class _ImdRefusingExtender(Extender):
         self.name = "imdmatch_refuse"
         self._targets: tuple[type, ...] = target if isinstance(target, tuple) else (target,)
         self.raised: list[Exception] = []
+        self.refused_contexts: list[HookContext] = []
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.INPUT_DATA_MATCH}
@@ -325,6 +326,7 @@ class _ImdRefusingExtender(Extender):
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         context = HookContext.current()
         if context is not None and context.reader_class in self._targets:
+            self.refused_contexts.append(context)
             refusal = PermissionError(f"no clearance for {context.reader_class.__name__}")
             self.raised.append(refusal)
             raise refusal
@@ -865,14 +867,29 @@ class TestSourceGroupHook:
         assert all(c.feature_names == (_COL_A,) for c in contexts)
 
     @pytest.mark.parametrize("options", [None, {"data_access_handle": "imdmatch_handle"}], ids=["plain", "handle"])
-    def test_a_gate_refuses_only_the_input_column_of_a_computed_name(self, options: dict[str, Any] | None) -> None:
+    def test_a_gate_refuses_input_and_output_once_when_the_derived_chain_fails(
+        self, options: dict[str, Any] | None
+    ) -> None:
         enabled = PluginCollector.enabled_feature_groups({ImdMatchGateSource, ImdMatchDerivedGroup})
         extender = _gate(ImdMatchGateSource)
 
-        with pytest.raises(FeatureResolutionError):
+        with pytest.raises(FeatureResolutionError) as excinfo:
             _prepare(Feature(_DERIVED_IMD, options=options or {}), enabled, _global_access(), extender)
 
-        assert len(extender.raised) == 1
+        assert len(extender.raised) == len(extender.refused_contexts) == 2
+        assert {(context.reader_class, context.feature_names) for context in extender.refused_contexts} == {
+            (ImdMatchGateSource, (_COL_A,)),
+            (ImdMatchGateSource, (_DERIVED_IMD,)),
+        }
+        input_refusal = next(
+            refusal
+            for context, refusal in zip(extender.refused_contexts, extender.raised)
+            if context.feature_names == (_COL_A,)
+        )
+        assert any(refusal is input_refusal for refusal in excinfo.value.refusals)
+        assert excinfo.value.__cause__ is input_refusal
+        assert ImdMatchGateSource.probes == 0
+        assert ImdMatchGateSource.column_reads == 0
 
     def test_a_refused_pointed_group_is_masked_by_a_computing_candidate(self) -> None:
         enabled = PluginCollector.enabled_feature_groups({ImdMatchGateSource, ImdMatchComputingGroup})

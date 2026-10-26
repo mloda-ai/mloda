@@ -150,8 +150,9 @@ class PandasNodeCentrality(Implementation[NodeCentralityFeatureGroup]):
         Returns:
             A pandas DataFrame representing the adjacency matrix
         """
-        # Create empty adjacency matrix
-        adj_matrix = pd.DataFrame(0, index=nodes, columns=nodes)
+        # Create empty adjacency matrix. Float, so fractional edge weights fit (pandas 3 refuses to
+        # write 0.5 into an int64 column).
+        adj_matrix = pd.DataFrame(0.0, index=nodes, columns=nodes, dtype=np.float64)
 
         # Fill adjacency matrix with edge weights
         for _, row in df.iterrows():

@@ -11,10 +11,11 @@ from typing import Any
 
 import pytest
 
+from mloda.core.version import get_mloda_version
 from mloda.interfaces.cli.main import _parser, main
 
 ROOT_HELP = """\
-usage: mloda [-h] {explain,run,mcp} ...
+usage: mloda [-h] [--version] {explain,run,mcp} ...
 
 Explain, run or serve mloda feature requests.
 
@@ -26,6 +27,7 @@ positional arguments:
 
 options:
   -h, --help         show this help message and exit
+  --version          show program's version number and exit
 """
 
 EXPLAIN_USAGE = """\
@@ -129,7 +131,7 @@ MCP_SERVE_DEFAULTS: dict[str, Any] = {
     "port": 8000,
 }
 
-ROOT_USAGE = "usage: mloda [-h] {explain,run,mcp} ...\n"
+ROOT_USAGE = "usage: mloda [-h] [--version] {explain,run,mcp} ...\n"
 
 
 @pytest.fixture(autouse=True)
@@ -158,6 +160,10 @@ def _cli(argv: Sequence[str]) -> tuple[int, str, str]:
 )
 def test_help_output_is_pinned(argv: list[str], expected: str) -> None:
     assert _cli(argv) == (0, expected, "")
+
+
+def test_version_flag_prints_the_installed_version() -> None:
+    assert _cli(["--version"]) == (0, f"mloda {get_mloda_version()}\n", "")
 
 
 @pytest.mark.parametrize(

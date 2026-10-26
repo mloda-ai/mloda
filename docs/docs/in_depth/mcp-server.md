@@ -162,6 +162,8 @@ mloda run request.json --full --format csv
 mloda run income segment -o model=small -c timeout:=30
 ```
 
+`mloda --version` prints the installed mloda version, handy to include when you report a problem.
+
 `mloda run FEATURE ... -o KEY=VALUE -c KEY=VALUE` builds the request from feature names: `-o` sets group options and
 `-c` context options on every feature, and both repeat. A value is `KEY=VALUE` (string), `KEY:=JSON` (parsed JSON) or
 `KEY=@FILE` (file text). A single target that is `-`, an existing file or ends in `.json` is a request file instead,

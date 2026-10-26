@@ -18,6 +18,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, TextIO
 
+from mloda.core.version import get_mloda_version
 from mloda.interfaces.service.catalog import Catalog
 from mloda.interfaces.service.config import ConfigError, Settings, load_settings
 from mloda.interfaces.service.errors import is_error
@@ -106,6 +107,7 @@ def _add_config_options(command: argparse.ArgumentParser) -> None:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mloda", description="Explain, run or serve mloda feature requests.")
+    parser.add_argument("--version", action="version", version=f"mloda {get_mloda_version()}")
     commands = parser.add_subparsers(dest="command", required=True)
     for name, help_text, arguments in COMMANDS:
         command = commands.add_parser(name, help=help_text)

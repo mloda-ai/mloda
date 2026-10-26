@@ -114,6 +114,8 @@ class RowReducer(FeatureGroup):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         names = {str(n) for n in features.get_all_names()}
         if "red_count" in names:
+            if isinstance(data, dict):
+                return {"red_count": [len(next(iter(data.values())))]}
             return pa.table({"red_count": [data.num_rows]})
         if isinstance(data, dict):
             by_key: dict[Any, list[Any]] = {}
@@ -217,6 +219,9 @@ class SplitFrameConsumer(FeatureGroup):
         "sum_and_key": {"red_sum", "raw_key"},
         "sum_and_plus_one": {"red_sum", "raw_plus_one"},
         "joined_and_plus_one": {ReducedJoinedBack.get_class_name(), "raw_plus_one"},
+        "count_and_val": {"red_count", "raw_val"},
+        "count_sum_and_key": {"red_count", "red_sum", "raw_key"},
+        "joined_and_count": {ReducedJoinedBack.get_class_name(), "red_count"},
     }
 
     @classmethod
@@ -232,7 +237,29 @@ class SplitFrameConsumer(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {name: [] for name in cls._INPUTS}
+        out: dict[str, list[Any]] = {}
+        for name in features.get_all_names():
+            key = str(name)
+            if key == "joined_and_plus_one":
+                joined = data.column(ReducedJoinedBack.get_class_name()).to_pylist()
+                plus = data.column("raw_plus_one").to_pylist()
+                out[key] = [f"{a},{b}" for a, b in zip(joined, plus)]
+            elif key == "sum_and_key":
+                out[key] = data.column("red_sum").to_pylist()
+            else:
+                out[key] = []
+        return out
+
+
+class DictSplitFrameConsumer(SplitFrameConsumer):
+    _INPUTS = {"dict_sum_and_val": {"raw_val", "red_sum"}}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("raw_val"), Feature("red_sum", compute_framework="PyArrowTable")}
 
 
 class ReducedAfterJoin(FeatureGroup):
@@ -582,6 +609,7 @@ class TestEndToEndIntegration:
         assert result.to_pydict()["StringDataSource"] == ["a", "b", "c"]
 
 
+_RAW_REDUCER_LINK = Link.inner(JoinSpec(ReducerRawSource, "raw_key"), JoinSpec(RowReducer, "raw_key"))
 _REDUCER_DIM_LINK = Link.inner(JoinSpec(RowReducer, "raw_key"), JoinSpec(ReducerDim, "dim_key"))
 _REDUCER_DIM_LINK_REVERSED = Link.inner(JoinSpec(ReducerDim, "dim_key"), JoinSpec(RowReducer, "raw_key"))
 _RAW_DIM_LINK = Link.inner(JoinSpec(ReducerRawSource, "raw_key"), JoinSpec(ReducerDim, "dim_key"))
@@ -658,14 +686,59 @@ class TestRowReducingGroupJoins(_ReducerRunHelpers):
     def test_reduced_output_joined_back_onto_its_input(
         self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
-        link = Link.inner(JoinSpec(ReducerRawSource, "raw_key"), JoinSpec(RowReducer, "raw_key"))
-        self._assert_joined_back(link, modes, flight_server)
+        self._assert_joined_back(_RAW_REDUCER_LINK, modes, flight_server)
 
     def test_reduced_output_joined_back_onto_its_input_reversed(
         self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         link = Link.inner(JoinSpec(RowReducer, "raw_key"), JoinSpec(ReducerRawSource, "raw_key"))
         self._assert_joined_back(link, modes, flight_server)
+
+    @pytest.mark.parametrize("framework", [None, "PythonDictFramework"], ids=["default", "dict"])
+    def test_linked_chained_step_computes(
+        self, framework: str | None, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        red_count = Feature("red_count", compute_framework=framework) if framework else Feature("red_count")
+        frames = self._run(
+            [Feature(ReducedJoinedBack.get_class_name()), red_count],
+            modes,
+            flight_server,
+            links={_RAW_REDUCER_LINK},
+            extra_groups={ReducedJoinedBack},
+        )
+
+        assert [sorted(c) for c in self._column(frames, ReducedJoinedBack.get_class_name())] == [[40, 50, 80]]
+        assert self._column(frames, "red_count") == [[2]]
+        MlodaTestRunner.assert_flight_server_clean(modes, flight_server)
+
+    def test_consumer_of_reduced_output_and_key_with_link(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        frames = self._run(
+            [Feature("sum_and_key")], modes, flight_server, links={_RAW_REDUCER_LINK}, extra_groups={SplitFrameConsumer}
+        )
+
+        assert [sorted(c) for c in self._column(frames, "sum_and_key")] == [[30, 30, 40]]
+
+    @pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
+    def test_joined_back_with_sibling_consumer(
+        self, reverse: bool, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        left, right = (RowReducer, ReducerRawSource) if reverse else (ReducerRawSource, RowReducer)
+        link = Link.inner(JoinSpec(left, "raw_key"), JoinSpec(right, "raw_key"))
+        frames = self._run(
+            [Feature("joined_and_plus_one")],
+            modes,
+            flight_server,
+            links={link},
+            extra_groups={SplitFrameConsumer, ReducedJoinedBack, RawPlusOne},
+        )
+
+        pairs = sorted(
+            tuple(int(x) for x in v.split(",")) for c in self._column(frames, "joined_and_plus_one") for v in c
+        )
+        assert pairs == [(40, 11), (50, 21), (80, 41)]
+        MlodaTestRunner.assert_flight_server_clean(modes, flight_server)
 
     def test_joined_consumer_of_reduced_output(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         self._assert_consumer(_REDUCER_DIM_LINK, modes, flight_server)
@@ -904,7 +977,7 @@ class TestRowReducingGroupPlan:
         assert session.engine is not None
 
     @pytest.mark.parametrize(
-        "feature, extra_groups, consumer, parents, hint",
+        "feature, extra_groups, consumer, parents, hint, links",
         [
             (
                 Feature("count_and_sum"),
@@ -912,6 +985,7 @@ class TestRowReducingGroupPlan:
                 SplitFrameConsumer,
                 ("red_count", "red_sum"),
                 "separate feature groups",
+                None,
             ),
             (
                 Feature(ReducedJoinedBack.get_class_name()),
@@ -919,6 +993,7 @@ class TestRowReducingGroupPlan:
                 ReducedJoinedBack,
                 ("red_sum", "raw_val"),
                 "expose the needed column",
+                None,
             ),
             (
                 Feature("sum_and_key"),
@@ -926,6 +1001,7 @@ class TestRowReducingGroupPlan:
                 SplitFrameConsumer,
                 ("red_sum", "raw_key"),
                 "expose the needed column",
+                None,
             ),
             (
                 Feature("sum_and_plus_one"),
@@ -933,26 +1009,72 @@ class TestRowReducingGroupPlan:
                 SplitFrameConsumer,
                 ("red_sum", "raw_plus_one"),
                 "expose the needed column",
+                None,
+            ),
+            (
+                Feature("dict_sum_and_val"),
+                {DictSplitFrameConsumer},
+                DictSplitFrameConsumer,
+                ("red_sum", "raw_val"),
+                "expose the needed column",
+                None,
+            ),
+            (
+                Feature("count_and_val"),
+                {SplitFrameConsumer},
+                SplitFrameConsumer,
+                ("red_count", "raw_val"),
+                "expose the needed column",
+                {_RAW_REDUCER_LINK},
+            ),
+            (
+                Feature("count_sum_and_key"),
+                {SplitFrameConsumer},
+                SplitFrameConsumer,
+                ("red_count",),
+                "expose the needed column",
+                {_RAW_REDUCER_LINK},
+            ),
+            (
+                Feature("joined_and_count"),
+                {SplitFrameConsumer, ReducedJoinedBack},
+                SplitFrameConsumer,
+                ("red_count",),
+                "expose the needed column",
+                {_RAW_REDUCER_LINK},
             ),
         ],
-        ids=["two_reducing_steps", "reduced_and_unreduced_input", "reduced_and_group_key", "reduced_and_sibling"],
+        ids=[
+            "two_reducing_steps",
+            "reduced_and_unreduced_input",
+            "reduced_and_group_key",
+            "reduced_and_sibling",
+            "cross_framework_pinned",
+            "linked_reduced_and_unreduced",
+            "linked_count_sum_and_key",
+            "linked_joined_and_count",
+        ],
     )
     def test_consumer_reading_two_frames_raises_at_prepare(
         self,
         feature: Feature,
         extra_groups: set[type[FeatureGroup]],
         consumer: type[FeatureGroup],
-        parents: tuple[str, str],
+        parents: tuple[str, ...],
         hint: str,
+        links: set[Link] | None,
     ) -> None:
         with pytest.raises(ValueError) as exc_info:
-            _plan_reducer(RowReducer, [feature], extra_groups=extra_groups)
+            _plan_reducer(RowReducer, [feature], extra_groups=extra_groups, links=links)
 
         message = str(exc_info.value)
         assert consumer.get_class_name() in message
         assert hint in message
         assert all(parent in message for parent in parents)
-        assert "Link" in message
+        if links is None:
+            assert "Link" in message
+        else:
+            assert "A Link already joins" in message
 
 
 class TestValidatorEdgeCases:

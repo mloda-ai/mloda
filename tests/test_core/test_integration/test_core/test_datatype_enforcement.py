@@ -102,7 +102,7 @@ class RowReducer(FeatureGroup):
         return {PyArrowTable, PythonDictFramework}
 
     @classmethod
-    def reduces_rows(cls) -> bool:
+    def replaces_rows(cls) -> bool:
         return True
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
@@ -213,7 +213,7 @@ class ReducedAfterJoin(FeatureGroup):
         return {PyArrowTable}
 
     @classmethod
-    def reduces_rows(cls) -> bool:
+    def replaces_rows(cls) -> bool:
         return True
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
@@ -747,18 +747,18 @@ class TestRowReducingGroupBatching(_ReducerRunHelpers):
 
 
 class NonReducingReducer(RowReducer):
-    """Same logic as RowReducer but does not declare that it reduces rows."""
+    """Same logic as RowReducer but does not declare replaces_rows."""
 
     @classmethod
-    def reduces_rows(cls) -> bool:
+    def replaces_rows(cls) -> bool:
         return False
 
 
 class ReducingRawSource(ReducerRawSource):
-    """Root group that declares reduces_rows."""
+    """Root group that declares replaces_rows."""
 
     @classmethod
-    def reduces_rows(cls) -> bool:
+    def replaces_rows(cls) -> bool:
         return True
 
 
@@ -807,7 +807,7 @@ class TestRowReducingGroupPlan:
         assert all(s.compute_framework is PyArrowTable for s in steps)
         assert all(s.own_frame is False for s in steps)
 
-    def test_root_group_declaring_reduces_rows_with_split_plans(self) -> None:
+    def test_root_group_declaring_replaces_rows_with_split_plans(self) -> None:
         session = _plan_reducer(ReducingRawSource, [Feature.int32_of("raw_val"), Feature.int64_of("raw_val")])
 
         assert session.engine is not None

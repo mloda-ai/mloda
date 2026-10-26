@@ -194,7 +194,7 @@ class ComputeFrameworkExecutor:
     def _prepare_own_frame(
         self, step: FeatureGroupStep, parallelization_mode: ParallelizationMode, source_uuid: UUID | None
     ) -> UUID:
-        """Create the frame a row-reducing step runs on, starting from the source frame's data by reference."""
+        """Create the frame a row-replacing step runs on, starting from the source frame's data by reference."""
         cls_name = step.compute_framework.get_class_name()
         if source_uuid is None:
             raise ValueError(

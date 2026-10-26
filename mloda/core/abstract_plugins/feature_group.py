@@ -466,7 +466,7 @@ class FeatureGroup(ABC):
         return None
 
     @classmethod
-    def reduces_rows(cls) -> bool:
+    def replaces_rows(cls) -> bool:
         """True when calculate_feature returns a new frame with other rows than its input; each step then
         writes its own frame and must not mutate the input in place."""
         return False

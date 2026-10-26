@@ -242,7 +242,7 @@ class FeatureGroup(ABC):
         key = declaration.key
         source, separator, _ = name.rpartition(CHAIN_SEPARATOR)
         if separator and source:
-            patterns = safe_field(cls._get_prefix_patterns, [])
+            patterns: list[Any] = safe_field(cls._get_prefix_patterns, [])
             if patterns:
                 # Malformed patterns degrade to the options fallback instead of raising.
                 parsed = safe_field(
@@ -275,7 +275,7 @@ class FeatureGroup(ABC):
     @classmethod
     def name_bindings(cls, feature_name: FeatureName | str) -> dict[str, Any]:
         """Option values the feature name binds (after any name_converter); empty without prefix patterns."""
-        patterns = safe_field(cls._get_prefix_patterns, [])
+        patterns: list[Any] = safe_field(cls._get_prefix_patterns, [])
         if not patterns:
             return {}
         resolution = safe_field(

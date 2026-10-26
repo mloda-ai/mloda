@@ -3704,7 +3704,7 @@ Available join types:
                     children_if_root,
                 )
 
-                feature_group_step.own_frame = feature_group.reduces_rows() and any(
+                feature_group_step.own_frame = feature_group.replaces_rows() and any(
                     parent_to_children_mapping.get(f.uuid) for f in sub_features
                 )
 

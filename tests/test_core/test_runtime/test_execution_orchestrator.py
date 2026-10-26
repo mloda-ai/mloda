@@ -631,7 +631,7 @@ class _ChainChildFG(FeatureGroup):
 
 class _ChainReducingChildFG(_ChainChildFG):
     @classmethod
-    def reduces_rows(cls) -> bool:
+    def replaces_rows(cls) -> bool:
         return True
 
 

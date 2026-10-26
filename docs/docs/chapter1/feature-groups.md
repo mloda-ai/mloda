@@ -81,7 +81,7 @@ raises a `ValueError` naming the group and the missing features.
 
 A dict returned by a non-root feature group is appended to the frame when its columns are all new and its length matches; otherwise it replaces the frame. Appended columns are aligned by position, so a feature group that reorders or drops rows should return the full frame. On DuckDB, Spark and lazy Polars a dict is only appended onto a frame mloda built itself; there, return the frame with the column added instead. A single returned column (list or Series) follows the same rule and raises otherwise.
 
-A group whose result has other rows than its input (an aggregation, a resample) opts in by overriding `reduces_rows()` to return True. Each of its steps with an input frame then writes a frame of its own, while sibling steps keep reading the unreduced input. Such a group must return a new frame and never mutate its input in place.
+A group whose result has other rows than its input (an aggregation, a resample) opts in by overriding `replaces_rows()` to return True. Each of its steps with an input frame then writes a frame of its own, while sibling steps keep reading the unchanged input. Such a group must return a new frame and never mutate its input in place.
 
 A group that could not compute a value for some rows can say so with `report_failed_rows(column, rows, reason)` (import from `mloda.provider`) inside `calculate_feature`. `reason` is a short code, never row data; `rows` are positions in the group's own output. Entries reach `RunResult.failed_rows` of `run()` and `run_all()`; `stream_run` and `stream_all` do not collect them.
 

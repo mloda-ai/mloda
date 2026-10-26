@@ -154,8 +154,6 @@ class RawPlusOne(FeatureGroup):
 
 
 class ReducerDim(DataCreatorFeatureGroup):
-    """Small dimension table joined to the reduced output."""
-
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"dim_key", "dim_label"}
@@ -171,8 +169,6 @@ class ReducerDim(DataCreatorFeatureGroup):
 
 
 class ReducedJoinConsumer(FeatureGroup):
-    """Consumes the reduced output joined with the dimension labels."""
-
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {PyArrowTable}

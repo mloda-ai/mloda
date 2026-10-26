@@ -3843,7 +3843,6 @@ Available join types:
     ) -> dict[int, set[Feature]]:
         """Greedily merge groups on one chosen framework that differ only in data type or allowed frameworks.
 
-        Fewer steps mean fewer frames; a row-reducing group's steps each write their own frame.
         Merged groups keep the first group's key; artifact groups are skipped (artifact is keyed by the set).
         """
         if len(groups) < 2 or feature_group.artifact() is not None:

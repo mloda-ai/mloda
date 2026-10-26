@@ -690,8 +690,7 @@ class ExecutionOrchestrator:
 
         A cfw instance holds a single data slot and is shared by every step of a chain within one
         framework, so at most one feature group step may occupy it at a time.
-        An own-frame step occupies the frame holding its inputs (_cfw_to_occupy resolves the source, since the
-        new frame does not exist yet), so siblings cannot write it while the step reads it.
+        An own-frame step occupies its source frame, since its own frame does not exist yet.
         """
 
         with self._step_lock:

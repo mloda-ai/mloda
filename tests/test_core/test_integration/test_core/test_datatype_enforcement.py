@@ -147,7 +147,7 @@ class RawPlusOne(FeatureGroup):
         return {PyArrowTable}
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("raw_val")}
+        return {Feature("raw_val"), Feature("raw_key")}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -170,18 +170,26 @@ class ReducerDim(DataCreatorFeatureGroup):
 
 
 class ReducedJoinConsumer(FeatureGroup):
+    value_feature = "red_sum"
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {PyArrowTable}
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("red_sum"), Feature("dim_label")}
+        return {Feature(self.value_feature), Feature("dim_label")}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         labels = data.column("dim_label").to_pylist()
-        sums = data.column("red_sum").to_pylist()
-        return {cls.get_class_name(): [f"{label}:{value}" for label, value in zip(labels, sums)]}
+        values = data.column(cls.value_feature).to_pylist()
+        return {cls.get_class_name(): [f"{label}:{value}" for label, value in zip(labels, values)]}
+
+
+class DerivedJoinConsumer(ReducedJoinConsumer):
+    """Same consumer, reading the non-reducing RawPlusOne."""
+
+    value_feature = "raw_plus_one"
 
 
 class ReducedJoinedBack(FeatureGroup):
@@ -591,20 +599,24 @@ class _ReducerRunHelpers:
         return [frame[name] for frame in frames if name in frame]
 
 
-@PARALLELIZATION_MODES_SYNC_THREADING
+@PARALLELIZATION_MODES_ALL
 class TestRowReducingGroupJoins(_ReducerRunHelpers):
-    """A join consumer of a reduced output reads the reducer's own frame (joins of two frames need no workers)."""
+    """A join consumer of a reduced or derived output reads the right frame in every mode."""
 
-    def _assert_consumer(self, link: Link, modes: set[ParallelizationMode], flight_server: Any) -> None:
+    def _assert_consumer(
+        self,
+        link: Link,
+        modes: set[ParallelizationMode],
+        flight_server: Any,
+        consumer: type[FeatureGroup] = ReducedJoinConsumer,
+        extra_groups: frozenset[type[FeatureGroup]] = frozenset({ReducerDim, ReducedJoinConsumer}),
+        expected: tuple[str, ...] = ("a:30", "b:40"),
+    ) -> None:
         frames = self._run(
-            [Feature(ReducedJoinConsumer.get_class_name())],
-            modes,
-            flight_server,
-            links={link},
-            extra_groups={ReducerDim, ReducedJoinConsumer},
+            [Feature(consumer.get_class_name())], modes, flight_server, links={link}, extra_groups=set(extra_groups)
         )
 
-        assert [sorted(c) for c in self._column(frames, ReducedJoinConsumer.get_class_name())] == [["a:30", "b:40"]]
+        assert [sorted(c) for c in self._column(frames, consumer.get_class_name())] == [list(expected)]
 
     def _assert_joined_back(self, link: Link, modes: set[ParallelizationMode], flight_server: Any) -> None:
         frames = self._run(
@@ -636,6 +648,32 @@ class TestRowReducingGroupJoins(_ReducerRunHelpers):
         self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         self._assert_consumer(_REDUCER_DIM_LINK_REVERSED, modes, flight_server)
+
+    def test_joined_consumer_of_derived_group_on_the_left_side(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        link = Link.inner(JoinSpec(RawPlusOne, "raw_key"), JoinSpec(ReducerDim, "dim_key"))
+        self._assert_consumer(
+            link,
+            modes,
+            flight_server,
+            consumer=DerivedJoinConsumer,
+            extra_groups=frozenset({RawPlusOne, ReducerDim, DerivedJoinConsumer}),
+            expected=("a:11", "a:21", "b:41"),
+        )
+
+    def test_joined_consumer_of_derived_group_on_the_right_side(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        link = Link.inner(JoinSpec(ReducerDim, "dim_key"), JoinSpec(RawPlusOne, "raw_key"))
+        self._assert_consumer(
+            link,
+            modes,
+            flight_server,
+            consumer=DerivedJoinConsumer,
+            extra_groups=frozenset({RawPlusOne, ReducerDim, DerivedJoinConsumer}),
+            expected=("a:11", "a:21", "b:41"),
+        )
 
 
 @PARALLELIZATION_MODES_ALL

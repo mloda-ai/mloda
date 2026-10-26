@@ -100,10 +100,9 @@ The fields are frozen (assigning raises `FrozenInstanceError`) except `rows_out`
 
 `failed_rows` is a read-only tuple of `FailedRows(feature_group, column, rows, reason)` that the feature group reported with `report_failed_rows(column, rows, reason)` (import from `mloda.provider`) during the wrapped call. It is `()` when nothing was reported. `reason` is a short code (`[A-Za-z0-9_.-]`, up to 64 characters), never row data. `rows` are positions in the feature group's own output. `RunResult.failed_rows` holds the entries of a whole `run()`/`run_all()`; `stream_run`/`stream_all` do not collect them.
 
-For plugin tests without an engine run, use `mloda.steward.collect_failed_rows(feature_group)` around the call being
-tested and inspect `collector.entries` afterwards. The collector applies to the current context; leaving its block
-restores the previous collector. For an instrumented call, `HookContext.failed_rows` contains that call's reports
-even if the call raises.
+In plugin tests without an engine run, wrap the call in `mloda.steward.collect_failed_rows(feature_group)` and read
+`collector.entries` afterwards. For an instrumented call, `HookContext.failed_rows` holds that call's reports even if
+it raises.
 
 ```python
 from mloda.provider import FailedRows, instrument, report_failed_rows

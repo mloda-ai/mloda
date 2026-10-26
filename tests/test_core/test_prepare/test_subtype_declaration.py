@@ -826,3 +826,24 @@ class TestSubDeclResolverResultStringified:
         gate = SubDeclIntResolverFG.supports_compute_framework
         assert gate("subdecl_int_feature", Options(), SubDeclFwBeta) is False
         assert gate("subdecl_int_feature", Options(), SubDeclFwAlpha) is True
+
+
+class SubDeclExtraPatternFG(FeatureChainParserMixin, FeatureGroup):
+    PREFIX_PATTERN = r".*__(?P<subdecl_extra_op>sum|max)_subdecl_rolling$"
+    PROPERTY_MAPPING = {
+        "subdecl_extra_op": property_spec("Operation", allowed_values={"sum", "max"}, strict=True),
+    }
+    SUBTYPES = SubtypeDeclaration(key="subdecl_extra_op")
+
+    @classmethod
+    def _get_prefix_patterns(cls) -> list[str]:
+        return [cls.PREFIX_PATTERN, r".*__(?P<subdecl_extra_op>sum|max)_subdecl_window$"]
+
+
+def test_name_bindings_include_additional_pattern() -> None:
+    assert SubDeclExtraPatternFG.name_bindings("s__max_subdecl_window") == {"subdecl_extra_op": "max"}
+
+
+def test_subtype_uses_additional_pattern_before_options() -> None:
+    options = Options(context={"subdecl_extra_op": "sum"})
+    assert SubDeclExtraPatternFG.resolve_subtype("s__max_subdecl_window", options) == "max"

@@ -12,7 +12,7 @@ for example `pip install "mloda[pyarrow]"`.
 | `pyarrow` | PyArrow tables and file readers |
 | `pandas` | Pandas DataFrames |
 | `polars` | Polars DataFrames |
-| `numpy` | NumPy arrays |
+| `numpy` | NumPy for PyArrow multi-column aggregations and time windows |
 | `yaml` | YAML file input |
 | `duckdb` | DuckDB SQL backend |
 | `sqlite` | SQLite SQL backend |

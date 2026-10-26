@@ -23,7 +23,6 @@ from __future__ import annotations
 import errno
 import logging
 import threading
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -110,30 +109,6 @@ def _assert_scrubbed_debug_traceback(caplog: pytest.LogCaptureFixture, marker: s
     assert all(r.levelno == logging.DEBUG for r in records)
     assert not any(r.name == _RUNNER_LOGGER and r.levelno >= logging.ERROR for r in caplog.records)
     assert marker not in caplog.text
-
-
-@pytest.mark.parametrize("run", [mloda.run_all, mloda.stream_all], ids=["compute", "stream"])
-@pytest.mark.parametrize(
-    "mode",
-    [ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING],
-    ids=["sync", "threading", "multiprocessing"],
-)
-def test_original_exception_propagates_without_error_log(
-    run: Callable[..., Any], mode: ParallelizationMode, flight_server: Any, caplog: pytest.LogCaptureFixture
-) -> None:
-    with caplog.at_level(logging.INFO, logger=_RUNNER_LOGGER):
-        with pytest.raises(ImportError, match="bm25s"):
-            list(
-                run(
-                    [Feature(name="exc_import_error_col")],
-                    compute_frameworks=["PythonDictFramework"],
-                    plugin_collector=_ENABLED_IMPORT_ERROR,
-                    parallelization_modes={mode},
-                    flight_server=flight_server,
-                )
-            )
-
-    assert not any(r.name == _RUNNER_LOGGER and r.levelno >= logging.ERROR for r in caplog.records)
 
 
 # --------------------------------------------------------------------------- #

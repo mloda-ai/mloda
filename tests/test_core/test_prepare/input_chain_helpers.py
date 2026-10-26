@@ -28,7 +28,6 @@ RAW_B = "raw_b_chain_2320"
 SOURCE_KEY = "columns_chain_2320"
 MATCH_CALLS: Counter[tuple[type[FeatureGroup], str]] = Counter()
 PROBE_CALLS: Counter[tuple[type[SourceFeatureGroup], str]] = Counter()
-LOAD_CALLS: list[type[SourceFeatureGroup]] = []
 
 
 class ChainStub2320(StubFeatureGroup):
@@ -36,7 +35,6 @@ class ChainStub2320(StubFeatureGroup):
 
     INPUTS: ClassVar[tuple[Feature | str, ...] | None] = None
     FRAMEWORK_RULE: ClassVar[set[type[ComputeFramework]]] = {PyArrowTable}
-    WRITES: ClassVar[dict[str, Any]] = {}
 
     @classmethod
     def match_feature_group_criteria(
@@ -48,8 +46,6 @@ class ChainStub2320(StubFeatureGroup):
         matched = super().match_feature_group_criteria(feature_name, options, data_access_collection)
         if matched:
             MATCH_CALLS[cls, str(feature_name)] += 1
-            for key, value in cls.WRITES.items():
-                options.add_to_group(key, value)
         return matched
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
@@ -68,10 +64,6 @@ class ChainB2320(ChainStub2320):
     INPUTS = (LEAF,)
 
 
-class ChainBChild2320(ChainB2320):
-    pass
-
-
 class ChainC2320(ChainStub2320):
     MATCHED_NAMES = frozenset({CHOICE})
     INPUTS = (OTHER_MISSING,)
@@ -84,11 +76,6 @@ class ChainMiddle2320(ChainStub2320):
 
 class ChainLeaf2320(ChainStub2320):
     MATCHED_NAMES = frozenset({LEAF})
-
-
-class ChainOtherLeaf2320(ChainStub2320):
-    MATCHED_NAMES = frozenset({LEAF})
-    INPUTS = (MISSING,)
 
 
 class ChainSourceBase2320(SourceFeatureGroup):
@@ -120,15 +107,10 @@ class ChainSourceBase2320(SourceFeatureGroup):
 
     @classmethod
     def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
-        LOAD_CALLS.append(cls)
         return pa.table({name: match.access[name] for name in features.get_all_names()})
 
 
 class ChainChecked2320(ChainSourceBase2320):
-    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("chain2320", NamePolicy.CHECKED, True),)
-
-
-class ChainOtherChecked2320(ChainSourceBase2320):
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("chain2320", NamePolicy.CHECKED, True),)
 
 

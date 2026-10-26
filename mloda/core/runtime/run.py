@@ -518,7 +518,8 @@ class ExecutionOrchestrator:
         self._mark_children(cfw, children)
         source_uuid = self.executor.own_frame_sources.get(cfw.uuid)
         while source_uuid is not None:
-            self._mark_children(self.executor.cfw_collection[source_uuid], children)
+            source = self.executor.cfw_collection[source_uuid]
+            self._mark_children(source, children & source.children_if_root)
             source_uuid = self.executor.own_frame_sources.get(source_uuid)
 
     def _mark_children(self, cfw: ComputeFramework, children: set[UUID]) -> None:

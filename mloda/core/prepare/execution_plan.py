@@ -837,6 +837,7 @@ class ExecutionPlan:
         ep: FeatureGroupStep,
         first: tuple[str, type[FeatureGroup]],
         second: tuple[str, type[FeatureGroup]],
+        linked: bool = False,
     ) -> str:
         """Error for a consumer reading inputs from two different frames."""
         head = (
@@ -849,6 +850,11 @@ class ExecutionPlan:
             return (
                 head + f"Both are steps of the replaces_rows() group '{format_feature_group_class(first[1])}'; "
                 "split the logic into separate feature groups and join them with a Link."
+            )
+        if linked:
+            return head + (
+                "A Link already joins these groups, but the replaces_rows() frame lacks the link key; "
+                "expose the needed column as a feature of the replaces_rows() group."
             )
         return head + (
             "Join them with a Link, for example:\n"
@@ -1427,6 +1433,35 @@ Available join types:
             ep.uuid for ep in execution_plan if isinstance(ep, FeatureGroupStep) and ep.own_frame
         }
 
+        def own_frame_blind(ep: FeatureGroupStep) -> set[UUID]:
+            """Required uuids reached only through an own-frame parent, whose frame hides them from ep."""
+            parents_of = memo.edge_parents(graph)
+            direct: set[UUID] = set()
+            hidden: set[UUID] = set()
+            seen: set[tuple[UUID, bool]] = set()
+            todo = [(p, False) for m in ep.get_uuids() for p in parents_of.get(m, ())]
+            while todo:
+                node, behind = todo.pop()
+                if (node, behind) in seen:
+                    continue
+                seen.add((node, behind))
+                (hidden if behind else direct).add(node)
+                if behind:
+                    todo.extend((p, True) for p in parents_of.get(node, ()))
+                else:
+                    through = owning_step_of.get(node, node) in own_frame_steps
+                    todo.extend((p, through) for p in parents_of.get(node, ()))
+            return hidden - direct
+
+        def serving_joins(ep: FeatureGroupStep) -> list[JoinStep]:
+            """Joins whose both sides ep reaches without crossing an own-frame parent."""
+            visible = ep.required_uuids - own_frame_blind(ep) if own_frame_steps else ep.required_uuids
+            return [
+                js
+                for js in left_join_frameworks
+                if visible & js.destination_framework_uuids and visible & js.source_framework_uuids
+            ]
+
         def root_steps_of(parent: UUID) -> set[UUID]:
             closure = {parent} | graph.parent_to_children_mapping.get(parent, set())
             return {owning_step_of.get(uuid, uuid) for uuid in closure} & root_steps
@@ -1553,6 +1588,8 @@ Available join types:
                 if not read_frames & mutated:
                     continue
                 js.required_uuids |= own
+                if read_frames & source_frames[js.uuid]:
+                    need_to_upload_collector |= own
 
         group_touched: dict[int, set[UUID]] = defaultdict(set)
         chain_errors: dict[int, tuple[Step, frozenset[UUID], frozenset[UUID]]] = {}
@@ -1724,6 +1761,11 @@ Available join types:
                     } | self._both_side_readers(ep, required_by)
                     for inner_ep in (execution_plan[p] for p in sorted(candidate_positions)):
                         if isinstance(inner_ep, FeatureGroupStep):
+                            visible = (
+                                inner_ep.required_uuids - own_frame_blind(inner_ep)
+                                if own_frame_steps
+                                else inner_ep.required_uuids
+                            )
                             # 1) We do 1 here:
                             for uuid in inner_ep.get_uuids():
                                 if uuid in ep.source_framework_uuids:
@@ -1748,8 +1790,8 @@ Available join types:
                             if (
                                 ep.destination_hop_uuid is None
                                 and (scope is None or inner_ep.get_uuids() & scope)
-                                and any(elem in inner_ep.required_uuids for elem in ep.destination_framework_uuids)
-                                and any(elem in inner_ep.required_uuids for elem in ep.source_framework_uuids)
+                                and any(elem in visible for elem in ep.destination_framework_uuids)
+                                and any(elem in visible for elem in ep.source_framework_uuids)
                             ):
                                 if ep.link.jointype in (JoinType.APPEND, JoinType.UNION):
                                     self.set_store_value_to_left_most_index_and_update_feature_group(
@@ -2031,21 +2073,30 @@ Available join types:
 
                 if own_frame_steps:
                     # Same-framework parents on different frames (replaces_rows() outputs) cannot be read together.
-                    frame_parents: dict[frozenset[UUID], list[UUID]] = defaultdict(list)
+                    frames_by_framework: dict[type, dict[frozenset[UUID], list[UUID]]] = defaultdict(
+                        lambda: defaultdict(list)
+                    )
+                    serving = serving_joins(ep)
+                    serving_frame_uuids: set[UUID] = set()
+                    for js in serving:
+                        serving_frame_uuids |= js.destination_framework_uuids | js.source_framework_uuids | js.carriers
                     for parent_uuid in set().union(*(edge_parents.get(m, set()) for m in ep.get_uuids())):
-                        if nodes[parent_uuid].feature.get_compute_framework() != ep.compute_framework or any(
-                            js.matched(ep.compute_framework, parent_uuid, ep.required_uuids)
+                        parent_framework = nodes[parent_uuid].feature.get_compute_framework()
+                        if parent_framework == ep.compute_framework and any(
+                            js in serving and js.matched(ep.compute_framework, parent_uuid, ep.required_uuids)
                             for js in joins_by_feature.get(parent_uuid, ())
                         ):
                             continue
                         lineage = self._same_framework_lineage(parent_uuid, graph, memo)
-                        if lineage & join_frame_uuids:
+                        if lineage & serving_frame_uuids:
                             continue
                         frame_key = frozenset(
                             owner for owner in (owning_step_of.get(u, u) for u in lineage) if owner in own_frame_steps
                         )
-                        frame_parents[frame_key].append(parent_uuid)
-                    if len(frame_parents) > 1:
+                        frames_by_framework[parent_framework][frame_key].append(parent_uuid)
+                    for frame_parents in frames_by_framework.values():
+                        if len(frame_parents) < 2:
+                            continue
                         reps_by_frame = sorted(
                             (
                                 min(
@@ -2056,7 +2107,12 @@ Available join types:
                             ),
                             key=lambda item: (item[0], item[1].get_class_name()),
                         )
-                        raise ValueError(self._split_frame_error(ep, reps_by_frame[0], reps_by_frame[1]))
+                        linked = any(
+                            {js.link.left_feature_group, js.link.right_feature_group}
+                            == {reps_by_frame[0][1], reps_by_frame[1][1]}
+                            for js in left_join_frameworks
+                        )
+                        raise ValueError(self._split_frame_error(ep, reps_by_frame[0], reps_by_frame[1], linked))
             else:
                 raise ValueError(f"Element {ep} is not a valid element.")
             new_execution_plan.append(ep)

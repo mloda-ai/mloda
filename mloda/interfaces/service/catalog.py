@@ -116,11 +116,11 @@ def _fingerprint(query: str, kinds: Sequence[str]) -> str:
     return hashlib.sha256(json.dumps([query, list(kinds)]).encode("utf-8")).hexdigest()[:16]
 
 
-def _encode_cursor(offset: int, fingerprint: str) -> str:
+def encode_cursor(offset: int, fingerprint: str) -> str:
     return base64.urlsafe_b64encode(f"v1:{offset}:{fingerprint}".encode("ascii")).decode("ascii").rstrip("=")
 
 
-def _decode_cursor(cursor: str, fingerprint: str) -> int | None:
+def decode_cursor(cursor: str, fingerprint: str) -> int | None:
     """Offset of a cursor issued for this fingerprint, or None for a malformed or foreign one."""
     if not _CURSOR.fullmatch(cursor) or len(cursor) % 4 == 1:
         return None
@@ -209,7 +209,7 @@ class Catalog:
         fingerprint = _fingerprint(query, selected)
         offset = 0
         if cursor is not None:
-            decoded = _decode_cursor(cursor, fingerprint)
+            decoded = decode_cursor(cursor, fingerprint)
             if decoded is None:
                 return _invalid("/cursor", "The cursor is malformed or belongs to another query.")
             offset = decoded
@@ -217,7 +217,7 @@ class Catalog:
         end = offset + limit
         return {
             "items": items[offset:end],
-            "next_cursor": _encode_cursor(end, fingerprint) if end < len(items) else None,
+            "next_cursor": encode_cursor(end, fingerprint) if end < len(items) else None,
         }
 
     def _matches(self, needle: str, kinds: Sequence[str]) -> list[dict[str, Any]]:

@@ -23,6 +23,7 @@ _MCP_KEYS = frozenset(
         "sources",
         "classification",
         "inline_data",
+        "result_paging",
         "max_inline_values",
         "max_inline_chars",
         "default_classification",
@@ -69,6 +70,7 @@ class Settings:
     sources: Mapping[str, SourceConfig] = field(default_factory=dict)
     classification: Mapping[str, str] = field(default_factory=dict)
     inline_data: bool = False
+    result_paging: bool = False
     max_inline_values: int | None = None
     max_inline_chars: int | None = None
     default_classification: str | None = None
@@ -232,6 +234,10 @@ def _build(raw: Mapping[str, Any], base_dir: Path) -> Settings:
         if not isinstance(raw["inline_data"], bool):
             raise ConfigError("'inline_data' must be true or false")
         kwargs["inline_data"] = raw["inline_data"]
+    if "result_paging" in raw:
+        if not isinstance(raw["result_paging"], bool):
+            raise ConfigError("'result_paging' must be true or false")
+        kwargs["result_paging"] = raw["result_paging"]
     if raw.get("default_classification") is not None:
         if not isinstance(raw["default_classification"], str) or not raw["default_classification"]:
             raise ConfigError("'default_classification' must be a non-empty string")

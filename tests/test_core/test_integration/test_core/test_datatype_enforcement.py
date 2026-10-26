@@ -209,6 +209,30 @@ class ReducedJoinedBack(FeatureGroup):
         return {cls.get_class_name(): [v + s for v, s in zip(values, sums)]}
 
 
+class SplitFrameConsumer(FeatureGroup):
+    """Consumer whose inputs live on different frames."""
+
+    _INPUTS = {
+        "count_and_sum": {"red_count", "red_sum"},
+        "sum_and_key": {"red_sum", "raw_key"},
+    }
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return set(cls._INPUTS)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PyArrowTable}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(name) for name in self._INPUTS[str(feature_name)]}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {name: [] for name in cls._INPUTS}
+
+
 class ReducedAfterJoin(FeatureGroup):
     """Row-reducing group that reads a join result, grouping raw_val by dim_label."""
 
@@ -800,11 +824,13 @@ class ReducingRawSource(ReducerRawSource):
         return True
 
 
-def _plan_reducer(group: type[FeatureGroup], features: list[Feature]) -> Any:
+def _plan_reducer(
+    group: type[FeatureGroup], features: list[Feature], extra_groups: set[type[FeatureGroup]] | None = None
+) -> Any:
     return mloda.prepare(
         features,
         compute_frameworks=[PyArrowTable, PythonDictFramework],
-        plugin_collector=PluginCollector.enabled_feature_groups({ReducerRawSource, group}),
+        plugin_collector=PluginCollector.enabled_feature_groups({ReducerRawSource, group, *(extra_groups or set())}),
     )
 
 
@@ -857,6 +883,26 @@ class TestRowReducingGroupPlan:
         assert len(steps) == 2
         assert len({s.compute_framework for s in steps}) == 1
         assert all(s.own_frame is False for s in steps)
+
+    @pytest.mark.parametrize(
+        "feature, extra_group, parents",
+        [
+            (Feature("count_and_sum"), SplitFrameConsumer, ("red_count", "red_sum")),
+            (Feature(ReducedJoinedBack.get_class_name()), ReducedJoinedBack, ("red_sum", "raw_val")),
+            (Feature("sum_and_key"), SplitFrameConsumer, ("red_sum", "raw_key")),
+        ],
+        ids=["two_reducing_steps", "reduced_and_unreduced_input", "reduced_and_group_key"],
+    )
+    def test_consumer_reading_two_frames_raises_at_prepare(
+        self, feature: Feature, extra_group: type[FeatureGroup], parents: tuple[str, str]
+    ) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            _plan_reducer(RowReducer, [feature], extra_groups={extra_group})
+
+        message = str(exc_info.value)
+        assert extra_group.get_class_name() in message
+        assert all(parent in message for parent in parents)
+        assert "Link" in message
 
 
 class TestValidatorEdgeCases:

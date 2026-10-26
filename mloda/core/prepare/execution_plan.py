@@ -833,6 +833,25 @@ class ExecutionPlan:
         )
 
     @staticmethod
+    def _split_frame_error(
+        ep: FeatureGroupStep,
+        first: tuple[str, type[FeatureGroup]],
+        second: tuple[str, type[FeatureGroup]],
+    ) -> str:
+        """Error for a consumer reading same-framework inputs that live on two different frames."""
+        return (
+            f"'{format_feature_group_class(ep.feature_group)}' reads '{first[0]}' "
+            f"('{format_feature_group_class(first[1])}') and '{second[0]}' "
+            f"('{format_feature_group_class(second[1])}'), which are on different frames: "
+            "a row-reducing group's output lives on its own reduced frame.\n"
+            "Join them with a Link, for example:\n"
+            "    from mloda.user import Link, JoinSpec\n\n"
+            f'    Link.inner(JoinSpec({first[1].get_class_name()}, "key"), '
+            f'JoinSpec({second[1].get_class_name()}, "key"))\n'
+            "or expose the needed column (e.g. a group key) as a feature of the row-reducing group."
+        )
+
+    @staticmethod
     def _conflicting_transform_hops_error(
         ep: FeatureGroupStep,
         first_hop: TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent,
@@ -1395,6 +1414,10 @@ Available join types:
             for ep in execution_plan
             if isinstance(ep, FeatureGroupStep)
             and not any(graph.parent_to_children_mapping.get(uuid) for uuid in ep.get_uuids())
+        }
+
+        own_frame_steps: set[UUID] = {
+            ep.uuid for ep in execution_plan if isinstance(ep, FeatureGroupStep) and ep.own_frame
         }
 
         def root_steps_of(parent: UUID) -> set[UUID]:
@@ -1996,6 +2019,35 @@ Available join types:
                         key=lambda hop: (hop.from_feature_group.get_class_name(), hop.from_feature_group.__module__),
                     )
                     raise ValueError(self._conflicting_transform_hops_error(ep, reps[0], reps[1], reps[2:]))
+
+                # Same-framework parents on different frames (a row-reducing step owns its frame) cannot be read together.
+                frame_parents: dict[frozenset[UUID], list[UUID]] = defaultdict(list)
+                for parent_uuid in set().union(*(edge_parents.get(m, set()) for m in ep.get_uuids())):
+                    if nodes[parent_uuid].feature.get_compute_framework() != ep.compute_framework or any(
+                        js.matched(ep.compute_framework, parent_uuid, ep.required_uuids)
+                        for js in joins_by_feature.get(parent_uuid, ())
+                    ):
+                        continue
+                    frame_key = frozenset(
+                        owner
+                        for owner in (
+                            owning_step_of.get(u, u) for u in self._same_framework_lineage(parent_uuid, graph, memo)
+                        )
+                        if owner in own_frame_steps
+                    )
+                    frame_parents[frame_key].append(parent_uuid)
+                if len(frame_parents) > 1:
+                    reps_by_frame = sorted(
+                        (
+                            min(
+                                ((str(nodes[p].feature.name), nodes[p].feature_group_class) for p in members),
+                                key=lambda item: (item[0], item[1].get_class_name()),
+                            )
+                            for members in frame_parents.values()
+                        ),
+                        key=lambda item: (item[0], item[1].get_class_name()),
+                    )
+                    raise ValueError(self._split_frame_error(ep, reps_by_frame[0], reps_by_frame[1]))
 
             else:
                 raise ValueError(f"Element {ep} is not a valid element.")

@@ -125,7 +125,7 @@ class TestFlightServerIntegration:
         FlightServer.upload_table(self.location, table, str(object_id))
 
         frame = PandasDataFrame().download_frame(self.location, object_id)
+        FlightServer.drop_tables(self.location, {str(object_id)})
 
         assert isinstance(frame, pd.DataFrame)
         assert frame.equals(table.to_pandas())
-        FlightServer.drop_tables(self.location, {str(object_id)})

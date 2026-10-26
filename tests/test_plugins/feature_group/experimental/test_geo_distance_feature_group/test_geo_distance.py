@@ -289,3 +289,27 @@ class TestPandasGeoDistance:
         assert result_df["sf&nyc__haversine_distance"][0] == pytest.approx(4130, abs=100)
         assert result_df["point1&point2__euclidean_distance"][0] == pytest.approx(5.0, abs=0.01)
         assert result_df["point1&point2__manhattan_distance"][0] == 7
+
+    def test_missing_point_returns_nan(self) -> None:
+        """A missing point produces NaN for that row; other rows are unaffected."""
+        df = pd.DataFrame(
+            {
+                "a": [(52.5, 13.4), None, (48.1, 11.6)],
+                "b": [(48.1, 11.6), (48.1, 11.6), None],
+            }
+        )
+
+        haversine = PandasGeoDistance._calculate_haversine_distance(df, "a", "b")
+        assert not pd.isna(haversine.iloc[0])
+        assert pd.isna(haversine.iloc[1])
+        assert pd.isna(haversine.iloc[2])
+
+        euclidean = PandasGeoDistance._calculate_euclidean_distance(df, "a", "b")
+        assert not pd.isna(euclidean.iloc[0])
+        assert pd.isna(euclidean.iloc[1])
+        assert pd.isna(euclidean.iloc[2])
+
+        manhattan = PandasGeoDistance._calculate_manhattan_distance(df, "a", "b")
+        assert not pd.isna(manhattan.iloc[0])
+        assert pd.isna(manhattan.iloc[1])
+        assert pd.isna(manhattan.iloc[2])

@@ -26,6 +26,8 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     string-based feature creation and configuration-based creation with proper
     group/context parameter separation.
 
+    Reference contract: a missing point gives a missing distance.
+
     ## Feature Creation Methods
 
     ### 1. String-Based Creation

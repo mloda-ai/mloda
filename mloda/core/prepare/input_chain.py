@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import copy
 from dataclasses import dataclass, field
+from types import TracebackType
 from typing import Any, TypeVar
 from uuid import uuid4
 
@@ -115,6 +116,7 @@ def resolution_environment(
 @dataclass(frozen=True)
 class _InputFactFailure:
     error: Exception
+    traceback: TracebackType | None
 
 
 def cached_input_fact(environment: EnvironmentKey, kind: str, key: Hashable, compute: Callable[[], T]) -> T:
@@ -124,12 +126,17 @@ def cached_input_fact(environment: EnvironmentKey, kind: str, key: Hashable, com
         try:
             return compute()
         except Exception as exc:  # Swallows: store the exact exception until this helper immediately re-raises it.
-            return _InputFactFailure(exc.with_traceback(None))
+            return _InputFactFailure(exc, exc.__traceback__)
 
     outcome = run_cached((_CACHE, environment, kind, key), capture)
     if isinstance(outcome, _InputFactFailure):
-        raise outcome.error.with_traceback(None)
+        raise outcome.error.with_traceback(outcome.traceback)
     return outcome
+
+
+def _cached_success(environment: EnvironmentKey, kind: str, key: Hashable, compute: Callable[[], T]) -> T:
+    """Memoize successes only; a raise propagates live so a retry recomputes from the plugin's own frame."""
+    return run_cached((_CACHE, environment, kind, key), compute)
 
 
 @dataclass(frozen=True)
@@ -137,7 +144,6 @@ class _NameOutcome:
     name: FeatureName
     part: str | None
     options: Options
-    error: Exception | None = None
 
 
 def normalize_input_name(
@@ -155,17 +161,16 @@ def normalize_input_name(
         name = FeatureName(output_part[0]) if output_part is not None else requested
         try:
             name = feature_group.set_feature_name(options, name)
-        except Exception as exc:  # noqa: BLE001  (capture an outcome; the caller retains the raise policy)
-            return _NameOutcome(name, None, options, exc.with_traceback(None))
+        except Exception:  # Swallows nothing: adopt the fork's options, then raise live so no failure is cached.
+            feature.options._adopt(options)
+            raise
         part = output_part[1] if output_part is not None else None
         if output_part is None and name != requested and requested.startswith(f"{name}{COLUMN_SEPARATOR}"):
             part = requested[len(name) + 1 :]
         return _NameOutcome(name, part, options)
 
-    outcome = cached_input_fact(environment, "name", key, compute)
+    outcome = _cached_success(environment, "name", key, compute)
     feature.options._adopt(outcome.options)
-    if outcome.error is not None:
-        raise outcome.error.with_traceback(None)
     feature.name = outcome.name
     if outcome.part is not None:
         feature.record_part(outcome.part)
@@ -182,7 +187,6 @@ class _InputTemplate:
 class _InputDeclaration:
     entries: tuple[_InputTemplate | str, ...] | None
     options: Options
-    error: Exception | None = None
 
 
 def _copy_input(feature: Feature, *, fresh_identity: bool = False) -> Feature:
@@ -223,13 +227,12 @@ def declared_inputs(
                 ),
                 forked,
             )
-        except Exception as exc:  # noqa: BLE001  (also cache raises, without changing sole-candidate behavior)
-            return _InputDeclaration(None, forked, exc.with_traceback(None))
+        except Exception:  # Swallows nothing: adopt the fork's options, then raise live so no failure is cached.
+            options._adopt(forked)
+            raise
 
-    outcome = cached_input_fact(environment, "declaration", key, compute)
+    outcome = _cached_success(environment, "declaration", key, compute)
     options._adopt(outcome.options)
-    if outcome.error is not None:
-        raise outcome.error.with_traceback(None)
     if outcome.entries is None:
         return None
     entries: list[Feature | str] = []

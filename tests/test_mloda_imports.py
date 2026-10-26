@@ -309,6 +309,12 @@ def test_import_steward_governance() -> None:
     assert ReaderProbeScope is core_reader_probe.ReaderProbeScope
     assert "reader_probe_scope" in steward_module.__all__
     assert "ReaderProbeScope" in steward_module.__all__
+    # Failed-rows collector for plugin tests
+    from mloda.core.abstract_plugins.components import failed_rows as core_failed_rows
+    from mloda.steward import collect_failed_rows
+
+    assert collect_failed_rows is core_failed_rows.collect_failed_rows
+    assert "collect_failed_rows" in steward_module.__all__
 
 
 # =============================================================================

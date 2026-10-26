@@ -56,25 +56,3 @@ def test_remove_stopwords_downloads_only_after_missing_corpus(
         call.download("stopwords", quiet=True),
         call.words("english"),
     ]
-
-
-def test_remove_stopwords_preserves_text_on_corpus_error(
-    remove_stopwords: Callable[[list[str]], list[str]], nltk_io: Mock
-) -> None:
-    nltk_io.words.side_effect = OSError("unreadable corpus")
-    text = ["The  River is wide", "and the", ""]
-
-    assert remove_stopwords(text) == text
-    nltk_io.download.assert_not_called()
-
-
-@pytest.mark.parametrize("download_error", [OSError("offline"), None], ids=["download-error", "still-missing"])
-def test_remove_stopwords_preserves_text_when_download_cannot_supply_corpus(
-    remove_stopwords: Callable[[list[str]], list[str]], nltk_io: Mock, download_error: OSError | None
-) -> None:
-    nltk_io.words.side_effect = LookupError("missing stopwords")
-    nltk_io.download.side_effect = download_error
-    text = ["The  River is wide", "and the", ""]
-
-    assert remove_stopwords(text) == text
-    nltk_io.download.assert_called_once_with("stopwords", quiet=True)

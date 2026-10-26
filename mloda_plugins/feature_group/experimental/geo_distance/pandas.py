@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 from mloda.provider import ComputeFramework, FeatureSet, Implementation
 
@@ -22,13 +23,12 @@ class PandasGeoDistance(Implementation[GeoDistanceFeatureGroup]):
 
     @classmethod
     def _get_coordinate(cls, point: Any, index: int) -> float:
-        """Return the coordinate at *index*, or NaN when the point is missing."""
-        if point is None or (isinstance(point, float) and np.isnan(point)):
+        """Return the coordinate at *index*, or NaN when the point is missing; raise on str/bytes points."""
+        if point is None or (pd.api.types.is_scalar(point) and pd.isna(point)):
             return np.nan
-        try:
-            return float(point[index])
-        except (TypeError, IndexError):
-            return np.nan
+        if isinstance(point, (str, bytes)):
+            raise TypeError(f"Point must be a (lat, lon) sequence, got {type(point).__name__}")
+        return float(point[index])
 
     @classmethod
     def calculate(

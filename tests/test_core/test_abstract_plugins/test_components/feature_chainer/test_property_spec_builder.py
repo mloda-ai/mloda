@@ -740,7 +740,7 @@ class TestPropertySpecDeferredBinding:
 
 
 class TestPropertySpecCallerSettable:
-    """``caller_settable`` passthrough (issue #2317)."""
+    """``caller_settable`` passthrough."""
 
     def test_caller_settable_defaults_true_and_passes_through_builder(self) -> None:
         assert property_spec("d").caller_settable is True

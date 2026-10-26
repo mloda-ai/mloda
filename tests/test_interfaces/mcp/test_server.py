@@ -113,6 +113,10 @@ def _paging_settings(tmp_path: Path, max_preview_rows: int = 2) -> Settings:
     return dataclasses.replace(settings, result_paging=True, max_preview_rows=max_preview_rows)
 
 
+def _settings_for(tmp_path: Path, tool: str) -> Settings:
+    return _paging_settings(tmp_path) if tool == FETCH else _settings(tmp_path, "execute")
+
+
 def _services(settings: Settings) -> tuple[Catalog, Planner, Runner]:
     services: tuple[Catalog, Planner, Runner] = build_services(
         settings, env=ENV, plugin_collector=_base(), clock=_clock
@@ -240,13 +244,15 @@ class TestTools:
         ],
     )
     async def test_annotations(self, tmp_path: Path, name: str, expected: dict[str, bool]) -> None:
-        annotations = (await _tools(_server(_paging_settings(tmp_path))))[name].annotations
+        annotations = (await _tools(_server(_settings_for(tmp_path, name))))[name].annotations
 
         assert annotations is not None
         assert {key: getattr(annotations, key) for key in expected} == expected
 
-    async def test_every_tool_has_an_object_output_schema_and_a_description(self, tmp_path: Path) -> None:
-        tools = await _tools(_server(_paging_settings(tmp_path)))
+    @pytest.mark.parametrize("paging", [False, True], ids=["execute", "paging"])
+    async def test_every_tool_has_an_object_output_schema_and_a_description(self, tmp_path: Path, paging: bool) -> None:
+        settings = _paging_settings(tmp_path) if paging else _settings(tmp_path, "execute")
+        tools = await _tools(_server(settings))
 
         for tool in tools.values():
             assert isinstance(tool.output_schema, dict), tool.name
@@ -264,7 +270,7 @@ class TestTools:
         ],
     )
     async def test_tool_arguments(self, tmp_path: Path, name: str, properties: set[str], required: set[str]) -> None:
-        schema = (await _tools(_server(_paging_settings(tmp_path))))[name].input_schema
+        schema = (await _tools(_server(_settings_for(tmp_path, name))))[name].input_schema
 
         assert set(schema["properties"]) == properties
         assert set(schema.get("required", [])) == required
@@ -373,13 +379,13 @@ class TestInstructions:
 class TestEnvelope:
     @pytest.mark.parametrize(("name", "arguments"), CALLS, ids=CALL_IDS)
     async def test_summary_line_and_json_body(self, tmp_path: Path, name: str, arguments: dict[str, Any]) -> None:
-        result = await _call(_server(_paging_settings(tmp_path)), name, arguments)
+        result = await _call(_server(_settings_for(tmp_path, name)), name, arguments)
 
         _assert_envelope(result)
 
     @pytest.mark.parametrize(("name", "arguments"), CALLS, ids=CALL_IDS)
     async def test_no_paths_in_any_text(self, tmp_path: Path, name: str, arguments: dict[str, Any]) -> None:
-        result = await _call(_server(_paging_settings(tmp_path)), name, arguments)
+        result = await _call(_server(_settings_for(tmp_path, name)), name, arguments)
 
         for text in _texts(result):
             assert str(tmp_path) not in text
@@ -580,7 +586,7 @@ class TestBoundary:
         arguments: dict[str, Any],
     ) -> None:
         caplog.set_level(logging.DEBUG, logger=LOGGER)
-        services = _services(_paging_settings(tmp_path))
+        services = _services(_settings_for(tmp_path, name))
         monkeypatch.setattr(services[service], method, _boom)
 
         result = await _call(build_server(*services), name, arguments)
@@ -608,7 +614,7 @@ class TestAuditLog:
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture, name: str, arguments: dict[str, Any]
     ) -> None:
         caplog.set_level(logging.DEBUG, logger=LOGGER)
-        server = _server(_paging_settings(tmp_path))
+        server = _server(_settings_for(tmp_path, name))
 
         result = await _call(server, name, arguments)
 
@@ -619,18 +625,22 @@ class TestAuditLog:
         if "error" in structured:
             assert structured["error"]["audit_id"] in message
 
+    @pytest.mark.parametrize("paging", [False, True], ids=["execute", "paging"])
     async def test_every_call_of_a_session_logs_one_record(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture, paging: bool
     ) -> None:
         caplog.set_level(logging.DEBUG, logger=LOGGER)
 
-        async with Client(_server(_paging_settings(tmp_path))) as client:
-            for name, arguments in CALLS:
+        calls = CALLS if paging else [call for call in CALLS if call[0] != FETCH]
+        settings = _paging_settings(tmp_path) if paging else _settings(tmp_path, "execute")
+
+        async with Client(_server(settings)) as client:
+            for name, arguments in calls:
                 await client.call_tool(name, arguments)
 
         records = _audit_records(caplog)
-        assert len(records) == len(CALLS)
-        for record, (name, _) in zip(records, CALLS):
+        assert len(records) == len(calls)
+        for record, (name, _) in zip(records, calls):
             assert name in record.getMessage()
 
     async def test_default_server_refuses_an_unlisted_option(self, tmp_path: Path) -> None:

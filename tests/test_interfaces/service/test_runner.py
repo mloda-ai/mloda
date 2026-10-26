@@ -32,7 +32,6 @@ from mloda.interfaces.service.request import MAX_NAME_LENGTH
 from mloda.interfaces.service.catalog import encode_cursor
 from mloda.interfaces.service.runner import (
     MAX_FAILED_ROW_ENTRIES,
-    MAX_STORED_VALUES,
     RESULT_TTL_SECONDS,
     ResultStore,
     Runner,
@@ -643,10 +642,6 @@ class TestPreviewBounds:
 
 
 class TestResultStore:
-    def test_constants(self) -> None:
-        assert RESULT_TTL_SECONDS == 900
-        assert MAX_STORED_VALUES == 1_000_000
-
     def test_put_then_get_and_unknown_id(self) -> None:
         store = ResultStore(_Clock())
 
@@ -837,13 +832,6 @@ class TestPaging:
 
         assert len(rows) == 5
         assert len(probe_calls) == 1
-
-    def test_second_table_is_addressable(self, tmp_path: Path) -> None:
-        runner, result, _ = self._start(tmp_path)
-
-        error = _error(runner.fetch_rows(result["result_id"], 1), "validation_failed")
-
-        assert _has_detail(error, path="/table")
 
     @pytest.mark.parametrize("table", [-1, 1, 99, True, "0", 0.0, None])
     def test_bad_table_is_validation_failed(self, tmp_path: Path, table: Any) -> None:

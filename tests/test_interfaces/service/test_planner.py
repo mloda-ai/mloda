@@ -520,8 +520,13 @@ class TestCallerSettable:
     def test_trusted_caller_may_set_flagged_key(self, tmp_path: Path, feature: dict[str, Any], path: str) -> None:
         result = _explain(tmp_path, {"features": [feature]}, trusted_caller=True)
 
-        if is_error(result):
-            assert not _has_detail(result["error"], problem="option_not_caller_settable")
+        if "group_options/in_features" in path:
+            # nested group_options in_features is an invalid feature config, unrelated to the policy
+            error = _error(result, "validation_failed")
+            assert _has_detail(error, problem="invalid_feature_config")
+            assert not _has_detail(error, problem="option_not_caller_settable")
+        else:
+            _success(result)
 
     def test_operator_default_for_flagged_key_is_not_refused(self, tmp_path: Path) -> None:
         result = _explain(
@@ -540,7 +545,7 @@ class TestCallerSettable:
             context_options={CALLER_LOCKED_KEY: "https://operator.example"},
         )
 
-        assert not is_error(result) or not _has_detail(result["error"], problem="option_not_caller_settable")
+        _success(result)
 
     def test_listed_data_access_key_still_reports_data_access_first(self, tmp_path: Path) -> None:
         feature = {"name": "income", "options": {"CsvFG": SECRET, CALLER_LOCKED_KEY: SECRET}}

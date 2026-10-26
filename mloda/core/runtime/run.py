@@ -89,7 +89,12 @@ def planned_worker_count(execution_plan: Any, register_modes: set[Parallelizatio
             continue
         if isinstance(step, TransformFrameworkStep):
             count += 1
-        elif isinstance(step, FeatureGroupStep) and not step.tfs_ids:
+        elif isinstance(step, FeatureGroupStep):
+            if step.own_frame:
+                count += 1
+                continue
+            if step.tfs_ids:
+                continue
             seen = chain_children.setdefault(step.compute_framework, set())
             if step.features.any_uuid in seen:
                 continue
@@ -444,9 +449,12 @@ class ExecutionOrchestrator:
             if step.features.any_uuid is None:
                 raise ValueError(f"from_feature_uuid should not be none. {step}")
 
-            cfw = self.executor.get_cfw(
-                step.compute_framework, step.features.any_uuid, step.tfs_ids, step.reads_join_result
-            )
+            if step.own_frame:
+                cfw = self.executor.cfw_collection[step.uuid]
+            else:
+                cfw = self.executor.get_cfw(
+                    step.compute_framework, step.features.any_uuid, step.tfs_ids, step.reads_join_result
+                )
             self.add_to_result_data_collection(cfw, step.features, step.uuid)
             self._drop_data_if_possible(cfw, step)
 
@@ -504,8 +512,15 @@ class ExecutionOrchestrator:
         Records newly-finished children on a CFW and, if not yet fully satisfied, tracks the
         remaining wait-condition so a later `_drop_data_for_finished_cfws` pass can flush it. The
         worker-owned branch always tracks, since that later flush is a safe no-op if the worker
-        already resolved and exited on its own.
+        already resolved and exited on its own. Own-frame sources up the chain are credited too.
         """
+        self._mark_children(cfw, children)
+        source_uuid = self.executor.own_frame_sources.get(cfw.uuid)
+        while source_uuid is not None:
+            self._mark_children(self.executor.cfw_collection[source_uuid], children)
+            source_uuid = self.executor.own_frame_sources.get(source_uuid)
+
+    def _mark_children(self, cfw: ComputeFramework, children: set[UUID]) -> None:
         _, command_queue, _ = self.worker_manager.process_register.get(cfw.uuid, (None, None, None))
 
         if command_queue is None:
@@ -679,6 +694,7 @@ class ExecutionOrchestrator:
 
         A cfw instance holds a single data slot and is shared by every step of a chain within one
         framework, so at most one feature group step may occupy it at a time.
+        An own-frame step occupies its source frame, since its own frame does not exist yet.
         """
 
         with self._step_lock:

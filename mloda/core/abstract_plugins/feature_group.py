@@ -462,7 +462,8 @@ class FeatureGroup(ABC):
 
     @classmethod
     def reduces_rows(cls) -> bool:
-        """True when calculate_feature returns fewer rows than it got; any split into steps on one framework raises."""
+        """True when calculate_feature returns a new frame with other rows than its input; each step then
+        writes its own frame and must not mutate the input in place."""
         return False
 
     @staticmethod

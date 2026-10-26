@@ -40,6 +40,7 @@ def _register_one_shared_cfw(cfw_register: CfwManager, tfs_id_a: UUID, tfs_id_b:
 
 def _feature_group_step(tfs_ids: set[UUID]) -> Mock:
     step = Mock(spec=FeatureGroupStep)
+    step.own_frame = False
     step.tfs_ids = tfs_ids
     step.join_tokens = frozenset()
     step.compute_framework = Mock()

@@ -26,6 +26,7 @@ G = TypeVar("G", bound=FeatureGroup)
 
 
 _CONCRETE_VERDICTS: weakref.WeakKeyDictionary[type, bool] = weakref.WeakKeyDictionary()
+_PAIR_VERDICTS: weakref.WeakKeyDictionary[type, bool] = weakref.WeakKeyDictionary()
 
 
 def _has_abstract_member(cls: Any) -> bool:
@@ -73,6 +74,13 @@ def _names_a_pair(cls: Any) -> bool:
         and isinstance(framework, type)
         and issubclass(framework, ComputeFramework)
     )
+
+
+def _is_pair(cls: Any) -> bool:
+    """Names a valid pair; the verdict is cached after class creation."""
+    if cls not in _PAIR_VERDICTS:
+        _PAIR_VERDICTS[cls] = _names_a_pair(cls)
+    return _PAIR_VERDICTS[cls]
 
 
 class Implementation(ABC, Generic[G]):
@@ -162,7 +170,7 @@ def serving_implementation(
 
 def loaded_implementations() -> list[type[Implementation[Any]]]:
     """Concrete loaded Implementation classes naming a valid pair (a rejected subclass lingers until collected)."""
-    return [impl for impl in get_all_subclasses(Implementation) if _is_concrete(impl) and _names_a_pair(impl)]
+    return [impl for impl in get_all_subclasses(Implementation) if _is_concrete(impl) and _is_pair(impl)]
 
 
 _ACCESSIBLE: ContextVar[frozenset[type[Implementation[Any]]] | None] = ContextVar(

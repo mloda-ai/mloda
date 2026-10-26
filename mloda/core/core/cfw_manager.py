@@ -379,6 +379,12 @@ class CfwManager:
             raise ValueError(f"UUID {uuid} already exists in compute_frameworks")
         self.compute_frameworks[uuid] = (cls_name, children_if_root)
 
+    def claim_children(self, cfw_uuid: UUID, cls_name: str, children: set[UUID]) -> None:
+        """Removes children from every other registered frame of cls_name, so lookups for them resolve to cfw_uuid."""
+        for other_uuid, (other_cls, other_children) in list(self.compute_frameworks.items()):
+            if other_uuid != cfw_uuid and other_cls == cls_name and other_children & children:
+                self.compute_frameworks[other_uuid] = (other_cls, other_children - children)
+
     def set_location(self, location: str) -> None:
         """Sets the location for multiprocessing."""
         if not self.location:

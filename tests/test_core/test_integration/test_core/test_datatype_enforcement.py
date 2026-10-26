@@ -12,6 +12,7 @@ from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.user import DataType
 from mloda.user import Options
 from mloda.user import ParallelizationMode
@@ -21,7 +22,13 @@ from mloda.core.abstract_plugins.components.validators.datatype_validator import
     DataTypeMismatchError,
 )
 from mloda.provider import DefaultOptionKeys
-from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
+from mloda.user import JoinSpec
+from mloda.user import Link
+from tests.test_core.test_tooling import (
+    MlodaTestRunner,
+    PARALLELIZATION_MODES_ALL,
+    PARALLELIZATION_MODES_SYNC_THREADING,
+)
 
 
 def _arrow_resolver(table: pa.Table) -> Callable[[str], DataType | None]:
@@ -88,7 +95,7 @@ class RowReducer(FeatureGroup):
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
-        return {"red_sum", "red_max"}
+        return {"red_sum", "red_max", "red_count"}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
@@ -99,18 +106,123 @@ class RowReducer(FeatureGroup):
         return True
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        if str(feature_name) == "red_count":
+            return {Feature("red_sum")}
         return {Feature("raw_key"), Feature("raw_val")}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        names = {str(n) for n in features.get_all_names()}
+        if "red_count" in names:
+            return pa.table({"red_count": [data.num_rows]})
+        if isinstance(data, dict):
+            by_key: dict[Any, list[Any]] = {}
+            for key, val in zip(data["raw_key"], data["raw_val"]):
+                by_key.setdefault(key, []).append(val)
+            keys = sorted(by_key)
+            py_columns = {
+                "raw_key": keys,
+                "red_sum": [sum(by_key[k]) for k in keys],
+                "red_max": [max(by_key[k]) for k in keys],
+            }
+            return {k: v for k, v in py_columns.items() if k == "raw_key" or k in names}
         agg = data.group_by("raw_key").aggregate([("raw_val", "sum"), ("raw_val", "max")]).sort_by("raw_key")
         columns = {
             "raw_key": agg.column("raw_key"),
             "red_sum": agg.column("raw_val_sum"),
             "red_max": agg.column("raw_val_max"),
         }
-        names = {str(n) for n in features.get_all_names()}
         return pa.table({k: v for k, v in columns.items() if k == "raw_key" or k in names})
+
+
+class RawPlusOne(FeatureGroup):
+    """Non-reducing sibling reading the same input frame as RowReducer."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"raw_plus_one"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PyArrowTable}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("raw_val")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"raw_plus_one": [v + 1 for v in data.column("raw_val").to_pylist()]}
+
+
+class ReducerDim(DataCreatorFeatureGroup):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"dim_key", "dim_label"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        values = {"dim_key": [1, 2], "dim_label": ["a", "b"]}
+        return {name: values[name] for name in features.get_all_names()}
+
+
+class ReducedJoinConsumer(FeatureGroup):
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PyArrowTable}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("red_sum"), Feature("dim_label")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        labels = data.column("dim_label").to_pylist()
+        sums = data.column("red_sum").to_pylist()
+        return {cls.get_class_name(): [f"{label}:{value}" for label, value in zip(labels, sums)]}
+
+
+class ReducedJoinedBack(FeatureGroup):
+    """Consumer reading a raw input and the reduced output of the same source."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PyArrowTable}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("raw_val"), Feature("red_sum")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        values = data.column("raw_val").to_pylist()
+        sums = data.column("red_sum").to_pylist()
+        return {cls.get_class_name(): [v + s for v, s in zip(values, sums)]}
+
+
+class ReducedAfterJoin(FeatureGroup):
+    """Row-reducing group that reads a join result, grouping raw_val by dim_label."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"joined_sum"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PyArrowTable}
+
+    @classmethod
+    def reduces_rows(cls) -> bool:
+        return True
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("raw_val"), Feature("dim_label")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        agg = data.group_by("dim_label").aggregate([("raw_val", "sum")]).sort_by("dim_label")
+        return pa.table({"dim_label": agg.column("dim_label"), "joined_sum": agg.column("raw_val_sum")})
 
 
 class TestDataTypeEnforcementSeparation:
@@ -436,37 +548,202 @@ class TestEndToEndIntegration:
         assert result.to_pydict()["StringDataSource"] == ["a", "b", "c"]
 
 
-@PARALLELIZATION_MODES_SYNC_THREADING
-class TestRowReducingGroupBatching:
-    """Features of one row-reducing group on the same framework run as one step."""
+_REDUCER_DIM_LINK = Link.inner(JoinSpec(RowReducer, "raw_key"), JoinSpec(ReducerDim, "dim_key"))
+_REDUCER_DIM_LINK_REVERSED = Link.inner(JoinSpec(ReducerDim, "dim_key"), JoinSpec(RowReducer, "raw_key"))
+_RAW_DIM_LINK = Link.inner(JoinSpec(ReducerRawSource, "raw_key"), JoinSpec(ReducerDim, "dim_key"))
 
+
+class _ReducerRunHelpers:
     @staticmethod
-    def _run(features: list[Feature], modes: set[ParallelizationMode], flight_server: Any) -> dict[str, list[Any]]:
-        run_result = MlodaTestRunner.run_api(
+    def _run_result(
+        features: list[Feature],
+        modes: set[ParallelizationMode],
+        flight_server: Any,
+        links: set[Link] | None = None,
+        extra_groups: set[type[FeatureGroup]] | None = None,
+    ) -> Any:
+        return MlodaTestRunner.run_api(
             Features(features),
             parallelization_modes=modes,
             flight_server=flight_server,
             compute_frameworks=[PyArrowTable, PythonDictFramework],
-            plugin_collector=PluginCollector.enabled_feature_groups({ReducerRawSource, RowReducer}),
+            links=links,
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {ReducerRawSource, RowReducer} | (extra_groups or set())
+            ),
         )
-        assert len(run_result.results) == 1
-        return {k: list(v) for k, v in run_result.results[0].to_pydict().items()}
+
+    @classmethod
+    def _run(
+        cls,
+        features: list[Feature],
+        modes: set[ParallelizationMode],
+        flight_server: Any,
+        links: set[Link] | None = None,
+        extra_groups: set[type[FeatureGroup]] | None = None,
+    ) -> list[dict[str, list[Any]]]:
+        run_result = cls._run_result(features, modes, flight_server, links, extra_groups)
+        as_dicts = [f.to_pydict() if hasattr(f, "to_pydict") else f for f in run_result.results]
+        return [{k: list(v) for k, v in frame.items()} for frame in as_dicts]
+
+    @staticmethod
+    def _column(frames: list[dict[str, list[Any]]], name: str) -> list[list[Any]]:
+        return [frame[name] for frame in frames if name in frame]
+
+
+@PARALLELIZATION_MODES_SYNC_THREADING
+class TestRowReducingGroupJoins(_ReducerRunHelpers):
+    """A join consumer of a reduced output reads the reducer's own frame (joins of two frames need no workers)."""
+
+    def _assert_consumer(self, link: Link, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        frames = self._run(
+            [Feature(ReducedJoinConsumer.get_class_name())],
+            modes,
+            flight_server,
+            links={link},
+            extra_groups={ReducerDim, ReducedJoinConsumer},
+        )
+
+        assert [sorted(c) for c in self._column(frames, ReducedJoinConsumer.get_class_name())] == [["a:30", "b:40"]]
+
+    def _assert_joined_back(self, link: Link, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        frames = self._run(
+            [Feature(ReducedJoinedBack.get_class_name())],
+            modes,
+            flight_server,
+            links={link},
+            extra_groups={ReducedJoinedBack},
+        )
+
+        assert [sorted(c) for c in self._column(frames, ReducedJoinedBack.get_class_name())] == [[40, 50, 80]]
+
+    def test_reduced_output_joined_back_onto_its_input(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        link = Link.inner(JoinSpec(ReducerRawSource, "raw_key"), JoinSpec(RowReducer, "raw_key"))
+        self._assert_joined_back(link, modes, flight_server)
+
+    def test_reduced_output_joined_back_onto_its_input_reversed(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        link = Link.inner(JoinSpec(RowReducer, "raw_key"), JoinSpec(ReducerRawSource, "raw_key"))
+        self._assert_joined_back(link, modes, flight_server)
+
+    def test_joined_consumer_of_reduced_output(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        self._assert_consumer(_REDUCER_DIM_LINK, modes, flight_server)
+
+    def test_joined_consumer_with_reducer_on_the_right_side(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        self._assert_consumer(_REDUCER_DIM_LINK_REVERSED, modes, flight_server)
+
+
+@PARALLELIZATION_MODES_ALL
+class TestRowReducingGroupBatching(_ReducerRunHelpers):
+    """Each step of a row-reducing group computes on its own frame, whatever the planner splits."""
 
     def test_different_data_types_run_as_one_step(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
-        out = self._run([Feature.int64_of("red_sum"), Feature.int32_of("red_max")], modes, flight_server)
+        frames = self._run([Feature.int64_of("red_sum"), Feature.int32_of("red_max")], modes, flight_server)
 
-        assert out["red_sum"] == [30, 40]
-        assert out["red_max"] == [20, 40]
+        assert len(frames) == 1
+        assert frames[0]["red_sum"] == [30, 40]
+        assert frames[0]["red_max"] == [20, 40]
 
     def test_pinned_and_unpinned_framework_run_as_one_step(
         self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
-        out = self._run(
+        frames = self._run(
             [Feature("red_sum", compute_framework="PyArrowTable"), Feature("red_max")], modes, flight_server
         )
 
-        assert out["red_sum"] == [30, 40]
-        assert out["red_max"] == [20, 40]
+        assert len(frames) == 1
+        assert frames[0]["red_sum"] == [30, 40]
+        assert frames[0]["red_max"] == [20, 40]
+
+    def test_same_name_two_data_types_return_both_results(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        features = [Feature.int32_of("red_sum"), Feature.int64_of("red_sum")]
+        frames = self._run(features, modes, flight_server)
+
+        assert len(frames) == 2
+        assert [frame["red_sum"] for frame in frames] == [[30, 40], [30, 40]]
+
+    def test_distinct_option_groups_compute(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        frames = self._run(
+            [
+                Feature("red_sum", options=Options(group={"k": 1})),
+                Feature("red_max", options=Options(group={"k": 2})),
+            ],
+            modes,
+            flight_server,
+        )
+
+        assert len(frames) == 2
+        assert self._column(frames, "red_sum") == [[30, 40]]
+        assert self._column(frames, "red_max") == [[20, 40]]
+
+    def test_chained_same_group_names_compute(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        frames = self._run([Feature("red_count"), Feature("red_sum")], modes, flight_server)
+
+        assert self._column(frames, "red_count") == [[2]]
+        assert self._column(frames, "red_sum") == [[30, 40]]
+
+    def test_non_reducing_sibling_reads_unreduced_input(
+        self, modes: set[ParallelizationMode], flight_server: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[Any] = []
+
+        def _defer_ready_step(orchestrator: Any, step: Any, made_progress: bool) -> bool:
+            if not isinstance(step, FeatureGroupStep):
+                return False
+            if step.feature_group is RowReducer:
+                seen.append(step)
+            if step.feature_group is not RawPlusOne or not made_progress:
+                return False
+            return not any(s.step_is_done for s in seen)
+
+        monkeypatch.setattr(ExecutionOrchestrator, "_defer_ready_step", _defer_ready_step)
+        frames = self._run(
+            [Feature("red_sum"), Feature("raw_plus_one")], modes, flight_server, extra_groups={RawPlusOne}
+        )
+
+        assert self._column(frames, "raw_plus_one") == [[11, 21, 41]]
+        assert self._column(frames, "red_sum") == [[30, 40]]
+
+    def test_reducing_step_fed_by_a_hop_computes(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        frames = self._run([Feature("red_sum", compute_framework="PythonDictFramework")], modes, flight_server)
+
+        assert self._column(frames, "red_sum") == [[30, 40]]
+
+    def test_reducing_step_reading_a_join_result_computes(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        frames = self._run(
+            [Feature("joined_sum")],
+            modes,
+            flight_server,
+            links={_RAW_DIM_LINK},
+            extra_groups={ReducerDim, ReducedAfterJoin},
+        )
+
+        assert self._column(frames, "joined_sum") == [[30, 40]]
+
+    @pytest.mark.parametrize(
+        "features",
+        [
+            [Feature("raw_plus_one")],
+            [Feature.int32_of("red_sum"), Feature.int64_of("red_sum"), Feature("red_count")],
+        ],
+        ids=["plain", "reducing"],
+    )
+    def test_every_frame_is_released_after_the_run(
+        self, features: list[Feature], modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        run_result = self._run_result(features, modes, flight_server, extra_groups={RawPlusOne})
+
+        assert all(cfw.data is None for cfw in run_result.runner.executor.cfw_collection.values())
+        MlodaTestRunner.assert_flight_server_clean(modes, flight_server)
 
 
 class NonReducingReducer(RowReducer):
@@ -493,8 +770,8 @@ def _plan_reducer(group: type[FeatureGroup], features: list[Feature]) -> Any:
     )
 
 
-class TestRowReducingGroupPlanTimeGuard:
-    """A row-reducing group split over several steps on one framework fails at plan time."""
+class TestRowReducingGroupPlan:
+    """Steps of a non-root row-reducing group plan with their own frame."""
 
     @pytest.mark.parametrize(
         "features",
@@ -504,14 +781,18 @@ class TestRowReducingGroupPlanTimeGuard:
         ],
         ids=["same_name_two_data_types", "different_options"],
     )
-    def test_split_steps_raise_at_prepare(self, features: list[Feature]) -> None:
-        with pytest.raises(ValueError, match="RowReducer") as exc_info:
-            _plan_reducer(RowReducer, features)
+    def test_split_steps_plan_with_own_frames(self, features: list[Feature]) -> None:
+        session = _plan_reducer(RowReducer, features)
 
-        message = str(exc_info.value)
-        assert "PyArrowTable" in message
-        assert "one step" in message
-        assert "depend" in message
+        assert session.engine is not None
+        steps = [
+            s
+            for s in session.engine.execution_planner
+            if isinstance(s, FeatureGroupStep) and s.feature_group is RowReducer
+        ]
+        assert len(steps) == 2
+        assert all(s.compute_framework is PyArrowTable for s in steps)
+        assert all(s.own_frame is True for s in steps)
 
     def test_non_reducing_group_with_same_split_plans(self) -> None:
         session = _plan_reducer(NonReducingReducer, [Feature.int32_of("red_sum"), Feature.int64_of("red_sum")])
@@ -524,6 +805,7 @@ class TestRowReducingGroupPlanTimeGuard:
         ]
         assert len(steps) == 2
         assert all(s.compute_framework is PyArrowTable for s in steps)
+        assert all(s.own_frame is False for s in steps)
 
     def test_root_group_declaring_reduces_rows_with_split_plans(self) -> None:
         session = _plan_reducer(ReducingRawSource, [Feature.int32_of("raw_val"), Feature.int64_of("raw_val")])
@@ -536,6 +818,7 @@ class TestRowReducingGroupPlanTimeGuard:
         ]
         assert len(steps) == 2
         assert len({s.compute_framework for s in steps}) == 1
+        assert all(s.own_frame is False for s in steps)
 
 
 class TestValidatorEdgeCases:

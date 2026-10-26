@@ -30,6 +30,7 @@ from mloda.core.runtime.run import ExecutionOrchestrator, planned_worker_count
 from mloda.core.runtime.worker_manager import WorkerManager
 from tests.test_core.test_prepare.test_multi_link_group_resolution import SidePathPandasP, _side_path_prepare
 import mloda.core.core.cfw_manager as cfw_manager_module
+from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
 from mloda.core.core.cfw_manager import CfwManager, shared_manager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
@@ -460,6 +461,7 @@ class TestExecutionOrchestratorStepLock:
 def _single_step_mock() -> MagicMock:
     step_uuid = uuid_mod.uuid4()
     step = MagicMock()
+    step.own_frame = False
     step.get_uuids.return_value = {step_uuid}
     step.required_uuids = set()
     step.step_is_done = False
@@ -627,11 +629,17 @@ class _ChainChildFG(FeatureGroup):
         return {"planned_worker_chain_child_col": [1, 2, 3]}
 
 
-def _chain_plan() -> Any:
+class _ChainReducingChildFG(_ChainChildFG):
+    @classmethod
+    def reduces_rows(cls) -> bool:
+        return True
+
+
+def _chain_plan(child: type[FeatureGroup] = _ChainChildFG) -> Any:
     session = mloda.prepare(
-        [Feature(name="_ChainChildFG")],
+        [Feature(name=child.__name__)],
         compute_frameworks=["PythonDictFramework"],
-        plugin_collector=PluginCollector.enabled_feature_groups({_ChainRootFG, _ChainChildFG}),
+        plugin_collector=PluginCollector.enabled_feature_groups({_ChainRootFG, child}),
         parallelization_modes={ParallelizationMode.MULTIPROCESSING},
     )
     assert session.engine is not None
@@ -655,6 +663,9 @@ class TestPlannedWorkerCount:
 
     def test_same_framework_chain_shares_one_worker(self) -> None:
         assert planned_worker_count(_chain_plan(), {ParallelizationMode.MULTIPROCESSING}) == 1
+
+    def test_own_frame_step_counts_as_its_own_worker(self) -> None:
+        assert planned_worker_count(_chain_plan(_ChainReducingChildFG), {ParallelizationMode.MULTIPROCESSING}) == 2
 
 
 class TestEnterPrestartsStandbyWorkers:
@@ -898,6 +909,7 @@ class TestGetResultItemsPlanOrder:
 
     def _make_step(self, step_uuid: UUID) -> Mock:
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.uuid = step_uuid
         return step
 
@@ -1000,6 +1012,8 @@ class TestMarkChildrenAndTrackNeverBlocksOnWorkerOwnedCfw:
 
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
+        orchestrator.executor = Mock(spec=ComputeFrameworkExecutor)
+        orchestrator.executor.own_frame_sources = {}
 
         process, command_queue, result_queue = Mock(), Mock(), Mock()
         orchestrator.worker_manager.process_register[cfw_uuid] = (process, command_queue, result_queue)

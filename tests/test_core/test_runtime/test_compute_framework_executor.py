@@ -575,6 +575,22 @@ class TestGetExecutionFunction:
         assert result == executor.sync_execute_step
 
 
+def _own_frame_step(
+    feature_uuid: UUID, children: frozenset[UUID], step_uuid: UUID, compute_framework: Any = PythonDictFramework
+) -> Mock:
+    step = Mock(spec=FeatureGroupStep)
+    step.own_frame = True
+    step.uuid = step_uuid
+    step.tfs_ids = set()
+    step.join_tokens = frozenset()
+    step.reads_join_result = False
+    step.compute_framework = compute_framework
+    step.features = Mock()
+    step.features.any_uuid = feature_uuid
+    step.children_if_root = children
+    return step
+
+
 class TestPrepareExecuteStep:
     """Tests for prepare_execute_step method."""
 
@@ -583,6 +599,7 @@ class TestPrepareExecuteStep:
         cfw_register = Mock(spec=CfwManager)
         executor = ComputeFrameworkExecutor(cfw_register, Mock(spec=WorkerManager))
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = [uuid4()]
         step.compute_framework = Mock()
         step.compute_framework.get_class_name.return_value = "TestCFW"
@@ -607,6 +624,7 @@ class TestPrepareExecuteStep:
         frame_uuid, tfs_id, token = uuid4(), uuid4(), uuid4()
         cfw_register.add_cfw_to_compute_frameworks(frame_uuid, cls_name, {tfs_id})
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = {tfs_id}
         step.compute_framework = Mock()
         step.compute_framework.get_class_name.return_value = cls_name
@@ -629,6 +647,7 @@ class TestPrepareExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = [uuid4()]
         cfw_register.resolve_cfw_uuid_by_tfs_ids.return_value = None
         # add_compute_framework's own dedup check, separate from resolve_cfw_uuid_by_tfs_ids above.
@@ -660,6 +679,7 @@ class TestPrepareExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = None
@@ -667,6 +687,50 @@ class TestPrepareExecuteStep:
         cfw_register.resolve_cfw_uuid_by_tfs_ids.return_value = None
 
         with pytest.raises(ValueError, match="from_feature_uuid should not be none"):
+            executor.prepare_execute_step(step, ParallelizationMode.SYNC)
+
+    def test_own_frame_step_gets_a_new_cfw_keyed_by_its_step_uuid(self) -> None:
+        cfw_register = CfwManager({ParallelizationMode.SYNC})
+        executor = ComputeFrameworkExecutor(cfw_register, Mock(spec=WorkerManager))
+        feature_uuid, child_uuid, other_uuid, step_uuid = uuid4(), uuid4(), uuid4(), uuid4()
+        source_uuid = uuid4()
+        executor.init_compute_framework(
+            PythonDictFramework, ParallelizationMode.SYNC, {feature_uuid, child_uuid, other_uuid}, source_uuid
+        )
+        step = _own_frame_step(feature_uuid, frozenset({feature_uuid, child_uuid}), step_uuid)
+
+        assert executor.prepare_execute_step(step, ParallelizationMode.SYNC) == step_uuid
+
+        assert cfw_register.compute_frameworks[step_uuid] == ("PythonDictFramework", {feature_uuid, child_uuid})
+        assert executor.own_frame_sources[step_uuid] == source_uuid
+        assert executor.prepare_tfs_and_joinstep(step) is executor.cfw_collection[source_uuid]
+        assert cfw_register.compute_frameworks[source_uuid] == ("PythonDictFramework", {other_uuid})
+        assert cfw_register.get_cfw_uuid("PythonDictFramework", child_uuid) == step_uuid
+
+    def test_own_frame_step_claims_all_of_a_fully_covered_source(self) -> None:
+        cfw_register = CfwManager({ParallelizationMode.SYNC})
+        executor = ComputeFrameworkExecutor(cfw_register, Mock(spec=WorkerManager))
+        feature_uuid, child_uuid, step_uuid, source_uuid = uuid4(), uuid4(), uuid4(), uuid4()
+        executor.init_compute_framework(
+            PythonDictFramework, ParallelizationMode.SYNC, {feature_uuid, child_uuid}, source_uuid
+        )
+        step = _own_frame_step(feature_uuid, frozenset({feature_uuid, child_uuid}), step_uuid)
+
+        executor.prepare_execute_step(step, ParallelizationMode.SYNC)
+
+        assert cfw_register.compute_frameworks[source_uuid] == ("PythonDictFramework", set())
+
+    def test_own_frame_step_without_a_resolvable_source_raises(self) -> None:
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.resolve_cfw_uuid_by_tfs_ids.return_value = None
+        cfw_register.get_cfw_uuid.return_value = None
+        cfw_register.get_run_context.return_value = RunContext()
+        executor = ComputeFrameworkExecutor(cfw_register, Mock(spec=WorkerManager))
+        compute_framework = Mock()
+        compute_framework.get_class_name.return_value = "TestCFW"
+        step = _own_frame_step(uuid4(), frozenset({uuid4()}), uuid4(), compute_framework)
+
+        with pytest.raises(ValueError, match="own frame"):
             executor.prepare_execute_step(step, ParallelizationMode.SYNC)
 
     def test_handles_transform_framework_step(self) -> None:
@@ -898,6 +962,7 @@ class TestPrepareTfsAndJoinStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
 
         result = executor.prepare_tfs_and_joinstep(step)
 
@@ -939,6 +1004,7 @@ class TestSyncExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = uuid4()
@@ -964,6 +1030,7 @@ class TestSyncExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = uuid4()
@@ -989,6 +1056,7 @@ class TestSyncExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = uuid4()
@@ -1019,6 +1087,7 @@ class TestSyncExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = uuid4()
@@ -1056,6 +1125,7 @@ class TestThreadExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = uuid4()
@@ -1084,6 +1154,7 @@ class TestThreadExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = uuid4()
@@ -1115,6 +1186,7 @@ class TestThreadExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = uuid4()
@@ -1139,6 +1211,7 @@ class TestThreadExecuteStep:
     def test_thread_worker_reports_error_without_reraising(self, error_type: type[BaseException]) -> None:
         cfw_register = Mock(spec=CfwManager)
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         boom = error_type("Test error")
         step.execute.side_effect = boom
 
@@ -1151,6 +1224,7 @@ class TestThreadExecuteStep:
         """A secret in the raised exception's text must not reach set_error's msg/exc_info."""
         cfw_register = Mock(spec=CfwManager)
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         boom = RuntimeError(_LEAK_MESSAGE)
         step.execute.side_effect = boom
 
@@ -1167,6 +1241,7 @@ class TestThreadExecuteStep:
         """A secret in the exception's __cause__ must not reach set_error's msg/exc_info either."""
         cfw_register = Mock(spec=CfwManager)
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         boom = RuntimeError("load failed")
         boom.__cause__ = RuntimeError(_LEAK_MESSAGE)
         step.execute.side_effect = boom
@@ -1191,6 +1266,7 @@ class TestMultiExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = uuid4()
@@ -1222,6 +1298,7 @@ class TestMultiExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = uuid4()
@@ -1259,6 +1336,7 @@ class TestMultiExecuteStep:
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = uuid4()
@@ -1287,6 +1365,7 @@ class TestMultiExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = uuid4()
@@ -1318,6 +1397,7 @@ class TestMultiExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = uuid4()
@@ -1347,6 +1427,7 @@ class TestMultiExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = uuid4()
@@ -1425,6 +1506,7 @@ class TestMultiExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = uuid4()

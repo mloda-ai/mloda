@@ -125,8 +125,9 @@ call has `isError` set and one error shape: `{"error": {"code", "message", "deta
 - A plugin marks a key it never wants from a caller (a base URL, an API key) with
   `PropertySpec(..., caller_settable=False)`. MCP requests and `mloda_describe_feature` refuse that key as
   `policy_denied` even when `allow_options` lists it, and describe shows `caller_settable: false`. The match is by key
-  name across all installed plugins, and it does not cover chained feature names. `[mcp.options]` defaults and the local
-  CLI may still set it.
+  name across all installed plugins. A planned feature name that binds the key through the plugin's name pattern is
+  refused too, even when `[mcp.options]` sets it, at `/features/<i>` for a requested name and `/features` for a planned
+  one. `[mcp.options]` defaults and the local CLI may still set it.
 - Denied FeatureGroups are disabled before matching, so their code does not run; the agent sees `policy_denied` and
   the alternatives you configured. Requested names, `index` columns, `in_features` source names and filter columns are
   checked before planning. Any planned feature name the deny list matches, such as a chained name over a denied

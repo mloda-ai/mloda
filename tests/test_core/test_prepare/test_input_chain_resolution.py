@@ -2,14 +2,25 @@
 
 from __future__ import annotations
 
+import traceback
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
-from mloda.provider import FeatureGroup
-from mloda.user import DataAccessCollection, Feature, ParallelizationMode, PluginCollector
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.abstract_plugins.hook_context import HookContext
+from mloda.provider import FeatureGroup, escalate_match_abort
+from mloda.user import (
+    DataAccessCollection,
+    Feature,
+    FeatureName,
+    Options,
+    ParallelizationMode,
+    PluginCollector,
+)
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from tests.test_core.test_prepare.input_chain_helpers import (
     CHOICE,
@@ -30,6 +41,7 @@ from tests.test_core.test_prepare.input_chain_helpers import (
     ChainLeaf2320,
     ChainMiddle2320,
     ChainOpen2320,
+    ChainStub2320,
     chain_access,
     prepare_chain,
     result_for,
@@ -194,3 +206,153 @@ def test_open_route_steps_aside_only_when_the_derived_chain_resolves(
     assert set(result.identified) == {ChainA2320 if state == "present" else ChainOpen2320}
     if state != "present":
         assert result.eliminations[ChainA2320].stage == "inputs"
+
+
+BAD_INPUT = "bad_input_chain_2320"
+
+
+def _raise_in_plugin_2320(error: Exception) -> None:
+    raise error
+
+
+class ChainSub2320(ChainB2320):
+    INPUTS = (MISSING,)
+
+
+class ChainBadMatcher2320(ChainStub2320):
+    """Matches only BAD_INPUT, and raises a marked abort when asked to."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        if str(feature_name) == BAD_INPUT:
+            raise escalate_match_abort(ValueError("matcher abort chain_2320"))
+        return False
+
+
+class ChainRaisingExtender2320(Extender):
+    """Raises on the FEATURE_GROUP_MATCHED hook for one feature name."""
+
+    def __init__(self, name: str) -> None:
+        self.priority = 100
+        self.name = "raising_extender_2320"
+        self.target = name
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_MATCHED}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        context = HookContext.current()
+        assert context is not None
+        if context.feature_names == (self.target,):
+            raise RuntimeError("extender failure chain_2320")
+        return func(*args, **kwargs)
+
+
+@pytest.mark.parametrize("with_source", [False, True], ids=["plain", "with-searched-source"])
+@pytest.mark.parametrize("where", ["input_features", "set_feature_name"])
+def test_a_sole_candidates_own_traceback_survives(
+    where: str, with_source: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    error = KeyError("plugin failure chain_2320")
+
+    def raising_frame_2320(*args: Any, **kwargs: Any) -> Any:
+        _raise_in_plugin_2320(error)
+
+    monkeypatch.setattr(ChainA2320, where, raising_frame_2320)
+    groups: set[type[FeatureGroup]] = {ChainA2320}
+    if with_source:
+        groups.add(ChainChecked2320)
+
+    with pytest.raises(KeyError) as caught:
+        prepare_chain(groups, access=chain_access(**{RAW_A: [1]}) if with_source else None)
+
+    assert caught.value is error
+    assert "_raise_in_plugin_2320" in "".join(traceback.format_exception(caught.value))
+
+
+def _failing_own_inputs(monkeypatch: pytest.MonkeyPatch, error: Exception) -> None:
+    def inputs(self: Any, options: Options, name: FeatureName) -> set[Feature]:
+        raise error
+
+    monkeypatch.setattr(ChainA2320, "input_features", inputs)
+
+
+def _connection_input(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ChainA2320, "INPUTS", (Feature(MISSING, connection=object()),))
+
+
+@pytest.mark.parametrize("case", ["own-abort", "input-matcher-abort", "connection", "match-extender"])
+def test_framework_errors_in_a_failing_chain_propagate(case: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    groups: set[type[FeatureGroup]] = {ChainA2320, ChainB2320, ChainLeaf2320}
+    extender: Extender | None = None
+    expected: Exception | None = None
+    if case == "own-abort":
+        expected = escalate_match_abort(ValueError("own abort chain_2320"))
+        _failing_own_inputs(monkeypatch, expected)
+    elif case == "input-matcher-abort":
+        monkeypatch.setattr(ChainA2320, "INPUTS", (BAD_INPUT,))
+        groups.add(ChainBadMatcher2320)
+    elif case == "connection":
+        _connection_input(monkeypatch)
+    else:
+        groups.add(ChainMiddle2320)
+        extender = ChainRaisingExtender2320(MISSING)
+
+    with pytest.raises((ValueError, RuntimeError)) as caught:
+        prepare_chain(groups, extender=extender)
+
+    assert not isinstance(caught.value, FeatureResolutionError)
+    if expected is not None:
+        assert caught.value is expected
+
+
+def test_an_unmarked_plain_error_in_a_failing_chain_is_contained(monkeypatch: pytest.MonkeyPatch) -> None:
+    _failing_own_inputs(monkeypatch, KeyError("plain chain_2320"))
+
+    result = result_for(prepare_chain({ChainA2320, ChainB2320, ChainLeaf2320}).resolution_report())
+
+    assert set(result.identified) == {ChainB2320}
+    assert result.eliminations[ChainA2320].stage == "inputs"
+
+
+@pytest.mark.parametrize("with_open_claim", [False, True], ids=["plain", "open-claim"])
+def test_subclass_takeover_is_final_and_narrows_before_chain_checks(
+    with_open_claim: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(ChainB2320, "INPUTS", (RAW_A,))
+    groups: set[type[FeatureGroup]] = {ChainB2320, ChainSub2320, ChainChecked2320}
+    access = chain_access(**{RAW_A: [1]})
+    if with_open_claim:
+        monkeypatch.setattr(ChainSub2320, "INPUTS", (Feature(MISSING, forward_group=False),))
+        groups.add(ChainOpen2320)
+        feature = Feature(CHOICE, options={ChainOpen2320.__name__: {SOURCE_KEY: {CHOICE: [11]}}})
+        result = result_for(prepare_chain(groups, feature=feature, access=access).resolution_report())
+        assert set(result.identified) == {ChainOpen2320}
+        assert result.eliminations[ChainSub2320].stage == "inputs"
+    else:
+        with pytest.raises(FeatureResolutionError) as caught:
+            prepare_chain(groups, access=access)
+        assert caught.value.feature_name == MISSING
+    assert PROBE_CALLS[ChainChecked2320, RAW_A] == 0
+
+
+@pytest.mark.parametrize("varies", ["plugins", "access"])
+def test_cached_chain_outcomes_do_not_cross_runs(varies: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ChainA2320, "INPUTS", (LEAF,) if varies == "plugins" else (RAW_A,))
+    monkeypatch.setattr(ChainB2320, "INPUTS", (MISSING,))
+    base: set[type[FeatureGroup]] = {ChainA2320, ChainB2320}
+    full: set[type[FeatureGroup]] = {*base, ChainLeaf2320} if varies == "plugins" else {*base, ChainChecked2320}
+    first_access = chain_access(**{RAW_A: [1]}) if varies == "access" else None
+    second_access = chain_access() if varies == "access" else None
+
+    first = result_for(prepare_chain(full, access=first_access).resolution_report())
+    with pytest.raises(FeatureResolutionError) as caught:
+        prepare_chain(base if varies == "plugins" else full, access=second_access)
+
+    assert set(first.identified) == {ChainA2320}
+    assert caught.value.result.eliminations[ChainA2320].stage == "inputs"

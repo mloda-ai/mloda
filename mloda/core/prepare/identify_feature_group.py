@@ -871,11 +871,10 @@ class IdentifyFeatureGroupClass:
         self._collect_candidates(feature, others, links, data_access_collection, identified)
         if sources:
             computing = [fg for fg in identified if fg not in self._output_parts]
-            computed = any(self._computes(fg, feature) for fg in sorted(computing, key=_candidate_sort_key))
+            narrowed = self.filter_subclasses({fg: identified[fg] for fg in computing})
+            computed = any(self._computes(fg, feature) for fg in sorted(narrowed, key=_candidate_sort_key))
             with computed_elsewhere_scope(str(feature.name) if computed else None):
                 self._collect_candidates(feature, sources, links, data_access_collection, identified)
-        if len(identified) > 1:
-            self._filter_input_chains(feature, identified)
         _identified_feature_groups = identified
 
         candidates = set(_identified_feature_groups)
@@ -892,6 +891,8 @@ class IdentifyFeatureGroupClass:
                 self._record_elimination(
                     fg, "name", "matched only as an output part; another group matches the whole name"
                 )
+        if len(_identified_feature_groups) > 1:
+            self._filter_input_chains(feature, _identified_feature_groups)
         self._drop_open_claims(feature, _identified_feature_groups)
         self._raise_unmasked_deferred_abort(feature, _identified_feature_groups)
         if len(_identified_feature_groups) == 1:
@@ -928,7 +929,7 @@ class IdentifyFeatureGroupClass:
         computing = any(
             self._declares_inputs(fg, feature)
             for fg in sorted(self._criteria_matched_feature_groups, key=_candidate_sort_key)
-            if fg not in self._input_refusals
+            if fg not in self._input_refusals and fg not in self._replaced
         )
         reading = [
             fg
@@ -960,7 +961,9 @@ class IdentifyFeatureGroupClass:
     ) -> list[type[FeatureGroup]]:
         return [
             fg
-            for fg in sorted(self._criteria_matched_feature_groups - excluding, key=_candidate_sort_key)
+            for fg in sorted(
+                self._criteria_matched_feature_groups - excluding - self._replaced, key=_candidate_sort_key
+            )
             if self._computes(fg, feature)
         ]
 
@@ -1012,12 +1015,24 @@ class IdentifyFeatureGroupClass:
 
     @staticmethod
     def _input_failure(error: Exception) -> InputChainOutcome:
-        refusals: tuple[Exception, ...] = ()
-        if isinstance(error, FeatureResolutionError):
-            refusals = error.refusals
-        elif is_match_abort(error) and isinstance(error.__cause__, Exception):
-            refusals = (error.__cause__,)
+        refusals = error.refusals if isinstance(error, FeatureResolutionError) else ()
         return InputChainOutcome(False, True, contained_raise_reason(error), refusals)
+
+    def _contain_own_raise(
+        self, exc: Exception, feature_group: type[FeatureGroup], feature: Feature
+    ) -> InputChainOutcome:
+        """Contain a resolution failure or an unmarked raise of the candidate's own hooks; other aborts propagate."""
+        if not isinstance(exc, FeatureResolutionError):
+            if is_match_abort(exc):
+                raise exc
+            logger.log(
+                contained_raise_log_level(exc),
+                "%s %s while resolving its inputs for '%s'; treating it as a non-match.",
+                safe_field(lambda: feature_group.get_class_name(), "<unnamed feature group>"),
+                contained_raise_reason(exc),
+                feature.name,
+            )
+        return self._input_failure(exc)
 
     def _input_chain(self, feature_group: type[FeatureGroup], feature: Feature) -> InputChainOutcome:
         """Try a candidate without adding graph nodes; a match abort only rejects this attempt."""
@@ -1034,14 +1049,20 @@ class IdentifyFeatureGroupClass:
         state.active.add(key)
         state.active_features.setdefault(feature_key, set()).add(key)
         try:
-            normalize_input_name(self._environment, attempted, feature_group(), output_part)
+            failure: InputChainOutcome | None = None
+            entries: tuple[Feature | str, ...] | None = None
             try:
-                entries = declared_inputs(self._environment, feature_group, attempted.options, attempted.name)
-            except NotImplementedError as exc:
-                if is_match_abort(exc):
-                    raise
-                entries = None
-            if entries is None:
+                normalize_input_name(self._environment, attempted, feature_group(), output_part)
+                try:
+                    entries = declared_inputs(self._environment, feature_group, attempted.options, attempted.name)
+                except NotImplementedError as exc:
+                    if is_match_abort(exc):
+                        raise
+            except Exception as exc:  # noqa: BLE001  (only the candidate's own naming/declaration raises are contained)
+                failure = self._contain_own_raise(exc, feature_group, feature)
+            if failure is not None:
+                outcome = failure
+            elif entries is None:
                 outcome = InputChainOutcome(True, False)
             else:
                 inputs = input_features_collection(feature_group, entries, attempted)
@@ -1067,8 +1088,6 @@ class IdentifyFeatureGroupClass:
                     pending.update(child.pending)
                 if outcome.viable:
                     outcome = replace(outcome, pending=frozenset(pending))
-        except Exception as exc:  # noqa: BLE001  (speculative chain boundary; final resolution still raises)
-            outcome = self._input_failure(exc)
         finally:
             state.active.remove(key)
             state.active_features[feature_key].remove(key)
@@ -1113,7 +1132,7 @@ class IdentifyFeatureGroupClass:
             child._matched_options[winner] = feature.options
             child._output_parts = result.output_parts
             return child._input_chain(winner, feature)
-        except Exception as exc:  # noqa: BLE001  (a failed input must not abort another candidate's attempt)
+        except FeatureResolutionError as exc:
             return self._input_failure(exc)
 
     def _declaration_requirement(

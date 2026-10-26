@@ -623,11 +623,16 @@ def _initialize(tmp_path: Path, headers: Mapping[str, str], host: str = "127.0.0
 
 
 class TestCreateApp:
-    def test_returns_a_starlette_app(self, tmp_path: Path) -> None:
+    def test_returns_a_starlette_app(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from starlette.applications import Starlette
 
         from mloda.interfaces.mcp.server import create_app
 
+        def scoped_services(settings: Settings, **_kwargs: Any) -> tuple[Catalog, Planner, Runner]:
+            return _services(settings)
+
+        # Keep app construction scoped to the test's explicitly enabled plugins.
+        monkeypatch.setattr("mloda.interfaces.cli.main.build_services", scoped_services)
         assert isinstance(create_app(_settings(tmp_path), env=ENV), Starlette)
 
     @pytest.mark.parametrize("host", ["127.0.0.1:8000", "localhost:8000", "localhost"])

@@ -86,6 +86,12 @@ NAME_PATH_PRESENCE_GUARD_DEPTH: contextvars.ContextVar[int] = contextvars.Contex
 )
 
 
+def _effective_prefix_patterns(owner: type[Any]) -> list[Any]:
+    """Read the overridable pattern hook, degrading to no patterns as ``name_bindings`` does."""
+    patterns: list[Any] = safe_field(owner._get_prefix_patterns, [])
+    return patterns
+
+
 def _pattern_named_and_total_groups(pattern: Any) -> tuple[frozenset[str], int]:
     """The named group names and total group count of a pattern; an uncompilable pattern reports neither."""
     if isinstance(pattern, re.Pattern):
@@ -135,7 +141,7 @@ def validate_name_binding(owner: type[Any]) -> None:
     if not isinstance(property_mapping, dict):
         return
 
-    patterns = FeatureChainParser.prefix_patterns_of(owner)
+    patterns = _effective_prefix_patterns(owner)
     if not patterns:
         return
 
@@ -177,7 +183,7 @@ def warn_captureless_without_binding(owner: type[Any]) -> None:
     property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
     if not isinstance(property_mapping, dict) or not property_mapping:
         return
-    patterns = FeatureChainParser.prefix_patterns_of(owner)
+    patterns = _effective_prefix_patterns(owner)
     if not patterns:
         return
     for pattern in _flatten_patterns(patterns):
@@ -313,7 +319,7 @@ def warn_missing_in_features_declaration(owner: type[Any], mixin: type[Any]) -> 
     minimum = owner.MIN_IN_FEATURES
     if not isinstance(minimum, int) or minimum < 1:
         return
-    if FeatureChainParser.prefix_patterns_of(owner):
+    if _effective_prefix_patterns(owner):
         return
     if getattr(owner, "input_features", None) is not getattr(mixin, "input_features", None):
         return
@@ -523,7 +529,7 @@ def install_required_when_guard(owner: type[Any]) -> None:
             return check_required_when(
                 guarded_cls.__name__,
                 feature_name,
-                FeatureChainParser.prefix_patterns_of(guarded_cls),
+                _effective_prefix_patterns(guarded_cls),
                 getattr(guarded_cls, "PROPERTY_MAPPING", None),
                 options,
             )
@@ -560,7 +566,7 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
     if not isinstance(property_mapping, dict):
         return
     plain = not getattr(owner, CHAIN_PARSER_MIXIN_MARKER, False)
-    has_patterns = bool(FeatureChainParser.prefix_patterns_of(owner))
+    has_patterns = bool(_effective_prefix_patterns(owner))
     if not plain and not has_patterns:
         return
     # Same exemptions as the inner rule: with empty options, the missing keys ARE the flaggable ones.
@@ -621,7 +627,7 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
             # an exception, so the parse is contained as in build_effective_options; re.error is
             # additionally caught here because a malformed pattern must degrade to a non-match
             # of the name path, never veto the inner verdict (#868).
-            patterns = _flatten_patterns(FeatureChainParser.prefix_patterns_of(guarded_cls))
+            patterns = _flatten_patterns(_effective_prefix_patterns(guarded_cls))
             resolution = safe_field(
                 lambda: FeatureChainParser.resolve_name(feature_name, patterns, mapping),
                 NameResolution.miss(),

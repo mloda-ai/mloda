@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.components.feature_chainer import feature_chain
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.provider import DefaultOptionKeys, PropertySpec
+from mloda.provider import DefaultOptionKeys, PropertySpec, property_spec
 
 AUTHOR_GUARDS_LOGGER = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards"
 FIX_WORDING = "MIN_IN_FEATURES = 0"
@@ -46,6 +46,29 @@ def _missing_in_features_warnings(caplog: pytest.LogCaptureFixture, class_name: 
 
 class TestMissingInFeaturesWarns:
     """The guard warns when an absent in_features counts as zero sources."""
+
+    @pytest.mark.parametrize("has_patterns", [True, False], ids=["override-only", "removed"])
+    def test_source_contract_warning_uses_overridden_patterns(
+        self, has_patterns: bool, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        pattern = r".*__(?P<operation_source_r2353>run)_source_r2353$"
+        with caplog.at_level(logging.WARNING):
+
+            class _SourcePatternOverrideR2353(FeatureChainParserMixin):
+                PREFIX_PATTERN = None if has_patterns else pattern
+                PROPERTY_MAPPING = {
+                    "operation_source_r2353": property_spec("Operation", allowed_values=("run",), strict=True)
+                }
+
+                @classmethod
+                def _get_prefix_patterns(cls) -> list[str]:
+                    return [pattern] if has_patterns else []
+
+        assert (
+            _SourcePatternOverrideR2353.match_feature_group_criteria("src__run_source_r2353", Options()) is has_patterns
+        )
+        warnings = _missing_in_features_warnings(caplog, "_SourcePatternOverrideR2353")
+        assert len(warnings) == (0 if has_patterns else 1)
 
     def test_no_pattern_group_warns_with_fix_wording(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.WARNING):

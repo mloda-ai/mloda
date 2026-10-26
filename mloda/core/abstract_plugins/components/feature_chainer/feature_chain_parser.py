@@ -607,7 +607,7 @@ class FeatureChainParser:
 
     @classmethod
     def prefix_patterns_of(cls, owner: type[Any]) -> list[Any]:
-        """Collect the name patterns a class matches on. The single implementation the mixin uses too.
+        """Collect PREFIX_PATTERN and SUFFIX_PATTERN for the default ``_get_prefix_patterns`` hook.
 
         A pattern is a ``str`` or compiled ``re.Pattern`` that must match the whole name (``re.fullmatch``).
         Filtering by type would hide a compiled pattern from the guard while the matcher still matches

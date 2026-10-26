@@ -27,7 +27,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name 
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import PropertySpec
+from mloda.provider import PropertySpec, property_spec
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
@@ -582,6 +582,40 @@ class TestNameResolution:
 
 class TestDefinitionTimeAmbiguity:
     """Legacy positional binding over intersecting value spaces is order-dependent: reject it at definition."""
+
+    def test_override_only_positional_pattern_rejects_overlapping_values(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+
+            class _OverriddenPositionalR2353(FeatureChainParserMixin):
+                PROPERTY_MAPPING = {
+                    ALGORITHM_KEY: property_spec("Algorithm", allowed_values=("pca", "shared_r2353")),
+                    SOLVER_KEY: property_spec("Solver", allowed_values=("shared_r2353", "auto")),
+                }
+
+                @classmethod
+                def _get_prefix_patterns(cls) -> list[str]:
+                    return [r".*__(\w+)_override_positional_r2353$"]
+
+        message = str(exc_info.value)
+        assert "_OverriddenPositionalR2353" in message
+        assert ALGORITHM_KEY in message and SOLVER_KEY in message
+        assert "shared_r2353" in message
+        assert "(?P<" in message
+
+    def test_named_override_replaces_an_ambiguous_raw_pattern(self) -> None:
+        class _ReplacedPositionalR2353(FeatureChainParserMixin):
+            PREFIX_PATTERN = r".*__(\w+)_discarded_positional_r2353$"
+            PROPERTY_MAPPING = {
+                ALGORITHM_KEY: property_spec("Algorithm", allowed_values=("pca", "shared_r2353")),
+                SOLVER_KEY: property_spec("Solver", allowed_values=("shared_r2353", "auto")),
+            }
+
+            @classmethod
+            def _get_prefix_patterns(cls) -> list[str]:
+                return [rf".*__(?P<{ALGORITHM_KEY}>\w+)_(?P<{SOLVER_KEY}>\w+)_replacement_r2353$"]
+
+        resolution = _ReplacedPositionalR2353.resolve_feature_name("src__shared_r2353_auto_replacement_r2353")
+        assert resolution.bindings == {ALGORITHM_KEY: "shared_r2353", SOLVER_KEY: "auto"}
 
     def test_positional_capture_with_overlapping_value_spaces_raises(self) -> None:
         """Two keys reachable by the same captured string make the binding a guess."""

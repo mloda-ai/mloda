@@ -737,9 +737,9 @@ class FeatureChainParserMixin:
 
     @classmethod
     def _get_prefix_patterns(cls) -> list[Any]:
-        """Get prefix/suffix patterns from class attributes.
+        """Get prefix/suffix patterns from class attributes by default.
 
-        Delegates to the guard's own collector, so matcher and guard can never see different patterns.
+        Subclasses may override this hook; matching and author guards use its effective patterns.
         """
         return FeatureChainParser.prefix_patterns_of(cls)
 

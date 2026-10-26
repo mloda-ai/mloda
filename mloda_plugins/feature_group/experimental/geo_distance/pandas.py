@@ -37,6 +37,11 @@ class PandasGeoDistance(Implementation[GeoDistanceFeatureGroup]):
         data[feature_name] = result
         return data
 
+    @staticmethod
+    def _coord(series: Any, idx: int) -> Any:
+        """Extract the idx-th coordinate; a missing point yields NaN."""
+        return series.apply(lambda p: p[idx] if isinstance(p, (tuple, list)) else float("nan"))
+
     @classmethod
     def _calculate_distance(cls, data: Any, distance_type: str, point1_feature: str, point2_feature: str) -> Any:
         """
@@ -81,10 +86,10 @@ class PandasGeoDistance(Implementation[GeoDistanceFeatureGroup]):
 
         # Extract coordinates
         # Assuming each point feature contains (latitude, longitude) as a tuple or list
-        lat1 = data[point1_feature].apply(lambda p: p[0])
-        lon1 = data[point1_feature].apply(lambda p: p[1])
-        lat2 = data[point2_feature].apply(lambda p: p[0])
-        lon2 = data[point2_feature].apply(lambda p: p[1])
+        lat1 = cls._coord(data[point1_feature], 0)
+        lon1 = cls._coord(data[point1_feature], 1)
+        lat2 = cls._coord(data[point2_feature], 0)
+        lon2 = cls._coord(data[point2_feature], 1)
 
         # Convert degrees to radians
         lat1_rad = np.radians(lat1)
@@ -119,10 +124,10 @@ class PandasGeoDistance(Implementation[GeoDistanceFeatureGroup]):
         """
         # Extract coordinates
         # Assuming each point feature contains (x, y) as a tuple or list
-        x1 = data[point1_feature].apply(lambda p: p[0])
-        y1 = data[point1_feature].apply(lambda p: p[1])
-        x2 = data[point2_feature].apply(lambda p: p[0])
-        y2 = data[point2_feature].apply(lambda p: p[1])
+        x1 = cls._coord(data[point1_feature], 0)
+        y1 = cls._coord(data[point1_feature], 1)
+        x2 = cls._coord(data[point2_feature], 0)
+        y2 = cls._coord(data[point2_feature], 1)
 
         # Calculate Euclidean distance
         distance = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
@@ -146,10 +151,10 @@ class PandasGeoDistance(Implementation[GeoDistanceFeatureGroup]):
         """
         # Extract coordinates
         # Assuming each point feature contains (x, y) as a tuple or list
-        x1 = data[point1_feature].apply(lambda p: p[0])
-        y1 = data[point1_feature].apply(lambda p: p[1])
-        x2 = data[point2_feature].apply(lambda p: p[0])
-        y2 = data[point2_feature].apply(lambda p: p[1])
+        x1 = cls._coord(data[point1_feature], 0)
+        y1 = cls._coord(data[point1_feature], 1)
+        x2 = cls._coord(data[point2_feature], 0)
+        y2 = cls._coord(data[point2_feature], 1)
 
         # Calculate Manhattan distance
         distance = np.abs(x2 - x1) + np.abs(y2 - y1)

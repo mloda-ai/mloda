@@ -8,7 +8,7 @@ The mloda framework uses a sophisticated matching system to determine which feat
 
 When a feature is requested, the system checks all available feature groups to find the one that should handle the feature. This is done through the `match_feature_group_criteria` method in each feature group, which now typically uses the unified parser approach. Feature and column names match case-sensitively; see [Column name case sensitivity](compute-framework-integration.md#column-name-case-sensitivity).
 
-`match_feature_group_criteria` checks name fit only. Declare dependencies in `input_features`; a derived group's match hook does not need to scan readers or call `has_source`.
+`match_feature_group_criteria` checks name fit only. Declare dependencies in `input_features`; a derived group's match hook does not need to scan readers or call `has_source`. Resolution caches `input_features` per run, so its result should depend only on its options and feature name.
 
 When several candidates remain after subclass takeover and whole-name narrowing, resolution checks each one's input chain in the run's environment. A candidate with an unresolvable input is eliminated with stage `inputs`, and one viable candidate wins; a subclass takeover is final, and a sole candidate reports a failure at its actual dependency.
 
@@ -35,7 +35,7 @@ To report why a `match_guard` declined a value without overriding `match_feature
 
 Containment covers plugin raises only: a framework-owned raise (a forwarded value contradicting the feature name, a rejected effective-options build) still aborts the whole resolution, because it reports a misconfiguration you have to fix. To make a plugin raise behave like one, `escalate_match_abort(exc)` marks the raise and returns the same exception, and `is_match_abort(exc)` reports whether the mark is present (both from `mloda.provider`); this is the supported way to escalate a match-time misconfiguration.
 
-During a candidate's input-chain attempt, only a `FeatureResolutionError` from an input and an unmarked raise of the candidate's own `input_features` or `set_feature_name` (logged) are contained; marked match aborts, framework validation errors and `FEATURE_GROUP_MATCHED` extender raises still abort resolution.
+During a candidate's input-chain attempt, only a `FeatureResolutionError` from an input (a missing input, a rejection, or a source refusal, pointed or not) and an unmarked raise of the candidate's own `input_features` or `set_feature_name` (logged) are contained; marked match aborts, framework validation errors and `FEATURE_GROUP_MATCHED` extender raises still abort resolution.
 
 Filter matching contains the same way: a raise is a non-match for that probe, like a `False` return, and is recorded in `GlobalFilter.dropped_filters` as a `match hook` near-miss, as is a typed decline the matcher records; a framework-owned raise still aborts. Every entry names the gate that dropped the filter and that gate's reason. [How filters reach your FeatureGroup](filter_data.md#how-filters-reach-your-featuregroup) tables the gates the two paths share and where filter policy differs.
 

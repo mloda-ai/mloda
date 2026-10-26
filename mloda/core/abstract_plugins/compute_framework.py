@@ -1182,10 +1182,15 @@ class ComputeFramework(ABC):
         if isinstance(features, FeatureSet):
             features.materialize_option_defaults(feature_group)
 
+        collapse = features.one_feature_per_name() if isinstance(features, FeatureSet) else contextlib.nullcontext()
         try:
-            return self._run_hook(
-                ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE, feature_group, feature_group.calculate_feature, features
-            )
+            with collapse:
+                return self._run_hook(
+                    ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+                    feature_group,
+                    feature_group.calculate_feature,
+                    features,
+                )
         except KeyError as e:
             # Provide helpful error message for missing columns
             self._raise_helpful_missing_column_error(feature_group, e)

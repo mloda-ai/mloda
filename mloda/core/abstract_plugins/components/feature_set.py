@@ -1,10 +1,13 @@
 from collections import Counter
+from collections.abc import Iterator
+from contextlib import contextmanager
+from copy import copy
 from typing import TYPE_CHECKING, Any, Iterable
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.validators.feature_set_validator import FeatureSetValidator
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import InputCheck
@@ -213,6 +216,56 @@ class FeatureSet:
             self.declared_input_feature_names = None
             self.declared_input_feature_edges = None
             self.declared_input_columns = None
+
+    @contextmanager
+    def one_feature_per_name(self) -> Iterator[None]:
+        """Temporarily collapse same-named features into one merged stand-in; self.features is restored on exit."""
+        by_name: dict[str, list[Feature]] = {}
+        for feature in self.features:
+            by_name.setdefault(str(feature.name), []).append(feature)
+        if all(len(twins) == 1 for twins in by_name.values()):
+            yield
+            return
+        collapsed: set[Feature] = set()
+        for twins in by_name.values():
+            merged = self._merge_twins(twins) if len(twins) > 1 else None
+            collapsed.update(twins if merged is None else [merged])
+        original = self.features
+        self.features = collapsed
+        try:
+            yield
+        finally:
+            self.features = original
+
+    @staticmethod
+    def _merge_twins(twins: list[Feature]) -> Feature | None:
+        """Return one stand-in for twins whose group, context and data_type agree, else None."""
+        ordered = sorted(twins, key=lambda f: (not f.initial_requested_data, f.data_type is None, str(f.uuid)))
+        context: dict[Any, Any] = {}
+        for twin in ordered:
+            if twin.options.group != ordered[0].options.group:
+                return None
+            for key, value in twin.options.context.items():
+                if key in context and not _deep_equal(context[key], value):
+                    return None
+                context[key] = value
+        if len({f.data_type for f in ordered if f.data_type is not None}) > 1:
+            return None
+        merged = copy(ordered[0])
+        for key, value in context.items():
+            merged.options.context.setdefault(key, value)
+        if merged.data_type is None:
+            merged.data_type = next((f.data_type for f in ordered if f.data_type is not None), None)
+        for other in ordered[1:]:
+            merged.absorb_parts(other)
+            if not other.link_key_only:
+                merged.link_key_only = False
+            merged.absorb_result_index_columns(other)
+            if not (merged.initial_requested_data or other.initial_requested_data):
+                mine, theirs = merged.result_parts, other.result_parts
+                merged.result_parts = None if mine is None or theirs is None else mine | theirs
+            merged.initial_requested_data = merged.initial_requested_data or other.initial_requested_data
+        return merged
 
     def get_all_feature_ids(self) -> set[UUID]:
         return {feature.uuid for feature in self.features}

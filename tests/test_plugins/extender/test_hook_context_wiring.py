@@ -7,6 +7,7 @@ run_context/worker_index surfacing on the captured HookContext.
 
 import functools
 import gc
+import importlib
 import logging
 from pathlib import Path
 from typing import Any
@@ -919,7 +920,7 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
 
 
 class TestImplementationIdentityOnCalculateFeature:
-    """A source group step's calculate hook names its implementation and version; other steps leave both None."""
+    """Source group and operation group steps carry the implementation and version; plain groups leave both None."""
 
     def _calculate_context(self, column: str, group: type, dac: Any) -> HookContext:
         extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
@@ -957,3 +958,30 @@ class TestImplementationIdentityOnCalculateFeature:
         assert extender.captured is not None
         assert extender.captured.implementation is None
         assert extender.captured.implementation_version is None
+
+    @pytest.mark.parametrize(
+        "framework_name, impl_name", [("PandasDataFrame", "OpToyPandas"), ("PyArrowTable", "OpToyPyArrow")]
+    )
+    def test_operation_step_carries_path_and_version(self, framework_name: str, impl_name: str) -> None:
+        toy = importlib.import_module(
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+        )
+        impl: Any = getattr(toy, impl_name)
+        extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        validate_output = _ContextCapturingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
+
+        mloda.run_all(
+            [Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"}, compute_framework=framework_name)],
+            compute_frameworks=["PandasDataFrame", "PyArrowTable"],
+            plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyFG}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender, validate_output},
+        )
+
+        assert extender.captured is not None
+        assert extender.captured.feature_group_class == f"{toy.OpToyFG.__module__}.{toy.OpToyFG.__qualname__}"
+        assert extender.captured.implementation == f"{impl.__module__}:{impl.__qualname__}"
+        assert extender.captured.implementation_version == impl.version()
+        assert validate_output.captured is not None
+        assert validate_output.captured.implementation == extender.captured.implementation
+        assert validate_output.captured.implementation_version == extender.captured.implementation_version

@@ -20,6 +20,7 @@ import pytest
 from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.version import get_mloda_version
 from mloda.interfaces.cli.main import build_services, main
 from mloda.interfaces.service.catalog import Catalog
 from mloda.interfaces.service.config import Settings, load_settings
@@ -835,6 +836,13 @@ class TestUsage:
         assert "usage" in printed.lower()
         assert "explain" in printed
         assert "run" in printed
+
+    def test_version_prints_installed_version_and_exits_0(self) -> None:
+        outcome = _cli(["--version"])
+
+        assert outcome.code == 0
+        assert outcome.out == f"mloda {get_mloda_version()}\n"
+        assert outcome.err == ""
 
     def test_subcommand_help_exits_0(self, capsys: pytest.CaptureFixture[str]) -> None:
         outcome = _cli(["run", "--help"])

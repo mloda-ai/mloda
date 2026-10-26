@@ -155,6 +155,7 @@ Not yet: paging through full results, approvals, cancellation, and remote HTTP w
 ## Command line
 
 ```bash
+mloda --version                     # report the installed package version
 mloda explain request.json        # the same JSON as mloda_explain_request
 mloda run request.json --max-rows 100000 --format jsonl
 cat request.json | mloda explain -

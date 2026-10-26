@@ -14,7 +14,7 @@ import pytest
 from mloda.interfaces.cli.main import _parser, main
 
 ROOT_HELP = """\
-usage: mloda [-h] {explain,run,mcp} ...
+usage: mloda [-h] [--version] {explain,run,mcp} ...
 
 Explain, run or serve mloda feature requests.
 
@@ -26,6 +26,7 @@ positional arguments:
 
 options:
   -h, --help         show this help message and exit
+  --version          show program's version number and exit
 """
 
 EXPLAIN_USAGE = """\
@@ -129,7 +130,7 @@ MCP_SERVE_DEFAULTS: dict[str, Any] = {
     "port": 8000,
 }
 
-ROOT_USAGE = "usage: mloda [-h] {explain,run,mcp} ...\n"
+ROOT_USAGE = "usage: mloda [-h] [--version] {explain,run,mcp} ...\n"
 
 
 @pytest.fixture(autouse=True)

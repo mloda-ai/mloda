@@ -675,15 +675,17 @@ class TestRowReducingGroupBatching(_ReducerRunHelpers):
 
         assert self._column(frames, "joined_sum") == [[30, 40]]
 
-    @pytest.mark.parametrize("request_names", [["raw_plus_one"], ["red_sum", "red_count"]], ids=["plain", "reducing"])
+    @pytest.mark.parametrize(
+        "features",
+        [
+            [Feature("raw_plus_one")],
+            [Feature.int32_of("red_sum"), Feature.int64_of("red_sum"), Feature("red_count")],
+        ],
+        ids=["plain", "reducing"],
+    )
     def test_every_frame_is_released_after_the_run(
-        self, request_names: list[str], modes: set[ParallelizationMode], flight_server: Any
+        self, features: list[Feature], modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
-        if request_names == ["raw_plus_one"]:
-            features = [Feature("raw_plus_one")]
-        else:
-            features = [Feature.int32_of("red_sum"), Feature.int64_of("red_sum"), Feature("red_count")]
-
         run_result = self._run_result(features, modes, flight_server, extra_groups={RawPlusOne})
 
         assert all(cfw.data is None for cfw in run_result.runner.executor.cfw_collection.values())

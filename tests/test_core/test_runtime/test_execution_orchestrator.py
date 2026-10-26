@@ -634,11 +634,11 @@ class _ChainReducingChildFG(_ChainChildFG):
         return True
 
 
-def _chain_plan() -> Any:
+def _chain_plan(child: type[FeatureGroup] = _ChainChildFG) -> Any:
     session = mloda.prepare(
-        [Feature(name="_ChainChildFG")],
+        [Feature(name=child.__name__)],
         compute_frameworks=["PythonDictFramework"],
-        plugin_collector=PluginCollector.enabled_feature_groups({_ChainRootFG, _ChainChildFG}),
+        plugin_collector=PluginCollector.enabled_feature_groups({_ChainRootFG, child}),
         parallelization_modes={ParallelizationMode.MULTIPROCESSING},
     )
     assert session.engine is not None
@@ -664,15 +664,7 @@ class TestPlannedWorkerCount:
         assert planned_worker_count(_chain_plan(), {ParallelizationMode.MULTIPROCESSING}) == 1
 
     def test_own_frame_step_counts_as_its_own_worker(self) -> None:
-        session = mloda.prepare(
-            [Feature(name="_ChainReducingChildFG")],
-            compute_frameworks=["PythonDictFramework"],
-            plugin_collector=PluginCollector.enabled_feature_groups({_ChainRootFG, _ChainReducingChildFG}),
-            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
-        )
-        assert session.engine is not None
-
-        assert planned_worker_count(session.engine.execution_planner, {ParallelizationMode.MULTIPROCESSING}) == 2
+        assert planned_worker_count(_chain_plan(_ChainReducingChildFG), {ParallelizationMode.MULTIPROCESSING}) == 2
 
 
 class TestEnterPrestartsStandbyWorkers:

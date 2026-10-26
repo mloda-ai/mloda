@@ -575,6 +575,22 @@ class TestGetExecutionFunction:
         assert result == executor.sync_execute_step
 
 
+def _own_frame_step(
+    feature_uuid: UUID, children: frozenset[UUID], step_uuid: UUID, compute_framework: Any = PythonDictFramework
+) -> Mock:
+    step = Mock(spec=FeatureGroupStep)
+    step.own_frame = True
+    step.uuid = step_uuid
+    step.tfs_ids = set()
+    step.join_tokens = frozenset()
+    step.reads_join_result = False
+    step.compute_framework = compute_framework
+    step.features = Mock()
+    step.features.any_uuid = feature_uuid
+    step.children_if_root = children
+    return step
+
+
 class TestPrepareExecuteStep:
     """Tests for prepare_execute_step method."""
 
@@ -681,16 +697,7 @@ class TestPrepareExecuteStep:
         executor.init_compute_framework(
             PythonDictFramework, ParallelizationMode.SYNC, {feature_uuid, child_uuid, other_uuid}, source_uuid
         )
-        step = Mock(spec=FeatureGroupStep)
-        step.own_frame = True
-        step.uuid = step_uuid
-        step.tfs_ids = set()
-        step.join_tokens = frozenset()
-        step.reads_join_result = False
-        step.compute_framework = PythonDictFramework
-        step.features = Mock()
-        step.features.any_uuid = feature_uuid
-        step.children_if_root = frozenset({feature_uuid, child_uuid})
+        step = _own_frame_step(feature_uuid, frozenset({feature_uuid, child_uuid}), step_uuid)
 
         assert executor.prepare_execute_step(step, ParallelizationMode.SYNC) == step_uuid
 
@@ -707,16 +714,7 @@ class TestPrepareExecuteStep:
         executor.init_compute_framework(
             PythonDictFramework, ParallelizationMode.SYNC, {feature_uuid, child_uuid}, source_uuid
         )
-        step = Mock(spec=FeatureGroupStep)
-        step.own_frame = True
-        step.uuid = step_uuid
-        step.tfs_ids = set()
-        step.join_tokens = frozenset()
-        step.reads_join_result = False
-        step.compute_framework = PythonDictFramework
-        step.features = Mock()
-        step.features.any_uuid = feature_uuid
-        step.children_if_root = frozenset({feature_uuid, child_uuid})
+        step = _own_frame_step(feature_uuid, frozenset({feature_uuid, child_uuid}), step_uuid)
 
         executor.prepare_execute_step(step, ParallelizationMode.SYNC)
 
@@ -728,17 +726,9 @@ class TestPrepareExecuteStep:
         cfw_register.get_cfw_uuid.return_value = None
         cfw_register.get_run_context.return_value = RunContext()
         executor = ComputeFrameworkExecutor(cfw_register, Mock(spec=WorkerManager))
-        step = Mock(spec=FeatureGroupStep)
-        step.own_frame = True
-        step.uuid = uuid4()
-        step.tfs_ids = set()
-        step.join_tokens = frozenset()
-        step.reads_join_result = False
-        step.compute_framework = Mock()
-        step.compute_framework.get_class_name.return_value = "TestCFW"
-        step.features = Mock()
-        step.features.any_uuid = uuid4()
-        step.children_if_root = frozenset({uuid4()})
+        compute_framework = Mock()
+        compute_framework.get_class_name.return_value = "TestCFW"
+        step = _own_frame_step(uuid4(), frozenset({uuid4()}), uuid4(), compute_framework)
 
         with pytest.raises(ValueError, match="own frame"):
             executor.prepare_execute_step(step, ParallelizationMode.SYNC)

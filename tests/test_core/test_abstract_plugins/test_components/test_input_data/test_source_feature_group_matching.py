@@ -18,7 +18,12 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import featur
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import (
     SourcePointerError,
 )
-from mloda.core.abstract_plugins.components.match_rejection import MatchRejection, collect_match_rejections
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_STAGE,
+    MatchRejection,
+    collect_match_rejections,
+    record_match_rejection,
+)
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -195,6 +200,87 @@ class _RequiredDeclaredFG(ToyDeclaredFG):
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
         ClaimRoute("toy", NamePolicy.DECLARED, True, required_options=("toyfmt_required",)),
     )
+
+
+def _spy_declared_group(calls: list[str], record: bool = True) -> type[ToyDeclaredFG]:
+    class ToyfmtSpyDeclaredFG(ToyDeclaredFG):
+        @classmethod
+        def find_sources(
+            cls,
+            route: ClaimRoute,
+            feature_name: str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None,
+        ) -> list[SourceMatch]:
+            calls.append(feature_name)
+            if record:
+                record_match_rejection(cls.get_class_name(), "credential check failed", INPUT_DATA_STAGE)
+            return super().find_sources(route, feature_name, options, data_access_collection)
+
+    return ToyfmtSpyDeclaredFG
+
+
+class TestDeclaredNamesProbeOnlyDeclaredNames:
+    @pytest.mark.parametrize(
+        "options", [{}, {"ToyOtherSourceFG": {"other_connector__rows": [1]}}], ids=["unpointed", "foreign_pointer"]
+    )
+    def test_an_undeclared_unpointed_name_never_probes_or_records(self, options: dict[str, Any]) -> None:
+        calls: list[str] = []
+        group = _spy_declared_group(calls)
+        feature = Feature("other_connector__rows", Options(options))
+        result = _identify(feature, toy_dac(h1={COL: [1]}), group, ToyOtherSourceFG)
+
+        assert calls == []
+        assert group not in result.eliminations
+        assert group not in result.identified
+        del group, result, feature
+        gc.collect()
+
+    def test_a_declared_name_still_probes_and_claims(self) -> None:
+        calls: list[str] = []
+        group = _spy_declared_group(calls)
+        result = _identify(Feature("toyfmt_declared_col"), toy_dac(h1={COL: [1]}), group)
+
+        assert calls == ["toyfmt_declared_col"]
+        assert group in result.identified
+        del group, result
+        gc.collect()
+
+    def test_a_pointed_undeclared_name_still_probes_and_records_the_undeclared_reason(self) -> None:
+        calls: list[str] = []
+        group = _spy_declared_group(calls, record=False)
+        feature = Feature("toyfmt_undeclared", Options({group.get_class_name(): {COL: [1]}}))
+        result = _identify(feature, None, group)
+
+        assert calls != []
+        assert group not in result.identified
+        assert "is not a name ToyfmtSpyDeclaredFG declares" in result.eliminations[group].reason
+        del group, result, feature
+        gc.collect()
+
+    def test_a_required_option_declared_route_skips_an_undeclared_name(self) -> None:
+        calls: list[str] = []
+
+        class ToyfmtSpyRequiredFG(_RequiredDeclaredFG):
+            @classmethod
+            def find_sources(
+                cls,
+                route: ClaimRoute,
+                feature_name: str,
+                options: Options,
+                data_access_collection: DataAccessCollection | None,
+            ) -> list[SourceMatch]:
+                calls.append(feature_name)
+                record_match_rejection(cls.get_class_name(), "credential check failed", INPUT_DATA_STAGE)
+                return []
+
+        feature = Feature("other_connector__rows", Options({"toyfmt_required": 1}))
+        result = _identify(feature, toy_dac(h1={COL: [1]}), ToyfmtSpyRequiredFG)
+
+        assert calls == []
+        assert ToyfmtSpyRequiredFG not in result.eliminations
+        del ToyfmtSpyRequiredFG, result, feature
+        gc.collect()
 
 
 class TestRequiredOptionRoute:
@@ -1458,6 +1544,18 @@ class TestHasSource:
                 assert group.has_source(Options(options), dac, COL) is expected
 
         assert outer == {}
+
+    def test_an_undeclared_name_on_an_unpointed_declared_group_is_not_probed(self) -> None:
+        calls: list[str] = []
+        group = _spy_declared_group(calls)
+
+        with collect_match_rejections() as outer:
+            assert group.has_source(Options({}), toy_dac(h1=_COLS), "other_connector__rows") is False
+
+        assert calls == []
+        assert outer == {}
+        del group
+        gc.collect()
 
     def test_a_true_probe_checks_no_name_and_leaves_the_options_untouched(self) -> None:
         options = Options({"toyfmt_required": 1})

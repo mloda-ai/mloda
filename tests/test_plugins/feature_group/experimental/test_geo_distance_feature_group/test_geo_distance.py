@@ -2,6 +2,8 @@
 Tests for the GeoDistanceFeatureGroup.
 """
 
+from typing import Any
+
 import pandas as pd
 import pytest
 
@@ -294,8 +296,8 @@ class TestPandasGeoDistance:
         """A missing point produces NaN for that row; other rows are unaffected."""
         df = pd.DataFrame(
             {
-                "a": [(52.5, 13.4), None, (48.1, 11.6)],
-                "b": [(48.1, 11.6), (48.1, 11.6), None],
+                "a": [(52.5, 13.4), None, (48.1, 11.6), float("nan"), pd.NA],
+                "b": [(48.1, 11.6), (48.1, 11.6), None, (48.1, 11.6), (48.1, 11.6)],
             }
         )
 
@@ -303,13 +305,28 @@ class TestPandasGeoDistance:
         assert not pd.isna(haversine.iloc[0])
         assert pd.isna(haversine.iloc[1])
         assert pd.isna(haversine.iloc[2])
+        assert pd.isna(haversine.iloc[3])
+        assert pd.isna(haversine.iloc[4])
 
         euclidean = PandasGeoDistance._calculate_euclidean_distance(df, "a", "b")
         assert not pd.isna(euclidean.iloc[0])
         assert pd.isna(euclidean.iloc[1])
         assert pd.isna(euclidean.iloc[2])
+        assert pd.isna(euclidean.iloc[3])
+        assert pd.isna(euclidean.iloc[4])
 
         manhattan = PandasGeoDistance._calculate_manhattan_distance(df, "a", "b")
         assert not pd.isna(manhattan.iloc[0])
         assert pd.isna(manhattan.iloc[1])
         assert pd.isna(manhattan.iloc[2])
+        assert pd.isna(manhattan.iloc[3])
+        assert pd.isna(manhattan.iloc[4])
+
+    @pytest.mark.parametrize("distance_type", ["haversine", "euclidean", "manhattan"])
+    @pytest.mark.parametrize("malformed", [(52.5,), 5, "12"])
+    def test_malformed_point_raises(self, distance_type: str, malformed: Any) -> None:
+        """A malformed point raises instead of silently becoming NaN."""
+        df = pd.DataFrame({"a": [(52.5, 13.4), malformed], "b": [(48.1, 11.6), (48.1, 11.6)]})
+
+        with pytest.raises((IndexError, TypeError, ValueError)):
+            PandasGeoDistance._calculate_distance(df, distance_type, "a", "b")

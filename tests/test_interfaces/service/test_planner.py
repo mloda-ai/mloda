@@ -1331,9 +1331,9 @@ class TestDefaultOptions:
 
 class TestInlineLimits:
     DATA: ClassVar[dict[str, Any]] = {
-        "A": {"x": ["ab", "cd", None, 12345]},
+        "A": {"x": ["zq", "zw", None, 12345]},
         "B": {"y": [1.5, "e"]},
-    }  # 6 values, 5 chars
+    }  # 6 values, 5 chars; non-hex text avoids collisions with audit IDs.
 
     def _request(self) -> dict[str, Any]:
         return {"features": ["x"], "data": self.DATA}
@@ -1343,14 +1343,14 @@ class TestInlineLimits:
 
         error = _error(result, "limit_exceeded")
         assert _has_detail(error, reason="inline_values_over_limit", count=6, limit=5)
-        assert "ab" not in json.dumps(result)
+        assert "zq" not in json.dumps(result)
 
     def test_chars_over_limit(self, tmp_path: Path) -> None:
         result = _explain(tmp_path, self._request(), inline_data=True, max_inline_chars=4)
 
         error = _error(result, "limit_exceeded")
         assert _has_detail(error, reason="inline_chars_over_limit", count=5, limit=4)
-        assert "ab" not in json.dumps(result)
+        assert "zq" not in json.dumps(result)
 
     def test_both_over_limit_report_both(self, tmp_path: Path) -> None:
         result = _explain(tmp_path, self._request(), inline_data=True, max_inline_values=2, max_inline_chars=1)

@@ -378,8 +378,6 @@ def _twin(name: str = "mdb_twin", options: Options | None = None, **kwargs: Any)
 
 
 class TestFeatureSetOneFeaturePerName:
-    """Unit contract of FeatureSet.one_feature_per_name()."""
-
     def test_unique_names_is_noop(self) -> None:
         feature_set = FeatureSet([_plain("mdb_a"), _plain("mdb_b")])
         original = feature_set.features

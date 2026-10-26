@@ -89,7 +89,12 @@ def planned_worker_count(execution_plan: Any, register_modes: set[Parallelizatio
             continue
         if isinstance(step, TransformFrameworkStep):
             count += 1
-        elif isinstance(step, FeatureGroupStep) and not step.tfs_ids:
+        elif isinstance(step, FeatureGroupStep):
+            if step.own_frame:
+                count += 1
+                continue
+            if step.tfs_ids:
+                continue
             seen = chain_children.setdefault(step.compute_framework, set())
             if step.features.any_uuid in seen:
                 continue
@@ -444,11 +449,17 @@ class ExecutionOrchestrator:
             if step.features.any_uuid is None:
                 raise ValueError(f"from_feature_uuid should not be none. {step}")
 
-            cfw = self.executor.get_cfw(
-                step.compute_framework, step.features.any_uuid, step.tfs_ids, step.reads_join_result
-            )
+            if step.own_frame:
+                cfw = self.executor.cfw_collection[step.uuid]
+            else:
+                cfw = self.executor.get_cfw(
+                    step.compute_framework, step.features.any_uuid, step.tfs_ids, step.reads_join_result
+                )
             self.add_to_result_data_collection(cfw, step.features, step.uuid)
             self._drop_data_if_possible(cfw, step)
+            if step.own_frame:
+                source = self.executor.cfw_collection[self.executor.own_frame_sources[step.uuid]]
+                self._mark_children_and_track(source, set(step.children_if_root))
 
         return True
 
@@ -679,6 +690,8 @@ class ExecutionOrchestrator:
 
         A cfw instance holds a single data slot and is shared by every step of a chain within one
         framework, so at most one feature group step may occupy it at a time.
+        An own-frame step occupies the frame holding its inputs (_cfw_to_occupy resolves the source, since the
+        new frame does not exist yet), so siblings cannot write it while the step reads it.
         """
 
         with self._step_lock:

@@ -460,6 +460,7 @@ class TestExecutionOrchestratorStepLock:
 def _single_step_mock() -> MagicMock:
     step_uuid = uuid_mod.uuid4()
     step = MagicMock()
+    step.own_frame = False
     step.get_uuids.return_value = {step_uuid}
     step.required_uuids = set()
     step.step_is_done = False
@@ -627,6 +628,12 @@ class _ChainChildFG(FeatureGroup):
         return {"planned_worker_chain_child_col": [1, 2, 3]}
 
 
+class _ChainReducingChildFG(_ChainChildFG):
+    @classmethod
+    def reduces_rows(cls) -> bool:
+        return True
+
+
 def _chain_plan() -> Any:
     session = mloda.prepare(
         [Feature(name="_ChainChildFG")],
@@ -655,6 +662,17 @@ class TestPlannedWorkerCount:
 
     def test_same_framework_chain_shares_one_worker(self) -> None:
         assert planned_worker_count(_chain_plan(), {ParallelizationMode.MULTIPROCESSING}) == 1
+
+    def test_own_frame_step_counts_as_its_own_worker(self) -> None:
+        session = mloda.prepare(
+            [Feature(name="_ChainReducingChildFG")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_ChainRootFG, _ChainReducingChildFG}),
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+        )
+        assert session.engine is not None
+
+        assert planned_worker_count(session.engine.execution_planner, {ParallelizationMode.MULTIPROCESSING}) == 2
 
 
 class TestEnterPrestartsStandbyWorkers:
@@ -898,6 +916,7 @@ class TestGetResultItemsPlanOrder:
 
     def _make_step(self, step_uuid: UUID) -> Mock:
         step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
         step.uuid = step_uuid
         return step
 

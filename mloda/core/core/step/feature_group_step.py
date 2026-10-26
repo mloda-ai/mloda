@@ -6,6 +6,9 @@ from mloda.core.abstract_plugins.components.input_data.api_data_scope import Api
 from mloda.core.abstract_plugins.components.failed_rows import collect_failed_rows
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.cfw_manager import CfwManager
+from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
+from mloda.core.runtime.flight.flight_server import FlightServer
 from mloda.core.core.step.abstract_step import Step
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -16,6 +19,7 @@ class FeatureGroupStep(Step):
     source_connection_handle: str | None = None
     reads_join_result: bool = True
     join_tokens: frozenset[UUID] = frozenset()
+    own_frame: bool = False
 
     def __init__(
         self,
@@ -49,10 +53,12 @@ class FeatureGroupStep(Step):
         self,
         cfw_register: CfwManager,
         cfw: ComputeFramework,
-        from_cfw: ComputeFramework | UUID | None = None,  # Not used in this implementation
+        from_cfw: ComputeFramework | UUID | None = None,  # source frame of an own-frame step
         data: Any | None = None,
     ) -> Any | None:
         self.location = cfw_register.get_location()
+        if self.own_frame and data is None:
+            data = self._source_data(cfw, from_cfw)
 
         runtime_artifacts = cfw_register.get_runtime_artifacts()
         if runtime_artifacts is not None:
@@ -86,6 +92,15 @@ class FeatureGroupStep(Step):
                 cfw_register.add_uuid_flyway_datasets(cfw.uuid, set(self.children_if_root))
             return data
         return None
+
+    def _source_data(self, cfw: ComputeFramework, from_cfw: ComputeFramework | UUID | None) -> Any:
+        """The input frame of an own-frame step: in-process data, or a worker-owned source's flight table."""
+        if isinstance(from_cfw, ComputeFramework):
+            return from_cfw.get_data()
+        if isinstance(from_cfw, UUID) and self.location:
+            table = FlightServer.download_table(self.location, str(from_cfw))
+            return cfw.convert_flight_server_data_back(table, ComputeFrameworkTransformer())
+        raise ValueError(internal_invariant_error("an own-frame step has no source frame to read", f"step={self.uuid}"))
 
     def run_calculate_feature(self, cfw: ComputeFramework, data: Any | None = None) -> Any:
         if self.feature_group.calculate_feature is None:

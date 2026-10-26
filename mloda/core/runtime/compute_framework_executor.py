@@ -64,6 +64,7 @@ class ComputeFrameworkExecutor:
         self.worker_extender_payload = worker_extender_payload
         self.hook_extenders = hook_extenders
         self._cfw_lock = threading.Lock()
+        self.own_frame_sources: dict[UUID, UUID] = {}
 
     def init_compute_framework(
         self,
@@ -190,6 +191,25 @@ class ComputeFrameworkExecutor:
             return self.thread_execute_step
         return self.sync_execute_step
 
+    def _prepare_own_frame(
+        self, step: FeatureGroupStep, parallelization_mode: ParallelizationMode, source_uuid: UUID | None
+    ) -> UUID:
+        """Create the frame a row-reducing step writes, seeded from the frame holding its inputs."""
+        cls_name = step.compute_framework.get_class_name()
+        if source_uuid is None and step.features.any_uuid is not None:
+            source_uuid = self.cfw_register.get_cfw_uuid(cls_name, step.features.any_uuid)
+        if source_uuid is None:
+            raise ValueError(internal_invariant_error("an own frame step has no source frame", f"step={step}"))
+        children = set(step.children_if_root)
+        with self._cfw_lock:
+            cfw_uuid = self.init_compute_framework(step.compute_framework, parallelization_mode, children, step.uuid)
+            self.cfw_register.claim_children(cfw_uuid, cls_name, children)
+            connection = self.cfw_collection[source_uuid].framework_connection_object
+            if connection is not None:
+                self.cfw_collection[cfw_uuid].set_framework_connection_object(connection)
+        self.own_frame_sources[step.uuid] = source_uuid
+        return cfw_uuid
+
     def prepare_execute_step(self, step: Any, parallelization_mode: ParallelizationMode) -> UUID:
         """
         Prepares a step for execution by initializing or retrieving the associated CFW.
@@ -205,6 +225,9 @@ class ComputeFrameworkExecutor:
             resolved_uuid = self.cfw_register.resolve_cfw_uuid_by_tfs_ids(
                 cls_name, step.tfs_ids, step.features.any_uuid, step.reads_join_result
             )
+
+            if step.own_frame:
+                return self._prepare_own_frame(step, parallelization_mode, resolved_uuid)
 
             if resolved_uuid is not None:
                 # A reused frame never registers this step's children_if_root, so record its join tokens.
@@ -297,6 +320,8 @@ class ComputeFrameworkExecutor:
             # Both join sides are destination-framework cfws, whose modes kept this join in the
             # parent, so neither can be worker-owned.
             from_cfw = self.cfw_collection[resolve_join_source_cfw(step, self.cfw_register)]
+        elif isinstance(step, FeatureGroupStep) and step.own_frame:
+            from_cfw = self.cfw_collection[self.own_frame_sources[step.uuid]]
         return from_cfw
 
     def _bind_connection(self, step: Any, cfw_uuid: UUID) -> None:
@@ -361,6 +386,8 @@ class ComputeFrameworkExecutor:
         from_cfw = None
         if isinstance(step, TransformFrameworkStep):
             from_cfw = self.prepare_tfs_right_cfw(step)
+        elif isinstance(step, FeatureGroupStep) and step.own_frame:
+            from_cfw = self.own_frame_sources[step.uuid]
 
         existing = self.worker_manager.get_process_queues(cfw_uuid)
 

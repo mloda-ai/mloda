@@ -225,7 +225,9 @@ def test_describe_step_renders_a_transform_framework_step() -> None:
 
 def test_describe_step_survives_a_step_without_the_attributes_it_reads() -> None:
     """An error path may not raise: a stall message must survive a step that answers nothing."""
-    rendered = _describe_step(Mock(spec=FeatureGroupStep))
+    step = Mock(spec=FeatureGroupStep)
+    step.own_frame = False
+    rendered = _describe_step(step)
 
     assert isinstance(rendered, str)
     assert rendered, "a step must always render to something non-empty"

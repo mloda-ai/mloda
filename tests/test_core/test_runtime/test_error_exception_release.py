@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gc
+import logging
 import weakref
 from unittest.mock import Mock
 
@@ -77,7 +78,7 @@ class TestTakeErrorException:
 
 
 class TestCheckForErrorRaisePath:
-    def test_the_original_exception_is_still_reraised(self) -> None:
+    def test_the_original_exception_is_still_reraised(self, caplog: pytest.LogCaptureFixture) -> None:
         orchestrator = ExecutionOrchestrator(Mock(spec=ExecutionPlan))
         register, error = _register_with_error()
         orchestrator.cfw_register = register
@@ -86,6 +87,7 @@ class TestCheckForErrorRaisePath:
             orchestrator._check_for_error()
 
         assert excinfo.value is error
+        assert not any(r.name == "mloda.core.runtime.run" and r.levelno >= logging.ERROR for r in caplog.records)
 
     def test_the_register_no_longer_holds_the_exception_after_the_raise(self) -> None:
         orchestrator = ExecutionOrchestrator(Mock(spec=ExecutionPlan))
@@ -97,7 +99,9 @@ class TestCheckForErrorRaisePath:
 
         assert register.take_error_exception() is None
 
-    def test_an_error_without_an_exception_still_raises_the_typed_fallback(self) -> None:
+    def test_an_error_without_an_exception_still_raises_the_typed_fallback(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         orchestrator = ExecutionOrchestrator(Mock(spec=ExecutionPlan))
         register = CfwManager({ParallelizationMode.SYNC})
         register.set_error("critical error_out", "formatted traceback")
@@ -105,3 +109,7 @@ class TestCheckForErrorRaisePath:
 
         with pytest.raises(MlodaRunError, match="critical error_out"):
             orchestrator._check_for_error()
+
+        assert [
+            r.getMessage() for r in caplog.records if r.name == "mloda.core.runtime.run" and r.levelno == logging.ERROR
+        ] == ["formatted traceback"]

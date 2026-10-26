@@ -23,6 +23,7 @@ from __future__ import annotations
 import errno
 import logging
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -99,6 +100,40 @@ class CauseChainFeatureGroup(DataCreatorFeatureGroup):
 _ENABLED_IMPORT_ERROR = PluginCollector.enabled_feature_groups({ImportErrorFeatureGroup})
 _ENABLED_DOMAIN_ERROR = PluginCollector.enabled_feature_groups({DomainErrorFeatureGroup})
 _ENABLED_CAUSE_CHAIN = PluginCollector.enabled_feature_groups({CauseChainFeatureGroup})
+
+_RUNNER_LOGGER = "mloda.core.runtime.run"
+
+
+def _assert_scrubbed_debug_traceback(caplog: pytest.LogCaptureFixture, marker: str) -> None:
+    records = [r for r in caplog.records if r.name == _RUNNER_LOGGER and "Traceback" in r.getMessage()]
+    assert records
+    assert all(r.levelno == logging.DEBUG for r in records)
+    assert not any(r.name == _RUNNER_LOGGER and r.levelno >= logging.ERROR for r in caplog.records)
+    assert marker not in caplog.text
+
+
+@pytest.mark.parametrize("run", [mloda.run_all, mloda.stream_all], ids=["compute", "stream"])
+@pytest.mark.parametrize(
+    "mode",
+    [ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING],
+    ids=["sync", "threading", "multiprocessing"],
+)
+def test_original_exception_propagates_without_error_log(
+    run: Callable[..., Any], mode: ParallelizationMode, flight_server: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO, logger=_RUNNER_LOGGER):
+        with pytest.raises(ImportError, match="bm25s"):
+            list(
+                run(
+                    [Feature(name="exc_import_error_col")],
+                    compute_frameworks=["PythonDictFramework"],
+                    plugin_collector=_ENABLED_IMPORT_ERROR,
+                    parallelization_modes={mode},
+                    flight_server=flight_server,
+                )
+            )
+
+    assert not any(r.name == _RUNNER_LOGGER and r.levelno >= logging.ERROR for r in caplog.records)
 
 
 # --------------------------------------------------------------------------- #
@@ -203,7 +238,8 @@ _ENABLED_ROW_LEAK_CHAINED = PluginCollector.enabled_feature_groups({RowLeakChain
 
 
 def test_sync_secret_leak_direct_raw_to_caller_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> None:
-    """The caller keeps the raw secret-bearing message; ERROR log records never carry the secret."""
+    """The caller keeps the raw secret-bearing message; the DEBUG traceback is scrubbed."""
+    caplog.set_level(logging.DEBUG, logger=_RUNNER_LOGGER)
     with pytest.raises(OSError) as excinfo:
         mloda.run_all(
             [Feature(name="exc_secret_leak_col")],
@@ -213,13 +249,12 @@ def test_sync_secret_leak_direct_raw_to_caller_scrubbed_in_logs(caplog: pytest.L
         )
 
     assert _LEAK_MARKER in str(excinfo.value)
-    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
-    assert error_records
-    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
+    _assert_scrubbed_debug_traceback(caplog, _LEAK_MARKER)
 
 
 def test_sync_secret_leak_chained_raw_to_caller_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> None:
-    """The chained cause keeps its raw secret-bearing message; ERROR log records never carry the secret."""
+    """The chained cause keeps its raw secret-bearing message; the DEBUG traceback is scrubbed."""
+    caplog.set_level(logging.DEBUG, logger=_RUNNER_LOGGER)
     with pytest.raises(RuntimeError) as excinfo:
         mloda.run_all(
             [Feature(name="exc_secret_leak_chained_col")],
@@ -230,12 +265,11 @@ def test_sync_secret_leak_chained_raw_to_caller_scrubbed_in_logs(caplog: pytest.
 
     assert isinstance(excinfo.value.__cause__, OSError)
     assert _LEAK_MARKER in str(excinfo.value.__cause__)
-    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
-    assert error_records
-    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
+    _assert_scrubbed_debug_traceback(caplog, _LEAK_MARKER)
 
 
 def test_threading_secret_leak_scrubbed_in_logs(flight_server: Any, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.DEBUG, logger=_RUNNER_LOGGER)
     with pytest.raises(OSError) as excinfo:
         mloda.run_all(
             [Feature(name="exc_secret_leak_col")],
@@ -246,12 +280,11 @@ def test_threading_secret_leak_scrubbed_in_logs(flight_server: Any, caplog: pyte
         )
 
     assert _LEAK_MARKER in str(excinfo.value)
-    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
-    assert error_records
-    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
+    _assert_scrubbed_debug_traceback(caplog, _LEAK_MARKER)
 
 
 def test_multiprocessing_secret_leak_scrubbed_in_logs(flight_server: Any, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.DEBUG, logger=_RUNNER_LOGGER)
     with pytest.raises(OSError) as excinfo:
         mloda.run_all(
             [Feature(name="exc_secret_leak_col")],
@@ -262,13 +295,13 @@ def test_multiprocessing_secret_leak_scrubbed_in_logs(flight_server: Any, caplog
         )
 
     assert _LEAK_MARKER in str(excinfo.value)
-    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
-    assert error_records
-    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
+    _assert_scrubbed_debug_traceback(caplog, _LEAK_MARKER)
 
 
 @pytest.mark.timeout(15)
-def test_multiprocessing_unpicklable_secret_leak_message_is_scrubbed(flight_server: Any) -> None:
+def test_multiprocessing_unpicklable_secret_leak_message_is_scrubbed(
+    flight_server: Any, caplog: pytest.LogCaptureFixture
+) -> None:
     """The MlodaRunError fallback message for a non-picklable exception must not carry the secret."""
     from mloda.core.abstract_plugins.components.error_utils import MlodaRunError
 
@@ -283,6 +316,9 @@ def test_multiprocessing_unpicklable_secret_leak_message_is_scrubbed(flight_serv
 
     assert _LEAK_MARKER not in str(excinfo.value)
     assert "UnpicklableSecretLeakError" in str(excinfo.value)
+    error_records = [r for r in caplog.records if r.name == _RUNNER_LOGGER and r.levelno == logging.ERROR]
+    assert error_records
+    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
 
 
 # --------------------------------------------------------------------------- #
@@ -291,12 +327,8 @@ def test_multiprocessing_unpicklable_secret_leak_message_is_scrubbed(flight_serv
 
 
 def test_sync_preserves_import_error_type(caplog: pytest.LogCaptureFixture) -> None:
-    """SYNC ``run_all`` must surface the original ``ImportError`` type, not a bare Exception.
-
-    FAILS today: ``_check_for_error`` raises a bare ``Exception`` so
-    ``pytest.raises(ImportError)`` does not match and the Exception propagates.
-    It also logs the traceback exactly once, on an mloda logger, never on the root logger.
-    """
+    """SYNC preserves ImportError and logs its traceback once, at DEBUG on the runner logger."""
+    caplog.set_level(logging.DEBUG, logger=_RUNNER_LOGGER)
     with pytest.raises(ImportError, match="bm25s"):
         mloda.run_all(
             [Feature(name="exc_import_error_col")],
@@ -307,7 +339,7 @@ def test_sync_preserves_import_error_type(caplog: pytest.LogCaptureFixture) -> N
 
     assert [r.name for r in caplog.records if r.name == "root"] == []
     traceback_records = [r for r in caplog.records if "Traceback" in r.getMessage()]
-    assert [r.name for r in traceback_records] == ["mloda.core.runtime.run"]
+    assert [(r.name, r.levelno) for r in traceback_records] == [(_RUNNER_LOGGER, logging.DEBUG)]
 
 
 # --------------------------------------------------------------------------- #
@@ -521,7 +553,8 @@ def test_multiprocessing_unpicklable_exception_does_not_hang(flight_server: Any)
 
 
 def test_sync_row_leak_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> None:
-    """Row values in the exception message must not be logged to ERROR records."""
+    """Row values remain in the original exception but are absent from the DEBUG traceback."""
+    caplog.set_level(logging.DEBUG, logger=_RUNNER_LOGGER)
     with pytest.raises(RowLeakError) as excinfo:
         mloda.run_all(
             [Feature(name="exc_row_leak_col")],
@@ -531,13 +564,12 @@ def test_sync_row_leak_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> Non
         )
 
     assert _ROW_LEAK_MARKER in str(excinfo.value)
-    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
-    assert error_records
-    assert all(_ROW_LEAK_MARKER not in r.getMessage() for r in error_records)
+    _assert_scrubbed_debug_traceback(caplog, _ROW_LEAK_MARKER)
 
 
 def test_multiprocessing_row_leak_scrubbed_in_logs(flight_server: Any, caplog: pytest.LogCaptureFixture) -> None:
-    """Row values in the exception message must not be logged to ERROR records in MULTIPROCESSING."""
+    """Multiprocessing preserves raw row errors while scrubbing the DEBUG traceback."""
+    caplog.set_level(logging.DEBUG, logger=_RUNNER_LOGGER)
     with pytest.raises(RowLeakError) as excinfo:
         mloda.run_all(
             [Feature(name="exc_row_leak_col")],
@@ -548,13 +580,12 @@ def test_multiprocessing_row_leak_scrubbed_in_logs(flight_server: Any, caplog: p
         )
 
     assert _ROW_LEAK_MARKER in str(excinfo.value)
-    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
-    assert error_records
-    assert all(_ROW_LEAK_MARKER not in r.getMessage() for r in error_records)
+    _assert_scrubbed_debug_traceback(caplog, _ROW_LEAK_MARKER)
 
 
 def test_sync_row_leak_chained_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> None:
-    """Row values in chained exception messages must not be logged to ERROR records."""
+    """Chained row errors remain available to the caller and are scrubbed from the DEBUG traceback."""
+    caplog.set_level(logging.DEBUG, logger=_RUNNER_LOGGER)
     with pytest.raises(RuntimeError) as excinfo:
         mloda.run_all(
             [Feature(name="exc_row_leak_chained_col")],
@@ -565,9 +596,7 @@ def test_sync_row_leak_chained_scrubbed_in_logs(caplog: pytest.LogCaptureFixture
 
     assert isinstance(excinfo.value.__cause__, RowLeakError)
     assert _ROW_LEAK_MARKER in str(excinfo.value.__cause__)
-    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
-    assert error_records
-    assert all(_ROW_LEAK_MARKER not in r.getMessage() for r in error_records)
+    _assert_scrubbed_debug_traceback(caplog, _ROW_LEAK_MARKER)
 
 
 # --------------------------------------------------------------------------- #

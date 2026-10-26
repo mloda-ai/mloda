@@ -9,18 +9,25 @@ from typing import Any
 
 import pytest
 
-from mloda.core.prepare.identify_feature_group import FeatureResolutionError
+from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
+from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.provider import FeatureGroup, escalate_match_abort
 from mloda.user import (
     DataAccessCollection,
     Feature,
+    Index,
+    JoinSpec,
+    Link,
     FeatureName,
     Options,
     ParallelizationMode,
     PluginCollector,
 )
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from tests.test_core.test_prepare.input_chain_helpers import (
     CHOICE,
@@ -341,8 +348,23 @@ def test_subclass_takeover_is_final_and_narrows_before_chain_checks(
     assert PROBE_CALLS[ChainChecked2320, RAW_A] == 0
 
 
-@pytest.mark.parametrize("varies", ["plugins", "access"])
+@pytest.mark.parametrize("varies", ["plugins", "access", "links"])
 def test_cached_chain_outcomes_do_not_cross_runs(varies: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    if varies == "links":
+        monkeypatch.setattr(ChainA2320, "INPUTS", (LEAF,))
+        monkeypatch.setattr(ChainB2320, "INPUTS", (MISSING,))
+        monkeypatch.setattr(ChainLeaf2320, "index_columns", classmethod(lambda cls: [Index(("id_chain_2320",))]))
+        good = Link("inner", JoinSpec(ChainLeaf2320, "id_chain_2320"), JoinSpec(ChainB2320, "id_chain_2320"))
+        bad = Link("inner", JoinSpec(ChainLeaf2320, "wrong_chain_2320"), JoinSpec(ChainB2320, "wrong_chain_2320"))
+        plugins: FeatureGroupEnvironmentMapping = {
+            group: {PyArrowTable} for group in (ChainA2320, ChainB2320, ChainLeaf2320)
+        }
+        with run_match_cache():
+            resolved = IdentifyFeatureGroupClass.evaluate(Feature(CHOICE), plugins, {good}, None)
+            failed = IdentifyFeatureGroupClass.evaluate(Feature(CHOICE), plugins, {bad}, None)
+        assert set(resolved.identified) == {ChainA2320}
+        assert failed.eliminations[ChainA2320].stage == "inputs"
+        return
     monkeypatch.setattr(ChainA2320, "INPUTS", (LEAF,) if varies == "plugins" else (RAW_A,))
     monkeypatch.setattr(ChainB2320, "INPUTS", (MISSING,))
     base: set[type[FeatureGroup]] = {ChainA2320, ChainB2320}
@@ -356,3 +378,54 @@ def test_cached_chain_outcomes_do_not_cross_runs(varies: str, monkeypatch: pytes
 
     assert set(first.identified) == {ChainA2320}
     assert caught.value.result.eliminations[ChainA2320].stage == "inputs"
+
+
+def test_failure_text_stays_small_when_every_level_has_two_failing_candidates() -> None:
+    depth = 6
+    groups: list[type[FeatureGroup]] = []
+    for level in range(depth):
+        for side in "AB":
+            attrs = {
+                "MATCHED_NAMES": frozenset({f"level{level}_chain_2320"}),
+                "INPUTS": (f"level{level + 1}_chain_2320",),
+            }
+            groups.append(type(f"Level{level}{side}2320", (ChainStub2320,), attrs))
+
+    with pytest.raises(FeatureResolutionError) as caught:
+        prepare_chain(set(groups), feature=Feature("level0_chain_2320"))
+
+    assert len(str(caught.value)) < 6000
+    for group in groups[:2]:
+        elimination = caught.value.result.eliminations[group]
+        assert elimination.stage == "inputs"
+        assert "level1_chain_2320" in elimination.reason
+
+
+class ChainUnsupported2320(ChainA2320):
+    @classmethod
+    def supports_compute_framework(cls, *args: Any, **kwargs: Any) -> bool:
+        return False
+
+
+class ChainOtherFramework2320(ChainA2320):
+    FRAMEWORK_RULE = {PythonDictFramework}
+
+
+@pytest.mark.parametrize("derived", [ChainUnsupported2320, ChainOtherFramework2320], ids=["capability", "framework"])
+def test_open_route_step_aside_does_not_probe_a_candidate_eliminated_later(
+    derived: type[FeatureGroup], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(derived, "INPUTS", (Feature(RAW_A, forward_group=False),))
+    gate = ChainGate2320(reader=ChainChecked2320)
+
+    with pytest.raises(FeatureResolutionError) as caught:
+        prepare_chain(
+            {derived, ChainOpen2320, ChainChecked2320},
+            feature=Feature(CHOICE, options={ChainOpen2320.__name__: {SOURCE_KEY: {CHOICE: [11]}}}),
+            access=chain_access(**{RAW_A: [5]}),
+            extender=gate,
+        )
+
+    assert caught.value.result.eliminations[derived].stage != "inputs"
+    assert gate.calls_for(ChainChecked2320, RAW_A) == []
+    assert PROBE_CALLS[ChainChecked2320, RAW_A] == 0

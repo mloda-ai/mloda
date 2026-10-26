@@ -99,6 +99,11 @@ logger = logging.getLogger(__name__)
 InputResolver = Callable[[Feature, set[Link] | None, int], EvaluationResult]
 
 
+def _first_line(text: str) -> str:
+    lines = text.strip().splitlines()
+    return lines[0] if lines else ""
+
+
 @dataclass(frozen=True)
 class _CriteriaAttempt:
     probe: CriteriaProbeOutcome
@@ -956,20 +961,28 @@ class IdentifyFeatureGroupClass:
                 )
 
     def _computing_groups(
-        self, feature: Feature, excluding: frozenset[type[FeatureGroup]] = frozenset()
+        self,
+        feature: Feature,
+        identified: FeatureGroupEnvironmentMapping,
+        excluding: frozenset[type[FeatureGroup]] = frozenset(),
     ) -> list[type[FeatureGroup]]:
+        # A candidate eliminated after the chain filter is not probed; it only masks the claim by declaring inputs.
         return [
             fg
             for fg in sorted(
                 self._criteria_matched_feature_groups - excluding - self._replaced, key=_candidate_sort_key
             )
-            if self._computes(fg, feature)
+            if (
+                self._computes(fg, feature)
+                if fg in identified or fg in self._input_refusals
+                else self._declares_inputs(fg, feature)
+            )
         ]
 
     def _drop_open_claims(self, feature: Feature, identified: FeatureGroupEnvironmentMapping) -> None:
         """Drop claimants that matched through an open route alone when another candidate computes the feature."""
         claimants = frozenset(fg for fg in self._open_claims if fg in identified)
-        computing = self._computing_groups(feature, claimants) if claimants else []
+        computing = self._computing_groups(feature, identified, claimants) if claimants else []
         if not computing:
             return
         names = ", ".join(fg.__name__ for fg in computing)
@@ -1014,8 +1027,12 @@ class IdentifyFeatureGroupClass:
 
     @staticmethod
     def _input_failure(error: Exception) -> InputChainOutcome:
-        refusals = error.refusals if isinstance(error, FeatureResolutionError) else ()
-        return InputChainOutcome(False, True, contained_raise_reason(error), refusals)
+        if isinstance(error, FeatureResolutionError):
+            reason = _first_line(str(error))
+            if error.refusals:
+                reason = f"{reason} ({contained_raise_reason(error.refusals[0])})"
+            return InputChainOutcome(False, True, reason, error.refusals)
+        return InputChainOutcome(False, True, contained_raise_reason(error), ())
 
     def _contain_own_raise(
         self, exc: Exception, feature_group: type[FeatureGroup], feature: Feature
@@ -1117,7 +1134,7 @@ class IdentifyFeatureGroupClass:
                 )
                 message = render_resolution_failure(result, feature)
                 if message is not None:
-                    return InputChainOutcome(False, True, message, refusals)
+                    return InputChainOutcome(False, True, _first_line(message), refusals)
             else:
                 result = self._input_resolver(feature, links, self._input_depth + 1)
             winner = next(iter(result.identified))

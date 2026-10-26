@@ -59,6 +59,43 @@ def _permissive_matcher(*args: Any, **kwargs: Any) -> bool:
 class TestOverrideBypass:
     """A non-delegating True override must not bypass the presence rule."""
 
+    @pytest.mark.parametrize("has_raw_pattern", [False, True], ids=["override-only", "replacement"])
+    def test_presence_guard_uses_only_the_overridden_patterns(
+        self, has_raw_pattern: bool, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        class _PatternPresenceR2353(FeatureChainParserMixin):
+            PREFIX_PATTERN = r".*__(?P<carried_r2353>\w+)_raw_presence_r2353$" if has_raw_pattern else None
+            PROPERTY_MAPPING = {
+                "carried_r2353": property_spec("Value bound from the name"),
+                "missing_r2353": property_spec("Required option outside the name"),
+            }
+
+            @classmethod
+            def _get_prefix_patterns(cls) -> list[str]:
+                return [r".*__(?P<carried_r2353>\w+)_override_presence_r2353$"]
+
+            @classmethod
+            def match_feature_group_criteria(
+                cls, feature_name: str | FeatureName, options: Options, data_access_collection: Any = None
+            ) -> bool:
+                return True
+
+        name = "src__value_override_presence_r2353"
+        assert (
+            _PatternPresenceR2353.match_feature_group_criteria(name, Options(context={"missing_r2353": "ready"}))
+            is True
+        )
+        assert _PatternPresenceR2353.match_feature_group_criteria("unowned_r2353", Options()) is True
+        if has_raw_pattern:
+            assert (
+                _PatternPresenceR2353.match_feature_group_criteria("src__value_raw_presence_r2353", Options()) is True
+            )
+        with caplog.at_level(logging.WARNING):
+            assert _PatternPresenceR2353.match_feature_group_criteria(name, Options()) is False
+        warnings = _presence_warnings(caplog, "_PatternPresenceR2353")
+        assert len(warnings) == 1
+        assert "missing_r2353" in warnings[0].getMessage()
+
     def test_non_delegating_true_override_is_still_a_non_match(self, caplog: pytest.LogCaptureFixture) -> None:
         """The override never reaches the inner rule, so the guard must reject and warn itself."""
 

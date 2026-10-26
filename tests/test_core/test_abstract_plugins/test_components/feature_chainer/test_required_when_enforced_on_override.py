@@ -97,6 +97,23 @@ NOT_REQUIRED = Options(context={OP_TYPE: "sum"})
 ONLY_ORDER_BY = Options(context={ORDER_BY: "ts"})
 
 
+class _ExtendedPatternR2353(FeatureChainParserMixin, FeatureGroup):
+    NAME_ONLY_MATCH = True
+    PREFIX_PATTERN = r".*__(?P<op_type>sum|first)_raw_r2353$"
+    PROPERTY_MAPPING = {
+        OP_TYPE: property_spec("Operation", allowed_values=("sum", "first"), strict=True),
+        ORDER_BY: property_spec("Order column", required_when=lambda options: options.get(OP_TYPE) == "first"),
+    }
+
+    @classmethod
+    def _get_prefix_patterns(cls) -> list[Any]:
+        return [*super()._get_prefix_patterns(), r".*__(?P<op_type>sum|first)_override_r2353$"]
+
+
+class _InheritedPatternR2353(_ExtendedPatternR2353):
+    pass
+
+
 class _CallableMatcher:
     """A callable-instance matcher: no descriptor, so a classmethod wrap would pass it the class."""
 
@@ -500,6 +517,48 @@ class TestExactlyOnceAcrossInheritance:
 
 class TestPatternDiscovery:
     """The guard must collect the same patterns the matcher matched on."""
+
+    @pytest.mark.parametrize("group", [_ExtendedPatternR2353, _InheritedPatternR2353], ids=["override", "inherited"])
+    def test_override_only_pattern_supplies_required_when_binding(self, group: type[_ExtendedPatternR2353]) -> None:
+        name = "src__first_override_r2353"
+        options = Options()
+
+        assert group.name_bindings(name) == {OP_TYPE: "first"}
+        assert group.match_feature_group_criteria("src__first_raw_r2353", Options()) is False
+        assert group.match_feature_group_criteria(name, Options(context={ORDER_BY: "ts"})) is True
+        assert group.match_feature_group_criteria("src__sum_override_r2353", Options()) is True
+        assert group.match_feature_group_criteria(name, options) is False
+        assert options.get(OP_TYPE) is None
+
+    @pytest.mark.parametrize("patterns", ["replacement", "empty", "raising"])
+    def test_discarded_raw_pattern_cannot_trigger_required_when(self, patterns: str) -> None:
+        class _DiscardedPatternR2353(FeatureChainParserMixin):
+            PREFIX_PATTERN = r".*__(?P<op_type>sum|first)_discarded_r2353$"
+            PROPERTY_MAPPING = {
+                OP_TYPE: property_spec("Operation", allowed_values=("sum", "first"), strict=True, default=None),
+                ORDER_BY: property_spec("Order column", required_when=lambda options: options.get(OP_TYPE) == "first"),
+            }
+
+            @classmethod
+            def _get_prefix_patterns(cls) -> list[str]:
+                if patterns == "raising":
+                    raise RuntimeError("pattern discovery failed r2353")
+                return [r".*__(?P<op_type>sum|first)_replacement_r2353$"] if patterns == "replacement" else []
+
+            @classmethod
+            def match_feature_group_criteria(
+                cls, feature_name: str | FeatureName, options: Options, data_access_collection: Any = None
+            ) -> bool:
+                return True
+
+        name = "src__first_discarded_r2353"
+        assert _DiscardedPatternR2353.match_feature_group_criteria(name, SATISFIED) is True
+        assert _DiscardedPatternR2353.match_feature_group_criteria(name, REQUIRES_ORDER_BY) is False
+        assert _DiscardedPatternR2353.match_feature_group_criteria(name, Options()) is True
+        if patterns == "replacement":
+            assert (
+                _DiscardedPatternR2353.match_feature_group_criteria("src__first_replacement_r2353", Options()) is False
+            )
 
     def test_compiled_prefix_pattern_still_supplies_the_name_parsed_value(self) -> None:
         """re.match accepts a compiled pattern, so the mixin matches on it. The guard must see it too, or the

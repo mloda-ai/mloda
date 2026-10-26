@@ -25,7 +25,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import DefaultOptionKeys, PropertySpec
+from mloda.provider import DefaultOptionKeys, PropertySpec, property_spec
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 
 CLEANED_TEXT_NAME = "x__cleaned_text"
@@ -144,6 +144,36 @@ class TestCapturelessBindsNothing:
 
 class TestCapturelessDefinitionDiagnostic:
     """A captureless pattern with a non-empty mapping must opt in to the recognition-only form."""
+
+    @pytest.mark.parametrize("captureless", [True, False], ids=["introduces-captureless", "replaces-captureless"])
+    def test_warning_uses_the_override_instead_of_the_raw_pattern(
+        self, captureless: bool, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        named_pattern = r".*__(?P<operation_r2353>sum)_named_capture_r2353$"
+        captureless_pattern = r".*__recognize_capture_r2353$"
+        with caplog.at_level(logging.WARNING):
+
+            class _CapturePatternOverrideR2353(FeatureChainParserMixin):
+                PREFIX_PATTERN = named_pattern if captureless else captureless_pattern
+                PROPERTY_MAPPING = {"operation_r2353": property_spec("Operation", allowed_values=("sum",), strict=True)}
+
+                @classmethod
+                def _get_prefix_patterns(cls) -> list[str]:
+                    return [captureless_pattern if captureless else named_pattern]
+
+        warnings = [
+            record
+            for record in caplog.records
+            if record.levelno == logging.WARNING
+            and record.name == AUTHOR_GUARDS_LOGGER
+            and "_CapturePatternOverrideR2353" in record.getMessage()
+            and "RECOGNITION_ONLY_PATTERN" in record.getMessage()
+        ]
+        assert len(warnings) == (1 if captureless else 0)
+        name = "src__recognize_capture_r2353" if captureless else "src__sum_named_capture_r2353"
+        assert _CapturePatternOverrideR2353.resolve_feature_name(name).bindings == (
+            {} if captureless else {"operation_r2353": "sum"}
+        )
 
     def test_captureless_mapping_without_marker_warns(self, caplog: pytest.LogCaptureFixture) -> None:
         """Defining such a class without the marker emits a definition-time WARNING mentioning the marker."""

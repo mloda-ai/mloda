@@ -445,11 +445,17 @@ overrides the spec's classification.
 
 ## How a name-parsed value binds to a key
 
-A name owns the feature for a group when its `PREFIX_PATTERN` identifies the group, and an owned
+A name owns the feature for a group when one of its effective name patterns identifies the group, and an owned
 name is authoritative for every value it encodes. Every named capture group `(?P<key>...)` of an
 owned name that is a PROPERTY_MAPPING key binds to that key and is validated like an option, even
 when the option is also present; an unsupported value is a recorded match-time rejection. This
 covers a secondary capture and an `element_validator`-only spec (one with no `allowed_values`).
+
+By default, `_get_prefix_patterns()` collects `PREFIX_PATTERN` and `SUFFIX_PATTERN`. A custom or
+inherited override supplies the effective patterns used by matching, `name_bindings`, `resolve_subtype`,
+the required-presence and `required_when` guards, and the checks at class definition. If that hook
+raises, the guards treat it as returning no patterns, as `name_bindings` does; they do not fall back to
+the original pattern attributes.
 
 A key may declare `name_converter` (e.g. `int`): the captured text is converted, then validated
 (`allowed_values`, `element_validator`), seen by `match_guard` / `required_when`, and filled into
@@ -643,7 +649,7 @@ A mixin group whose `PROPERTY_MAPPING` has no `in_features` key and whose `MIN_I
 counts an absent `in_features` as zero sources, so it matches by options only when the caller passes
 `in_features`. At class definition the mixin warns, naming the class, unless the group overrides
 `input_features` or `match_feature_group_criteria` (a pass-through matcher override that delegates to the
-mixin is exempt too), or has a `PREFIX_PATTERN`/`SUFFIX_PATTERN` (the source can come from the name). It warns
+mixin is exempt too), or `_get_prefix_patterns()` supplies a name pattern (the source can come from the name). It warns
 once per hierarchy: a subclass of a class that already warned stays silent. The option path records no rejection reason for this case,
 so the resolution failure report does not name it; the warning is the diagnostic.
 

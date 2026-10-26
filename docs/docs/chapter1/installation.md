@@ -4,7 +4,25 @@ You can install mloda using either pip or by cloning the repository from Git.
 pip install mloda
 ```
 
-Backends are optional extras such as `pip install "mloda[pyarrow]"`. Extras that install pyarrow require `pyarrow>=14.0.1` (CVE-2023-47248); use that version or newer if you supply your own.
+The core package has no mandatory third-party dependencies. Choose extras for the backends or integrations you need,
+for example `pip install "mloda[pyarrow]"`.
+
+| Extra | Enables |
+| --- | --- |
+| `pyarrow` | PyArrow tables and file readers |
+| `pandas` | Pandas DataFrames |
+| `polars` | Polars DataFrames |
+| `numpy` | NumPy arrays |
+| `yaml` | YAML file input |
+| `duckdb` | DuckDB SQL backend |
+| `sqlite` | SQLite SQL backend |
+| `iceberg` | Apache Iceberg tables |
+| `spark` | PySpark DataFrames |
+| `sklearn` | scikit-learn transformations and pipelines |
+| `text_cleaning` | NLTK text cleaning |
+| `mcp` | Model Context Protocol (MCP) server |
+
+Extras that install pyarrow require `pyarrow>=14.0.1` (CVE-2023-47248); use that version or newer if you supply your own.
 
 ## 2. Install mloda via Git
 Alternatively, you can clone the repository and install from source:
@@ -23,7 +41,13 @@ print(metadata.version("mloda"))
 
 ## 4. Quick Start
 
-Try this 30-second example:
+The example below uses the Pandas backend. Install its extra first:
+
+```bash
+pip install "mloda[pandas]"
+```
+
+Then run:
 
 ```python
 from mloda.user import mloda, PluginLoader

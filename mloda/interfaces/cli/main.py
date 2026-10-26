@@ -43,15 +43,16 @@ def build_services(
     key = env.get(SIGNING_KEY_ENV)
     principal = getpass.getuser()
     catalog = Catalog.build(settings, plugin_collector, principal=principal)
+    now = time.time if clock is None else clock
     planner = Planner(
         settings,
         catalog,
         signing_key=key.encode("utf-8") if key else None,
         principal=principal,
         plugin_collector=plugin_collector,
-        clock=time.time if clock is None else clock,
+        clock=now,
     )
-    return catalog, planner, Runner(planner)
+    return catalog, planner, Runner(planner, clock=now)
 
 
 TARGETS = (

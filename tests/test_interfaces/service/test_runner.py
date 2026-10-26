@@ -29,7 +29,13 @@ from mloda.interfaces.service.errors import ERROR_CODES, is_error
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.planner import Planner
 from mloda.interfaces.service.request import MAX_NAME_LENGTH
-from mloda.interfaces.service.runner import MAX_FAILED_ROW_ENTRIES, Runner
+from mloda.interfaces.service.catalog import encode_cursor
+from mloda.interfaces.service.runner import (
+    MAX_FAILED_ROW_ENTRIES,
+    RESULT_TTL_SECONDS,
+    ResultStore,
+    Runner,
+)
 from mloda.provider import FeatureSet
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -61,6 +67,7 @@ CLOCK_START = 1_800_000_000.0
 KEY = b"r" * 32
 DENIED = "RunnerDeniedMcp5"
 PROBE = "income__mcp5_probe"
+SHORT = "income__mcp5_short"
 STALE = "income__mcp5_stale"
 TYPED_PREFIX = "income__mcp5_"
 TYPED_KINDS = ("decimal", "datetime", "date", "nan")
@@ -129,6 +136,16 @@ class RunnerProbeMcp5(_SuffixFeatureGroup):
         if cls.PROBE_LOCK:
             LOCK_PROBES.append(_lock_free_elsewhere())
         return {PROBE: [int(value) * 2 for value in data["income"]]}
+
+
+class RunnerShortMcp5(_SuffixFeatureGroup):
+    """Produces a single row, so its table never truncates."""
+
+    SUFFIXES: ClassVar[tuple[str, ...]] = ("__mcp5_short",)
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {SHORT: [7]}
 
 
 def _stale_column(name: str, data: Any) -> dict[str, list[int]]:
@@ -209,6 +226,7 @@ def _base(*extra: type[FeatureGroup]) -> PluginCollector:
         *FILE_SOURCE_GROUPS,
         RunnerProbeMcp5,
         RunnerTypesMcp5,
+        RunnerShortMcp5,
         RunnerDeniedMcp5,
         RunnerRaiseMcp5,
         RunnerFailedRowsMcp5,
@@ -633,6 +651,307 @@ class TestPreviewBounds:
         assert table["columns"] == [{"name": "customer_id", "classification": "personal", "in_preview": False}]
         assert table["preview"]["rows"] == []
         assert table["preview"]["truncated"] is True
+
+
+class TestResultStore:
+    def test_put_then_get_and_unknown_id(self) -> None:
+        store = ResultStore(_Clock())
+
+        result_id = store.put([{"a": [1, 2]}])
+
+        assert isinstance(result_id, str) and result_id
+        assert store.get(result_id) is not None
+        assert store.get("nope") is None
+
+    def test_ids_are_unique_and_unguessable(self) -> None:
+        store = ResultStore(_Clock())
+
+        ids = {store.put([{"a": [1]}]) for _ in range(20)}
+
+        assert len(ids) == 20
+        assert all(i is not None and len(i) >= 16 for i in ids)
+
+    def test_expires_after_the_ttl(self) -> None:
+        clock = _Clock()
+        store = ResultStore(clock, ttl_seconds=10)
+        result_id = store.put([{"a": [1]}])
+        assert result_id is not None
+
+        clock.now += 11
+
+        assert store.get(result_id) is None
+
+    @staticmethod
+    def _cells(count: int, width: int = 1) -> list[dict[str, list[Any]]]:
+        return [{"a": ["x" * width] * count}]
+
+    @staticmethod
+    def _size(tables: list[dict[str, list[Any]]]) -> int:
+        return len(json.dumps(tables))
+
+    def test_oldest_results_are_evicted_by_the_byte_cap(self) -> None:
+        tables = self._cells(4)
+        store = ResultStore(_Clock(), max_bytes=self._size(tables) * 2)
+        first, second, third = (store.put(tables) for _ in range(3))
+        assert first and second and third
+
+        assert store.get(first) is None
+        assert store.get(second) is not None
+        assert store.get(third) is not None
+
+    def test_one_large_result_can_evict_several(self) -> None:
+        small = self._cells(2)
+        big = self._cells(2, width=20)
+        store = ResultStore(_Clock(), max_bytes=self._size(small) * 3 + 1)
+        ids = [store.put(small) for _ in range(3)]
+        big_id = store.put(big)
+        assert big_id is not None
+
+        assert all(i is not None and store.get(i) is None for i in ids)
+        assert store.get(big_id) is not None
+
+    def test_few_wide_cells_exceed_the_cap(self) -> None:
+        store = ResultStore(_Clock(), max_bytes=100)
+
+        assert store.put(self._cells(1)) is not None
+        assert store.put(self._cells(2, width=200)) is None
+
+    def test_result_over_the_cap_is_not_stored_and_evicts_nothing(self) -> None:
+        small = self._cells(2)
+        store = ResultStore(_Clock(), max_bytes=self._size(small))
+        kept = store.put(small)
+        assert kept is not None
+
+        assert store.put(self._cells(5)) is None
+        assert store.get(kept) is not None
+
+
+class TestPaging:
+    PAGED: ClassVar[dict[str, Any]] = {"result_paging": True, "max_preview_rows": 2}
+
+    @staticmethod
+    def _start(tmp_path: Path, request: Mapping[str, Any] = REQUEST, rows: int = 5, **kwargs: Any) -> Any:
+        values = {**TestPaging.PAGED, **kwargs}
+        settings = _settings(tmp_path, **values)
+        _write_sales(tmp_path / "sales.csv", rows)
+        clock = _Clock()
+        planner = _planner(settings, clock=clock)
+        runner = Runner(planner, clock=clock)
+        return runner, runner.run(_plan_id(planner, request)), clock
+
+    @staticmethod
+    def _walk(runner: Runner, result_id: str, limit: int | None = None, table: int = 0) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        cursor = None
+        for _ in range(100):
+            page = _success(runner.fetch_rows(result_id, table, cursor=cursor, limit=limit))
+            assert page["untrusted"] is True
+            rows += page["rows"]
+            cursor = page["next_cursor"]
+            if cursor is None:
+                return rows
+        raise AssertionError("cursor never ended")
+
+    def test_truncated_run_has_result_id_and_next_cursor(self, tmp_path: Path) -> None:
+        _, result, _ = self._start(tmp_path)
+
+        table = _success(result)["tables"][0]
+        assert isinstance(result["result_id"], str)
+        assert isinstance(table["preview"]["next_cursor"], str)
+        assert table["preview"]["truncated"] is True
+        json.dumps(result, allow_nan=False)
+
+    def test_over_cap_result_gets_no_result_id_or_cursor(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("mloda.interfaces.service.runner.MAX_STORED_BYTES", 10)
+
+        _, result, _ = self._start(tmp_path)
+
+        assert _success(result)["tables"][0]["preview"]["truncated"] is True
+        assert "result_id" not in result
+        assert "next_cursor" not in _only_table(result)["preview"]
+
+    def test_only_the_truncated_table_gets_a_cursor(self, tmp_path: Path) -> None:
+        runner, result, _ = self._start(tmp_path, {"features": ["income", SHORT]})
+
+        tables = _success(result)["tables"]
+        by_name = {c["name"]: t for t in tables for c in t["columns"]}
+        assert by_name["income"]["preview"]["truncated"] is True
+        assert isinstance(by_name["income"]["preview"]["next_cursor"], str)
+        assert by_name[SHORT]["preview"]["truncated"] is False
+        assert "next_cursor" not in by_name[SHORT]["preview"]
+        index = tables.index(by_name[SHORT])
+        page = _success(runner.fetch_rows(result["result_id"], index))
+        assert page["rows"] == [{SHORT: 7}]
+        assert page["next_cursor"] is None
+
+    def test_paging_off_has_no_result_id(self, tmp_path: Path) -> None:
+        result = _run(tmp_path, max_preview_rows=2)
+
+        assert "result_id" not in result
+        assert "next_cursor" not in _only_table(result)["preview"]
+
+    def test_untruncated_has_no_result_id(self, tmp_path: Path) -> None:
+        _, result, _ = self._start(tmp_path, max_preview_rows=20)
+
+        assert "result_id" not in result
+        assert set(result) == RUN_KEYS
+        assert "next_cursor" not in _only_table(result)["preview"]
+
+    def test_all_withheld_has_no_result_id(self, tmp_path: Path) -> None:
+        _, result, _ = self._start(tmp_path, {"features": ["customer_id"]})
+
+        assert "result_id" not in result
+        assert "next_cursor" not in _only_table(result)["preview"]
+
+    def test_trusted_caller_has_no_result_id(self, tmp_path: Path) -> None:
+        _, result, _ = self._start(tmp_path, trusted_caller=True)
+
+        assert "result_id" not in result
+        assert "next_cursor" not in _only_table(result)["preview"]
+
+    def test_full_run_has_no_result_id(self, tmp_path: Path) -> None:
+        settings = _settings(tmp_path, trusted_caller=True, **self.PAGED)
+        planner = _planner(settings)
+
+        result = Runner(planner).run(_plan_id(planner), full=True)
+
+        assert "result_id" not in result
+
+    def test_walking_cursors_returns_every_row_once_in_order(self, tmp_path: Path) -> None:
+        runner, result, _ = self._start(tmp_path)
+
+        rows = self._walk(runner, result["result_id"])
+
+        assert rows == [{"income": 10 * i, "segment": "a" if i % 2 else "b"} for i in range(1, 6)]
+
+    def test_preview_next_cursor_continues_after_the_preview(self, tmp_path: Path) -> None:
+        runner, result, _ = self._start(tmp_path)
+        cursor = result["tables"][0]["preview"]["next_cursor"]
+
+        page = _success(runner.fetch_rows(result["result_id"], 0, cursor=cursor, limit=2))
+
+        assert page["rows"] == [{"income": 30, "segment": "a"}, {"income": 40, "segment": "b"}]
+        assert page["next_cursor"] is not None
+        last = _success(runner.fetch_rows(result["result_id"], 0, cursor=page["next_cursor"], limit=2))
+        assert last["rows"] == [{"income": 50, "segment": "a"}]
+        assert last["next_cursor"] is None
+
+    def test_first_page_starts_at_row_zero_and_limit_defaults_to_preview(self, tmp_path: Path) -> None:
+        runner, result, _ = self._start(tmp_path)
+
+        page = _success(runner.fetch_rows(result["result_id"]))
+
+        assert page["rows"] == [{"income": 10, "segment": "a"}, {"income": 20, "segment": "b"}]
+        assert set(page) == {"untrusted", "rows", "next_cursor"}
+
+    def test_withheld_columns_never_appear(self, tmp_path: Path) -> None:
+        runner, result, _ = self._start(tmp_path)
+
+        dumped = json.dumps(self._walk(runner, result["result_id"], limit=1))
+
+        assert all(customer_id not in dumped for customer_id in CUSTOMER_IDS)
+        assert "customer_id" not in dumped
+
+    def test_values_are_json_safe(self, tmp_path: Path) -> None:
+        runner, result, _ = self._start(tmp_path, {"features": TYPED}, max_preview_rows=2)
+
+        rows = self._walk(runner, result["result_id"])
+
+        assert len(rows) == 5
+        for income, row in zip([10, 20, 30, 40, 50], rows):
+            assert row[TYPED_PREFIX + "decimal"] == str(Decimal(income) / Decimal(4))
+            assert row[TYPED_PREFIX + "date"] == (date(2024, 1, 1) + timedelta(days=income)).isoformat()
+            assert row[TYPED_PREFIX + "nan"] == (None if income >= 30 else income + 0.5)
+        json.dumps(rows, allow_nan=False)
+
+    def test_paging_never_reruns_the_plan(self, tmp_path: Path, probe_calls: list[str]) -> None:
+        runner, result, _ = self._start(tmp_path, {"features": ["customer_id", PROBE]})
+        assert len(probe_calls) == 1
+
+        tables = _success(result)["tables"]
+        index = next(i for i, t in enumerate(tables) if PROBE in [c["name"] for c in t["columns"]])
+        rows = self._walk(runner, result["result_id"], limit=1, table=index)
+
+        assert len(rows) == 5
+        assert len(probe_calls) == 1
+
+    @pytest.mark.parametrize("table", [-1, 1, 99, True, "0", 0.0, None])
+    def test_bad_table_is_validation_failed(self, tmp_path: Path, table: Any) -> None:
+        runner, result, _ = self._start(tmp_path)
+
+        error = _error(runner.fetch_rows(result["result_id"], table), "validation_failed")
+
+        assert _has_detail(error, path="/table")
+
+    @pytest.mark.parametrize("limit", [0, -1, 3, 1000, True, "1", 1.0])
+    def test_bad_limit_is_validation_failed(self, tmp_path: Path, limit: Any) -> None:
+        runner, result, _ = self._start(tmp_path)
+
+        error = _error(runner.fetch_rows(result["result_id"], 0, limit=limit), "validation_failed")
+
+        assert _has_detail(error, path="/limit")
+
+    def test_limit_at_the_bounds_is_accepted(self, tmp_path: Path) -> None:
+        runner, result, _ = self._start(tmp_path)
+
+        assert len(_success(runner.fetch_rows(result["result_id"], 0, limit=1))["rows"]) == 1
+        assert len(_success(runner.fetch_rows(result["result_id"], 0, limit=2))["rows"]) == 2
+
+    @pytest.mark.parametrize("cursor", ["", "garbage", "!!!", "djE6MDpubw", 5, ["x"]])
+    def test_malformed_cursor_is_validation_failed(self, tmp_path: Path, cursor: Any) -> None:
+        runner, result, _ = self._start(tmp_path)
+
+        error = _error(runner.fetch_rows(result["result_id"], 0, cursor=cursor), "validation_failed")
+
+        assert _has_detail(error, path="/cursor")
+
+    def test_cursor_from_another_result_is_refused(self, tmp_path: Path) -> None:
+        runner, first, _ = self._start(tmp_path)
+        planner = _planner(_settings(tmp_path, **self.PAGED))
+        other = Runner(planner)
+        second = other.run(_plan_id(planner))
+        cursor = first["tables"][0]["preview"]["next_cursor"]
+
+        error = _error(other.fetch_rows(second["result_id"], 0, cursor=cursor), "validation_failed")
+
+        assert _has_detail(error, path="/cursor")
+
+    def test_cursor_from_another_table_is_refused(self, tmp_path: Path) -> None:
+        runner, result, _ = self._start(tmp_path)
+        cursor = result["tables"][0]["preview"]["next_cursor"]
+        foreign = encode_cursor(2, "0" * 16)
+
+        for bad in (foreign, cursor + "A"):
+            error = _error(runner.fetch_rows(result["result_id"], 0, cursor=bad), "validation_failed")
+            assert _has_detail(error, path="/cursor")
+
+    @pytest.mark.parametrize("result_id", ["nope", "", None, 5, ["a"], True])
+    def test_unknown_result_id_is_plan_invalid(self, tmp_path: Path, result_id: Any) -> None:
+        runner, _, _ = self._start(tmp_path)
+
+        error = _error(runner.fetch_rows(result_id), "plan_invalid")
+
+        assert "unknown or expired" in error["message"]
+        assert "again" in error["message"]
+
+    def test_result_expires_with_the_clock(self, tmp_path: Path) -> None:
+        runner, result, clock = self._start(tmp_path)
+        assert not is_error(runner.fetch_rows(result["result_id"]))
+
+        clock.now += RESULT_TTL_SECONDS + 1
+
+        error = _error(runner.fetch_rows(result["result_id"]), "plan_invalid")
+        assert "expired" in error["message"]
+
+    def test_plan_mode_is_policy_denied(self, tmp_path: Path) -> None:
+        planner = _planner(_settings(tmp_path, mode="plan", **self.PAGED))
+
+        _error(Runner(planner).fetch_rows("anything"), "policy_denied")
+
+    def test_paging_off_is_policy_denied(self, tmp_path: Path) -> None:
+        planner = _planner(_settings(tmp_path, max_preview_rows=2))
+
+        _error(Runner(planner).fetch_rows("anything"), "policy_denied")
 
 
 class TestOtherFrameworks:

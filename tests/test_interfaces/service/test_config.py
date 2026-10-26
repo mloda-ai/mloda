@@ -242,6 +242,20 @@ def test_non_bool_inline_data_is_config_error(tmp_path: Path, value: str) -> Non
         load_settings(_write(tmp_path, f"[mcp]\ninline_data = {value}\n"), env={})
 
 
+def test_result_paging_defaults_to_false() -> None:
+    assert Settings().result_paging is False
+
+
+def test_result_paging_toml_true_loads(tmp_path: Path) -> None:
+    assert load_settings(_write(tmp_path, "[mcp]\nresult_paging = true\n"), env={}).result_paging is True
+
+
+@pytest.mark.parametrize("value", ['"yes"', "1", "[true]"])
+def test_non_bool_result_paging_is_config_error(tmp_path: Path, value: str) -> None:
+    with pytest.raises(ConfigError, match="'result_paging' must be true or false"):
+        load_settings(_write(tmp_path, f"[mcp]\nresult_paging = {value}\n"), env={})
+
+
 def test_trusted_caller_defaults_to_false() -> None:
     assert Settings().trusted_caller is False
 

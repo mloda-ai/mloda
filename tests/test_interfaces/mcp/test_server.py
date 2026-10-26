@@ -46,6 +46,7 @@ SEARCH = "mloda_search_features"
 DESCRIBE = "mloda_describe_feature"
 EXPLAIN = "mloda_explain_request"
 RUN = "mloda_run_request"
+FETCH = "mloda_fetch_rows"
 PLAN_TOOLS = {SEARCH, DESCRIBE, EXPLAIN}
 REQUEST: dict[str, Any] = {"features": ["customer_id", "income", "segment"]}
 CUSTOMER_IDS = [f"C9M7{index:03d}" for index in range(1, 6)]
@@ -79,8 +80,9 @@ CALLS: list[tuple[str, dict[str, Any]]] = [
     (EXPLAIN, {"request": REQUEST}),
     (EXPLAIN, {"request": {"features": ["incme"]}}),
     (RUN, {"plan_id": "garbage"}),
+    (FETCH, {"result_id": "garbage"}),
 ]
-CALL_IDS = ["search", "search_sources", "describe_error", "explain", "explain_error", "run_error"]
+CALL_IDS = ["search", "search_sources", "describe_error", "explain", "explain_error", "run_error", "fetch_error"]
 
 
 @pytest.fixture
@@ -104,6 +106,15 @@ def _settings(tmp_path: Path, mode: str = "plan") -> Settings:
     config = tmp_path / "mloda.toml"
     config.write_text(CONFIG, encoding="utf-8")
     return load_settings(config, ENV, {"mode": mode})
+
+
+def _paging_settings(tmp_path: Path, max_preview_rows: int = 2) -> Settings:
+    settings = _settings(tmp_path, "execute")
+    return dataclasses.replace(settings, result_paging=True, max_preview_rows=max_preview_rows)
+
+
+def _settings_for(tmp_path: Path, tool: str) -> Settings:
+    return _paging_settings(tmp_path) if tool == FETCH else _settings(tmp_path, "execute")
 
 
 def _services(settings: Settings) -> tuple[Catalog, Planner, Runner]:
@@ -204,9 +215,25 @@ class TestTools:
 
         assert set(tools) == PLAN_TOOLS | {RUN}
 
+    async def test_execute_mode_without_paging_has_no_fetch_tool(self, tmp_path: Path) -> None:
+        tools = await _tools(_server(_settings(tmp_path, "execute")))
+
+        assert FETCH not in tools
+
+    async def test_result_paging_adds_the_fetch_tool_in_execute_mode(self, tmp_path: Path) -> None:
+        tools = await _tools(_server(_paging_settings(tmp_path)))
+
+        assert set(tools) == PLAN_TOOLS | {RUN, FETCH}
+
+    async def test_plan_mode_with_paging_has_no_fetch_tool(self, tmp_path: Path) -> None:
+        settings = dataclasses.replace(_settings(tmp_path), result_paging=True)
+
+        assert set(await _tools(_server(settings))) == PLAN_TOOLS
+
     @pytest.mark.parametrize(
         ("name", "expected"),
         [
+            (FETCH, {"read_only_hint": True, "open_world_hint": False}),
             (SEARCH, {"read_only_hint": True, "open_world_hint": False}),
             (DESCRIBE, {"read_only_hint": True, "open_world_hint": False}),
             (EXPLAIN, {"read_only_hint": True, "open_world_hint": True}),
@@ -217,13 +244,15 @@ class TestTools:
         ],
     )
     async def test_annotations(self, tmp_path: Path, name: str, expected: dict[str, bool]) -> None:
-        annotations = (await _tools(_server(_settings(tmp_path, "execute"))))[name].annotations
+        annotations = (await _tools(_server(_settings_for(tmp_path, name))))[name].annotations
 
         assert annotations is not None
         assert {key: getattr(annotations, key) for key in expected} == expected
 
-    async def test_every_tool_has_an_object_output_schema_and_a_description(self, tmp_path: Path) -> None:
-        tools = await _tools(_server(_settings(tmp_path, "execute")))
+    @pytest.mark.parametrize("paging", [False, True], ids=["execute", "paging"])
+    async def test_every_tool_has_an_object_output_schema_and_a_description(self, tmp_path: Path, paging: bool) -> None:
+        settings = _paging_settings(tmp_path) if paging else _settings(tmp_path, "execute")
+        tools = await _tools(_server(settings))
 
         for tool in tools.values():
             assert isinstance(tool.output_schema, dict), tool.name
@@ -237,10 +266,11 @@ class TestTools:
             (DESCRIBE, {"name", "options"}, {"name"}),
             (EXPLAIN, {"request"}, {"request"}),
             (RUN, {"plan_id"}, {"plan_id"}),
+            (FETCH, {"result_id", "table", "cursor", "limit"}, {"result_id"}),
         ],
     )
     async def test_tool_arguments(self, tmp_path: Path, name: str, properties: set[str], required: set[str]) -> None:
-        schema = (await _tools(_server(_settings(tmp_path, "execute"))))[name].input_schema
+        schema = (await _tools(_server(_settings_for(tmp_path, name))))[name].input_schema
 
         assert set(schema["properties"]) == properties
         assert set(schema.get("required", [])) == required
@@ -325,6 +355,19 @@ class TestInstructions:
         assert all(position >= 0 for position in positions), instructions
         assert positions == sorted(positions)
 
+    async def test_fetch_step_only_when_offered(self, tmp_path: Path) -> None:
+        async def instructions(settings: Settings) -> str:
+            async with Client(_server(settings)) as client:
+                text = client.instructions
+            assert isinstance(text, str)
+            return text
+
+        assert FETCH not in await instructions(_settings(tmp_path))
+        assert FETCH not in await instructions(_settings(tmp_path, "execute"))
+        paged = await instructions(_paging_settings(tmp_path))
+        assert FETCH in paged
+        assert paged.find(RUN) < paged.find(FETCH)
+
     async def test_descriptions_and_data_are_untrusted(self, tmp_path: Path) -> None:
         instructions = (await self._instructions(tmp_path)).lower()
 
@@ -336,13 +379,13 @@ class TestInstructions:
 class TestEnvelope:
     @pytest.mark.parametrize(("name", "arguments"), CALLS, ids=CALL_IDS)
     async def test_summary_line_and_json_body(self, tmp_path: Path, name: str, arguments: dict[str, Any]) -> None:
-        result = await _call(_server(_settings(tmp_path, "execute")), name, arguments)
+        result = await _call(_server(_settings_for(tmp_path, name)), name, arguments)
 
         _assert_envelope(result)
 
     @pytest.mark.parametrize(("name", "arguments"), CALLS, ids=CALL_IDS)
     async def test_no_paths_in_any_text(self, tmp_path: Path, name: str, arguments: dict[str, Any]) -> None:
-        result = await _call(_server(_settings(tmp_path, "execute")), name, arguments)
+        result = await _call(_server(_settings_for(tmp_path, name)), name, arguments)
 
         for text in _texts(result):
             assert str(tmp_path) not in text
@@ -458,6 +501,32 @@ class TestExecute:
             for customer_id in CUSTOMER_IDS:
                 assert customer_id not in text
 
+    async def test_explain_run_fetch_equals_the_runner(self, tmp_path: Path) -> None:
+        settings = _paging_settings(tmp_path)
+        _, planner, runner = _services(settings)
+        ran_direct = runner.run(planner.explain(REQUEST)["plan_id"])
+        direct_id = ran_direct["result_id"]
+        expected = runner.fetch_rows(direct_id, 0, limit=2)
+        expected_next = runner.fetch_rows(direct_id, 0, cursor=expected["next_cursor"], limit=2)
+
+        async with Client(_server(settings)) as client:
+            plan_id = _assert_envelope(await client.call_tool(EXPLAIN, {"request": REQUEST}))["plan_id"]
+            ran = _assert_envelope(await client.call_tool(RUN, {"plan_id": plan_id}))
+            assert ran["tables"][0]["preview"]["next_cursor"] is not None
+            first = await client.call_tool(FETCH, {"result_id": ran["result_id"], "limit": 2})
+            cursor = _structured(first)["next_cursor"]
+            second = await client.call_tool(FETCH, {"result_id": ran["result_id"], "cursor": cursor, "limit": 2})
+
+        first_page = _assert_envelope(first)
+        second_page = _assert_envelope(second)
+        assert first_page["rows"] == expected["rows"]
+        assert second_page["rows"] == expected_next["rows"]
+        assert first_page["untrusted"] == expected["untrusted"]
+        assert (first_page["next_cursor"] is None) == (expected["next_cursor"] is None)
+        assert (second_page["next_cursor"] is None) == (expected_next["next_cursor"] is None)
+        assert expected["rows"] == PREVIEW_ROWS[:2]
+        assert expected_next["rows"] == PREVIEW_ROWS[2:4]
+
     async def test_run_result_carries_failed_rows_and_is_not_an_error(self, tmp_path: Path) -> None:
         settings = _settings(tmp_path, "execute")
         request = {"features": ["customer_id", FAILED]}
@@ -503,6 +572,7 @@ class TestBoundary:
             (DESCRIBE, 0, "describe", {"name": "income"}),
             (EXPLAIN, 1, "explain", {"request": REQUEST}),
             (RUN, 2, "run", {"plan_id": "garbage"}),
+            (FETCH, 2, "fetch_rows", {"result_id": "garbage"}),
         ],
     )
     async def test_unexpected_exception_is_an_internal_error_without_its_text(
@@ -516,7 +586,7 @@ class TestBoundary:
         arguments: dict[str, Any],
     ) -> None:
         caplog.set_level(logging.DEBUG, logger=LOGGER)
-        services = _services(_settings(tmp_path, "execute"))
+        services = _services(_settings_for(tmp_path, name))
         monkeypatch.setattr(services[service], method, _boom)
 
         result = await _call(build_server(*services), name, arguments)
@@ -544,7 +614,7 @@ class TestAuditLog:
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture, name: str, arguments: dict[str, Any]
     ) -> None:
         caplog.set_level(logging.DEBUG, logger=LOGGER)
-        server = _server(_settings(tmp_path, "execute"))
+        server = _server(_settings_for(tmp_path, name))
 
         result = await _call(server, name, arguments)
 
@@ -555,18 +625,22 @@ class TestAuditLog:
         if "error" in structured:
             assert structured["error"]["audit_id"] in message
 
+    @pytest.mark.parametrize("paging", [False, True], ids=["execute", "paging"])
     async def test_every_call_of_a_session_logs_one_record(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture, paging: bool
     ) -> None:
         caplog.set_level(logging.DEBUG, logger=LOGGER)
 
-        async with Client(_server(_settings(tmp_path, "execute"))) as client:
-            for name, arguments in CALLS:
+        calls = CALLS if paging else [call for call in CALLS if call[0] != FETCH]
+        settings = _paging_settings(tmp_path) if paging else _settings(tmp_path, "execute")
+
+        async with Client(_server(settings)) as client:
+            for name, arguments in calls:
                 await client.call_tool(name, arguments)
 
         records = _audit_records(caplog)
-        assert len(records) == len(CALLS)
-        for record, (name, _) in zip(records, CALLS):
+        assert len(records) == len(calls)
+        for record, (name, _) in zip(records, calls):
             assert name in record.getMessage()
 
     async def test_default_server_refuses_an_unlisted_option(self, tmp_path: Path) -> None:

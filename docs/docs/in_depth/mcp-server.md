@@ -40,6 +40,7 @@ alternatives = { customer_email = ["customer_id"] }
 preview_allows = ["public", "internal"]
 max_preview_rows = 20
 inline_data = false                    # allow inline request data (trusted callers only)
+# result_paging = false                # let callers page through truncated previews
 # max_inline_values = 1000             # refuse inline data with more values (default: no limit)
 # max_inline_chars = 10000             # refuse inline data with more string characters (default: no limit)
 plan_ttl = "24h"
@@ -77,6 +78,14 @@ numbers, booleans, lists or tables (no TOML dates or times), and `in_features` i
 | `mloda_describe_feature` | Resolves one feature name and lists the options of its FeatureGroup |
 | `mloda_explain_request` | Validates and plans a request without reading data; returns the plan and a `plan_id` |
 | `mloda_run_request` | Runs a `plan_id`; only offered when `mode = "execute"` |
+| `mloda_fetch_rows` | Pages through a run result by `result_id`; only offered when `mode = "execute"` and `result_paging = true` |
+
+A run whose preview is truncated returns a `result_id`, and each truncated table's preview a `next_cursor`.
+`mloda_fetch_rows` returns pages of the preview-allowed columns only (`limit` up to `max_preview_rows`) and never
+re-runs the plan. Results expire after 15 minutes and share a total size cap (oldest evicted
+first; a result over the cap gets no `result_id`). Anyone holding a `result_id` can fetch its rows, like a plan id
+within the same server. An unknown or expired id is `plan_invalid`. Paging lets a caller
+read every row of the previewable columns, so it is off by default.
 
 The resource `mloda://schema/feature-request` is the JSON Schema of a request. A request is the
 [feature configuration](feature-config.md) JSON plus optional filters, source restrictions and inline data:
@@ -113,6 +122,11 @@ call has `isError` set and one error shape: `{"error": {"code", "message", "deta
   JSON pointer, never by value. Data-access keys stay refused even when listed. Options encoded in a chained feature
   name are not covered. `mloda explain` and `mloda run` are local and not restricted. `mloda_describe_feature` shows
   `caller_settable` for each option and refuses option keys not in `allow_options`.
+- A plugin marks a key it never wants from a caller (a base URL, an API key) with
+  `PropertySpec(..., caller_settable=False)`. MCP requests and `mloda_describe_feature` refuse that key as
+  `policy_denied` even when `allow_options` lists it, and describe shows `caller_settable: false`. The match is by key
+  name across all installed plugins, and it does not cover chained feature names. `[mcp.options]` defaults and the local
+  CLI may still set it.
 - Denied FeatureGroups are disabled before matching, so their code does not run; the agent sees `policy_denied` and
   the alternatives you configured. Requested names, `index` columns, `in_features` source names and filter columns are
   checked before planning. Any planned feature name the deny list matches, such as a chained name over a denied
@@ -150,7 +164,7 @@ principal (the OS user) and one set of plan ids.
 To embed it, call `mloda.interfaces.mcp.server.create_app(settings, env=env, host=...)`, which returns a Starlette app.
 A mounted sub-app's lifespan does not run, so run the returned app's lifespan or serve it directly.
 
-Not yet: paging through full results, approvals, cancellation, and remote HTTP with OAuth.
+Not yet: approvals, cancellation, and remote HTTP with OAuth.
 
 ## Command line
 

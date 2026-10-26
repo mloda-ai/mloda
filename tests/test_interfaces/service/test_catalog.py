@@ -29,6 +29,13 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from tests.helpers.docs_scope import small_feature_group_walk
 from tests.helpers.plugin_stubs import StubFeatureGroup
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
+from tests.test_interfaces.source_groups import (
+    CALLER_LOCKED_FEATURE,
+    CALLER_LOCKED_KEY,
+    CALLER_OPEN_FEATURE,
+    CallerLockedMcp6,
+    CallerOpenMcp7,
+)
 
 # Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
 pytestmark = pytest.mark.timeout(30)
@@ -514,6 +521,26 @@ class TestDescribe:
             "mcp3_window": True,
         }
 
+    @pytest.mark.parametrize("listed", [(), (CALLER_LOCKED_KEY,)])
+    def test_flagged_option_is_not_caller_settable_even_when_listed(
+        self, tmp_path: Path, listed: tuple[str, ...]
+    ) -> None:
+        collector = PluginCollector.enabled_feature_groups({*ALLOWED, CallerLockedMcp6})
+        flagged = Catalog.build(_settings(tmp_path, allow_options=listed), collector)
+
+        options = flagged.describe(CALLER_LOCKED_FEATURE)["options"]
+
+        assert {entry["name"]: entry["caller_settable"] for entry in options} == {CALLER_LOCKED_KEY: False}
+
+    @pytest.mark.parametrize("listed", [(), (CALLER_LOCKED_KEY,)])
+    def test_key_flagged_by_another_group_is_not_caller_settable(self, tmp_path: Path, listed: tuple[str, ...]) -> None:
+        collector = PluginCollector.enabled_feature_groups({*ALLOWED, CallerLockedMcp6, CallerOpenMcp7})
+        flagged = Catalog.build(_settings(tmp_path, allow_options=listed), collector)
+
+        options = flagged.describe(CALLER_OPEN_FEATURE)["options"]
+
+        assert {entry["name"]: entry["caller_settable"] for entry in options} == {CALLER_LOCKED_KEY: False}
+
     def test_metadata_missing_flags_empty_explanation(self, catalog: Catalog) -> None:
         result = catalog.describe("mcp3_alpha_total")
         assert result["metadata_missing"] == ["explanation for option 'mcp3_note'"]
@@ -604,3 +631,42 @@ class TestDescribeOptionAllowList:
 
         assert [detail["problem"] for detail in result["error"]["details"]] != ["option_not_allowed"]
         assert SECRET not in json.dumps(result)
+
+    @pytest.mark.parametrize("listed", [(), (CALLER_LOCKED_KEY,)])
+    def test_flagged_key_is_refused_even_when_listed(self, tmp_path: Path, listed: tuple[str, ...]) -> None:
+        collector = PluginCollector.enabled_feature_groups({*ALLOWED, CallerLockedMcp6})
+        flagged = Catalog.build(_settings(tmp_path, allow_options=listed), collector)
+
+        result = flagged.describe(CALLER_LOCKED_FEATURE, options={CALLER_LOCKED_KEY: SECRET})
+
+        assert _error_code(result) == "policy_denied"
+        (detail,) = result["error"]["details"]
+        assert detail["path"] == f"/options/{CALLER_LOCKED_KEY}"
+        assert detail["problem"] == "option_not_caller_settable"
+        assert SECRET not in json.dumps(result)
+
+    @pytest.mark.parametrize("listed", [(), (CALLER_LOCKED_KEY,)])
+    def test_key_flagged_by_another_group_is_refused(self, tmp_path: Path, listed: tuple[str, ...]) -> None:
+        collector = PluginCollector.enabled_feature_groups({*ALLOWED, CallerLockedMcp6, CallerOpenMcp7})
+        flagged = Catalog.build(_settings(tmp_path, allow_options=listed), collector)
+
+        result = flagged.describe(CALLER_OPEN_FEATURE, options={CALLER_LOCKED_KEY: SECRET})
+
+        assert _error_code(result) == "policy_denied"
+        (detail,) = result["error"]["details"]
+        assert detail["problem"] == "option_not_caller_settable"
+        assert SECRET not in json.dumps(result)
+
+    def test_trusted_caller_may_set_flagged_key(self, tmp_path: Path) -> None:
+        collector = PluginCollector.enabled_feature_groups({*ALLOWED, CallerLockedMcp6})
+        trusted = Catalog.build(_settings(tmp_path, trusted_caller=True), collector)
+
+        assert not is_error(trusted.describe(CALLER_LOCKED_FEATURE, options={CALLER_LOCKED_KEY: SECRET}))
+
+    def test_data_access_check_precedes_flagged_key_check(self, tmp_path: Path) -> None:
+        collector = PluginCollector.enabled_feature_groups({*ALLOWED, CallerLockedMcp6})
+        flagged = Catalog.build(_settings(tmp_path, allow_options=(CALLER_LOCKED_KEY,)), collector)
+
+        result = flagged.describe(CALLER_LOCKED_FEATURE, options={"CsvFG": SECRET, CALLER_LOCKED_KEY: SECRET})
+
+        assert [detail["problem"] for detail in result["error"]["details"]] == ["data_access_option"]

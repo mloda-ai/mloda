@@ -28,7 +28,9 @@ from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.request import (
     MAX_NAME_LENGTH,
     Problem,
+    caller_refused_option_keys,
     option_data_access_violations,
+    refused_group_option_violations,
     unlisted_group_option_violations,
 )
 from mloda.interfaces.service.sources import data_access_collection, source_columns
@@ -115,11 +117,11 @@ def _fingerprint(query: str, kinds: Sequence[str]) -> str:
     return hashlib.sha256(json.dumps([query, list(kinds)]).encode("utf-8")).hexdigest()[:16]
 
 
-def _encode_cursor(offset: int, fingerprint: str) -> str:
+def encode_cursor(offset: int, fingerprint: str) -> str:
     return base64.urlsafe_b64encode(f"v1:{offset}:{fingerprint}".encode("ascii")).decode("ascii").rstrip("=")
 
 
-def _decode_cursor(cursor: str, fingerprint: str) -> int | None:
+def decode_cursor(cursor: str, fingerprint: str) -> int | None:
     """Offset of a cursor issued for this fingerprint, or None for a malformed or foreign one."""
     if not _CURSOR.fullmatch(cursor) or len(cursor) % 4 == 1:
         return None
@@ -142,13 +144,14 @@ def _options(fg: type[FeatureGroup], allowed: Collection[str]) -> tuple[list[dic
     options: list[dict[str, Any]] = []
     missing: list[str] = []
     mapping = fg.PROPERTY_MAPPING or {}
+    refused = caller_refused_option_keys()
     for key in sorted(mapping, key=str):
         spec = mapping[key]
         entry: dict[str, Any] = {
             "name": str(key),
             "explanation": sanitize_text(spec.explanation),
             "required": is_no_default(spec.default),
-            "caller_settable": str(key) in allowed,
+            "caller_settable": str(key) in allowed and str(key) not in refused,
         }
         if not is_no_default(spec.default):
             entry["default"] = _json_value(spec.default)
@@ -208,7 +211,7 @@ class Catalog:
         fingerprint = _fingerprint(query, selected)
         offset = 0
         if cursor is not None:
-            decoded = _decode_cursor(cursor, fingerprint)
+            decoded = decode_cursor(cursor, fingerprint)
             if decoded is None:
                 return _invalid("/cursor", "The cursor is malformed or belongs to another query.")
             offset = decoded
@@ -216,7 +219,7 @@ class Catalog:
         end = offset + limit
         return {
             "items": items[offset:end],
-            "next_cursor": _encode_cursor(end, fingerprint) if end < len(items) else None,
+            "next_cursor": encode_cursor(end, fingerprint) if end < len(items) else None,
         }
 
     def _matches(self, needle: str, kinds: Sequence[str]) -> list[dict[str, Any]]:
@@ -243,7 +246,11 @@ class Catalog:
             details = problems_to_details(violations)
             return error_result("policy_denied", "A request may not set data-access options.", details)
         if not self._settings.trusted_caller:
+            locked = refused_group_option_violations(group)
             unlisted = unlisted_group_option_violations(group, self._settings.allow_options)
+            if locked:
+                message = "A request may not set options a plugin marks as not caller-settable."
+                return error_result("policy_denied", message, problems_to_details([*locked, *unlisted]))
             if unlisted:
                 message = "A request may only set options listed in allow_options."
                 return error_result("policy_denied", message, problems_to_details(unlisted))

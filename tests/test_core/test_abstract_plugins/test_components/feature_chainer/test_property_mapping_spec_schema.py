@@ -57,6 +57,7 @@ class TestTheConstructorIsTheSchema:
             "required_when",
             "allow_explicit_none",
             "deferred_binding",
+            "caller_settable",
             "name_converter",
             "expected",
         }

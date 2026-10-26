@@ -94,6 +94,8 @@ class PropertySpec:
     expected: str | None = None
     # Converts the captured text of a named capture bound to this key, before validation.
     name_converter: Callable[[str], Any] | None = None
+    # Refused for untrusted service callers even when allow-listed.
+    caller_settable: bool = True
 
     def __post_init__(self) -> None:
         prefix = f"PropertySpec({self.explanation!r})"
@@ -130,6 +132,9 @@ class PropertySpec:
 
         if not isinstance(self.deferred_binding, bool):
             raise ValueError(f"{prefix}: deferred_binding must be a bool, got {type(self.deferred_binding).__name__}.")
+
+        if not isinstance(self.caller_settable, bool):
+            raise ValueError(f"{prefix}: caller_settable must be a bool, got {type(self.caller_settable).__name__}.")
 
         if self.element_validator is not None and not callable(self.element_validator):
             raise ValueError(f"{prefix}: element_validator must be callable.")
@@ -246,6 +251,7 @@ def property_spec(
     allow_explicit_none: bool = False,
     deferred_binding: bool = False,
     name_converter: Callable[[str], Any] | None = None,
+    caller_settable: bool = True,
 ) -> PropertySpec:
     """Build a ``PropertySpec``; the ``strict=`` keyword sets the ``strict_validation`` field."""
     return PropertySpec(
@@ -261,4 +267,5 @@ def property_spec(
         allow_explicit_none=allow_explicit_none,
         deferred_binding=deferred_binding,
         name_converter=name_converter,
+        caller_settable=caller_settable,
     )

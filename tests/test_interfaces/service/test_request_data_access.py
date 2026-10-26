@@ -7,10 +7,18 @@ import pytest
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import QUERY_OPTION
-from mloda.provider import ApiDataFG
+from mloda.provider import ApiDataFG, property_spec
 from mloda.user import PluginLoader
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
-from mloda.interfaces.service.request import Problem, data_access_option_keys, data_access_violations
+from mloda.interfaces.service.request import (
+    Problem,
+    caller_refused_option_keys,
+    data_access_option_keys,
+    data_access_violations,
+    refused_group_option_violations,
+    refused_option_violations,
+)
+from tests.test_interfaces.source_groups import CALLER_LOCKED_KEY, CallerLockedMcp6  # noqa: F401
 
 # PluginLoader.all() can take seconds on a cold import under xdist load.
 pytestmark = pytest.mark.timeout(30)
@@ -178,3 +186,61 @@ def test_every_violation_is_reported() -> None:
 
     assert sorted(p.path for p in problems) == [f"/features/0/options/{KEY}", f"/features/1/context_options/{KEY}"]
     _assert_no_secret(problems)
+
+
+def test_caller_refused_keys_contain_the_flagged_key() -> None:
+    keys = caller_refused_option_keys()
+    assert isinstance(keys, frozenset)
+    assert CALLER_LOCKED_KEY in keys
+    assert KEY not in keys
+
+
+@pytest.mark.parametrize("container", ["options", "group_options", "context_options"])
+def test_refused_key_in_container_is_reported_without_value(container: str) -> None:
+    request: dict[str, Any] = {"features": ["a", {"name": "b", container: {"k": 1, CALLER_LOCKED_KEY: SECRET}}]}
+
+    problems = refused_option_violations(request)
+
+    assert [p.path for p in problems] == [f"/features/1/{container}/{CALLER_LOCKED_KEY}"]
+    assert problems[0].problem == "option_not_caller_settable"
+    _assert_no_secret(problems)
+
+
+def test_refused_key_in_nested_in_features_is_reported() -> None:
+    nested = {"name": "raw", "options": {CALLER_LOCKED_KEY: SECRET}}
+    request = {"features": [{"name": "b", "options": {"in_features": nested}}]}
+
+    problems = refused_option_violations(request)
+
+    assert [p.path for p in problems] == [f"/features/0/options/in_features/options/{CALLER_LOCKED_KEY}"]
+    _assert_no_secret(problems)
+
+
+def test_clean_or_malformed_request_has_no_refused_keys() -> None:
+    assert refused_option_violations({"features": ["a", {"name": "b", "options": {"k": 1}}]}) == []
+    assert refused_option_violations({"features": "a"}) == []
+    assert refused_option_violations(None) == []
+
+
+def test_refused_group_option_is_reported_by_pointer() -> None:
+    problems = refused_group_option_violations({"k": 1, CALLER_LOCKED_KEY: SECRET})
+
+    assert [p.path for p in problems] == [f"/options/{CALLER_LOCKED_KEY}"]
+    assert problems[0].problem == "option_not_caller_settable"
+    _assert_no_secret(problems)
+
+
+def test_malformed_property_mapping_does_not_break_key_collection(monkeypatch: pytest.MonkeyPatch) -> None:
+    not_a_mapping = type("NotAMapping", (), {"PROPERTY_MAPPING": ["mcp_malformed_a"]})
+    non_spec_values = type("NonSpecValues", (), {"PROPERTY_MAPPING": {"mcp_malformed_b": "just text"}})
+    flagged = type(
+        "Flagged",
+        (),
+        {"PROPERTY_MAPPING": {"mcp_flagged": property_spec("Locked.", default=None, caller_settable=False)}},
+    )
+    monkeypatch.setattr(
+        "mloda.interfaces.service.request.get_all_subclasses",
+        lambda _cls: [not_a_mapping, non_spec_values, flagged],
+    )
+
+    assert caller_refused_option_keys() == frozenset({"mcp_flagged"})

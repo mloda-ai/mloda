@@ -471,6 +471,12 @@ class SourceFeatureGroup(FeatureGroup):
                 for route in cls.CLAIM_ROUTES
                 if all(key in options for key in route.required_options)
                 and (route.searched or pointed or bool(route.required_options))
+                and not (
+                    name
+                    and route.names is NamePolicy.DECLARED
+                    and not pointed
+                    and not cls._declared_name(cls.get_column_base_feature(name))
+                )
             ]
             if not routes:
                 return False
@@ -507,7 +513,13 @@ class SourceFeatureGroup(FeatureGroup):
         skipped = False
         missing: set[str] = set()
         selected: list[ClaimRoute] = []
+        declared: bool | None = None
         for route in cls.CLAIM_ROUTES:
+            if route.names is NamePolicy.DECLARED and not pointed:
+                if declared is None:
+                    declared = cls._declared_name(base_name)
+                if not declared:
+                    continue
             if not all(key in options for key in route.required_options):
                 if foreign is None:
                     missing.update(key for key in route.required_options if key not in options)
@@ -624,7 +636,9 @@ class SourceFeatureGroup(FeatureGroup):
                     deferrable=True,
                 )
             replace_probe_match_rejection(cls.get_class_name(), reason, known_owners, stage=INPUT_DATA_STAGE)
-        elif missing and not selected and (pointed or cls._declared_name(base_name)):
+        elif (
+            missing and not selected and (pointed or (cls._declared_name(base_name) if declared is None else declared))
+        ):
             plural = "s" if len(missing) > 1 else ""
             keys = ", ".join(repr(key) for key in sorted(missing))
             reason = f"{cls.get_class_name()} needs the option{plural} {keys} for '{name}'"

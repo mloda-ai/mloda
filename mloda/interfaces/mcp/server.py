@@ -31,6 +31,7 @@ SEARCH = "mloda_search_features"
 DESCRIBE = "mloda_describe_feature"
 EXPLAIN = "mloda_explain_request"
 RUN = "mloda_run_request"
+FETCH = "mloda_fetch_rows"
 REQUEST_DESCRIPTION = f"A feature request as defined by the JSON Schema resource {SCHEMA_URI}."
 _LOGGER = logging.getLogger("mloda.interfaces.mcp")
 
@@ -44,11 +45,15 @@ class ServiceResult(BaseModel):
 ToolResult = Annotated[CallToolResult, ServiceResult]
 
 
-def _instructions(execute: bool) -> str:
+def _instructions(execute: bool, paging: bool = False) -> str:
     steps = f"1. {SEARCH} to find features and sources. 2. {DESCRIBE} for a feature's options. "
     steps += f"3. {EXPLAIN} to validate and plan a request; it returns a plan_id."
     if execute:
         steps += f" 4. {RUN} with that plan_id to execute it and get a classified preview."
+        if paging:
+            steps += (
+                f" 5. {FETCH} with the result_id and a next_cursor to page through the rest of a truncated preview."
+            )
     return (
         f"mloda plans and runs feature requests. Workflow: {steps} "
         "Every result is a one-line summary followed by the result as JSON; errors carry a code and an audit_id. "
@@ -126,6 +131,14 @@ def build_server(catalog: Catalog, planner: Planner, runner: Runner) -> MCPServe
     def run(plan_id: Annotated[str, Field(description="The plan_id returned by explain.")]) -> ToolResult:
         return _respond(RUN, lambda: runner.run(plan_id))
 
+    def fetch_rows(
+        result_id: Annotated[str, Field(description="The result_id returned by run.")],
+        table: Annotated[int, Field(description="Index of the result table.")] = 0,
+        cursor: Annotated[str | None, Field(description="next_cursor of the previous page.")] = None,
+        limit: Annotated[int | None, Field(description="Page size; defaults to the preview size.")] = None,
+    ) -> ToolResult:
+        return _respond(FETCH, lambda: runner.fetch_rows(result_id, table, cursor, limit))
+
     read_only = ToolAnnotations(read_only_hint=True, open_world_hint=False)
     tools = [
         Tool.from_function(
@@ -155,7 +168,11 @@ def build_server(catalog: Catalog, planner: Planner, runner: Runner) -> MCPServe
         )
         description = "Execute the request behind a plan_id from explain and return a classified, bounded preview."
         tools.append(Tool.from_function(run, name=RUN, description=description, annotations=run_annotations))
-    server: MCPServer[Any] = MCPServer(name="mloda", instructions=_instructions(execute), tools=tools)
+    paging = execute and planner.settings.result_paging
+    if paging:
+        description = "Page through the preview-allowed columns of a run result by result_id and cursor."
+        tools.append(Tool.from_function(fetch_rows, name=FETCH, description=description, annotations=read_only))
+    server: MCPServer[Any] = MCPServer(name="mloda", instructions=_instructions(execute, paging), tools=tools)
 
     @server.resource(SCHEMA_URI, name="feature-request-schema", mime_type=SCHEMA_MIME_TYPE)
     def feature_request_schema() -> str:

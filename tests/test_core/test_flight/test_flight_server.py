@@ -1,6 +1,7 @@
 import threading
 from typing import Any
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pandas as pd
 import pytest
@@ -120,11 +121,11 @@ class TestFlightServerIntegration:
 
     def test_download_frame_converts_to_the_native_framework(self) -> None:
         table = pa.table({"a": [1, 2, 3]})
-        table_key = "test_download_frame"
-        FlightServer.upload_table(self.location, table, table_key)
+        object_id = uuid4()
+        FlightServer.upload_table(self.location, table, str(object_id))
 
-        frame = PandasDataFrame().download_frame(self.location, table_key)
+        frame = PandasDataFrame().download_frame(self.location, object_id)
 
         assert isinstance(frame, pd.DataFrame)
         assert frame.equals(table.to_pandas())
-        FlightServer.drop_tables(self.location, {table_key})
+        FlightServer.drop_tables(self.location, {str(object_id)})

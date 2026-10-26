@@ -838,17 +838,17 @@ class ExecutionPlan:
         first: tuple[str, type[FeatureGroup]],
         second: tuple[str, type[FeatureGroup]],
     ) -> str:
-        """Error for a consumer reading same-framework inputs that live on two different frames."""
+        """Error for a consumer reading inputs from two different frames."""
         return (
             f"'{format_feature_group_class(ep.feature_group)}' reads '{first[0]}' "
             f"('{format_feature_group_class(first[1])}') and '{second[0]}' "
-            f"('{format_feature_group_class(second[1])}'), which are on different frames: "
-            "a row-reducing group's output lives on its own reduced frame.\n"
+            f"('{format_feature_group_class(second[1])}'), which are on different frames "
+            "(a row-reducing group's output lives on its own frame).\n"
             "Join them with a Link, for example:\n"
             "    from mloda.user import Link, JoinSpec\n\n"
             f'    Link.inner(JoinSpec({first[1].get_class_name()}, "key"), '
             f'JoinSpec({second[1].get_class_name()}, "key"))\n'
-            "or expose the needed column (e.g. a group key) as a feature of the row-reducing group."
+            "or expose the needed column as a feature of the row-reducing group."
         )
 
     @staticmethod

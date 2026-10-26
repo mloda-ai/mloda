@@ -164,6 +164,11 @@ class JoinStep(Step):
 
         if from_cfw is None:
             raise ValueError("From_cfw should not be none for join step.")
+
+        if self.location and isinstance(cfw.data, str):
+            # the destination frame's worker already handed its data to the flight server
+            cfw.set_data(self._download_frame(self.location, cfw, cfw.data))
+
         from_cfw_data, from_cfw_uuid = self.get_data(from_cfw, cfw)
 
         self._merge_data(cfw, from_cfw_data)
@@ -179,6 +184,11 @@ class JoinStep(Step):
 
         return None
 
+    @staticmethod
+    def _download_frame(location: str, cfw: ComputeFramework, object_id: str) -> Any:
+        table = FlightServer.download_table(location, object_id)
+        return cfw.convert_flight_server_data_back(table, ComputeFrameworkTransformer())
+
     def get_data(self, from_cfw: UUID | ComputeFramework, cfw: ComputeFramework) -> Any:
         """
         This method is used to get the data from the compute framework.
@@ -187,11 +197,7 @@ class JoinStep(Step):
         If we are not using multiprocessing, we just get the data from the compute framework.
         """
         if self.location and isinstance(from_cfw, UUID):
-            transformer = ComputeFrameworkTransformer()
-
-            data = FlightServer.download_table(self.location, str(from_cfw))
-            data = cfw.convert_flight_server_data_back(data, transformer)
-            return data, from_cfw
+            return self._download_frame(self.location, cfw, str(from_cfw)), from_cfw
         if isinstance(from_cfw, UUID):
             raise ValueError("From_cfw is a UUID, but we are not using flightserver.")
         return from_cfw.get_data(), from_cfw.uuid

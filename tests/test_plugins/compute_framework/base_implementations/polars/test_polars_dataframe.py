@@ -170,3 +170,51 @@ class TestPolarsEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFramewor
     @pytest.fixture
     def non_empty_data(self) -> Any:
         return pl.DataFrame({"a": [1]})
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsIsMissingColumnError:
+    @staticmethod
+    def _attribute_error(obj: Any, name: str) -> AttributeError:
+        with pytest.raises(AttributeError) as excinfo:
+            getattr(obj, name)
+        return excinfo.value
+
+    def test_attribute_read_on_eager_frame_is_a_missing_column(self) -> None:
+        error = self._attribute_error(pl.DataFrame({"a": [1]}), "x")
+        assert PolarsDataFrame.is_missing_column_error(error) is True
+
+    def test_attribute_read_on_lazy_frame_is_a_missing_column(self) -> None:
+        error = self._attribute_error(pl.LazyFrame({"a": [1]}), "x")
+        assert PolarsDataFrame.is_missing_column_error(error) is True
+
+    def test_misspelled_method_is_not_a_missing_column(self) -> None:
+        error = self._attribute_error(pl.DataFrame({"a": [1]}), "fliter")
+        assert PolarsDataFrame.is_missing_column_error(error) is False
+
+    def test_declared_column_on_eager_frame_is_not_a_missing_column(self) -> None:
+        error = self._attribute_error(pl.DataFrame({"declared": [1]}), "declared")
+        assert PolarsDataFrame.is_missing_column_error(error) is False
+
+    def test_declared_column_on_lazy_frame_is_matched(self) -> None:
+        """A LazyFrame cannot be checked for columns inside an error hook, so the hedged hint applies."""
+        error = self._attribute_error(pl.LazyFrame({"declared": [1]}), "declared")
+        assert PolarsDataFrame.is_missing_column_error(error) is True
+
+    def test_plain_attribute_error_with_a_custom_message_is_not_a_missing_column(self) -> None:
+        class _Frame(pl.DataFrame):
+            def __getattr__(self, name: str) -> Any:
+                raise AttributeError(f"`{name}` was removed; use `other` instead", name=name, obj=self)
+
+        error = self._attribute_error(_Frame({"a": [1]}), "melt")
+        assert type(error) is AttributeError
+        assert PolarsDataFrame.is_missing_column_error(error) is False
+
+    def test_removed_api_error_is_not_a_missing_column(self) -> None:
+        error = self._attribute_error(pl.DataFrame({"a": [1]}), "melt")
+        assert type(error) is not AttributeError
+        assert PolarsDataFrame.is_missing_column_error(error) is False
+
+    def test_attribute_error_on_an_expression_is_not_a_missing_column(self) -> None:
+        error = self._attribute_error(pl.col("a"), "x")
+        assert PolarsDataFrame.is_missing_column_error(error) is False

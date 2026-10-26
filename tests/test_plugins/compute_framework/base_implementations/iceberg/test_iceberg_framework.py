@@ -495,3 +495,23 @@ class TestIcebergTfsConnectionInit(TfsConnectionInitMixin):
         mock_catalog = Mock(spec=Catalog)
         mock_catalog.load_table = Mock()
         return mock_catalog
+
+
+@pytest.mark.skipif(pyiceberg is None, reason="PyIceberg is not installed. Skipping this test.")
+class TestIcebergIsMissingColumnError:
+    def test_schema_projection_of_an_unknown_column_is_a_missing_column(self) -> None:
+        schema = Schema(NestedField(field_id=1, name="a", field_type=LongType(), required=False))
+        with pytest.raises(ValueError) as excinfo:
+            schema.select("x")
+        assert IcebergFramework.is_missing_column_error(excinfo.value) is True
+
+    def test_plain_could_not_find_column_without_key_error_cause_is_not_a_missing_column(self) -> None:
+        assert IcebergFramework.is_missing_column_error(ValueError("Could not find column: x")) is False
+
+    def test_mloda_explanatory_error_chained_from_key_error_is_not_a_missing_column(self) -> None:
+        try:
+            raise KeyError("x")
+        except KeyError as key_error:
+            explanatory = ValueError("Feature 'f' read a column it did not declare in input_features().")
+            explanatory.__cause__ = key_error
+        assert IcebergFramework.is_missing_column_error(explanatory) is False

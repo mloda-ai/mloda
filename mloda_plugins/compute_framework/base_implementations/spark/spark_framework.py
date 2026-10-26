@@ -11,6 +11,7 @@ from mloda.user import FeatureName, ParallelizationMode
 from mloda.provider import ComputeFramework, ConnectionRequirement
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda.provider import OutputSchema
+from mloda_plugins.compute_framework.base_implementations.attribute_column_read import is_attribute_column_read
 from mloda_plugins.compute_framework.base_implementations.spark.spark_filter_engine import SparkFilterEngine
 from mloda_plugins.compute_framework.base_implementations.spark.spark_mask_engine import SparkMaskEngine
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import pick_helper_column_name
@@ -20,8 +21,10 @@ try:
     from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, BooleanType
     import pyspark.sql.functions as F
     from pyspark.errors import AnalysisException
+    from pyspark.errors import PySparkAttributeError
 except ImportError:
     AnalysisException = None
+    PySparkAttributeError = None
     SparkSession = None
     DataFrame = None
     StructType = None
@@ -35,6 +38,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 _SPARK_MISSING_COLUMN_CONDITION = "UNRESOLVED_COLUMN"
+_SPARK_ATTRIBUTE_CONDITION = "ATTRIBUTE_NOT_SUPPORTED"
 
 
 class SparkFramework(ComputeFramework):
@@ -93,10 +97,15 @@ class SparkFramework(ComputeFramework):
 
     @classmethod
     def is_missing_column_error(cls, error: Exception) -> bool:
-        if AnalysisException is None or not isinstance(error, AnalysisException):
-            return False
-        condition = error.getCondition() if hasattr(error, "getCondition") else error.getErrorClass()
-        return condition is not None and condition.startswith(_SPARK_MISSING_COLUMN_CONDITION)
+        if AnalysisException is not None and isinstance(error, AnalysisException):
+            condition = error.getCondition() if hasattr(error, "getCondition") else error.getErrorClass()
+            return condition is not None and condition.startswith(_SPARK_MISSING_COLUMN_CONDITION)
+        if PySparkAttributeError is not None and isinstance(error, PySparkAttributeError):
+            condition = error.getCondition() if hasattr(error, "getCondition") else error.getErrorClass()
+            return condition == _SPARK_ATTRIBUTE_CONDITION and is_attribute_column_read(
+                error, (DataFrame,), check_message=False
+            )
+        return is_attribute_column_read(error, (DataFrame,))
 
     @classmethod
     def merge_engine(cls) -> type[BaseMergeEngine]:

@@ -14,6 +14,7 @@ from mloda.user import ParallelizationMode
 from mloda.user import mloda
 
 from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
+    AttributeReadConsumer,
     KeyReadConsumer,
     MissingColumnConsumer,
     MissingColumnRunAllTestBase,
@@ -110,4 +111,4 @@ class TestPandasMissingColumnRunAll(MissingColumnRunAllTestBase):
 
     @classmethod
     def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
-        return [KeyReadConsumer, PandasQueryReadConsumer]
+        return [KeyReadConsumer, PandasQueryReadConsumer, AttributeReadConsumer]

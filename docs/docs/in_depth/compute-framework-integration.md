@@ -206,15 +206,18 @@ Matched errors are translated from `calculate_feature` through final-filter vali
 
 Matched per framework:
 
--   Polars (eager and lazy): `ColumnNotFoundError`; execution errors at the final collect are not translated.
--   Pandas: `UndefinedVariableError` from `query` / `eval`, except local-variable references.
+-   Polars (eager and lazy): `ColumnNotFoundError`, and an attribute read (`df.x`, Polars has no attribute column access); execution errors at the final collect are not translated.
+-   Pandas: `UndefinedVariableError` from `query` / `eval`, except local-variable references, and an attribute read (`df.x`).
 -   PyArrow and Iceberg: `ArrowInvalid` for an unmatched field reference.
+-   Iceberg native projection: pyiceberg's `Could not find column` error from `Schema.select`.
 -   DuckDB: `BinderException` for a column missing from the relation, and `MissingRelationColumnError`.
 -   SQLite: `OperationalError` for a missing column, and `MissingRelationColumnError`.
--   Spark: `AnalysisException` with an `UNRESOLVED_COLUMN` condition.
+-   Spark: `AnalysisException` with an `UNRESOLVED_COLUMN` condition, and an attribute read (`df.x`, `ATTRIBUTE_NOT_SUPPORTED`).
 -   PythonDict: only the `KeyError` path.
 
-Native Iceberg scan errors and attribute-style reads (`df.x`) are not translated.
+Attribute reads exclude private names, method names, near-misses of a method name for names of six or more characters (such as `df.fliter`), and errors with a non-default message (e.g. a removed-API hint). Lazy Polars cannot check columns, so a declared column read as an attribute also gets the hint.
+
+A native Iceberg `scan(row_filter=...)` on a missing field is not translated: its pyiceberg error (`Could not find field with name ...`) carries no `KeyError` cause, so it cannot be told apart from other `ValueError`s.
 
 ### Column name case sensitivity
 

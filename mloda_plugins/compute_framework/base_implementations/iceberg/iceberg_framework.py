@@ -120,7 +120,13 @@ class IcebergFramework(ComputeFramework):
 
     @classmethod
     def is_missing_column_error(cls, error: Exception) -> bool:
-        return PyArrowTable.is_missing_column_error(error)
+        if PyArrowTable.is_missing_column_error(error):
+            return True
+        return (
+            isinstance(error, ValueError)
+            and isinstance(error.__cause__, KeyError)
+            and str(error).startswith("Could not find column")
+        )
 
     @classmethod
     def result_framework(cls) -> type[ComputeFramework]:

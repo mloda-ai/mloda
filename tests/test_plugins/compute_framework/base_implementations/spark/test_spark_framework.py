@@ -522,3 +522,65 @@ class TestSparkIsMissingColumnError:
 
         error = AnalysisException(message="boom")
         assert SparkFramework.is_missing_column_error(error) is False
+
+
+_SPARK_FRAMEWORK_MODULE = "mloda_plugins.compute_framework.base_implementations.spark.spark_framework"
+
+
+class _FakeSparkFrame:
+    """Stand-in for a Spark DataFrame whose attribute lookup falls through ``__getattr__``."""
+
+    def filter(self) -> None:
+        pass
+
+    def __getattr__(self, name: str) -> Any:
+        return object.__getattribute__(self, name)
+
+
+class _FakePySparkAttributeError(AttributeError):
+    """Stand-in for PySparkAttributeError carrying an error class."""
+
+    def __init__(self, error_class: str, name: str | None, obj: Any) -> None:
+        super().__init__("boom", name=name, obj=obj)
+        self._error_class = error_class
+
+    def getErrorClass(self) -> str:
+        return self._error_class
+
+
+def _attribute_read_error(obj: Any, name: str, error_class: str) -> _FakePySparkAttributeError:
+    """Build the stand-in error from a real failed attribute lookup so ``name`` and ``obj`` are set."""
+    with pytest.raises(AttributeError) as excinfo:
+        getattr(obj, name)
+    return _FakePySparkAttributeError(error_class, excinfo.value.name, excinfo.value.obj)
+
+
+class TestSparkIsMissingColumnErrorAttributeRead:
+    @pytest.fixture(autouse=True)
+    def _patch_pyspark_names(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            f"{_SPARK_FRAMEWORK_MODULE}.PySparkAttributeError", _FakePySparkAttributeError, raising=False
+        )
+        monkeypatch.setattr(f"{_SPARK_FRAMEWORK_MODULE}.DataFrame", _FakeSparkFrame, raising=False)
+
+    def test_attribute_not_supported_on_a_frame_is_a_missing_column(self) -> None:
+        error = _attribute_read_error(_FakeSparkFrame(), "x", "ATTRIBUTE_NOT_SUPPORTED")
+        assert SparkFramework.is_missing_column_error(error) is True
+
+    def test_plain_attribute_error_with_default_message_is_a_missing_column(self) -> None:
+        with pytest.raises(AttributeError) as excinfo:
+            getattr(_FakeSparkFrame(), "x")
+        assert type(excinfo.value) is AttributeError
+        assert SparkFramework.is_missing_column_error(excinfo.value) is True
+
+    def test_jvm_attribute_not_supported_is_not_a_missing_column(self) -> None:
+        error = _attribute_read_error(_FakeSparkFrame(), "x", "JVM_ATTRIBUTE_NOT_SUPPORTED")
+        assert SparkFramework.is_missing_column_error(error) is False
+
+    def test_misspelled_method_is_not_a_missing_column(self) -> None:
+        error = _attribute_read_error(_FakeSparkFrame(), "fliter", "ATTRIBUTE_NOT_SUPPORTED")
+        assert SparkFramework.is_missing_column_error(error) is False
+
+    def test_attribute_error_on_a_non_frame_is_not_a_missing_column(self) -> None:
+        error = _attribute_read_error(object(), "x", "ATTRIBUTE_NOT_SUPPORTED")
+        assert SparkFramework.is_missing_column_error(error) is False

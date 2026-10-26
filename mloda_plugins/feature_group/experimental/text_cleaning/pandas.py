@@ -8,12 +8,10 @@ import unicodedata
 
 try:
     import nltk
-    from nltk.corpus import stopwords
 
     nltk_available = True
 except ImportError:
     nltk = None
-    stopwords = None
     nltk_available = False
 
 
@@ -151,9 +149,7 @@ class PandasTextCleaning(Implementation[TextCleaningFeatureGroup]):
             return text
 
         try:
-            # Download stopwords if not already downloaded
-            nltk.download("stopwords", quiet=True)
-            stop_words = set(stopwords.words("english"))
+            stop_words = TextCleaningFeatureGroup._load_english_stopwords(nltk)
 
             def remove_stopwords_from_text(input_str: str) -> str:
                 words = input_str.split()

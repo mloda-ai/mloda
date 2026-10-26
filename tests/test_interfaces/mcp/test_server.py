@@ -697,16 +697,19 @@ def _initialize(tmp_path: Path, headers: Mapping[str, str], host: str = "127.0.0
 
 
 class TestCreateApp:
-    def test_returns_a_starlette_app(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    @pytest.fixture(autouse=True)
+    def _scoped_services(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def scoped_services(settings: Settings, **_kwargs: Any) -> tuple[Catalog, Planner, Runner]:
+            return _services(settings)
+
+        # Keep app construction scoped to the test plugins; the full catalog build times out under load.
+        monkeypatch.setattr("mloda.interfaces.cli.main.build_services", scoped_services)
+
+    def test_returns_a_starlette_app(self, tmp_path: Path) -> None:
         from starlette.applications import Starlette
 
         from mloda.interfaces.mcp.server import create_app
 
-        def scoped_services(settings: Settings, **_kwargs: Any) -> tuple[Catalog, Planner, Runner]:
-            return _services(settings)
-
-        # Keep app construction scoped to the test's explicitly enabled plugins.
-        monkeypatch.setattr("mloda.interfaces.cli.main.build_services", scoped_services)
         assert isinstance(create_app(_settings(tmp_path), env=ENV), Starlette)
 
     @pytest.mark.parametrize("host", ["127.0.0.1:8000", "localhost:8000", "localhost"])
@@ -737,11 +740,10 @@ class TestCreateApp:
         from mloda.interfaces.mcp.server import create_app
 
         seen: list[Settings] = []
-        real = build_services
 
         def spy(settings: Settings, **kwargs: Any) -> Any:
             seen.append(settings)
-            return real(settings, **kwargs)
+            return _services(settings)
 
         monkeypatch.setattr("mloda.interfaces.cli.main.build_services", spy)
 

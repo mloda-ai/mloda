@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Any, Callable
 from uuid import uuid4
 
+import numpy as np
 import pytest
 
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -408,7 +409,7 @@ class TestFeatureSetOneFeaturePerName:
         assert b.initial_requested_data is False
 
     def test_parts_and_result_index_columns_merge_without_mutating_originals(self) -> None:
-        a, b = _plain(), _twin()
+        a, b = _plain(initial_requested_data=True), _twin(initial_requested_data=True)
         a.requested_parts = frozenset({"p1"})
         a.result_parts = frozenset({"p1"})
         a.result_index_columns = ("i1",)
@@ -454,7 +455,14 @@ class TestFeatureSetOneFeaturePerName:
                     _plain(options=Options(context={"mdb_k": "1"})),
                     _twin(options=Options(context={"mdb_j": "2"})),
                 ),
-                lambda s, a: s.options.context == {"mdb_k": "1", "mdb_j": "2"},
+                lambda s, a: s.options.context == {"mdb_k": "1", "mdb_j": "2"} and s.options.is_own("mdb_j") is True,
+            ),
+            (
+                lambda: (
+                    _plain(options=Options(group={"mdb_k": np.array([1, 2])})),
+                    _twin(options=Options(group={"mdb_k": np.array([1, 2])})),
+                ),
+                lambda s, a: bool(np.array_equal(s.options.group["mdb_k"], np.array([1, 2]))),
             ),
             (
                 lambda: (
@@ -481,6 +489,7 @@ class TestFeatureSetOneFeaturePerName:
         ],
         ids=[
             "test_disjoint_context_keys_collapse_into_union",
+            "test_value_equal_ndarray_group_values_collapse",
             "test_superset_context_collapses_with_union",
             "test_domain_difference_collapses_to_initially_requested_twin",
             "test_implementation_pin_difference_collapses_to_initially_requested_twin",
@@ -498,6 +507,14 @@ class TestFeatureSetOneFeaturePerName:
             (stand_in,) = feature_set.features
             assert check(stand_in, a)
         assert (a.options.context, b.options.context) == contexts_before
+
+    def test_base_twin_is_the_direct_one_regardless_of_uuid_order(self) -> None:
+        for _ in range(20):
+            a, b = _plain(domain="mdb_d1"), _twin(domain="mdb_d2")
+            feature_set = FeatureSet([a, b])
+            with feature_set.one_feature_per_name():
+                (stand_in,) = feature_set.features
+                assert stand_in.domain == a.domain
 
     def test_exception_inside_block_restores_full_set(self) -> None:
         feature_set = FeatureSet([_plain(), _twin()])

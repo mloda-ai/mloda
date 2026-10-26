@@ -249,10 +249,13 @@ class FeatureSet:
     @staticmethod
     def _merge_twins(twins: list[Feature]) -> Feature | None:
         """Return one stand-in for twins whose group, context and data_type agree, else None."""
-        ordered = sorted(twins, key=lambda f: (not f.initial_requested_data, f.data_type is None, str(f.uuid)))
+        ordered = sorted(
+            twins,
+            key=lambda f: (not f.initial_requested_data, f.data_type is None, f.child_options is not None, str(f.uuid)),
+        )
         context: dict[Any, Any] = {}
         for twin in ordered:
-            if twin.options.group != ordered[0].options.group:
+            if _deep_hashable(twin.options.group) != _deep_hashable(ordered[0].options.group):
                 return None
             for key, value in twin.options.context.items():
                 if key in context and not _deep_equal(context[key], value):
@@ -270,9 +273,7 @@ class FeatureSet:
             if not other.link_key_only:
                 merged.link_key_only = False
             merged.absorb_result_index_columns(other)
-            if not (merged.initial_requested_data or other.initial_requested_data):
-                mine, theirs = merged.result_parts, other.result_parts
-                merged.result_parts = None if mine is None or theirs is None else mine | theirs
+            merged.options.union_own_keys(other.options)
             merged.initial_requested_data = merged.initial_requested_data or other.initial_requested_data
         return merged
 

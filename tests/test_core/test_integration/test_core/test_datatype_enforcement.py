@@ -156,6 +156,18 @@ class RawPlusOne(FeatureGroup):
         return {"raw_plus_one": [v + 1 for v in data.column("raw_val").to_pylist()]}
 
 
+class DictRawPlusOne(RawPlusOne):
+    """Non-reducing RawPlusOne computed on PythonDictFramework."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"raw_plus_one": [v + 1 for v in data["raw_val"]]}
+
+
 class ReducerDim(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -246,20 +258,30 @@ class SplitFrameConsumer(FeatureGroup):
                 out[key] = [f"{a},{b}" for a, b in zip(joined, plus)]
             elif key == "sum_and_key":
                 out[key] = data.column("red_sum").to_pylist()
+            elif key == "dict_sum_and_key":
+                out[key] = list(data["red_sum"])
+            elif key == "dict_plus_one_and_key":
+                out[key] = list(data["raw_plus_one"])
             else:
                 out[key] = []
         return out
 
 
 class DictSplitFrameConsumer(SplitFrameConsumer):
-    _INPUTS = {"dict_sum_and_val": {"raw_val", "red_sum"}}
+    _INPUTS = {
+        "dict_sum_and_val": {"raw_val", "red_sum"},
+        "dict_sum_and_key": {"red_sum", "raw_key"},
+        "dict_plus_one_and_key": {"raw_plus_one", "raw_key"},
+    }
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {PythonDictFramework}
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("raw_val"), Feature("red_sum", compute_framework="PyArrowTable")}
+        if str(feature_name) == "dict_sum_and_val":
+            return {Feature("raw_val"), Feature("red_sum", compute_framework="PyArrowTable")}
+        return super().input_features(options, feature_name)
 
 
 class ReducedAfterJoin(FeatureGroup):
@@ -711,14 +733,48 @@ class TestRowReducingGroupJoins(_ReducerRunHelpers):
         assert self._column(frames, "red_count") == [[2]]
         MlodaTestRunner.assert_flight_server_clean(modes, flight_server)
 
+    @pytest.mark.parametrize(
+        ("feature", "siblings", "producer", "expected_siblings", "expected"),
+        [
+            ("sum_and_key", [], RowReducer, {}, [30, 30, 40]),
+            ("dict_sum_and_key", [], RowReducer, {}, [30, 30, 40]),
+            (
+                "dict_sum_and_key",
+                [Feature("red_sum", compute_framework="PythonDictFramework")],
+                RowReducer,
+                {"red_sum": [[30, 40]]},
+                [30, 30, 40],
+            ),
+            ("dict_plus_one_and_key", [], DictRawPlusOne, {}, [11, 11, 21, 21, 41]),
+        ],
+        ids=["arrow", "dict", "dict_with_sibling", "dict_non_reducing"],
+    )
+    @pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
     def test_consumer_of_reduced_output_and_key_with_link(
-        self, modes: set[ParallelizationMode], flight_server: Any
+        self,
+        feature: str,
+        siblings: list[Feature],
+        producer: type[FeatureGroup],
+        expected_siblings: dict[str, list[list[Any]]],
+        expected: list[int],
+        reverse: bool,
+        modes: set[ParallelizationMode],
+        flight_server: Any,
     ) -> None:
+        left, right = (producer, ReducerRawSource) if reverse else (ReducerRawSource, producer)
+        link = Link.inner(JoinSpec(left, "raw_key"), JoinSpec(right, "raw_key"))
         frames = self._run(
-            [Feature("sum_and_key")], modes, flight_server, links={_RAW_REDUCER_LINK}, extra_groups={SplitFrameConsumer}
+            [Feature(feature), *siblings],
+            modes,
+            flight_server,
+            links={link},
+            extra_groups={SplitFrameConsumer, DictSplitFrameConsumer, DictRawPlusOne},
         )
 
-        assert [sorted(c) for c in self._column(frames, "sum_and_key")] == [[30, 30, 40]]
+        assert [sorted(c) for c in self._column(frames, feature)] == [expected]
+        for name, column in expected_siblings.items():
+            assert self._column(frames, name) == column
+        MlodaTestRunner.assert_flight_server_clean(modes, flight_server)
 
     @pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
     def test_joined_back_with_sibling_consumer(

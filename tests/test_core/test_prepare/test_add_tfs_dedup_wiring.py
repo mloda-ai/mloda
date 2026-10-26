@@ -653,7 +653,7 @@ def _bridge_scenario(bridged: bool) -> BridgeScenario:
     feature_set = FeatureSet()
     feature_set.add(dest_feature)
     graph.parent_to_children_mapping[dest_feature.uuid] = dest_parents
-    dest_step = FeatureGroupStep(BridgeConsumerFG, feature_set, set(), PythonDictFramework)
+    dest_step = FeatureGroupStep(BridgeConsumerFG, feature_set, set(dest_parents), PythonDictFramework)
 
     return BridgeScenario(producer_x, producer_y, join_step, dest_step, graph)
 

@@ -1846,6 +1846,8 @@ Available join types:
                         js
                         for js in joins_by_feature.get(parent_feature_uuid, ())
                         if js.matched(ep.compute_framework, parent_feature_uuid, ep.required_uuids)
+                        # Only a step reading both join sides reads the merged frame.
+                        and js.reads_join_frame(ep.required_uuids)
                     ]
                     if matching_join_steps:
                         # Served by a join, no explicit hop needed.

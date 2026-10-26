@@ -250,8 +250,6 @@ class SplitFrameConsumer(FeatureGroup):
 
 
 class DictSplitFrameConsumer(SplitFrameConsumer):
-    """Consumer on the dict framework reading a raw column and a pinned PyArrow reduced column."""
-
     _INPUTS = {"dict_sum_and_val": {"raw_val", "red_sum"}}
 
     @classmethod
@@ -694,26 +692,13 @@ class TestRowReducingGroupJoins(_ReducerRunHelpers):
         link = Link.inner(JoinSpec(RowReducer, "raw_key"), JoinSpec(ReducerRawSource, "raw_key"))
         self._assert_joined_back(link, modes, flight_server)
 
-    def test_linked_chained_step_computes(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
-        frames = self._run(
-            [Feature(ReducedJoinedBack.get_class_name()), Feature("red_count")],
-            modes,
-            flight_server,
-            links={_RAW_REDUCER_LINK},
-            extra_groups={ReducedJoinedBack},
-        )
-
-        assert [sorted(c) for c in self._column(frames, ReducedJoinedBack.get_class_name())] == [[40, 50, 80]]
-        assert self._column(frames, "red_count") == [[2]]
-
-    def test_linked_chained_step_computes_on_dict_framework(
-        self, modes: set[ParallelizationMode], flight_server: Any
+    @pytest.mark.parametrize("framework", [None, "PythonDictFramework"], ids=["default", "dict"])
+    def test_linked_chained_step_computes(
+        self, framework: str | None, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
+        red_count = Feature("red_count", compute_framework=framework) if framework else Feature("red_count")
         frames = self._run(
-            [
-                Feature(ReducedJoinedBack.get_class_name()),
-                Feature("red_count", compute_framework="PythonDictFramework"),
-            ],
+            [Feature(ReducedJoinedBack.get_class_name()), red_count],
             modes,
             flight_server,
             links={_RAW_REDUCER_LINK},

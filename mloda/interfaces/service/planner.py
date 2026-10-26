@@ -30,6 +30,7 @@ from mloda.interfaces.service.request import (
     build_request,
     _pointer,
     data_access_violations,
+    unlisted_option_violations,
     in_feature_sources,
     validate_request,
 )
@@ -221,7 +222,12 @@ class Planner:
         if violations:
             details = problems_to_details(violations)
             return error_result("policy_denied", "A request may not set data-access options.", details)
-        parsed = build_request(request)
+        if not self._settings.trusted_caller:
+            unlisted = unlisted_option_violations(request, self._settings.allow_options)
+            if unlisted:
+                details = problems_to_details(unlisted)
+                return error_result("policy_denied", "A request may only set options listed in allow_options.", details)
+        parsed = build_request(request, settings=self._settings)
         if isinstance(parsed, list):
             return error_result("validation_failed", "A feature config is invalid.", problems_to_details(parsed))
         request_names = [_item_name(item) for item in request["features"]]
@@ -253,7 +259,7 @@ class Planner:
             return unmatched
         aliases = tuple(_alias_of(step, sources) or _inline_alias(step, parsed.inline_data) for step in steps)
         producers = _producers(steps, aliases)
-        withheld = self._withheld_filters(filters, producers)
+        withheld = None if self._settings.trusted_caller else self._withheld_filters(filters, producers)
         if withheld is not None:
             return withheld
         estimate = self._estimate(steps, aliases, parsed.inline_data)
@@ -348,6 +354,9 @@ class Planner:
             return error_result("policy_denied", "Inline data is not enabled under the service policy.", [detail])
         if len(json.dumps(request["data"])) > MAX_PLAN_ID_LENGTH:
             return error_result("limit_exceeded", _TOO_LARGE_MESSAGE)
+        over = self._inline_over_limit(request["data"])
+        if over:
+            return error_result("limit_exceeded", "Inline data is over the configured limit.", over)
         details = [
             {
                 "path": _pointer("data", name),
@@ -360,6 +369,27 @@ class Planner:
         if not details:
             return None
         return error_result("validation_failed", "An inline set is named like a configured source.", details)
+
+    def _inline_over_limit(self, data: Any) -> list[dict[str, Any]]:
+        columns = [
+            column
+            for table in (data.values() if isinstance(data, dict) else ())
+            if isinstance(table, dict)
+            for column in table.values()
+            if isinstance(column, list)
+        ]
+        counts = {
+            "inline_values_over_limit": (sum(len(column) for column in columns), self._settings.max_inline_values),
+            "inline_chars_over_limit": (
+                sum(len(value) for column in columns for value in column if isinstance(value, str)),
+                self._settings.max_inline_chars,
+            ),
+        }
+        return [
+            {"reason": reason, "count": count, "limit": limit}
+            for reason, (count, limit) in counts.items()
+            if limit is not None and count > limit
+        ]
 
     @staticmethod
     def _index_entries(request: Any) -> list[tuple[str, str]]:
@@ -483,7 +513,7 @@ class Planner:
             return explicit
         inputs = _inputs(producers[name][0], name) if name in producers and name not in seen else ()
         if not inputs:
-            return UNCLASSIFIED
+            return self._settings.default_classification or UNCLASSIFIED
         labels = [self._classification(source, producers, seen | {name}) for source in inputs]
         return max(labels, key=_strictness)
 

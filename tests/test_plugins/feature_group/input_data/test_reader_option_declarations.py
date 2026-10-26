@@ -77,13 +77,15 @@ class TestReadDocumentFGDeclarations:
         assert ReadDocumentFG.PROPERTY_MAPPING["document_suffixes"].default is None
         assert ReadDocumentFG.PROPERTY_MAPPING["data_access_handle"].default is None
 
-    @pytest.mark.parametrize(
-        "module,name", [("text_fg", "TextFG"), ("markdown_fg", "MarkdownFG"), ("json_document_fg", "JsonDocumentFG")]
-    )
+    @pytest.mark.parametrize("module,name", [("markdown_fg", "MarkdownFG"), ("json_document_fg", "JsonDocumentFG")])
     def test_document_groups_inherit_without_redeclaring(self, module: str, name: str) -> None:
         group = load_document_group(module, name)
         assert "PROPERTY_MAPPING" not in group.__dict__
         assert group.declared_option_keys() == ReadDocumentFG.declared_option_keys()
+
+    def test_text_group_adds_only_text_lines(self) -> None:
+        group = load_document_group("text_fg", "TextFG")
+        assert group.declared_option_keys() == ReadDocumentFG.declared_option_keys() | {"text_lines"}
 
 
 class TestReadDBFGDeclarations:
@@ -138,8 +140,8 @@ class TestEveryOptionKeyReadIsDeclared:
 
         assert text_group.match_feature_group_criteria("TextFG", options, data_access)
         read = set(options.read_keys) - {text_group.get_class_name()}
-        assert read == {"document_suffixes", "data_access_handle"}
-        assert read <= ReadDocumentFG.declared_option_keys()
+        assert read == {"document_suffixes", "data_access_handle", "text_lines"}
+        assert read <= text_group.declared_option_keys()
 
     def test_read_db_group_reads_only_declared_keys(self, tmp_path: Path) -> None:
         options = _RodRecordingOptions()

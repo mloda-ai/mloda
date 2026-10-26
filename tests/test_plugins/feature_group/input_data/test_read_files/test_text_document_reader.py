@@ -5,7 +5,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+import pytest
+
+from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.provider import (
+    ComputeFramework,
+    DefaultOptionKeys,
+    FeatureChainParserMixin,
+    FeatureGroup,
+    FeatureSet,
+    PropertySpec,
+)
 from mloda.user import DataAccessCollection, Feature, Options, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import records_from_frame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     DocumentLoadsIntoFrameworkMixin,
@@ -135,3 +149,137 @@ class TestTextContent:
             "TextFG": ["a note"],
             "PyFG": ["x = 1\n"],
         }
+
+
+class UpperChainedFG(FeatureChainParserMixin, FeatureGroup):
+    """Test-only chained group: <source>__upper upper-cases the text of its source."""
+
+    PREFIX_PATTERN = r".*__upper$"
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1
+    PROPERTY_MAPPING = {DefaultOptionKeys.in_features: PropertySpec("Source feature", context=True)}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: Any, options: Options, data_access_collection: Any = None
+    ) -> bool:
+        """Name-only match so config-based matching never claims other tests' features."""
+        if not str(feature_name).endswith("__upper"):
+            return False
+        return super().match_feature_group_criteria(feature_name, options, data_access_collection)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework, PandasDataFrame}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        columns = {str(k): list(v) for k, v in data.items()} if isinstance(data, dict) else data.to_dict("list")
+        out: dict[str, list[str]] = {}
+        for feature in features.features:
+            source = cls._extract_source_features(feature)[0]
+            out[str(feature.name)] = [text.upper() for text in columns[str(source)]]
+        return out if isinstance(data, dict) else pd.DataFrame(out)
+
+
+def _columns(result: list[Any]) -> dict[str, list[Any]]:
+    columns: dict[str, list[Any]] = {}
+    for frame in result:
+        for row in records_from_frame(frame):
+            for key, value in row.items():
+                columns.setdefault(str(key), []).append(value)
+    return columns
+
+
+def _run_collection(
+    path: Path, features: list[Feature | str], framework: type[ComputeFramework] = PythonDictFramework
+) -> dict[str, list[Any]]:
+    result = mloda.run_all(
+        features,
+        compute_frameworks=[framework],
+        plugin_collector=PluginCollector.enabled_feature_groups(
+            {load_document_group("text_fg", "TextFG"), UpperChainedFG}
+        ),
+        data_access_collection=DataAccessCollection(files={"doc": str(path)}),
+    )
+    return _columns(result)
+
+
+def _write(tmp_path: Path, text: str) -> Path:
+    path = tmp_path / "note.txt"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+class TestTextChainedFeature:
+    @pytest.mark.parametrize("framework", [PythonDictFramework, PandasDataFrame])
+    def test_chained_feature_and_source_column_resolve_together(
+        self, tmp_path: Path, framework: type[ComputeFramework]
+    ) -> None:
+        path = _write(tmp_path, "mixed Case\n")
+
+        columns = _run_collection(path, ["TextFG__upper", "TextFG~source"], framework)
+
+        assert columns == {"TextFG__upper": ["MIXED CASE\n"], "TextFG~source": [str(path)]}
+
+
+class TestTextLinesOption:
+    TEXT = "alpha\n\n  \nbeta\ngamma"
+
+    def test_the_option_is_declared_with_an_explanation_and_default_false(self) -> None:
+        spec = load_document_group("text_fg", "TextFG").PROPERTY_MAPPING["text_lines"]
+
+        assert spec.explanation
+        assert spec.default is False
+
+    def test_one_row_per_non_blank_line_with_repeated_source_and_file_type(self, tmp_path: Path) -> None:
+        path = _write(tmp_path, self.TEXT)
+        names = ["TextFG", "TextFG~source", "TextFG~file_type"]
+
+        columns = _run_collection(path, [Feature(n, options=Options({"text_lines": True})) for n in names])
+
+        assert columns == {
+            "TextFG": ["alpha", "beta", "gamma"],
+            "TextFG~source": [str(path)] * 3,
+            "TextFG~file_type": ["txt"] * 3,
+        }
+
+    @pytest.mark.parametrize("value", [None, False], ids=["without_the_option", "option_set_false"])
+    def test_without_the_option_or_set_false_the_whole_text_is_one_row(
+        self, tmp_path: Path, value: bool | None
+    ) -> None:
+        path = _write(tmp_path, self.TEXT)
+        feature: str | Feature = (
+            "TextFG" if value is None else Feature("TextFG", options=Options({"text_lines": value}))
+        )
+
+        assert _run_collection(path, [feature]) == {"TextFG": [self.TEXT]}
+
+    def test_the_option_reaches_the_source_through_a_chained_feature(self, tmp_path: Path) -> None:
+        path = _write(tmp_path, self.TEXT)
+        options = Options(group={"text_lines": True})
+
+        columns = _run_collection(path, [Feature("TextFG__upper", options=options)])
+
+        assert columns == {"TextFG__upper": ["ALPHA", "BETA", "GAMMA"]}
+
+    def test_the_chained_feature_next_to_the_source_column_with_the_option(self, tmp_path: Path) -> None:
+        path = _write(tmp_path, "a\n\nb\n")
+        options = Options(group={"text_lines": True})
+
+        columns = _run_collection(
+            path, [Feature("TextFG__upper", options=options), Feature("TextFG~source", options=options)]
+        )
+
+        assert columns == {"TextFG__upper": ["A", "B"], "TextFG~source": [str(path)] * 2}
+
+
+class TestTextCountRows:
+    @pytest.mark.parametrize("text", ["one line", "a\n\n  \nb\nc\n", "", "\n \n"])
+    def test_count_rows_is_the_base_one_without_reading_the_file(self, tmp_path: Path, text: str) -> None:
+        path = _write(tmp_path, text)
+        group = load_document_group("text_fg", "TextFG")
+
+        count = group.count_rows(SourceMatch(source=str(path), access=str(path)), PythonDictFramework)
+
+        assert count == 1

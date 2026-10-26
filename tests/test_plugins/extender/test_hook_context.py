@@ -204,6 +204,7 @@ class TestHookContextIsFrozenExceptOutcomeFields:
             ("feature_names", ("forged",)),
             ("feature_group_class", "pkg.Forged"),
             ("specialized_from", ("pkg.Forged",)),
+            ("failed_rows", ("forged",)),
             ("step_uuid", uuid4()),
         ],
     )
@@ -238,6 +239,7 @@ class TestHookContextIsFrozenExceptOutcomeFields:
             "data_access_identity",
             "feature_names",
             "feature_group_class",
+            "failed_rows",
             "step_uuid",
         ],
     )
@@ -600,6 +602,25 @@ class TestHookContextResultAttributes:
         assert seen == [None, None]
         assert context.result_attributes is None
 
+    def test_failed_rows_defaults_to_empty_tuple(self) -> None:
+        assert _make_context().failed_rows == ()
+
+    def test_instrument_resets_failed_rows_per_call(self) -> None:
+        context = _make_context()
+        seen: list[Any] = []
+
+        def raw() -> str:
+            seen.append(context.failed_rows)
+            return "ok"
+
+        wrapped = instrument(context, raw)
+        with context.activate():
+            wrapped()
+            wrapped()
+
+        assert seen == [(), ()]
+        assert context.failed_rows == ()
+
 
 class TestHookContextRowCount:
     """HookContext.row_count is __len__-gated, never calls len() on unsized objects."""
@@ -878,7 +899,7 @@ class TestInstrumentPreservesSelf:
         assert not hasattr(wrapped, "__self__")
 
 
-_EMPTY_TUPLE_DEFAULTS = {"feature_names", "specialized_from"}
+_EMPTY_TUPLE_DEFAULTS = {"feature_names", "specialized_from", "failed_rows"}
 
 
 class TestHookContextKeywordDefaults:

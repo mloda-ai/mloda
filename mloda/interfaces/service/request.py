@@ -6,7 +6,7 @@ The schema and the validator derive from the same constants so they accept exact
 import copy
 import difflib
 import json
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Collection, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
@@ -316,7 +316,7 @@ def data_access_option_keys() -> frozenset[str]:
 
 def option_data_access_violations(options: Mapping[str, Any], path: str = "") -> list[Problem]:
     """Report every data-access key in a group ``options`` mapping, including nested in_features configs."""
-    return _scan_feature_config({"options": dict(options)}, path, data_access_option_keys())
+    return _scan_data_access({"options": dict(options)}, path, data_access_option_keys())
 
 
 def _declared_in_features(config: Mapping[str, Any], path: str) -> Iterator[tuple[str, str | dict[str, Any]]]:
@@ -354,7 +354,9 @@ def in_feature_sources(request: Any) -> list[tuple[str, str]]:
     return sources
 
 
-def _scan_feature_config(item: Mapping[str, Any], path: str, keys: frozenset[str]) -> list[Problem]:
+def _scan_feature_config(
+    item: Mapping[str, Any], path: str, flagged: Callable[[str], bool], problem: str, message: str
+) -> list[Problem]:
     problems: list[Problem] = []
     configs = [(path, item)] + [(p, d) for p, d in _declared_in_features(item, path) if isinstance(d, dict)]
     for config_path, config in configs:
@@ -363,15 +365,51 @@ def _scan_feature_config(item: Mapping[str, Any], path: str, keys: frozenset[str
             if not isinstance(options, dict):
                 continue
             for key in options:
-                if key in keys:
+                if flagged(key):
                     problems.append(
                         Problem(
                             path=config_path + _pointer(container, key),
-                            problem="data_access_option",
-                            message=f"Option key '{key}' configures data access, which a request may not set.",
+                            problem=problem,
+                            message=message.format(key=key),
                         )
                     )
     return problems
+
+
+_DATA_ACCESS_MESSAGE = "Option key '{key}' configures data access, which a request may not set."
+_NOT_ALLOWED_MESSAGE = "Option key '{key}' is not in allow_options, so a request may not set it."
+
+
+def _scan_data_access(item: Mapping[str, Any], path: str, keys: frozenset[str]) -> list[Problem]:
+    return _scan_feature_config(item, path, keys.__contains__, "data_access_option", _DATA_ACCESS_MESSAGE)
+
+
+def _unlisted_scan(item: Mapping[str, Any], path: str, allowed: Collection[str]) -> list[Problem]:
+    skipped = data_access_option_keys() | {str(DefaultOptionKeys.in_features)}
+    return _scan_feature_config(
+        item,
+        path,
+        lambda key: str(key) not in skipped and key not in allowed,
+        "option_not_allowed",
+        _NOT_ALLOWED_MESSAGE,
+    )
+
+
+def unlisted_option_violations(request: Any, allowed: Collection[str]) -> list[Problem]:
+    """Report every option key outside ``allowed`` by path, never by value; data-access keys are left out."""
+    features = request.get("features") if isinstance(request, dict) else None
+    if not isinstance(features, list):
+        return []
+    problems: list[Problem] = []
+    for index, item in enumerate(features):
+        if isinstance(item, dict):
+            problems.extend(_unlisted_scan(item, _pointer("features", index), allowed))
+    return problems
+
+
+def unlisted_group_option_violations(options: Mapping[str, Any], allowed: Collection[str]) -> list[Problem]:
+    """Report every key of a group ``options`` mapping outside ``allowed`` as ``/options/<key>``."""
+    return _unlisted_scan({"options": dict(options)}, "", allowed)
 
 
 def data_access_violations(request: Any) -> list[Problem]:
@@ -383,7 +421,7 @@ def data_access_violations(request: Any) -> list[Problem]:
     problems: list[Problem] = []
     for index, item in enumerate(features):
         if isinstance(item, dict):
-            problems.extend(_scan_feature_config(item, _pointer("features", index), keys))
+            problems.extend(_scan_data_access(item, _pointer("features", index), keys))
     return problems
 
 
@@ -437,11 +475,36 @@ def _inline_data_problems(data: Mapping[str, Mapping[str, list[Any]]]) -> list[P
     return problems
 
 
-def build_request(request: Mapping[str, Any]) -> ParsedRequest | list[Problem]:
+def _with_defaults(item: str | dict[str, Any], settings: Settings | None) -> str | dict[str, Any]:
+    """Merge the operator default options under a feature; the feature's own values win."""
+    if settings is None or not (settings.options or settings.context_options):
+        return item
+    config: dict[str, Any] = {"name": item} if isinstance(item, str) else dict(item)
+    if "options" in config and ("group_options" in config or "context_options" in config):
+        return config
+    own = {key for container in _OPTION_CONTAINERS for key in config.get(container) or {}}
+    group = {
+        **{key: value for key, value in settings.options.items() if key not in own},
+        **config.pop("options", {}),
+        **config.get("group_options", {}),
+    }
+    context = {
+        **{key: value for key, value in settings.context_options.items() if key not in own},
+        **config.get("context_options", {}),
+    }
+    if group:
+        config["group_options"] = group
+    if context:
+        config["context_options"] = context
+    return config
+
+
+def build_request(request: Mapping[str, Any], *, settings: Settings | None = None) -> ParsedRequest | list[Problem]:
     """Build a structurally valid request; semantic feature-config errors come back as problems."""
     features: list[Feature | str] = []
     problems: list[Problem] = []
-    for index, item in enumerate(request["features"]):
+    for index, original in enumerate(request["features"]):
+        item = _with_defaults(original, settings)
         if isinstance(item, str):
             features.append(item)
             continue

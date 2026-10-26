@@ -4,6 +4,7 @@ Every call goes through the SDK's in-process client; results must be exactly wha
 """
 
 import json
+import dataclasses
 import logging
 from collections.abc import Iterator, Mapping
 from pathlib import Path
@@ -26,7 +27,14 @@ from mloda.interfaces.service.planner import Planner  # noqa: E402
 from mloda.interfaces.service.request import MAX_FEATURES, SCHEMA_ID, request_schema  # noqa: E402
 from mloda.interfaces.service.runner import Runner  # noqa: E402
 from mloda.user import PluginCollector  # noqa: E402
-from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS  # noqa: E402
+from tests.test_interfaces.source_groups import (  # noqa: E402
+    FAILED,
+    FILE_SOURCE_GROUPS,
+    MISSING,
+    MISSING_INPUT,
+    RunnerFailedRowsMcp5,
+    RunnerMissingInputMcp5,
+)
 
 # The tools resolve real FeatureGroups and read source files; a cold cache under xdist load can exceed 10s.
 pytestmark = [pytest.mark.timeout(30), pytest.mark.anyio]
@@ -85,7 +93,7 @@ def _clock() -> float:
 
 
 def _base() -> PluginCollector:
-    return PluginCollector.enabled_feature_groups(set(FILE_SOURCE_GROUPS))
+    return PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, RunnerFailedRowsMcp5, RunnerMissingInputMcp5})
 
 
 def _settings(tmp_path: Path, mode: str = "plan") -> Settings:
@@ -450,6 +458,33 @@ class TestExecute:
             for customer_id in CUSTOMER_IDS:
                 assert customer_id not in text
 
+    async def test_run_result_carries_failed_rows_and_is_not_an_error(self, tmp_path: Path) -> None:
+        settings = _settings(tmp_path, "execute")
+        request = {"features": ["customer_id", FAILED]}
+
+        async with Client(_server(settings)) as client:
+            plan_id = _assert_envelope(await client.call_tool(EXPLAIN, {"request": request}))["plan_id"]
+            ran = await client.call_tool(RUN, {"plan_id": plan_id})
+
+        result = _assert_envelope(ran)
+        assert ran.is_error is False
+        assert result["status"] == "completed"
+        assert result["failed_rows"] == [
+            {"column": FAILED, "reason": "timeout", "row_count": 2, "rows": [1, 3], "truncated": False}
+        ]
+
+    async def test_run_missing_input_is_an_error_with_its_own_code(self, tmp_path: Path) -> None:
+        settings = _settings(tmp_path, "execute")
+
+        async with Client(_server(settings)) as client:
+            explained = await client.call_tool(EXPLAIN, {"request": {"features": [MISSING]}})
+            ran = await client.call_tool(RUN, {"plan_id": _assert_envelope(explained)["plan_id"]})
+
+        assert _error_code(ran) == "missing_input_feature"
+        (detail,) = _structured(ran)["error"]["details"]
+        assert detail["missing_inputs"] == [MISSING_INPUT]
+        assert "available_columns" not in json.dumps(_structured(ran))
+
     async def test_run_with_a_foreign_plan_id_is_plan_invalid(self, tmp_path: Path) -> None:
         result = await _call(_server(_settings(tmp_path, "execute")), RUN, {"plan_id": "mpl1.x.y"})
 
@@ -534,6 +569,18 @@ class TestAuditLog:
         for record, (name, _) in zip(records, CALLS):
             assert name in record.getMessage()
 
+    async def test_default_server_refuses_an_unlisted_option(self, tmp_path: Path) -> None:
+        request = {"features": [{"name": "income", "options": {"opt": SECRET_OPTION}}]}
+
+        result = await _call(_server(_settings(tmp_path)), EXPLAIN, {"request": request})
+
+        assert result.is_error is True
+        structured = _structured(result)
+        assert structured["error"]["code"] == "policy_denied"
+        assert [detail["path"] for detail in structured["error"]["details"]] == ["/features/0/options/opt"]
+        assert structured["error"]["details"][0]["problem"] == "option_not_allowed"
+        assert SECRET_OPTION not in json.dumps(structured)
+
     @pytest.mark.parametrize(
         ("name", "arguments"),
         [
@@ -554,3 +601,96 @@ class TestAuditLog:
         assert len(_audit_records(caplog)) == 1
         for record in caplog.records:
             assert SECRET_OPTION not in record.getMessage()
+
+
+INITIALIZE: dict[str, Any] = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}},
+}
+MCP_HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+
+
+def _initialize(tmp_path: Path, headers: Mapping[str, str], host: str = "127.0.0.1") -> int:
+    from starlette.testclient import TestClient
+
+    from mloda.interfaces.mcp.server import create_app
+
+    app = create_app(_settings(tmp_path), env=ENV, host=host)
+    with TestClient(app, base_url="http://testserver") as client:
+        return client.post("/mcp", json=INITIALIZE, headers={**MCP_HEADERS, **headers}).status_code
+
+
+class TestCreateApp:
+    def test_returns_a_starlette_app(self, tmp_path: Path) -> None:
+        from starlette.applications import Starlette
+
+        from mloda.interfaces.mcp.server import create_app
+
+        assert isinstance(create_app(_settings(tmp_path), env=ENV), Starlette)
+
+    @pytest.mark.parametrize("host", ["127.0.0.1:8000", "localhost:8000", "localhost"])
+    def test_loopback_host_is_accepted(self, tmp_path: Path, host: str) -> None:
+        assert _initialize(tmp_path, {"Host": host}) == 200
+
+    def test_foreign_host_is_refused_with_421(self, tmp_path: Path) -> None:
+        assert _initialize(tmp_path, {"Host": "evil.example:8000"}) == 421
+
+    def test_foreign_origin_is_refused_with_403(self, tmp_path: Path) -> None:
+        assert _initialize(tmp_path, {"Host": "localhost:8000", "Origin": "http://evil.example"}) == 403
+
+    def test_loopback_origin_is_accepted(self, tmp_path: Path) -> None:
+        assert _initialize(tmp_path, {"Host": "localhost:8000", "Origin": "http://localhost:8000"}) == 200
+
+    @pytest.mark.parametrize(
+        "headers", [{"Host": "127.0.0.2:8000"}, {"Host": "127.0.0.2", "Origin": "http://127.0.0.2:8000"}]
+    )
+    def test_other_loopback_bind_accepts_its_own_host_and_origin(
+        self, tmp_path: Path, headers: Mapping[str, str]
+    ) -> None:
+        assert _initialize(tmp_path, headers, host="127.0.0.2") == 200
+
+    def test_other_loopback_bind_still_refuses_a_foreign_host(self, tmp_path: Path) -> None:
+        assert _initialize(tmp_path, {"Host": "evil.example:8000"}, host="127.0.0.2") == 421
+
+    def test_create_app_forces_trusted_caller_off(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from mloda.interfaces.mcp.server import create_app
+
+        seen: list[Settings] = []
+        real = build_services
+
+        def spy(settings: Settings, **kwargs: Any) -> Any:
+            seen.append(settings)
+            return real(settings, **kwargs)
+
+        monkeypatch.setattr("mloda.interfaces.cli.main.build_services", spy)
+
+        create_app(dataclasses.replace(_settings(tmp_path), trusted_caller=True), env=ENV)
+
+        assert [s.trusted_caller for s in seen] == [False]
+
+    def test_non_loopback_bind_does_not_restrict_the_host(self, tmp_path: Path) -> None:
+        assert _initialize(tmp_path, {"Host": "evil.example:8000"}, host="0.0.0.0") == 200  # nosec B104
+
+
+class TestServeTrustedCaller:
+    def test_stdio_serve_forces_trusted_caller_off(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from mloda.interfaces.mcp import main as mcp_main
+
+        seen: list[Settings] = []
+
+        class _Stub:
+            def run(self, transport: str) -> None:
+                return None
+
+        def fake_services(settings: Settings, **kwargs: Any) -> tuple[Any, ...]:
+            seen.append(settings)
+            return ()
+
+        monkeypatch.setattr("mloda.interfaces.cli.main.build_services", fake_services)
+        monkeypatch.setattr("mloda.interfaces.mcp.server.build_server", lambda *services: _Stub())
+
+        mcp_main.serve(dataclasses.replace(_settings(tmp_path), trusted_caller=True), env=ENV)
+
+        assert [s.trusted_caller for s in seen] == [False]

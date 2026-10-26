@@ -10,6 +10,7 @@ from typing import Any
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.runtime.mp_context import mp_start_context
@@ -104,6 +105,8 @@ class CfwManager:
         self.uuid_flyway_datasets: dict[UUID, set[UUID]] = {}
 
         self.artifact_to_save: dict[str, Any] = {}
+
+        self.failed_rows: list[FailedRows] = []
 
         self.runtime_artifacts: dict[str, Any] | None = None
 
@@ -431,6 +434,14 @@ class CfwManager:
     def get_artifacts(self) -> dict[str, Any]:
         """Retrieves the dictionary of saved artifacts."""
         return self.artifact_to_save
+
+    def add_failed_rows(self, entries: list[FailedRows]) -> None:
+        """Appends the failed-row entries one step reported."""
+        self.failed_rows.extend(entries)
+
+    def get_failed_rows(self) -> list[FailedRows]:
+        """Retrieves every reported failed-row entry."""
+        return self.failed_rows
 
     def set_runtime_artifacts(self, artifacts: dict[str, Any]) -> None:
         """Sets runtime artifacts passed to run() for load-mode resolution."""

@@ -23,11 +23,18 @@ _MCP_KEYS = frozenset(
         "sources",
         "classification",
         "inline_data",
+        "max_inline_values",
+        "max_inline_chars",
+        "default_classification",
+        "allow_options",
+        "options",
+        "context_options",
     }
 )
 _SOURCE_KEYS = frozenset({"files", "folders"})
 _ENV_PREFIX = "MLODA_MCP_"
-_ENV_INT_KEYS = frozenset({"max_rows"})
+_INLINE_LIMIT_KEYS = ("max_inline_values", "max_inline_chars")
+_ENV_INT_KEYS = frozenset({"max_rows", *_INLINE_LIMIT_KEYS})
 _ENV_LIST_KEYS = frozenset({"compute_frameworks"})
 _ENV_STR_KEYS = frozenset({"mode"})
 _TTL_PATTERN = re.compile(r"(\d+)([hms])")
@@ -62,6 +69,13 @@ class Settings:
     sources: Mapping[str, SourceConfig] = field(default_factory=dict)
     classification: Mapping[str, str] = field(default_factory=dict)
     inline_data: bool = False
+    max_inline_values: int | None = None
+    max_inline_chars: int | None = None
+    default_classification: str | None = None
+    allow_options: tuple[str, ...] = ()
+    trusted_caller: bool = False
+    options: Mapping[str, Any] = field(default_factory=dict)
+    context_options: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -141,6 +155,24 @@ def _str_mapping(value: Any, key: str) -> dict[str, Any]:
     return dict(value)
 
 
+def _json_safe(value: Any) -> bool:
+    if isinstance(value, dict):
+        return all(isinstance(k, str) and _json_safe(v) for k, v in value.items())
+    if isinstance(value, list):
+        return all(_json_safe(item) for item in value)
+    return isinstance(value, (str, int, float, bool))
+
+
+def _default_options(value: Any, key: str) -> dict[str, Any]:
+    table = _str_mapping(value, key)
+    for reserved in ("in_features", "feature_group"):
+        if reserved in table:
+            raise ConfigError(f"'{key}' must not set {reserved}")
+    if not _json_safe(table):
+        raise ConfigError(f"'{key}' values must be strings, numbers, booleans, lists or tables")
+    return table
+
+
 def _int(value: Any, key: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise ConfigError(f"'{key}' must be an integer")
@@ -172,13 +204,18 @@ def _build(raw: Mapping[str, Any], base_dir: Path) -> Settings:
     kwargs: dict[str, Any] = {}
     if "mode" in raw:
         kwargs["mode"] = raw["mode"]
-    for key in ("compute_frameworks", "deny_feature_groups", "preview_allows"):
+    for key in ("compute_frameworks", "deny_feature_groups", "preview_allows", "allow_options"):
         if key in raw:
             kwargs[key] = _str_tuple(raw[key], key)
     if "ApiInputDataFeature" in kwargs.get("deny_feature_groups", ()):
         raise ConfigError("'deny_feature_groups' names the removed ApiInputDataFeature; use ApiDataFG instead")
     if raw.get("max_rows") is not None:
         kwargs["max_rows"] = _int(raw["max_rows"], "max_rows")
+    for key in _INLINE_LIMIT_KEYS:
+        if raw.get(key) is not None:
+            kwargs[key] = _int(raw[key], key)
+            if kwargs[key] < 1:
+                raise ConfigError(f"'{key}' must be an integer of at least 1")
     if "max_preview_rows" in raw:
         kwargs["max_preview_rows"] = _int(raw["max_preview_rows"], "max_preview_rows")
     if "plan_ttl" in raw:
@@ -195,6 +232,13 @@ def _build(raw: Mapping[str, Any], base_dir: Path) -> Settings:
         if not isinstance(raw["inline_data"], bool):
             raise ConfigError("'inline_data' must be true or false")
         kwargs["inline_data"] = raw["inline_data"]
+    if raw.get("default_classification") is not None:
+        if not isinstance(raw["default_classification"], str) or not raw["default_classification"]:
+            raise ConfigError("'default_classification' must be a non-empty string")
+        kwargs["default_classification"] = raw["default_classification"]
+    for key in ("options", "context_options"):
+        if key in raw:
+            kwargs[key] = _default_options(raw[key], key)
     if "sources" in raw:
         sources = _str_mapping(raw["sources"], "sources")
         kwargs["sources"] = {alias: _build_source(alias, v, base_dir) for alias, v in sources.items()}

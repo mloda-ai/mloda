@@ -3,6 +3,7 @@ from typing import Any, Generator
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
+from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -36,6 +37,7 @@ class DataLifecycleManager:
         self.result_data_collection: dict[UUID, Any] = {}
         self.track_data_to_drop: dict[UUID, set[UUID]] = {}
         self.artifacts: dict[str, Any] = {}
+        self.failed_rows: tuple[FailedRows, ...] = ()
         self.transformer = transformer if transformer is not None else ComputeFrameworkTransformer()
         self.column_ordering = column_ordering
         self.request_feature_order = request_feature_order
@@ -246,6 +248,14 @@ class DataLifecycleManager:
             artifacts: Dictionary of artifacts to store.
         """
         self.artifacts = artifacts
+
+    def set_failed_rows(self, failed_rows: list[FailedRows]) -> None:
+        """Stores the failed-row entries the run reported."""
+        self.failed_rows = tuple(failed_rows)
+
+    def get_failed_rows(self) -> tuple[FailedRows, ...]:
+        """Returns the failed-row entries the run reported."""
+        return self.failed_rows
 
     def get_artifacts(self) -> dict[str, Any]:
         """

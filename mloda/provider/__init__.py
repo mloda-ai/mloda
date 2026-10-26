@@ -142,6 +142,7 @@ from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseM
 from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
+from mloda.core.abstract_plugins.components.failed_rows import FailedRows, report_failed_rows
 from mloda.core.prepare.resolution_types import (
     ResolutionDiagnosis,
     ResolutionRecord,
@@ -247,5 +248,7 @@ __all__ = [
     "FeatureResolutionError",
     "MissingInputFeatureError",
     "ResolutionRecord",
+    "FailedRows",
+    "report_failed_rows",
     "ResolutionDiagnosis",
 ]

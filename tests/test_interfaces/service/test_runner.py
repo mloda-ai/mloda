@@ -28,16 +28,29 @@ from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import ERROR_CODES, is_error
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.planner import Planner
-from mloda.interfaces.service.runner import Runner
+from mloda.interfaces.service.request import MAX_NAME_LENGTH
+from mloda.interfaces.service.runner import MAX_FAILED_ROW_ENTRIES, Runner
 from mloda.provider import FeatureSet
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.plugin_stubs import StubFeatureGroup
 from tests.test_interfaces.source_groups import (
+    FAILED,
+    FAILED_COLUMN_LONG,
+    FAILED_CTRL,
+    FAILED_ENTRIES,
+    FAILED_ENTRY_COUNT,
+    FAILED_LONG,
+    FAILED_MANY,
+    FAILED_MANY_ROWS,
     FILE_SOURCE_GROUPS,
     PLAN_RAISE_SECRET,
+    MISSING,
+    MISSING_INPUT,
     RAISE,
     RAISE_SECRET,
+    RunnerFailedRowsMcp5,
+    RunnerMissingInputMcp5,
     RunnerRaiseMcp5,
 )
 
@@ -198,6 +211,8 @@ def _base(*extra: type[FeatureGroup]) -> PluginCollector:
         RunnerTypesMcp5,
         RunnerDeniedMcp5,
         RunnerRaiseMcp5,
+        RunnerFailedRowsMcp5,
+        RunnerMissingInputMcp5,
         ApiDataFG,
     }
     return PluginCollector.enabled_feature_groups(groups | set(extra))
@@ -422,6 +437,11 @@ class TestRunTimeChecks:
         _error(result, "policy_denied")
         assert denied_calls == []
 
+    def test_listed_option_runs(self, tmp_path: Path) -> None:
+        request = {"features": [{"name": "income", "options": {"k": 1}}]}
+
+        assert _only_table(_run(tmp_path, request, allow_options=("k",)))["row_count"] == 5
+
 
 class TestFeatureGroupFailure:
     def test_exception_becomes_an_internal_error_without_its_text(self, tmp_path: Path) -> None:
@@ -430,6 +450,16 @@ class TestFeatureGroupFailure:
         error = _error(result, "internal")
         assert "ValueError" in error["message"]
         assert RAISE_SECRET not in json.dumps(result)
+
+    def test_missing_input_has_its_own_code_with_the_missing_inputs(self, tmp_path: Path) -> None:
+        result = _run(tmp_path, {"features": ["customer_id", MISSING]})
+
+        error = _error(result, "missing_input_feature")
+        assert error["details"] == [
+            {"feature_group": "RunnerMissingInputMcp5", "feature": MISSING, "missing_inputs": [MISSING_INPUT]}
+        ]
+        assert "available_columns" not in json.dumps(result)
+        assert "status" not in result
 
     def test_failure_is_logged_once_with_audit_id_and_traceback_without_the_message(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
@@ -670,6 +700,135 @@ class TestJsonSafety:
         assert all(value is None or isinstance(value, (str, int, float, bool)) for value in values)
 
 
+class TestFull:
+    FULL_KEYS = {"row_count", "columns", "rows"}
+
+    def _full(self, tmp_path: Path, request: Mapping[str, Any] = REQUEST, **kwargs: Any) -> dict[str, Any]:
+        planner = _planner(_settings(tmp_path, **{"trusted_caller": True, **kwargs}))
+        plan_id = _plan_id(planner, request)
+        _write_sales(tmp_path / "sales.csv", rows=20)
+        result: dict[str, Any] = Runner(planner).run(plan_id, full=True)
+        return result
+
+    def _full_table(self, result: Mapping[str, Any]) -> dict[str, Any]:
+        tables = _success(result)["tables"]
+        assert len(tables) == 1
+        table: dict[str, Any] = tables[0]
+        assert set(table) == self.FULL_KEYS
+        return table
+
+    def test_full_returns_every_row_and_column_including_withheld(self, tmp_path: Path) -> None:
+        table = self._full_table(self._full(tmp_path, max_preview_rows=3))
+
+        assert table["row_count"] == 20
+        assert len(table["rows"]) == 20
+        assert all(set(row) == set(FEATURES) for row in table["rows"])
+        assert [row["customer_id"] for row in table["rows"]] == CUSTOMER_IDS
+        assert [row["income"] for row in table["rows"]] == [10 * i for i in range(1, 21)]
+
+    def test_full_columns_carry_name_and_classification_only(self, tmp_path: Path) -> None:
+        table = self._full_table(self._full(tmp_path))
+
+        assert table["columns"] == [
+            {"name": "customer_id", "classification": "personal"},
+            {"name": "income", "classification": "internal"},
+            {"name": "segment", "classification": "public"},
+        ]
+
+    def test_full_includes_unclassified_columns(self, tmp_path: Path) -> None:
+        table = self._full_table(self._full(tmp_path, classification={}))
+
+        assert {column["classification"] for column in table["columns"]} == {"unclassified"}
+        assert all(set(row) == set(FEATURES) for row in table["rows"])
+
+    def test_full_values_are_json_safe(self, tmp_path: Path) -> None:
+        result = self._full(tmp_path, {"features": TYPED}, classification={"income": "internal"})
+
+        rows = self._full_table(result)["rows"]
+        assert len(rows) == 20
+        assert rows[0][TYPED_PREFIX + "decimal"] == str(Decimal(10) / Decimal(4))
+        assert rows[-1][TYPED_PREFIX + "nan"] is None
+        json.dumps(result, allow_nan=False)
+
+    def test_max_rows_still_applies_under_full(self, tmp_path: Path) -> None:
+        _error(self._full(tmp_path, max_rows=10), "limit_exceeded")
+
+    def test_full_is_policy_denied_for_an_untrusted_caller(self, tmp_path: Path) -> None:
+        planner = _planner(_settings(tmp_path))
+        plan_id = _plan_id(planner)
+
+        result = Runner(planner).run(plan_id, full=True)
+
+        _error(result, "policy_denied")
+        assert "tables" not in result
+        assert set(_only_table(Runner(planner).run(plan_id))) == TABLE_KEYS
+
+    def test_default_run_is_unchanged(self, tmp_path: Path) -> None:
+        planner = _planner(_settings(tmp_path, max_preview_rows=2))
+        plan_id = _plan_id(planner)
+
+        explicit = Runner(planner).run(plan_id, full=False)
+
+        assert set(_only_table(explicit)) == TABLE_KEYS
+        assert len(_only_table(explicit)["preview"]["rows"]) == 2
+
+
+class TestFailedRows:
+    ENTRY_KEYS = {"column", "reason", "row_count", "rows", "truncated"}
+
+    def test_reported_rows_are_listed(self, tmp_path: Path) -> None:
+        result = _success(_run(tmp_path, {"features": ["customer_id", FAILED]}))
+
+        assert result["failed_rows"] == [
+            {"column": FAILED, "reason": "timeout", "row_count": 2, "rows": [1, 3], "truncated": False}
+        ]
+        json.dumps(result, allow_nan=False)
+
+    def test_without_reports_the_key_is_absent(self, tmp_path: Path) -> None:
+        assert "failed_rows" not in _success(_run(tmp_path))
+
+    def test_rows_are_capped_at_1000_with_the_full_count(self, tmp_path: Path) -> None:
+        (entry,) = _success(_run(tmp_path, {"features": [FAILED_MANY]}))["failed_rows"]
+
+        assert set(entry) == self.ENTRY_KEYS
+        assert entry["row_count"] == FAILED_MANY_ROWS
+        assert entry["rows"] == list(range(1000))
+        assert entry["truncated"] is True
+
+    def test_full_lifts_the_cap(self, tmp_path: Path) -> None:
+        planner = _planner(_settings(tmp_path, trusted_caller=True))
+        plan_id = _plan_id(planner, {"features": [FAILED_MANY]})
+
+        (entry,) = _success(Runner(planner).run(plan_id, full=True))["failed_rows"]
+
+        assert entry["rows"] == list(range(FAILED_MANY_ROWS))
+        assert entry["row_count"] == FAILED_MANY_ROWS
+        assert entry["truncated"] is False
+
+    def test_long_column_label_is_truncated_to_the_name_limit(self, tmp_path: Path) -> None:
+        (entry,) = _success(_run(tmp_path, {"features": [FAILED_LONG]}))["failed_rows"]
+
+        assert entry["column"] == FAILED_COLUMN_LONG[:MAX_NAME_LENGTH]
+
+    @pytest.mark.parametrize("trusted", [False, True])
+    def test_entries_are_capped_at_100(self, tmp_path: Path, trusted: bool) -> None:
+        planner = _planner(_settings(tmp_path, trusted_caller=trusted))
+        plan_id = _plan_id(planner, {"features": [FAILED_ENTRIES]})
+
+        entries = _success(Runner(planner).run(plan_id, full=trusted))["failed_rows"]
+
+        assert FAILED_ENTRY_COUNT > MAX_FAILED_ROW_ENTRIES
+        assert len(entries) == MAX_FAILED_ROW_ENTRIES
+
+    def test_column_has_control_characters_stripped(self, tmp_path: Path) -> None:
+        (entry,) = _success(_run(tmp_path, {"features": [FAILED_CTRL]}))["failed_rows"]
+
+        assert entry["column"].startswith("bad")
+        assert entry["column"].endswith("col")
+        assert not any(ord(char) < 32 for char in entry["column"])
+        assert entry["reason"] == "ctrl"
+
+
 class TestLock:
     def test_run_holds_the_lock_while_mloda_runs_and_releases_it(self, tmp_path: Path, lock_probes: list[bool]) -> None:
         _success(_run(tmp_path, {"features": [PROBE]}))
@@ -702,3 +861,45 @@ class TestResultsAreJson:
         assert is_error(result)
         assert result["error"]["code"] in ERROR_CODES
         json.dumps(result, allow_nan=False)
+
+
+class TestDefaultOptions:
+    DEFAULTS: ClassVar[dict[str, Any]] = {"options": {"dkey": "DEFAULT_VALUE_mcp5_8c2e"}}
+
+    def test_source_column_and_chained_feature_run_together_without_leaking_defaults(self, tmp_path: Path) -> None:
+        request = {"features": ["customer_id", PROBE]}
+
+        result = _success(_run(tmp_path, request, **self.DEFAULTS))
+
+        assert result["status"] == "completed"
+        assert sum(table["row_count"] for table in result["tables"]) >= 5
+        assert "DEFAULT_VALUE_mcp5_8c2e" not in json.dumps(result)
+
+    def test_plain_request_runs_with_context_defaults(self, tmp_path: Path) -> None:
+        result = _success(_run(tmp_path, context_options={"dctx": 1}))
+        assert result["status"] == "completed"
+
+
+class TestInlineLimits:
+    REQUEST: ClassVar[dict[str, Any]] = {"features": ["token"], "data": {"Tokens": {"token": ["007", "", None]}}}
+
+    def test_plan_at_the_limit_runs(self, tmp_path: Path) -> None:
+        result = _run(tmp_path, self.REQUEST, inline_data=True, max_inline_values=3, max_inline_chars=3)
+
+        assert _only_table(result)["row_count"] == 3
+
+    def test_run_replans_through_the_inline_limit_check(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        planner = _planner(_settings(tmp_path, inline_data=True, max_inline_values=3))
+        plan_id = _plan_id(planner, self.REQUEST)
+        calls: list[str] = []
+        original = Planner._inline_refusal
+
+        def spy(self: Planner, request: Any) -> dict[str, Any] | None:
+            calls.append("checked")
+            return original(self, request)
+
+        monkeypatch.setattr(Planner, "_inline_refusal", spy)
+
+        _success(Runner(planner).run(plan_id))
+
+        assert calls

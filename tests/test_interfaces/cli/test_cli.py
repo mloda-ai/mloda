@@ -11,7 +11,7 @@ import io
 import json
 import tomllib
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -29,12 +29,16 @@ from mloda.interfaces.service.runner import Runner
 from mloda.user import PluginCollector, PluginLoader
 from tests.helpers.docs_scope import shipped_feature_group_walk
 from tests.test_interfaces.source_groups import (
+    FAILED,
     FILE_SOURCE_GROUPS,
+    MISSING,
     PLAN_RAISE,
     PLAN_RAISE_SECRET,
     RAISE,
     RAISE_SECRET,
     PlanRaiseMcp5,
+    RunnerFailedRowsMcp5,
+    RunnerMissingInputMcp5,
     RunnerRaiseMcp5,
 )
 
@@ -144,8 +148,10 @@ def _elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return cwd
 
 
-def _services(config: Path | None, overrides: Mapping[str, Any] | None = None) -> tuple[Catalog, Planner, Runner]:
-    settings = load_settings(config, ENV, overrides)
+def _services(
+    config: Path | None, overrides: Mapping[str, Any] | None = None, trusted: bool = True
+) -> tuple[Catalog, Planner, Runner]:
+    settings = replace(load_settings(config, ENV, overrides), trusted_caller=trusted)
     services: tuple[Catalog, Planner, Runner] = build_services(
         settings, env=ENV, plugin_collector=_base(), clock=_clock
     )
@@ -275,6 +281,23 @@ class TestExplainErrors:
 
         assert outcome.code == 2
         assert _error_code(outcome) == "limit_exceeded"
+
+
+class TestUnlistedOption:
+    REQUEST_WITH_OPTION: dict[str, Any] = {"features": [{"name": "income", "options": {"unlisted_key": 1}}]}
+
+    @pytest.mark.parametrize("command", ["explain", "run"])
+    def test_cli_accepts_an_option_that_is_not_allow_listed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        path = _request_file(tmp_path, self.REQUEST_WITH_OPTION)
+
+        outcome = _cli([command, str(path), "--config", str(config)])
+
+        assert "option_not_allowed" not in outcome.out
+        assert outcome.code == 0, outcome.out
 
 
 class TestRequestInput:
@@ -506,6 +529,53 @@ class TestRunInlineData:
         assert '"007"' not in outcome.out
 
 
+class TestRunFailedRows:
+    def test_failed_rows_are_printed_and_exit_3(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        request = _request_file(tmp_path, {"features": ["customer_id", FAILED]})
+
+        outcome = _cli(["run", str(request), "--config", str(config)], extra_groups=[RunnerFailedRowsMcp5])
+
+        assert outcome.code == 3, outcome.err
+        result = outcome.json()
+        assert result["status"] == "completed"
+        assert result["failed_rows"] == [
+            {"column": FAILED, "reason": "timeout", "row_count": 2, "rows": [1, 3], "truncated": False}
+        ]
+
+    @pytest.mark.parametrize("output_format", ["jsonl", "csv"])
+    def test_failed_rows_summary_goes_to_stderr_for_row_formats(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, output_format: str
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        request = _request_file(tmp_path, {"features": [FAILED]})
+        argv = ["run", str(request), "--config", str(config), "--format", output_format]
+
+        outcome = _cli(argv, extra_groups=[RunnerFailedRowsMcp5])
+
+        assert outcome.code == 3, outcome.err
+        lines = outcome.err.strip().splitlines()
+        assert len(lines) == 1
+        for part in (FAILED, "timeout", "2", "1", "3"):
+            assert part in lines[0]
+        assert "failed_rows" not in outcome.out
+
+    def test_run_without_failed_rows_exits_0_and_has_no_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli(
+            ["run", str(_request_file(tmp_path)), "--config", str(config)], extra_groups=[RunnerFailedRowsMcp5]
+        )
+
+        assert outcome.code == 0, outcome.err
+        assert "failed_rows" not in outcome.json()
+
+
 class TestRunFeatureGroupFailure:
     def test_failing_feature_group_is_an_internal_result_with_exit_2(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -519,6 +589,16 @@ class TestRunFeatureGroupFailure:
         assert outcome.code == 2
         assert _error_code(outcome) == "internal"
         assert RAISE_SECRET not in outcome.out
+
+    def test_missing_input_has_its_own_code_with_exit_2(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        request = _request_file(tmp_path, {"features": ["customer_id", MISSING]})
+
+        outcome = _cli(["run", str(request), "--config", str(config)], extra_groups=[RunnerMissingInputMcp5])
+
+        assert outcome.code == 2
+        assert _error_code(outcome) == "missing_input_feature"
 
     @pytest.mark.parametrize("command", ["explain", "run"])
     def test_planning_failure_is_an_internal_result_with_exit_2(
@@ -581,6 +661,41 @@ class TestRunFormats:
         assert outcome.err.strip()
 
     @pytest.mark.parametrize("output_format", ["json", "jsonl", "csv"])
+    def test_full_prints_every_row_and_column(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, output_format: str
+    ) -> None:
+        config = _config(tmp_path, CONFIG.replace('mode = "plan"', 'mode = "plan"\nmax_preview_rows = 2'))
+        _elsewhere(tmp_path, monkeypatch)
+        argv = ["run", str(_request_file(tmp_path)), "--config", str(config), "--full", "--format", output_format]
+
+        outcome = _cli(argv)
+
+        assert outcome.code == 0, outcome.err
+        expected = [{"customer_id": CUSTOMER_IDS[i], **PREVIEW_ROWS[i]} for i in range(5)]
+        if output_format == "json":
+            (table,) = outcome.json()["tables"]
+            assert "preview" not in table
+            assert table["row_count"] == 5
+            assert table["rows"] == expected
+        elif output_format == "jsonl":
+            assert [json.loads(line) for line in outcome.out.splitlines()] == expected
+        else:
+            rows = list(csv.reader(io.StringIO(outcome.out)))
+            assert rows == [["customer_id", "income", "segment"]] + [
+                [CUSTOMER_IDS[i], str(PREVIEW_ROWS[i]["income"]), str(PREVIEW_ROWS[i]["segment"])] for i in range(5)
+            ]
+
+    def test_full_still_enforces_max_rows(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        argv = ["run", str(_request_file(tmp_path)), "--config", str(config), "--max-rows", "3", "--full"]
+
+        outcome = _cli(argv)
+
+        assert outcome.code == 2
+        assert _error_code(outcome) == "limit_exceeded"
+
+    @pytest.mark.parametrize("output_format", ["json", "jsonl", "csv"])
     def test_withheld_values_never_appear(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, output_format: str
     ) -> None:
@@ -595,27 +710,37 @@ class TestRunFormats:
 
 
 class TestWithheldFilters:
+    REQUEST: dict[str, Any] = {
+        "features": ["segment"],
+        "filters": [{"feature": "customer_id", "op": "eq", "value": CUSTOMER_IDS[2]}],
+    }
+
+    def test_service_built_for_mcp_refuses_a_filter_on_a_withheld_column(self, tmp_path: Path) -> None:
+        _, planner, _ = _services(_config(tmp_path), trusted=False)
+
+        result = planner.explain(self.REQUEST)
+
+        assert planner.settings.trusted_caller is False
+        assert is_error(result)
+        assert result["error"]["code"] == "policy_denied"
+        details = result["error"]["details"]
+        assert [(detail["path"], detail["problem"]) for detail in details] == [
+            ("/filters/0", "filter_on_withheld_column")
+        ]
+
     @pytest.mark.parametrize("command", ["explain", "run"])
-    def test_filter_on_withheld_column_is_policy_denied(
+    def test_cli_accepts_a_filter_on_a_withheld_column(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
     ) -> None:
         config = _config(tmp_path)
         _elsewhere(tmp_path, monkeypatch)
-        request = {
-            "features": ["segment"],
-            "filters": [{"feature": "customer_id", "op": "eq", "value": CUSTOMER_IDS[2]}],
-        }
 
-        outcome = _cli([command, str(_request_file(tmp_path, request)), "--config", str(config)])
+        outcome = _cli([command, str(_request_file(tmp_path, self.REQUEST)), "--config", str(config)])
 
-        assert outcome.code == 2
-        assert _error_code(outcome) == "policy_denied"
-        details = outcome.json()["error"]["details"]
-        assert [(detail["path"], detail["problem"]) for detail in details] == [
-            ("/filters/0", "filter_on_withheld_column")
-        ]
-        assert "tables" not in outcome.json()
-        _assert_no_withheld_values(outcome)
+        assert outcome.code == 0, outcome.out + outcome.err
+        assert outcome.json()["status" if command == "run" else "plan_id"]
+        if command == "run":
+            _assert_no_withheld_values(outcome)
 
 
 class TestBuildServices:
@@ -744,3 +869,140 @@ class TestPackaging:
                 modules.append(node.module)
 
         assert not [name for name in modules if name == "mcp" or name.startswith("mcp.")]
+
+
+class TestFeatureArguments:
+    def _explain(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *args: str) -> _Outcome:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        return _cli(["explain", *args, "--config", str(config)])
+
+    def test_features_without_flags_build_a_plain_request(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        outcome = self._explain(tmp_path, monkeypatch, "customer_id", "income")
+
+        assert outcome.code == 0, outcome.err
+        assert outcome.json()["normalized_request"] == {"features": [{"name": "customer_id"}, {"name": "income"}]}
+
+    def test_option_and_context_flags_build_the_request(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        outcome = self._explain(tmp_path, monkeypatch, "income", "segment", "-o", "a=1", "-c", "b=two")
+
+        assert outcome.code == 0, outcome.err
+        expected = {"group_options": {"a": "1"}, "context_options": {"b": "two"}}
+        assert outcome.json()["normalized_request"] == {
+            "features": [{"name": "income", **expected}, {"name": "segment", **expected}]
+        }
+
+    def test_flags_are_repeatable_and_empty_containers_are_omitted(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        outcome = self._explain(tmp_path, monkeypatch, "income", "--option", "a=1", "-o", "b=2")
+
+        assert outcome.code == 0, outcome.err
+        assert outcome.json()["normalized_request"] == {
+            "features": [{"name": "income", "group_options": {"a": "1", "b": "2"}}]
+        }
+
+    def test_json_and_file_values(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        note = tmp_path / "note.txt"
+        note.write_text("line one\nline two", encoding="utf-8")
+
+        outcome = self._explain(
+            tmp_path, monkeypatch, "income", "-o", 'l:=[1, {"x": true}]', "-o", f"t=@{note}", "-o", "n:=5", "-o", "e="
+        )
+
+        assert outcome.code == 0, outcome.err
+        (feature,) = outcome.json()["normalized_request"]["features"]
+        assert feature["group_options"] == {"l": [1, {"x": True}], "t": "line one\nline two", "n": 5, "e": ""}
+
+    def test_value_may_contain_equals(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        outcome = self._explain(tmp_path, monkeypatch, "income", "-o", "k=a=b")
+
+        (feature,) = outcome.json()["normalized_request"]["features"]
+        assert feature["group_options"] == {"k": "a=b"}
+
+    def test_run_builds_the_request_too(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli(["run", "income", "segment", "-o", "a=1", "--config", str(config)])
+
+        assert outcome.code == 0, outcome.err
+        assert outcome.json()["status"] == "completed"
+
+    @pytest.mark.parametrize("command", ["explain", "run"])
+    def test_a_json_name_that_does_not_exist_is_still_a_missing_request_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli([command, "x.json", "--config", str(config)])
+
+        assert outcome.code == 2
+        assert outcome.out == ""
+        assert "request file not found" in outcome.err
+
+    def test_an_existing_file_without_json_suffix_is_a_request_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        path = tmp_path / "request.txt"
+        path.write_text(json.dumps(REQUEST), encoding="utf-8")
+
+        outcome = _cli(["explain", str(path), "--config", str(config)])
+
+        assert outcome.code == 0, outcome.err
+        assert outcome.json()["normalized_request"] == REQUEST
+
+    @pytest.mark.parametrize("command", ["explain", "run"])
+    @pytest.mark.parametrize(
+        "flags",
+        [
+            ["-o", "no_equals_" + SECRET],
+            ["-c", "no_equals_" + SECRET],
+            ["-o", "k:=" + SECRET + " {"],
+            ["-o", "k=@" + SECRET + "_missing.txt"],
+            ["-c", "k:=[" + SECRET],
+            ["-o", "k:=" + "[" * 200_000 + SECRET],
+        ],
+    )
+    def test_malformed_pair_is_a_stderr_error_that_never_echoes_the_value(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str, flags: list[str]
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli([command, "income", *flags, "--config", str(config)])
+
+        assert outcome.code == 2
+        assert outcome.out == ""
+        assert outcome.err.strip()
+        assert SECRET not in outcome.err
+
+    @pytest.mark.parametrize("flag", ["-o", "-c"])
+    @pytest.mark.parametrize("command", ["explain", "run"])
+    def test_flags_with_a_request_file_are_a_stderr_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str, flag: str
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli([command, str(_request_file(tmp_path)), flag, "k=" + SECRET, "--config", str(config)])
+
+        assert outcome.code == 2
+        assert outcome.out == ""
+        assert outcome.err.strip()
+        assert SECRET not in outcome.err
+
+    def test_flags_with_stdin_request_are_a_stderr_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli(["explain", "-", "-o", "k=v", "--config", str(config)], stdin_text=json.dumps(REQUEST))
+
+        assert outcome.code == 2
+        assert outcome.out == ""
+        assert outcome.err.strip()

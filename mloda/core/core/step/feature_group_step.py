@@ -3,6 +3,7 @@ from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef, api_data_scope
+from mloda.core.abstract_plugins.components.failed_rows import collect_failed_rows
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.abstract_step import Step
@@ -61,12 +62,15 @@ class FeatureGroupStep(Step):
 
         match = self.features.input_data_match
         access = None if match is None else match[1].access
-        if isinstance(access, ApiDataRef) and issubclass(self.feature_group, ApiDataFG):
-            key = access.key
-            with api_data_scope(lambda: cfw_register.get_api_data_by_name(key), key):
+        with collect_failed_rows(self.feature_group.get_class_name()) as collector:
+            if isinstance(access, ApiDataRef) and issubclass(self.feature_group, ApiDataFG):
+                key = access.key
+                with api_data_scope(lambda: cfw_register.get_api_data_by_name(key), key):
+                    data = self.run_calculate_feature(cfw, data)
+            else:
                 data = self.run_calculate_feature(cfw, data)
-        else:
-            data = self.run_calculate_feature(cfw, data)
+        if collector.entries:
+            cfw_register.add_failed_rows(collector.entries)
         self.save_artifact(self.features, cfw_register)
 
         # return_data_type_rule

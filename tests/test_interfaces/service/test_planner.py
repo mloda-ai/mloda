@@ -46,6 +46,9 @@ DENIED = "PlannerDeniedMcp4"
 DOUBLE_SUFFIX = "__mcp4_double"
 DERIVED = "income" + DOUBLE_SUFFIX
 IN_SUFFIX = "_mcp4_in"
+OPTS = "income__mcp4_opts"
+DEFAULT_VALUE = "DEFAULT_VALUE_mcp4_3f9a"
+SEEN_OPTIONS: list[tuple[dict[str, Any], dict[str, Any]]] = []
 CLOCK_START = 1_800_000_000.0
 KEY = b"k" * 32
 STEP_KEYS = {
@@ -172,6 +175,31 @@ class PlannerInFeaturesMcp4(FeatureGroup):
         return {str(features.get_name_of_one_feature()): [1]}
 
 
+class PlannerOptionsProbeMcp4(FeatureGroup):
+    """Derives ``income`` and records the group and context options it was planned with."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == OPTS
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        SEEN_OPTIONS.append((dict(options.group), dict(options.context)))
+        return {Feature("income")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {OPTS: list(data["income"])}
+
+
 def _base() -> PluginCollector:
     return PluginCollector.enabled_feature_groups(
         {
@@ -179,6 +207,7 @@ def _base() -> PluginCollector:
             PlannerDoubleMcp4,
             PlannerDeniedMcp4,
             PlannerInFeaturesMcp4,
+            PlannerOptionsProbeMcp4,
             PlanRaiseMcp5,
             ApiDataFG,
         }
@@ -356,9 +385,98 @@ class TestRequestChecks:
     def test_semantic_feature_config_error_is_validation_failed(self, tmp_path: Path) -> None:
         request = {"features": [{"name": "income", "options": {"x": 1}, "group_options": {"y": 1}}]}
 
-        error = _error(_explain(tmp_path, request), "validation_failed")
+        error = _error(_explain(tmp_path, request, allow_options=("x", "y")), "validation_failed")
 
         assert _has_detail(error, path="/features/0", problem="invalid_feature_config")
+
+
+NESTED_OPTION_CASES: list[tuple[dict[str, Any], str]] = [
+    ({"name": "income", "options": {"k": SECRET}}, "/features/0/options/k"),
+    ({"name": "income", "group_options": {"k": SECRET}}, "/features/0/group_options/k"),
+    ({"name": "income", "context_options": {"k": SECRET}}, "/features/0/context_options/k"),
+    (
+        {"name": "income", "options": {"in_features": {"name": "raw", "options": {"k": SECRET}}}},
+        "/features/0/options/in_features/options/k",
+    ),
+    (
+        {"name": "income", "group_options": {"in_features": {"name": "raw", "context_options": {"k": SECRET}}}},
+        "/features/0/group_options/in_features/context_options/k",
+    ),
+    (
+        {
+            "name": "income",
+            "options": {
+                "in_features": {
+                    "name": "a",
+                    "options": {
+                        "in_features": {
+                            "name": "b",
+                            "group_options": {"in_features": {"name": "c", "options": {"k": SECRET}}},
+                        }
+                    },
+                }
+            },
+        },
+        "/features/0/options/in_features/options/in_features/group_options/in_features/options/k",
+    ),
+]
+
+
+class TestOptionAllowlist:
+    @pytest.mark.parametrize(("feature", "path"), NESTED_OPTION_CASES)
+    def test_unlisted_key_is_policy_denied_by_pointer_without_value(
+        self, tmp_path: Path, feature: dict[str, Any], path: str
+    ) -> None:
+        result = _explain(tmp_path, {"features": [feature]})
+
+        error = _error(result, "policy_denied")
+        assert [detail["path"] for detail in error["details"]] == [path]
+        assert _has_detail(error, problem="option_not_allowed")
+        assert SECRET not in json.dumps(result)
+
+    @pytest.mark.parametrize(("feature", "path"), NESTED_OPTION_CASES)
+    def test_listed_key_passes(self, tmp_path: Path, feature: dict[str, Any], path: str) -> None:
+        result = _explain(tmp_path, {"features": [feature]}, allow_options=("k",))
+
+        if is_error(result):
+            assert not _has_detail(result["error"], problem="option_not_allowed")
+
+    @pytest.mark.parametrize(("feature", "path"), NESTED_OPTION_CASES)
+    def test_trusted_caller_may_set_unlisted_keys(self, tmp_path: Path, feature: dict[str, Any], path: str) -> None:
+        result = _explain(tmp_path, {"features": [feature]}, trusted_caller=True)
+
+        if is_error(result):
+            assert not _has_detail(result["error"], problem="option_not_allowed")
+
+    def test_every_unlisted_key_is_reported_and_listed_ones_are_not(self, tmp_path: Path) -> None:
+        feature = {"name": "income", "options": {"a": 1, "b": 2, "ok": 3}, "context_options": {"c": 4}}
+
+        error = _error(_explain(tmp_path, {"features": [feature]}, allow_options=("ok",)), "policy_denied")
+
+        assert sorted(detail["path"] for detail in error["details"]) == [
+            "/features/0/context_options/c",
+            "/features/0/options/a",
+            "/features/0/options/b",
+        ]
+
+    def test_in_features_key_itself_is_not_refused(self, tmp_path: Path) -> None:
+        feature = {"name": "income", "options": {"in_features": "customer_id"}}
+
+        result = _explain(tmp_path, {"features": [feature]})
+
+        if is_error(result):
+            assert not _has_detail(result["error"], problem="option_not_allowed")
+
+    @pytest.mark.parametrize("key", ["CsvFG", RESERVED_READER_OPTION_KEY])
+    def test_listed_data_access_key_stays_a_data_access_problem(self, tmp_path: Path, key: str) -> None:
+        request = {"features": [{"name": "income", "options": {key: SECRET}}]}
+
+        result = _explain(tmp_path, request, allow_options=(key,))
+
+        error = _error(result, "policy_denied")
+        assert [detail["path"] for detail in error["details"]] == [f"/features/0/options/{key}"]
+        assert _has_detail(error, problem="data_access_option")
+        assert SECRET not in json.dumps(result)
 
 
 class TestUnresolved:
@@ -541,6 +659,26 @@ class TestFilters:
         assert result["normalized_request"] == request
 
 
+class TestTrustedCaller:
+    REQUEST = {"features": ["customer_id"], "filters": [{"feature": "segment", "op": "in", "values": ["a"]}]}
+
+    def test_untrusted_caller_is_refused_a_filter_on_a_withheld_column(self, tmp_path: Path) -> None:
+        error = _error(_explain(tmp_path, self.REQUEST), "policy_denied")
+
+        assert _has_detail(error, path="/filters/0", problem="filter_on_withheld_column")
+
+    def test_trusted_caller_may_filter_on_a_withheld_column(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, self.REQUEST, trusted_caller=True))
+
+        assert result["policy"] == {"verdict": "allowed"}
+        assert result["normalized_request"] == self.REQUEST
+
+    def test_trusted_caller_keeps_the_egress_report(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, self.REQUEST, trusted_caller=True))
+
+        assert result["egress"]["withheld"] == [{"column": "customer_id", "reason": "classification: unclassified"}]
+
+
 class TestSuccess:
     def test_result_keys(self, tmp_path: Path) -> None:
         result = _success(_explain(tmp_path, {"features": ["customer_id", "income"]}))
@@ -688,6 +826,57 @@ class TestEgress:
         result = _explain(tmp_path, {"features": ["customer_id", DERIVED]}, classification=classification)
 
         assert _success(result)["egress"] == {"preview_columns": ["customer_id", DERIVED], "withheld": []}
+
+    def test_default_classification_labels_unlisted_leaf_columns(self, tmp_path: Path) -> None:
+        classification = {"customer_id": "personal"}
+        request = {"features": ["customer_id", "income", "segment"]}
+
+        egress = _success(
+            _explain(tmp_path, request, classification=classification, default_classification="internal")
+        )["egress"]
+
+        assert egress["preview_columns"] == ["income", "segment"]
+        assert egress["withheld"] == [{"column": "customer_id", "reason": "classification: personal"}]
+
+    def test_default_classification_does_not_override_an_explicit_label(self, tmp_path: Path) -> None:
+        classification = {"income": "internal"}
+
+        egress = _success(
+            _explain(
+                tmp_path,
+                {"features": ["income", "segment"]},
+                classification=classification,
+                default_classification="personal",
+            )
+        )["egress"]
+
+        assert egress["preview_columns"] == ["income"]
+        assert egress["withheld"] == [{"column": "segment", "reason": "classification: personal"}]
+
+    def test_derived_feature_takes_the_strictest_input_with_a_default_classification(self, tmp_path: Path) -> None:
+        classification = {"customer_id": "internal"}
+
+        egress = _success(
+            _explain(
+                tmp_path,
+                {"features": ["customer_id", DERIVED]},
+                classification=classification,
+                default_classification="personal",
+            )
+        )["egress"]
+
+        assert egress["preview_columns"] == ["customer_id"]
+        assert egress["withheld"] == [{"column": DERIVED, "reason": "classification: personal"}]
+
+    def test_derived_feature_is_not_labelled_by_the_default(self, tmp_path: Path) -> None:
+        classification = {"income": "personal"}
+
+        egress = _success(
+            _explain(tmp_path, {"features": [DERIVED]}, classification=classification, default_classification="public")
+        )["egress"]
+
+        assert egress["preview_columns"] == []
+        assert egress["withheld"] == [{"column": DERIVED, "reason": "classification: personal"}]
 
     def test_keep_index_index_column_is_listed_and_withheld_by_classification(self, tmp_path: Path) -> None:
         classification = {"customer_id": "personal", "income": "internal"}
@@ -1086,3 +1275,100 @@ class TestKeepIndex:
         assert "tables" not in result
         json.dumps(result)
         _assert_no_paths(result, tmp_path, "sales.csv")
+
+
+class TestDefaultOptions:
+    DEFAULTS: ClassVar[dict[str, Any]] = {
+        "options": {"dkey": DEFAULT_VALUE},
+        "context_options": {"dctx": DEFAULT_VALUE},
+    }
+
+    def test_defaults_reach_the_feature_group_and_stay_out_of_the_result(self, tmp_path: Path) -> None:
+        SEEN_OPTIONS.clear()
+
+        result = _success(_explain(tmp_path, {"features": [OPTS]}, **self.DEFAULTS))
+
+        assert SEEN_OPTIONS
+        assert all(group == {"dkey": DEFAULT_VALUE} for group, _ in SEEN_OPTIONS)
+        assert all(context == {"dctx": DEFAULT_VALUE} for _, context in SEEN_OPTIONS)
+        assert DEFAULT_VALUE not in json.dumps(result)
+        assert result["normalized_request"] == {"features": [OPTS]}
+
+    def test_flat_options_config_combines_with_context_defaults(self, tmp_path: Path) -> None:
+        SEEN_OPTIONS.clear()
+        feature = {"name": OPTS, "options": {"dkey": "own", "extra": 1}}
+
+        result = _success(_explain(tmp_path, {"features": [feature]}, allow_options=("dkey", "extra"), **self.DEFAULTS))
+
+        assert all(group == {"dkey": "own", "extra": 1} for group, _ in SEEN_OPTIONS)
+        assert all(context == {"dctx": DEFAULT_VALUE} for _, context in SEEN_OPTIONS)
+        assert result["normalized_request"] == {"features": [feature]}
+
+    def test_request_without_options_still_plans_when_defaults_are_unlisted(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, {"features": ["customer_id", "income"]}, **self.DEFAULTS))
+        assert DEFAULT_VALUE not in json.dumps(result)
+
+    def test_caller_may_not_set_a_defaulted_key_that_is_not_listed(self, tmp_path: Path) -> None:
+        feature = {"name": "income", "options": {"dkey": "mine"}}
+
+        error = _error(_explain(tmp_path, {"features": [feature]}, **self.DEFAULTS), "policy_denied")
+
+        assert _has_detail(error, path="/features/0/options/dkey", problem="option_not_allowed")
+
+    def test_caller_may_set_a_defaulted_key_that_is_listed(self, tmp_path: Path) -> None:
+        feature = {"name": "income", "options": {"dkey": "mine"}}
+
+        result = _explain(tmp_path, {"features": [feature]}, allow_options=("dkey",), **self.DEFAULTS)
+
+        _success(result)
+
+    def test_source_column_and_chained_feature_together_with_group_defaults(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, {"features": ["customer_id", DERIVED]}, options={"dkey": DEFAULT_VALUE}))
+
+        assert [step["feature_group"] for step in result["steps"]] == ["CsvFG", "PlannerDoubleMcp4"]
+        assert DEFAULT_VALUE not in json.dumps(result)
+
+
+class TestInlineLimits:
+    DATA: ClassVar[dict[str, Any]] = {
+        "A": {"x": ["ab", "cd", None, 12345]},
+        "B": {"y": [1.5, "e"]},
+    }  # 6 values, 5 chars
+
+    def _request(self) -> dict[str, Any]:
+        return {"features": ["x"], "data": self.DATA}
+
+    def test_values_over_limit(self, tmp_path: Path) -> None:
+        result = _explain(tmp_path, self._request(), inline_data=True, max_inline_values=5)
+
+        error = _error(result, "limit_exceeded")
+        assert _has_detail(error, reason="inline_values_over_limit", count=6, limit=5)
+        assert "ab" not in json.dumps(result)
+
+    def test_chars_over_limit(self, tmp_path: Path) -> None:
+        result = _explain(tmp_path, self._request(), inline_data=True, max_inline_chars=4)
+
+        error = _error(result, "limit_exceeded")
+        assert _has_detail(error, reason="inline_chars_over_limit", count=5, limit=4)
+        assert "ab" not in json.dumps(result)
+
+    def test_both_over_limit_report_both(self, tmp_path: Path) -> None:
+        result = _explain(tmp_path, self._request(), inline_data=True, max_inline_values=2, max_inline_chars=1)
+
+        error = _error(result, "limit_exceeded")
+        assert _has_detail(error, reason="inline_values_over_limit", count=6, limit=2)
+        assert _has_detail(error, reason="inline_chars_over_limit", count=5, limit=1)
+
+    def test_exactly_at_limit_passes(self, tmp_path: Path) -> None:
+        request = {"features": ["x"], "data": {"A": {"x": ["ab", "cd", None, 12345]}}}
+        _success(_explain(tmp_path, request, inline_data=True, max_inline_values=4, max_inline_chars=4))
+
+    def test_limit_is_checked_before_planning(self, tmp_path: Path) -> None:
+        request = {"features": ["no_such_column"], "data": self.DATA}
+
+        result = _explain(tmp_path, request, inline_data=True, max_inline_values=1)
+
+        _error(result, "limit_exceeded")
+
+    def test_disabled_inline_data_stays_policy_denied(self, tmp_path: Path) -> None:
+        _error(_explain(tmp_path, self._request(), max_inline_values=1), "policy_denied")

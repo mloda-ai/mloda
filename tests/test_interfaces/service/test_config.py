@@ -1,6 +1,8 @@
 """Settings loading for the MCP service layer: TOML file, env vars, overrides, strictness, config hash."""
 
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -240,6 +242,62 @@ def test_non_bool_inline_data_is_config_error(tmp_path: Path, value: str) -> Non
         load_settings(_write(tmp_path, f"[mcp]\ninline_data = {value}\n"), env={})
 
 
+def test_trusted_caller_defaults_to_false() -> None:
+    assert Settings().trusted_caller is False
+
+
+def test_config_hash_changes_with_trusted_caller() -> None:
+    assert Settings().config_hash() != Settings(trusted_caller=True).config_hash()
+
+
+def test_trusted_caller_is_not_a_toml_key(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match="trusted_caller"):
+        load_settings(_write(tmp_path, "[mcp]\ntrusted_caller = true\n"), env={})
+
+
+def test_trusted_caller_is_not_an_override() -> None:
+    with pytest.raises(ConfigError, match="trusted_caller"):
+        load_settings(None, env={}, overrides={"trusted_caller": True})
+
+
+def test_default_classification_defaults_to_none() -> None:
+    assert Settings().default_classification is None
+
+
+def test_default_classification_toml_loads(tmp_path: Path) -> None:
+    path = _write(tmp_path, '[mcp]\ndefault_classification = "internal"\n')
+    assert load_settings(path, env={}).default_classification == "internal"
+
+
+@pytest.mark.parametrize("value", ["1", "true", '["internal"]', '""'])
+def test_non_string_or_empty_default_classification_is_config_error(tmp_path: Path, value: str) -> None:
+    with pytest.raises(ConfigError, match="default_classification"):
+        load_settings(_write(tmp_path, f"[mcp]\ndefault_classification = {value}\n"), env={})
+
+
+def test_config_hash_changes_with_default_classification() -> None:
+    assert Settings().config_hash() != Settings(default_classification="internal").config_hash()
+
+
+def test_allow_options_defaults_to_empty_tuple() -> None:
+    assert Settings().allow_options == ()
+
+
+def test_allow_options_toml_loads(tmp_path: Path) -> None:
+    path = _write(tmp_path, '[mcp]\nallow_options = ["k", "other"]\n')
+    assert load_settings(path, env={}).allow_options == ("k", "other")
+
+
+@pytest.mark.parametrize("value", ['"k"', "1", "[1]", '["k", 2]', "{k = 1}"])
+def test_bad_allow_options_is_config_error(tmp_path: Path, value: str) -> None:
+    with pytest.raises(ConfigError, match="allow_options"):
+        load_settings(_write(tmp_path, f"[mcp]\nallow_options = {value}\n"), env={})
+
+
+def test_config_hash_changes_with_allow_options() -> None:
+    assert Settings().config_hash() != Settings(allow_options=("k",)).config_hash()
+
+
 def test_config_hash_ignores_mapping_insertion_order() -> None:
     one = Settings(classification={"a": "personal", "b": "public"})
     other = Settings(classification={"b": "public", "a": "personal"})
@@ -250,3 +308,83 @@ def test_removed_api_input_data_feature_in_deny_list_is_rejected_with_a_hint(tmp
     path = _write(tmp_path, '[mcp]\ndeny_feature_groups = ["ApiInputDataFeature"]\n')
     with pytest.raises(ConfigError, match="ApiDataFG"):
         load_settings(path, env={})
+
+
+def test_default_options_default_to_empty() -> None:
+    assert dict(Settings().options) == {}
+    assert dict(Settings().context_options) == {}
+
+
+def test_default_option_tables_load(tmp_path: Path) -> None:
+    text = '[mcp.options]\nmodel = "m"\nretries = 3\nratio = 0.5\non = true\nbook = ["a", {b = [1, 2]}]\n'
+    text += '[mcp.context_options]\ntimeout = 30\nnested = {x = {y = "z"}}\n'
+
+    settings = load_settings(_write(tmp_path, text), env={})
+
+    assert dict(settings.options) == {
+        "model": "m",
+        "retries": 3,
+        "ratio": 0.5,
+        "on": True,
+        "book": ["a", {"b": [1, 2]}],
+    }
+    assert dict(settings.context_options) == {"timeout": 30, "nested": {"x": {"y": "z"}}}
+
+
+@pytest.mark.parametrize("table", ["options", "context_options"])
+@pytest.mark.parametrize(
+    "body",
+    ["when = 2020-01-01T00:00:00Z", "day = 2020-01-01", "deep = [{at = 12:30:00}]", 'in_features = "x"'],
+)
+def test_bad_default_option_values_are_config_errors(tmp_path: Path, table: str, body: str) -> None:
+    with pytest.raises(ConfigError, match=table):
+        load_settings(_write(tmp_path, f"[mcp.{table}]\n{body}\n"), env={})
+
+
+@pytest.mark.parametrize("table", ["options", "context_options"])
+@pytest.mark.parametrize("value", ['"x"', "1", '["a"]'])
+def test_non_table_default_options_is_config_error(tmp_path: Path, table: str, value: str) -> None:
+    with pytest.raises(ConfigError, match=table):
+        load_settings(_write(tmp_path, f"[mcp]\n{table} = {value}\n"), env={})
+
+
+def test_config_hash_changes_with_default_options() -> None:
+    base = Settings().config_hash()
+    assert base != Settings(options={"k": 1}).config_hash()
+    assert base != Settings(context_options={"k": 1}).config_hash()
+    assert Settings(options={"k": 1}).config_hash() != Settings(context_options={"k": 1}).config_hash()
+
+
+@pytest.mark.parametrize("table", ["options", "context_options"])
+@pytest.mark.parametrize("key", ["in_features", "feature_group"])
+def test_reserved_default_option_key_is_config_error(tmp_path: Path, table: str, key: str) -> None:
+    with pytest.raises(ConfigError, match=key):
+        load_settings(_write(tmp_path, f'[mcp.{table}]\n{key} = "x"\n'), env={})
+
+
+@pytest.mark.parametrize("key", ["max_inline_values", "max_inline_chars"])
+class TestInlineLimits:
+    def test_default_is_none(self, key: str) -> None:
+        assert getattr(Settings(), key) is None
+
+    def test_toml_loads(self, tmp_path: Path, key: str) -> None:
+        assert getattr(load_settings(_write(tmp_path, f"[mcp]\n{key} = 5\n"), env={}), key) == 5
+
+    @pytest.mark.parametrize("value", ["0", "-1", "true", '"5"', "1.5"])
+    def test_bad_toml_value_is_config_error(self, tmp_path: Path, key: str, value: str) -> None:
+        with pytest.raises(ConfigError, match=f"'{key}' must be"):
+            load_settings(_write(tmp_path, f"[mcp]\n{key} = {value}\n"), env={})
+
+    def test_env_loads_and_wins_over_file(self, tmp_path: Path, key: str) -> None:
+        env = {f"MLODA_MCP_{key.upper()}": "7"}
+        assert getattr(load_settings(None, env=env), key) == 7
+        assert getattr(load_settings(_write(tmp_path, f"[mcp]\n{key} = 5\n"), env=env), key) == 7
+
+    @pytest.mark.parametrize("value", ["0", "-3", "many", "1.5", ""])
+    def test_bad_env_value_is_config_error(self, key: str, value: str) -> None:
+        with pytest.raises(ConfigError):
+            load_settings(None, env={f"MLODA_MCP_{key.upper()}": value})
+
+    def test_config_hash_changes(self, key: str) -> None:
+        changes: dict[str, Any] = {key: 5}
+        assert Settings().config_hash() != replace(Settings(), **changes).config_hash()

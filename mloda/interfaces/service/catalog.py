@@ -8,7 +8,7 @@ import difflib
 import hashlib
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,7 +25,12 @@ from mloda.core.api.plugin_info import FeatureGroupInfo, ResolvedFeature
 from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import error_result, problems_to_details, strip_control_characters
 from mloda.interfaces.service.lock import MLODA_LOCK
-from mloda.interfaces.service.request import MAX_NAME_LENGTH, Problem, option_data_access_violations
+from mloda.interfaces.service.request import (
+    MAX_NAME_LENGTH,
+    Problem,
+    option_data_access_violations,
+    unlisted_group_option_violations,
+)
 from mloda.interfaces.service.sources import data_access_collection, source_columns
 from mloda.steward import verified_context
 
@@ -133,7 +138,7 @@ def _json_value(value: Any) -> Any:
     return value if value is None or isinstance(value, (str, int, float, bool)) else str(value)
 
 
-def _options(fg: type[FeatureGroup]) -> tuple[list[dict[str, Any]], list[str]]:
+def _options(fg: type[FeatureGroup], allowed: Collection[str]) -> tuple[list[dict[str, Any]], list[str]]:
     options: list[dict[str, Any]] = []
     missing: list[str] = []
     mapping = fg.PROPERTY_MAPPING or {}
@@ -143,6 +148,7 @@ def _options(fg: type[FeatureGroup]) -> tuple[list[dict[str, Any]], list[str]]:
             "name": str(key),
             "explanation": sanitize_text(spec.explanation),
             "required": is_no_default(spec.default),
+            "caller_settable": str(key) in allowed,
         }
         if not is_no_default(spec.default):
             entry["default"] = _json_value(spec.default)
@@ -236,6 +242,11 @@ class Catalog:
         if violations:
             details = problems_to_details(violations)
             return error_result("policy_denied", "A request may not set data-access options.", details)
+        if not self._settings.trusted_caller:
+            unlisted = unlisted_group_option_violations(group, self._settings.allow_options)
+            if unlisted:
+                message = "A request may only set options listed in allow_options."
+                return error_result("policy_denied", message, problems_to_details(unlisted))
         with verified_context(principal=self._principal), MLODA_LOCK:
             resolved = resolve_feature(
                 name,
@@ -274,7 +285,7 @@ class Catalog:
             if entry is not None
             else _description(fg_name, safe_field(lambda: as_str(fg.description()), fg_name))
         )
-        options, missing = _options(fg)
+        options, missing = _options(fg, self._settings.allow_options)
         in_features = None
         if issubclass(fg, FeatureChainParserMixin):
             in_features = {"min": fg.MIN_IN_FEATURES, "max": fg.MAX_IN_FEATURES}

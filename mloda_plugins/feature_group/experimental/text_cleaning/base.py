@@ -137,6 +137,15 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
         operations = feature.options.get(cls.CLEANING_OPERATIONS)
         return operations if operations is not None else None
 
+    @staticmethod
+    def _load_english_stopwords(nltk: Any) -> set[str]:
+        """Use the local English corpus, downloading only when it is missing."""
+        try:
+            return set(nltk.corpus.stopwords.words("english"))
+        except LookupError:
+            nltk.download("stopwords", quiet=True)
+            return set(nltk.corpus.stopwords.words("english"))
+
     @classmethod
     def clean(
         cls,

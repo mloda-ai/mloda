@@ -16,12 +16,10 @@ from mloda_plugins.feature_group.experimental.text_cleaning.base import TextClea
 # Optional NLTK support - gracefully handle if not available
 try:
     import nltk
-    from nltk.corpus import stopwords
 
     nltk_available = True
 except ImportError:
     nltk = None
-    stopwords = None
     nltk_available = False
 
 
@@ -160,9 +158,7 @@ class PythonDictTextCleaning(Implementation[TextCleaningFeatureGroup]):
             return text
 
         try:
-            # Download stopwords if not already downloaded
-            nltk.download("stopwords", quiet=True)
-            stop_words = set(stopwords.words("english"))
+            stop_words = TextCleaningFeatureGroup._load_english_stopwords(nltk)
 
             result = []
             for input_str in text:

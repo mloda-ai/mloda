@@ -109,7 +109,6 @@ def resolution_environment(
         frozenset(current_implementations()),
         frozenset((excluded or {}).items()),
     )
-    # Reuse the complete snapshot so each candidate lookup does not compare the whole plugin universe.
     return run_cached((_ENVIRONMENT, environment), lambda: environment)
 
 
@@ -152,7 +151,6 @@ def normalize_input_name(
     feature_group: FeatureGroup,
     output_part: tuple[str, str] | None,
 ) -> None:
-    """Apply the same provider rename and output-part handling during a probe and at intake."""
     requested = feature.name
     key = type(feature_group), str(requested), resolution_key(feature.options), output_part
 

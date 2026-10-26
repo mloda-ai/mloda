@@ -51,7 +51,7 @@ except FeatureResolutionError as err:
 
 When an INPUT_DATA_MATCH extender refused the candidate source groups, `err.refusals` holds its exceptions, so an access refusal can be told apart from a missing plugin (see [Extender](../../chapter1/extender.md)).
 
-This also covers refused dependencies of competing candidates. If every candidate's input chain fails, the error names the requested feature, lists each failed chain, and retains the original refusal exceptions in `err.refusals`; `err.__cause__` is the first refusal. A refusal shared by several chains is retained once. Speculative attempts do not appear in `partial_records`.
+This also covers refused dependencies of competing candidates: if every input chain fails, the error lists each chain and `err.refusals` holds the original refusal exceptions.
 
 To inspect a request without catching an exception, use the non-raising
 surfaces: `resolve_feature` for a single name (above), or `mlodaAPI.diagnose(...)`,
@@ -93,7 +93,7 @@ Each line names a candidate the matcher considered and dropped: the first gate t
 | `declarations` | A consumer's input or a requested feature requires a declared attribute that the candidate does not declare, or declares with another value. | Provide a candidate that declares the attribute the reason names. |
 | `inputs` | A competing candidate matched, but one of its dependencies or a deeper input could not resolve in this run. The reason names the input chain and its failure. | Enable or supply the missing input, correct its options or scope, or address the recorded source refusal. |
 
-The resolver checks whole input chains when choosing among competing candidates. A group with a viable chain can therefore win where an unavailable competitor previously caused an ambiguity. If several chains remain viable, the existing selection and ambiguity rules apply. A sole candidate still reports a failure at its actual dependency, and an explicit scope or source pointer retains its matching semantics. `mloda.diagnose(...)` exposes the same `inputs` eliminations on successful resolutions and on its `failed_result` when no chain resolves.
+A group with a viable input chain can win where an unavailable competitor previously caused an ambiguity. `mloda.diagnose(...)` exposes the same `inputs` eliminations.
 
 A chained group that keeps the default `MIN_IN_FEATURES` but declares no `in_features` matches by options only when `in_features` is passed. The option path records no rejection reason (a non-matching candidate cannot be told apart from an unrelated one), so the failure report does not name this cause. The class-definition warning names the fix: set `MIN_IN_FEATURES = 0` or declare `in_features` in `PROPERTY_MAPPING`.
 

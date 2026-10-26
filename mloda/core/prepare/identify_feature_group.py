@@ -924,8 +924,7 @@ class IdentifyFeatureGroupClass:
         ]
         if not remaining:
             return
-        # Earlier gates do not unmask the consumer's pointed-source abort. An explicitly failed
-        # competing chain does; only survivors count as reading, because one of them would win.
+        # A failed competing chain was already dropped and cannot unmask the abort.
         computing = any(
             self._declares_inputs(fg, feature)
             for fg in sorted(self._criteria_matched_feature_groups, key=_candidate_sort_key)
@@ -1035,7 +1034,7 @@ class IdentifyFeatureGroupClass:
         return self._input_failure(exc)
 
     def _input_chain(self, feature_group: type[FeatureGroup], feature: Feature) -> InputChainOutcome:
-        """Try a candidate without adding graph nodes; a match abort only rejects this attempt."""
+        """Resolve a candidate's input chain without adding graph nodes."""
         attempted = copy(feature)
         attempted.options = self._matched_options.get(feature_group, feature.options)._fork()
         output_part = self._output_parts.get(feature_group)

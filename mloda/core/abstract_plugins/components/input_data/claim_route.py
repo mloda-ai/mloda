@@ -128,6 +128,24 @@ def pin_report_scope(reported: set[str]) -> Iterator[list[tuple[str, Any]]]:
         _PIN_SCOPE.reset(token)
 
 
+_CHAIN_CHECK: ContextVar[bool] = ContextVar("mloda_chain_check", default=False)
+
+
+def in_chain_check() -> bool:
+    """True while a candidate is being matched as part of an input-chain step-aside check."""
+    return _CHAIN_CHECK.get()
+
+
+@contextmanager
+def chain_check_scope() -> Iterator[None]:
+    """Mark the block as an input-chain step-aside check so nested matches do not re-fire FEATURE_GROUP_MATCHED."""
+    token = _CHAIN_CHECK.set(True)
+    try:
+        yield
+    finally:
+        _CHAIN_CHECK.reset(token)
+
+
 def current_feature_group_scope() -> Any:
     """The feature_group= scope of the request being probed, or None."""
     return _FEATURE_GROUP_SCOPE.get()

@@ -28,6 +28,11 @@ class ReaderProbeScope:
 _CURRENT: ContextVar[ReaderProbeScope | None] = ContextVar("reader_probe_scope", default=None)
 
 
+def current_reader_probe_scope() -> ReaderProbeScope | None:
+    """The active gate identity, used to keep cached match outcomes inside their scope."""
+    return _CURRENT.get()
+
+
 @contextmanager
 def reader_probe_scope(scope: ReaderProbeScope | None) -> Iterator[None]:
     """Make scope (or none) current for reader probes inside the block."""

@@ -49,6 +49,7 @@ _STAGE_DEPTH: dict[EliminationStage, int] = {
     "framework_pin": 6,
     "links": 7,
     "declarations": 8,
+    "inputs": 9,
 }
 
 

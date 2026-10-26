@@ -14,6 +14,9 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import QUERY_OPTION
 from mloda.core.api.feature_config.loader import load_features_from_config
@@ -378,14 +381,52 @@ def _scan_feature_config(
 
 _DATA_ACCESS_MESSAGE = "Option key '{key}' configures data access, which a request may not set."
 _NOT_ALLOWED_MESSAGE = "Option key '{key}' is not in allow_options, so a request may not set it."
+_NOT_CALLER_SETTABLE_MESSAGE = "Option key '{key}' is marked by its plugin as not settable by a caller."
 
 
 def _scan_data_access(item: Mapping[str, Any], path: str, keys: frozenset[str]) -> list[Problem]:
     return _scan_feature_config(item, path, keys.__contains__, "data_access_option", _DATA_ACCESS_MESSAGE)
 
 
+def caller_refused_option_keys() -> frozenset[str]:
+    """Option keys a plugin marks as not settable by an untrusted caller."""
+    keys: set[str] = set()
+    for group in get_all_subclasses(FeatureGroup):
+        mapping = getattr(group, "PROPERTY_MAPPING", None)
+        if not isinstance(mapping, Mapping):
+            continue
+        keys.update(
+            str(key) for key, spec in mapping.items() if isinstance(spec, PropertySpec) and not spec.caller_settable
+        )
+    return frozenset(keys)
+
+
+def _scan_refused(item: Mapping[str, Any], path: str) -> list[Problem]:
+    keys = caller_refused_option_keys()
+    return _scan_feature_config(
+        item, path, lambda key: str(key) in keys, "option_not_caller_settable", _NOT_CALLER_SETTABLE_MESSAGE
+    )
+
+
+def refused_option_violations(request: Any) -> list[Problem]:
+    """Report every option key a plugin marks as not caller-settable by path, never by value."""
+    features = request.get("features") if isinstance(request, dict) else None
+    if not isinstance(features, list):
+        return []
+    problems: list[Problem] = []
+    for index, item in enumerate(features):
+        if isinstance(item, dict):
+            problems.extend(_scan_refused(item, _pointer("features", index)))
+    return problems
+
+
+def refused_group_option_violations(options: Mapping[str, Any]) -> list[Problem]:
+    """Report every not-caller-settable key of a group ``options`` mapping as ``/options/<key>``."""
+    return _scan_refused({"options": dict(options)}, "")
+
+
 def _unlisted_scan(item: Mapping[str, Any], path: str, allowed: Collection[str]) -> list[Problem]:
-    skipped = data_access_option_keys() | {str(DefaultOptionKeys.in_features)}
+    skipped = data_access_option_keys() | caller_refused_option_keys() | {str(DefaultOptionKeys.in_features)}
     return _scan_feature_config(
         item,
         path,

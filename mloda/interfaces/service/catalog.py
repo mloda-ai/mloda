@@ -29,6 +29,7 @@ from mloda.interfaces.service.request import (
     MAX_NAME_LENGTH,
     Problem,
     option_data_access_violations,
+    refused_group_option_violations,
     unlisted_group_option_violations,
 )
 from mloda.interfaces.service.sources import data_access_collection, source_columns
@@ -148,7 +149,7 @@ def _options(fg: type[FeatureGroup], allowed: Collection[str]) -> tuple[list[dic
             "name": str(key),
             "explanation": sanitize_text(spec.explanation),
             "required": is_no_default(spec.default),
-            "caller_settable": str(key) in allowed,
+            "caller_settable": spec.caller_settable and str(key) in allowed,
         }
         if not is_no_default(spec.default):
             entry["default"] = _json_value(spec.default)
@@ -243,7 +244,11 @@ class Catalog:
             details = problems_to_details(violations)
             return error_result("policy_denied", "A request may not set data-access options.", details)
         if not self._settings.trusted_caller:
+            locked = refused_group_option_violations(group)
             unlisted = unlisted_group_option_violations(group, self._settings.allow_options)
+            if locked:
+                message = "A request may not set options a plugin marks as not caller-settable."
+                return error_result("policy_denied", message, problems_to_details([*locked, *unlisted]))
             if unlisted:
                 message = "A request may only set options listed in allow_options."
                 return error_result("policy_denied", message, problems_to_details(unlisted))

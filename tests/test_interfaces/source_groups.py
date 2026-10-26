@@ -9,7 +9,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
-from mloda.provider import FeatureSet
+from mloda.provider import FeatureSet, property_spec
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.file_formats.feather_fg import FeatherFG
@@ -153,3 +153,35 @@ class RunnerMissingInputMcp5(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         raise MissingInputFeatureError("RunnerMissingInputMcp5", MISSING, (MISSING_INPUT,), ("income",))
+
+
+CALLER_LOCKED_KEY = "mcp_secret_base_url"
+CALLER_LOCKED_FEATURE = "mcp_caller_locked_feature"
+
+
+class CallerLockedMcp6(FeatureGroup):
+    """Declares an option no MCP caller may set."""
+
+    PROPERTY_MAPPING = {
+        CALLER_LOCKED_KEY: property_spec("Operator-only base URL.", default=None, caller_settable=False),
+    }
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == CALLER_LOCKED_FEATURE
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("income")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {CALLER_LOCKED_FEATURE: list(data["income"])}

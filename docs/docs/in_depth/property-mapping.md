@@ -42,6 +42,7 @@ PROPERTY_MAPPING = {
 | `allow_explicit_none` | `bool` | `False` | Opt-in so an explicit `None` is honored (not treated as absent) and flows through validation. |
 | `deferred_binding` | `bool` | `False` | Exempts a required key from the string-named path presence check only; its value is bound outside match-time name capture. Not optionality: the key stays required on the config path. See [Required presence on the string-named path](#required-presence-on-the-string-named-path). |
 | `name_converter` | `Callable[[str], Any] \| None` | `None` | Converts the captured text of a named capture bound to this key (e.g. `int`), before validation. Never applied to explicit options or the legacy positional fallback. |
+| `caller_settable` | `bool` | `True` | `False`: an MCP caller may never set the key, even when `[mcp] allow_options` lists it. See [MCP Server and CLI](mcp-server.md#what-stays-on-the-server). |
 
 **`property_spec(...)` is the authoring path to reach for.** It is a thin builder over the
 same fields, its keyword is `strict=` (which sets `strict_validation`), and it keeps the

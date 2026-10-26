@@ -36,7 +36,15 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG
 from tests.helpers.plugin_stubs import StubFeatureGroup
-from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS, PLAN_RAISE, PLAN_RAISE_SECRET, PlanRaiseMcp5
+from tests.test_interfaces.source_groups import (
+    CALLER_LOCKED_FEATURE,
+    CALLER_LOCKED_KEY,
+    FILE_SOURCE_GROUPS,
+    PLAN_RAISE,
+    PLAN_RAISE_SECRET,
+    CallerLockedMcp6,
+    PlanRaiseMcp5,
+)
 
 # Planning resolves real FeatureGroups and reads source files; a cold cache under xdist load can exceed 10s.
 pytestmark = pytest.mark.timeout(30)
@@ -209,6 +217,7 @@ def _base() -> PluginCollector:
             PlannerInFeaturesMcp4,
             PlannerOptionsProbeMcp4,
             PlanRaiseMcp5,
+            CallerLockedMcp6,
             ApiDataFG,
         }
     )
@@ -477,6 +486,78 @@ class TestOptionAllowlist:
         assert [detail["path"] for detail in error["details"]] == [f"/features/0/options/{key}"]
         assert _has_detail(error, problem="data_access_option")
         assert SECRET not in json.dumps(result)
+
+
+def _rename_key(value: Any, old: str, new: str) -> Any:
+    if isinstance(value, dict):
+        return {(new if key == old else key): _rename_key(item, old, new) for key, item in value.items()}
+    return value
+
+
+LOCKED_CASES = [
+    (_rename_key(feature, "k", CALLER_LOCKED_KEY), path.replace("/k", "/" + CALLER_LOCKED_KEY))
+    for feature, path in NESTED_OPTION_CASES
+]
+
+
+class TestCallerSettable:
+    @pytest.mark.parametrize(("feature", "path"), LOCKED_CASES)
+    @pytest.mark.parametrize("listed", [False, True])
+    def test_flagged_key_is_refused_even_when_listed(
+        self, tmp_path: Path, feature: dict[str, Any], path: str, listed: bool
+    ) -> None:
+        allow = (CALLER_LOCKED_KEY,) if listed else ()
+
+        result = _explain(tmp_path, {"features": [feature]}, allow_options=allow)
+
+        error = _error(result, "policy_denied")
+        assert [detail["path"] for detail in error["details"]] == [path]
+        assert _has_detail(error, problem="option_not_caller_settable")
+        assert not _has_detail(error, problem="option_not_allowed")
+        assert SECRET not in json.dumps(result)
+
+    @pytest.mark.parametrize(("feature", "path"), LOCKED_CASES)
+    def test_trusted_caller_may_set_flagged_key(self, tmp_path: Path, feature: dict[str, Any], path: str) -> None:
+        result = _explain(tmp_path, {"features": [feature]}, trusted_caller=True)
+
+        if is_error(result):
+            assert not _has_detail(result["error"], problem="option_not_caller_settable")
+
+    def test_operator_default_for_flagged_key_is_not_refused(self, tmp_path: Path) -> None:
+        result = _explain(
+            tmp_path,
+            {"features": ["customer_id", CALLER_LOCKED_FEATURE]},
+            options={CALLER_LOCKED_KEY: "https://operator.example"},
+        )
+
+        _success(result)
+        assert "operator.example" not in json.dumps(result)
+
+    def test_operator_context_default_for_flagged_key_is_not_refused(self, tmp_path: Path) -> None:
+        result = _explain(
+            tmp_path,
+            {"features": ["customer_id", CALLER_LOCKED_FEATURE]},
+            context_options={CALLER_LOCKED_KEY: "https://operator.example"},
+        )
+
+        assert not is_error(result) or not _has_detail(result["error"], problem="option_not_caller_settable")
+
+    def test_listed_data_access_key_still_reports_data_access_first(self, tmp_path: Path) -> None:
+        feature = {"name": "income", "options": {"CsvFG": SECRET, CALLER_LOCKED_KEY: SECRET}}
+
+        error = _error(
+            _explain(tmp_path, {"features": [feature]}, allow_options=("CsvFG", CALLER_LOCKED_KEY)), "policy_denied"
+        )
+
+        assert _has_detail(error, problem="data_access_option")
+        assert not _has_detail(error, problem="option_not_caller_settable")
+
+    def test_other_unlisted_key_is_still_option_not_allowed(self, tmp_path: Path) -> None:
+        feature = {"name": "income", "options": {CALLER_LOCKED_KEY: SECRET, "other": 1}}
+
+        error = _error(_explain(tmp_path, {"features": [feature]}), "policy_denied")
+
+        assert _has_detail(error, path="/features/0/options/other", problem="option_not_allowed")
 
 
 class TestUnresolved:

@@ -30,6 +30,7 @@ from mloda.interfaces.service.request import (
     build_request,
     _pointer,
     data_access_violations,
+    refused_option_violations,
     unlisted_option_violations,
     in_feature_sources,
     validate_request,
@@ -223,7 +224,11 @@ class Planner:
             details = problems_to_details(violations)
             return error_result("policy_denied", "A request may not set data-access options.", details)
         if not self._settings.trusted_caller:
+            locked = refused_option_violations(request)
             unlisted = unlisted_option_violations(request, self._settings.allow_options)
+            if locked:
+                message = "A request may not set options a plugin marks as not caller-settable."
+                return error_result("policy_denied", message, problems_to_details([*locked, *unlisted]))
             if unlisted:
                 details = problems_to_details(unlisted)
                 return error_result("policy_denied", "A request may only set options listed in allow_options.", details)

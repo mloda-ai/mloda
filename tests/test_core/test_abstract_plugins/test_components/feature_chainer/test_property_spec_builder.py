@@ -739,6 +739,22 @@ class TestPropertySpecDeferredBinding:
             property_spec("d", deferred_binding=not_a_bool)
 
 
+class TestPropertySpecCallerSettable:
+    """``caller_settable`` passthrough (issue #2317)."""
+
+    def test_caller_settable_defaults_true_and_passes_through_builder(self) -> None:
+        assert property_spec("d").caller_settable is True
+        assert PropertySpec("d").caller_settable is True
+        assert property_spec("d", caller_settable=False).caller_settable is False
+
+    def test_non_bool_caller_settable_raises(self) -> None:
+        not_a_bool: Any = "no"
+        with pytest.raises(ValueError, match="caller_settable must be a bool"):
+            PropertySpec("d", caller_settable=not_a_bool)
+        with pytest.raises(ValueError, match="caller_settable must be a bool"):
+            property_spec("d", caller_settable=not_a_bool)
+
+
 class TestPropertySpecNameConverter:
     """``name_converter`` passthrough: an opt-in per-key converter for name-captured text."""
 

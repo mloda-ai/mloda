@@ -113,6 +113,11 @@ call has `isError` set and one error shape: `{"error": {"code", "message", "deta
   JSON pointer, never by value. Data-access keys stay refused even when listed. Options encoded in a chained feature
   name are not covered. `mloda explain` and `mloda run` are local and not restricted. `mloda_describe_feature` shows
   `caller_settable` for each option and refuses option keys not in `allow_options`.
+- A plugin marks a key it never wants from a caller (a base URL, an API key) with
+  `PropertySpec(..., caller_settable=False)`. MCP requests and `mloda_describe_feature` refuse that key as
+  `policy_denied` even when `allow_options` lists it, and describe shows `caller_settable: false`. The match is by key
+  name across all installed plugins, and it does not cover chained feature names. `[mcp.options]` defaults and the local
+  CLI may still set it.
 - Denied FeatureGroups are disabled before matching, so their code does not run; the agent sees `policy_denied` and
   the alternatives you configured. Requested names, `index` columns, `in_features` source names and filter columns are
   checked before planning. Any planned feature name the deny list matches, such as a chained name over a denied

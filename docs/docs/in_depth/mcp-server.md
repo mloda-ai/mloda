@@ -82,8 +82,9 @@ numbers, booleans, lists or tables (no TOML dates or times), and `in_features` i
 
 A run whose preview is truncated returns a `result_id`, and each truncated table's preview a `next_cursor`.
 `mloda_fetch_rows` returns pages of the preview-allowed columns only (`limit` up to `max_preview_rows`) and never
-re-runs the plan. Results live in the server process for 15 minutes and within a total cell cap (oldest evicted
-first; a result over the cap gets no `result_id`). An unknown or expired id is `plan_invalid`. Paging lets a caller
+re-runs the plan. Results expire after 15 minutes and share a total size cap (oldest evicted
+first; a result over the cap gets no `result_id`). Anyone holding a `result_id` can fetch its rows, like a plan id
+within the same server. An unknown or expired id is `plan_invalid`. Paging lets a caller
 read every row of the previewable columns, so it is off by default.
 
 The resource `mloda://schema/feature-request` is the JSON Schema of a request. A request is the

@@ -67,6 +67,7 @@ CLOCK_START = 1_800_000_000.0
 KEY = b"r" * 32
 DENIED = "RunnerDeniedMcp5"
 PROBE = "income__mcp5_probe"
+SHORT = "income__mcp5_short"
 STALE = "income__mcp5_stale"
 TYPED_PREFIX = "income__mcp5_"
 TYPED_KINDS = ("decimal", "datetime", "date", "nan")
@@ -135,6 +136,16 @@ class RunnerProbeMcp5(_SuffixFeatureGroup):
         if cls.PROBE_LOCK:
             LOCK_PROBES.append(_lock_free_elsewhere())
         return {PROBE: [int(value) * 2 for value in data["income"]]}
+
+
+class RunnerShortMcp5(_SuffixFeatureGroup):
+    """Produces a single row, so its table never truncates."""
+
+    SUFFIXES: ClassVar[tuple[str, ...]] = ("__mcp5_short",)
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {SHORT: [7]}
 
 
 def _stale_column(name: str, data: Any) -> dict[str, list[int]]:
@@ -215,6 +226,7 @@ def _base(*extra: type[FeatureGroup]) -> PluginCollector:
         *FILE_SOURCE_GROUPS,
         RunnerProbeMcp5,
         RunnerTypesMcp5,
+        RunnerShortMcp5,
         RunnerDeniedMcp5,
         RunnerRaiseMcp5,
         RunnerFailedRowsMcp5,
@@ -669,11 +681,18 @@ class TestResultStore:
 
         assert store.get(result_id) is None
 
-    def test_oldest_results_are_evicted_by_the_value_cap(self) -> None:
-        store = ResultStore(_Clock(), max_values=10)
-        first = store.put([{"a": [1, 2, 3, 4]}])
-        second = store.put([{"a": [1, 2, 3, 4]}])
-        third = store.put([{"a": [1, 2, 3, 4]}])
+    @staticmethod
+    def _cells(count: int, width: int = 1) -> list[dict[str, list[Any]]]:
+        return [{"a": ["x" * width] * count}]
+
+    @staticmethod
+    def _size(tables: list[dict[str, list[Any]]]) -> int:
+        return len(json.dumps(tables))
+
+    def test_oldest_results_are_evicted_by_the_byte_cap(self) -> None:
+        tables = self._cells(4)
+        store = ResultStore(_Clock(), max_bytes=self._size(tables) * 2)
+        first, second, third = (store.put(tables) for _ in range(3))
         assert first and second and third
 
         assert store.get(first) is None
@@ -681,29 +700,29 @@ class TestResultStore:
         assert store.get(third) is not None
 
     def test_one_large_result_can_evict_several(self) -> None:
-        store = ResultStore(_Clock(), max_values=10)
-        small = [store.put([{"a": [1, 2]}]) for _ in range(3)]
-        big = store.put([{"a": list(range(5)), "b": list(range(5))}])
-        assert big is not None
+        small = self._cells(2)
+        big = self._cells(2, width=20)
+        store = ResultStore(_Clock(), max_bytes=self._size(small) * 3 + 1)
+        ids = [store.put(small) for _ in range(3)]
+        big_id = store.put(big)
+        assert big_id is not None
 
-        assert all(i is not None and store.get(i) is None for i in small)
-        assert store.get(big) is not None
+        assert all(i is not None and store.get(i) is None for i in ids)
+        assert store.get(big_id) is not None
 
-    def test_cells_count_rows_times_columns(self) -> None:
-        store = ResultStore(_Clock(), max_values=6)
-        first = store.put([{"a": [1, 2], "b": [1, 2]}])
-        second = store.put([{"a": [1, 2], "b": [1, 2]}])
-        assert first and second
+    def test_few_wide_cells_exceed_the_cap(self) -> None:
+        store = ResultStore(_Clock(), max_bytes=100)
 
-        assert store.get(first) is None
-        assert store.get(second) is not None
+        assert store.put(self._cells(1)) is not None
+        assert store.put(self._cells(2, width=200)) is None
 
     def test_result_over_the_cap_is_not_stored_and_evicts_nothing(self) -> None:
-        store = ResultStore(_Clock(), max_values=4)
-        kept = store.put([{"a": [1, 2]}])
+        small = self._cells(2)
+        store = ResultStore(_Clock(), max_bytes=self._size(small))
+        kept = store.put(small)
         assert kept is not None
 
-        assert store.put([{"a": list(range(5))}]) is None
+        assert store.put(self._cells(5)) is None
         assert store.get(kept) is not None
 
 
@@ -741,6 +760,29 @@ class TestPaging:
         assert isinstance(table["preview"]["next_cursor"], str)
         assert table["preview"]["truncated"] is True
         json.dumps(result, allow_nan=False)
+
+    def test_over_cap_result_gets_no_result_id_or_cursor(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("mloda.interfaces.service.runner.MAX_STORED_BYTES", 10)
+
+        _, result, _ = self._start(tmp_path)
+
+        assert _success(result)["tables"][0]["preview"]["truncated"] is True
+        assert "result_id" not in result
+        assert "next_cursor" not in _only_table(result)["preview"]
+
+    def test_only_the_truncated_table_gets_a_cursor(self, tmp_path: Path) -> None:
+        runner, result, _ = self._start(tmp_path, {"features": ["income", SHORT]})
+
+        tables = _success(result)["tables"]
+        by_name = {c["name"]: t for t in tables for c in t["columns"]}
+        assert by_name["income"]["preview"]["truncated"] is True
+        assert isinstance(by_name["income"]["preview"]["next_cursor"], str)
+        assert by_name[SHORT]["preview"]["truncated"] is False
+        assert "next_cursor" not in by_name[SHORT]["preview"]
+        index = tables.index(by_name[SHORT])
+        page = _success(runner.fetch_rows(result["result_id"], index))
+        assert page["rows"] == [{SHORT: 7}]
+        assert page["next_cursor"] is None
 
     def test_paging_off_has_no_result_id(self, tmp_path: Path) -> None:
         result = _run(tmp_path, max_preview_rows=2)

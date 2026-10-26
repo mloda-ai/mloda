@@ -185,3 +185,25 @@ class CallerLockedMcp6(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {CALLER_LOCKED_FEATURE: list(data["income"])}
+
+
+CALLER_OPEN_FEATURE = "mcp_caller_open_feature"
+
+
+class CallerOpenMcp7(CallerLockedMcp6):
+    """Declares the same key with the default, settable spec; another group locks it."""
+
+    PROPERTY_MAPPING = {CALLER_LOCKED_KEY: property_spec("Same key, settable here.", default=None)}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == CALLER_OPEN_FEATURE
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {CALLER_OPEN_FEATURE: list(data["income"])}

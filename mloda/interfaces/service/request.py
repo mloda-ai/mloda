@@ -401,8 +401,7 @@ def caller_refused_option_keys() -> frozenset[str]:
     return frozenset(keys)
 
 
-def _scan_refused(item: Mapping[str, Any], path: str) -> list[Problem]:
-    keys = caller_refused_option_keys()
+def _scan_refused(item: Mapping[str, Any], path: str, keys: frozenset[str]) -> list[Problem]:
     return _scan_feature_config(
         item, path, lambda key: str(key) in keys, "option_not_caller_settable", _NOT_CALLER_SETTABLE_MESSAGE
     )
@@ -413,20 +412,26 @@ def refused_option_violations(request: Any) -> list[Problem]:
     features = request.get("features") if isinstance(request, dict) else None
     if not isinstance(features, list):
         return []
+    keys = caller_refused_option_keys()
     problems: list[Problem] = []
     for index, item in enumerate(features):
         if isinstance(item, dict):
-            problems.extend(_scan_refused(item, _pointer("features", index)))
+            problems.extend(_scan_refused(item, _pointer("features", index), keys))
     return problems
 
 
 def refused_group_option_violations(options: Mapping[str, Any]) -> list[Problem]:
     """Report every not-caller-settable key of a group ``options`` mapping as ``/options/<key>``."""
-    return _scan_refused({"options": dict(options)}, "")
+    return _scan_refused({"options": dict(options)}, "", caller_refused_option_keys())
 
 
-def _unlisted_scan(item: Mapping[str, Any], path: str, allowed: Collection[str]) -> list[Problem]:
-    skipped = data_access_option_keys() | caller_refused_option_keys() | {str(DefaultOptionKeys.in_features)}
+def _unlisted_skipped() -> frozenset[str]:
+    return data_access_option_keys() | caller_refused_option_keys() | {str(DefaultOptionKeys.in_features)}
+
+
+def _unlisted_scan(
+    item: Mapping[str, Any], path: str, allowed: Collection[str], skipped: frozenset[str]
+) -> list[Problem]:
     return _scan_feature_config(
         item,
         path,
@@ -441,16 +446,17 @@ def unlisted_option_violations(request: Any, allowed: Collection[str]) -> list[P
     features = request.get("features") if isinstance(request, dict) else None
     if not isinstance(features, list):
         return []
+    skipped = _unlisted_skipped()
     problems: list[Problem] = []
     for index, item in enumerate(features):
         if isinstance(item, dict):
-            problems.extend(_unlisted_scan(item, _pointer("features", index), allowed))
+            problems.extend(_unlisted_scan(item, _pointer("features", index), allowed, skipped))
     return problems
 
 
 def unlisted_group_option_violations(options: Mapping[str, Any], allowed: Collection[str]) -> list[Problem]:
     """Report every key of a group ``options`` mapping outside ``allowed`` as ``/options/<key>``."""
-    return _unlisted_scan({"options": dict(options)}, "", allowed)
+    return _unlisted_scan({"options": dict(options)}, "", allowed, _unlisted_skipped())
 
 
 def data_access_violations(request: Any) -> list[Problem]:

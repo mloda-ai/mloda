@@ -28,6 +28,7 @@ from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.request import (
     MAX_NAME_LENGTH,
     Problem,
+    caller_refused_option_keys,
     option_data_access_violations,
     refused_group_option_violations,
     unlisted_group_option_violations,
@@ -143,13 +144,14 @@ def _options(fg: type[FeatureGroup], allowed: Collection[str]) -> tuple[list[dic
     options: list[dict[str, Any]] = []
     missing: list[str] = []
     mapping = fg.PROPERTY_MAPPING or {}
+    refused = caller_refused_option_keys()
     for key in sorted(mapping, key=str):
         spec = mapping[key]
         entry: dict[str, Any] = {
             "name": str(key),
             "explanation": sanitize_text(spec.explanation),
             "required": is_no_default(spec.default),
-            "caller_settable": spec.caller_settable and str(key) in allowed,
+            "caller_settable": str(key) in allowed and str(key) not in refused,
         }
         if not is_no_default(spec.default):
             entry["default"] = _json_value(spec.default)

@@ -1545,6 +1545,9 @@ class TestHasSource:
 
         assert outer == {}
 
+    def test_no_name_still_probes_declared_routes(self) -> None:
+        assert ToyDeclaredFG.has_source(Options({}), toy_dac(h1=_COLS)) is True
+
     def test_an_undeclared_name_on_an_unpointed_declared_group_is_not_probed(self) -> None:
         calls: list[str] = []
         group = _spy_declared_group(calls)

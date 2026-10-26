@@ -4,6 +4,7 @@ The request is planned again first, so policy, data-access rules, filters and ro
 """
 
 import hashlib
+import json
 import math
 import re
 import secrets
@@ -29,7 +30,7 @@ from mloda.user import PlanStep
 FAILED_ROWS_CAP = 1000
 MAX_FAILED_ROW_ENTRIES = 100
 RESULT_TTL_SECONDS = 900
-MAX_STORED_VALUES = 1_000_000
+MAX_STORED_BYTES = 50_000_000
 
 _WHITESPACE_CONTROLS = re.compile(r"[\t\n\r]")
 
@@ -49,36 +50,41 @@ def _json_safe(value: Any) -> Any:
 
 
 class ResultStore:
-    """In-process store of preview-allowed result columns, bounded by age and total cell count."""
+    """In-process store of preview-allowed result columns, bounded by age and total serialized size."""
 
     def __init__(
         self,
         clock: Callable[[], float] = time.time,
         ttl_seconds: int = RESULT_TTL_SECONDS,
-        max_values: int = MAX_STORED_VALUES,
+        max_bytes: int | None = None,
     ) -> None:
         self._clock = clock
         self._ttl = ttl_seconds
-        self._max = max_values
+        self._max = MAX_STORED_BYTES if max_bytes is None else max_bytes
         self._lock = threading.Lock()
+        self._total = 0
         self._entries: dict[str, tuple[float, int, list[dict[str, list[Any]]]]] = {}
+
+    def _drop(self, key: str) -> None:
+        self._total -= self._entries.pop(key)[1]
 
     def _purge(self) -> None:
         now = self._clock()
         for key in [key for key, entry in self._entries.items() if entry[0] <= now]:
-            del self._entries[key]
+            self._drop(key)
 
     def put(self, tables: list[dict[str, list[Any]]]) -> str | None:
-        """Store ``tables`` and return their id, or None when they exceed the cell cap."""
-        cells = sum(len(values) for table in tables for values in table.values())
-        if cells > self._max:
+        """Store JSON-safe ``tables`` and return their id, or None when they exceed the size cap."""
+        size = len(json.dumps(tables))
+        if size > self._max:
             return None
         result_id = secrets.token_urlsafe(16)
         with self._lock:
             self._purge()
-            while self._entries and sum(entry[1] for entry in self._entries.values()) + cells > self._max:
-                del self._entries[next(iter(self._entries))]
-            self._entries[result_id] = (self._clock() + self._ttl, cells, tables)
+            while self._entries and self._total + size > self._max:
+                self._drop(next(iter(self._entries)))
+            self._entries[result_id] = (self._clock() + self._ttl, size, tables)
+            self._total += size
         return result_id
 
     def get(self, result_id: str) -> list[dict[str, list[Any]]] | None:
@@ -145,7 +151,8 @@ class Runner:
     def _store(self, completed: dict[str, Any], stored: list[dict[str, list[Any]]]) -> None:
         tables = completed["tables"]
         truncated = [i for i, table in enumerate(tables) if table["preview"]["truncated"] and stored[i]]
-        result_id = self._results.put(stored) if truncated else None
+        safe = [{name: [_json_safe(v) for v in values] for name, values in table.items()} for table in stored]
+        result_id = self._results.put(safe) if truncated else None
         if result_id is None:
             return
         completed["result_id"] = result_id
@@ -179,7 +186,7 @@ class Runner:
         columns = stored[table]
         total = len(next(iter(columns.values()), []))
         end = min(offset + limit, total)
-        rows = [{name: _json_safe(values[index]) for name, values in columns.items()} for index in range(offset, end)]
+        rows = [{name: values[index] for name, values in columns.items()} for index in range(offset, end)]
         return {
             "untrusted": True,
             "rows": rows,

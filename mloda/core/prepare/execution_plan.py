@@ -1401,6 +1401,13 @@ Available join types:
             )
         return carriers, next(iter(sides), True)
 
+    @staticmethod
+    def _reads_merged_frame(ep: FeatureGroupStep, js: JoinStep, parent_uuid: UUID) -> bool:
+        """Whether the parent is served by a matching join whose merged frame ep reads."""
+        return js.matched(ep.compute_framework, parent_uuid, ep.required_uuids) is not None and js.reads_join_frame(
+            ep.required_uuids
+        )
+
     def add_tfs(
         self, execution_plan: list[JoinStep | FeatureGroupStep], graph: Graph
     ) -> list[TransformFrameworkStep | JoinStep | FeatureGroupStep]:
@@ -1463,11 +1470,8 @@ Available join types:
         def serving_joins(ep: FeatureGroupStep) -> list[JoinStep]:
             """Joins whose both sides ep reaches without crossing an own-frame parent."""
             visible = ep.required_uuids - own_frame_blind(ep) if own_frame_steps else ep.required_uuids
-            return [
-                js
-                for js in left_join_frameworks
-                if visible & js.destination_framework_uuids and visible & js.source_framework_uuids
-            ]
+            # This group-wide list also feeds lineage ownership, independent of a parent/framework binding.
+            return [js for js in left_join_frameworks if js.reads_join_frame(visible)]
 
         def root_steps_of(parent: UUID) -> set[UUID]:
             closure = {parent} | graph.parent_to_children_mapping.get(parent, set())
@@ -1845,9 +1849,7 @@ Available join types:
                     matching_join_steps = [
                         js
                         for js in joins_by_feature.get(parent_feature_uuid, ())
-                        if js.matched(ep.compute_framework, parent_feature_uuid, ep.required_uuids)
-                        # Only a step reading both join sides reads the merged frame.
-                        and js.reads_join_frame(ep.required_uuids)
+                        if self._reads_merged_frame(ep, js, parent_feature_uuid)
                     ]
                     if matching_join_steps:
                         # Served by a join, no explicit hop needed.
@@ -1980,7 +1982,7 @@ Available join types:
                     for declared in edge_parents.get(member_uuid, set()) & edge_parents.get(via, set())
                     if nodes[declared].feature.get_compute_framework() != ep.compute_framework
                     and not any(
-                        declared in js.carriers and js.matched(ep.compute_framework, declared, ep.required_uuids)
+                        declared in js.carriers and self._reads_merged_frame(ep, js, declared)
                         for js in joins_by_feature.get(declared, ())
                     )
                 ]
@@ -2083,6 +2085,7 @@ Available join types:
                     frames_by_framework: dict[type, dict[frozenset[UUID], list[UUID]]] = defaultdict(
                         lambda: defaultdict(list)
                     )
+                    # Own-frame splits additionally require both join sides to remain visible.
                     serving = serving_joins(ep)
                     serving_frame_uuids: set[UUID] = set()
                     for js in serving:
@@ -2092,7 +2095,7 @@ Available join types:
                     for parent_uuid in set().union(*(edge_parents.get(m, set()) for m in ep.get_uuids())):
                         parent_framework = nodes[parent_uuid].feature.get_compute_framework()
                         if parent_framework == ep.compute_framework and any(
-                            js in serving and js.matched(ep.compute_framework, parent_uuid, ep.required_uuids)
+                            js in serving and self._reads_merged_frame(ep, js, parent_uuid)
                             for js in joins_by_feature.get(parent_uuid, ())
                         ):
                             frames_by_framework[parent_framework][joined_key].append(parent_uuid)

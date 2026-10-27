@@ -364,6 +364,8 @@ A feature between a join side and the feature consuming the join runs on that si
 
 In the following section, we will see how this can look like.
 
+If one feature group produces a Link side and also reads that Link's merged frame, batching can make the side wait on its own join. This previously raised `Internal error: the steps of the plan form a cycle.`; `mloda.prepare` now names the group and recommends splitting the side feature and the join reader into separate feature groups. For example, keep `g1` in the group named by the Link and put a feature reading `g1` and the other side's columns in a separate reader group. The diagnostic requires an actual dependency cycle, including any intervening framework hops; a class used only as a side with a separate reader remains valid.
+
 #### Merging Data in the Compute Framework
 
 The compute framework uses the base class BaseMergeEngine as configuration.

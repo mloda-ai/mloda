@@ -183,6 +183,68 @@ class ReducerDim(DataCreatorFeatureGroup):
         return {name: values[name] for name in features.get_all_names()}
 
 
+class DictReducerDim(ReducerDim):
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+
+class JoinSideAndReader(FeatureGroup):
+    """Produces a join key and also consumes the joined frame."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"self_join_key", "self_joined_label"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PyArrowTable}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        if str(feature_name) == "self_join_key":
+            return {Feature("raw_key")}
+        return {Feature("self_join_key"), Feature("dim_label")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        key_column = "self_join_key" if "self_join_key" in data.column_names else "raw_key"
+        keys = data.column(key_column).to_pylist()
+        values: dict[str, list[Any]] = {"self_join_key": keys}
+        if "self_joined_label" in features.get_all_names():
+            labels = data.column("dim_label").to_pylist()
+            values["self_joined_label"] = [f"{key}:{label}" for key, label in zip(keys, labels)]
+        return {name: values[name] for name in features.get_all_names()}
+
+
+class JoinSideOnly(JoinSideAndReader):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"self_join_key"}
+
+
+class SeparateJoinReader(FeatureGroup):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"self_joined_label"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PyArrowTable}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("self_join_key"), Feature("dim_label")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        keys = data.column("self_join_key").to_pylist()
+        labels = data.column("dim_label").to_pylist()
+        values = {
+            "self_join_key": keys,
+            "self_joined_label": [f"{key}:{label}" for key, label in zip(keys, labels)],
+        }
+        return {name: values[name] for name in features.get_all_names()}
+
+
 class ReducedJoinConsumer(FeatureGroup):
     value_feature = "red_sum"
 
@@ -829,6 +891,57 @@ class TestRowReducingGroupJoins(_ReducerRunHelpers):
             extra_groups=frozenset({RawPlusOne, ReducerDim, DerivedJoinConsumer}),
             expected=("a:11", "a:21", "b:41"),
         )
+
+
+@PARALLELIZATION_MODES_SYNC_THREADING
+@pytest.mark.parametrize("dim", [ReducerDim, DictReducerDim], ids=["arrow", "dict"])
+@pytest.mark.parametrize("reverse", [False, True], ids=["left_side", "right_side"])
+class TestJoinSideReaderCycle:
+    @staticmethod
+    def _prepare(
+        side: type[FeatureGroup],
+        reader: type[FeatureGroup],
+        dim: type[FeatureGroup],
+        reverse: bool,
+        modes: set[ParallelizationMode],
+    ) -> Any:
+        left, right = JoinSpec(side, "self_join_key"), JoinSpec(dim, "dim_key")
+        link = Link.inner(right, left) if reverse else Link.inner(left, right)
+        return mloda.prepare(
+            [Feature("self_joined_label", feature_group=reader)],
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
+            parallelization_modes=modes,
+            links={link},
+            plugin_collector=PluginCollector.enabled_feature_groups({ReducerRawSource, dim, side, reader}),
+        )
+
+    def test_same_group_side_and_reader_has_actionable_prepare_error(
+        self, dim: type[FeatureGroup], reverse: bool, modes: set[ParallelizationMode]
+    ) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            self._prepare(JoinSideAndReader, JoinSideAndReader, dim, reverse, modes)
+
+        message = str(exc_info.value)
+        assert JoinSideAndReader.get_class_name() in message
+        assert "join" in message.lower()
+        assert "side" in message.lower()
+        assert "separate feature groups" in message.lower()
+        assert "internal error" not in message.lower()
+
+    @pytest.mark.parametrize("side", [JoinSideOnly, JoinSideAndReader], ids=["dedicated_side", "dual_role_side"])
+    def test_separate_side_and_reader_compute(
+        self,
+        side: type[FeatureGroup],
+        dim: type[FeatureGroup],
+        reverse: bool,
+        modes: set[ParallelizationMode],
+        flight_server: Any,
+    ) -> None:
+        session = self._prepare(side, SeparateJoinReader, dim, reverse, modes)
+        result = session.run(parallelization_modes=modes, flight_server=flight_server)
+
+        assert len(result) == 1
+        assert sorted(result[0].column("self_joined_label").to_pylist()) == ["1:a", "1:a", "2:b"]
 
 
 @PARALLELIZATION_MODES_ALL

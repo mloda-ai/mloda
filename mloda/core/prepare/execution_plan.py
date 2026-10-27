@@ -1195,6 +1195,35 @@ Available join types:
                     queue.append(dependent)
 
         if pending:
+
+            def depends_on(start: UUID, target: UUID) -> bool:
+                seen = {start}
+                waiting = list(pending[start])
+                while waiting:
+                    producer = waiting.pop()
+                    if producer == target:
+                        return True
+                    if producer not in seen:
+                        seen.add(producer)
+                        waiting.extend(pending.get(producer, ()))
+                return False
+
+            join_steps = [step for step in steps if isinstance(step, JoinStep) and step.uuid in pending]
+            conflicting_groups = {
+                format_feature_group_class(step.feature_group)
+                for step in steps
+                if isinstance(step, FeatureGroupStep) and step.uuid in pending
+                for join in join_steps
+                if step.get_uuids() & (join.destination_framework_uuids | join.source_framework_uuids)
+                and depends_on(step.uuid, join.uuid)
+                and depends_on(join.uuid, step.uuid)
+            }
+            if conflicting_groups:
+                raise ValueError(
+                    f"Feature group '{min(conflicting_groups)}' forms a join dependency cycle: it produces a join side "
+                    "and also waits for that join's merged frame. "
+                    "Split the side feature and the join reader into separate feature groups."
+                )
             raise ValueError(
                 internal_invariant_error(
                     "the steps of the plan form a cycle.",

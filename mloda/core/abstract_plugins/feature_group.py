@@ -462,7 +462,6 @@ class FeatureGroup(ABC):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         """
         This function should be used to calculate the feature.
-        Same-named features whose options agree arrive merged into one; disagreeing ones arrive as they are.
         """
         return None
 

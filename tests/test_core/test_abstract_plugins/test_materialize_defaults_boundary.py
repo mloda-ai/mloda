@@ -23,10 +23,8 @@ from __future__ import annotations
 from typing import Any, Callable
 from uuid import uuid4
 
-import numpy as np
 import pytest
 
-from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
@@ -34,7 +32,8 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.provider import DataCreatorFeatureGroup, PropertySpec
-from mloda.user import PluginCollector, mloda
+from mloda.user import GlobalFilter, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
 
@@ -198,13 +197,39 @@ MDB_DIRECT = "mdb_src__mdbop_q_b"
 MDB_CHAINED = "mdb_src__mdbop_q_b__mdbop_r_c"
 
 
-def _run_direct_and_chained(calls: list[list[str]], extender: Extender | None = None) -> list[Any]:
-    fg = make_name_bound_fg("Mdb", __name__, "mdbop", (MDB_FIRST, MDB_SECOND), input_column="mdb_src", calls=calls)
+def _run_direct_and_chained(
+    calls: list[list[str]],
+    extender: Extender | None = None,
+    framework: type[Any] = PythonDictFramework,
+    append_columns: bool = False,
+    direct_first: bool = True,
+    include_direct: bool = True,
+    filter_on: str | None = None,
+) -> list[Any]:
+    fg = make_name_bound_fg(
+        "Mdb",
+        __name__,
+        "mdbop",
+        (MDB_FIRST, MDB_SECOND),
+        defaults={MDB_FIRST: "a", MDB_SECOND: "a"},
+        input_column="mdb_src",
+        calls=calls,
+        append_columns=append_columns,
+    )
     source = make_root_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
+    direct = Feature(MDB_DIRECT)
+    requests = [direct, Feature(MDB_CHAINED)] if direct_first else [Feature(MDB_CHAINED), direct]
+    if not include_direct:
+        requests = [Feature(MDB_CHAINED)]
+    global_filter = None
+    if filter_on is not None:
+        global_filter = GlobalFilter()
+        global_filter.add_filter(filter_on, "min", {"value": 1})
     return list(
         mloda.run_all(
-            [Feature(MDB_DIRECT), Feature(MDB_CHAINED)],
-            compute_frameworks=[PythonDictFramework],
+            requests,
+            global_filter=global_filter,
+            compute_frameworks=[framework],
             plugin_collector=PluginCollector.enabled_feature_groups({fg, source}),
             function_extender={extender} if extender is not None else None,
         )
@@ -298,17 +323,33 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         assert columns == [name]
         assert seen[name] == ("q", "b")
 
-    def test_direct_and_chained_request_reach_calculate_feature_once_per_name(self) -> None:
+    @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
+    def test_direct_and_chained_request_reach_calculate_feature_once_per_name(self, direct_first: bool) -> None:
         calls: list[list[str]] = []
         extender = _CapturingExtender()
-        results = _run_direct_and_chained(calls, extender=extender)
+        results = _run_direct_and_chained(calls, extender=extender, direct_first=direct_first)
         for recorded in (calls, extender.names):
-            assert recorded
-            for names in recorded:
-                assert len(names) == len(set(names)), f"repeated name in one calculate_feature call: {names}"
-            assert any(MDB_DIRECT in names for names in recorded)
+            assert sum(names.count(MDB_DIRECT) for names in recorded) == 1, recorded
         direct_frames = [r for r in results if MDB_DIRECT in (r if isinstance(r, dict) else r[0])]
         assert len(direct_frames) == 1
+
+    @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
+    def test_direct_and_chained_request_append_style_group_pyarrow(self, direct_first: bool) -> None:
+        calls: list[list[str]] = []
+        results = _run_direct_and_chained(calls, framework=PyArrowTable, append_columns=True, direct_first=direct_first)
+        names = [name for table in results for name in table.column_names]
+        assert names.count(MDB_DIRECT) == 1
+        assert names.count(MDB_CHAINED) == 1
+        assert sum(c.count(MDB_DIRECT) for c in calls) == 1
+
+    @pytest.mark.parametrize(
+        ("include_direct", "filter_on"),
+        [(False, "mdb_src"), (False, MDB_DIRECT), (True, MDB_DIRECT)],
+        ids=["chained_only_src", "chained_only_direct", "direct_and_chained_direct"],
+    )
+    def test_global_filter_on_column_reaching_group_as_input_copy(self, include_direct: bool, filter_on: str) -> None:
+        results = _run_direct_and_chained([], include_direct=include_direct, filter_on=filter_on)
+        assert any(MDB_CHAINED in (r if isinstance(r, dict) else r[0]) for r in results)
 
     def test_explicit_option_agreeing_with_name_is_observed(self) -> None:
         name = "mdb_src__mdbop_q_b"
@@ -329,7 +370,7 @@ class _CapturingExtender(Extender):
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         # _invoke_extender passes (data, features); capture the FeatureSet the plugin will see.
         self.captured.append(args[1])
-        # The FeatureSet is restored in place after the call, so snapshot the names now.
+        # Snapshot the names at call time.
         self.names.append([str(f.name) for f in args[1].features])
         return func(*args, **kwargs)
 
@@ -365,165 +406,6 @@ class TestExtenderPathObservesMaterializedOptions:
             (f.options.get(MDB_FIRST), f.options.get(MDB_SECOND)) for c in extender.captured for f in c.features
         ]
         assert ("q", "b") in observed
-
-
-def _plain(name: str = "mdb_twin", options: Options | None = None, **kwargs: Any) -> Feature:
-    return Feature(name, options if options is not None else Options(), **kwargs)
-
-
-def _twin(name: str = "mdb_twin", options: Options | None = None, **kwargs: Any) -> Feature:
-    """A Feature carrying a stamped child_options so it coexists with an otherwise equal twin."""
-    feature = _plain(name, options, **kwargs)
-    feature.child_options = Options()
-    return feature
-
-
-class TestFeatureSetOneFeaturePerName:
-    def test_unique_names_is_noop(self) -> None:
-        feature_set = FeatureSet([_plain("mdb_a"), _plain("mdb_b")])
-        original = feature_set.features
-        with feature_set.one_feature_per_name():
-            assert feature_set.features is original
-        assert feature_set.features is original
-
-    def test_equal_twins_collapse_and_full_set_restored(self) -> None:
-        a, b = _plain(), _twin()
-        feature_set = FeatureSet([a, b])
-        assert len(feature_set.features) == 2
-        original = feature_set.features
-        with feature_set.one_feature_per_name():
-            assert [str(f.name) for f in feature_set.features] == ["mdb_twin"]
-        assert feature_set.features is original
-        assert feature_set.features == {a, b}
-
-    def test_stand_in_is_a_copy_with_initial_requested_data_and_originals_unmutated(self) -> None:
-        a, b = _plain(initial_requested_data=True), _twin()
-        feature_set = FeatureSet([a, b])
-        assert len(feature_set.features) == 2
-        with feature_set.one_feature_per_name():
-            (stand_in,) = feature_set.features
-            assert stand_in is not a
-            assert stand_in is not b
-            assert stand_in.initial_requested_data is True
-        assert a.initial_requested_data is True
-        assert b.initial_requested_data is False
-
-    def test_parts_and_result_index_columns_merge_without_mutating_originals(self) -> None:
-        a, b = _plain(initial_requested_data=True), _twin(initial_requested_data=True)
-        a.requested_parts = frozenset({"p1"})
-        a.result_parts = frozenset({"p1"})
-        a.result_index_columns = ("i1",)
-        b.requested_parts = frozenset({"p2"})
-        b.result_parts = frozenset({"p2"})
-        b.result_index_columns = ("i1", "i2")
-        feature_set = FeatureSet([a, b])
-        assert len(feature_set.features) == 2
-        with feature_set.one_feature_per_name():
-            (stand_in,) = feature_set.features
-            assert stand_in.requested_parts == frozenset({"p1", "p2"})
-            assert stand_in.result_parts == frozenset({"p1", "p2"})
-            assert stand_in.result_index_columns == ("i1", "i2")
-        assert a.requested_parts == frozenset({"p1"})
-        assert a.result_index_columns == ("i1",)
-        assert b.requested_parts == frozenset({"p2"})
-
-    @pytest.mark.parametrize(
-        "make_pair",
-        [
-            lambda: (_plain(options=Options(context={"mdb_k": "1"})), _twin(options=Options(context={"mdb_k": "2"}))),
-            lambda: (_plain(options=Options(group={"mdb_k": "1"})), _twin(options=Options(group={"mdb_k": "2"}))),
-            lambda: (_plain(data_type=DataType.INT32), _twin(data_type=DataType.INT64)),
-        ],
-        ids=["context_value", "group_value", "data_type"],
-    )
-    def test_disagreeing_twins_pass_through_unchanged(self, make_pair: Callable[[], tuple[Feature, Feature]]) -> None:
-        a, b = make_pair()
-        feature_set = FeatureSet([a, b])
-        assert len(feature_set.features) == 2
-        original = feature_set.features
-        with feature_set.one_feature_per_name():
-            assert len(feature_set.features) == 2
-            assert any(f is a for f in feature_set.features)
-            assert any(f is b for f in feature_set.features)
-        assert feature_set.features is original
-
-    @pytest.mark.parametrize(
-        "make_pair, check",
-        [
-            (
-                lambda: (
-                    _plain(options=Options(context={"mdb_k": "1"})),
-                    _twin(options=Options(context={"mdb_j": "2"})),
-                ),
-                lambda s, a: s.options.context == {"mdb_k": "1", "mdb_j": "2"} and s.options.is_own("mdb_j") is True,
-            ),
-            (
-                lambda: (
-                    _plain(options=Options(group={"mdb_k": np.array([1, 2])})),
-                    _twin(options=Options(group={"mdb_k": np.array([1, 2])})),
-                ),
-                lambda s, a: bool(np.array_equal(s.options.group["mdb_k"], np.array([1, 2]))),
-            ),
-            (
-                lambda: (
-                    _plain(options=Options(context={"mdb_k": 1, "mdb_j": 2})),
-                    _twin(options=Options(context={"mdb_k": 1})),
-                ),
-                lambda s, a: s.options.context == {"mdb_k": 1, "mdb_j": 2},
-            ),
-            (
-                lambda: (_plain(domain="mdb_d1", initial_requested_data=True), _twin(domain="mdb_d2")),
-                lambda s, a: s.domain == a.domain,
-            ),
-            (
-                lambda: (
-                    _plain(implementation="mdb_impl1", initial_requested_data=True),
-                    _twin(implementation="mdb_impl2"),
-                ),
-                lambda s, a: s.implementation_pin == ("mdb_impl1",),
-            ),
-            (
-                lambda: (_plain(), _plain(data_type=DataType.INT32)),
-                lambda s, a: s.data_type == DataType.INT32,
-            ),
-        ],
-        ids=[
-            "test_disjoint_context_keys_collapse_into_union",
-            "test_value_equal_ndarray_group_values_collapse",
-            "test_superset_context_collapses_with_union",
-            "test_domain_difference_collapses_to_initially_requested_twin",
-            "test_implementation_pin_difference_collapses_to_initially_requested_twin",
-            "test_none_data_type_defers_to_typed_twin",
-        ],
-    )
-    def test_compatible_twins_collapse_into_one_merged_stand_in(
-        self, make_pair: Callable[[], tuple[Feature, Feature]], check: Callable[[Feature, Feature], bool]
-    ) -> None:
-        a, b = make_pair()
-        contexts_before = (dict(a.options.context), dict(b.options.context))
-        feature_set = FeatureSet([a, b])
-        assert len(feature_set.features) == 2
-        with feature_set.one_feature_per_name():
-            (stand_in,) = feature_set.features
-            assert check(stand_in, a)
-        assert (a.options.context, b.options.context) == contexts_before
-
-    def test_base_twin_is_the_direct_one_regardless_of_uuid_order(self) -> None:
-        for _ in range(20):
-            a, b = _plain(domain="mdb_d1"), _twin(domain="mdb_d2")
-            feature_set = FeatureSet([a, b])
-            with feature_set.one_feature_per_name():
-                (stand_in,) = feature_set.features
-                assert stand_in.domain == a.domain
-
-    def test_exception_inside_block_restores_full_set(self) -> None:
-        feature_set = FeatureSet([_plain(), _twin()])
-        original = feature_set.features
-        with pytest.raises(RuntimeError):
-            with feature_set.one_feature_per_name():
-                raise RuntimeError("mdb boom")
-        assert feature_set.features is original
-        assert len(feature_set.features) == 2
 
 
 class TestFeatureSetMaterializeOptionDefaults:

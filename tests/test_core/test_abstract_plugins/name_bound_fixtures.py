@@ -26,13 +26,15 @@ def make_name_bound_fg(
     converters: dict[str, Callable[[str], Any]] | None = None,
     capture: str = "[a-z]",
     calls: list[list[str]] | None = None,
+    append_columns: bool = False,
 ) -> type[FeatureGroup]:
     """Pattern group binding ``bound_keys`` from ``<name>__<tag>_<x>_<y>``; records option tuples in ``seen``.
 
     ``defaults`` maps key to its declared default (None declares none). Without ``input_column`` the
     group returns ``data`` unchanged; with it, each feature gets that input column. ``converters`` maps
     key to its ``name_converter``; ``capture`` is the regex class of each captured segment. ``calls``
-    gets one list of feature names (repeats kept) appended per calculate_feature call.
+    gets one list of feature names (repeats kept) appended per calculate_feature call; ``append_columns``
+    makes the group append one pyarrow column per feature instead of returning a dict.
     """
     pattern = rf".*__{tag}_" + "_".join(rf"(?P<{key}>{capture})" for key in bound_keys) + "$"
     keys = (*bound_keys, *unbound_keys)
@@ -54,6 +56,10 @@ def make_name_bound_fg(
             for feature in features.features:
                 seen[str(feature.name)] = tuple(feature.options.get(key) for key in keys)
         if input_column is None:
+            return data
+        if append_columns:
+            for feature in features.features:
+                data = data.append_column(str(feature.name), data[input_column])
             return data
         return {str(feature.name): data[input_column] for feature in features.features}
 

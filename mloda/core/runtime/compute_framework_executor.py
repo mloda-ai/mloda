@@ -17,6 +17,7 @@ from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep, resolve_join_source_cfw
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
+from mloda.core.runtime.credentials import current_runtime_credentials
 from mloda.core.runtime.worker_manager import WorkerManager
 from mloda.core.runtime.worker.thread_worker import thread_worker
 from mloda.core.runtime.worker.multiprocessing_worker import worker
@@ -103,6 +104,7 @@ class ComputeFrameworkExecutor:
             uuid or uuid4(),
             function_extender=function_extender,
         )
+        new_cfw._runtime_credentials = current_runtime_credentials()
         if dispatched_to_worker and self.worker_extender_payload is not None:
             # Materialization happens only in ComputeFramework.__setstate__, once this instance is
             # actually unpickled in the worker; never here in the parent that dispatches it.

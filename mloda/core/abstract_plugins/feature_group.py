@@ -7,6 +7,7 @@ from typing import Any, ClassVar, Callable, cast, final
 from abc import ABC
 
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
 
@@ -624,6 +625,13 @@ class FeatureGroup(ABC):
         """
         # Contained: this is the root-feature protocol signal, which is_root reads as "this IS a root" (#845).
         raise NotImplementedError
+
+    @classmethod
+    def read_credential(cls, handle: str) -> RegisteredCredential:
+        """Read one named credential during calculate_feature or a runtime validation hook."""
+        from mloda.core.runtime.credentials import read_credential
+
+        return read_credential(handle)
 
     @final
     @classmethod

@@ -8,6 +8,7 @@ from typing import Any, Callable, Generator, cast
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.credential_scrub import redact_exception, registered_secrets_scope
+from mloda.core.runtime.credentials import RuntimeCredentialRegistry, runtime_credentials_scope
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourcePointerError
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 
@@ -77,18 +78,21 @@ def _plan_origin(origin: PlanOrigin | None) -> Generator[None, None, None]:
 class _CredentialRedaction:
     """Mask secret literals in logs and in any exception escaping the block (a class: see registered_secrets_scope)."""
 
-    def __init__(self, literals: frozenset[str]) -> None:
+    def __init__(self, literals: frozenset[str], credentials: RuntimeCredentialRegistry | None = None) -> None:
         self._literals = literals
         self._scope = registered_secrets_scope(literals)
+        self._credentials = runtime_credentials_scope(credentials)
 
     def __enter__(self) -> None:
         self._scope.__enter__()
+        self._credentials.__enter__()
 
     def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
         try:
             if exc is not None:
                 redact_exception(exc, self._literals)
         finally:
+            self._credentials.__exit__(exc_type, exc, tb)
             self._scope.__exit__(exc_type, exc, tb)
 
 
@@ -145,7 +149,7 @@ class mlodaAPI:
         )
         self.plan_id = self.plan_context.plan_id
 
-        with _plan_origin(None):
+        with _plan_origin(None), runtime_credentials_scope(None):
             call_contained_hook(self._extenders, "on_plan_start", self.plan_context)
             plan_outcome = LifecycleOutcome("succeeded")
             try:
@@ -326,7 +330,10 @@ class mlodaAPI:
         return frozenset() if dac is None else dac.secret_literals()
 
     def _credential_redaction(self, literals: frozenset[str] | None = None) -> "_CredentialRedaction":
-        return _CredentialRedaction(self._secret_literals() if literals is None else literals)
+        return _CredentialRedaction(
+            self._secret_literals() if literals is None else literals,
+            RuntimeCredentialRegistry(getattr(self, "data_access_collection", None)),
+        )
 
     @staticmethod
     def _bind_feature_connections(

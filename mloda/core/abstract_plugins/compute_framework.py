@@ -7,6 +7,7 @@ from contextvars import ContextVar
 from typing import Any, NoReturn, final, get_origin
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
+from mloda.core.abstract_plugins.components.credential_scrub import redact_escaping_exception
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
@@ -41,6 +42,11 @@ from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda.core.optional_dependency import loaded, require
 from mloda.core.runtime.flight.flight_server import FlightServer
+from mloda.core.runtime.credentials import (
+    RuntimeCredentialRegistry,
+    current_runtime_credentials,
+    runtime_credentials_scope,
+)
 
 _PYARROW_REASON = "this operation"
 
@@ -127,6 +133,7 @@ class ComputeFramework(ABC):
     _pending_extender_payload: bytes | None = None
     _hook_extenders: dict[ExtenderHook, Extender] | None = None
     _pinned_frame: Any = None
+    _runtime_credentials: RuntimeCredentialRegistry | None = None
 
     def __init__(
         self,
@@ -816,6 +823,11 @@ class ComputeFramework(ABC):
 
     @final
     def _run_hook(self, hook: ExtenderHook, feature_group: Any, method: Callable[..., Any], features: Any) -> Any:
+        with runtime_credentials_scope(current_runtime_credentials(), hook=True), redact_escaping_exception():
+            return ComputeFramework._dispatch_hook(self, hook, feature_group, method, features)
+
+    @final
+    def _dispatch_hook(self, hook: ExtenderHook, feature_group: Any, method: Callable[..., Any], features: Any) -> Any:
         """Dispatch method through hook's extender (if any), instrumenting the call with a HookContext.
         For FEATURE_GROUP_CALCULATE_FEATURE, also activates self so a nested source group load call can find it via ComputeFramework.current()."""
         extender = self.get_function_extender(hook)

@@ -5,6 +5,7 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.utils import failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+from mloda.core.runtime.credentials import runtime_credentials_scope
 
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ def thread_worker(
     from_cfw: ComputeFramework | UUID | None,
     registered_secrets: frozenset[str] = frozenset(),
 ) -> None:
-    with registered_secrets_scope(registered_secrets):
+    with registered_secrets_scope(registered_secrets), runtime_credentials_scope(cfw._runtime_credentials):
         try:
             command.execute(cfw_register, cfw, from_cfw=from_cfw)
             command.step_is_done = True

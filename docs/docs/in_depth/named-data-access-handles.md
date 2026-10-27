@@ -101,7 +101,45 @@ Two safety behaviors come with it:
 
 - **Early mis-wrap error.** Passing a bare dict whose values are not mappings (the mis-wrap shape above) now raises `ValueError` at construction time, naming the offending handle and showing the three correct alternatives, instead of failing silently later during matcher selection.
 - **Redacted error output.** `repr(Credential(password="hunter2"))` prints `Credential(password='***')`, and the resolver's ambiguity error renders credential candidates with keys visible and values replaced by `***`. Mapping credentials registered through the constructor or `add_credentials` print (print, f-strings, logging, pprint) with values `***`. Copies (`dict(cred)`, `{**cred}`, `.copy()`), `.items()`/`.values()` and `json.dumps` see raw values; `yaml.safe_dump` rejects the subclass, so convert with `dict(cred)` first. Direct assignment into `dac.credentials` stores the value as-is and prints raw; registration copies the caller's dict. A match keeps credentials out of its `repr`, and the caller's own dict stays untouched. Option conflict errors and filter divergence warnings mask mapping values and scrub credential-shaped strings (URI user info, query and fragment, `password=` values) inside nested lists, tuples and sets (mapping keys print as given). A database group's matched options hold a plain-dict pointer as a `RegisteredCredential`, so `str(features.options)` masks it. `str(Options)` masks the reserved reader tuple (a mapping masked, a DSN string scrubbed) and the value under any credential-shaped key (nested too); every other option prints as given, including the caller's own `Options` (mloda works on copies) and a pointer forwarded to a consumer, so `Credential(...)` (e.g. `options={"SqliteFG": Credential(sqlite="/x.db")}`) stays the recommended form.
-- **`dac.redact(text)`.** Exact-matches every registered credential string value of 8 or more characters (host, user, path, not just password; shorter values are left to the pattern rules), only from `credentials` (not connections, files, folders), then scrubs the result through `scrub_credentials`. During a run, credential-shaped values of 8 or more characters are already masked in raised errors (args including nested strings, instance attributes, `OSError` fields, notes, refusals, cause and context chain) and logs; an `ExceptionGroup`'s own message, bytes and C-level attributes are not masked. `redact` also covers host, user and path values.
+- **`dac.redact(text)`.** Exact-matches every registered credential string value of 8 or more characters (host, user, path, not just password; shorter values are left to the pattern rules), only from `credentials` (not connections, files, folders), then scrubs the result through `scrub_credentials`. During a run, credential-shaped values of 8 or more characters are already masked in raised errors (args including nested strings and matching byte values, instance attributes, `OSError` fields, notes, refusals, cause and context chain) and logs; an `ExceptionGroup`'s own message and arbitrary C-level attributes are not masked. `redact` also covers host, user and path values.
+
+### Runtime credential access
+
+Source groups such as `ReadDBFG` bind credentials while matching a data source. A group that needs a key only during calculation can instead call `cls.read_credential(handle)` in `calculate_feature`, `validate_input_features`, or `validate_output_features`:
+
+```python
+import hmac
+from typing import Any
+
+from mloda.provider import DataCreatorFeatureGroup, FeatureSet
+from mloda.user import Credential, DataAccessCollection, Feature, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+
+
+class SignedExample(DataCreatorFeatureGroup):
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        credential = cls.read_credential(features.get_options_key("credential_handle"))
+        return {"SignedExample": [hmac.digest(credential["material"], b"example", "sha256").hex()]}
+
+
+collection = DataAccessCollection(credentials={"signing": Credential(material=b"documentation-only-key")})
+results = mloda.run_all(
+    [Feature("SignedExample", options={"credential_handle": "signing"})],
+    data_access_collection=collection,
+    compute_frameworks=[PythonDictFramework],
+    plugin_collector=PluginCollector.enabled_feature_groups({SignedExample}),
+)
+assert len(results[0]["SignedExample"][0]) == 64
+```
+
+The returned mapping is a `RegisteredCredential`: item access is raw and its repr masks values. The handle must be explicit; a missing handle or one registered under another resource kind raises the same `ValueError` as `collection.resolve("credentials", hint=handle)`. Outside those runtime hooks, including `input_features` and nested preparation, access raises `RuntimeError`. Source matching and `data_access_handle` keep their existing behavior.
+
+The runtime carries credentials separately from `FeatureSet`, options, `PlanContext` and `RunContext`. Rotating a value under the same handle does not change feature identity, plan hashes or explain output. Access works in synchronous, threaded and multiprocessing runs; multiprocessing requires the credential values to be picklable, but unrelated connection objects are not sent through this channel.
+
+After a successful lookup, that slot's nonempty string and byte leaves (including nested mappings, lists, tuples, sets and frozensets) are masked in framework errors before extenders observe them, even for short values or non-secret-shaped keys. Exception arguments are copied recursively through tuple, list, dict, set and frozenset containers, retaining those container types. The added literal masking belongs to that hook only; a failed lookup adds nothing, and other hooks, concurrent runs, nested runs and paused streams do not inherit it. Existing run-wide masking of long credential-shaped values still applies.
+
+Successful result data and the collection remain unchanged. This is literal masking of framework exception fields and text passed through its scrub helpers, not a filter over arbitrary plugin logs, custom objects or transformed encodings. The exception-field limits above still apply.
 
 ### Why a typed class: four kinds of users
 

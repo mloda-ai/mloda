@@ -149,6 +149,7 @@ def strip_uri_userinfo(text: str) -> str:
 
 _PLACEHOLDER = "\ue000"
 _REGISTERED_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_registered_secrets", default=frozenset())
+_SELECTED_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_selected_secrets", default=frozenset())
 
 
 def _literal_spans(text: str, literals: Iterable[str]) -> list[tuple[int, int]]:
@@ -206,8 +207,25 @@ class registered_secrets_scope:  # noqa: N801
         _REGISTERED_SECRETS.reset(self._tokens.pop())
 
 
+class selected_secrets_scope:  # noqa: N801
+    """Keep explicitly selected credential literals local to one runtime hook."""
+
+    def __init__(self) -> None:
+        self._tokens: list[Token[frozenset[str]]] = []
+
+    def __enter__(self) -> None:
+        self._tokens.append(_SELECTED_SECRETS.set(frozenset()))
+
+    def __exit__(self, *exc_info: object) -> None:
+        _SELECTED_SECRETS.reset(self._tokens.pop())
+
+
+def register_selected_secrets(literals: frozenset[str]) -> None:
+    _SELECTED_SECRETS.set(_SELECTED_SECRETS.get() | literals)
+
+
 def current_registered_secrets() -> frozenset[str]:
-    return _REGISTERED_SECRETS.get()
+    return _REGISTERED_SECRETS.get() | _SELECTED_SECRETS.get()
 
 
 def scrub_credentials(text: str) -> str:
@@ -215,7 +233,7 @@ def scrub_credentials(text: str) -> str:
 
     Inside a ``registered_secrets_scope`` the registered literals are masked exactly first.
     """
-    registered = _REGISTERED_SECRETS.get()
+    registered = current_registered_secrets()
     if registered:
         text = placeholder_mask(text, registered)
     text = _drop_free_text_userinfo(text)
@@ -231,10 +249,12 @@ def scrub_credentials(text: str) -> str:
 
 
 def _mask_item(item: Any, literals: frozenset[str], memo: dict[int, Any] | None = None) -> Any:
-    """Mask str leaves, recursing into tuples, lists and dicts (types kept, cycles terminate via ``memo``)."""
+    """Mask str/bytes leaves in built-in containers (types kept, cycles terminate via ``memo``)."""
     if isinstance(item, str):
         return mask_literals(item, literals)
-    if not isinstance(item, (tuple, list, dict)):
+    if isinstance(item, bytes):
+        return mask_literals(item.decode("latin1"), literals).encode("latin1")
+    if not isinstance(item, (tuple, list, dict, set, frozenset)):
         return item
     memo = {} if memo is None else memo
     if id(item) in memo:
@@ -250,6 +270,15 @@ def _mask_item(item: Any, literals: frozenset[str], memo: dict[int, Any] | None 
         for key, element in item.items():
             masked_dict[_mask_item(key, literals, memo)] = _mask_item(element, literals, memo)
         return masked_dict
+    if isinstance(item, (set, frozenset)):
+        masked_set: set[Any] = set()
+        memo[id(item)] = masked_set
+        masked_set.update(_mask_item(element, literals, memo) for element in item)
+        if isinstance(item, frozenset):
+            frozen_set = frozenset(masked_set)
+            memo[id(item)] = frozen_set
+            return frozen_set
+        return masked_set
     memo[id(item)] = item
     elements = [_mask_item(element, literals, memo) for element in item]
     result = item._make(elements) if hasattr(item, "_make") else tuple(elements)

@@ -25,6 +25,29 @@ _KIND_TO_ATTR: dict[str, str] = {
 }
 
 
+def _resolve_handle(
+    kind: str,
+    registry: Mapping[str, Any],
+    kinds: Mapping[str, str],
+    hint: str,
+    predicate: Callable[[Any], bool] | None = None,
+) -> Any:
+    if hint not in registry:
+        actual_kind = kinds.get(hint)
+        if actual_kind is not None:
+            raise ValueError(
+                f"Handle '{hint}' is registered under kind '{actual_kind}', but kind '{kind}' was requested."
+            )
+        raise ValueError(
+            f"Handle '{hint}' not found for kind '{kind}'. "
+            f"Available handles of kind '{kind}': {sorted(registry.keys())}"
+        )
+    entry = registry[hint]
+    if predicate is not None and not predicate(entry):
+        raise ValueError(f"Handle '{hint}' of kind '{kind}' did not satisfy the predicate (predicate mismatch).")
+    return entry
+
+
 class DataAccessCollection:
     """Registry of data resources keyed by stable handle names.
 
@@ -331,22 +354,8 @@ class DataAccessCollection:
         registry: dict[str, Any] = getattr(self, attr)
 
         if hint is not None:
-            if hint not in registry:
-                actual_kind = self.handles().get(hint)
-                if actual_kind is not None:
-                    raise ValueError(
-                        f"Handle '{hint}' is registered under kind '{actual_kind}', but kind '{kind}' was requested."
-                    )
-                raise ValueError(
-                    f"Handle '{hint}' not found for kind '{kind}'. "
-                    f"Available handles of kind '{kind}': {sorted(registry.keys())}"
-                )
-            entry = registry[hint]
-            if predicate is not None and not predicate(entry):
-                raise ValueError(
-                    f"Handle '{hint}' of kind '{kind}' did not satisfy the predicate (predicate mismatch)."
-                )
-            return entry
+            kinds = self.handles() if hint not in registry else {}
+            return _resolve_handle(kind, registry, kinds, hint, predicate)
 
         if predicate is None:
             matches: list[tuple[str, Any]] = list(registry.items())

@@ -27,6 +27,8 @@ A DAC holds resources of four kinds:
 
 When the collection holds more than one resource of the same kind, you can name them with stable handles and disambiguate per feature via `Options(context={"data_access_handle": "..."})`. See [Named Data Access Handles](named-data-access-handles.md) for the full naming model, the resolution rule, and the available error shapes; for the simple single-source cases below, naming is optional.
 
+Any feature group can also call `cls.read_credential(handle)` in `calculate_feature`, `validate_input_features`, or `validate_output_features`. Register a named `Credential` in the collection and carry only its handle in an option; the value stays out of feature options, hashes and plan output. This complements source groups' match-time credential binding. See [Runtime credential access](named-data-access-handles.md#runtime-credential-access) for an example and the scope of error redaction.
+
 You can apply these options like so:
 
 ```py

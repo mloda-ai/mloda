@@ -33,6 +33,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.provider import DataCreatorFeatureGroup, PropertySpec
 from mloda.user import PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
 
@@ -192,6 +193,39 @@ def _run_two_keys(
     return seen
 
 
+MDB_DIRECT = "mdb_src__mdbop_q_b"
+MDB_CHAINED = "mdb_src__mdbop_q_b__mdbop_r_c"
+
+
+def _run_direct_and_chained(
+    calls: list[list[str]],
+    extender: Extender | None = None,
+    framework: type[Any] = PythonDictFramework,
+    direct_options: Options | None = None,
+    append_columns: bool = False,
+) -> list[Any]:
+    fg = make_name_bound_fg(
+        "Mdb",
+        __name__,
+        "mdbop",
+        (MDB_FIRST, MDB_SECOND),
+        unbound_keys=("mdb_extra",),
+        defaults={MDB_FIRST: "a", MDB_SECOND: "a", "mdb_extra": "d"},
+        input_column="mdb_src",
+        calls=calls,
+        append_columns=append_columns,
+    )
+    source = make_root_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
+    return list(
+        mloda.run_all(
+            [Feature(MDB_DIRECT, direct_options or Options()), Feature(MDB_CHAINED)],
+            compute_frameworks=[framework],
+            plugin_collector=PluginCollector.enabled_feature_groups({fg, source}),
+            function_extender={extender} if extender is not None else None,
+        )
+    )
+
+
 def _single_row(frame: Any, column: str) -> Any:
     """Extract the single payload row, tolerant of columnar dict or list-of-row-dicts results."""
     if isinstance(frame, dict):
@@ -279,6 +313,28 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         assert columns == [name]
         assert seen[name] == ("q", "b")
 
+    def test_direct_and_chained_request_reach_calculate_feature_once_per_name(self) -> None:
+        calls: list[list[str]] = []
+        extender = _CapturingExtender()
+        results = _run_direct_and_chained(calls, extender=extender)
+        for recorded in (calls, extender.names):
+            assert sum(names.count(MDB_DIRECT) for names in recorded) == 1, recorded
+        direct_frames = [r for r in results if MDB_DIRECT in (r if isinstance(r, dict) else r[0])]
+        assert len(direct_frames) == 1
+
+    def test_direct_and_chained_request_append_style_group_pyarrow(self) -> None:
+        calls: list[list[str]] = []
+        results = _run_direct_and_chained(calls, framework=PyArrowTable, append_columns=True)
+        names = [name for table in results for name in table.column_names]
+        assert names.count(MDB_DIRECT) == 1
+        assert names.count(MDB_CHAINED) == 1
+        assert sum(c.count(MDB_DIRECT) for c in calls) == 1
+
+    def test_direct_request_with_own_context_stays_separate_from_input_copy(self) -> None:
+        calls: list[list[str]] = []
+        _run_direct_and_chained(calls, direct_options=Options(context={"mdb_extra": "x"}))
+        assert sum(c.count(MDB_DIRECT) for c in calls) == 2, calls
+
     def test_explicit_option_agreeing_with_name_is_observed(self) -> None:
         name = "mdb_src__mdbop_q_b"
         seen = _run_two_keys(True, name, Options(context={MDB_FIRST: "q"}))
@@ -290,6 +346,7 @@ class _CapturingExtender(Extender):
 
     def __init__(self) -> None:
         self.captured: list[Any] = []
+        self.names: list[list[str]] = []
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
@@ -297,6 +354,8 @@ class _CapturingExtender(Extender):
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         # _invoke_extender passes (data, features); capture the FeatureSet the plugin will see.
         self.captured.append(args[1])
+        # The FeatureSet is restored in place after the call, so snapshot the names now.
+        self.names.append([str(f.name) for f in args[1].features])
         return func(*args, **kwargs)
 
 

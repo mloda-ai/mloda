@@ -495,7 +495,10 @@ class Feature:
     def equals_ignoring_compute_frameworks(self, other: Any) -> bool:
         return self._equals(other, False)
 
-    def _equals(self, other: Any, include_compute_frameworks: bool) -> bool:
+    def equals_ignoring_child_options(self, other: Any) -> bool:
+        return self._equals(other, True, include_child_options=False)
+
+    def _equals(self, other: Any, include_compute_frameworks: bool, include_child_options: bool = True) -> bool:
         if not isinstance(other, Feature):
             return False
         return (
@@ -508,7 +511,7 @@ class Feature:
             and self.data_type == other.data_type
             and self.implementation_pin == other.implementation_pin
             and self._connection_holder == other._connection_holder
-            and self._child_options_key() == other._child_options_key()
+            and (not include_child_options or self._child_options_key() == other._child_options_key())
             and self._input_data_match_key() == other._input_data_match_key()
         )
 

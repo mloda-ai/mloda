@@ -1,5 +1,5 @@
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from copy import deepcopy
 from dataclasses import replace
 import logging
@@ -982,7 +982,19 @@ class Engine:
         feature.options = entry[1]
         feature_collection = self.feature_group_collection[feature_group_class]
 
-        if feature not in feature_collection:
+        existing_feature = (
+            next((f for f in feature_collection if feature == f), None) if feature in feature_collection else None
+        )
+        if existing_feature is None:
+            existing_feature = self._find_direct_input_twin(feature, feature_collection)
+            if (
+                existing_feature is not None
+                and self._cascade_keys_at_resolution.get(existing_feature.uuid, feature.options.cascade_context_keys)
+                != feature.options.cascade_context_keys
+            ):
+                existing_feature = None
+
+        if existing_feature is None:
             self.add_feature_link_to_links(feature)
 
             self.feature_link_parents[feature.uuid] = set()
@@ -991,8 +1003,6 @@ class Engine:
             if specialized_from:
                 self.specialized_from[feature.uuid] = specialized_from
             return True
-
-        existing_feature = next((f for f in feature_collection if feature == f), None)
 
         if existing_feature is not None:
             if check_cascade and self.resolved_input_feature_names.get(existing_feature.uuid):
@@ -1027,6 +1037,20 @@ class Engine:
                 self._update_feature_link_parents(child_uuid, feature.uuid, existing_feature.uuid)
 
         return False
+
+    @staticmethod
+    def _find_direct_input_twin(feature: Feature, feature_collection: Iterable[Feature]) -> Feature | None:
+        """Finds the copy of a feature that differs only by direct request vs engine-stamped child_options."""
+        for f in feature_collection:
+            if (
+                (f.child_options is None) != (feature.child_options is None)
+                and f.equals_ignoring_child_options(feature)
+                and f.options.cascade_context_keys == feature.options.cascade_context_keys
+                and f.requested_parts == feature.requested_parts
+                and f.parts_only == feature.parts_only
+            ):
+                return f
+        return None
 
     def _warn_on_default_equivalent_merge(
         self, feature: Feature, declared_options: Options, existing_feature: Feature

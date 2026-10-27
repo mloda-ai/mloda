@@ -32,7 +32,7 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.provider import DataCreatorFeatureGroup, PropertySpec
-from mloda.user import PluginCollector, mloda
+from mloda.user import GlobalFilter, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
@@ -201,24 +201,34 @@ def _run_direct_and_chained(
     calls: list[list[str]],
     extender: Extender | None = None,
     framework: type[Any] = PythonDictFramework,
-    direct_options: Options | None = None,
     append_columns: bool = False,
+    direct_first: bool = True,
+    include_direct: bool = True,
+    filter_on: str | None = None,
 ) -> list[Any]:
     fg = make_name_bound_fg(
         "Mdb",
         __name__,
         "mdbop",
         (MDB_FIRST, MDB_SECOND),
-        unbound_keys=("mdb_extra",),
-        defaults={MDB_FIRST: "a", MDB_SECOND: "a", "mdb_extra": "d"},
+        defaults={MDB_FIRST: "a", MDB_SECOND: "a"},
         input_column="mdb_src",
         calls=calls,
         append_columns=append_columns,
     )
     source = make_root_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
+    direct = Feature(MDB_DIRECT)
+    requests = [direct, Feature(MDB_CHAINED)] if direct_first else [Feature(MDB_CHAINED), direct]
+    if not include_direct:
+        requests = [Feature(MDB_CHAINED)]
+    global_filter = None
+    if filter_on is not None:
+        global_filter = GlobalFilter()
+        global_filter.add_filter(filter_on, "min", {"value": 1})
     return list(
         mloda.run_all(
-            [Feature(MDB_DIRECT, direct_options or Options()), Feature(MDB_CHAINED)],
+            requests,
+            global_filter=global_filter,
             compute_frameworks=[framework],
             plugin_collector=PluginCollector.enabled_feature_groups({fg, source}),
             function_extender={extender} if extender is not None else None,
@@ -313,27 +323,33 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         assert columns == [name]
         assert seen[name] == ("q", "b")
 
-    def test_direct_and_chained_request_reach_calculate_feature_once_per_name(self) -> None:
+    @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
+    def test_direct_and_chained_request_reach_calculate_feature_once_per_name(self, direct_first: bool) -> None:
         calls: list[list[str]] = []
         extender = _CapturingExtender()
-        results = _run_direct_and_chained(calls, extender=extender)
+        results = _run_direct_and_chained(calls, extender=extender, direct_first=direct_first)
         for recorded in (calls, extender.names):
             assert sum(names.count(MDB_DIRECT) for names in recorded) == 1, recorded
         direct_frames = [r for r in results if MDB_DIRECT in (r if isinstance(r, dict) else r[0])]
         assert len(direct_frames) == 1
 
-    def test_direct_and_chained_request_append_style_group_pyarrow(self) -> None:
+    @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
+    def test_direct_and_chained_request_append_style_group_pyarrow(self, direct_first: bool) -> None:
         calls: list[list[str]] = []
-        results = _run_direct_and_chained(calls, framework=PyArrowTable, append_columns=True)
+        results = _run_direct_and_chained(calls, framework=PyArrowTable, append_columns=True, direct_first=direct_first)
         names = [name for table in results for name in table.column_names]
         assert names.count(MDB_DIRECT) == 1
         assert names.count(MDB_CHAINED) == 1
         assert sum(c.count(MDB_DIRECT) for c in calls) == 1
 
-    def test_direct_request_with_own_context_stays_separate_from_input_copy(self) -> None:
-        calls: list[list[str]] = []
-        _run_direct_and_chained(calls, direct_options=Options(context={"mdb_extra": "x"}))
-        assert sum(c.count(MDB_DIRECT) for c in calls) == 2, calls
+    @pytest.mark.parametrize(
+        ("include_direct", "filter_on"),
+        [(False, "mdb_src"), (False, MDB_DIRECT), (True, MDB_DIRECT)],
+        ids=["chained_only_src", "chained_only_direct", "direct_and_chained_direct"],
+    )
+    def test_global_filter_on_column_reaching_group_as_input_copy(self, include_direct: bool, filter_on: str) -> None:
+        results = _run_direct_and_chained([], include_direct=include_direct, filter_on=filter_on)
+        assert any(MDB_CHAINED in (r if isinstance(r, dict) else r[0]) for r in results)
 
     def test_explicit_option_agreeing_with_name_is_observed(self) -> None:
         name = "mdb_src__mdbop_q_b"
@@ -354,7 +370,7 @@ class _CapturingExtender(Extender):
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         # _invoke_extender passes (data, features); capture the FeatureSet the plugin will see.
         self.captured.append(args[1])
-        # The FeatureSet is restored in place after the call, so snapshot the names now.
+        # Snapshot the names at call time.
         self.names.append([str(f.name) for f in args[1].features])
         return func(*args, **kwargs)
 

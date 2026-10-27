@@ -735,9 +735,11 @@ class Engine:
                     raise ValueError(f"Matched filter on {feature.name} is not declared in the global filter.")
                 if declared.filter_feature.compute_frameworks:
                     feature = self._narrow_host_to_pin(feature_group_class, feature, match.filter_feature)
-                survivor = next(
-                    f for f in self.feature_group_collection[feature_group_class] if f == match.filter_feature
+                survivor = self._find_existing_feature(
+                    match.filter_feature, self.feature_group_collection[feature_group_class]
                 )
+                if survivor is None:
+                    raise ValueError(f"Filter feature {match.filter_feature.name} is missing from its group.")
                 self.filter_ties.append((feature.uuid, survivor.uuid))
                 # The stored filter needs its own Feature: planner rewrites of the queue twin must not shift its hash.
                 # handle_filter_feature copies via Feature.__copy__, which owns the containers that decide the hash.
@@ -763,7 +765,7 @@ class Engine:
             return host
         collection.discard(host)
         host.compute_frameworks = set(pin)
-        existing = next((f for f in collection if f == host), None)
+        existing = self._find_existing_feature(host, collection)
         if existing is None:
             host.framework_pinned = True
             collection.add(host)
@@ -982,17 +984,14 @@ class Engine:
         feature.options = entry[1]
         feature_collection = self.feature_group_collection[feature_group_class]
 
-        existing_feature = (
-            next((f for f in feature_collection if feature == f), None) if feature in feature_collection else None
-        )
-        if existing_feature is None:
-            existing_feature = self._find_direct_input_twin(feature, feature_collection)
-            if (
-                existing_feature is not None
-                and self._cascade_keys_at_resolution.get(existing_feature.uuid, feature.options.cascade_context_keys)
-                != feature.options.cascade_context_keys
-            ):
-                existing_feature = None
+        existing_feature = self._find_existing_feature(feature, feature_collection)
+        if (
+            existing_feature is not None
+            and existing_feature != feature
+            and self._cascade_keys_at_resolution.get(existing_feature.uuid, feature.options.cascade_context_keys)
+            != feature.options.cascade_context_keys
+        ):
+            existing_feature = None
 
         if existing_feature is None:
             self.add_feature_link_to_links(feature)
@@ -1039,11 +1038,16 @@ class Engine:
         return False
 
     @staticmethod
-    def _find_direct_input_twin(feature: Feature, feature_collection: Iterable[Feature]) -> Feature | None:
-        """Finds the copy of a feature that differs only by direct request vs engine-stamped child_options."""
+    def _find_existing_feature(feature: Feature, feature_collection: Iterable[Feature]) -> Feature | None:
+        """Finds the equal feature, else a twin differing only in child_options."""
+        if feature in feature_collection:
+            exact = next((f for f in feature_collection if feature == f), None)
+            if exact is not None:
+                return exact
         for f in feature_collection:
             if (
-                (f.child_options is None) != (feature.child_options is None)
+                f is not feature
+                and f.child_options_differ(feature)
                 and f.equals_ignoring_child_options(feature)
                 and f.options.cascade_context_keys == feature.options.cascade_context_keys
                 and f.requested_parts == feature.requested_parts

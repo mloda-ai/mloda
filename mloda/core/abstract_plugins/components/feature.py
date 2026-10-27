@@ -498,6 +498,9 @@ class Feature:
     def equals_ignoring_child_options(self, other: Any) -> bool:
         return self._equals(other, True, include_child_options=False)
 
+    def child_options_differ(self, other: "Feature") -> bool:
+        return bool(self._child_options_key() != other._child_options_key())
+
     def _equals(self, other: Any, include_compute_frameworks: bool, include_child_options: bool = True) -> bool:
         if not isinstance(other, Feature):
             return False

@@ -495,13 +495,19 @@ class Feature:
     def equals_ignoring_compute_frameworks(self, other: Any) -> bool:
         return self._equals(other, False)
 
-    def equals_ignoring_child_options(self, other: Any) -> bool:
-        return self._equals(other, True, include_child_options=False)
+    def equals_ignoring_child_options(self, other: Any, *, include_data_type: bool = True) -> bool:
+        return self._equals(other, True, include_child_options=False, include_data_type=include_data_type)
 
     def child_options_differ(self, other: "Feature") -> bool:
         return bool(self._child_options_key() != other._child_options_key())
 
-    def _equals(self, other: Any, include_compute_frameworks: bool, include_child_options: bool = True) -> bool:
+    def _equals(
+        self,
+        other: Any,
+        include_compute_frameworks: bool,
+        include_child_options: bool = True,
+        include_data_type: bool = True,
+    ) -> bool:
         if not isinstance(other, Feature):
             return False
         return (
@@ -511,7 +517,7 @@ class Feature:
             and _deep_equal(self.options.context, other.options.context)
             and self.domain == other.domain
             and (not include_compute_frameworks or self.compute_frameworks == other.compute_frameworks)
-            and self.data_type == other.data_type
+            and (not include_data_type or self.data_type == other.data_type)
             and self.implementation_pin == other.implementation_pin
             and self._connection_holder == other._connection_holder
             and (not include_child_options or self._child_options_key() == other._child_options_key())

@@ -29,10 +29,11 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.abstract_plugins.components.validators.datatype_validator import DataTypeMismatchError
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.provider import DataCreatorFeatureGroup, PropertySpec
-from mloda.user import GlobalFilter, PluginCollector, mloda
+from mloda.user import DataType, GlobalFilter, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
@@ -205,6 +206,7 @@ def _run_direct_and_chained(
     direct_first: bool = True,
     include_direct: bool = True,
     filter_on: str | None = None,
+    direct_data_type: DataType | None = None,
 ) -> list[Any]:
     fg = make_name_bound_fg(
         "Mdb",
@@ -217,14 +219,14 @@ def _run_direct_and_chained(
         append_columns=append_columns,
     )
     source = make_root_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
-    direct = Feature(MDB_DIRECT)
+    direct = Feature(MDB_DIRECT, data_type=direct_data_type)
     requests = [direct, Feature(MDB_CHAINED)] if direct_first else [Feature(MDB_CHAINED), direct]
     if not include_direct:
         requests = [Feature(MDB_CHAINED)]
     global_filter = None
     if filter_on is not None:
         global_filter = GlobalFilter()
-        global_filter.add_filter(filter_on, "min", {"value": 1})
+        global_filter.add_filter(filter_on, "min", {"value": 2})
     return list(
         mloda.run_all(
             requests,
@@ -324,32 +326,75 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         assert seen[name] == ("q", "b")
 
     @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
-    def test_direct_and_chained_request_reach_calculate_feature_once_per_name(self, direct_first: bool) -> None:
+    @pytest.mark.parametrize("direct_data_type", [None, DataType.INT64], ids=["untyped", "typed"])
+    def test_direct_and_chained_request_reach_calculate_feature_once_per_name(
+        self, direct_first: bool, direct_data_type: DataType | None
+    ) -> None:
         calls: list[list[str]] = []
         extender = _CapturingExtender()
-        results = _run_direct_and_chained(calls, extender=extender, direct_first=direct_first)
+        results = _run_direct_and_chained(
+            calls, extender=extender, direct_first=direct_first, direct_data_type=direct_data_type
+        )
         for recorded in (calls, extender.names):
             assert sum(names.count(MDB_DIRECT) for names in recorded) == 1, recorded
+        observed = [f for features in extender.captured for f in features.features if f.name == MDB_DIRECT]
+        assert len(observed) == 1
+        assert observed[0].data_type is direct_data_type
+        assert observed[0].initial_requested_data
         direct_frames = [r for r in results if MDB_DIRECT in (r if isinstance(r, dict) else r[0])]
         assert len(direct_frames) == 1
 
     @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
-    def test_direct_and_chained_request_append_style_group_pyarrow(self, direct_first: bool) -> None:
+    @pytest.mark.parametrize("direct_data_type", [None, DataType.INT64], ids=["untyped", "typed"])
+    def test_direct_and_chained_request_append_style_group_pyarrow(
+        self, direct_first: bool, direct_data_type: DataType | None
+    ) -> None:
         calls: list[list[str]] = []
-        results = _run_direct_and_chained(calls, framework=PyArrowTable, append_columns=True, direct_first=direct_first)
+        results = _run_direct_and_chained(
+            calls,
+            framework=PyArrowTable,
+            append_columns=True,
+            direct_first=direct_first,
+            direct_data_type=direct_data_type,
+        )
         names = [name for table in results for name in table.column_names]
         assert names.count(MDB_DIRECT) == 1
         assert names.count(MDB_CHAINED) == 1
         assert sum(c.count(MDB_DIRECT) for c in calls) == 1
+        for name in (MDB_DIRECT, MDB_CHAINED):
+            (table,) = [table for table in results if name in table.column_names]
+            assert table[name].to_pylist() == [1, 2]
+            assert table.schema.field(name).type == DataType.to_arrow_type(DataType.INT64)
+
+    @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
+    def test_typed_direct_and_untyped_input_keep_runtime_type_enforcement(self, direct_first: bool) -> None:
+        with pytest.raises(DataTypeMismatchError, match=MDB_DIRECT):
+            _run_direct_and_chained([], direct_first=direct_first, direct_data_type=DataType.STRING)
 
     @pytest.mark.parametrize(
-        ("include_direct", "filter_on"),
-        [(False, "mdb_src"), (False, MDB_DIRECT), (True, MDB_DIRECT)],
-        ids=["chained_only_src", "chained_only_direct", "direct_and_chained_direct"],
+        ("include_direct", "filter_on", "direct_data_type", "direct_first"),
+        [
+            (False, "mdb_src", None, True),
+            (False, MDB_DIRECT, None, True),
+            (True, MDB_DIRECT, None, True),
+            (True, MDB_DIRECT, DataType.INT64, True),
+            (True, MDB_DIRECT, DataType.INT64, False),
+        ],
+        ids=["chained_only_src", "chained_only_direct", "direct_and_chained_direct", "typed_first", "typed_last"],
     )
-    def test_global_filter_on_column_reaching_group_as_input_copy(self, include_direct: bool, filter_on: str) -> None:
-        results = _run_direct_and_chained([], include_direct=include_direct, filter_on=filter_on)
-        assert any(MDB_CHAINED in (r if isinstance(r, dict) else r[0]) for r in results)
+    def test_global_filter_on_column_reaching_group_as_input_copy(
+        self, include_direct: bool, filter_on: str, direct_data_type: DataType | None, direct_first: bool
+    ) -> None:
+        results = _run_direct_and_chained(
+            [],
+            include_direct=include_direct,
+            filter_on=filter_on,
+            direct_data_type=direct_data_type,
+            direct_first=direct_first,
+        )
+        (frame,) = [r for r in results if MDB_CHAINED in (r if isinstance(r, dict) else r[0])]
+        values = list(frame[MDB_CHAINED]) if isinstance(frame, dict) else [row[MDB_CHAINED] for row in frame]
+        assert values == [2]
 
     def test_explicit_option_agreeing_with_name_is_observed(self) -> None:
         name = "mdb_src__mdbop_q_b"

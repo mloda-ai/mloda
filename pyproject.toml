@@ -193,8 +193,7 @@ extend-select = ["UP006", "UP007", "UP017", "UP036", "UP045"]
 exclude-newer = "7 days"
 # decorator 5.3.0 ships empty License metadata so pip-licenses can't classify it; 5.3.1 fixes this.
 # Opt decorator out of the rolling window so the latest published version is always accepted.
-# certifi 2026.10.19 is a security fix inside the window; drop this entry after 2026-10-27.
-exclude-newer-package = { decorator = "2099-01-01T00:00:00Z", certifi = "2026-10-21T00:00:00Z" }
+exclude-newer-package = { decorator = "2099-01-01T00:00:00Z" }
 # Constraints applied only to transitive dependencies to remediate Dependabot security alerts.
 # - urllib3 >= 2.7.0: GHSA decompression-bomb bypass + sensitive headers across origins
 # - idna   >= 3.15:   idna.encode() bypass of CVE-2024-3651 fix

@@ -1,6 +1,6 @@
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
-from copy import deepcopy
+from copy import copy, deepcopy
 from dataclasses import replace
 import logging
 from typing import Any, cast
@@ -736,7 +736,7 @@ class Engine:
                 if declared.filter_feature.compute_frameworks:
                     feature = self._narrow_host_to_pin(feature_group_class, feature, match.filter_feature)
                 survivor = self._find_existing_feature(
-                    match.filter_feature, self.feature_group_collection[feature_group_class]
+                    match.filter_feature, self.feature_group_collection[feature_group_class], allow_untyped_input=True
                 )
                 if survivor is None:
                     raise ValueError(f"Filter feature {match.filter_feature.name} is missing from its group.")
@@ -984,7 +984,7 @@ class Engine:
         feature.options = entry[1]
         feature_collection = self.feature_group_collection[feature_group_class]
 
-        existing_feature = self._find_existing_feature(feature, feature_collection)
+        existing_feature = self._find_existing_feature(feature, feature_collection, allow_untyped_input=True)
         if (
             existing_feature is not None
             and existing_feature != feature
@@ -1016,6 +1016,13 @@ class Engine:
                         f"Declare the same cascade_context_keys on every request that reaches the feature, "
                         f"and list the cascading request first when a Feature object is shared between requests."
                     )
+            if existing_feature.data_type is None and feature.data_type is not None:
+                # Other Features may hold the old object in their identity. Copy it without changing the graph UUID.
+                promoted = copy(existing_feature)
+                promoted.data_type = feature.data_type
+                feature_collection = {promoted if f is existing_feature else f for f in feature_collection}
+                self.feature_group_collection[feature_group_class] = feature_collection
+                existing_feature = promoted
             if specialized_from:
                 merged = set(self.specialized_from.get(existing_feature.uuid, ())) | set(specialized_from)
                 self.specialized_from[existing_feature.uuid] = tuple(sorted(merged, key=_candidate_sort_key))
@@ -1037,24 +1044,48 @@ class Engine:
 
         return False
 
-    @staticmethod
-    def _find_existing_feature(feature: Feature, feature_collection: Iterable[Feature]) -> Feature | None:
-        """Finds the equal feature, else a twin differing only in child_options."""
+    def _find_existing_feature(
+        self, feature: Feature, feature_collection: Iterable[Feature], *, allow_untyped_input: bool = False
+    ) -> Feature | None:
+        """Prefer an equal twin; optionally let a typed request satisfy an untyped input."""
         if feature in feature_collection:
             exact = next((f for f in feature_collection if feature == f), None)
             if exact is not None:
                 return exact
+        compatible = None
         for f in feature_collection:
             if (
-                f is not feature
-                and f.child_options_differ(feature)
-                and f.equals_ignoring_child_options(feature)
-                and f.options.cascade_context_keys == feature.options.cascade_context_keys
-                and f.requested_parts == feature.requested_parts
-                and f.parts_only == feature.parts_only
+                f is feature
+                or f.options.cascade_context_keys != feature.options.cascade_context_keys
+                or f.requested_parts != feature.requested_parts
+                or f.parts_only != feature.parts_only
             ):
+                continue
+            if f.child_options_differ(feature) and f.equals_ignoring_child_options(feature):
                 return f
-        return None
+            if (
+                allow_untyped_input
+                and compatible is None
+                and (
+                    (
+                        f.initial_requested_data
+                        and f.data_type is not None
+                        and not feature.initial_requested_data
+                        and feature.data_type is None
+                    )
+                    or (
+                        feature.initial_requested_data
+                        and feature.data_type is not None
+                        and not f.initial_requested_data
+                        and f.data_type is None
+                    )
+                )
+                # Cross-type reuse needs completed inputs, not a placeholder or an ancestor still resolving.
+                and f.uuid in self.resolved_input_feature_names
+                and f.equals_ignoring_child_options(feature, include_data_type=False)
+            ):
+                compatible = f
+        return compatible
 
     def _warn_on_default_equivalent_merge(
         self, feature: Feature, declared_options: Options, existing_feature: Feature

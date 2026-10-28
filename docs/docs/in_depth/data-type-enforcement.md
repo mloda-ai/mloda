@@ -184,6 +184,20 @@ Feature.int64_of("amount")
 Feature.not_typed("id")
 ```
 
+### Reusing a typed request as an input
+
+When a feature is requested with a type and also needed without a type as another feature's input,
+mloda can reuse the typed request. For example, a direct `Feature.int64_of("amount")` can satisfy an
+input declared as `Feature("amount")`. Otherwise-identical requests produce the column once, retain
+the declared type for runtime validation, and keep the consumer connected regardless of request order.
+Previously, this pair produced two planned features and could fail with duplicate columns in append-style groups.
+Reuse requires completed input resolution: a column injected for a filter or index does not suppress
+the dependency resolution of a later typed request.
+
+The other identity constraints still apply, including options, context, domain, compute frameworks,
+implementation and data source. Two different explicit types remain separate, as does a typed input
+paired with an untyped direct request. Ordinary `Feature` equality and hashing remain type-sensitive.
+
 ## Database Type Awareness
 
 When reading from databases (e.g., SQLite), declared types are used to build the PyArrow schema:

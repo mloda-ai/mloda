@@ -18,6 +18,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
     SourceMatch,
     aborts_are_contained,
     computed_elsewhere,
+    remembered_probe,
     current_feature_group_scope,
     feature_group_scope,
     note_open_claim,
@@ -94,6 +95,37 @@ def implementation_path(feature_group: type, implementation: Any, match: Any) ->
     if match is not None and issubclass(feature_group, SourceFeatureGroup):
         return "neutral"
     return None
+
+
+class _Claims:
+    """What a set of routes found: fitting and seen sources, whether a declared route went undeclared, open-only."""
+
+    def __init__(self) -> None:
+        self.fitting: dict[str, SourceMatch] = {}
+        self.seen: dict[str, SourceMatch] = {}
+        self.firm: set[str] = set()
+        self.undeclared = False
+        self.open_only: frozenset[str] = frozenset()
+
+    def add(self, group: type["SourceFeatureGroup"], route: ClaimRoute, match: SourceMatch, base_name: str) -> None:
+        if route.names is NamePolicy.CHECKED:
+            self.seen[match.source] = match
+            if group.has_column(match, base_name):
+                self.fitting[match.source] = match
+                self.firm.add(match.source)
+        elif route.names is NamePolicy.OPEN:
+            self.fitting[match.source] = match
+            if group._declared_name(base_name):
+                self.firm.add(match.source)
+        elif group._declared_name(base_name):
+            self.fitting[match.source] = match
+            self.firm.add(match.source)
+        else:
+            self.undeclared = True
+
+    def freeze(self) -> "_Claims":
+        self.open_only = frozenset(self.fitting) - self.firm
+        return self
 
 
 class SourcePointerError(ValueError):
@@ -390,31 +422,16 @@ class SourceFeatureGroup(FeatureGroup):
         options: Options,
         data_access_collection: DataAccessCollection | None,
         searched_only: frozenset[ClaimRoute] = frozenset(),
-    ) -> tuple[dict[str, SourceMatch], dict[str, SourceMatch], bool, frozenset[str], frozenset[str]]:
-        fitting: dict[str, SourceMatch] = {}
-        seen: dict[str, SourceMatch] = {}
-        firm: set[str] = set()
-        undeclared = False
-        by_searched: set[str] = set()
-        by_other: set[str] = set()
+    ) -> tuple[_Claims, _Claims]:
+        """The claims over all routes, and over the routes that are not searched-only."""
+        everything = _Claims()
+        unlocked = _Claims()
         for route in routes:
+            claims = (everything,) if route in searched_only else (everything, unlocked)
             for match in cls.find_sources(route, name, options, data_access_collection):
-                (by_searched if route in searched_only else by_other).add(match.source)
-                if route.names is NamePolicy.CHECKED:
-                    seen[match.source] = match
-                    if cls.has_column(match, base_name):
-                        fitting[match.source] = match
-                        firm.add(match.source)
-                elif route.names is NamePolicy.OPEN:
-                    fitting[match.source] = match
-                    if cls._declared_name(base_name):
-                        firm.add(match.source)
-                elif cls._declared_name(base_name):
-                    fitting[match.source] = match
-                    firm.add(match.source)
-                else:
-                    undeclared = True
-        return fitting, seen, undeclared, frozenset(fitting) - firm, frozenset(by_searched - by_other)
+                for claim in claims:
+                    claim.add(cls, route, match, base_name)
+        return everything.freeze(), unlocked.freeze()
 
     @classmethod
     def _decline_refused_probe(cls, outcome: SourceProbeOutcome, pointed: bool, known_owners: frozenset[str]) -> bool:
@@ -544,23 +561,28 @@ class SourceFeatureGroup(FeatureGroup):
         open_only: frozenset[str] = frozenset()
         known_owners = match_rejection_owners()
         if selected:
-            outcome = probe_source_group(
+            outcome = remembered_probe(
+                name,
                 cls,
-                lambda: cls._probe_routes(
-                    selected, name, base_name, options, data_access_collection, frozenset(searched_only)
+                lambda: probe_source_group(
+                    cls,
+                    lambda: cls._probe_routes(
+                        selected, name, base_name, options, data_access_collection, frozenset(searched_only)
+                    ),
+                    data_access_collection,
+                    base_name,
+                    options,
                 ),
-                data_access_collection,
-                base_name,
-                options,
             )
             if outcome.refused is not None:
                 return cls._decline_refused_probe(outcome, pointed, known_owners)
-            fitting, seen, undeclared, open_only, stepping = outcome.result
-            if stepping & fitting.keys() and computed_elsewhere(name):
-                fitting = {source: match for source, match in fitting.items() if source not in stepping}
-                seen = {source: match for source, match in seen.items() if source not in stepping}
-                open_only -= stepping
+            claims, unlocked = outcome.result
+            if (
+                claims.fitting.keys() != unlocked.fitting.keys() or claims.open_only != unlocked.open_only
+            ) and computed_elsewhere(name):
+                claims = unlocked
                 selected = [route for route in selected if route not in searched_only]
+            fitting, seen, undeclared, open_only = claims.fitting, claims.seen, claims.undeclared, claims.open_only
         if query_declined:
             if fitting or seen:
                 replace_probe_match_rejection(cls.get_class_name(), query_reason, known_owners, stage=INPUT_DATA_STAGE)

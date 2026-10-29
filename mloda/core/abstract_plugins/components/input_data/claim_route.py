@@ -84,18 +84,25 @@ def open_claim_scope() -> Iterator[list[bool]]:
 
 
 @dataclass
-class _ChainCheck:
+class ChainCheck:
+    """The step-aside check for one feature name; answer stays None until the owner computes it."""
+
     name: str
-    decide: Callable[[], bool]
     answer: bool | None = None
-    running: bool = False
+    probes: dict[type, Any] = field(default_factory=dict)
     uses: int = 0
 
 
-_CHAIN_CHECK: ContextVar[_ChainCheck | None] = ContextVar("mloda_chain_check", default=None)
+class ChainCheckNeeded(BaseException):  # BaseException so match seams that contain Exception let it through
+    def __init__(self, check: ChainCheck) -> None:
+        super().__init__(check.name)
+        self.check = check
 
 
-def _check_for(name: str) -> _ChainCheck | None:
+_CHAIN_CHECK: ContextVar[ChainCheck | None] = ContextVar("mloda_chain_check", default=None)
+
+
+def _check_for(name: str) -> ChainCheck | None:
     check = _CHAIN_CHECK.get()
     return check if check is not None and check.name == name else None
 
@@ -106,30 +113,36 @@ def chain_check_installed(name: str) -> bool:
 
 
 def chain_check_uses(name: str) -> int:
-    """How often the check for name was consulted; 0 when none is installed."""
+    """How often the answer for name was consulted; 0 when no check is installed."""
     check = _check_for(name)
     return 0 if check is None else check.uses
 
 
 def computed_elsewhere(name: str) -> bool:
-    """True when a non-source candidate computes name, the feature being matched; evaluated on first consult."""
+    """True when a non-source candidate computes name; signals the owner of the check while the answer is unknown."""
     check = _check_for(name)
     if check is None:
         return False
-    check.uses += 1
     if check.answer is None:
-        if check.running:
-            return False
-        check.running = True
-        check.answer = check.decide()
-        check.running = False
+        raise ChainCheckNeeded(check)
+    check.uses += 1
     return check.answer
 
 
+def remembered_probe(name: str, group: type, probe: Callable[[], Any]) -> Any:
+    """Run probe once per group while a check for name is installed, so a restarted collection does not repeat it."""
+    check = _check_for(name)
+    if check is None:
+        return probe()
+    if group not in check.probes:
+        check.probes[group] = probe()
+    return check.probes[group]
+
+
 @contextmanager
-def chain_check_scope(name: str, computes: Callable[[], bool]) -> Iterator[None]:
-    """Install a lazy step-aside check for name: computes runs on the first consult only."""
-    token = _CHAIN_CHECK.set(_ChainCheck(name, computes))
+def chain_check_scope(check: ChainCheck) -> Iterator[None]:
+    """Install check for the block."""
+    token = _CHAIN_CHECK.set(check)
     try:
         yield
     finally:

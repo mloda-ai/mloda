@@ -41,6 +41,7 @@ from tests.test_core.test_prepare.input_chain_helpers import (
     RAW_A,
     RAW_B,
     SOURCE_KEY,
+    UNLOCK_OPTION,
     ChainA2320,
     ChainB2320,
     ChainC2320,
@@ -48,6 +49,7 @@ from tests.test_core.test_prepare.input_chain_helpers import (
     ChainGate2320,
     ChainLeaf2320,
     ChainMiddle2320,
+    ChainMixed2320,
     ChainOpen2320,
     ChainStub2320,
     chain_access,
@@ -162,14 +164,18 @@ def test_explicit_choice_is_narrowed_before_inputs_and_keeps_its_failure() -> No
     assert MATCH_CALLS[ChainB2320, CHOICE] == 0
 
 
+@pytest.mark.parametrize("with_source", [False, True], ids=["plain", "source-has-choice"])
 @pytest.mark.parametrize("two_hop", [False, True], ids=["self-cycle", "two-node-cycle"])
-def test_cycles_reach_the_existing_graph_cycle_error(two_hop: bool, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cycles_reach_the_existing_graph_cycle_error(
+    two_hop: bool, with_source: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(ChainA2320, "INPUTS", (MIDDLE if two_hop else CHOICE,))
     monkeypatch.setattr(ChainMiddle2320, "INPUTS", (CHOICE,))
     monkeypatch.setattr(ChainB2320, "INPUTS", (MISSING,))
+    groups: set[type[FeatureGroup]] = {*GROUPS, ChainChecked2320} if with_source else GROUPS
 
     with pytest.raises(ValueError, match="cycle detected in feature graph") as caught:
-        prepare_chain(GROUPS)
+        prepare_chain(groups, access=chain_access(**{CHOICE: [1]}) if with_source else None)
 
     assert not isinstance(caught.value, FeatureResolutionError)
 
@@ -479,6 +485,33 @@ def test_a_single_candidate_chain_fires_the_match_hook_once_per_feature(depth: i
     )
 
     assert extender.counts == {f"level{level}_chain_2320": 1 for level in range(depth)}
+
+
+def test_a_deep_chain_resolves_when_the_source_has_every_non_leaf_chain_name() -> None:
+    depth = 50
+    groups = _linear_chain(depth)
+    names = [f"level{level}_chain_2320" for level in range(depth)]
+
+    session = prepare_chain(
+        {*groups, ChainChecked2320},
+        feature=Feature(names[0]),
+        access=chain_access(**{name: [1] for name in names[:-1]}),
+        extender=ChainCountingExtender2320(),
+    )
+
+    records = session.resolution_report()
+    for level, name in enumerate(names[:-1]):
+        assert set(result_for(records, name).identified) == {groups[level]}
+
+
+def test_a_mixed_route_source_does_not_clash_when_the_open_route_steps_aside() -> None:
+    session = prepare_chain(
+        {ChainB2320, ChainMixed2320},
+        feature=Feature(CHOICE, options={UNLOCK_OPTION: True}),
+        access=chain_access(**{CHOICE: [1]}),
+    )
+
+    assert set(result_for(session.resolution_report()).identified) == {ChainB2320}
 
 
 def test_a_derived_chain_steps_aside_a_source_that_has_the_root_name() -> None:

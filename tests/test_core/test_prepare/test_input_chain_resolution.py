@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import traceback
+from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -294,8 +295,13 @@ def _connection_input(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize("case", ["own-abort", "input-matcher-abort", "connection", "match-extender"])
-def test_framework_errors_in_a_failing_chain_propagate(case: str, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("with_source", [False, True], ids=["plain", "source-has-choice"])
+def test_framework_errors_in_a_failing_chain_propagate(
+    case: str, with_source: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
     groups: set[type[FeatureGroup]] = {ChainA2320, ChainB2320, ChainLeaf2320}
+    if with_source:
+        groups.add(ChainChecked2320)
     extender: Extender | None = None
     expected: Exception | None = None
     if case == "own-abort":
@@ -311,7 +317,7 @@ def test_framework_errors_in_a_failing_chain_propagate(case: str, monkeypatch: p
         extender = ChainRaisingExtender2320(MISSING)
 
     with pytest.raises((ValueError, RuntimeError)) as caught:
-        prepare_chain(groups, extender=extender)
+        prepare_chain(groups, extender=extender, access=chain_access(**{CHOICE: [1]}) if with_source else None)
 
     assert not isinstance(caught.value, FeatureResolutionError)
     if expected is not None:
@@ -429,3 +435,60 @@ def test_open_route_step_aside_does_not_probe_a_candidate_eliminated_later(
     assert caught.value.result.eliminations[derived].stage != "inputs"
     assert gate.calls_for(ChainChecked2320, RAW_A) == []
     assert PROBE_CALLS[ChainChecked2320, RAW_A] == 0
+
+
+class ChainCountingExtender2320(Extender):
+    """Counts FEATURE_GROUP_MATCHED hook calls per feature name."""
+
+    def __init__(self) -> None:
+        self.priority = 100
+        self.name = "counting_extender_2320"
+        self.counts: Counter[str] = Counter()
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_MATCHED}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        context = HookContext.current()
+        assert context is not None
+        self.counts.update(context.feature_names)
+        return func(*args, **kwargs)
+
+
+def _linear_chain(depth: int) -> list[type[FeatureGroup]]:
+    groups: list[type[FeatureGroup]] = []
+    for level in range(depth):
+        attrs: dict[str, Any] = {"MATCHED_NAMES": frozenset({f"level{level}_chain_2320"})}
+        if level + 1 < depth:
+            attrs["INPUTS"] = (f"level{level + 1}_chain_2320",)
+        groups.append(type(f"Level{level}2320", (ChainStub2320,), attrs))
+    return groups
+
+
+@pytest.mark.parametrize("depth", [3, 150])
+@pytest.mark.parametrize("with_access", [False, True], ids=["no-access", "access-without-chain-names"])
+def test_a_single_candidate_chain_fires_the_match_hook_once_per_feature(depth: int, with_access: bool) -> None:
+    groups = _linear_chain(depth)
+    extender = ChainCountingExtender2320()
+
+    prepare_chain(
+        {*groups, ChainChecked2320},
+        feature=Feature("level0_chain_2320"),
+        access=chain_access(**{RAW_A: [1]}) if with_access else None,
+        extender=extender,
+    )
+
+    assert extender.counts == {f"level{level}_chain_2320": 1 for level in range(depth)}
+
+
+def test_a_derived_chain_steps_aside_a_source_that_has_the_root_name() -> None:
+    groups = _linear_chain(3)
+
+    session = prepare_chain(
+        {*groups, ChainChecked2320},
+        feature=Feature("level0_chain_2320"),
+        access=chain_access(level0_chain_2320=[1]),
+    )
+
+    result = result_for(session.resolution_report(), "level0_chain_2320")
+    assert set(result.identified) == {groups[0]}

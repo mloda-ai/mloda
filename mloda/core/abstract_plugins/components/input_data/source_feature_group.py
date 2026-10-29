@@ -389,13 +389,17 @@ class SourceFeatureGroup(FeatureGroup):
         base_name: str,
         options: Options,
         data_access_collection: DataAccessCollection | None,
-    ) -> tuple[dict[str, SourceMatch], dict[str, SourceMatch], bool, frozenset[str]]:
+        searched_only: frozenset[ClaimRoute] = frozenset(),
+    ) -> tuple[dict[str, SourceMatch], dict[str, SourceMatch], bool, frozenset[str], frozenset[str]]:
         fitting: dict[str, SourceMatch] = {}
         seen: dict[str, SourceMatch] = {}
         firm: set[str] = set()
         undeclared = False
+        by_searched: set[str] = set()
+        by_other: set[str] = set()
         for route in routes:
             for match in cls.find_sources(route, name, options, data_access_collection):
+                (by_searched if route in searched_only else by_other).add(match.source)
                 if route.names is NamePolicy.CHECKED:
                     seen[match.source] = match
                     if cls.has_column(match, base_name):
@@ -410,7 +414,7 @@ class SourceFeatureGroup(FeatureGroup):
                     firm.add(match.source)
                 else:
                     undeclared = True
-        return fitting, seen, undeclared, frozenset(fitting) - firm
+        return fitting, seen, undeclared, frozenset(fitting) - firm, frozenset(by_searched - by_other)
 
     @classmethod
     def _decline_refused_probe(cls, outcome: SourceProbeOutcome, pointed: bool, known_owners: frozenset[str]) -> bool:
@@ -513,6 +517,7 @@ class SourceFeatureGroup(FeatureGroup):
         skipped = False
         missing: set[str] = set()
         selected: list[ClaimRoute] = []
+        searched_only: set[ClaimRoute] = set()
         declared: bool | None = None
         for route in cls.CLAIM_ROUTES:
             if route.names is NamePolicy.DECLARED and not pointed:
@@ -530,8 +535,8 @@ class SourceFeatureGroup(FeatureGroup):
             if foreign is not None:
                 skipped = True
                 continue
-            if not unlocked and computed_elsewhere(name):
-                continue
+            if not unlocked:
+                searched_only.add(route)
             selected.append(route)
         fitting: dict[str, SourceMatch] = {}
         seen: dict[str, SourceMatch] = {}
@@ -541,14 +546,21 @@ class SourceFeatureGroup(FeatureGroup):
         if selected:
             outcome = probe_source_group(
                 cls,
-                lambda: cls._probe_routes(selected, name, base_name, options, data_access_collection),
+                lambda: cls._probe_routes(
+                    selected, name, base_name, options, data_access_collection, frozenset(searched_only)
+                ),
                 data_access_collection,
                 base_name,
                 options,
             )
             if outcome.refused is not None:
                 return cls._decline_refused_probe(outcome, pointed, known_owners)
-            fitting, seen, undeclared, open_only = outcome.result
+            fitting, seen, undeclared, open_only, stepping = outcome.result
+            if stepping & fitting.keys() and computed_elsewhere(name):
+                fitting = {source: match for source, match in fitting.items() if source not in stepping}
+                seen = {source: match for source, match in seen.items() if source not in stepping}
+                open_only -= stepping
+                selected = [route for route in selected if route not in searched_only]
         if query_declined:
             if fitting or seen:
                 replace_probe_match_rejection(cls.get_class_name(), query_reason, known_owners, stage=INPUT_DATA_STAGE)

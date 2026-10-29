@@ -1,3 +1,4 @@
+import contextvars
 import inspect
 import os
 from collections.abc import Callable, Mapping, Sequence
@@ -31,8 +32,10 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.declared_attributes import DeclarationRequirement
 from mloda.core.abstract_plugins.components.input_data.claim_route import (
     DataAccessReader,
+    chain_check_installed,
+    chain_check_scope,
+    chain_check_uses,
     computed_elsewhere,
-    computed_elsewhere_scope,
     feature_group_scope,
     open_claim_scope,
     pin_report_scope,
@@ -110,6 +113,7 @@ class _CriteriaAttempt:
     options: Options
     open_claim: bool
     pending_pins: tuple[tuple[str, Any], ...]
+    consulted: bool | None = None
 
 
 def _unique_refusals(refusals: Sequence[Exception]) -> tuple[Exception, ...]:
@@ -877,8 +881,9 @@ class IdentifyFeatureGroupClass:
         if sources:
             computing = [fg for fg in identified if fg not in self._output_parts]
             narrowed = self.filter_subclasses({fg: identified[fg] for fg in computing})
-            computed = any(self._computes(fg, feature) for fg in sorted(narrowed, key=_candidate_sort_key))
-            with computed_elsewhere_scope(str(feature.name) if computed else None):
+            if narrowed:
+                self._collect_sources_with_check(feature, narrowed, sources, links, data_access_collection, identified)
+            else:
                 self._collect_candidates(feature, sources, links, data_access_collection, identified)
         _identified_feature_groups = identified
 
@@ -913,6 +918,35 @@ class IdentifyFeatureGroupClass:
             feature.options._adopt(winner_options)
             feature.input_data_match = pair
         return _identified_feature_groups
+
+    def _collect_sources_with_check(
+        self,
+        feature: Feature,
+        narrowed: FeatureGroupEnvironmentMapping,
+        sources: list[tuple[type[FeatureGroup], set[type[ComputeFramework]]]],
+        links: set[Link] | None,
+        data_access_collection: DataAccessCollection | None,
+        identified: FeatureGroupEnvironmentMapping,
+    ) -> None:
+        """Collect the sources with a lazy step-aside check, run in the context captured here, so no scope leaks in."""
+        context = contextvars.copy_context()
+        parked: list[Exception] = []
+
+        def computes() -> bool:
+            try:
+                return context.run(
+                    lambda: any(self._computes(fg, feature) for fg in sorted(narrowed, key=_candidate_sort_key))
+                )
+            except Exception as exc:  # noqa: BLE001  (parked so a source's match seam cannot contain it)
+                parked.append(exc)
+                return False
+
+        try:
+            with chain_check_scope(str(feature.name), computes):
+                self._collect_candidates(feature, sources, links, data_access_collection, identified)
+        finally:
+            if parked:
+                raise parked[0]
 
     def _hook_name(self, feature_group: type[FeatureGroup], feature: Feature) -> str:
         """The name plugin hooks see: the base feature when the candidate matched a declared output part."""
@@ -1251,25 +1285,26 @@ class IdentifyFeatureGroupClass:
         Mark-or-contain policy: see call_match_hook.
         """
 
+        name = str(feature.name)
+
         def compute() -> _CriteriaAttempt:
             options = feature.options._fork()
+            uses = chain_check_uses(name)
             with (
                 feature_group_scope(feature.feature_group_scope),
                 open_claim_scope() as open_claim,
                 pin_report_scope(self._reported_pins) as pending_pins,
             ):
                 probe = probe_match_criteria(feature_group, feature.name, options, data_access_collection, True)
-            return _CriteriaAttempt(probe, options, bool(open_claim), tuple(pending_pins))
+            consulted = computed_elsewhere(name) if chain_check_uses(name) > uses else None
+            return _CriteriaAttempt(probe, options, bool(open_claim), tuple(pending_pins), consulted)
 
         if request_key is None:
             request_key = resolution_key(feature)
-        key = (
-            feature_group,
-            request_key,
-            computed_elsewhere(str(feature.name)),
-            frozenset(self._reported_pins),
-        )
+        key = (feature_group, request_key, chain_check_installed(name), frozenset(self._reported_pins))
         attempt = cached_input_fact(self._environment, "criteria", key, compute)
+        if attempt.consulted is not None and attempt.consulted != computed_elsewhere(name):
+            attempt = cached_input_fact(self._environment, "criteria", (*key, not attempt.consulted), compute)
         probe = attempt.probe
         pending_pins = attempt.pending_pins
         if not probe.matched and probe.matcher_error is None:

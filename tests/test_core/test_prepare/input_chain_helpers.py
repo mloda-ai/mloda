@@ -118,6 +118,18 @@ class ChainOpen2320(ChainSourceBase2320):
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("chain2320", NamePolicy.OPEN, False),)
 
 
+UNLOCK_OPTION = "unlock_chain2320"
+
+
+class ChainMixed2320(ChainSourceBase2320):
+    """A searched-only route plus an open route unlocked by an option, both finding the same source."""
+
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
+        ClaimRoute("chain2320", NamePolicy.CHECKED, True),
+        ClaimRoute("chain2320", NamePolicy.OPEN, False, (UNLOCK_OPTION,)),
+    )
+
+
 class ChainGate2320(Extender):
     """Record every match hook and retain the exact refusals for selected reader-column pairs."""
 

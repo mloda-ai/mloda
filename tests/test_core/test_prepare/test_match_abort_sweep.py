@@ -104,6 +104,10 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
         "real edge: the database group override delegates to the source group default rules, whose raises are "
         "marked aborts, except the contained reader pair conflict"
     ),
+    ("mloda/core/abstract_plugins/components/input_data/claim_route.py", "computed_elsewhere"): (
+        "raises the BaseException ChainCheckNeeded, which no match seam contains; the check owner in "
+        "_filter_loop catches it"
+    ),
     ("mloda/core/abstract_plugins/function_extender.py", "_invoke_extender"): (
         "the INPUT_DATA_MATCH extender seam; an extender raise refuses one candidate in probe_source_group"
     ),

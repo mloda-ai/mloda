@@ -1,7 +1,7 @@
-import contextvars
 import inspect
 import os
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from copy import copy, deepcopy
 from difflib import get_close_matches
 from dataclasses import dataclass, replace
@@ -31,6 +31,8 @@ from mloda.core.abstract_plugins.components.credential_scrub import scrub_creden
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.declared_attributes import DeclarationRequirement
 from mloda.core.abstract_plugins.components.input_data.claim_route import (
+    ChainCheck,
+    ChainCheckNeeded,
     DataAccessReader,
     chain_check_installed,
     chain_check_scope,
@@ -881,10 +883,17 @@ class IdentifyFeatureGroupClass:
         if sources:
             computing = [fg for fg in identified if fg not in self._output_parts]
             narrowed = self.filter_subclasses({fg: identified[fg] for fg in computing})
-            if narrowed:
-                self._collect_sources_with_check(feature, narrowed, sources, links, data_access_collection, identified)
-            else:
-                self._collect_candidates(feature, sources, links, data_access_collection, identified)
+            check = ChainCheck(str(feature.name)) if narrowed else None
+            while True:
+                try:
+                    with chain_check_scope(check) if check is not None else nullcontext():
+                        self._collect_candidates(feature, sources, links, data_access_collection, identified)
+                    break
+                except ChainCheckNeeded as needed:
+                    if needed.check is not check or check is None:
+                        raise
+                    # Outside the scope, so the chain check stacks like an eager one and a cycle cannot see it unanswered.
+                    check.answer = any(self._computes(fg, feature) for fg in sorted(narrowed, key=_candidate_sort_key))
         _identified_feature_groups = identified
 
         candidates = set(_identified_feature_groups)
@@ -918,35 +927,6 @@ class IdentifyFeatureGroupClass:
             feature.options._adopt(winner_options)
             feature.input_data_match = pair
         return _identified_feature_groups
-
-    def _collect_sources_with_check(
-        self,
-        feature: Feature,
-        narrowed: FeatureGroupEnvironmentMapping,
-        sources: list[tuple[type[FeatureGroup], set[type[ComputeFramework]]]],
-        links: set[Link] | None,
-        data_access_collection: DataAccessCollection | None,
-        identified: FeatureGroupEnvironmentMapping,
-    ) -> None:
-        """Collect the sources with a lazy step-aside check, run in the context captured here, so no scope leaks in."""
-        context = contextvars.copy_context()
-        parked: list[Exception] = []
-
-        def computes() -> bool:
-            try:
-                return context.run(
-                    lambda: any(self._computes(fg, feature) for fg in sorted(narrowed, key=_candidate_sort_key))
-                )
-            except Exception as exc:  # noqa: BLE001  (parked so a source's match seam cannot contain it)
-                parked.append(exc)
-                return False
-
-        try:
-            with chain_check_scope(str(feature.name), computes):
-                self._collect_candidates(feature, sources, links, data_access_collection, identified)
-        finally:
-            if parked:
-                raise parked[0]
 
     def _hook_name(self, feature_group: type[FeatureGroup], feature: Feature) -> str:
         """The name plugin hooks see: the base feature when the candidate matched a declared output part."""

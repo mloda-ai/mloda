@@ -5,7 +5,89 @@ from typing import Any
 import pytest
 
 import mloda.provider as provider
-from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
+from mloda.core.abstract_plugins.components.input_data.claim_route import (
+    ChainCheck,
+    ChainCheckNeeded,
+    ClaimRoute,
+    NamePolicy,
+    SourceMatch,
+    chain_check_scope,
+    computed_elsewhere,
+    remembered_probe,
+)
+
+
+def test_no_check_installed_means_not_computed_elsewhere() -> None:
+    assert computed_elsewhere("name") is False
+
+
+def test_an_unknown_answer_raises_the_signal_carrying_the_check() -> None:
+    check = ChainCheck("name")
+
+    with chain_check_scope(check):
+        with pytest.raises(ChainCheckNeeded) as caught:
+            computed_elsewhere("name")
+
+    assert caught.value.check is check
+    assert not isinstance(caught.value, Exception)
+
+
+@pytest.mark.parametrize("answer", [True, False])
+def test_a_known_answer_is_returned(answer: bool) -> None:
+    with chain_check_scope(ChainCheck("name", answer=answer)):
+        assert computed_elsewhere("name") is answer
+
+
+def test_another_name_is_false_and_never_signals() -> None:
+    with chain_check_scope(ChainCheck("name")):
+        assert computed_elsewhere("other") is False
+
+
+def test_the_check_scope_resets_on_exit() -> None:
+    with chain_check_scope(ChainCheck("name", answer=True)):
+        pass
+
+    assert computed_elsewhere("name") is False
+
+
+def test_remembered_probe_runs_once_per_group_under_a_check() -> None:
+    calls: list[str] = []
+
+    def probe_for(label: str) -> Any:
+        def probe() -> str:
+            calls.append(label)
+            return label
+
+        return probe
+
+    class GroupA:
+        pass
+
+    class GroupB:
+        pass
+
+    with chain_check_scope(ChainCheck("name")):
+        assert remembered_probe("name", GroupA, probe_for("a")) == "a"
+        assert remembered_probe("name", GroupA, probe_for("a2")) == "a"
+        assert remembered_probe("name", GroupB, probe_for("b")) == "b"
+
+    assert calls == ["a", "b"]
+
+
+def test_remembered_probe_runs_every_time_without_a_check() -> None:
+    calls: list[int] = []
+
+    def probe() -> int:
+        calls.append(1)
+        return len(calls)
+
+    class Group:
+        pass
+
+    assert remembered_probe("name", Group, probe) == 1
+    assert remembered_probe("name", Group, probe) == 2
+    with chain_check_scope(ChainCheck("other")):
+        assert remembered_probe("name", Group, probe) == 3
 
 
 def test_claim_route_is_hashable_and_compares_by_value() -> None:

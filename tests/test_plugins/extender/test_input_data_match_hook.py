@@ -864,6 +864,10 @@ class TestSourceGroupHook:
 
         identified = [set(r.result.identified) for r in session.resolution_report() if r.feature_name == _DERIVED_IMD]
         assert identified == [{ImdMatchDerivedGroup}]
+        names = [c.feature_names for c in extender.for_reader(ImdMatchGateSource)]
+        assert names.count((_DERIVED_IMD,)) == 1
+        assert names.count((_COL_A,)) >= 1
+        assert set(names) <= {(_DERIVED_IMD,), (_COL_A,)}
 
     @pytest.mark.parametrize("options", [None, {"data_access_handle": "imdmatch_handle"}], ids=["plain", "handle"])
     def test_a_gate_refuses_input_and_output_once_when_the_derived_chain_fails(

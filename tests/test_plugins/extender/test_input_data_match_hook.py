@@ -856,15 +856,14 @@ class TestSourceGroupHook:
         assert ImdMatchGateSource.probes == 0
         assert ImdMatchGateSource.column_reads == 0
 
-    def test_a_searched_source_does_not_fire_the_hook_for_a_name_a_group_computes(self) -> None:
+    def test_a_searched_source_does_not_claim_a_name_a_group_computes(self) -> None:
         enabled = PluginCollector.enabled_feature_groups({ImdMatchGateSource, ImdMatchDerivedGroup})
         extender = _ImdRecordingExtender()
 
-        _prepare(Feature(_DERIVED_IMD), enabled, _global_access(), extender)
+        session = _prepare(Feature(_DERIVED_IMD), enabled, _global_access(), extender)
 
-        contexts = extender.for_reader(ImdMatchGateSource)
-        assert contexts
-        assert all(c.feature_names == (_COL_A,) for c in contexts)
+        identified = [set(r.result.identified) for r in session.resolution_report() if r.feature_name == _DERIVED_IMD]
+        assert identified == [{ImdMatchDerivedGroup}]
 
     @pytest.mark.parametrize("options", [None, {"data_access_handle": "imdmatch_handle"}], ids=["plain", "handle"])
     def test_a_gate_refuses_input_and_output_once_when_the_derived_chain_fails(

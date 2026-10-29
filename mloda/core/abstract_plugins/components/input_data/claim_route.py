@@ -1,6 +1,6 @@
 """Value objects a SourceFeatureGroup uses to declare what it claims, plus the match-time scope variable."""
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -83,22 +83,57 @@ def open_claim_scope() -> Iterator[list[bool]]:
         _OPEN_CLAIM.reset(token)
 
 
-_COMPUTED_ELSEWHERE: ContextVar[str | None] = ContextVar("mloda_computed_elsewhere", default=None)
+@dataclass
+class _ChainCheck:
+    name: str
+    decide: Callable[[], bool]
+    answer: bool | None = None
+    running: bool = False
+    uses: int = 0
+
+
+_CHAIN_CHECK: ContextVar[_ChainCheck | None] = ContextVar("mloda_chain_check", default=None)
+
+
+def _check_for(name: str) -> _ChainCheck | None:
+    check = _CHAIN_CHECK.get()
+    return check if check is not None and check.name == name else None
+
+
+def chain_check_installed(name: str) -> bool:
+    """True when a step-aside check is installed for name."""
+    return _check_for(name) is not None
+
+
+def chain_check_uses(name: str) -> int:
+    """How often the check for name was consulted; 0 when none is installed."""
+    check = _check_for(name)
+    return 0 if check is None else check.uses
 
 
 def computed_elsewhere(name: str) -> bool:
-    """True when a non-source candidate computes name, the feature being matched."""
-    return _COMPUTED_ELSEWHERE.get() == name
+    """True when a non-source candidate computes name, the feature being matched; evaluated on first consult."""
+    check = _check_for(name)
+    if check is None:
+        return False
+    check.uses += 1
+    if check.answer is None:
+        if check.running:
+            return False
+        check.running = True
+        check.answer = check.decide()
+        check.running = False
+    return check.answer
 
 
 @contextmanager
-def computed_elsewhere_scope(name: str | None) -> Iterator[None]:
-    """Set the name a non-source candidate computes inside the block."""
-    token = _COMPUTED_ELSEWHERE.set(name)
+def chain_check_scope(name: str, computes: Callable[[], bool]) -> Iterator[None]:
+    """Install a lazy step-aside check for name: computes runs on the first consult only."""
+    token = _CHAIN_CHECK.set(_ChainCheck(name, computes))
     try:
         yield
     finally:
-        _COMPUTED_ELSEWHERE.reset(token)
+        _CHAIN_CHECK.reset(token)
 
 
 _PIN_SCOPE: ContextVar[tuple[set[str], list[tuple[str, Any]]] | None] = ContextVar("mloda_pin_scope", default=None)
@@ -126,24 +161,6 @@ def pin_report_scope(reported: set[str]) -> Iterator[list[tuple[str, Any]]]:
         yield pending
     finally:
         _PIN_SCOPE.reset(token)
-
-
-_CHAIN_CHECK: ContextVar[bool] = ContextVar("mloda_chain_check", default=False)
-
-
-def in_chain_check() -> bool:
-    """True while a candidate is being matched as part of an input-chain step-aside check."""
-    return _CHAIN_CHECK.get()
-
-
-@contextmanager
-def chain_check_scope() -> Iterator[None]:
-    """Mark the block as an input-chain step-aside check so nested matches do not re-fire FEATURE_GROUP_MATCHED."""
-    token = _CHAIN_CHECK.set(True)
-    try:
-        yield
-    finally:
-        _CHAIN_CHECK.reset(token)
 
 
 def current_feature_group_scope() -> Any:

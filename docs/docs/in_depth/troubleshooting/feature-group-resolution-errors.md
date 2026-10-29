@@ -146,7 +146,7 @@ For troubleshooting guide, see: ...
 
 This error occurs when multiple distinct feature groups claim they can handle the same feature. Each feature must resolve to exactly one feature group to prevent conflicts. It is raised as `FeatureResolutionError` (a `ValueError` subclass) during planning; see [Catching resolution failures](#catching-resolution-failures) to inspect it.
 
-When a feature group and its subclass both match, the subclass wins whenever it can run, even if it supports fewer compute frameworks than its parent. A compute-framework pin the subclass cannot serve eliminates it first, so pinning one of the parent's other frameworks reaches the parent.
+When a feature group and its subclass both match, the subclass wins whenever it can run, even if it supports fewer compute frameworks than its parent. A compute-framework pin the subclass cannot serve eliminates it first, so pinning one of the parent's other frameworks reaches the parent. See [A loaded subclass replaces its parent](#a-loaded-subclass-replaces-its-parent) for what else does and does not keep a subclass out.
 
 If you previously hit this in a notebook because of a redefined feature group (re-running a cell that defines `class MyFG(FeatureGroup): ...`), that case is now auto-deduplicated. If this error still appears, two distinct classes (different `(module, qualname)`) both claim the name. For source-backed features this usually means two source groups found the column, for example `CsvFG` in a file and `SqliteFG` in a database. Fix it with `feature_group=` (see below), a pointer such as `options={"CsvFG": path}`, or a `data_access_handle` that names one source.
 
@@ -219,9 +219,28 @@ Caveats:
 
 - The scope narrows candidates; it does not break ties between them. If the run enables two compute frameworks whose concrete subclasses both match, the family base stays ambiguous and raises, exactly as the bare name does. Enable one framework for the run, or pin `compute_frameworks` on the `Feature` (Python only).
 - The class object is collision-proof; the string form is not. Two classes with the same name in different modules both match the string, so the request stays ambiguous and raises.
-- Neither form pins one exact class: a subclass of the named class is preferred over it. To resolve to a specific class, name that class. For an operation group such as `AggregatedFeatureGroup`, name the implementation instead with `implementation="PandasAggregation"`; a bad pin raises `ImplementationPinError`.
+- Neither form pins one exact class: a subclass of the named class is preferred over it. To resolve to a specific class, name that class. For an operation group such as `AggregatedFeatureGroup`, name the implementation instead with `implementation="PandasAggregation"`; a bad pin raises `ImplementationPinError`. An implementation pin does not exclude a subclass that inherits that implementation: a loaded `class MyAggr(AggregatedFeatureGroup)` still wins. See [A loaded subclass replaces its parent](#a-loaded-subclass-replaces-its-parent).
 - The root `FeatureGroup` base is rejected in either form: it names no family.
 - The scope is read by feature resolution and by filter matching, and stays excluded from Feature identity, so two requests for the same column name scoped to different sources compare equal. Requesting both in one features list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one, so you are told, not surprised. Inside a single `input_features()` returning a set literal, a second same-name feature with a different scope is silently deduplicated by the Python set itself before the engine ever sees it, so never scope the same name twice within one feature group. To read the same column from two sources side by side, give them distinct derived feature names.
+
+### A loaded subclass replaces its parent
+
+Discovery walks the live subclasses of `FeatureGroup`, so a subclass defined in any imported module serves without registration or an entry point (a function-local subclass that nothing references drops out once it is garbage collected). When the subclass and its parent both match a feature, the subclass replaces the parent for that request. This is intended, and it holds for every way of naming the parent:
+
+- `feature_group=AggregatedFeatureGroup` (class or string) resolves to the subclass.
+- `implementation="PyArrowAggregation"` resolves to the subclass, which inherits that implementation.
+- `PluginCollector.disabled_feature_groups({AggregatedFeatureGroup})` checks exact classes, so it removes the parent and leaves the subclass serving.
+- Source groups behave the same: a `class MyCsv(CsvFG)` serves `options={"CsvFG": path}`.
+- Two sibling subclasses of one parent make the parent unreachable and the request raises `Multiple feature groups found`.
+
+What keeps a subclass out:
+
+- `PluginCollector.disabled_feature_groups({MySubclass})`, or an allow-list with `enabled_feature_groups` that omits it.
+- [Strict registry mode](../plugin_registry.md#strict-mode), when the subclass is not registered.
+- A compute-framework pin the subclass cannot serve.
+- A [plan lock](../plan-lock.md): a takeover changes the recorded class and fails `check_plan_lock` with `PlanLockMismatchError`.
+
+`PlanStep.specialized_from` names the parents a step's feature group replaced, so `explain()` shows a takeover before anything runs. It stays empty when the parent was disabled, because the parent was never a candidate.
 
 ## Source feature group errors
 

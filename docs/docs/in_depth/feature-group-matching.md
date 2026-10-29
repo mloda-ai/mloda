@@ -10,7 +10,7 @@ When a feature is requested, the system checks all available feature groups to f
 
 `match_feature_group_criteria` checks name fit only. Declare dependencies in `input_features`; a derived group's match hook does not need to scan readers or call `has_source`. Resolution caches `input_features` per run, so its result should depend only on its options and feature name.
 
-When several candidates remain after subclass takeover and whole-name narrowing, resolution checks each one's input chain in the run's environment. A candidate with an unresolvable input is eliminated with stage `inputs`, and one viable candidate wins; a subclass takeover is final, and a sole candidate reports a failure at its actual dependency.
+A loaded subclass replaces its parent whenever both match; see [A loaded subclass replaces its parent](troubleshooting/feature-group-resolution-errors.md#a-loaded-subclass-replaces-its-parent) for what keeps it out. When several candidates remain after subclass takeover and whole-name narrowing, resolution checks each one's input chain in the run's environment. A candidate with an unresolvable input is eliminated with stage `inputs`, and one viable candidate wins; a subclass takeover is final, and a sole candidate reports a failure at its actual dependency.
 
 ## Modern Unified Matching
 

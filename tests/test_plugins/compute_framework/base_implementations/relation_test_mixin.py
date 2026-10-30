@@ -227,7 +227,6 @@ class RelationTestMixin:
         assert len(result) == 3
 
     def test_append_columns_keeps_column_and_row_order(self, connection: Any, relation_class: Any) -> None:
-        """append_columns returns base then new columns in order, with rows in input order."""
         rel = relation_class.from_dict(connection, {"a": [1, 2, 3], "b": ["x", "y", "z"]})
         result = rel.append_columns({"x": [7, 8, 9], "y": [True, False, True]})
         assert result.columns == ["a", "b", "x", "y"]

@@ -5,6 +5,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
@@ -370,30 +371,33 @@ class TestToxConfig:
             f"[testenv:mcp] must default EXPECTED_SKIP_COUNT to 0: {setenv}"
         )
 
-    def test_ci_runs_pandas2_env(self) -> None:
-        """Lockfile everywhere except pandas/numpy, which are capped to pandas 2.x / numpy < 2.4."""
+    @pytest.mark.parametrize(
+        ("env", "python", "pins", "modules"),
+        [
+            ("pandas2", "3.11", ("pandas<3", "numpy<2.4"), ("pandas", "numpy")),
+            ("duckdb2", "3.13", ("duckdb>=2,<3",), ("duckdb",)),
+        ],
+    )
+    def test_ci_runs_pinned_major_env(
+        self, env: str, python: str, pins: tuple[str, ...], modules: tuple[str, ...]
+    ) -> None:
+        """Lockfile everywhere except one dependency, pinned to another major via commands_pre."""
         parser = self._tox_parser()
-        sections = [name for name in parser.sections() if name.replace(" ", "") == "testenv:pandas2"]
-        assert len(sections) == 1, f"tox.ini needs exactly one [testenv:pandas2] section: {parser.sections()}"
+        sections = [name for name in parser.sections() if name.replace(" ", "") == f"testenv:{env}"]
+        assert len(sections) == 1, f"tox.ini needs exactly one [testenv:{env}] section: {parser.sections()}"
         section = sections[0]
         overridden = [key for key in ("runner", "deps", "package", "extras") if parser.has_option(section, key)]
-        assert not overridden, f"[testenv:pandas2] must inherit the lockfile install from [testenv]: {overridden}"
+        assert not overridden, f"[testenv:{env}] must inherit the lockfile install from [testenv]: {overridden}"
         lines = [ln.strip() for ln in parser.get(section, "commands_pre", fallback="").splitlines() if ln.strip()]
-        installs = [
-            i
-            for i, ln in enumerate(lines)
-            if ln.startswith("uv pip install") and "pandas<3" in ln and "numpy<2.4" in ln
-        ]
-        assert installs, f"commands_pre needs a `uv pip install` line capping pandas<3 and numpy<2.4: {lines}"
+        installs = [i for i, ln in enumerate(lines) if ln.startswith("uv pip install") and all(p in ln for p in pins)]
+        assert installs, f"commands_pre needs a `uv pip install` line with {pins}: {lines}"
         guards = [
-            ln
-            for ln in lines[installs[0] + 1 :]
-            if all(word in ln for word in ("pandas", "numpy", "assert", "__version__"))
+            ln for ln in lines[installs[0] + 1 :] if all(word in ln for word in (*modules, "assert", "__version__"))
         ]
-        assert guards, f"commands_pre needs an assert on pandas/numpy __version__ after the install line: {lines}"
+        assert guards, f"commands_pre needs an assert on {modules} __version__ after the install line: {lines}"
         matrix = self._workflow_jobs("ci.yaml")["build"]["strategy"]["matrix"]["include"]
-        assert any(str(e.get("python-version")) == "3.11" and e.get("toxenv") == "-e pandas2" for e in matrix), (
-            f"ci.yaml build matrix needs an include entry for python 3.11 with toxenv '-e pandas2': {matrix}"
+        assert any(str(e.get("python-version")) == python and e.get("toxenv") == f"-e {env}" for e in matrix), (
+            f"ci.yaml build matrix needs an include entry for python {python} with toxenv '-e {env}': {matrix}"
         )
 
     def test_ci_runs_lint_env(self) -> None:

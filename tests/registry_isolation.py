@@ -1,18 +1,67 @@
-"""Shared registry-isolation helper (#845) for both discovery roots, FeatureGroup and BaseTransformer.
+"""Shared registry-isolation helper (#845) for the discovery roots FeatureGroup, BaseTransformer and Implementation.
 
 A subclass defined inside a test sits in a reference cycle, so it stays in ``root.__subclasses__()`` until
-cyclic GC runs and a later test on the same worker trips over it.
+cyclic GC runs and a later test on the same worker trips over it. A creation log replaces per-test tree walks.
 """
 
 from __future__ import annotations
 
 import gc
 import sys
-from typing import Any
+import weakref
+from typing import Any, Generic, TypeVar
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.implementation import Implementation
+
+T = TypeVar("T")
+
+
+class SubclassLog(Generic[T]):
+    """Weak log of every subclass of `root` in definition order, filled from __init_subclass__."""
+
+    def __init__(self, root: type[T]) -> None:
+        self._refs: list[weakref.ref[type[T]]] = []
+        self._hook(root)
+        for cls in get_all_subclasses(root):
+            if "__init_subclass__" in vars(cls):
+                self._hook(cls)
+
+    def _hook(self, owner: type[Any]) -> None:
+        original = vars(owner).get("__init_subclass__")
+        # The wrapper replaces the owner's own __init_subclass__ in vars(owner) for the test process.
+        # A class whose definition raises before any hooked __init_subclass__ runs (a mixin before the root) is not logged.
+        if getattr(getattr(original, "__func__", None), "_subclass_log", None) is self:
+            return
+
+        def logged(cls: type[Any], /, **kwargs: Any) -> None:
+            # Log before delegating: a class the original rejects is already in __subclasses__ and must be reclaimed.
+            self._refs.append(weakref.ref(cls))
+            if "__init_subclass__" in vars(cls):
+                self._hook(cls)
+            if original is not None:
+                original.__func__(cls, **kwargs)
+            else:
+                super(owner, cls).__init_subclass__(**kwargs)
+
+        setattr(logged, "_subclass_log", self)
+        setattr(owner, "__init_subclass__", classmethod(logged))
+
+    def mark(self) -> int:
+        """A snapshot that costs no walk."""
+        return len(self._refs)
+
+    def live_since(self, mark: int) -> list[type[T]]:
+        """A fresh list of still-alive classes logged after `mark`, deduplicated in order."""
+        alive = (ref() for ref in self._refs[mark:])
+        return list(dict.fromkeys(cls for cls in alive if cls is not None))
+
+
+FEATURE_GROUPS = SubclassLog(FeatureGroup)
+TRANSFORMERS = SubclassLog(BaseTransformer)  # type: ignore[type-abstract]
+IMPLEMENTATIONS = SubclassLog(Implementation)  # type: ignore[type-abstract]
 
 
 def _is_owned_by_its_module(cls: type[Any]) -> bool:
@@ -28,16 +77,16 @@ def _is_owned_by_its_module(cls: type[Any]) -> bool:
     return vars(module).get(cls.__name__, None) is cls if module is not None else False
 
 
-def reclaim_leaked_subclasses(root: type[Any], before: set[type[Any]], module_name: str) -> list[type[Any]]:
-    """Collect `root` subclasses created since `before`; return the ones from `module_name` that survived."""
+def reclaim_leaked_subclasses(log: SubclassLog[T], mark: int, module_name: str) -> list[type[T]]:
+    """Collect subclasses logged since `mark`; return the ones from `module_name` that survived."""
 
-    def new_reclaimable() -> list[type[Any]]:
+    def new_reclaimable() -> list[type[T]]:
         """A fresh list each call, so no survivor is held across a collection and pins what it would reclaim."""
-        return [cls for cls in get_all_subclasses(root) - before if not _is_owned_by_its_module(cls)]
+        return [cls for cls in log.live_since(mark) if not _is_owned_by_its_module(cls)]
 
-    def new_from_module() -> list[type[Any]]:
+    def new_from_module() -> list[type[T]]:
         """Everything new this module owns, module-bound or not: a bound one is a leak no collection can fix."""
-        return [cls for cls in get_all_subclasses(root) - before if cls.__module__ == module_name]
+        return [cls for cls in log.live_since(mark) if cls.__module__ == module_name]
 
     # Cheap path: only collect when something collectable appeared. The gate reads ANY such new subclass, not
     # only this module's; only the RETURN value stays filtered to module_name.
@@ -59,12 +108,12 @@ def reclaim_leaked_subclasses(root: type[Any], before: set[type[Any]], module_na
     return sorted(new_from_module(), key=lambda cls: cls.__name__)
 
 
-def reclaim_leaked_feature_groups(before: set[type[FeatureGroup]], module_name: str) -> list[type[FeatureGroup]]:
-    """Collect FeatureGroup subclasses created since `before`; return the ones from `module_name` that survived."""
-    return reclaim_leaked_subclasses(FeatureGroup, before, module_name)
+def reclaim_leaked_feature_groups(mark: int, module_name: str) -> list[type[FeatureGroup]]:
+    """Collect FeatureGroup subclasses created since `mark`; return the ones from `module_name` that survived."""
+    return reclaim_leaked_subclasses(FEATURE_GROUPS, mark, module_name)
 
 
-def reclaim_leaked_transformers(before: set[type[BaseTransformer]], module_name: str) -> list[type[BaseTransformer]]:
+def reclaim_leaked_transformers(mark: int, module_name: str) -> list[type[BaseTransformer]]:
     """Same over BaseTransformer: a leftover subclass joins the worker's next ComputeFrameworkTransformer() discovery
     and makes the ComputeFramework carrying it unpicklable for multiprocessing."""
-    return reclaim_leaked_subclasses(BaseTransformer, before, module_name)
+    return reclaim_leaked_subclasses(TRANSFORMERS, mark, module_name)

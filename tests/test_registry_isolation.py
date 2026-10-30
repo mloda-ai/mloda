@@ -1,4 +1,4 @@
-"""Pin the shared registry-isolation mechanism (#845, part 1) for both roots, FeatureGroup and BaseTransformer.
+"""Pin the shared registry-isolation mechanism (#845, part 1) for the roots FeatureGroup, BaseTransformer, Implementation.
 
 The mitigation must stay ONE mechanism: ``reclaim_leaked_feature_groups`` and ``reclaim_leaked_transformers`` (thin
 wrappers over one root-agnostic core in ``tests.registry_isolation``) plus one autouse ``tests/conftest.py`` fixture.
@@ -10,18 +10,33 @@ import ast
 import gc
 import sys
 import types
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
+from mloda.core.abstract_plugins.components.input_data.read_db_fg import ReadDBFG
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.provider import SubtypeDeclaration
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 from tests import registry_isolation_probe
-from tests.registry_isolation import reclaim_leaked_feature_groups, reclaim_leaked_transformers
+from tests.helpers.subclass_walks import count_root_walks
+from tests.registry_isolation import (
+    FEATURE_GROUPS,
+    IMPLEMENTATIONS,
+    TRANSFORMERS,
+    SubclassLog,
+    reclaim_leaked_feature_groups,
+    reclaim_leaked_subclasses,
+    reclaim_leaked_transformers,
+)
 
 
 TESTS_ROOT = Path(__file__).resolve().parent
@@ -37,9 +52,14 @@ FIXTURE_NAME = "_no_feature_group_registry_pollution"
 FIXTURE_DEF = f"def {FIXTURE_NAME}"
 
 
+def _registered_names_of_root(root: type[Any]) -> set[str]:
+    """Names (never class objects, which would pin them) of this module's registered subclasses of `root`."""
+    return {c.__name__ for c in get_all_subclasses(root) if c.__module__ == __name__}
+
+
 def _registered_names() -> set[str]:
     """Names (never class objects, which would pin them) of this module's registered FeatureGroup subclasses."""
-    return {c.__name__ for c in get_all_subclasses(FeatureGroup) if c.__module__ == __name__}
+    return _registered_names_of_root(FeatureGroup)
 
 
 def _registered_names_of(module_name: str) -> set[str]:
@@ -65,6 +85,15 @@ def _define_leaked_subclass() -> type[FeatureGroup]:
     return LeakedRegistryProbe845FeatureGroup
 
 
+def _define_overlap_probe() -> str:
+    """Define a SourceFeatureGroup subclass and return only its name; returning the class would pin it."""
+
+    class _OverlapProbeFG(SourceFeatureGroup):
+        pass
+
+    return _OverlapProbeFG.__name__
+
+
 def _registered_transformer_names() -> set[str]:
     """Names (never class objects, which would pin them) of this module's registered BaseTransformer subclasses."""
     return {c.__name__ for c in get_all_subclasses(BaseTransformer) if c.__module__ == __name__}
@@ -88,22 +117,47 @@ def _define_leaked_transformer() -> type[BaseTransformer]:
     return LeakedRegistryProbeTransformer
 
 
+def _define_rejected_implementation() -> None:
+    class RiRejectedImpl(Implementation[Any]):
+        compute_framework = PythonDictFramework
+
+        @classmethod
+        def calculate(cls, *args: Any) -> Any:
+            return None
+
+
+def _define_pre_super_rejected_group() -> None:
+    type("RiPreSuperRejectedFG", (ReadDBFG,), {"PROPERTY_MAPPING": ["k"], "__module__": __name__})
+
+
+def _define_feature_group_rejected_group() -> None:
+    class RiRejectedByFeatureGroupFG(FeatureGroup):
+        SUBTYPES = SubtypeDeclaration(key="ri_missing_key")
+
+
+_REJECTED_DEFINITIONS: list[tuple[SubclassLog[Any], type[Any], str, type[Exception], Callable[[], None]]] = [
+    (IMPLEMENTATIONS, Implementation, "RiRejectedImpl", TypeError, _define_rejected_implementation),
+    (FEATURE_GROUPS, FeatureGroup, "RiPreSuperRejectedFG", TypeError, _define_pre_super_rejected_group),
+    (FEATURE_GROUPS, FeatureGroup, "RiRejectedByFeatureGroupFG", ValueError, _define_feature_group_rejected_group),
+]
+
+
 class TestReclaimLeakedFeatureGroups:
-    """reclaim_leaked_feature_groups(before, module_name) is the one reclaim-and-report mechanism."""
+    """reclaim_leaked_feature_groups(mark, module_name) is the one reclaim-and-report mechanism."""
 
     def test_reclaims_a_throwaway_subclass(self) -> None:
         """A transient subclass is registered, then reclaimed. One test, not two: xdist could split a pair."""
-        before = get_all_subclasses(FeatureGroup)
+        mark = FEATURE_GROUPS.mark()
         name = _define_throwaway_subclass()
         assert name in _registered_names(), "the probe never registered; the reclaim assertion would prove nothing"
-        assert reclaim_leaked_feature_groups(before, __name__) == []
+        assert reclaim_leaked_feature_groups(mark, __name__) == []
         assert name not in _registered_names(), f"{name} survived the reclaim"
 
     def test_reports_a_genuine_leak(self) -> None:
         """A strongly referenced subclass is reported, so the conftest fixture fails loudly instead of hiding it."""
-        before = get_all_subclasses(FeatureGroup)
+        mark = FEATURE_GROUPS.mark()
         leaked_cls = _define_leaked_subclass()
-        reported = [c.__name__ for c in reclaim_leaked_feature_groups(before, __name__)]
+        reported = [c.__name__ for c in reclaim_leaked_feature_groups(mark, __name__)]
         expected = leaked_cls.__name__
         del leaked_cls  # drop the strong reference before asserting, so a failure leaves nothing behind
         gc.collect()
@@ -118,10 +172,10 @@ class TestReclaimLeakedFeatureGroups:
         """
         gc.disable()
         try:
-            before = get_all_subclasses(FeatureGroup)
+            mark = FEATURE_GROUPS.mark()
             name = registry_isolation_probe.define_helper_subclass()
             registered_before = name in _registered_names_of(PROBE_MODULE)
-            reported = [c.__name__ for c in reclaim_leaked_feature_groups(before, __name__)]
+            reported = [c.__name__ for c in reclaim_leaked_feature_groups(mark, __name__)]
             registered_after = name in _registered_names_of(PROBE_MODULE)
         finally:
             gc.enable()
@@ -133,28 +187,42 @@ class TestReclaimLeakedFeatureGroups:
 
     def test_no_new_subclasses_reports_nothing(self) -> None:
         """The cheap path: nothing appeared since the snapshot, so nothing is reported and no collection is needed."""
-        before = get_all_subclasses(FeatureGroup)
-        assert reclaim_leaked_feature_groups(before, __name__) == []
+        mark = FEATURE_GROUPS.mark()
+        assert reclaim_leaked_feature_groups(mark, __name__) == []
+
+    @pytest.mark.parametrize(("log", "root", "name", "error", "define"), _REJECTED_DEFINITIONS)
+    def test_a_rejected_definition_is_still_reclaimed(
+        self, log: SubclassLog[Any], root: type[Any], name: str, error: type[Exception], define: Callable[[], None]
+    ) -> None:
+        mark = log.mark()
+        with pytest.raises(error):
+            define()
+
+        assert name in _registered_names_of_root(root), (
+            "the rejected class never lingered; the reclaim assertion proves nothing"
+        )
+        assert reclaim_leaked_subclasses(log, mark, __name__) == []
+        assert name not in _registered_names_of_root(root), f"{name} survived the reclaim"
 
 
 class TestReclaimLeakedTransformers:
-    """reclaim_leaked_transformers(before, module_name) is the same mechanism over the BaseTransformer root."""
+    """reclaim_leaked_transformers(mark, module_name) is the same mechanism over the BaseTransformer root."""
 
     def test_reclaims_a_throwaway_transformer_subclass(self) -> None:
         """A transient subclass is registered, then reclaimed. One test, not two: xdist could split a pair."""
-        before = get_all_subclasses(BaseTransformer)
+        mark = TRANSFORMERS.mark()
         name = _define_throwaway_transformer()
         assert name in _registered_transformer_names(), (
             "the probe never registered; the reclaim assertion would prove nothing"
         )
-        assert reclaim_leaked_transformers(before, __name__) == []
+        assert reclaim_leaked_transformers(mark, __name__) == []
         assert name not in _registered_transformer_names(), f"{name} survived the reclaim"
 
     def test_reports_a_genuine_transformer_leak(self) -> None:
         """A strongly referenced subclass is reported, so the conftest fixture fails loudly instead of hiding it."""
-        before = get_all_subclasses(BaseTransformer)
+        mark = TRANSFORMERS.mark()
         leaked_cls = _define_leaked_transformer()
-        reported = [c.__name__ for c in reclaim_leaked_transformers(before, __name__)]
+        reported = [c.__name__ for c in reclaim_leaked_transformers(mark, __name__)]
         expected = leaked_cls.__name__
         del leaked_cls  # drop the strong reference before asserting, so a failure leaves nothing behind
         gc.collect()
@@ -181,10 +249,10 @@ def _module_bound_subclass() -> Iterator[str]:
 
 
 @contextmanager
-def _subclass_bound_in_this_module() -> Iterator[str]:
+def _subclass_bound_in_this_module(base: type[Any] = FeatureGroup) -> Iterator[str]:
     """Bind a FeatureGroup subclass into THIS module, the shape a test that writes to its own module leaves."""
     this_module = sys.modules[__name__]
-    cls = type(OWN_MODULE_CLASS, (FeatureGroup,), {"__module__": __name__})
+    cls = type(OWN_MODULE_CLASS, (base,), {"__module__": __name__})
     setattr(this_module, OWN_MODULE_CLASS, cls)
     del cls
     try:
@@ -218,35 +286,57 @@ class TestModuleOwnedSubclassesSkipTheCollection:
 
     def test_a_module_bound_subclass_costs_no_collection(self) -> None:
         """The gate reads the binding instead: a full collection per test sat close to the per-test timeout (#995)."""
-        before = get_all_subclasses(FeatureGroup)
+        mark = FEATURE_GROUPS.mark()
         collections: list[int] = []
         with _module_bound_subclass() as name:
             assert name in _registered_names_of(SYNTHETIC_MODULE), (
                 "the probe never registered; the collection assertion would prove nothing"
             )
             with _counted_collections(collections):
-                reported = reclaim_leaked_feature_groups(before, __name__)
+                reported = reclaim_leaked_feature_groups(mark, __name__)
 
         assert reported == [], f"a class this module does not own must not be reported, got {reported}"
         assert collections == [], f"a module-owned class must cost no collection, got generations {collections}"
 
-    def test_a_subclass_bound_in_the_calling_module_is_still_reported(self) -> None:
-        """Skipping the collection must not skip the report: no collection can reclaim a bound class."""
-        before = get_all_subclasses(FeatureGroup)
-        with _subclass_bound_in_this_module() as name:
-            reported = [cls.__name__ for cls in reclaim_leaked_feature_groups(before, __name__)]
+    def test_a_snapshot_and_reclaim_cost_no_class_tree_walk(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The log replaces the root walk: snapshot plus reclaim must never call FeatureGroup.__subclasses__."""
+        root_walks = count_root_walks(monkeypatch, FeatureGroup)
+        mark = FEATURE_GROUPS.mark()
+        with _module_bound_subclass():
+            reported = reclaim_leaked_feature_groups(mark, __name__)
+
+        assert reported == []
+        assert root_walks == [], f"snapshot and reclaim walked the FeatureGroup tree {len(root_walks)} time(s)"
+
+    @pytest.mark.parametrize("base", [FeatureGroup, ReadDBFG])
+    def test_a_subclass_bound_in_the_calling_module_is_still_reported(self, base: type[Any]) -> None:
+        """Skipping the collection must not skip the report; a doubly logged class is reported exactly once."""
+        mark = FEATURE_GROUPS.mark()
+        with _subclass_bound_in_this_module(base) as name:
+            reported = [cls.__name__ for cls in reclaim_leaked_feature_groups(mark, __name__)]
 
         assert reported == [name], (
             f"a class this module bound into itself outlives the test and must be reported, got {reported}"
         )
 
+    def test_a_second_log_on_an_overlapping_root_still_logs(self) -> None:
+        """Each log hooks independently: a second log under an already hooked root must record new subclasses."""
+        second = SubclassLog(SourceFeatureGroup)  # type: ignore[type-abstract]  # abstract root, as for the module logs
+        mark = second.mark()
+        fg_mark = FEATURE_GROUPS.mark()
+        name = _define_overlap_probe()
+
+        assert name in [c.__name__ for c in second.live_since(mark)]
+        assert name in [c.__name__ for c in FEATURE_GROUPS.live_since(fg_mark)]
+        assert reclaim_leaked_feature_groups(fg_mark, __name__) == []
+
     def test_a_just_defined_subclass_is_reclaimed_by_the_young_generation(self) -> None:
         """The counterpart: the transient shape the reclaim exists for never escalates past generation 0."""
-        before = get_all_subclasses(FeatureGroup)
+        mark = FEATURE_GROUPS.mark()
         collections: list[int] = []
         with _counted_collections(collections):
             name = _define_throwaway_subclass()
-            reported = reclaim_leaked_feature_groups(before, __name__)
+            reported = reclaim_leaked_feature_groups(mark, __name__)
 
         assert reported == []
         assert collections == [0], (

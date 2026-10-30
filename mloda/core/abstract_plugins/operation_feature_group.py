@@ -3,11 +3,10 @@
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 if TYPE_CHECKING:
@@ -35,7 +34,7 @@ class OperationFeatureGroup(FeatureGroup):
         implementations = current_implementations()
         return {
             framework
-            for framework in get_all_subclasses(ComputeFramework)
+            for framework in compute_framework_subclasses()
             if serving_implementation(cls, framework, implementations) is not None
         }
 

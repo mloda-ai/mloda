@@ -31,14 +31,13 @@ from mloda.core.abstract_plugins.components.property_spec import PropertySpec, i
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options, _isolate_forwarded_value
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.utils import (
     contained_raise_reason,
-    get_all_subclasses,
     is_match_abort,
     safe_field,
 )
@@ -843,7 +842,7 @@ class FeatureGroup(ABC):
         if implemented is not None:
             return implemented if rule is None else implemented & rule
         if rule is None:
-            return get_all_subclasses(ComputeFramework)
+            return compute_framework_subclasses()
         return rule
 
     @classmethod

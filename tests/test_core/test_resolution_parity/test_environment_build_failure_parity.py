@@ -490,11 +490,14 @@ def test_enabled_group_missing_from_registry_is_named_when_collector_filters_eve
     held = [_make_unregistered_fg()]
     name = held[0].__name__
     ref = weakref.ref(held[0])
-    collector = PluginCollector.enabled_feature_groups({held[0]})
-    _, message = safe_field_with_error(lambda: PreFilterPlugins(PreFilterPlugins.get_cfw_subclasses(), collector), None)
+    _, message = safe_field_with_error(
+        lambda: PreFilterPlugins(
+            PreFilterPlugins.get_cfw_subclasses(), PluginCollector.enabled_feature_groups({held[0]})
+        ),
+        None,
+    )
 
     del held[:]
-    del collector
     collected = _reclaimed(ref)
 
     assert message is not None
@@ -511,16 +514,18 @@ def test_enabled_group_missing_from_registry_warns_when_other_groups_survive(
     held = [_make_unregistered_fg()]
     name = held[0].__name__
     ref = weakref.ref(held[0])
-    collector = PluginCollector.enabled_feature_groups({held[0], CollectorFilteredProbe850})
     with caplog.at_level("WARNING", logger="mloda.core.prepare.accessible_plugins"):
         _, message = safe_field_with_error(
-            lambda: PreFilterPlugins(PreFilterPlugins.get_cfw_subclasses(), collector), None
+            lambda: PreFilterPlugins(
+                PreFilterPlugins.get_cfw_subclasses(),
+                PluginCollector.enabled_feature_groups({held[0], CollectorFilteredProbe850}),
+            ),
+            None,
         )
     warnings = [r.getMessage() for r in caplog.records if r.name == "mloda.core.prepare.accessible_plugins"]
     caplog.clear()
 
     del held[:]
-    del collector
     collected = _reclaimed(ref)
 
     assert message is None

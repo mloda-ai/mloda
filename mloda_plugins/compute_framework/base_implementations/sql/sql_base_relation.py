@@ -110,6 +110,8 @@ class SqlBaseRelation(ABC):
         Rows keep input order (use ``.order()`` to sort).
 
         ``func`` is a raw SQL fragment inlined verbatim; never pass user-controlled input.
+        With ``partition_by`` or ``order_by`` set, ``func`` may only read real columns (backend
+        pseudo-columns such as SQLite rowid are reachable only through ``partition_by`` / ``order_by``).
         The ``alias`` and every identifier in ``partition_by`` / ``order_by`` are quoted via
         ``quote_ident``. Raises ``ValueError`` if ``alias`` collides with an existing column
         (ASCII case-insensitive), or if a partition/order column is not an exact column name.
@@ -130,6 +132,9 @@ class SqlBaseRelation(ABC):
         """Append ``expr OVER (over_sql)`` as ``alias``, keeping the input row order."""
         if not over_sql:
             return self._project_raw(f"*, {expr} OVER () AS {quote_ident(alias)}")
+        for name in referenced:
+            if name not in self.columns and fold_identifier(alias) == fold_identifier(name):
+                raise ValueError(f"Column {alias!r} collides with pseudo-column {name!r}")
         tag = self._pick_helper_column(alias)
         exposed = "".join(
             f"{quote_ident(name)} AS {quote_ident(name)}, "

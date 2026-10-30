@@ -20,6 +20,8 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 
+from tests.helpers.subclass_walks import collect_until
+
 T = TypeVar("T")
 
 
@@ -128,10 +130,7 @@ def reclaim_leaked_subclasses(log: SubclassLog[T], mark: int, module_name: str) 
     # collection is bounded by the young generation instead of the whole heap. Escalate to older generations
     # only while any new reclaimable class survives, whichever module owns it. Trade-off: a new class from another
     # module that is genuinely still alive now costs the full ladder in the test that created it.
-    for generation in (0, 1, 2):
-        gc.collect(generation)
-        if not new_reclaimable():
-            break
+    collect_until(lambda: not new_reclaimable())
     if not new_from_module():
         return []
     # Something is left, so pay the second collection: it reclaims what the first one only made collectable.

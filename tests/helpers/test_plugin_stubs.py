@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import gc
 import inspect
 import weakref
 from collections.abc import Iterator
@@ -28,6 +27,7 @@ from tests.helpers.plugin_stubs import (
     make_fg,
     make_raising_fg,
 )
+from tests.helpers.subclass_walks import collect_until_dead
 
 
 HELPER_MODULE = "tests.helpers.plugin_stubs"
@@ -87,13 +87,6 @@ def _as_stub(cls: type[FeatureGroup]) -> type[StubFeatureGroup]:
 def _mint_and_drop(name: str) -> weakref.ref[type[FeatureGroup]]:
     """Hand back only a weak reference: this frame keeps no strong one."""
     return weakref.ref(make_fg(name))
-
-
-def _collect_until_dead(reference: weakref.ref[type[FeatureGroup]]) -> None:
-    for generation in (0, 1, 2):
-        gc.collect(generation)
-        if reference() is None:
-            return
 
 
 def _ordinary_spelling_verdicts() -> tuple[bool, bool]:
@@ -193,8 +186,7 @@ class TestRegistrySafety:
     def test_the_factory_keeps_no_strong_reference(self) -> None:
         """A cached class object would leak every stub in the suite past its own test."""
         reference = _mint_and_drop("PluginStubWeakrefFG")
-        _collect_until_dead(reference)
-        assert reference() is None, "make_fg must not retain the classes it mints"
+        assert collect_until_dead(reference), "make_fg must not retain the classes it mints"
 
     def test_distinct_calls_mint_distinct_classes(self) -> None:
         first = make_fg("PluginStubDistinctFirstFG")
@@ -807,8 +799,7 @@ class TestTransientRaisingDouble:
 
     def test_the_helper_keeps_no_strong_reference(self) -> None:
         reference = _mint_raising_and_drop("PluginStubTransientWeakrefFG")
-        _collect_until_dead(reference)
-        assert reference() is None, "make_raising_fg must not retain the classes it mints"
+        assert collect_until_dead(reference), "make_raising_fg must not retain the classes it mints"
 
     def test_doc_becomes_the_class_description(self) -> None:
         cls = make_raising_fg("PluginStubTransientDocFG", COUNTED_HOOK, doc=DOC)

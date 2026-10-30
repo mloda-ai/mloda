@@ -62,12 +62,8 @@ class TestSqliteTfsConnectionE2E(TfsConnectionEndToEndMixin):
         return list(final.column("tfs_doubled").to_pylist())
 
 
-def _double_relation(relation: Any, column: str, alias: str) -> Any:
-    return relation
-
-
 def test_root_binding_groups_result_is_reclaimed_after_the_caller_releases_it() -> None:
-    root, sink, _ = root_binding_groups(SqliteFramework, _double_relation)
+    root, sink, _ = root_binding_groups(SqliteFramework, TestSqliteTfsConnectionE2E.double_relation)
     refs = (weakref.ref(root), weakref.ref(sink))
     assert all(ref() is not None for ref in refs)
 

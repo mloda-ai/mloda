@@ -129,7 +129,7 @@ def _cleanup_main_module_attrs() -> Any:
     """
     main_mod = sys.modules["__main__"]
     snapshot = set(main_mod.__dict__.keys())
-    assert not _REF_STORE
+    assert not _REF_STORE, "_REF_STORE was not emptied by the previous test's teardown"
     yield
     _REF_STORE.clear()
     new_keys = set(main_mod.__dict__.keys()) - snapshot
@@ -956,10 +956,9 @@ def test_get_feature_group_docs_annotates_unintrospectable_class_with_unavailabl
 
     NOTE: this class is held only via a LOCAL reference (enough to keep it alive in
     ``FeatureGroup.__subclasses__()`` during the call). It is deliberately NOT
-    appended to ``_REF_STORE``: that would keep a non-``__main__``
-    class into every later ``get_feature_group_docs()`` result on the same xdist
-    worker. After the assertions the local ref is deleted and ``gc.collect()`` runs
-    so the class is unregistered from ``__subclasses__``.
+    appended to ``_REF_STORE`` so it can be dropped before the test ends. After the
+    assertions the local ref is deleted and ``gc.collect()`` runs so the class is
+    unregistered from ``__subclasses__``.
     """
     fake_module = "some_fake_module_name_xyz_19"
     fake_cls = cast(

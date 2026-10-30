@@ -364,10 +364,27 @@ class PreFilterPlugins:
     def get_accessible_plugins(self) -> FeatureGroupEnvironmentMapping:
         return self.accessible_plugins
 
+    @staticmethod
+    def _unregistered_enabled_hint(plugin_collector: PluginCollector | None, universe: set[type[FeatureGroup]]) -> str:
+        if plugin_collector is None:
+            return ""
+        names = sorted(
+            entry.__name__
+            for entry in plugin_collector.enabled_feature_group_classes
+            if isinstance(entry, type) and issubclass(entry, FeatureGroup) and entry not in universe
+        )
+        if not names:
+            return ""
+        return (
+            f" {names} subclass FeatureGroup without reaching FeatureGroup.__init_subclass__: "
+            "an __init_subclass__ override must call super().__init_subclass__()."
+        )
+
     def _set_feature_groups(self, plugin_collector: PluginCollector | None = None) -> set[type[FeatureGroup]]:
         accessible_feature_groups = self.get_featuregroup_subclasses()
 
         loaded_universe_was_non_empty = bool(accessible_feature_groups)
+        unregistered_hint = self._unregistered_enabled_hint(plugin_collector, accessible_feature_groups)
         if plugin_collector:
             for accessible_fg in deepcopy(accessible_feature_groups):
                 if not plugin_collector.applicable_feature_group_class(accessible_fg):
@@ -434,12 +451,17 @@ class PreFilterPlugins:
             ]
             _warn_once_unregistered(unregistered + self._unregistered_implementation_names, " and ".join(kinds))
 
+        will_raise_with_hint = collector_filtered_everything and len(accessible_feature_groups) == 0
+        if unregistered_hint and not will_raise_with_hint:
+            logger.warning("%s", unregistered_hint.strip())
+
         if len(accessible_feature_groups) == 0:
             if collector_filtered_everything:
                 raise EnvironmentPreconditionError(
                     "The PluginCollector filtered out every FeatureGroup: none of the loaded FeatureGroups "
                     "satisfied its enabled/disabled configuration. Adjust the classes passed to "
                     "enabled_feature_groups()/disabled_feature_groups() (or the collector's applicability filter)."
+                    + unregistered_hint
                 )
             raise EnvironmentPreconditionError("No feature groups are loaded. Did you call PluginLoader.all()?")
         return accessible_feature_groups

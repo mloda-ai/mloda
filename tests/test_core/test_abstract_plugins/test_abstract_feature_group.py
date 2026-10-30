@@ -10,11 +10,12 @@ from mloda.user import DataAccessCollection
 from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.provider import FeatureGroup
+from mloda.user import PluginLoader
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.property_spec import property_spec
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field_with_error
 from mloda.core.abstract_plugins.feature_group import feature_group_subclasses
 from mloda.core.api.plugin_docs import get_feature_group_docs
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
@@ -328,6 +329,7 @@ class TestFeatureGroupSubclassRegistry:
     """`feature_group_subclasses()` mirrors the live FeatureGroup tree without walking it."""
 
     def test_registry_equals_the_walk(self) -> None:
+        PluginLoader.all()
         registry = feature_group_subclasses()
         if registry != get_all_subclasses(FeatureGroup):
             gc.collect()
@@ -359,6 +361,22 @@ class TestFeatureGroupSubclassRegistry:
         assert present
         assert collected
         assert name not in names
+
+    def test_definition_rejected_by_class_validation_is_never_registered(self) -> None:
+        def make() -> type[FeatureGroup]:
+            class ZzRejectedRegistryGroup(FeatureGroup):
+                PROPERTY_MAPPING = {"key": "not a PropertySpec"}  # type: ignore[dict-item]
+
+            return ZzRejectedRegistryGroup
+
+        _, message = safe_field_with_error(make, FeatureGroup)
+        walk_names = {fg.__name__ for fg in get_all_subclasses(FeatureGroup)}
+        registry_names = {fg.__name__ for fg in feature_group_subclasses()}
+        gc.collect()
+
+        assert message is not None
+        assert "ZzRejectedRegistryGroup" in walk_names
+        assert "ZzRejectedRegistryGroup" not in registry_names
 
     def test_group_skipping_registration_is_invisible_to_registry_readers(self) -> None:
         class _SkipsRegistration:

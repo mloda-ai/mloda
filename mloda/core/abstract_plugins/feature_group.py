@@ -127,14 +127,14 @@ class FeatureGroup(ABC):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        with _subclasses_lock:
-            _subclasses.add(cls)
         FeatureChainParser.validate_property_mapping_defaults(cls.__name__, cls.PROPERTY_MAPPING)
         validate_name_binding(cls)
         warn_captureless_without_binding(cls)
         install_name_path_presence_guard(cls)
         install_required_when_guard(cls)
         cls._validate_subtype_declaration()
+        with _subclasses_lock:
+            _subclasses.add(cls)
 
     @classmethod
     def _overrides(cls, method_name: str) -> bool:

@@ -25,7 +25,10 @@ before the scope closes. The collector-filtered probe below is exempt: it declar
 is merely filtered, so plain pytest.raises is safe for it.
 """
 
+import gc
 import sys
+import weakref
+from typing import Any
 
 import pytest
 
@@ -34,6 +37,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.utils import safe_field_with_error
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -460,6 +464,68 @@ def test_collector_that_filters_everything_names_the_collector_not_the_loader() 
     assert "filtered out every FeatureGroup" in message
     # The loaded universe was non-empty, so the nothing-loaded hint would misdirect the fix.
     assert "Did you call PluginLoader.all()?" not in message
+
+
+class _SkipsRegistration:
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        pass
+
+
+def _make_unregistered_fg() -> type[FeatureGroup]:
+    class ZzUnregisteredEnabledGroup(_SkipsRegistration, CollectorFilteredProbe850):
+        pass
+
+    return ZzUnregisteredEnabledGroup
+
+
+def _reclaimed(ref: "weakref.ref[type[FeatureGroup]]") -> bool:
+    for generation in (0, 1, 2):
+        if ref() is None:
+            break
+        gc.collect(generation)
+    return ref() is None
+
+
+def test_enabled_group_missing_from_registry_is_named_when_collector_filters_everything() -> None:
+    held = [_make_unregistered_fg()]
+    name = held[0].__name__
+    ref = weakref.ref(held[0])
+    collector = PluginCollector.enabled_feature_groups({held[0]})
+    _, message = safe_field_with_error(lambda: PreFilterPlugins(PreFilterPlugins.get_cfw_subclasses(), collector), None)
+
+    del held[:]
+    del collector
+    collected = _reclaimed(ref)
+
+    assert message is not None
+    assert "filtered out every FeatureGroup" in message
+    assert name in message
+    assert "FeatureGroup.__init_subclass__" in message
+    assert "super().__init_subclass__()" in message
+    assert collected
+
+
+def test_enabled_group_missing_from_registry_warns_when_other_groups_survive(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    held = [_make_unregistered_fg()]
+    name = held[0].__name__
+    ref = weakref.ref(held[0])
+    collector = PluginCollector.enabled_feature_groups({held[0], CollectorFilteredProbe850})
+    with caplog.at_level("WARNING", logger="mloda.core.prepare.accessible_plugins"):
+        _, message = safe_field_with_error(
+            lambda: PreFilterPlugins(PreFilterPlugins.get_cfw_subclasses(), collector), None
+        )
+    warnings = [r.getMessage() for r in caplog.records if r.name == "mloda.core.prepare.accessible_plugins"]
+    caplog.clear()
+
+    del held[:]
+    del collector
+    collected = _reclaimed(ref)
+
+    assert message is None
+    assert any(name in w and "super().__init_subclass__()" in w for w in warnings)
+    assert collected
 
 
 def test_nothing_loaded_raises_the_plugin_loader_hint(monkeypatch: pytest.MonkeyPatch) -> None:

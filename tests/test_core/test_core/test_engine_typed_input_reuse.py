@@ -26,6 +26,8 @@ def _plan_direct_and_dependency(
     direct_options: Options | None = None,
     input_options: Options | None = None,
     follow_on: bool = False,
+    second_direct_type: DataType | None = None,
+    engines: list[Any] | None = None,
 ) -> tuple[list[Feature], set[UUID]]:
     source = make_root_fg("TypedReuse", __name__, SOURCE, [1, 2])
 
@@ -39,7 +41,10 @@ def _plan_direct_and_dependency(
 
     direct = Feature(SOURCE, options=direct_options, data_type=direct_type)
     consumer = Feature(CONSUMER)
-    requests = [direct, consumer] if direct_first else [consumer, direct]
+    directs = [direct]
+    if second_direct_type is not None:
+        directs.append(Feature(SOURCE, options=direct_options, data_type=second_direct_type))
+    requests = [*directs, consumer] if direct_first else [consumer, *directs]
     if follow_on:
         requests.append(Feature(LATER_CONSUMER))
     session = mloda.prepare(
@@ -48,6 +53,8 @@ def _plan_direct_and_dependency(
         plugin_collector=PluginCollector.enabled_feature_groups({source, TypedReuseConsumer}),
     )
     assert session.engine is not None
+    if engines is not None:
+        engines.append(session.engine)
     source_features = session.engine.feature_group_collection[source]
     assert all(feature in source_features for feature in source_features)
     resolved_consumers = session.engine.feature_group_collection[TypedReuseConsumer]
@@ -66,6 +73,29 @@ def test_typed_direct_request_is_the_single_parent_of_its_untyped_consumer(direc
     assert survivor.data_type is DataType.INT64
     assert survivor.initial_requested_data
     assert parents == {survivor.uuid}
+
+
+def test_untyped_input_reuses_the_first_sorted_typed_request_in_any_candidate_order() -> None:
+    engines: list[Any] = []
+    sources, parents = _plan_direct_and_dependency(
+        DataType.INT32, None, direct_first=True, second_direct_type=DataType.INT64, engines=engines
+    )
+    engine = engines[0]
+    typed = {feature.data_type: feature for feature in sources}
+    assert set(typed) == {DataType.INT32, DataType.INT64}
+    assert all(feature.uuid in engine.resolved_input_feature_names for feature in sources)
+
+    probe = copy(typed[DataType.INT64])
+    probe.data_type = None
+    probe.initial_requested_data = False
+
+    for candidates in (
+        sorted(sources, key=lambda f: str(f.data_type)),
+        sorted(sources, key=lambda f: str(f.data_type), reverse=True),
+    ):
+        found = engine._find_existing_feature(probe, candidates, allow_untyped_input=True)
+        assert found is typed[DataType.INT32]
+    assert parents == {typed[DataType.INT32].uuid}
 
 
 def test_follow_on_untyped_consumer_reuses_the_promoted_typed_parent() -> None:

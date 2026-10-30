@@ -50,6 +50,7 @@ from mloda.core.abstract_plugins.components.input_data.file_source import FileSo
 from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
 from mloda.core.prepare.resolve_implementation_pins import ResolveImplementationPins
 from mloda.core.prepare.resolution_failure_renderer import _candidate_sort_key
+from mloda.core.prepare.stable_text import stable_text
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
 from mloda.core.prepare.input_chain import (
@@ -78,6 +79,10 @@ from mloda.core.abstract_plugins.components.validators.link_validator import Lin
 
 
 logger = logging.getLogger(__name__)
+
+
+def _typed_reuse_key(feature: Feature) -> tuple[str, str]:
+    return str(feature.data_type), stable_text(feature.child_options)
 
 
 class Engine:
@@ -1065,7 +1070,6 @@ class Engine:
                 return f
             if (
                 allow_untyped_input
-                and compatible is None
                 and (
                     (
                         f.initial_requested_data
@@ -1084,7 +1088,8 @@ class Engine:
                 and f.uuid in self.resolved_input_feature_names
                 and f.equals_ignoring_child_options(feature, include_data_type=False)
             ):
-                compatible = f
+                if compatible is None or _typed_reuse_key(f) < _typed_reuse_key(compatible):
+                    compatible = f
         return compatible
 
     def _warn_on_default_equivalent_merge(

@@ -193,6 +193,8 @@ the declared type for runtime validation, and keep the consumer connected regard
 Previously, this pair produced two planned features and could fail with duplicate columns in append-style groups.
 Reuse requires completed input resolution: a column injected for a filter or index does not suppress
 the dependency resolution of a later typed request.
+When several typed requests could serve the same untyped input, mloda reuses the one whose data type
+name sorts first (for example `INT32` before `INT64`), so the plan does not depend on request or set order.
 
 The other identity constraints still apply, including options, context, domain, compute frameworks,
 implementation and data source. Two different explicit types remain separate, as does a typed input

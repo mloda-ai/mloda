@@ -1,5 +1,9 @@
 from collections.abc import Sequence
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
+from mloda.core.abstract_plugins.compute_framework import (
+    ComputeFramework,
+    compute_framework_subclasses,
+    unregistered_frameworks_hint,
+)
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
@@ -102,19 +106,8 @@ class SetupComputeFramework:
         ]
         if unmatched:
             available_names = sorted(cls.get_class_name() for cls in sub_classes)
-            unregistered = sorted(
-                entry.__name__
-                for entry in unmatched
-                if isinstance(entry, type)
-                and issubclass(entry, ComputeFramework)
-                and entry not in compute_framework_subclasses()
-            )
-            hint = (
-                f" {unregistered} subclass ComputeFramework without reaching ComputeFramework.__init_subclass__: "
-                "an __init_subclass__ override must call super().__init_subclass__()."
-                if unregistered
-                else ""
-            )
+            found = unregistered_frameworks_hint(unmatched)
+            hint = f" {found}" if found else ""
             raise ValueError(
                 f"No given compute frameworks {unmatched} found in available compute frameworks: {available_names}.{hint}"
             )

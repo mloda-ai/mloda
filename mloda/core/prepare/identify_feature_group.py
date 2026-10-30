@@ -74,7 +74,11 @@ from mloda.core.abstract_plugins.components.utils import (
     safe_exc_str,
     safe_field,
 )
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
+from mloda.core.abstract_plugins.compute_framework import (
+    ComputeFramework,
+    compute_framework_subclasses,
+    unregistered_frameworks_hint,
+)
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -95,6 +99,13 @@ def _operation_implementation_reason(feature_group: type[FeatureGroup]) -> str |
     if not any(issubclass(feature_group, impl.feature_group) for impl in current_implementations()):
         return "its implementations are all disabled or denied for this run"
     return None
+
+
+def _no_framework_enabled_reason(declared: frozenset[type[ComputeFramework]]) -> str:
+    """Why no declared compute framework is enabled, naming unregistered ones when found."""
+    hint = unregistered_frameworks_hint(declared)
+    reason = "none of its compute frameworks are enabled for this run"
+    return f"{reason}; {hint}" if hint else reason
 
 
 logger = logging.getLogger(__name__)
@@ -831,7 +842,7 @@ class IdentifyFeatureGroupClass:
                         not_enabled_reason = (
                             self._excluded.get(feature_group)
                             or _operation_implementation_reason(feature_group)
-                            or "none of its compute frameworks are enabled for this run"
+                            or _no_framework_enabled_reason(self._declared_frameworks_of(feature_group))
                         )
                     else:
                         not_enabled_reason = (

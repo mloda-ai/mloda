@@ -3,7 +3,7 @@ import pickle  # nosec B403
 import threading
 import weakref
 from abc import ABC
-from collections.abc import Callable, Generator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from contextvars import ContextVar
 from typing import Any, NoReturn, final, get_origin
@@ -1385,3 +1385,19 @@ def compute_framework_subclasses() -> set[type[ComputeFramework]]:
     """Every live ComputeFramework subclass, without walking the class tree."""
     with _subclasses_lock:
         return set(_subclasses)
+
+
+def unregistered_frameworks_hint(candidates: Iterable[object]) -> str | None:
+    """Hint naming ComputeFramework subclasses that never reached the registry, else None."""
+    registered = compute_framework_subclasses()
+    names = sorted(
+        c.__name__
+        for c in candidates
+        if isinstance(c, type) and issubclass(c, ComputeFramework) and c not in registered
+    )
+    if not names:
+        return None
+    return (
+        f"{names} subclass ComputeFramework without reaching ComputeFramework.__init_subclass__: "
+        "an __init_subclass__ override must call super().__init_subclass__()."
+    )

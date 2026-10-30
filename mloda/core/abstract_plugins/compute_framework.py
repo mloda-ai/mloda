@@ -1,5 +1,7 @@
 import contextlib
 import pickle  # nosec B403
+import threading
+import weakref
 from abc import ABC
 from collections.abc import Callable, Generator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
@@ -43,6 +45,9 @@ from mloda.core.optional_dependency import loaded, require
 from mloda.core.runtime.flight.flight_server import FlightServer
 
 _PYARROW_REASON = "this operation"
+
+_subclasses: weakref.WeakSet[type["ComputeFramework"]] = weakref.WeakSet()
+_subclasses_lock = threading.Lock()
 
 _current_compute_framework: ContextVar["ComputeFramework | None"] = ContextVar(
     "_current_compute_framework", default=None
@@ -120,7 +125,15 @@ class ComputeFramework(ABC):
 
     Of course, for migrations, we allow multiple definitions of the same feature group on different compute frameworks.
     This use case, however, is currently not supported, as one could just run the module twice and compare the result datasets for now.
+
+    A subclass that defines `__init_subclass__` must call `super().__init_subclass__()`, since that call
+    is what registers it as a known compute framework.
     """
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        with _subclasses_lock:
+            _subclasses.add(cls)
 
     # Class-level default so the attribute exists even when a subclass's __getstate__
     # returns a filtered dict that omits it (e.g. dropping unpicklable live state).
@@ -1366,3 +1379,9 @@ class ComputeFramework(ABC):
         # Fallback: never drop a matched column not covered by order_source.
         result.extend(sorted(_selected_feature_names - appended))
         return result
+
+
+def compute_framework_subclasses() -> set[type[ComputeFramework]]:
+    """Every live ComputeFramework subclass, the same set as get_all_subclasses(ComputeFramework) without the walk."""
+    with _subclasses_lock:
+        return set(_subclasses)

@@ -6,11 +6,14 @@ Validates that the API contract is clear and consistent:
 - Invalid return types raise ValueError with a helpful message.
 """
 
+import gc
+import weakref
 from unittest.mock import patch
 
 import pytest
 
 from mloda.provider import ComputeFramework, FeatureGroup
+from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
 
@@ -50,6 +53,51 @@ class TestComputeFrameworkRuleBaseClassDefault:
         all_frameworks = get_all_subclasses(ComputeFramework)
         assert result == all_frameworks
         assert len(result) > 0
+
+    @pytest.mark.parametrize(("base", "exact"), [(FeatureGroup, True), (OperationFeatureGroup, False)])
+    def test_definition_never_walks_the_compute_framework_tree(
+        self, base: type[FeatureGroup], exact: bool, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        expected = get_all_subclasses(ComputeFramework)
+        root_calls: list[int] = []
+
+        def spy(cls: type) -> list[type]:
+            if cls is ComputeFramework:
+                root_calls.append(1)
+            return type.__subclasses__(cls)
+
+        monkeypatch.setattr(ComputeFramework, "__subclasses__", classmethod(spy))
+        results = [base.compute_framework_definition() for _ in range(3)]
+        monkeypatch.undo()
+
+        assert len(root_calls) == 0
+        assert results[0] == results[1] == results[2]
+        assert results[0] <= expected
+        if exact:
+            assert results[0] == expected
+
+    def test_definition_tracks_a_transient_subclass(self) -> None:
+        """Characterization guard: a new subclass shows up at once and a dead one disappears."""
+
+        class TransientFramework(StubComputeFramework):
+            @classmethod
+            def expected_data_framework(cls) -> type:
+                return set
+
+        present = TransientFramework in FeatureGroup.compute_framework_definition()
+        name = TransientFramework.__name__
+        ref = weakref.ref(TransientFramework)
+        del TransientFramework
+        for generation in (0, 1, 2):
+            if ref() is None:
+                break
+            gc.collect(generation)
+        collected = ref() is None
+        names = {c.__name__ for c in FeatureGroup.compute_framework_definition()}
+
+        assert present
+        assert collected
+        assert name not in names
 
 
 class TestComputeFrameworkDefinitionWithExplicitSet:

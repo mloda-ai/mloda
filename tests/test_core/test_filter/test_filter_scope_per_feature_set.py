@@ -4,7 +4,6 @@ The scope stays per FeatureSet; the divergence must be reported as a WARNING, on
 
 from __future__ import annotations
 
-import gc
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -43,7 +42,6 @@ def _sentinel(features: FeatureSet) -> dict[str, list[int]]:
 
 def _make_fg(capture: list[tuple[Feature, ...]] | None = None) -> type[FeatureGroup]:
     """A throwaway root group whose filter-feature match depends on the probing feature's mode."""
-    gc.collect()
 
     class FspScopeFG(DataCreatorFeatureGroup):
         @classmethod
@@ -173,7 +171,6 @@ def _run(
     # Records carry args that can hold the throwaway class.
     caplog.clear()
     del fg, collector, results, captured
-    gc.collect()
     return snapshot
 
 
@@ -250,7 +247,6 @@ def _cross_run_warnings(caplog: pytest.LogCaptureFixture) -> tuple[tuple[str, ..
 
     caplog.clear()
     del fg, collector, global_filter
-    gc.collect()
     return first, second
 
 
@@ -303,7 +299,6 @@ def _repeated_report_levels(caplog: pytest.LogCaptureFixture) -> tuple[tuple[int
 
     caplog.clear()
     del fg, collector, global_filter, captured, diverging, plan
-    gc.collect()
     return records
 
 
@@ -360,7 +355,6 @@ def _target_rows(features: FeatureSet) -> dict[str, list[int]]:
 
 def _make_scoped_target_pair() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
     """Two throwaway root groups: each serves its own target and can serve the shared filter feature."""
-    gc.collect()
 
     class FspScopedTargetFG(DataCreatorFeatureGroup):
         @classmethod
@@ -407,7 +401,6 @@ def _drive_scoped_filter_run() -> dict[str, list[int]]:
         if column in frame
     }
     del fg_scoped, fg_other, collector, global_filter, results
-    gc.collect()
     return columns
 
 

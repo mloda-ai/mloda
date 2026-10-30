@@ -4,7 +4,6 @@ enrichment-only differences stay silent, and each genuinely unmatched filter war
 
 from __future__ import annotations
 
-import gc
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -58,7 +57,6 @@ def _attached_option_values(features: FeatureSet, key: str) -> tuple[str, ...]:
 
 def _make_fg(capture: list[tuple[Feature, ...]], notes: list[tuple[str, ...]]) -> type[FeatureGroup]:
     """A throwaway root group whose per-filter matches depend on the probing feature's mode."""
-    gc.collect()
 
     class FsdDivergenceFG(DataCreatorFeatureGroup):
         @classmethod
@@ -97,7 +95,6 @@ def _make_fg(capture: list[tuple[Feature, ...]], notes: list[tuple[str, ...]]) -
 
 def _make_rename_fg(capture: list[tuple[Feature, ...]], notes: list[tuple[str, ...]]) -> type[FeatureGroup]:
     """A throwaway root group renaming its one declared filter to a mode-specific column."""
-    gc.collect()
 
     class FsdRenameFG(DataCreatorFeatureGroup):
         @classmethod
@@ -133,7 +130,6 @@ def _make_rename_fg(capture: list[tuple[Feature, ...]], notes: list[tuple[str, .
 
 def _make_freshness_fg(modes: list[tuple[str, ...]]) -> type[FeatureGroup]:
     """A throwaway root group serving one host, recording each run's attached enrichment mode."""
-    gc.collect()
 
     class FsdFreshnessFG(DataCreatorFeatureGroup):
         @classmethod
@@ -241,7 +237,6 @@ def _run(
     # Records carry args that can hold the throwaway class.
     caplog.clear()
     del fg, collector, results, captured, notes
-    gc.collect()
     return snapshot
 
 
@@ -341,7 +336,6 @@ def _cross_run_modes(caplog: pytest.LogCaptureFixture) -> tuple[tuple[str, ...],
     observed = tuple(modes)
     caplog.clear()
     del fg, collector, global_filter, modes
-    gc.collect()
     return observed
 
 

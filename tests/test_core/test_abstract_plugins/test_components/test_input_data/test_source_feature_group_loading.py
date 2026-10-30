@@ -62,7 +62,6 @@ def _release_subscripted_generics() -> None:
     """Drop typing's alias cache, which keeps subscripted local generic classes alive."""
     for cleanup in getattr(typing, "_cleanups", []):
         cleanup()
-    gc.collect()
 
 
 def _toy_operation() -> Any:
@@ -234,7 +233,6 @@ class TestImplementationReceivesFramework:
         )
         assert column_values(result, "toyfmt_ld") == [111, 222]
         del _FrameworkImpl
-        gc.collect()
         return seen
 
     def test_framework_instance_is_passed_without_extender(self, tmp_path: Path) -> None:
@@ -288,7 +286,6 @@ class TestImplementationSeesDacConnection:
             data_access_collection=dac,
         )
         del _DuckImpl
-        gc.collect()
 
         assert len(seen) == 1
         assert seen[0] is conn
@@ -317,7 +314,6 @@ class TestCalculateFeatureWithoutMarker:
 
         group.calculate_feature(None, features)
         del _NoneImpl
-        gc.collect()
 
         assert frameworks == [None]
 
@@ -644,7 +640,6 @@ class TestImplementationDefinition:
         assert _OpGroup.calculate_feature(data, features) == "done"
         assert seen == [(_OpGroup, data, features, None)]
         del _RecordingImpl, _OpGroup
-        gc.collect()
 
     def test_the_typed_signature_is_enforced_by_mypy(self) -> None:
         class _OpGroup(OpToyFG):
@@ -663,7 +658,6 @@ class TestImplementationDefinition:
 
         assert issubclass(_WrongArity, Implementation)
         del _WrongArity, _OpGroup
-        gc.collect()
 
     def test_compute_framework_must_be_a_compute_framework(self) -> None:
         with pytest.raises(TypeError, match="compute_framework"):
@@ -715,7 +709,6 @@ class TestImplementationDefinition:
         assert {_HelperPythonDict, _HelperPyArrow} <= set(loaded_implementations())
         assert PreFilterPlugins({PythonDictFramework, PyArrowTable}).implementations is not None
         del _HelperPythonDict, _HelperPyArrow, _HelperBase
-        gc.collect()
 
     def test_loaded_implementations_does_not_rescan_known_classes(
         self, monkeypatch: pytest.MonkeyPatch, make_implementation: Any
@@ -754,7 +747,6 @@ class TestImplementationDefinition:
         assert pair_calls == []
         calls.clear()
         del new_impl
-        gc.collect()
 
     def test_class_made_concrete_by_a_decorator_is_loaded(self) -> None:
         def add_calculate(cls: Any) -> Any:
@@ -768,13 +760,6 @@ class TestImplementationDefinition:
 
         assert _Decorated in loaded_implementations()
         del _Decorated
-        gc.collect()
-
-
-@pytest.fixture(autouse=True, scope="module")
-def _collect_local_classes() -> Iterator[None]:
-    yield
-    gc.collect()
 
 
 def _run_operation(

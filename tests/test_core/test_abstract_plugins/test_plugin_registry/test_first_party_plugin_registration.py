@@ -20,13 +20,12 @@ Exclusions from the guard:
   class is registry-gated exactly like a public one.
 
 Parallel-safety: the import sweep is cached per worker, doubles with a spoofed first-party ``__module__`` are
-built in fixtures and gc-collected on teardown, and the autouse conftest fixture restores the default registry
+built in fixtures and reclaimed after teardown, and the autouse conftest fixture restores the default registry
 and the warn-mode dedup set around every test, so clearing the registry here is safe. The sweep costs a few
 seconds cold, hence the raised timeouts; the optional-dependency skip policy it relies on is exercised by
 ``tox -e core`` (tox.ini), which collects tests/test_core/ with only the test and pandas extras installed.
 """
 
-import gc
 import importlib
 import inspect
 import logging
@@ -213,7 +212,7 @@ def _pyproject_reserved_namespaces() -> set[str]:
 
 @pytest.fixture
 def make_framework_double() -> Iterator[Callable[[str, str], type[ComputeFramework]]]:
-    """Build ComputeFrameworks with a spoofed __module__, then drop them from __subclasses__ on teardown.
+    """Build ComputeFrameworks with a spoofed __module__; the autouse leak fixture reclaims them after teardown.
 
     They claim a first-party module with no importable source behind it, so they must not outlive the test:
     other tests in this worker walk ComputeFramework.__subclasses__().
@@ -232,7 +231,6 @@ def make_framework_double() -> Iterator[Callable[[str, str], type[ComputeFramewo
 
     yield make
     created.clear()
-    gc.collect()
 
 
 @pytest.fixture
@@ -240,7 +238,7 @@ def make_drift_probe() -> Iterator[Callable[[str, str], str]]:
     """Publish a concrete FeatureGroup in a synthetic wheel-owned module and return its registry key.
 
     Returns the key, not the class, so the test holds no strong reference; teardown drops the module and
-    gc-collects, keeping the probe out of FeatureGroup.__subclasses__() for the rest of the worker's life.
+    the autouse leak fixture reclaims the probe afterwards.
     """
     created: list[type[FeatureGroup]] = []
     modules: list[str] = []
@@ -273,7 +271,6 @@ def make_drift_probe() -> Iterator[Callable[[str, str], str]]:
     for module_name in modules:
         sys.modules.pop(module_name, None)
     created.clear()
-    gc.collect()
 
 
 @pytest.mark.timeout(30)

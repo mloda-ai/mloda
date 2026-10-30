@@ -52,7 +52,7 @@
 | mypy                      | 2.1.0           | MIT                                                |
 | mypy_extensions           | 1.1.0           | MIT                                                |
 | nest-asyncio              | 1.6.0           | BSD License                                        |
-| nltk                      | 3.10.3          | Apache Software License                            |
+| nltk                      | 3.10.4          | Apache Software License                            |
 | numpy                     | 2.4.5           | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
 | opentelemetry-api         | 1.45.1          | Apache-2.0                                         |
 | packaging                 | 26.2            | Apache-2.0 OR BSD-2-Clause                         |

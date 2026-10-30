@@ -21,13 +21,13 @@ from mloda.core.abstract_plugins.components.hashable_dict import (
 )
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import Link
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
 from mloda.core.abstract_plugins.components.options import (
     Options,
     reject_reserved_reader_key,
     validate_forwarding_directives,
 )
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field
+from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 
 
@@ -731,11 +731,11 @@ class Feature:
     ) -> type[ComputeFramework] | None:
         if compute_framework:
             return FeatureValidator.validate_and_resolve_compute_framework(
-                compute_framework, get_all_subclasses(ComputeFramework), "parameter"
+                compute_framework, compute_framework_subclasses(), "parameter"
             )
         elif compute_framework_options:
             return FeatureValidator.validate_and_resolve_compute_framework(
-                compute_framework_options, get_all_subclasses(ComputeFramework), "options"
+                compute_framework_options, compute_framework_subclasses(), "options"
             )
         return None
 

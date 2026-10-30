@@ -186,7 +186,7 @@ extenders = get_extender_docs(wraps="formula")
 
 ## Graceful Degradation Policy
 
-The discovery functions above walk every live plugin subclass and introspect it.
+The discovery functions above enumerate every live plugin subclass and introspect it.
 Plugins can be broken, exotic, or built at runtime (via `type()`, notebook
 re-execution, or `importlib.reload`), so introspecting one class can fail. The
 guarded catalog reads follow one shared contract so that a broken plugin
@@ -205,9 +205,12 @@ Every failure a plugin can cause falls into one of three tiers:
   `available_only=True`, exactly as a genuinely unavailable one would be.
 - **Skip.** An entry that is not meant to be documented is dropped silently:
   classes defined in `__main__`, and the abstract bases (`get_extender_docs`
-  skips `Extender` and `CompositeExtender` explicitly; the FeatureGroup and
-  ComputeFramework roots never appear because `get_all_subclasses` omits them).
-  Redefinition duplicates are collapsed rather than listed twice (see below).
+  skips `Extender` and `CompositeExtender` explicitly; the FeatureGroup root
+  is absent because `get_all_subclasses` omits it; the ComputeFramework root
+  is never recorded by `compute_framework_subclasses()`). A framework whose
+  `__init_subclass__` chain never reaches `ComputeFramework.__init_subclass__`
+  is not recorded either, so it is absent as well. Redefinition duplicates are
+  collapsed rather than listed twice (see below).
 - **Propagate.** Errors that are not a single plugin's introspection fault are
   left to surface: bad arguments to the discovery function itself, and failures
   in mloda's own catalog machinery. These are bugs to fix, not conditions to

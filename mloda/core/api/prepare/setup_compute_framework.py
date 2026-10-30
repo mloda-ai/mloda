@@ -1,7 +1,6 @@
 from collections.abc import Sequence
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
 from mloda.core.abstract_plugins.components.feature_collection import Features
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 
@@ -16,7 +15,7 @@ class SetupComputeFramework:
         parallelization_modes: set[ParallelizationMode] | None = None,
         output_framework: str | type[ComputeFramework] | None = None,
     ) -> None:
-        available_compute_frameworks = get_all_subclasses(ComputeFramework)
+        available_compute_frameworks = compute_framework_subclasses()
         if not available_compute_frameworks:
             raise ValueError("No compute framework plugin is loaded; import one or call PluginLoader.all().")
 
@@ -103,8 +102,21 @@ class SetupComputeFramework:
         ]
         if unmatched:
             available_names = sorted(cls.get_class_name() for cls in sub_classes)
+            unregistered = sorted(
+                entry.__name__
+                for entry in unmatched
+                if isinstance(entry, type)
+                and issubclass(entry, ComputeFramework)
+                and entry not in compute_framework_subclasses()
+            )
+            hint = (
+                f" {unregistered} subclass ComputeFramework without reaching ComputeFramework.__init_subclass__: "
+                "an __init_subclass__ override must call super().__init_subclass__()."
+                if unregistered
+                else ""
+            )
             raise ValueError(
-                f"No given compute frameworks {unmatched} found in available compute frameworks: {available_names}."
+                f"No given compute frameworks {unmatched} found in available compute frameworks: {available_names}.{hint}"
             )
         count = len(api_request_compute_frameworks)
         return {sub for sub in sub_classes if self._position(sub, api_request_compute_frameworks) < count}

@@ -18,7 +18,7 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 )
 from mloda.core.abstract_plugins.plugin_registry.plugin_policy import _module_matches_prefix
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.implementation import (
@@ -582,7 +582,7 @@ class PreFilterPlugins:
 
     @staticmethod
     def get_cfw_subclasses() -> set[type[ComputeFramework]]:
-        all_subclasses = get_all_subclasses(ComputeFramework)
+        all_subclasses = compute_framework_subclasses()
         available_subclasses = {cls for cls in all_subclasses if cls.is_available()}
         return available_subclasses
 

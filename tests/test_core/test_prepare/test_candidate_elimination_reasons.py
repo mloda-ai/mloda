@@ -695,7 +695,7 @@ class TestEliminationStages:
     def test_frameworks_not_enabled_stage_when_no_compute_framework_is_loaded(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr("mloda.core.prepare.identify_feature_group.get_all_subclasses", lambda cls: set())
+        monkeypatch.setattr("mloda.core.prepare.identify_feature_group.compute_framework_subclasses", lambda: set())
         feature = Feature(NOT_ENABLED_FEATURE)
         plugins: FeatureGroupEnvironmentMapping = {ElimNotEnabledFG011: set()}
 

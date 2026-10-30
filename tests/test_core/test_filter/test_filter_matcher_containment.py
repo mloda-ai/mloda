@@ -506,12 +506,12 @@ def _run(escalate: bool) -> tuple[dict[str, Any] | None, str | None]:
             global_filter=global_filter,
         )
     )
-    del fg, collector
-    if results is None:
-        return None, escaped
-    assert len(results) == 1, f"expected exactly one result frame, got: {results!r}"
-    payload = _single_row(results[0], E2E_MAIN)
-    assert isinstance(payload, dict)
+    payload: Any = None
+    if results is not None:
+        assert len(results) == 1, f"expected exactly one result frame, got: {results!r}"
+        payload = _single_row(results[0], E2E_MAIN)
+        assert isinstance(payload, dict)
+    del fg, collector, global_filter, results
     return payload, escaped
 
 

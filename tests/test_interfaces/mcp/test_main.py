@@ -18,7 +18,7 @@ import pytest
 import mloda.interfaces.cli.main as cli_main
 import mloda.interfaces.mcp.main as mcp_main
 from mloda.interfaces.service.config import Settings, load_settings
-from tests.helpers.docs_scope import shipped_feature_group_walk
+from tests.helpers.docs_scope import shipped_feature_group_registry
 
 # serve builds the catalog over every loaded FeatureGroup; a cold cache under xdist load can exceed 10s.
 pytestmark = pytest.mark.timeout(30)
@@ -278,8 +278,8 @@ class TestServe:
             runs.append((self, transport))
 
         monkeypatch.setattr(mcpserver.MCPServer, "run", fake_run)
-        walk = shipped_feature_group_walk()
-        monkeypatch.setattr("mloda.core.api.plugin_docs.get_all_subclasses", walk)
+        registry = shipped_feature_group_registry()
+        monkeypatch.setattr("mloda.core.api.plugin_docs.feature_group_subclasses", registry)
         settings = load_settings(_config(tmp_path), ENV)
 
         assert mcp_main.serve(settings, env=ENV) == 0

@@ -239,8 +239,8 @@ def test_malformed_property_mapping_does_not_break_key_collection(monkeypatch: p
         {"PROPERTY_MAPPING": {"mcp_flagged": property_spec("Locked.", default=None, caller_settable=False)}},
     )
     monkeypatch.setattr(
-        "mloda.interfaces.service.request.get_all_subclasses",
-        lambda _cls: [not_a_mapping, non_spec_values, flagged],
+        "mloda.interfaces.service.request.feature_group_subclasses",
+        lambda: [not_a_mapping, non_spec_values, flagged],
     )
 
     assert caller_refused_option_keys() == frozenset({"mcp_flagged"})

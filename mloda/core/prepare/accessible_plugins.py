@@ -19,7 +19,7 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 from mloda.core.abstract_plugins.plugin_registry.plugin_policy import _module_matches_prefix
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.feature_group import FeatureGroup, feature_group_subclasses
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.implementation import (
     Implementation,
@@ -588,4 +588,4 @@ class PreFilterPlugins:
 
     @staticmethod
     def get_featuregroup_subclasses() -> set[type[FeatureGroup]]:
-        return get_all_subclasses(FeatureGroup)
+        return feature_group_subclasses()

@@ -27,7 +27,7 @@ from mloda.interfaces.service.errors import is_error
 from mloda.interfaces.service.planner import Planner
 from mloda.interfaces.service.runner import Runner
 from mloda.user import PluginCollector, PluginLoader
-from tests.helpers.docs_scope import shipped_feature_group_walk
+from tests.helpers.docs_scope import shipped_feature_group_registry
 from tests.test_interfaces.source_groups import (
     FAILED,
     FILE_SOURCE_GROUPS,
@@ -812,8 +812,8 @@ class TestBuildServices:
             return original_all(force_reload=force_reload)
 
         monkeypatch.setattr(PluginLoader, "all", classmethod(spy_all))
-        walk = shipped_feature_group_walk()
-        monkeypatch.setattr("mloda.core.api.plugin_docs.get_all_subclasses", walk)
+        registry = shipped_feature_group_registry()
+        monkeypatch.setattr("mloda.core.api.plugin_docs.feature_group_subclasses", registry)
 
         catalog, _, _ = build_services(self._settings(tmp_path), env=ENV, plugin_collector=None)
 

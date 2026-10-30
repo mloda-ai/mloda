@@ -26,7 +26,7 @@ from mloda.provider import FeatureChainParserMixin, property_spec
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import VALID_STRICT_MODES
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.helpers.docs_scope import small_feature_group_walk
+from tests.helpers.docs_scope import small_feature_group_registry
 from tests.helpers.plugin_stubs import StubFeatureGroup
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
 from tests.test_interfaces.source_groups import (
@@ -314,8 +314,8 @@ class TestBuildDoesNotTouchDenied:
     def test_build_without_collector_excludes_denied(
         self, tmp_path: Path, denied_calls: list[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        walk = small_feature_group_walk(*ALLOWED, CatalogDeniedMcp3)
-        monkeypatch.setattr("mloda.core.api.plugin_docs.get_all_subclasses", walk)
+        registry = small_feature_group_registry(*ALLOWED, CatalogDeniedMcp3)
+        monkeypatch.setattr("mloda.core.api.plugin_docs.feature_group_subclasses", registry)
         catalog = Catalog.build(_settings(tmp_path))
         result = catalog.search("Mcp3", kinds=["feature_group"], limit=MAX_SEARCH_LIMIT)
 

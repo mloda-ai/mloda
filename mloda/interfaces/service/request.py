@@ -15,8 +15,7 @@ from mloda.core.abstract_plugins.components.default_options_key import DefaultOp
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.feature_group import feature_group_subclasses
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import QUERY_OPTION
 from mloda.core.api.feature_config.loader import load_features_from_config
@@ -391,7 +390,7 @@ def _scan_data_access(item: Mapping[str, Any], path: str, keys: frozenset[str]) 
 def caller_refused_option_keys() -> frozenset[str]:
     """Option keys a plugin marks as not settable by an untrusted caller."""
     keys: set[str] = set()
-    for group in get_all_subclasses(FeatureGroup):
+    for group in feature_group_subclasses():
         mapping = getattr(group, "PROPERTY_MAPPING", None)
         if not isinstance(mapping, Mapping):
             continue

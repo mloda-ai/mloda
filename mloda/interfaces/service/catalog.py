@@ -17,8 +17,8 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.components.property_spec import is_no_default
-from mloda.core.abstract_plugins.components.utils import as_str, get_all_subclasses, safe_field
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.components.utils import as_str, safe_field
+from mloda.core.abstract_plugins.feature_group import FeatureGroup, feature_group_subclasses
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.api.plugin_docs import get_feature_group_docs, resolve_feature
 from mloda.core.api.plugin_info import FeatureGroupInfo, ResolvedFeature
@@ -57,7 +57,7 @@ def sanitize_text(text: str | None, limit: int = MAX_DESCRIPTION_LENGTH) -> str:
 def plugin_collector_for(settings: Settings, base: PluginCollector | None = None) -> PluginCollector:
     """Copy ``base`` (or allow everything) and disable every FeatureGroup whose class name is denied."""
     collector = PluginCollector() if base is None else base.copy()
-    denied = {fg for fg in get_all_subclasses(FeatureGroup) if fg.__name__ in settings.deny_feature_groups}
+    denied = {fg for fg in feature_group_subclasses() if fg.__name__ in settings.deny_feature_groups}
     collector.add_disabled_feature_group_classes(denied)
     return collector
 

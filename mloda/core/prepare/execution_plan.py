@@ -3716,9 +3716,22 @@ Available join types:
         return feature_set_collection_per_uuid
 
     def _split_features_by_dependency_levels(
-        self, features: set[Feature], parent_to_children_mapping: dict[UUID, set[UUID]]
+        self,
+        features: set[Feature],
+        parent_to_children_mapping: dict[UUID, set[UUID]],
+        group_uuids: set[UUID] | None = None,
     ) -> list[set[Feature]]:
         feature_uuids = {f.uuid for f in features}
+        # A replaces_rows() member reading another bucket of its group must not share a step with members
+        # reading the source; parentless members (injected link keys) stay with it otherwise.
+        if group_uuids:
+            outside = group_uuids - feature_uuids
+            late = {f for f in features if parent_to_children_mapping.get(f.uuid, set()) & outside}
+            early = features - late
+            if late and any(parent_to_children_mapping.get(f.uuid) for f in early):
+                return self._split_features_by_dependency_levels(
+                    early, parent_to_children_mapping
+                ) + self._split_features_by_dependency_levels(late, parent_to_children_mapping)
         uuid_to_feature = {f.uuid: f for f in features}
 
         intra_deps: dict[UUID, set[UUID]] = {}
@@ -3753,6 +3766,7 @@ Available join types:
         root_parent_children_mapping: dict[UUID, set[UUID]] | None = None,
     ) -> dict[Any, FeatureGroupStep]:
         feature_group, features = feature_group_features[0], feature_group_features[1]
+        group_uuids = {f.uuid for f in features} if feature_group.replaces_rows() else None
         features_grouped_by_framework_and_options: dict[Any, set[Feature]] = (
             self.group_features_by_compute_framework_and_options(features)
         )
@@ -3802,8 +3816,7 @@ Available join types:
                 split_groups.append((f_hash, bucket_idx, members))
 
         for f_hash, bucket_idx, features in split_groups:
-            sub_groups = self._split_features_by_dependency_levels(features, parent_to_children_mapping)
-
+            sub_groups = self._split_features_by_dependency_levels(features, parent_to_children_mapping, group_uuids)
             for level_idx, sub_features in enumerate(sub_groups):
                 pre_calculated = self.retrieve_nodes_which_must_be_calculated_before(
                     sub_features, parent_to_children_mapping

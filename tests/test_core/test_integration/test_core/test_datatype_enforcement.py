@@ -989,11 +989,28 @@ class TestRowReducingGroupBatching(_ReducerRunHelpers):
         assert self._column(frames, "red_sum") == [[30, 40]]
         assert self._column(frames, "red_max") == [[20, 40]]
 
-    def test_chained_same_group_names_compute(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
-        frames = self._run([Feature("red_count"), Feature("red_sum")], modes, flight_server)
+    @pytest.mark.parametrize(
+        "features, expected_sum",
+        [
+            ([Feature("red_count"), Feature("red_sum")], [[30, 40]]),
+            (
+                [Feature("red_count"), Feature.int32_of("red_sum"), Feature.int64_of("red_sum")],
+                [[30, 40], [30, 40]],
+            ),
+        ],
+        ids=["untyped", "typed_siblings"],
+    )
+    def test_chained_same_group_names_compute(
+        self,
+        features: list[Feature],
+        expected_sum: list[list[int]],
+        modes: set[ParallelizationMode],
+        flight_server: Any,
+    ) -> None:
+        frames = self._run(features, modes, flight_server)
 
         assert self._column(frames, "red_count") == [[2]]
-        assert self._column(frames, "red_sum") == [[30, 40]]
+        assert self._column(frames, "red_sum") == expected_sum
 
     def test_non_reducing_sibling_reads_unreduced_input(
         self, modes: set[ParallelizationMode], flight_server: Any, monkeypatch: pytest.MonkeyPatch
@@ -1068,6 +1085,15 @@ class ReducingRawSource(ReducerRawSource):
         return True
 
 
+class TypedCountReducer(RowReducer):
+    """RowReducer whose red_count reads the int32 red_sum."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        if str(feature_name) == "red_count":
+            return {Feature.int32_of("red_sum")}
+        return {Feature("raw_key"), Feature("raw_val")}
+
+
 def _plan_reducer(
     group: type[FeatureGroup],
     features: list[Feature],
@@ -1105,6 +1131,32 @@ class TestRowReducingGroupPlan:
         assert len(steps) == 2
         assert all(s.compute_framework is PyArrowTable for s in steps)
         assert all(s.own_frame is True for s in steps)
+
+    @pytest.mark.parametrize(
+        "group, features",
+        [
+            (RowReducer, [Feature("red_count"), Feature.int32_of("red_sum"), Feature.int64_of("red_sum")]),
+            (
+                TypedCountReducer,
+                [Feature.int32_of("red_sum"), Feature.int64_of("red_sum"), Feature("red_count")],
+            ),
+            (
+                TypedCountReducer,
+                [Feature.int32_of("red_sum"), Feature.int64_of("red_sum"), Feature.int64_of("red_count")],
+            ),
+        ],
+        ids=["untyped_count_default_input", "untyped_count_typed_input", "typed_count_typed_input"],
+    )
+    def test_dependent_member_gets_own_step(self, group: type[FeatureGroup], features: list[Feature]) -> None:
+        session = _plan_reducer(group, features)
+
+        assert session.engine is not None
+        steps = [
+            s for s in session.engine.execution_planner if isinstance(s, FeatureGroupStep) and s.feature_group is group
+        ]
+        count_steps = [s for s in steps if "red_count" in {str(n) for n in s.features.get_all_names()}]
+        assert len(count_steps) == 1
+        assert all("red_sum" not in {str(n) for n in s.features.get_all_names()} for s in count_steps)
 
     def test_non_reducing_group_with_same_split_plans(self) -> None:
         session = _plan_reducer(NonReducingReducer, [Feature.int32_of("red_sum"), Feature.int64_of("red_sum")])

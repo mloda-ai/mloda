@@ -84,9 +84,14 @@ def _is_class(obj: object) -> bool:
     return isinstance(obj, type)
 
 
+def _is_plugin_subclass(cls: type[Any], bases: tuple[type[Any], ...]) -> bool:
+    """Nominal MRO check; avoids ABCMeta's subclass walk and ignores virtual registrations."""
+    return any(base in cls.__mro__ for base in bases)
+
+
 def _resolve_plugin_type(cls: type[Any]) -> type[Any]:
     for base in _PLUGIN_BASE_TYPES:
-        if _is_class(cls) and issubclass(cls, base):
+        if _is_class(cls) and _is_plugin_subclass(cls, (base,)):
             return base
     raise ValueError(f"{cls!r} is not a subclass of FeatureGroup, ComputeFramework, Extender, or Implementation.")
 
@@ -269,9 +274,9 @@ def register_module_plugins(module: ModuleType, *, source: PluginSource | str = 
     registry = PluginRegistry.default()
     keys: list[str] = []
     for obj in vars(module).values():
-        if not _is_class(obj) or obj in _PLUGIN_BASE_TYPES:
+        if not _is_class(obj) or obj in _PLUGIN_BASE_TYPES or obj.__module__ != module.__name__:
             continue
-        if not issubclass(obj, _PLUGIN_BASE_TYPES) or obj.__module__ != module.__name__:
+        if not _is_plugin_subclass(obj, _PLUGIN_BASE_TYPES):
             continue
         if inspect.isabstract(obj):
             continue

@@ -12,12 +12,16 @@ The scopes used here (python_dict, sqlite, node_centrality) need no optional dep
 The autouse conftest fixture restores the default registry around every test, so clearing it inside a test is safe.
 """
 
+import abc
 import gc
 import inspect
+import pathlib
 import sys
 import types
 from abc import abstractmethod
 from typing import Any
+
+import pytest
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -291,3 +295,146 @@ class TestLoaderRegistrationSkipsAbstractClasses:
         assert NodeCentralityFeatureGroup in registered_feature_groups, (
             "loading a scope must register its concrete plugin classes"
         )
+
+
+def _spy_on_plugin_subclasschecks(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Wrap ABCMeta.__subclasscheck__; the returned list collects calls whose cls is a plugin base or subclass."""
+    original = abc.ABCMeta.__subclasscheck__
+    counted: list[str] = []
+
+    def spy(cls: abc.ABCMeta, subclass: type[Any]) -> bool:
+        if FeatureGroup in cls.__mro__ or cls in _PLUGIN_BASE_TYPES:
+            counted.append(cls.__qualname__)
+        return original(cls, subclass)
+
+    monkeypatch.setattr(abc.ABCMeta, "__subclasscheck__", spy)
+    return counted
+
+
+def _invalidate_abc_caches() -> None:
+    class _Throwaway(abc.ABC):
+        pass
+
+    class _Registered:
+        pass
+
+    _Throwaway.register(_Registered)
+
+
+class TestPluginDiscoveryAvoidsAbcWalk:
+    """Plugin discovery must not pay the ABC subclass-tree walk for classes it will not register."""
+
+    def test_register_module_plugins_skips_abc_walk_for_unregistered_classes(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        registry = PluginRegistry.default()
+        registry.clear()
+
+        module = types.ModuleType("fake_registry_abc_walk_mod")
+
+        class _OwnConcreteFG(FeatureGroup):
+            @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: Any,
+                options: Any,
+                data_access_collection: Any = None,
+            ) -> bool:
+                return False
+
+        class _OwnPlainClass:
+            pass
+
+        _OwnConcreteFG.__module__ = module.__name__
+        _OwnPlainClass.__module__ = module.__name__
+        setattr(module, "_OwnConcreteFG", _OwnConcreteFG)
+        setattr(module, "_OwnPlainClass", _OwnPlainClass)
+        setattr(module, "ImportedFramework", _python_dict_framework_cls())
+        setattr(module, "ImportedPath", pathlib.Path)
+        setattr(module, "alias", tuple[str, ...])
+
+        try:
+            counted = _spy_on_plugin_subclasschecks(monkeypatch)
+
+            keys = register_module_plugins(module)
+
+            assert keys == [_default_key(_OwnConcreteFG)]
+            assert counted == [], f"ABC subclass walk ran {len(counted)} times for classes it would not register"
+        finally:
+            monkeypatch.undo()
+            registry.clear()
+            for name in ("_OwnConcreteFG", "_OwnPlainClass", "ImportedFramework", "ImportedPath", "alias"):
+                delattr(module, name)
+            del _OwnConcreteFG, _OwnPlainClass, module
+            gc.collect()
+
+    def test_cold_plugin_loader_cost_does_not_grow_with_live_feature_groups(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The call count stands in for wall time to stay stable under xdist load.
+        PluginLoader.all(force_reload=True)
+        counted = _spy_on_plugin_subclasschecks(monkeypatch)
+
+        _invalidate_abc_caches()
+        counted.clear()
+        PluginLoader.all(force_reload=True)
+        baseline = len(counted)
+
+        extras: list[type[Any]] = []
+        try:
+            for i in range(300):
+                extras.append(
+                    type(
+                        f"_ColdLoadExtraFG{i}",
+                        (FeatureGroup,),
+                        {
+                            "__module__": __name__,
+                            "__qualname__": f"TestPluginDiscoveryAvoidsAbcWalk.<locals>._ColdLoadExtraFG{i}",
+                            "match_feature_group_criteria": classmethod(lambda cls, *a, **k: False),
+                        },
+                    )
+                )
+            _invalidate_abc_caches()
+            counted.clear()
+            PluginLoader.all(force_reload=True)
+            with_extra = len(counted)
+        finally:
+            monkeypatch.undo()
+            PluginRegistry.default().clear()
+            extras.clear()
+            del extras
+            gc.collect()
+
+        assert with_extra - baseline <= 10, (
+            f"cold load did {with_extra - baseline} extra ABC subclass checks for 300 extra FeatureGroups "
+            f"(baseline {baseline}, with extras {with_extra})"
+        )
+
+    def test_virtual_abc_subclasses_are_not_plugins(self) -> None:
+        class _VirtualHostFG(FeatureGroup):
+            @abstractmethod
+            def _virtual_host_probe_hook(self) -> None: ...
+
+            @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: Any,
+                options: Any,
+                data_access_collection: Any = None,
+            ) -> bool:
+                return False
+
+        class _VirtualX:
+            pass
+
+        try:
+            _VirtualHostFG.register(_VirtualX)
+            assert issubclass(_VirtualX, FeatureGroup), "sanity: X is a virtual FeatureGroup subclass"
+
+            with pytest.raises(ValueError, match="is not a subclass of FeatureGroup"):
+                PluginRegistry().register(_VirtualX)
+            with pytest.raises(TypeError, match="requires subclasses of"):
+                PluginLoader()._register_manifest("label", "mloda.feature_groups", FeatureGroup, (_VirtualX,))
+        finally:
+            del _VirtualHostFG, _VirtualX
+            gc.collect()

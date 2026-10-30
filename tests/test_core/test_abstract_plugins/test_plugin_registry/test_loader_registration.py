@@ -302,7 +302,7 @@ def _spy_on_plugin_subclasschecks(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     original = abc.ABCMeta.__subclasscheck__
     counted: list[str] = []
 
-    def spy(cls: type[Any], subclass: type[Any]) -> bool:
+    def spy(cls: abc.ABCMeta, subclass: type[Any]) -> bool:
         if FeatureGroup in cls.__mro__ or cls in _PLUGIN_BASE_TYPES:
             counted.append(cls.__qualname__)
         return original(cls, subclass)
@@ -372,6 +372,7 @@ class TestPluginDiscoveryAvoidsAbcWalk:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # The call count stands in for wall time to stay stable under xdist load.
+        PluginLoader.all(force_reload=True)
         counted = _spy_on_plugin_subclasschecks(monkeypatch)
 
         _invalidate_abc_caches()
@@ -388,7 +389,7 @@ class TestPluginDiscoveryAvoidsAbcWalk:
                         (FeatureGroup,),
                         {
                             "__module__": __name__,
-                            "__qualname__": f"TestColdLoad.<locals>._ColdLoadExtraFG{i}",
+                            "__qualname__": f"TestPluginDiscoveryAvoidsAbcWalk.<locals>._ColdLoadExtraFG{i}",
                             "match_feature_group_criteria": classmethod(lambda cls, *a, **k: False),
                         },
                     )
@@ -430,9 +431,9 @@ class TestPluginDiscoveryAvoidsAbcWalk:
             _VirtualHostFG.register(_VirtualX)
             assert issubclass(_VirtualX, FeatureGroup), "sanity: X is a virtual FeatureGroup subclass"
 
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match="is not a subclass of FeatureGroup"):
                 PluginRegistry().register(_VirtualX)
-            with pytest.raises(TypeError):
+            with pytest.raises(TypeError, match="requires subclasses of"):
                 PluginLoader()._register_manifest("label", "mloda.feature_groups", FeatureGroup, (_VirtualX,))
         finally:
             del _VirtualHostFG, _VirtualX

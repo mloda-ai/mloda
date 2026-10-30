@@ -164,7 +164,7 @@ class DuckDBFramework(ComputeFramework):
         return set(data.columns)
 
     def _row_count(self, data: Any) -> int | None:
-        """A DuckdbRelation's __len__ runs count_star(), a real query; never call it for observability."""
+        """A DuckdbRelation's __len__ runs a COUNT query; never call it for observability."""
         if isinstance(data, DuckdbRelation):
             return None
         return super()._row_count(data)

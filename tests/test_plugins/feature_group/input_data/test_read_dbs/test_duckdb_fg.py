@@ -182,7 +182,7 @@ class TestDuckdbFGInPlace:
         assert isinstance(result[0], DuckdbRelation)
         assert result[0].connection is connection
         assert result[0].columns == ["inplace_a"]
-        assert connection.execute("SELECT 1").fetchone() == (1,)
+        assert connection.execute("SELECT 1").fetchall() == [(1,)]
         assert result[0].to_arrow_table().to_pydict() == {"inplace_a": [1, 2, 3]}
 
     def test_the_neutral_load_returns_the_requested_columns_as_an_arrow_table(self, opened: list[Any]) -> None:

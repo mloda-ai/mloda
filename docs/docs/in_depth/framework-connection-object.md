@@ -114,6 +114,8 @@ data_access_collection = DataAccessCollection(
 feature = Feature("feature1", options={"connection_handle": "warehouse"})
 ```
 
+On DuckDB 2.0, an `execute()` result on your connection that was not fetched to the end (even `fetchone()` on a one-row result) blocks reading any relation mloda returns on that connection: use `fetchall()` or a separate `connection.cursor()`.
+
 ### Using Spark with mloda API
 
 ```py

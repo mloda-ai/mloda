@@ -39,6 +39,9 @@ jobs:
           # Lockfile install with pandas<3 / numpy<2.4.
           - python-version: "3.11"
             toxenv: "-e pandas2"
+          # Lockfile install with duckdb 2.x.
+          - python-version: "3.13"
+            toxenv: "-e duckdb2"
           - python-version: "3.12"
             toxenv: "-e python312"
           - python-version: "3.13"

@@ -22,11 +22,11 @@ from mloda.core.abstract_plugins.components.input_data.read_db_fg import ReadDBF
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 from mloda.provider import SubtypeDeclaration
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
-from tests import registry_isolation_probe
+from tests import registry_isolation, registry_isolation_probe
 from tests.helpers.subclass_walks import count_root_walks
 from tests.registry_isolation import (
     FEATURE_GROUPS,
@@ -42,6 +42,9 @@ from tests.registry_isolation import (
 TESTS_ROOT = Path(__file__).resolve().parent
 
 PROBE_MODULE = registry_isolation_probe.__name__
+
+# Snapshot at import, before any test runs inside a young window, so it is the interpreter default.
+DEFAULT_YOUNG_THRESHOLD = gc.get_threshold()[0]
 
 SYNTHETIC_MODULE = "tests._registry_isolation_module_owned_probe"
 SYNTHETIC_CLASS = "ModuleOwnedRegistryProbe995FeatureGroup"
@@ -160,8 +163,8 @@ class TestReclaimLeakedFeatureGroups:
         reported = [c.__name__ for c in reclaim_leaked_feature_groups(mark, __name__)]
         expected = leaked_cls.__name__
         del leaked_cls  # drop the strong reference before asserting, so a failure leaves nothing behind
-        gc.collect()
-        gc.collect()
+        gc.collect()  # the leaked class was promoted by the reclaim, so only a full collection frees it
+        gc.collect()  # second pass: finalizer-freed cycles can release further classes
         assert reported == [expected], f"a strongly referenced subclass must be reported, got {reported}"
         assert expected not in _registered_names(), "the deliberate leak must not outlive this test"
 
@@ -184,6 +187,31 @@ class TestReclaimLeakedFeatureGroups:
         assert registered_before, "the probe never registered; the reclaim assertion would prove nothing"
         assert reported == [], f"a class this module does not own must not be reported, got {reported}"
         assert not registered_after, f"{name} survived the reclaim: an unowned class must still be collected"
+
+    @pytest.mark.parametrize("builder", ["helper_module", "type_built"])
+    def test_reclaims_another_modules_promoted_transient(self, builder: str) -> None:
+        """A foreign-module class that was promoted while held is reclaimed, not reported."""
+        was_enabled = gc.isenabled()  # restore what was found, so a paused GC stays paused
+        gc.disable()
+        try:
+            mark = FEATURE_GROUPS.mark()
+            if builder == "helper_module":
+                name = registry_isolation_probe.define_helper_subclass()
+            else:
+                name = type("PromotedForeignRegistryProbeFeatureGroup", (FeatureGroup,), {"__module__": "abc"}).__name__
+            held = [c for c in FEATURE_GROUPS.live_since(mark) if c.__name__ == name]
+            assert len(held) == 1, "the probe never registered; the reclaim assertion would prove nothing"
+            gc.collect()  # promotes the held class out of the young generation
+            del held
+            reported = [c.__name__ for c in reclaim_leaked_feature_groups(mark, __name__)]
+            survivors = [c.__name__ for c in FEATURE_GROUPS.live_since(mark) if c.__name__ == name]
+        finally:
+            if was_enabled:
+                gc.enable()
+            gc.collect()  # never leave the probe behind for the next test on this worker
+
+        assert reported == [], f"a class this module does not own must not be reported, got {reported}"
+        assert survivors == [], f"{name} was promoted, then released, and must still be reclaimed: {survivors}"
 
     def test_no_new_subclasses_reports_nothing(self) -> None:
         """The cheap path: nothing appeared since the snapshot, so nothing is reported and no collection is needed."""
@@ -225,8 +253,8 @@ class TestReclaimLeakedTransformers:
         reported = [c.__name__ for c in reclaim_leaked_transformers(mark, __name__)]
         expected = leaked_cls.__name__
         del leaked_cls  # drop the strong reference before asserting, so a failure leaves nothing behind
-        gc.collect()
-        gc.collect()
+        gc.collect()  # the leaked class was promoted by the reclaim, so only a full collection frees it
+        gc.collect()  # second pass: finalizer-freed cycles can release further classes
         assert reported == [expected], f"a strongly referenced subclass must be reported, got {reported}"
         assert expected not in _registered_transformer_names(), "the deliberate leak must not outlive this test"
 
@@ -245,7 +273,7 @@ def _module_bound_subclass() -> Iterator[str]:
         delattr(module, SYNTHETIC_CLASS)
         del sys.modules[SYNTHETIC_MODULE]
         del module
-        gc.collect()
+        gc.collect()  # the module-bound class sat in a cycle with its module; free it for the next test
 
 
 @contextmanager
@@ -259,25 +287,26 @@ def _subclass_bound_in_this_module(base: type[Any] = FeatureGroup) -> Iterator[s
         yield OWN_MODULE_CLASS
     finally:
         delattr(this_module, OWN_MODULE_CLASS)
-        gc.collect()
+        gc.collect()  # never leave the bound class behind for the next test on this worker
 
 
 @contextmanager
-def _counted_collections(counts: list[int]) -> Iterator[None]:
-    """Record the generation of every collection that runs, with automatic collections paused."""
+def _counted_collections(counts: list[int], pause_automatic: bool = True) -> Iterator[None]:
+    """Record the generation of every collection that runs, with automatic collections paused unless asked not to."""
 
     def on_collect(phase: str, info: dict[str, int]) -> None:
         if phase == "start":
             counts.append(info["generation"])
 
     was_enabled = gc.isenabled()  # restore what was found, so nesting this cannot re-enable a paused GC
-    gc.disable()
+    if pause_automatic:
+        gc.disable()
     gc.callbacks.append(on_collect)
     try:
         yield
     finally:
         gc.callbacks.remove(on_collect)
-        if was_enabled:
+        if pause_automatic and was_enabled:
             gc.enable()
 
 
@@ -343,6 +372,165 @@ class TestModuleOwnedSubclassesSkipTheCollection:
             f"{name} was just defined, so generation 0 must reclaim it and the ladder must stop there; "
             f"a full collection scans the whole heap and costs about a second. Got generations {collections}"
         )
+
+
+def _define_held_group_during_allocations(held_objects: int) -> list[int]:
+    """Hold a fresh FeatureGroup subclass across `held_objects` container allocations, release all, count the reclaim."""
+    mark = FEATURE_GROUPS.mark()
+
+    class YoungWindowRegistryProbeFeatureGroup(FeatureGroup):
+        pass
+
+    held = [[i] for i in range(held_objects)]  # tracked containers: they drive automatic young collections
+    del YoungWindowRegistryProbeFeatureGroup
+    del held
+    collections: list[int] = []
+    with _counted_collections(collections, pause_automatic=False):
+        assert reclaim_leaked_feature_groups(mark, __name__) == []
+    return collections
+
+
+class TestYoungWindow:
+    """young_window() raises the gen-0 threshold so a held test class is not promoted by automatic collections."""
+
+    def test_allocations_past_the_default_threshold_do_not_escalate_the_ladder(self) -> None:
+        """Automatic GC stays on; past the default point only the window keeps the class young, so gen 0 suffices."""
+        assert registry_isolation.YOUNG_WINDOW_THRESHOLD > 5 * DEFAULT_YOUNG_THRESHOLD, (
+            "the window must out-last the allocation count this test uses"
+        )
+        collections = _define_held_group_during_allocations(5 * DEFAULT_YOUNG_THRESHOLD)
+        assert collections == [0], f"the class was promoted and the ladder escalated, got generations {collections}"
+
+    def test_sets_the_window_threshold_and_restores_the_tuple_on_exit(self) -> None:
+        original = gc.get_threshold()
+        try:
+            gc.set_threshold(1234, 7, 3)
+            sentinel = gc.get_threshold()  # read back: 3.14 zeroes the third slot
+            with registry_isolation.young_window():
+                inside = gc.get_threshold()
+            after = gc.get_threshold()
+        finally:
+            gc.set_threshold(*original)
+        assert inside == (registry_isolation.YOUNG_WINDOW_THRESHOLD, *sentinel[1:])
+        assert after == sentinel
+        assert sentinel[:2] == (1234, 7)
+
+    def test_restores_the_tuple_when_the_body_raises(self) -> None:
+        original = gc.get_threshold()
+        try:
+            gc.set_threshold(1234, 7, 3)
+            sentinel = gc.get_threshold()  # read back: 3.14 zeroes the third slot
+            with pytest.raises(RuntimeError, match="boom"):
+                with registry_isolation.young_window():
+                    raise RuntimeError("boom")
+            after = gc.get_threshold()
+        finally:
+            gc.set_threshold(*original)
+        assert after == sentinel
+        assert sentinel[:2] == (1234, 7)
+
+
+class TestExtraRootsAreReclaimed:
+    """snapshot_roots and reclaim_since reclaim ComputeFramework and Extender subclasses (reclaim only, no report)."""
+
+    @pytest.mark.parametrize("root", registry_isolation.EXTRA_RECLAIM_ROOTS, ids=lambda r: r.__name__)
+    def test_a_dead_local_subclass_is_gone_without_a_full_collection(self, root: type) -> None:
+        snapshot = registry_isolation.snapshot_roots()
+
+        def define() -> str:
+            stubs = {"wraps": lambda self: set(), "__call__": lambda self, func, *a, **kw: func(*a, **kw)}
+            return type("DeadLocalRegistryProbeExtra", (root,), stubs).__name__
+
+        name = define()
+        collections: list[int] = []
+        with _counted_collections(collections):
+            registry_isolation.reclaim_since(snapshot, __name__)
+        alive = [c.__name__ for c in registry_isolation.RECLAIM_LOGS[root].live_since(snapshot[root])]
+        assert name not in alive, f"{name} survived the reclaim"
+        assert collections == [0], f"a young dead class must cost generation 0 only, got {collections}"
+
+    @pytest.mark.parametrize("root", registry_isolation.EXTRA_RECLAIM_ROOTS, ids=lambda r: r.__name__)
+    def test_a_held_local_extra_root_subclass_is_not_reported(self, root: type) -> None:
+        snapshot = registry_isolation.snapshot_roots()
+        stubs = {"wraps": lambda self: set(), "__call__": lambda self, func, *a, **kw: func(*a, **kw)}
+        held = type("HeldLocalRegistryProbeExtra", (root,), stubs)
+        try:
+            reported = [c.__name__ for c in registry_isolation.reclaim_since(snapshot, __name__)]
+        finally:
+            del held  # drop the strong reference before asserting, so a failure leaves nothing behind
+            gc.collect()  # the held class is promoted by the reclaim, so only a full collection frees it
+        assert reported == [], f"extra roots are reclaim-only and must not be reported, got {reported}"
+
+    def test_a_retained_feature_group_is_still_reported(self) -> None:
+        snapshot = registry_isolation.snapshot_roots()
+        leaked_cls = _define_leaked_subclass()
+        try:
+            reported = [c.__name__ for c in registry_isolation.reclaim_since(snapshot, __name__)]
+            expected = leaked_cls.__name__
+        finally:
+            del leaked_cls  # drop the strong reference before asserting, so a failure leaves nothing behind
+            gc.collect()  # the leaked class is promoted by the reclaim, so only a full collection frees it
+        assert reported == [expected], f"a retained FeatureGroup must be reported, got {reported}"
+
+
+def _define_implementation() -> tuple[type[Implementation[Any]], str]:
+    """A local Implementation naming a local pair; returns the class (held by the caller) and its name."""
+    from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+        PythonDictFramework,
+    )
+
+    class ReleasedImplProbeFeatureGroup(SourceFeatureGroup):
+        pass
+
+    class ReleasedImplProbe(Implementation[Any]):
+        feature_group = ReleasedImplProbeFeatureGroup
+        compute_framework = PythonDictFramework
+
+        @classmethod
+        def calculate(cls, serving: Any, data: Any, features: Any, framework: Any) -> Any:
+            return None
+
+    return ReleasedImplProbe, ReleasedImplProbe.__name__
+
+
+class TestReclaimReleasedImplementations:
+    """reclaim_released_implementations(mark, module_name) is the factored make_implementation teardown."""
+
+    def test_released_implementation_costs_no_full_collection(self) -> None:
+        mark = IMPLEMENTATIONS.mark()
+        impl, name = _define_implementation()
+        assert impl in loaded_implementations(), "the probe is not loaded; the assertion would prove nothing"
+        del impl
+        collections: list[int] = []
+        with _counted_collections(collections):
+            leaked = registry_isolation.reclaim_released_implementations(mark, __name__)
+        assert leaked == []
+        assert 2 not in collections, f"a released implementation must not need generation 2, got {collections}"
+        assert name not in {c.__name__ for c in IMPLEMENTATIONS.live_since(mark)}
+
+    def test_a_retained_loaded_implementation_is_reported(self) -> None:
+        mark = IMPLEMENTATIONS.mark()
+        impl, name = _define_implementation()
+        try:
+            reported = [c.__name__ for c in registry_isolation.reclaim_released_implementations(mark, __name__)]
+        finally:
+            del impl  # drop the strong reference before asserting, so a failure leaves nothing behind
+            gc.collect()  # the retained class was promoted by the reclaim, so only a full collection frees it
+            gc.collect()  # second pass: the Implementation and its pair release in separate rounds
+        assert reported == [name], f"a retained loaded implementation must be reported, got {reported}"
+        assert name not in {c.__name__ for c in IMPLEMENTATIONS.live_since(mark)}
+
+    def test_a_loaded_implementation_of_another_module_is_not_reported(self) -> None:
+        mark = IMPLEMENTATIONS.mark()
+        impl, _ = _define_implementation()
+        impl.__module__ = "tests._other_module_probe"
+        try:
+            reported = [c.__name__ for c in registry_isolation.reclaim_released_implementations(mark, __name__)]
+        finally:
+            del impl
+            gc.collect()  # never leave the retained probe behind for the next test on this worker
+            gc.collect()  # second pass: the Implementation and its pair release in separate rounds
+        assert reported == [], f"a class this module does not own must not be reported, got {reported}"
 
 
 class TestIsolationFixtureIsGlobal:

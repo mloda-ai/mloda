@@ -6,7 +6,6 @@ type-only __len__ gate, instrument's rows_out reset, and feature_group_version's
 degrade-and-log-once fallback.
 """
 
-import gc
 import logging
 from typing import Any
 
@@ -20,6 +19,7 @@ from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.provider import DataCreatorFeatureGroup, FeatureGroup, PropertySpec
 from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.registry_isolation import FEATURE_GROUPS, reclaim_leaked_feature_groups
 
 _UTILS_LOGGER = "mloda.core.abstract_plugins.components.utils"
 
@@ -137,6 +137,8 @@ class TestPlainStringDeclaredInputs:
     """input_features may declare plain str names instead of Feature objects."""
 
     def test_plain_str_set_becomes_frozenset_of_names(self, caplog: pytest.LogCaptureFixture) -> None:
+        mark = FEATURE_GROUPS.mark()
+
         class _PlainStrInputsFeatureGroup(FeatureGroup):
             """input_features declares plain str names, not Feature objects."""
 
@@ -161,13 +163,15 @@ class TestPlainStringDeclaredInputs:
             assert not any("Degraded field" in record.message for record in caplog.records)
         finally:
             del _PlainStrInputsFeatureGroup
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestBatchedFeatureSetDeclaredInputsUnion:
     """A batched FeatureSet's declared inputs union across all requested feature names."""
 
     def test_declared_inputs_union_across_batch(self) -> None:
+        mark = FEATURE_GROUPS.mark()
+
         class _BatchedInputFeatureGroup(FeatureGroup):
             """input_features returns one Feature per requested feature_name."""
 
@@ -190,13 +194,15 @@ class TestBatchedFeatureSetDeclaredInputsUnion:
             assert extender.captured.input_feature_edges == {"a": ("src_a",), "b": ("src_b",)}
         finally:
             del _BatchedInputFeatureGroup
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestDeclaredInputsReresolvedAfterOptionDefaultsMaterialize:
     """Declared inputs read from options must reflect materialized option defaults, not the pre-materialize memo."""
 
     def test_input_features_sees_the_materialized_default(self) -> None:
+        mark = FEATURE_GROUPS.mark()
+
         class _DeclaredInputRematerializesFeatureGroup(FeatureGroup):
             """PROPERTY_MAPPING declares a concrete default; input_features requires it materialized."""
 
@@ -226,9 +232,11 @@ class TestDeclaredInputsReresolvedAfterOptionDefaultsMaterialize:
             assert captured.input_feature_edges == {"my_feature": ("default_source",)}
         finally:
             del _DeclaredInputRematerializesFeatureGroup
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_materialize_resets_the_edges_memo_with_the_other_memo_attrs(self) -> None:
+        mark = FEATURE_GROUPS.mark()
+
         class _EdgesMemoResetFeatureGroup(FeatureGroup):
             """PROPERTY_MAPPING declares a concrete default so materialization changes the options."""
 
@@ -252,13 +260,15 @@ class TestDeclaredInputsReresolvedAfterOptionDefaultsMaterialize:
             assert feature_set.declared_input_columns is None
         finally:
             del _EdgesMemoResetFeatureGroup
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestFeatureNamesAndInputFeaturesArePlainStr:
     """feature_names and input_features must hold plain str, never FeatureName subclass instances."""
 
     def test_feature_names_and_input_features_hold_plain_str(self) -> None:
+        mark = FEATURE_GROUPS.mark()
+
         class _StrTypedFeatureNamesFeatureGroup(FeatureGroup):
             """input_features declares a Feature object, not a plain str."""
 
@@ -288,13 +298,15 @@ class TestFeatureNamesAndInputFeaturesArePlainStr:
             assert all(type(name) is str for names in edges.values() for name in names)
         finally:
             del _StrTypedFeatureNamesFeatureGroup
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestInputFeatureEdgesPerOutputFeature:
     """input_feature_edges maps each output feature to its own declared inputs; input_features stays the union."""
 
     def test_same_named_features_are_union_merged_and_sorted(self) -> None:
+        mark = FEATURE_GROUPS.mark()
+
         class _OptionDrivenInputFeatureGroup(FeatureGroup):
             """input_features reads the source from the feature's own options."""
 
@@ -318,9 +330,11 @@ class TestInputFeatureEdgesPerOutputFeature:
             assert extender.captured.input_feature_edges == {"twin": ("y_src", "z_src")}
         finally:
             del _OptionDrivenInputFeatureGroup
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_feature_without_declared_inputs_is_absent(self) -> None:
+        mark = FEATURE_GROUPS.mark()
+
         class _OnlyOneDeclaresInputFeatureGroup(FeatureGroup):
             """Only feature 'a' declares an input; 'b' declares none."""
 
@@ -343,9 +357,11 @@ class TestInputFeatureEdgesPerOutputFeature:
             assert extender.captured.input_features == frozenset({"src_a"})
         finally:
             del _OnlyOneDeclaresInputFeatureGroup
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_mutating_the_captured_edges_does_not_leak_into_the_memo_or_a_later_context(self) -> None:
+        mark = FEATURE_GROUPS.mark()
+
         class _MutationProbeFeatureGroup(FeatureGroup):
             """input_features declares one source per requested feature_name."""
 
@@ -379,7 +395,7 @@ class TestInputFeatureEdgesPerOutputFeature:
             assert first.input_feature_edges is not later.input_feature_edges
         finally:
             del _MutationProbeFeatureGroup
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestDeclaredInputsResolvedOncePerStep:
@@ -387,6 +403,8 @@ class TestDeclaredInputsResolvedOncePerStep:
     option defaults materialize."""
 
     def test_input_features_and_init_called_once_across_the_step(self) -> None:
+        mark = FEATURE_GROUPS.mark()
+
         class _CountingFeatureGroup(FeatureGroup):
             """Class-level counters track __init__ and input_features invocations."""
 
@@ -422,7 +440,7 @@ class TestDeclaredInputsResolvedOncePerStep:
                 assert context.input_features == frozenset({"x"})
         finally:
             del _CountingFeatureGroup
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
 
 class _ValidateInputTrackingFeatureGroup(FeatureGroup):
@@ -484,6 +502,8 @@ class TestValidateHooksRowsOutStaysNone:
     """rows_out must stay None on the validate hooks, even when the validator returns a sized value."""
 
     def test_rows_out_none_for_sized_validate_return_values(self) -> None:
+        mark = FEATURE_GROUPS.mark()
+
         class _SizedValidateReturnFeatureGroup(FeatureGroup):
             """validate_input_features/validate_output_features return sized lists."""
 
@@ -516,7 +536,7 @@ class TestValidateHooksRowsOutStaysNone:
             assert output_extender.captured.rows_out is None
         finally:
             del _SizedValidateReturnFeatureGroup
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
 
 class _NoLenGetattrRecordingDouble:
@@ -567,6 +587,8 @@ class TestRowsInOutDegradeSilentlyOnLenRaising:
     """rows_in/rows_out must degrade to None without a WARNING when __len__ raises."""
 
     def test_len_raising_degrades_without_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        mark = FEATURE_GROUPS.mark()
+
         class _RootReturnsLenRaisingFeatureGroup(FeatureGroup):
             """Root feature group; calculate_feature returns a __len__-raising double."""
 
@@ -589,7 +611,7 @@ class TestRowsInOutDegradeSilentlyOnLenRaising:
             assert extender.captured.rows_out is None
         finally:
             del _RootReturnsLenRaisingFeatureGroup
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
 
 def _make_context(**overrides: Any) -> HookContext:
@@ -629,6 +651,8 @@ class TestFeatureGroupVersionDegradesAndLogs:
     """A version() that raises must degrade to 'unavailable' and log exactly one WARNING."""
 
     def test_version_raising_degrades_and_logs_exactly_one_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        mark = FEATURE_GROUPS.mark()
+
         class _VersionRaisesFeatureGroup(FeatureGroup):
             """version() classmethod raises."""
 
@@ -663,13 +687,15 @@ class TestFeatureGroupVersionDegradesAndLogs:
             assert "RuntimeError" in warnings[0]
         finally:
             del _VersionRaisesFeatureGroup
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestDeclaredInputMemoAttributesGuarded:
     """run_calculate_feature must not raise AttributeError when the FeatureSet lacks the declared-input memo attrs."""
 
     def test_missing_memo_attributes_does_not_raise(self) -> None:
+        mark = FEATURE_GROUPS.mark()
+
         class _MemolessInputFeatureGroup(FeatureGroup):
             """input_features declares a plain str name."""
 
@@ -698,9 +724,11 @@ class TestDeclaredInputMemoAttributesGuarded:
             assert extender.captured.input_feature_edges == {"my_feature": ("x",)}
         finally:
             del _MemolessInputFeatureGroup
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_resolved_names_memo_without_edges_attribute_does_not_raise(self) -> None:
+        mark = FEATURE_GROUPS.mark()
+
         class _EdgesAttrMissingFeatureGroup(FeatureGroup):
             """input_features declares a plain str name."""
 
@@ -728,7 +756,7 @@ class TestDeclaredInputMemoAttributesGuarded:
             assert extender.captured.input_feature_edges is None
         finally:
             del _EdgesAttrMissingFeatureGroup
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
 
 _REPL_COL = "ctx_replaced_col"

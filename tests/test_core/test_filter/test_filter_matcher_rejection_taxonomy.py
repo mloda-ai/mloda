@@ -6,7 +6,6 @@ runs, so a failing assert never pins a throwaway FeatureGroup and trips the no-l
 
 from __future__ import annotations
 
-import gc
 import logging
 from collections.abc import Callable
 from copy import deepcopy
@@ -32,6 +31,7 @@ from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.user import Feature, FeatureName, FilterType, GlobalFilter, Options, SingleFilter
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.registry_isolation import FEATURE_GROUPS, reclaim_leaked_feature_groups
 
 
 GF_LOGGER_NAME = "mloda.core.filter.global_filter"
@@ -112,8 +112,6 @@ def _window_not_observed() -> bool:
 
 def _make_value_rejection_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
     """A throwaway group whose hook raises PropertyValueRejection for the filter feature."""
-    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
-    gc.collect()
 
     class RtxValueRejectionFG728(FeatureGroup):
         @classmethod
@@ -136,7 +134,6 @@ def _make_value_rejection_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
 
 def _make_recorded_decline_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
     """A throwaway group whose hook records a rejection for the filter feature and returns False."""
-    gc.collect()
 
     class RtxRecordedDeclineFG728(FeatureGroup):
         window_active: ClassVar[bool] = False
@@ -163,7 +160,6 @@ def _make_recorded_decline_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]
 
 def _make_record_then_value_raise_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
     """A throwaway group whose hook records reason A, then raises PropertyValueRejection(B)."""
-    gc.collect()
 
     class RtxRecordThenValueRaiseFG728(FeatureGroup):
         @classmethod
@@ -187,7 +183,6 @@ def _make_record_then_value_raise_fg() -> tuple[type[FeatureGroup], Callable[[],
 
 def _make_stage_decline_fg(stage: str) -> tuple[type[FeatureGroup], Callable[[], bool]]:
     """A throwaway group whose hook records with the caller's stage for the filter feature and returns False."""
-    gc.collect()
 
     class RtxStageDeclineFG728(FeatureGroup):
         @classmethod
@@ -211,7 +206,6 @@ def _make_stage_decline_fg(stage: str) -> tuple[type[FeatureGroup], Callable[[],
 
 def _make_record_then_error_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
     """A throwaway group whose hook records reason A, then raises a plain RuntimeError."""
-    gc.collect()
 
     class RtxRecordThenErrorFG728(FeatureGroup):
         window_active: ClassVar[bool] = False
@@ -238,7 +232,6 @@ def _make_record_then_error_fg() -> tuple[type[FeatureGroup], Callable[[], bool]
 
 def _make_record_but_match_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
     """A throwaway group whose hook records a rejection for the filter feature and still returns True."""
-    gc.collect()
 
     class RtxRecordButMatchFG728(FeatureGroup):
         window_active: ClassVar[bool] = False
@@ -265,7 +258,6 @@ def _make_record_but_match_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]
 
 def _make_escalating_rejection_fg(marker: BaseException) -> tuple[type[FeatureGroup], Callable[[], bool]]:
     """A throwaway group whose hook records reason A, then raises the caller's own marked exception object."""
-    gc.collect()
 
     class RtxEscalatingRejectionFG728(FeatureGroup):
         window_active: ClassVar[bool] = False
@@ -290,7 +282,6 @@ def _make_escalating_rejection_fg(marker: BaseException) -> tuple[type[FeatureGr
 
 def _make_plain_error_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
     """A throwaway group whose hook raises a plain RuntimeError for the filter feature, recording nothing."""
-    gc.collect()
 
     class RtxPlainErrorFG728(FeatureGroup):
         @classmethod
@@ -313,7 +304,6 @@ def _make_plain_error_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
 
 def _make_falsy_decline_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
     """A throwaway group whose hook records a rejection for the filter feature and returns None."""
-    gc.collect()
 
     class RtxFalsyDeclineFG728(FeatureGroup):
         @classmethod
@@ -337,7 +327,6 @@ def _make_falsy_decline_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
 
 def _make_decline_then_defect_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
     """A throwaway group whose hook declines with a recorded reason once, then raises on the next ask."""
-    gc.collect()
 
     class RtxDeclineThenDefectFG728(FeatureGroup):
         declined: ClassVar[bool] = False
@@ -376,7 +365,6 @@ class RtxHostileStrRejection728(PropertyValueRejection):
 
 def _make_marking_hostile_str_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
     """A throwaway group whose hook writes a marker option, then raises the unreadable rejection."""
-    gc.collect()
 
     class RtxMarkingHostileStrFG728(FeatureGroup):
         @classmethod
@@ -400,7 +388,6 @@ def _make_marking_hostile_str_fg() -> tuple[type[FeatureGroup], Callable[[], boo
 
 def _make_unnameable_decline_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
     """A throwaway group whose hook records a rejection and returns False, but cannot say what it is called."""
-    gc.collect()
 
     class RtxUnnameableDeclineFG728(FeatureGroup):
         @classmethod
@@ -429,7 +416,6 @@ def _make_unnameable_decline_fg() -> tuple[type[FeatureGroup], Callable[[], bool
 
 def _make_plain_decline_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
     """A throwaway group whose hook returns a literal False for the filter feature, recording nothing."""
-    gc.collect()
 
     class RtxPlainDeclineFG728(FeatureGroup):
         @classmethod
@@ -466,6 +452,7 @@ class _RtxCriteriaSnapshot:
 
 def _drive_criteria(make: _RtxFactory, caplog: pytest.LogCaptureFixture, calls: int = 1) -> _RtxCriteriaSnapshot:
     """Call criteria `calls` times on ONE fresh GlobalFilter; the finally unbinds every name that pins the class."""
+    mark = FEATURE_GROUPS.mark()
     caplog.clear()
     fg, read_window = make()
     global_filter = GlobalFilter()
@@ -492,7 +479,7 @@ def _drive_criteria(make: _RtxFactory, caplog: pytest.LogCaptureFixture, calls: 
         )
     finally:
         del fg, read_window, global_filter, declared, items
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 @dataclass(frozen=True)
@@ -506,6 +493,7 @@ class _RtxCountedSnapshot:
 
 def _drive_criteria_counted(make: _RtxFactory) -> _RtxCountedSnapshot:
     """Call criteria once, reading only len(dropped_filters); the finally unbinds every name pinning the class."""
+    mark = FEATURE_GROUPS.mark()
     fg, read_window = make()
     global_filter = GlobalFilter()
     try:
@@ -517,7 +505,7 @@ def _drive_criteria_counted(make: _RtxFactory) -> _RtxCountedSnapshot:
         )
     finally:
         del fg, read_window, global_filter
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 @dataclass(frozen=True)
@@ -532,6 +520,7 @@ class _RtxResolutionSnapshot:
 
 def _drive_resolution(make: _RtxFactory) -> _RtxResolutionSnapshot:
     """Call the resolution seam directly; the finally unbinds the identifier, which keys records by class."""
+    mark = FEATURE_GROUPS.mark()
     fg, read_window = make()
     identifier = IdentifyFeatureGroupClass()
     feature = Feature(FILTER_FEATURE)
@@ -547,7 +536,7 @@ def _drive_resolution(make: _RtxFactory) -> _RtxResolutionSnapshot:
         )
     finally:
         del fg, read_window, identifier, feature, matched
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 @dataclass(frozen=True)
@@ -574,6 +563,7 @@ def _canonical_snapshot(result: EvaluationResult | None, escaped: str | None) ->
 
 def _drive_canonical(make: _RtxFactory) -> _CanonicalSnapshot:
     """Evaluate the filter feature against the probe alone and fold the eliminations to plain tuples."""
+    mark = FEATURE_GROUPS.mark()
     fg, read_window = make()
     plugins: FeatureGroupEnvironmentMapping = {fg: {PythonDictFramework}}
     result = None
@@ -585,7 +575,7 @@ def _drive_canonical(make: _RtxFactory) -> _CanonicalSnapshot:
         return snapshot
     finally:
         del fg, read_window, plugins, result
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestValueRejectionIsATypedDrop:
@@ -708,6 +698,7 @@ class TestMatchAndEscalationLeaveNoDrop:
 
     def test_an_escalated_value_rejection_still_escapes_and_records_no_drop(self) -> None:
         """An escalate_match_abort-marked raise crosses the seam as the SAME object and is not a drop."""
+        mark = FEATURE_GROUPS.mark()
         marker = escalate_match_abort(PropertyValueRejection(ESCALATE_MESSAGE))
         fg, read_window = _make_escalating_rejection_fg(marker)
         global_filter = GlobalFilter()
@@ -724,7 +715,7 @@ class TestMatchAndEscalationLeaveNoDrop:
         # Drop the retained traceback: its frames pin the throwaway class through the hook's `cls`.
         marker.__traceback__ = None
         del fg, read_window, global_filter, caught
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
         assert is_marker, f"the marked exception itself must escape, got: {type_name}: {message}"
         assert type_name == VALUE_REJECTION_TYPE_NAME
@@ -734,6 +725,7 @@ class TestMatchAndEscalationLeaveNoDrop:
 
     def test_the_window_is_reset_after_the_abort_escapes(self) -> None:
         """The probe's finally owns the reset, so even a propagating abort leaves no open window behind."""
+        mark = FEATURE_GROUPS.mark()
         marker = escalate_match_abort(PropertyValueRejection(ESCALATE_MESSAGE))
         fg, read_window = _make_escalating_rejection_fg(marker)
         global_filter = GlobalFilter()
@@ -747,7 +739,7 @@ class TestMatchAndEscalationLeaveNoDrop:
         # Drop the retained traceback: its frames pin the throwaway class through the hook's `cls`.
         marker.__traceback__ = None
         del fg, read_window, global_filter, caught
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
         assert is_marker, "the marked abort must escape criteria for the reset to be the fact under test"
         assert window_after_is_none, "the probe must reset MATCH_REJECTION_REASONS even on the abort path"
@@ -768,6 +760,7 @@ class _ProbeSnapshot:
 
 def _drive_probe(make: _RtxFactory) -> _ProbeSnapshot:
     """Probe one throwaway matcher; the import lives here so a missing probe fails only these tests."""
+    mark = FEATURE_GROUPS.mark()
     from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 
     fg, read_window = make()
@@ -786,7 +779,7 @@ def _drive_probe(make: _RtxFactory) -> _ProbeSnapshot:
         return snapshot
     finally:
         del fg, read_window
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestCriteriaProbeOutcome:
@@ -915,6 +908,7 @@ class TestAnOuterWindowSurvivesTheProbe:
     """The probe stacks its own window: an outer recording is neither harvested nor lost."""
 
     def test_an_outer_record_is_not_harvested_and_survives(self) -> None:
+        mark = FEATURE_GROUPS.mark()
         token = MATCH_REJECTION_REASONS.set({})
         try:
             record_match_rejection(OUTER_OWNER, OUTER_REASON)
@@ -927,7 +921,7 @@ class TestAnOuterWindowSurvivesTheProbe:
                 outer_entries = tuple(sorted((owner, rejection.reason) for owner, rejection in outer.items()))
             finally:
                 del fg, read_window, global_filter
-                gc.collect()
+                reclaim_leaked_feature_groups(mark, __name__)
         finally:
             MATCH_REJECTION_REASONS.reset(token)
 

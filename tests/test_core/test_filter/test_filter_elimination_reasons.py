@@ -6,7 +6,6 @@ trips the no-leak fixture in tests/conftest.py.
 
 from __future__ import annotations
 
-import gc
 import logging
 from collections.abc import Callable, Sequence
 from copy import deepcopy
@@ -33,6 +32,7 @@ from mloda.core.prepare.resolution_types import Elimination, EliminationStage, E
 from mloda.user import Feature, FeatureName, FilterType, GlobalFilter, Options, SingleFilter
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.registry_isolation import FEATURE_GROUPS, reclaim_leaked_feature_groups
 
 GF_LOGGER_NAME = "mloda.core.filter.global_filter"
 
@@ -247,8 +247,6 @@ def _losing_pair() -> tuple[Feature, Feature]:
 
 def _make_plain_fg() -> type[FeatureGroup]:
     """A throwaway group matching both module names through the default criteria."""
-    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
-    gc.collect()
 
     class FerPlainFG(FeatureGroup):
         @classmethod
@@ -260,7 +258,6 @@ def _make_plain_fg() -> type[FeatureGroup]:
 
 def _make_scope_tie_a_fg() -> type[FeatureGroup]:
     """A plain matcher whose class name sorts before its twin's."""
-    gc.collect()
 
     class FerScopeTieAFG(FeatureGroup):
         @classmethod
@@ -272,7 +269,6 @@ def _make_scope_tie_a_fg() -> type[FeatureGroup]:
 
 def _make_scope_tie_b_fg() -> type[FeatureGroup]:
     """A plain matcher whose class name sorts after its twin's."""
-    gc.collect()
 
     class FerScopeTieBFG(FeatureGroup):
         @classmethod
@@ -284,7 +280,6 @@ def _make_scope_tie_b_fg() -> type[FeatureGroup]:
 
 def _make_matcher_error_fg() -> type[FeatureGroup]:
     """A throwaway group whose hook raises a plain RuntimeError for the filter feature."""
-    gc.collect()
 
     class FerMatcherErrorFG(FeatureGroup):
         @classmethod
@@ -307,7 +302,6 @@ def _make_matcher_error_fg() -> type[FeatureGroup]:
 
 def _make_stage_decline_fg(stage: str) -> type[FeatureGroup]:
     """A throwaway group whose hook records under the caller's stage hint and declines the filter feature."""
-    gc.collect()
 
     class FerStageDeclineFG(FeatureGroup):
         @classmethod
@@ -331,7 +325,6 @@ def _make_stage_decline_fg(stage: str) -> type[FeatureGroup]:
 
 def _make_group_domain_fg() -> type[FeatureGroup]:
     """A plain matcher declaring a non-default group domain."""
-    gc.collect()
 
     class FerGroupDomainFG(FeatureGroup):
         @classmethod
@@ -354,7 +347,6 @@ class _RaisingName:
 
 def _make_unreadable_domain_fg() -> type[FeatureGroup]:
     """A plain matcher declaring a group domain whose name no f-string can render."""
-    gc.collect()
 
     class FerUnreadableDomainFG(FeatureGroup):
         @classmethod
@@ -371,7 +363,6 @@ def _make_unreadable_domain_fg() -> type[FeatureGroup]:
 
 def _make_capability_reject_fg() -> type[FeatureGroup]:
     """A plain matcher whose capability hook rejects every framework."""
-    gc.collect()
 
     class FerCapabilityRejectFG(FeatureGroup):
         @classmethod
@@ -394,7 +385,6 @@ def _make_capability_reject_fg() -> type[FeatureGroup]:
 
 def _make_plain_decline_fg() -> type[FeatureGroup]:
     """A throwaway group whose hook returns a literal False for the filter feature, recording nothing."""
-    gc.collect()
 
     class FerPlainDeclineFG(FeatureGroup):
         @classmethod
@@ -417,7 +407,6 @@ def _make_plain_decline_fg() -> type[FeatureGroup]:
 
 def _make_counting_fg(asked: list[str]) -> type[FeatureGroup]:
     """A plain matcher appending every name its match hook is asked about to `asked`, which holds no class."""
-    gc.collect()
 
     class FerCountingFG(FeatureGroup):
         @classmethod
@@ -439,7 +428,6 @@ def _make_counting_fg(asked: list[str]) -> type[FeatureGroup]:
 
 def _make_varying_defect_fg(reasons: Sequence[str]) -> type[FeatureGroup]:
     """A throwaway group whose hook raises each of `reasons` once, then repeats the last one for every later call."""
-    gc.collect()
 
     class FerVaryingDefectFG(FeatureGroup):
         _pending: ClassVar[list[str]] = list(reasons)
@@ -464,7 +452,6 @@ def _make_varying_defect_fg(reasons: Sequence[str]) -> type[FeatureGroup]:
 
 def _make_varying_falsy_fg(returns: Sequence[Any]) -> type[FeatureGroup]:
     """A throwaway group returning each of `returns` once, then repeating the last: the type name is what differs."""
-    gc.collect()
 
     class FerVaryingFalsyFG(FeatureGroup):
         _pending: ClassVar[list[Any]] = list(returns)
@@ -489,7 +476,6 @@ def _make_varying_falsy_fg(returns: Sequence[Any]) -> type[FeatureGroup]:
 
 def _make_falsy_decline_fg() -> type[FeatureGroup]:
     """A throwaway group whose hook returns None for the filter feature, recording nothing."""
-    gc.collect()
 
     class FerFalsyDeclineFG(FeatureGroup):
         @classmethod
@@ -512,7 +498,6 @@ def _make_falsy_decline_fg() -> type[FeatureGroup]:
 
 def _make_option_keyed_defect_fg() -> type[FeatureGroup]:
     """A throwaway group whose raise message is keyed off the probed options, so what it reads decides the reason."""
-    gc.collect()
 
     class FerOptionKeyedDefectFG(FeatureGroup):
         @classmethod
@@ -535,7 +520,6 @@ def _make_option_keyed_defect_fg() -> type[FeatureGroup]:
 
 def _make_unnameable_defect_fg() -> type[FeatureGroup]:
     """A throwaway group that raises for the filter feature and cannot say what it is called either."""
-    gc.collect()
 
     class FerUnnameableDefectFG(FeatureGroup):
         @classmethod
@@ -563,7 +547,6 @@ def _make_unnameable_defect_fg() -> type[FeatureGroup]:
 
 def _make_unnameable_domain_fg() -> type[FeatureGroup]:
     """A throwaway group that matches the filter feature and cannot say what it is called."""
-    gc.collect()
 
     class FerUnnameableDomainFG(FeatureGroup):
         @classmethod
@@ -589,7 +572,6 @@ def _make_unnameable_domain_fg() -> type[FeatureGroup]:
 
 def _make_decline_then_defect_fg() -> type[FeatureGroup]:
     """A throwaway group whose hook declines with a recorded reason once, then raises on the next ask."""
-    gc.collect()
 
     class FerDeclineThenDefectFG(FeatureGroup):
         declined: ClassVar[bool] = False
@@ -618,7 +600,6 @@ def _make_decline_then_defect_fg() -> type[FeatureGroup]:
 
 def _make_defect_then_match_fg() -> type[FeatureGroup]:
     """A throwaway group whose hook raises once, then matches the filter feature on every later ask."""
-    gc.collect()
 
     class FerDefectThenMatchFG(FeatureGroup):
         raised: ClassVar[bool] = False
@@ -644,7 +625,6 @@ def _make_defect_then_match_fg() -> type[FeatureGroup]:
 
 def _make_match_then_decline_fg() -> type[FeatureGroup]:
     """A throwaway group whose hook matches the filter feature once, then declines with a recorded reason."""
-    gc.collect()
 
     class FerMatchThenDeclineFG(FeatureGroup):
         matched: ClassVar[bool] = False
@@ -744,7 +724,6 @@ def _run_setup(
     finally:
         groups.clear()
         del groups, matched
-        gc.collect()
 
 
 def _drive(
@@ -756,6 +735,7 @@ def _drive(
     warn_unmatched: bool = False,
 ) -> _LedgerSnapshot:
     """One setup on ONE fresh GlobalFilter carrying every declared filter."""
+    mark = FEATURE_GROUPS.mark()
     groups = [make() for make in makes]
     global_filter = _new_global_filter(filter_features)
     try:
@@ -763,7 +743,7 @@ def _drive(
     finally:
         groups.clear()
         del groups, global_filter
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 def _drive_matching(
@@ -786,6 +766,7 @@ def _drive_setups(
     make_host: Callable[[], Feature] = _plain_host,
 ) -> tuple[_LedgerSnapshot, ...]:
     """One readout per engine setup, each consulting the probes it names by index, with a reset between them."""
+    mark = FEATURE_GROUPS.mark()
     groups = [make() for make in makes]
     global_filter = _new_global_filter((filter_feature,))
     snapshots: list[_LedgerSnapshot] = []
@@ -799,7 +780,7 @@ def _drive_setups(
     finally:
         groups.clear()
         del groups, global_filter
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 def _drive_shared_name(
@@ -844,6 +825,7 @@ def _drive_unnameable_drop(
     make: _Factory, caplog: pytest.LogCaptureFixture, filter_feature: Feature | str = FILTER_FEATURE
 ) -> _DegradedDropSnapshot:
     """Match one declared filter against a group whose class name raises; the ledger is counted, never keyed."""
+    mark = FEATURE_GROUPS.mark()
     caplog.clear()
     fg = make()
     global_filter = _new_global_filter((filter_feature,))
@@ -862,7 +844,7 @@ def _drive_unnameable_drop(
         )
     finally:
         del fg, global_filter, matched
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 @dataclass(frozen=True)
@@ -889,6 +871,7 @@ def _canonical_snapshot(result: EvaluationResult | None, escaped: str | None) ->
 
 def _drive_canonical(make: _Factory) -> _CanonicalSnapshot:
     """Evaluate the filter feature against the probe alone and fold the eliminations to plain tuples."""
+    mark = FEATURE_GROUPS.mark()
     fg = make()
     plugins: FeatureGroupEnvironmentMapping = {fg: {PythonDictFramework}}
     result = None
@@ -900,11 +883,12 @@ def _drive_canonical(make: _Factory) -> _CanonicalSnapshot:
         return snapshot
     finally:
         del fg, plugins, result
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 def _drive_near_miss_block() -> tuple[str | None, str]:
     """(the rendered block, the same block rebuilt from the shared bullet) over two eliminated candidates."""
+    mark = FEATURE_GROUPS.mark()
     from mloda.core.prepare.resolution_failure_renderer import near_miss_text
 
     # Built before the classes exist, so a raising helper leaves no throwaway class behind.
@@ -931,7 +915,7 @@ def _drive_near_miss_block() -> tuple[str | None, str]:
         return rendered, expected
     finally:
         del fg_a, fg_b, result
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestTheSharedStageMapper:

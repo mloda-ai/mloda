@@ -7,7 +7,6 @@ and that both seams route through it. Probe classes are dropped before any asser
 
 from __future__ import annotations
 
-import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -27,6 +26,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from tests.registry_isolation import FEATURE_GROUPS, reclaim_leaked_feature_groups
 
 
 # The probe's module binding of the helper: the one point where a spy can intercept the hook call.
@@ -119,8 +119,6 @@ def _capture(call: Callable[[], T]) -> tuple[T | None, str | None]:
 
 def _make_probe_fg(answer: Callable[[], Any]) -> type[FeatureGroup]:
     """A throwaway group whose match hook returns, or raises, whatever ``answer`` does."""
-    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
-    gc.collect()
 
     class MatchHookProbeFG991(FeatureGroup):
         @classmethod
@@ -163,6 +161,7 @@ def _drive(
     ``returned`` is the object the hook hands back, ``raised`` the object it raises. The finally unbinds
     every name and clears every traceback that would pin the probe class.
     """
+    mark = FEATURE_GROUPS.mark()
     fg = _make_probe_fg(answer)
     outcome: Any = None
     escaped: BaseException | None = None
@@ -197,7 +196,7 @@ def _drive(
                 # The frames hold the helper's own `feature_group` local, which pins the probe class.
                 exception.__traceback__ = None
         del fg, outcome, escaped, error, matched, raw
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestTheHelperCoercesTheReturn:
@@ -306,6 +305,7 @@ class _ContainedErrorSnapshot:
 
 def _drive_contained_error(marker: Exception) -> _ContainedErrorSnapshot:
     """Contain one raise and read the exception the outcome carries, traceback included, out as plain data."""
+    mark = FEATURE_GROUPS.mark()
     fg = _make_probe_fg(partial(_raise, marker))
     outcome: MatchHookOutcome | None = None
     error: Exception | None = None
@@ -324,7 +324,7 @@ def _drive_contained_error(marker: Exception) -> _ContainedErrorSnapshot:
         # The frames hold the helper's own `feature_group` and `returned` locals, which pin the probe class.
         marker.__traceback__ = None
         del fg, outcome, error
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestTheContainedRaiseCarriesNoTraceback:
@@ -380,6 +380,7 @@ class _Spy:
 
 def test_the_filter_seam_calls_the_helper_once_per_filter(monkeypatch: pytest.MonkeyPatch) -> None:
     """The filter seam routes through the probe, whose module binding is the interception point, once per filter."""
+    mark = FEATURE_GROUPS.mark()
     assert hasattr(match_hook_module, HELPER_NAME), (
         f"{match_hook_module.__name__} must hold {HELPER_NAME}, the binding the probe routes the hook call "
         "through; nothing here can observe a call the probe makes itself."
@@ -399,7 +400,7 @@ def test_the_filter_seam_calls_the_helper_once_per_filter(monkeypatch: pytest.Mo
         seen = sorted(spy.seen)
     finally:
         del fg, global_filter, matched, spy
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
     assert escaped is None, f"nothing may cross identify_matched_filters: {escaped}"
     assert seen == [(PROBE_CLASS_NAME, FILTER_FEATURE_A), (PROBE_CLASS_NAME, FILTER_FEATURE_B)], (
@@ -410,6 +411,7 @@ def test_the_filter_seam_calls_the_helper_once_per_filter(monkeypatch: pytest.Mo
 
 def test_the_resolution_seam_calls_the_helper_once_per_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
     """The resolution seam routes through the probe, whose module binding is the interception point, per candidate."""
+    mark = FEATURE_GROUPS.mark()
     assert hasattr(match_hook_module, HELPER_NAME), (
         f"{match_hook_module.__name__} must hold {HELPER_NAME}, the binding the probe routes the hook call "
         "through; nothing here can observe a call the probe makes itself."
@@ -427,7 +429,7 @@ def test_the_resolution_seam_calls_the_helper_once_per_candidate(monkeypatch: py
         seen = sorted(spy.seen)
     finally:
         del fg, identifier, spy
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
     assert escaped is None, f"nothing may cross the resolution seam: {escaped}"
     assert seen == [(PROBE_CLASS_NAME, PROBE_FEATURE)], (

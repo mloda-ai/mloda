@@ -1,13 +1,11 @@
 """A name whose source count violates MIN_IN_FEATURES is a near-miss, not a bare "no feature groups found".
 
 The gate rejects at match time (#944), so the actionable in_feature-count message must reach the
-resolution-failure report as an elimination. The probe class is dropped under gc.collect() before any
+resolution-failure report as an elimination. The probe class is reclaimed before any
 assert, so no failing assert pins it (tests/conftest.py).
 """
 
 from __future__ import annotations
-
-import gc
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
@@ -20,6 +18,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.core.prepare.resolution_types import EvaluationResult
+from tests.registry_isolation import FEATURE_GROUPS, reclaim_leaked_feature_groups
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
@@ -36,7 +35,6 @@ class MinCountFw944(ComputeFramework):
 
 def _make_min_count_mixin_fg() -> type[FeatureGroup]:
     """A mixin candidate whose name identifies it, so only the in_feature count gate can reject it."""
-    gc.collect()  # class objects are cyclic: collect leftovers before defining a twin
 
     class MinInFeaturesMixinFG944(FeatureChainParserMixin, FeatureGroup):
         PREFIX_PATTERN = r".*__(?P<operation>\w+)_mincount944$"
@@ -55,6 +53,7 @@ def _make_min_count_mixin_fg() -> type[FeatureGroup]:
 
 def _resolve(feature_name: str) -> tuple[str | None, tuple[str, ...], tuple[tuple[str, str, str], ...], str]:
     """Evaluate that name: (error type, winner names, (class, stage, reason) per elimination, rendered message)."""
+    mark = FEATURE_GROUPS.mark()
     feature_group = _make_min_count_mixin_fg()
     feature = Feature(feature_name, Options())
     plugins: FeatureGroupEnvironmentMapping = {feature_group: {MinCountFw944}}
@@ -73,7 +72,7 @@ def _resolve(feature_name: str) -> tuple[str | None, tuple[str, ...], tuple[tupl
             sorted((g.get_class_name(), str(e.stage), str(e.reason)) for g, e in result.eliminations.items())
         )
     del result, plugins, feature, feature_group
-    gc.collect()
+    reclaim_leaked_feature_groups(mark, __name__)
     return error_type, identified, eliminations, message
 
 

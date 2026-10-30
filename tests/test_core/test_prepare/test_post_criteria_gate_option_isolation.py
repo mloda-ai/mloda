@@ -3,7 +3,6 @@
 Doubles carry an ``os061`` suffix and are dropped per test.
 """
 
-import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -23,6 +22,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from tests.registry_isolation import FEATURE_GROUPS, reclaim_leaked_feature_groups
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceBase
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
@@ -51,7 +51,6 @@ def _capture(call: Callable[[], T]) -> tuple[T | None, str | None]:
 
 def _make_domain_rejected_match_fg() -> type[FeatureGroup]:
     """Criteria match RETURNS TRUE and writes a distinctive option, but the domain gate rejects it."""
-    gc.collect()
 
     class DomainRejectedMatchFG_os061(FeatureGroup):
         """Stands in for a matched candidate that a later gate still eliminates."""
@@ -88,7 +87,6 @@ def _make_domain_rejected_match_fg() -> type[FeatureGroup]:
 
 def _make_domain_matching_fg() -> type[FeatureGroup]:
     """Clean winner: matches the shared feature name and the requested domain, writes nothing."""
-    gc.collect()
 
     class DomainMatchingFG_os061(FeatureGroup):
         """The winner whose options must not carry the eliminated candidate's write."""
@@ -123,6 +121,7 @@ class _OptionsSnapshot:
 
 def _evaluate(builders: tuple[Callable[[], type[FeatureGroup]], ...]) -> _OptionsSnapshot:
     """Evaluate the shared feature against the given candidates, in order, and read the options out."""
+    mark = FEATURE_GROUPS.mark()
     candidates = [build() for build in builders]
     try:
         feature = Feature(SHARED_FEATURE, domain=REQUESTED_DOMAIN)
@@ -142,7 +141,7 @@ def _evaluate(builders: tuple[Callable[[], type[FeatureGroup]], ...]) -> _Option
     finally:
         candidates.clear()
         del candidates
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestPostCriteriaGateRejectionLeavesNoPartialMutation:
@@ -269,14 +268,12 @@ def _resolve(candidates: list[type[FeatureGroup]], domain: str | None = None) ->
         match=feature.input_data_match,
     )
     del result
-    gc.collect()
     return resolved
 
 
 def _parent_and_sub(
     seen: list[dict[str, Any]], with_reader: bool = False
 ) -> tuple[type[FeatureGroup], type[FeatureGroup]]:
-    gc.collect()
     parent_writes = _Writes(
         group={ORDER_KEY: "parent", "parent_only_winner_iso": "p"},
         context={"parent_ctx_only_winner_iso": "p", "ctx_shared_winner_iso": "parent"},
@@ -323,7 +320,6 @@ class TestEachCandidateSeesTheOriginalOptions:
 
     @pytest.mark.parametrize("first_wins_order", [True, False])
     def test_unrelated_candidates_do_not_see_each_others_writes(self, first_wins_order: bool) -> None:
-        gc.collect()
         seen: list[dict[str, Any]] = []
         one = _make_candidate("UnrelatedOneFG_winner_iso", _Writes({"one_key_winner_iso": 1}, {}, frozenset()), seen)
         two = _make_candidate("UnrelatedTwoFG_winner_iso", _Writes({"two_key_winner_iso": 2}, {}, frozenset()), seen)
@@ -339,7 +335,6 @@ class TestUnrelatedDifferentReadersStillConflict:
 
     @pytest.mark.parametrize("one_first", [True, False])
     def test_unrelated_candidates_with_different_reader_pairs_raise(self, one_first: bool) -> None:
-        gc.collect()
         one = _make_candidate(
             "ReaderOneFG_winner_iso", _Writes({}, {}, frozenset(), (ReaderParent_winner_iso, "one_access")), []
         )
@@ -371,7 +366,6 @@ class TestReplayStartsFromTheOriginalOptions:
 
     @pytest.mark.parametrize("stray_first", [False, True])
     def test_stray_reader_write_does_not_break_multiple_survivors(self, stray_first: bool) -> None:
-        gc.collect()
         shared = (ReaderParent_winner_iso, "a")
         one = _make_candidate("SurvivorOneFG_winner_iso", _Writes({}, {}, frozenset(), shared), [])
         two = _make_candidate("SurvivorTwoFG_winner_iso", _Writes({}, {}, frozenset(), shared), [])
@@ -395,7 +389,6 @@ class ReaderGrand_winner_iso(ToySourceBase):
 @pytest.mark.parametrize("order", [("gp", "p", "c"), ("c", "p", "gp"), ("p", "c", "gp")])
 class TestReaderlessWinnerInheritsNearestAncestorReader:
     def test_nearest_replaced_ancestor_reader_wins(self, order: tuple[str, ...]) -> None:
-        gc.collect()
         gp = _make_candidate("GrandFG_winner_iso", _Writes({}, {}, frozenset(), (ReaderGrand_winner_iso, "a")), [])
         p = _make_candidate(
             "MidFG_winner_iso", _Writes({}, {}, frozenset(), (ReaderParent_winner_iso, "b")), [], base=gp
@@ -422,7 +415,6 @@ class TestDroppedCandidateLeavesNoOwnKey:
 
     @pytest.mark.parametrize("winner_first", [True, False])
     def test_domain_dropped_candidates_own_key_is_not_own(self, winner_first: bool) -> None:
-        gc.collect()
         wrong = type(
             "WrongDomBase_winner_iso", (FeatureGroup,), {"get_domain": classmethod(lambda cls: Domain("w_dom"))}
         )
@@ -444,7 +436,6 @@ class TestDroppedCandidateLeavesNoOwnKey:
 
     @pytest.mark.parametrize("winner_first", [True, False])
     def test_non_matching_candidates_own_key_is_not_own(self, winner_first: bool) -> None:
-        gc.collect()
         dropped = _make_candidate(
             "FalseDroppedFG_winner_iso",
             _Writes({}, {}, frozenset(), matches=False, api_group={DROPPED_KEY: "dropped"}),
@@ -460,7 +451,6 @@ class TestDroppedCandidateLeavesNoOwnKey:
 
     @pytest.mark.parametrize("parent_first", [True, False])
     def test_dropped_parents_own_key_is_not_own(self, parent_first: bool) -> None:
-        gc.collect()
         parent = _make_candidate(
             "OwnParentFG_winner_iso", _Writes({}, {}, frozenset(), api_group={DROPPED_KEY: "parent"}), []
         )
@@ -481,7 +471,6 @@ class TestDroppedCandidateLeavesNoOwnKey:
 
 class TestEscalatedAbortLeavesTheRequestUntouched:
     def test_abort_after_a_write_escapes_without_mutating_the_request(self) -> None:
-        gc.collect()
         aborting = _make_candidate(
             "AbortingFG_winner_iso",
             _Writes({"abort_grp_winner_iso": 1}, {"abort_ctx_winner_iso": 2}, frozenset(), abort=True),
@@ -500,7 +489,6 @@ CAPABILITY_KEY = "capability_key_winner_iso"
 
 class TestCapabilityHookSeesTheCandidatesOwnWrites:
     def test_supports_compute_framework_reads_the_matcher_write(self) -> None:
-        gc.collect()
         candidate = _make_candidate("CapabilityFG_winner_iso", _Writes({CAPABILITY_KEY: "v"}, {}, frozenset()), [])
 
         def supports(

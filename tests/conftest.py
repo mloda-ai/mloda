@@ -1,25 +1,23 @@
 import gc
 import importlib.util
 import os
-import weakref
 from collections.abc import Callable, Iterator
 from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components import utils
 from mloda.provider import MatchRejection, collect_match_rejections
-from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.prepare import accessible_plugins
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 
 from tests.registry_isolation import (
-    FEATURE_GROUPS,
     IMPLEMENTATIONS,
-    TRANSFORMERS,
-    reclaim_leaked_feature_groups,
-    reclaim_leaked_subclasses,
-    reclaim_leaked_transformers,
+    reclaim_released_implementations,
+    reclaim_since,
+    snapshot_roots,
+    young_window,
 )
 
 _ALL_MP_PRELOAD_MODULES = [
@@ -54,17 +52,15 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 # Defined first on purpose: autouse fixtures tear down in reverse, so this runs after the registry reset.
 @pytest.fixture(autouse=True)
 def _no_feature_group_registry_pollution(request: pytest.FixtureRequest) -> Any:
-    """Fail a test that leaves its own FeatureGroup, BaseTransformer or Implementation subclass registered (#845)."""
-    fg_mark = FEATURE_GROUPS.mark()
-    tr_mark = TRANSFORMERS.mark()
-    impl_mark = IMPLEMENTATIONS.mark()
-    yield
+    """Fail a test leaving its own FeatureGroup, BaseTransformer or Implementation subclass registered (#845).
+
+    ComputeFramework and Extender subclasses are reclaimed too but never reported.
+    """
+    snapshot = snapshot_roots()
     module_name = request.module.__name__
-    leaked = [
-        *reclaim_leaked_feature_groups(fg_mark, module_name),
-        *reclaim_leaked_transformers(tr_mark, module_name),
-        *reclaim_leaked_subclasses(IMPLEMENTATIONS, impl_mark, module_name),
-    ]
+    with young_window():
+        yield
+        leaked = reclaim_since(snapshot, module_name)
     assert not leaked, (
         f"Leaked FeatureGroup/BaseTransformer/Implementation subclasses from {module_name}: {[c.__name__ for c in leaked]}"
     )
@@ -202,7 +198,7 @@ if os.getenv(CHECK_SKIP_COUNT_ENV_VAR) == "1":
 @pytest.fixture
 def make_implementation() -> Iterator[Callable[..., type[Implementation[Any]]]]:
     """make(group, framework, fn=None, base=Implementation, name=None); teardown asserts every class is collected."""
-    created: list[weakref.ref[type[Implementation[Any]]]] = []
+    mark = IMPLEMENTATIONS.mark()
 
     def make(
         group: Any,
@@ -222,10 +218,8 @@ def make_implementation() -> Iterator[Callable[..., type[Implementation[Any]]]]:
         if name is not None:
             _Impl.__name__ = name
             _Impl.__qualname__ = name
-        created.append(weakref.ref(_Impl))
         return _Impl
 
     yield make
-    gc.collect()
-    leaked = [ref() for ref in created if ref() is not None]
-    assert not [impl for impl in loaded_implementations() if impl in leaked], f"leaked implementations: {leaked}"
+    leaked = reclaim_released_implementations(mark, __name__)
+    assert not leaked, f"leaked implementations: {leaked}"

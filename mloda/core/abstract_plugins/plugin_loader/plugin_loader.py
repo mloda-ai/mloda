@@ -141,8 +141,8 @@ class PluginLoader:
         re-register everything after such partial edits.
 
         Pass ``force_reload=True`` (or call ``reset_cache()`` first) to rebuild anyway, for example to
-        pick up newly installed entry points. Discovery is cached per process, keyed on ``sys.path`` and
-        its directories' mtimes, so an in-place edit of an existing ``entry_points.txt`` needs ``force_reload=True``.
+        pick up newly installed entry points. Discovery is cached per process; an in-place edit of an
+        existing ``entry_points.txt`` needs ``force_reload=True``.
 
         Must not be called re-entrantly from within plugin import / entry-point loading: such a call
         raises RuntimeError instead of deadlocking on the non-reentrant cache lock. Treat the returned
@@ -364,7 +364,7 @@ class PluginLoader:
             if item.name == "__init__.py":
                 continue  # Skip __init__.py
             relative_path = item.relative_to(self._get_group_path("")).with_suffix("")  # Relative path without .py
-            module_paths.append(".".join(relative_path.parts))  # Convert to module path
+            module_paths.append(".".join(relative_path.parts))
         return module_paths
 
     def _load_plugin(self, module_path: str) -> None:

@@ -85,7 +85,7 @@ def _is_class(obj: object) -> bool:
 
 
 def _is_plugin_subclass(cls: type[Any], bases: tuple[type[Any], ...]) -> bool:
-    """Nominal MRO check that skips ABCMeta's walk over every live subclass (virtual registrations are not plugins)."""
+    """Nominal MRO check; avoids ABCMeta's subclass walk and ignores virtual registrations."""
     return any(base in cls.__mro__ for base in bases)
 
 

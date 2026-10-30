@@ -6,7 +6,6 @@ Validates that the API contract is clear and consistent:
 - Invalid return types raise ValueError with a helpful message.
 """
 
-import gc
 import weakref
 from typing import Any
 from unittest.mock import patch
@@ -20,7 +19,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
-from tests.helpers.subclass_walks import count_root_walks
+from tests.helpers.subclass_walks import collect_until_dead, count_root_walks
 
 
 class StubComputeFramework(ComputeFramework):
@@ -95,11 +94,7 @@ class TestComputeFrameworkRuleBaseClassDefault:
         name = TransientFramework.__name__
         ref = weakref.ref(TransientFramework)
         del TransientFramework
-        for generation in (0, 1, 2):
-            if ref() is None:
-                break
-            gc.collect(generation)
-        collected = ref() is None
+        collected = collect_until_dead(ref)
         names = {c.__name__ for c in FeatureGroup.compute_framework_definition()}
 
         assert present

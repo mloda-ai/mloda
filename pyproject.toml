@@ -60,7 +60,7 @@ polars = ["polars>=1.21"]
 numpy = ["numpy"]
 yaml = ["pyyaml"]
 # DuckDB 2.x is not supported yet; the duckdb2 tox env tracks it ahead of support.
-duckdb = ["duckdb<2", "pyarrow>=14.0.1"]
+duckdb = ["duckdb<3", "pyarrow>=14.0.1"]
 sqlite = ["pyarrow>=14.0.1"]
 iceberg = ["pyiceberg", "pyarrow>=14.0.1"]
 spark = ["pyspark>=3.5", "pyarrow>=14.0.1"]

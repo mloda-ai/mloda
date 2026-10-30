@@ -56,6 +56,11 @@ def reclaim_leaked_subclasses(root: type[Any], before: set[type[Any]], module_na
         return []
     # Something is left, so pay the second collection: it reclaims what the first one only made collectable.
     gc.collect()
+    if not new_from_module():
+        return []
+    # Still a survivor after the full ladder: escalate to a full gc.collect() so the caller's assertion is
+    # only reached once every generation has been swept, not just the young ones.
+    gc.collect()
     return sorted(new_from_module(), key=lambda cls: cls.__name__)
 
 

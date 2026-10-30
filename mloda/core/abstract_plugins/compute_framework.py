@@ -1382,6 +1382,6 @@ class ComputeFramework(ABC):
 
 
 def compute_framework_subclasses() -> set[type[ComputeFramework]]:
-    """Every live ComputeFramework subclass, the same set as get_all_subclasses(ComputeFramework) without the walk."""
+    """Every live ComputeFramework subclass, without walking the class tree."""
     with _subclasses_lock:
         return set(_subclasses)

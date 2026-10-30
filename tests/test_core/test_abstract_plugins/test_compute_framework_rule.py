@@ -16,6 +16,8 @@ from mloda.provider import ComputeFramework, FeatureGroup
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
+from tests.helpers.subclass_walks import count_root_walks
+
 
 class StubComputeFramework(ComputeFramework):
     """Minimal compute framework for testing."""
@@ -59,14 +61,7 @@ class TestComputeFrameworkRuleBaseClassDefault:
         self, base: type[FeatureGroup], exact: bool, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         expected = get_all_subclasses(ComputeFramework)
-        root_calls: list[int] = []
-
-        def spy(cls: type) -> list[type]:
-            if cls is ComputeFramework:
-                root_calls.append(1)
-            return type.__subclasses__(cls)
-
-        monkeypatch.setattr(ComputeFramework, "__subclasses__", classmethod(spy))
+        root_calls = count_root_walks(monkeypatch, ComputeFramework)
         results = [base.compute_framework_definition() for _ in range(3)]
         monkeypatch.undo()
 
@@ -77,7 +72,7 @@ class TestComputeFrameworkRuleBaseClassDefault:
             assert results[0] == expected
 
     def test_definition_tracks_a_transient_subclass(self) -> None:
-        """Characterization guard: a new subclass shows up at once and a dead one disappears."""
+        """A new subclass shows up at once and a collected one disappears."""
 
         class TransientFramework(StubComputeFramework):
             @classmethod

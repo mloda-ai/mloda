@@ -35,8 +35,7 @@ class SubclassLog(Generic[T]):
             return
 
         def logged(cls: type[Any], /, **kwargs: Any) -> None:
-            # Log before delegating: CPython registers the class in __subclasses__ before __init_subclass__ runs,
-            # so a definition the original rejects still lingers until a collection and must be reclaimed.
+            # Log before delegating: a class the original rejects is already in __subclasses__ and must be reclaimed.
             self._refs.append(weakref.ref(cls))
             if "__init_subclass__" in vars(cls):
                 self._hook(cls)

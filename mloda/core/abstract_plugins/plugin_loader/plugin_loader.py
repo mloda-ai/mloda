@@ -1,9 +1,12 @@
 import importlib
 import importlib.metadata
 import inspect
+import os
 import sys
 import threading
+import time
 from collections.abc import Iterable, Sequence
+from importlib.metadata import EntryPoints
 from pathlib import Path
 
 import logging
@@ -88,6 +91,10 @@ class PluginLoader:
     _skipped: ClassVar[dict[str, str]] = {}
     # Separate from _skipped (which only tracks skipped plugins): last problem warned about per malformed marker.
     _warned_markers: ClassVar[dict[tuple[str | None, str], str]] = {}
+    _entry_point_scan: ClassVar[tuple[tuple[tuple[str, int | None], ...], dict[str, EntryPoints]] | None] = None
+    # A sys.path directory modified within this window may still be mid-install, so its scan is not stored.
+    _SCAN_SETTLE_NS: ClassVar[int] = 2_000_000_000
+    _module_paths_cache: ClassVar[dict[Path, list[str]]] = {}
 
     @classmethod
     def skipped_plugins(cls) -> dict[str, str]:
@@ -134,7 +141,8 @@ class PluginLoader:
         re-register everything after such partial edits.
 
         Pass ``force_reload=True`` (or call ``reset_cache()`` first) to rebuild anyway, for example to
-        pick up newly installed entry points.
+        pick up newly installed entry points. Discovery is cached per process, keyed on ``sys.path`` and
+        its directories' mtimes, so an in-place edit of an existing ``entry_points.txt`` needs ``force_reload=True``.
 
         Must not be called re-entrantly from within plugin import / entry-point loading: such a call
         raises RuntimeError instead of deadlocking on the non-reentrant cache lock. Treat the returned
@@ -158,6 +166,8 @@ class PluginLoader:
                     # a mismatch and the next all() call heals the registry. Reading after the build
                     # would permanently mask such a mid-build invalidation.
                     generation_before_build = PluginRegistry.default().generation
+                    if force_reload:
+                        cls._clear_discovery_caches()
                     plugin_loader = cls()
                     plugin_loader.load_all_plugins()
                     plugin_loader.load_entry_points()
@@ -175,6 +185,31 @@ class PluginLoader:
             cls._cached_generation = None
             cls._skipped.clear()
             cls._warned_markers.clear()
+            cls._clear_discovery_caches()
+
+    @classmethod
+    def _clear_discovery_caches(cls) -> None:
+        cls._entry_point_scan = None
+        cls._module_paths_cache.clear()
+
+    @classmethod
+    def _scan_entry_points(cls) -> dict[str, EntryPoints]:
+        key = tuple(
+            (entry, os.stat(os.path.abspath(entry)).st_mtime_ns if os.path.exists(os.path.abspath(entry)) else None)
+            for entry in sys.path
+        )
+        cached = cls._entry_point_scan
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        all_entry_points = importlib.metadata.entry_points()
+        scan = {
+            name: all_entry_points.select(group=name)
+            for name in (*ENTRY_POINT_GROUPS, OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP)
+        }
+        threshold = time.time_ns() - cls._SCAN_SETTLE_NS
+        if all(mtime is None or mtime < threshold for _, mtime in key):
+            cls._entry_point_scan = (key, scan)
+        return scan
 
     def load_entry_points(self, group: str | None = None) -> list[str]:
         """Discover installed entry-point manifests and register their plugin classes."""
@@ -182,11 +217,12 @@ class PluginLoader:
             valid = ", ".join(ENTRY_POINT_GROUPS)
             raise ValueError(f"Unknown entry-point group '{group}'. Valid groups are: {valid}.")
         groups = [group] if group is not None else list(ENTRY_POINT_GROUPS)
-        declared_optional = self._load_declared_optional_dependencies()
+        scan = self._scan_entry_points()
+        declared_optional = self._load_declared_optional_dependencies(scan)
         keys: list[str] = []
         for group_name in groups:
             base_type = ENTRY_POINT_GROUPS[group_name]
-            for entry_point in importlib.metadata.entry_points(group=group_name):
+            for entry_point in scan[group_name]:
                 skipped_key = f"{entry_point.name} ({entry_point.value})"
                 try:
                     manifest = entry_point.load()
@@ -232,12 +268,14 @@ class PluginLoader:
                 keys.extend(self._register_manifest(entry_point.name, group_name, base_type, manifest))
         return sorted(set(keys))
 
-    def _load_declared_optional_dependencies(self) -> dict[tuple[str | None, str], frozenset[str]]:
+    def _load_declared_optional_dependencies(
+        self, scan: dict[str, EntryPoints] | None = None
+    ) -> dict[tuple[str | None, str], frozenset[str]]:
         """Load per-(distribution, entry-point) optional-root declarations; a marker that fails to
         load, or isn't a non-string iterable of roots, is skipped with a WARNING logged once per problem.
         """
         declared: dict[tuple[str | None, str], frozenset[str]] = {}
-        for entry_point in importlib.metadata.entry_points(group=OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP):
+        for entry_point in (scan or self._scan_entry_points())[OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP]:
             dist_name = entry_point.dist.name if entry_point.dist is not None else None
             try:
                 roots = entry_point.load()
@@ -317,12 +355,17 @@ class PluginLoader:
         """
         Loads plugins from a given path, recursively traversing subdirectories.
         """
+        for module_path in self._module_paths_from_path(group_path):
+            self._load_plugin(module_path)
+
+    def _module_paths_from_path(self, group_path: Path) -> list[str]:
+        module_paths: list[str] = []
         for item in group_path.rglob("*.py"):  # Finds all .py files in the directory
             if item.name == "__init__.py":
                 continue  # Skip __init__.py
             relative_path = item.relative_to(self._get_group_path("")).with_suffix("")  # Relative path without .py
-            module_path = ".".join(relative_path.parts)  # Convert to module path
-            self._load_plugin(module_path)
+            module_paths.append(".".join(relative_path.parts))  # Convert to module path
+        return module_paths
 
     def _load_plugin(self, module_path: str) -> None:
         """Internal function to load a plugin."""
@@ -360,9 +403,17 @@ class PluginLoader:
     def load_all_plugins(self) -> None:
         """Load all groups (top-level folders) and their plugins, plus the core-defined plugin classes."""
         base_path = self._get_group_path("")
-        for item in base_path.iterdir():
-            if item.is_dir() and (item / "__init__.py").exists():
-                self.load_group(item.name)
+        module_paths = self._module_paths_cache.get(base_path)
+        if module_paths is None:
+            module_paths = [
+                module_path
+                for item in base_path.iterdir()
+                if item.is_dir() and (item / "__init__.py").exists()
+                for module_path in self._module_paths_from_path(item)
+            ]
+            self._module_paths_cache[base_path] = module_paths
+        for module_path in module_paths:
+            self._load_plugin(module_path)
 
         for module_name in CORE_PLUGIN_MODULES:
             register_module_plugins(importlib.import_module(module_name), source="loader")

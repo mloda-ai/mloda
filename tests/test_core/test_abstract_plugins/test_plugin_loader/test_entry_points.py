@@ -26,11 +26,14 @@ package name, so importlib.metadata discovery is exercised for real and tests st
 """
 
 import importlib
+import importlib.metadata
 import logging
+import os
 import shutil
 import sys
 import textwrap
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -1550,3 +1553,140 @@ class TestLoadEntryPointsTransitiveOptionalDependency:
         with pytest.raises(ModuleNotFoundError) as exc_info:
             PluginLoader().load_entry_points()
         assert exc_info.value.name == missing_dep
+
+
+def _install_scan_spy(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Wrap importlib.metadata.entry_points; each call appends its kwargs to the returned list."""
+    calls: list[dict[str, Any]] = []
+    original = importlib.metadata.entry_points
+
+    def spy(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        return original(**kwargs)
+
+    monkeypatch.setattr(importlib.metadata, "entry_points", spy)
+    return calls
+
+
+def _no_settle(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(PluginLoader, "_SCAN_SETTLE_NS", 0, raising=False)
+
+
+def _build_fg_distribution(base_dir: Path, pkg: str) -> str:
+    """Build a one-feature-group distribution and return its registry key."""
+    _build_distribution(
+        base_dir,
+        pkg,
+        _FG_MANIFEST,
+        f"""
+        [mloda.feature_groups]
+        demo = {pkg}.manifest:FEATURE_GROUPS
+        """,
+    )
+    return f"{pkg}.manifest:EpFeatureGroup"
+
+
+class TestEntryPointScanCache:
+    def test_one_scan_per_load_and_none_when_sys_path_unchanged(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _no_settle(monkeypatch)
+        key = _build_fg_distribution(tmp_path, "eptest_scancache_once_pkg")
+        monkeypatch.syspath_prepend(str(tmp_path))
+        calls = _install_scan_spy(monkeypatch)
+
+        first = PluginLoader().load_entry_points()
+        assert len(calls) == 1, f"expected one shared scan, got {len(calls)}"
+
+        second = PluginLoader().load_entry_points()
+        assert len(calls) == 1, "unchanged sys.path must not rescan"
+        assert second == first
+        assert key in second
+
+    def test_new_path_entry_is_discovered_without_reset(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _no_settle(monkeypatch)
+        first_dir = tmp_path / "first"
+        first_dir.mkdir()
+        monkeypatch.syspath_prepend(str(first_dir))
+        PluginLoader().load_entry_points()
+
+        second_dir = tmp_path / "second"
+        second_dir.mkdir()
+        key = _build_fg_distribution(second_dir, "eptest_scancache_newpath_pkg")
+        monkeypatch.syspath_prepend(str(second_dir))
+
+        assert key in PluginLoader().load_entry_points()
+
+    def test_distribution_added_to_existing_path_dir_is_discovered(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _no_settle(monkeypatch)
+        monkeypatch.syspath_prepend(str(tmp_path))
+        PluginLoader().load_entry_points()
+
+        key = _build_fg_distribution(tmp_path, "eptest_scancache_existing_pkg")
+        bumped_ns = os.stat(tmp_path).st_mtime_ns + 1_000_000_000
+        os.utime(tmp_path, ns=(bumped_ns, bumped_ns))
+        importlib.invalidate_caches()
+
+        assert key in PluginLoader().load_entry_points()
+
+    def test_distribution_added_right_after_scan_is_discovered_with_default_settle(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.syspath_prepend(str(tmp_path))
+        PluginLoader().load_entry_points()
+
+        key = _build_fg_distribution(tmp_path, "eptest_scancache_settle_pkg")
+
+        assert key in PluginLoader().load_entry_points()
+
+    def test_empty_path_entry_follows_chdir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _no_settle(monkeypatch)
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+        dist_dir = tmp_path / "dist"
+        dist_dir.mkdir()
+        key = _build_fg_distribution(dist_dir, "eptest_scancache_chdir_pkg")
+        monkeypatch.setattr(sys, "path", ["", *sys.path])
+
+        monkeypatch.chdir(empty_dir)
+        assert key not in PluginLoader().load_entry_points()
+
+        monkeypatch.chdir(dist_dir)
+        assert key in PluginLoader().load_entry_points()
+
+    def test_removed_path_entry_drops_its_entry_points(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _no_settle(monkeypatch)
+        key = _build_fg_distribution(tmp_path, "eptest_scancache_removed_pkg")
+
+        with monkeypatch.context() as scoped:
+            scoped.syspath_prepend(str(tmp_path))
+            assert key in PluginLoader().load_entry_points()
+
+        assert key not in PluginLoader().load_entry_points()
+
+    def test_reset_cache_forces_rescan(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _no_settle(monkeypatch)
+        _build_fg_distribution(tmp_path, "eptest_scancache_reset_pkg")
+        monkeypatch.syspath_prepend(str(tmp_path))
+        calls = _install_scan_spy(monkeypatch)
+
+        PluginLoader().load_entry_points()
+        before = len(calls)
+        PluginLoader.reset_cache()
+        PluginLoader().load_entry_points()
+
+        assert len(calls) - before == 1
+
+    def test_all_force_reload_forces_rescan(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _no_settle(monkeypatch)
+        _build_fg_distribution(tmp_path, "eptest_scancache_force_pkg")
+        monkeypatch.syspath_prepend(str(tmp_path))
+        calls = _install_scan_spy(monkeypatch)
+
+        PluginLoader().load_entry_points()
+        before = len(calls)
+        PluginLoader.all(force_reload=True)
+
+        assert len(calls) - before == 1

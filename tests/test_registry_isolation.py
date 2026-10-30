@@ -232,6 +232,46 @@ class TestReclaimLeakedFeatureGroups:
         assert reclaim_leaked_subclasses(log, mark, __name__) == []
         assert name not in _registered_names_of_root(root), f"{name} survived the reclaim"
 
+    def test_reclaims_a_promoted_type_built_subclass(self) -> None:
+        """A type()-built subclass gets __module__ 'abc'; once promoted past generation 0 it is still reclaimed."""
+        name = "PromotedTypeBuiltRegistryProbeFeatureGroup"
+        mark = FEATURE_GROUPS.mark()
+        collections: list[int] = []
+        with _counted_collections(collections):
+            _build_type_built_subclass_and_promote(name)
+            ladder_start = len(collections)
+            reported = reclaim_leaked_feature_groups(mark, __name__)
+        escalation = collections[ladder_start:]
+
+        assert reported == [], f"a class the test did not keep must not be reported, got {reported}"
+        survivors = {c.__name__ for c in FEATURE_GROUPS.live_since(mark)}
+        assert name not in survivors, f"{name} survived the reclaim: its __module__ is 'abc', so it was never seen"
+        assert collections[0] == 0 and len(escalation) > 1 and escalation[0] == 0, (
+            f"the ladder must escalate past generation 0 for a promoted class, got generations {collections}"
+        )
+
+    def test_reports_a_strongly_held_type_built_subclass(self) -> None:
+        """A held type()-built subclass (__module__ 'abc') is reported, not silently ignored."""
+        mark = FEATURE_GROUPS.mark()
+        leaked_cls = type("LeakedTypeBuiltRegistryProbeFeatureGroup", (FeatureGroup,), {})
+        assert leaked_cls.__module__ == "abc", "the probe no longer takes its module from abc; the test proves nothing"
+        reported = [c.__name__ for c in reclaim_leaked_feature_groups(mark, __name__)]
+        expected = leaked_cls.__name__
+        del leaked_cls  # drop the strong reference before asserting, so a failure leaves nothing behind
+        gc.collect()
+        gc.collect()
+        assert reported == [expected], f"a strongly held type()-built subclass must be reported, got {reported}"
+        survivors = {c.__name__ for c in FEATURE_GROUPS.live_since(mark)}
+        assert expected not in survivors, "the deliberate leak must not outlive this test"
+
+
+def _build_type_built_subclass_and_promote(name: str) -> None:
+    """Build a subclass without __module__, keep it across a generation 0 collection, then drop every reference."""
+    cls = type(name, (FeatureGroup,), {})
+    assert cls.__module__ == "abc", "the probe no longer takes its module from abc; the test proves nothing"
+    gc.collect(0)
+    del cls
+
 
 class TestReclaimLeakedTransformers:
     """reclaim_leaked_transformers(mark, module_name) is the same mechanism over the BaseTransformer root."""

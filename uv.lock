@@ -1535,7 +1535,7 @@ yaml = [
 [package.metadata]
 requires-dist = [
     { name = "bandit", marker = "extra == 'test'" },
-    { name = "duckdb", marker = "extra == 'duckdb'" },
+    { name = "duckdb", marker = "extra == 'duckdb'", specifier = "<2" },
     { name = "ipykernel", marker = "extra == 'test'" },
     { name = "joblib", marker = "extra == 'sklearn'", specifier = ">=1.0.0" },
     { name = "marimo", marker = "extra == 'docs'" },

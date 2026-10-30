@@ -595,6 +595,30 @@ class TestSqliteRelation(SqlRelationWindowTestMixin, RelationTestMixin):
         assert "rn" in result.columns
         assert result.to_arrow_table().column("rn").to_pylist() == [1, 2, 3]
 
+    @pytest.mark.parametrize("method", ["window", "with_row_number"])
+    @pytest.mark.parametrize(
+        "alias, partition_by, order_by",
+        [
+            ("rowid", ("rowid",), ()),
+            ("ROWID", (), (OrderBy("rowid"),)),
+            ("oid", ("OID",), ()),
+        ],
+    )
+    def test_alias_folding_to_referenced_pseudo_column_raises(
+        self,
+        connection: sqlite3.Connection,
+        method: str,
+        alias: str,
+        partition_by: tuple[str, ...],
+        order_by: tuple[OrderBy, ...],
+    ) -> None:
+        rel = SqliteRelation.from_dict(connection, {"v": [1, 2, 3]})
+        with pytest.raises(ValueError, match=alias):
+            if method == "window":
+                rel.window("SUM(v)", alias, partition_by=partition_by, order_by=order_by)
+            else:
+                rel.with_row_number(alias, partition_by=partition_by, order_by=order_by)
+
     @pytest.mark.parametrize("bad", ["missing", "V"])
     def test_select_missing_or_case_mismatched_name_raises(self, connection: sqlite3.Connection, bad: str) -> None:
         rel = SqliteRelation.from_dict(connection, {"v": [1, 2]})

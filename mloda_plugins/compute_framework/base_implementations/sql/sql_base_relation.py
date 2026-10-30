@@ -31,10 +31,11 @@ class SqlBaseRelation(ABC):
     user-supplied column names with ``_ensure_column_absent`` so collision-safe
     naming is automatic rather than a per-backend convention that is easy to drop.
 
-    Subclasses implement two primitives:
+    Subclasses implement three primitives:
     - ``columns``: the current column names.
     - ``_project_raw``: materialize ``SELECT {projection} FROM <self>`` as a new
       relation of the same type (the projection is a trusted SQL fragment).
+    - ``_select_ordered``: ``SELECT <columns> FROM <self> ORDER BY <order_column>`` by column name.
     Subclasses MAY override the version-guard hooks (no-ops by default).
     """
 
@@ -47,6 +48,10 @@ class SqlBaseRelation(ABC):
     @abstractmethod
     def _project_raw(self: RelT, projection: str) -> RelT:
         """Materialize ``SELECT {projection} FROM <self>`` as a new relation."""
+
+    @abstractmethod
+    def _select_ordered(self: RelT, columns: Sequence[str], order_column: str) -> RelT:
+        """Materialize ``SELECT <columns> FROM <self> ORDER BY <order_column>`` (names are quoted)."""
 
     def _ensure_column_absent(self, name: str) -> None:
         """Raise ``ValueError`` if ``name`` collides with an existing column (ASCII case-insensitive)."""
@@ -74,7 +79,7 @@ class SqlBaseRelation(ABC):
         partition_by: Sequence[str] = (),
         order_by: Sequence[str | OrderBy] = (),
     ) -> RelT:
-        """Append a ROW_NUMBER() window column named ``alias``.
+        """Append a ROW_NUMBER() window column named ``alias``; rows keep input order (use ``.order()`` to sort).
 
         All identifiers in ``partition_by`` / ``order_by`` and the ``alias`` are quoted
         via ``quote_ident``. Raises ``ValueError`` if ``alias`` collides with an existing
@@ -87,7 +92,9 @@ class SqlBaseRelation(ABC):
         self._assert_window_supported()
         self._assert_nulls_supported(order_by)
         over_sql = render_over_clause(partition_by, order_by, None)
-        return self._project_raw(f"*, ROW_NUMBER() OVER ({over_sql}) AS {quote_ident(alias)}")
+        return self._window_in_input_order(
+            "ROW_NUMBER()", alias, over_sql, (*partition_by, *self._order_names(order_by))
+        )
 
     def window(
         self: RelT,
@@ -100,7 +107,11 @@ class SqlBaseRelation(ABC):
     ) -> RelT:
         """Append a window-function column ``alias`` computed by ``func`` over the OVER clause.
 
+        Rows keep input order (use ``.order()`` to sort).
+
         ``func`` is a raw SQL fragment inlined verbatim; never pass user-controlled input.
+        With ``partition_by`` or ``order_by`` set, ``func`` may only read real columns (backend
+        pseudo-columns such as SQLite rowid are reachable only through ``partition_by`` / ``order_by``).
         The ``alias`` and every identifier in ``partition_by`` / ``order_by`` are quoted via
         ``quote_ident``. Raises ``ValueError`` if ``alias`` collides with an existing column
         (ASCII case-insensitive), or if a partition/order column is not an exact column name.
@@ -111,4 +122,25 @@ class SqlBaseRelation(ABC):
         self._assert_nulls_supported(order_by)
         validate_window(order_by, frame)
         over_sql = render_over_clause(partition_by, order_by, frame)
-        return self._project_raw(f"*, {func} OVER ({over_sql}) AS {quote_ident(alias)}")
+        return self._window_in_input_order(func, alias, over_sql, (*partition_by, *self._order_names(order_by)))
+
+    @staticmethod
+    def _order_names(order_by: Sequence[str | OrderBy]) -> list[str]:
+        return [o if isinstance(o, str) else o.column for o in order_by]
+
+    def _window_in_input_order(self: RelT, expr: str, alias: str, over_sql: str, referenced: Sequence[str]) -> RelT:
+        """Append ``expr OVER (over_sql)`` as ``alias``, keeping the input row order."""
+        if not over_sql:
+            return self._project_raw(f"*, {expr} OVER () AS {quote_ident(alias)}")
+        for name in referenced:
+            if name not in self.columns and fold_identifier(alias) == fold_identifier(name):
+                raise ValueError(f"Column {alias!r} collides with pseudo-column {name!r}")
+        tag = self._pick_helper_column(alias)
+        exposed = "".join(
+            f"{quote_ident(name)} AS {quote_ident(name)}, "
+            for name in dict.fromkeys(referenced)
+            if name not in self.columns
+        )
+        tagged = self._project_raw(f"*, {exposed}ROW_NUMBER() OVER () AS {quote_ident(tag)}")
+        windowed = tagged._project_raw(f"*, {expr} OVER ({over_sql}) AS {quote_ident(alias)}")
+        return windowed._select_ordered([*self.columns, alias], tag)

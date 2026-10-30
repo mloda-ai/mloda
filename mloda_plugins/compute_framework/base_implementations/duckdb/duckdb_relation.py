@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from typing import Any, Literal, cast
 
 try:
@@ -204,6 +205,10 @@ class DuckdbRelation(SqlBaseRelation):
 
     def _project_raw(self, projection: str) -> "DuckdbRelation":
         return self.project(projection)
+
+    def _select_ordered(self, columns: Sequence[str], order_column: str) -> "DuckdbRelation":
+        ordered = self._relation.order(quote_ident(order_column))
+        return DuckdbRelation(self._connection, ordered.project(", ".join(quote_ident(c) for c in columns)))
 
     def append_column(self, name: str, values: list[Any]) -> "DuckdbRelation":
         """Return a new relation with an additional column appended positionally.

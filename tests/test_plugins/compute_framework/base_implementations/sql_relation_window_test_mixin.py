@@ -154,6 +154,32 @@ class SqlRelationWindowTestMixin:
 
     # --- window() ---
 
+    @pytest.mark.parametrize(
+        "apply",
+        [
+            pytest.param(lambda r: r.window("SUM(v)", "w", partition_by=("g",)), id="window-partition"),
+            pytest.param(
+                lambda r: r.window("SUM(v)", "w", partition_by=("g",), order_by=("v",)), id="window-partition-order"
+            ),
+            pytest.param(
+                lambda r: r.window("SUM(v)", "w", order_by=(OrderBy("v", descending=True),)), id="window-order-desc"
+            ),
+            pytest.param(lambda r: r.with_row_number("w", partition_by=("g",)), id="row-number-partition"),
+            pytest.param(
+                lambda r: r.with_row_number("w", order_by=(OrderBy("v", descending=True),)), id="row-number-order-desc"
+            ),
+        ],
+    )
+    def test_window_keeps_input_order(self, connection: Any, relation_class: Any, apply: Any) -> None:
+        """A non-empty OVER clause must not reorder rows or leak helper columns."""
+        rel = relation_class.from_dict(
+            connection,
+            {"id": list(range(12)), "g": ["a", "b", "c"] * 4, "v": [10 * i for i in range(12)]},
+        )
+        result = apply(rel)
+        assert self.get_column_values(result, "id") == list(range(12))
+        assert result.columns == ["id", "g", "v", "w"]
+
     def test_window_partition_only(self, sample_relation: Any) -> None:
         """SUM(age) partitioned by category, no order, no frame: each row gets its category total."""
         result = sample_relation.window("SUM(age)", "cat_sum", partition_by=("category",))

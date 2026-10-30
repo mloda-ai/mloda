@@ -6,17 +6,17 @@ from collections.abc import Callable, Iterator
 from typing import Any
 import pytest
 
-from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components import utils
 from mloda.provider import MatchRejection, collect_match_rejections
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.prepare import accessible_plugins
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 
 from tests.registry_isolation import (
+    FEATURE_GROUPS,
+    IMPLEMENTATIONS,
+    TRANSFORMERS,
     reclaim_leaked_feature_groups,
     reclaim_leaked_subclasses,
     reclaim_leaked_transformers,
@@ -55,15 +55,15 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 @pytest.fixture(autouse=True)
 def _no_feature_group_registry_pollution(request: pytest.FixtureRequest) -> Any:
     """Fail a test that leaves one of its own FeatureGroup or BaseTransformer subclasses registered (#845)."""
-    before_feature_groups = get_all_subclasses(FeatureGroup)
-    before_transformers = get_all_subclasses(BaseTransformer)
-    before_implementations = get_all_subclasses(Implementation)
+    fg_mark = FEATURE_GROUPS.mark()
+    tr_mark = TRANSFORMERS.mark()
+    impl_mark = IMPLEMENTATIONS.mark()
     yield
     module_name = request.module.__name__
     leaked = [
-        *reclaim_leaked_feature_groups(before_feature_groups, module_name),
-        *reclaim_leaked_transformers(before_transformers, module_name),
-        *reclaim_leaked_subclasses(Implementation, before_implementations, module_name),
+        *reclaim_leaked_feature_groups(fg_mark, module_name),
+        *reclaim_leaked_transformers(tr_mark, module_name),
+        *reclaim_leaked_subclasses(IMPLEMENTATIONS, impl_mark, module_name),
     ]
     assert not leaked, (
         f"Leaked FeatureGroup/BaseTransformer/Implementation subclasses from {module_name}: {[c.__name__ for c in leaked]}"

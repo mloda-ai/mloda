@@ -551,6 +551,11 @@ class TestTracebackBlamesRoot:
         assert not hasattr(plugin_loader_module, "_traceback_blames_root")
 
 
+_PYTHON_DICT_KEY = (
+    "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework:PythonDictFramework"
+)
+
+
 class TestPluginModuleListCache:
     def test_rebuild_after_registry_restore_skips_rglob_until_reset(self, monkeypatch: pytest.MonkeyPatch) -> None:
         PluginLoader.all()
@@ -566,12 +571,20 @@ class TestPluginModuleListCache:
 
         monkeypatch.setattr(Path, "rglob", spy)
 
+        before = PluginLoader.all()
         registry.clear()
         registry.restore(snap)
-        PluginLoader.all()
+        rebuilt = PluginLoader.all()
 
+        assert rebuilt is not before, "a rebuild must have happened"
         assert registry.snapshot() == snap
         assert rglob_calls == [], f"rebuild must reuse the module list, walked: {rglob_calls}"
+
+        registry.clear()
+        assert registry.get(_PYTHON_DICT_KEY) is None
+        PluginLoader.all()
+        assert registry.get(_PYTHON_DICT_KEY) is not None
+        assert rglob_calls == [], f"re-registration must reuse the module list, walked: {rglob_calls}"
 
         PluginLoader.reset_cache()
         PluginLoader.all()

@@ -1569,7 +1569,7 @@ def _install_scan_spy(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
 
 
 def _no_settle(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(PluginLoader, "_SCAN_SETTLE_NS", 0, raising=False)
+    monkeypatch.setattr(PluginLoader, "_SCAN_SETTLE_NS", 0)
 
 
 def _build_fg_distribution(base_dir: Path, pkg: str) -> str:
@@ -1627,7 +1627,6 @@ class TestEntryPointScanCache:
         key = _build_fg_distribution(tmp_path, "eptest_scancache_existing_pkg")
         bumped_ns = os.stat(tmp_path).st_mtime_ns + 1_000_000_000
         os.utime(tmp_path, ns=(bumped_ns, bumped_ns))
-        importlib.invalidate_caches()
 
         assert key in PluginLoader().load_entry_points()
 
@@ -1635,9 +1634,11 @@ class TestEntryPointScanCache:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.syspath_prepend(str(tmp_path))
+        m0 = os.stat(tmp_path).st_mtime_ns
         PluginLoader().load_entry_points()
 
         key = _build_fg_distribution(tmp_path, "eptest_scancache_settle_pkg")
+        os.utime(tmp_path, ns=(m0, m0))
 
         assert key in PluginLoader().load_entry_points()
 
@@ -1666,27 +1667,19 @@ class TestEntryPointScanCache:
 
         assert key not in PluginLoader().load_entry_points()
 
-    def test_reset_cache_forces_rescan(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    @pytest.mark.parametrize("trigger", ["reset_cache", "all_force_reload"])
+    def test_explicit_reload_forces_rescan(self, trigger: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _no_settle(monkeypatch)
-        _build_fg_distribution(tmp_path, "eptest_scancache_reset_pkg")
+        _build_fg_distribution(tmp_path, f"eptest_scancache_{trigger}_pkg")
         monkeypatch.syspath_prepend(str(tmp_path))
         calls = _install_scan_spy(monkeypatch)
 
         PluginLoader().load_entry_points()
         before = len(calls)
-        PluginLoader.reset_cache()
-        PluginLoader().load_entry_points()
-
-        assert len(calls) - before == 1
-
-    def test_all_force_reload_forces_rescan(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        _no_settle(monkeypatch)
-        _build_fg_distribution(tmp_path, "eptest_scancache_force_pkg")
-        monkeypatch.syspath_prepend(str(tmp_path))
-        calls = _install_scan_spy(monkeypatch)
-
-        PluginLoader().load_entry_points()
-        before = len(calls)
-        PluginLoader.all(force_reload=True)
+        if trigger == "reset_cache":
+            PluginLoader.reset_cache()
+            PluginLoader().load_entry_points()
+        else:
+            PluginLoader.all(force_reload=True)
 
         assert len(calls) - before == 1

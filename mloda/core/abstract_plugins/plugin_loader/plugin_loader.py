@@ -194,9 +194,10 @@ class PluginLoader:
 
     @classmethod
     def _scan_entry_points(cls) -> dict[str, EntryPoints]:
+        resolved_entries = [os.path.realpath(entry) for entry in sys.path]
         key = tuple(
-            (entry, os.stat(os.path.abspath(entry)).st_mtime_ns if os.path.exists(os.path.abspath(entry)) else None)
-            for entry in sys.path
+            (resolved, os.stat(resolved).st_mtime_ns if os.path.exists(resolved) else None)
+            for resolved in resolved_entries
         )
         cached = cls._entry_point_scan
         if cached is not None and cached[0] == key:
@@ -275,7 +276,9 @@ class PluginLoader:
         load, or isn't a non-string iterable of roots, is skipped with a WARNING logged once per problem.
         """
         declared: dict[tuple[str | None, str], frozenset[str]] = {}
-        for entry_point in (scan or self._scan_entry_points())[OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP]:
+        for entry_point in (scan if scan is not None else self._scan_entry_points())[
+            OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP
+        ]:
             dist_name = entry_point.dist.name if entry_point.dist is not None else None
             try:
                 roots = entry_point.load()

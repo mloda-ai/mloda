@@ -54,7 +54,7 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 # Defined first on purpose: autouse fixtures tear down in reverse, so this runs after the registry reset.
 @pytest.fixture(autouse=True)
 def _no_feature_group_registry_pollution(request: pytest.FixtureRequest) -> Any:
-    """Fail a test that leaves one of its own FeatureGroup or BaseTransformer subclasses registered (#845)."""
+    """Fail a test that leaves its own FeatureGroup, BaseTransformer or Implementation subclass registered (#845)."""
     fg_mark = FEATURE_GROUPS.mark()
     tr_mark = TRANSFORMERS.mark()
     impl_mark = IMPLEMENTATIONS.mark()

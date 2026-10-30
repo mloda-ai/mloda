@@ -31,7 +31,9 @@ class SubclassLog(Generic[T]):
 
     def _hook(self, owner: type[Any]) -> None:
         original = vars(owner).get("__init_subclass__")
-        if getattr(getattr(original, "__func__", None), "_subclass_log", False):
+        # The wrapper replaces the owner's own __init_subclass__ in vars(owner) for the test process.
+        # A class whose definition raises before any hooked __init_subclass__ runs (a mixin before the root) is not logged.
+        if getattr(getattr(original, "__func__", None), "_subclass_log", None) is self:
             return
 
         def logged(cls: type[Any], /, **kwargs: Any) -> None:
@@ -44,7 +46,7 @@ class SubclassLog(Generic[T]):
             else:
                 super(owner, cls).__init_subclass__(**kwargs)
 
-        setattr(logged, "_subclass_log", True)
+        setattr(logged, "_subclass_log", self)
         setattr(owner, "__init_subclass__", classmethod(logged))
 
     def mark(self) -> int:

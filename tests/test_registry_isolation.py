@@ -1,4 +1,4 @@
-"""Pin the shared registry-isolation mechanism (#845, part 1) for both roots, FeatureGroup and BaseTransformer.
+"""Pin the shared registry-isolation mechanism (#845, part 1) for the roots FeatureGroup, BaseTransformer, Implementation.
 
 The mitigation must stay ONE mechanism: ``reclaim_leaked_feature_groups`` and ``reclaim_leaked_transformers`` (thin
 wrappers over one root-agnostic core in ``tests.registry_isolation``) plus one autouse ``tests/conftest.py`` fixture.
@@ -10,7 +10,7 @@ import ast
 import gc
 import sys
 import types
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -19,6 +19,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import ReadDBFG
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
@@ -84,6 +85,15 @@ def _define_leaked_subclass() -> type[FeatureGroup]:
     return LeakedRegistryProbe845FeatureGroup
 
 
+def _define_overlap_probe() -> str:
+    """Define a SourceFeatureGroup subclass and return only its name; returning the class would pin it."""
+
+    class _OverlapProbeFG(SourceFeatureGroup):
+        pass
+
+    return _OverlapProbeFG.__name__
+
+
 def _registered_transformer_names() -> set[str]:
     """Names (never class objects, which would pin them) of this module's registered BaseTransformer subclasses."""
     return {c.__name__ for c in get_all_subclasses(BaseTransformer) if c.__module__ == __name__}
@@ -105,6 +115,31 @@ def _define_leaked_transformer() -> type[BaseTransformer]:
         pass
 
     return LeakedRegistryProbeTransformer
+
+
+def _define_rejected_implementation() -> None:
+    class RiRejectedImpl(Implementation[Any]):
+        compute_framework = PythonDictFramework
+
+        @classmethod
+        def calculate(cls, *args: Any) -> Any:
+            return None
+
+
+def _define_pre_super_rejected_group() -> None:
+    type("RiPreSuperRejectedFG", (ReadDBFG,), {"PROPERTY_MAPPING": ["k"], "__module__": __name__})
+
+
+def _define_feature_group_rejected_group() -> None:
+    class RiRejectedByFeatureGroupFG(FeatureGroup):
+        SUBTYPES = SubtypeDeclaration(key="ri_missing_key")
+
+
+_REJECTED_DEFINITIONS: list[tuple[SubclassLog[Any], type[Any], str, type[Exception], Callable[[], None]]] = [
+    (IMPLEMENTATIONS, Implementation, "RiRejectedImpl", TypeError, _define_rejected_implementation),
+    (FEATURE_GROUPS, FeatureGroup, "RiPreSuperRejectedFG", TypeError, _define_pre_super_rejected_group),
+    (FEATURE_GROUPS, FeatureGroup, "RiRejectedByFeatureGroupFG", ValueError, _define_feature_group_rejected_group),
+]
 
 
 class TestReclaimLeakedFeatureGroups:
@@ -155,42 +190,18 @@ class TestReclaimLeakedFeatureGroups:
         mark = FEATURE_GROUPS.mark()
         assert reclaim_leaked_feature_groups(mark, __name__) == []
 
-    @pytest.mark.parametrize("case", ["feature_group_rejects", "pre_super_rejects", "implementation_rejects"])
-    def test_a_rejected_definition_is_still_reclaimed(self, case: str) -> None:
-        log: SubclassLog[Any]
-        error: type[Exception]
-        root: type[Any]
-        if case == "implementation_rejects":
-            log, root, name, error = IMPLEMENTATIONS, Implementation, "RiRejectedImpl", TypeError
-        elif case == "pre_super_rejects":
-            log, root, name, error = FEATURE_GROUPS, FeatureGroup, "RiPreSuperRejectedFG", TypeError
-        else:
-            log, root, name, error = FEATURE_GROUPS, FeatureGroup, "RiRejectedByFeatureGroupFG", ValueError
-
+    @pytest.mark.parametrize(("log", "root", "name", "error", "define"), _REJECTED_DEFINITIONS)
+    def test_a_rejected_definition_is_still_reclaimed(
+        self, log: SubclassLog[Any], root: type[Any], name: str, error: type[Exception], define: Callable[[], None]
+    ) -> None:
         mark = log.mark()
         with pytest.raises(error):
-            if case == "implementation_rejects":
+            define()
 
-                class RiRejectedImpl(Implementation[Any]):
-                    compute_framework = PythonDictFramework
-
-                    @classmethod
-                    def calculate(cls, *args: Any) -> Any:
-                        return None
-
-            elif case == "pre_super_rejects":
-                type("RiPreSuperRejectedFG", (ReadDBFG,), {"PROPERTY_MAPPING": ["k"], "__module__": __name__})
-            else:
-
-                class RiRejectedByFeatureGroupFG(FeatureGroup):
-                    SUBTYPES = SubtypeDeclaration(key="ri_missing_key")
-
-        logged = [c.__name__ for c in log.live_since(mark)]
-        assert logged.count(name) == 1, f"the rejected class must be logged exactly once, got {logged}"
         assert name in _registered_names_of_root(root), (
             "the rejected class never lingered; the reclaim assertion proves nothing"
         )
-        assert reclaim_leaked_subclasses(log, mark, __name__) == []  # type: ignore[misc]
+        assert reclaim_leaked_subclasses(log, mark, __name__) == []
         assert name not in _registered_names_of_root(root), f"{name} survived the reclaim"
 
 
@@ -238,10 +249,10 @@ def _module_bound_subclass() -> Iterator[str]:
 
 
 @contextmanager
-def _subclass_bound_in_this_module() -> Iterator[str]:
+def _subclass_bound_in_this_module(base: type[Any] = FeatureGroup) -> Iterator[str]:
     """Bind a FeatureGroup subclass into THIS module, the shape a test that writes to its own module leaves."""
     this_module = sys.modules[__name__]
-    cls = type(OWN_MODULE_CLASS, (FeatureGroup,), {"__module__": __name__})
+    cls = type(OWN_MODULE_CLASS, (base,), {"__module__": __name__})
     setattr(this_module, OWN_MODULE_CLASS, cls)
     del cls
     try:
@@ -297,15 +308,27 @@ class TestModuleOwnedSubclassesSkipTheCollection:
         assert reported == []
         assert root_walks == [], f"snapshot and reclaim walked the FeatureGroup tree {len(root_walks)} time(s)"
 
-    def test_a_subclass_bound_in_the_calling_module_is_still_reported(self) -> None:
-        """Skipping the collection must not skip the report: no collection can reclaim a bound class."""
+    @pytest.mark.parametrize("base", [FeatureGroup, ReadDBFG])
+    def test_a_subclass_bound_in_the_calling_module_is_still_reported(self, base: type[Any]) -> None:
+        """Skipping the collection must not skip the report; a doubly logged class is reported exactly once."""
         mark = FEATURE_GROUPS.mark()
-        with _subclass_bound_in_this_module() as name:
+        with _subclass_bound_in_this_module(base) as name:
             reported = [cls.__name__ for cls in reclaim_leaked_feature_groups(mark, __name__)]
 
         assert reported == [name], (
             f"a class this module bound into itself outlives the test and must be reported, got {reported}"
         )
+
+    def test_a_second_log_on_an_overlapping_root_still_logs(self) -> None:
+        """Each log hooks independently: a second log under an already hooked root must record new subclasses."""
+        second = SubclassLog(SourceFeatureGroup)  # type: ignore[type-abstract]  # abstract root, as for the module logs
+        mark = second.mark()
+        fg_mark = FEATURE_GROUPS.mark()
+        name = _define_overlap_probe()
+
+        assert name in [c.__name__ for c in second.live_since(mark)]
+        assert name in [c.__name__ for c in FEATURE_GROUPS.live_since(fg_mark)]
+        assert reclaim_leaked_feature_groups(fg_mark, __name__) == []
 
     def test_a_just_defined_subclass_is_reclaimed_by_the_young_generation(self) -> None:
         """The counterpart: the transient shape the reclaim exists for never escalates past generation 0."""

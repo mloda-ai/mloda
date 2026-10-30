@@ -8,11 +8,15 @@ Validates that the API contract is clear and consistent:
 
 import gc
 import weakref
+from typing import Any
 from unittest.mock import patch
 
 import pytest
 
 from mloda.provider import ComputeFramework, FeatureGroup
+from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
@@ -49,32 +53,40 @@ class TestComputeFrameworkRuleBaseClassDefault:
     def test_base_class_returns_none(self) -> None:
         assert FeatureGroup.compute_framework_rule() is None
 
-    def test_none_means_all_frameworks(self) -> None:
-        """compute_framework_definition() should resolve None to all known subclasses."""
-        result = FeatureGroup.compute_framework_definition()
-        all_frameworks = get_all_subclasses(ComputeFramework)
-        assert result == all_frameworks
-        assert len(result) > 0
-
-    @pytest.mark.parametrize(("base", "exact"), [(FeatureGroup, True), (OperationFeatureGroup, False)])
-    def test_definition_never_walks_the_compute_framework_tree(
-        self, base: type[FeatureGroup], exact: bool, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_none_means_all_frameworks(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """compute_framework_definition() resolves None to all known subclasses without walking the tree."""
         expected = get_all_subclasses(ComputeFramework)
-        root_calls = count_root_walks(monkeypatch, ComputeFramework)
-        results = [base.compute_framework_definition() for _ in range(3)]
+        root_walks = count_root_walks(monkeypatch, ComputeFramework)
+        results = [FeatureGroup.compute_framework_definition() for _ in range(3)]
         monkeypatch.undo()
 
-        assert len(root_calls) == 0
-        assert results[0] == results[1] == results[2]
-        assert results[0] <= expected
-        if exact:
-            assert results[0] == expected
+        assert all(result == expected for result in results)
+        assert len(expected) > 0
+        assert root_walks == []
+
+    def test_operation_group_definition_never_walks_the_compute_framework_tree(
+        self, monkeypatch: pytest.MonkeyPatch, make_implementation: Any
+    ) -> None:
+        class _ServedGroup(OperationFeatureGroup):
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+                return None
+
+        make_implementation(_ServedGroup, StubComputeFramework)
+        root_walks = count_root_walks(monkeypatch, ComputeFramework)
+        results = [_ServedGroup.compute_framework_definition() for _ in range(3)]
+        monkeypatch.undo()
+
+        assert all(result == {StubComputeFramework} for result in results)
+        assert root_walks == []
 
     def test_definition_tracks_a_transient_subclass(self) -> None:
         """A new subclass shows up at once and a collected one disappears."""
 
-        class TransientFramework(StubComputeFramework):
+        class _CooperativeMixin:
+            def __init_subclass__(cls, **kwargs: Any) -> None:
+                super().__init_subclass__(**kwargs)
+
+        class TransientFramework(_CooperativeMixin, StubComputeFramework):
             @classmethod
             def expected_data_framework(cls) -> type:
                 return set

@@ -24,7 +24,7 @@ from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDe
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.components.utils import as_str, get_all_subclasses, safe_field, safe_field_with_error
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -242,7 +242,7 @@ def get_compute_framework_docs(
     Returns:
         List of ComputeFrameworkInfo objects sorted by name.
     """
-    all_compute_frameworks = get_all_subclasses(ComputeFramework)
+    all_compute_frameworks = compute_framework_subclasses()
     if registered_only:
         registered = PluginRegistry.default().registered_classes()
         all_compute_frameworks = {cfw for cfw in all_compute_frameworks if cfw in registered}
@@ -427,9 +427,7 @@ def resolve_feature(
     scope_suffix = f" {callout}" if callout else ""
     feature_name_obj = FeatureName(feature_name)
 
-    restricted_frameworks = (
-        compute_frameworks if compute_frameworks is not None else get_all_subclasses(ComputeFramework)
-    )
+    restricted_frameworks = compute_frameworks if compute_frameworks is not None else compute_framework_subclasses()
     try:
         pre_filter = PreFilterPlugins(restricted_frameworks, plugin_collector)
         accessible_plugins: FeatureGroupEnvironmentMapping = pre_filter.get_accessible_plugins()

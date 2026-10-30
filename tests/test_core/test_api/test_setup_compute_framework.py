@@ -1,3 +1,5 @@
+import gc
+import weakref
 from typing import Any
 
 import pytest
@@ -8,7 +10,8 @@ from mloda.user import Features, ParallelizationMode, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda.provider import ComputeFramework
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field_with_error
+from mloda.core.abstract_plugins.compute_framework import compute_framework_subclasses
 
 
 class TestSetupComputeFramework:
@@ -35,7 +38,9 @@ class TestSetupComputeFramework:
         user_compute_frameworks: list[str] | None,
         parallelization_modes: set[ParallelizationMode] | None,
     ) -> None:
-        monkeypatch.setattr("mloda.core.api.prepare.setup_compute_framework.get_all_subclasses", lambda cls: set())
+        monkeypatch.setattr(
+            "mloda.core.api.prepare.setup_compute_framework.compute_framework_subclasses", lambda: set()
+        )
         with pytest.raises(ValueError) as exc_info:
             SetupComputeFramework(user_compute_frameworks, features, parallelization_modes)
         assert str(exc_info.value) == "No compute framework plugin is loaded; import one or call PluginLoader.all()."
@@ -165,6 +170,50 @@ class TestSetupComputeFramework:
 
         assert setup_compute_framework.framework_preference == {PyArrowTable: 0, first: 1, second: 1}
 
+    def test_framework_missing_from_registry_is_reported_by_setup(self, features: Features) -> None:
+        class _SkipsRegistration:
+            def __init_subclass__(cls, **kwargs: Any) -> None:
+                pass
+
+        def make() -> type[ComputeFramework]:
+            class ZzSetupUnregisteredFramework(_SkipsRegistration, ComputeFramework):
+                pass
+
+            return ZzSetupUnregisteredFramework
+
+        held = [make()]
+        name = held[0].__name__
+        ref = weakref.ref(held[0])
+        walk_sees = held[0] in get_all_subclasses(ComputeFramework)
+        registry_sees = held[0] in compute_framework_subclasses()
+        _, class_message = safe_field_with_error(lambda: SetupComputeFramework([held[0]], features), None)
+        _, name_message = safe_field_with_error(lambda: SetupComputeFramework([name], features), None)
+        _, feature_message = safe_field_with_error(lambda: Feature("f", compute_framework=name), None)
+        # The default set cannot report a framework it cannot see, so the drop there is by design.
+        in_default = held[0] in SetupComputeFramework(None, features).compute_frameworks
+
+        del held[:]
+        for generation in (0, 1, 2):
+            if ref() is None:
+                break
+            gc.collect(generation)
+        collected = ref() is None
+
+        assert walk_sees
+        assert not registry_sees
+        assert class_message is not None
+        assert class_message.startswith("No given compute frameworks")
+        assert name in class_message
+        assert "super().__init_subclass__()" in class_message
+        assert name_message is not None
+        assert name_message.startswith("No given compute frameworks")
+        assert name in name_message
+        assert feature_message is not None
+        assert feature_message.startswith("Compute framework via parameter")
+        assert name in feature_message
+        assert not in_default
+        assert collected
+
     def test_set_through_mloda_api_raises_setup_configuration_error(self) -> None:
         with pytest.raises(SetupConfigurationError, match="ordered list"):
             mloda.prepare(["some_feature"], compute_frameworks={"PandasDataFrame"})  # type: ignore[arg-type]
@@ -172,7 +221,9 @@ class TestSetupComputeFramework:
     def test_no_compute_framework_loaded_through_run_all_raises_setup_configuration_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr("mloda.core.api.prepare.setup_compute_framework.get_all_subclasses", lambda cls: set())
+        monkeypatch.setattr(
+            "mloda.core.api.prepare.setup_compute_framework.compute_framework_subclasses", lambda: set()
+        )
 
         with pytest.raises(SetupConfigurationError, match="No compute framework plugin is loaded"):
             mloda.run_all(["some_feature"], output_framework="PandasDataFrame")

@@ -8,6 +8,7 @@ Validates that the API contract is clear and consistent:
 
 import gc
 import weakref
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import patch
 
@@ -19,6 +20,11 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
+from mloda.core.api.plugin_docs import get_compute_framework_docs, resolve_feature
+from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
+from mloda.core.prepare.accessible_plugins import PreFilterPlugins
+from mloda.user import Features
 
 from tests.helpers.subclass_walks import count_root_walks
 
@@ -77,6 +83,36 @@ class TestComputeFrameworkRuleBaseClassDefault:
         monkeypatch.undo()
 
         assert all(result == {StubComputeFramework} for result in results)
+        assert root_walks == []
+
+    @pytest.mark.parametrize(
+        "reader",
+        [
+            lambda: SetupComputeFramework(None, Features([Feature("some_feature")])),
+            lambda: Feature("f", compute_framework="StubComputeFramework"),
+            lambda: Feature("f", options={"compute_framework": "StubComputeFramework"}),
+            lambda: PreFilterPlugins.get_cfw_subclasses(),
+            lambda: get_compute_framework_docs(),
+            lambda: resolve_feature(
+                "some_feature", plugin_collector=PluginCollector.enabled_feature_groups({_ValidTestGroup})
+            ),
+        ],
+        ids=[
+            "setup_default",
+            "feature_parameter",
+            "feature_options",
+            "prefilter_cfw_subclasses",
+            "compute_framework_docs",
+            "resolve_feature_default",
+        ],
+    )
+    def test_readers_of_all_compute_frameworks_never_walk_the_tree(
+        self, monkeypatch: pytest.MonkeyPatch, reader: Callable[[], Any]
+    ) -> None:
+        root_walks = count_root_walks(monkeypatch, ComputeFramework)
+        reader()
+        monkeypatch.undo()
+
         assert root_walks == []
 
     def test_definition_tracks_a_transient_subclass(self) -> None:

@@ -695,6 +695,8 @@ class Feature:
     def similarity_hash(self, split_keys: frozenset[str] | None = None) -> int:
         """Grouping hash over options, compute framework, split-key context values, and data type.
 
+        The step builder later re-merges groups that differ only in data type (ExecutionPlan._merge_same_framework_groups).
+
         When split_keys is None it falls back to THIS feature's own inherited_context_keys, a
         per-feature convenience. Production grouping in
         ExecutionPlan.group_features_by_compute_framework_and_options passes the resolution-wide

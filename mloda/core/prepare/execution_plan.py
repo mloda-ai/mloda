@@ -4079,6 +4079,10 @@ Available join types:
     def group_features_by_compute_framework_and_options(features: set[Feature]) -> dict[int, set[Feature]]:
         """Group features by compute framework, options, and data type.
 
+        When building steps, run_feature_group then merges groups on one chosen framework that differ only in
+        data type or allowed frameworks (_merge_same_framework_groups), except artifact groups, overlapping
+        names, differing filters, or a variant conflict. choose_compute_frameworks uses the groups as returned.
+
         Features with data_type=None are "lenient" - they join existing groups
         with matching base properties (options + compute_frameworks).
         This allows index columns (which have no explicit type) to stay grouped

@@ -1,6 +1,8 @@
 """End-to-end TFS connection-propagation test for SQLite."""
 
+import gc
 import sqlite3
+import weakref
 from typing import Any
 
 import pytest
@@ -16,6 +18,7 @@ from mloda.user import FeatureName, Options
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_e2e_mixin import (
     TfsConnectionEndToEndMixin,
+    root_binding_groups,
 )
 
 
@@ -57,3 +60,18 @@ class TestSqliteTfsConnectionE2E(TfsConnectionEndToEndMixin):
         assert isinstance(final, pa.Table)
         assert "tfs_doubled" in final.column_names
         return list(final.column("tfs_doubled").to_pylist())
+
+
+def _double_relation(relation: Any, column: str, alias: str) -> Any:
+    return relation
+
+
+def test_root_binding_groups_result_is_reclaimed_after_the_caller_releases_it() -> None:
+    root, sink, _ = root_binding_groups(SqliteFramework, _double_relation)
+    refs = (weakref.ref(root), weakref.ref(sink))
+    assert all(ref() is not None for ref in refs)
+
+    del root, sink
+    gc.collect()  # the weakref assert below needs the class cycles actually collected
+
+    assert [ref() is None for ref in refs] == [True, True]

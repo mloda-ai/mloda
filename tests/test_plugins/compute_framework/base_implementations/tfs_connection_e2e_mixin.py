@@ -5,7 +5,6 @@ of a TransformFrameworkStep at setup time. This mixin exercises that wiring
 through `mloda.run_all` so each SQL framework gets the same coverage as the
 original DuckDB reproducer."""
 
-import functools
 from abc import abstractmethod
 from collections.abc import Callable
 from typing import Any
@@ -38,7 +37,6 @@ class TfsRawValPyArrowSource(DataCreatorFeatureGroup):
 _ROOT_SEEN: dict[str, Any] = {}
 
 
-@functools.cache
 def root_binding_groups(
     framework: type[ComputeFramework], double: Callable[[Any, str, str], Any]
 ) -> tuple[type[FeatureGroup], type[FeatureGroup], str]:

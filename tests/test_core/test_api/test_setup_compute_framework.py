@@ -171,6 +171,7 @@ class TestSetupComputeFramework:
         assert setup_compute_framework.framework_preference == {PyArrowTable: 0, first: 1, second: 1}
 
     def test_framework_missing_from_registry_is_reported_by_setup(self, features: Features) -> None:
+
         class _SkipsRegistration:
             def __init_subclass__(cls, **kwargs: Any) -> None:
                 pass
@@ -213,6 +214,15 @@ class TestSetupComputeFramework:
         assert name in feature_message
         assert not in_default
         assert collected
+
+    def test_base_framework_does_not_get_unregistered_hint(self, features: Features) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            SetupComputeFramework([ComputeFramework], features)
+
+        message = str(exc_info.value)
+
+        assert "No given compute frameworks" in message
+        assert "super().__init_subclass__()" not in message
 
     def test_set_through_mloda_api_raises_setup_configuration_error(self) -> None:
         with pytest.raises(SetupConfigurationError, match="ordered list"):

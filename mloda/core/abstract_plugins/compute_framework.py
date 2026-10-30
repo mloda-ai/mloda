@@ -1393,7 +1393,7 @@ def unregistered_frameworks_hint(candidates: Iterable[object]) -> str | None:
     names = sorted(
         c.__name__
         for c in candidates
-        if isinstance(c, type) and issubclass(c, ComputeFramework) and c not in registered
+        if isinstance(c, type) and c is not ComputeFramework and issubclass(c, ComputeFramework) and c not in registered
     )
     if not names:
         return None

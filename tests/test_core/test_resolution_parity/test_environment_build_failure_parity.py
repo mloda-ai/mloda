@@ -15,7 +15,7 @@ PLUGIN's failure is attributed ("Failed to build the plugin environment: <type>:
 already complete user-facing sentences and stay bare. A PluginCollector that filters out every FeatureGroup is
 one such precondition, and its message names the collector rather than the loader (#850).
 
-The broken class is built per test by a factory and dropped in a finally (del + gc.collect(), same pattern as
+The broken class is built per test by a factory and dropped in a finally (del + a reclaim of the new subclasses, same pattern as
 test_sbdg_resolve_feature_broken_rule.py). This matters more than usual here: under fail-closed semantics a
 leaked broken class aborts the environment build of every unrelated resolve_feature/engine test in the same
 xdist worker. So nothing that could pin it may outlive the scoped block: no exception traceback (the engine and
@@ -25,7 +25,6 @@ before the scope closes. The collector-filtered probe below is exempt: it declar
 is merely filtered, so plain pytest.raises is safe for it.
 """
 
-import gc
 import sys
 
 import pytest
@@ -50,6 +49,7 @@ from mloda.core.prepare.accessible_plugins import (
 )
 from mloda.core.prepare.resolution_types import ResolutionDiagnosis
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from tests.registry_isolation import FEATURE_GROUPS, reclaim_leaked_feature_groups
 
 
 ENV_BUILD_FAILURE_FEATURE = "probe790_env_build_failure"
@@ -64,8 +64,6 @@ ENV_BUILD_MLODA_REDEFINITION_ERROR_MESSAGE = "probe790 compute_framework_rule ra
 
 def _make_broken_rule_fg() -> type[FeatureGroup]:
     """Build a fresh probe whose compute_framework_rule raises while the environment is built."""
-    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
-    gc.collect()
 
     class EnvBuildFailureProbe790(FeatureGroup):
         """Matches a unique feature name, but its compute_framework_rule raises when consulted."""
@@ -96,8 +94,6 @@ def _make_value_error_rule_fg() -> type[FeatureGroup]:
     itself when compute_framework_rule() returns a non-set, the classic plugin-author mistake. It is also
     the shape mloda uses for its OWN environment preconditions, which is what makes the two easy to confuse.
     """
-    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
-    gc.collect()
 
     class EnvBuildValueErrorProbe790(FeatureGroup):
         """Matches a unique feature name, but its compute_framework_rule rejects itself when consulted."""
@@ -131,8 +127,6 @@ def _make_mloda_typed_error_rule_fg(
     attributed to the PLUGIN, not misread as mloda's OWN precondition just because the plugin borrowed a
     type mloda also uses for its policy.
     """
-    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
-    gc.collect()
 
     class EnvBuildMlodaTypedErrorProbe790(FeatureGroup):
         """Matches a unique feature name, but its compute_framework_rule raises a mloda error type."""
@@ -178,13 +172,14 @@ def _capture_engine_build_failure() -> str | None:
 
 def test_engine_environment_build_fails_fast_on_broken_rule() -> None:
     """The engine aborts the run and ATTRIBUTES the culprit as FrameworkDeclarationError, not a raw exception (#850)."""
+    mark = FEATURE_GROUPS.mark()
     broken_fg = _make_broken_rule_fg()
     identity = f"{broken_fg.__module__}:{broken_fg.__qualname__}"
     try:
         message = _capture_engine_build_failure()
     finally:
         del broken_fg
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
     assert message is not None, "the engine must not swallow a raising compute_framework_rule"
     assert "Failed to build the plugin environment" in message
@@ -195,6 +190,7 @@ def test_engine_environment_build_fails_fast_on_broken_rule() -> None:
 
 def test_resolve_feature_projects_the_environment_build_failure() -> None:
     """resolve_feature does not raise and reports the real provider failure instead of a generic miss."""
+    mark = FEATURE_GROUPS.mark()
     broken_fg = _make_broken_rule_fg()
     try:
         result = resolve_feature(ENV_BUILD_FAILURE_FEATURE)
@@ -204,7 +200,7 @@ def test_resolve_feature_projects_the_environment_build_failure() -> None:
         del result
     finally:
         del broken_fg
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
     # Never-raising contract: the failure is projected into the result, not thrown.
     assert winner_name is None
@@ -218,6 +214,7 @@ def test_resolve_feature_projects_the_environment_build_failure() -> None:
 
 def test_resolve_feature_names_the_broken_plugin_for_an_unrelated_feature() -> None:
     """An unrelated feature still surfaces the broken plugin, named as module:qualname (#794)."""
+    mark = FEATURE_GROUPS.mark()
     broken_fg = _make_broken_rule_fg()
     identity = f"{broken_fg.__module__}:{broken_fg.__qualname__}"
     try:
@@ -228,7 +225,7 @@ def test_resolve_feature_names_the_broken_plugin_for_an_unrelated_feature() -> N
         del result
     finally:
         del broken_fg
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
     # The broken plugin declares EVERY group's frameworks, so it aborts the build of an unrelated feature too.
     assert winner_name is None
@@ -243,6 +240,7 @@ def test_resolve_feature_names_the_broken_plugin_for_an_unrelated_feature() -> N
 
 def test_engine_and_resolve_feature_report_the_same_provider_failure() -> None:
     """Parity: for an unscoped feature both paths surface the SAME attributed string, not two drifting ones (#850)."""
+    mark = FEATURE_GROUPS.mark()
     broken_fg = _make_broken_rule_fg()
     try:
         engine_message = _capture_engine_build_failure()
@@ -251,7 +249,7 @@ def test_engine_and_resolve_feature_report_the_same_provider_failure() -> None:
         del result
     finally:
         del broken_fg
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
     assert engine_message is not None
     assert resolve_error is not None
@@ -266,6 +264,7 @@ def test_diagnose_projects_the_environment_build_failure() -> None:
     feature: the build aborts before any feature is resolved. prepare()'s failure is caught unbound and read
     via sys.exc_info() so its traceback never pins the broken class, matching the engine helper's discipline.
     """
+    mark = FEATURE_GROUPS.mark()
     broken_fg = _make_broken_rule_fg()
     identity = f"{broken_fg.__module__}:{broken_fg.__qualname__}"
     try:
@@ -283,7 +282,7 @@ def test_diagnose_projects_the_environment_build_failure() -> None:
             prepare_error = str(sys.exc_info()[1])
     finally:
         del broken_fg
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
     assert complete is False
     assert records == []
@@ -304,6 +303,7 @@ def test_resolve_feature_attributes_a_plugin_raised_value_error() -> None:
     broke. Unattributed, this failure is indistinguishable from an ordinary no-match: the reader sees a
     bare sentence and hunts for a feature-name typo that does not exist.
     """
+    mark = FEATURE_GROUPS.mark()
     broken_fg = _make_value_error_rule_fg()
     try:
         result = resolve_feature(ENV_BUILD_VALUE_ERROR_FEATURE)
@@ -313,7 +313,7 @@ def test_resolve_feature_attributes_a_plugin_raised_value_error() -> None:
         del result
     finally:
         del broken_fg
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
     assert winner_name is None
     assert error is not None
@@ -351,6 +351,7 @@ def test_resolve_feature_attributes_a_plugin_raised_mloda_typed_error(
     types are exercised independently so a future type-specific carve-out cannot regress one while the other
     stays green.
     """
+    mark = FEATURE_GROUPS.mark()
     broken_fg = _make_mloda_typed_error_rule_fg(exc_type, feature_name, message)
     identity = f"{broken_fg.__module__}:{broken_fg.__qualname__}"
     try:
@@ -361,7 +362,7 @@ def test_resolve_feature_attributes_a_plugin_raised_mloda_typed_error(
         del result
     finally:
         del broken_fg
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
     assert winner_name is None
     assert error is not None
@@ -384,6 +385,7 @@ def test_own_environment_precondition_is_projected_bare() -> None:
     broken probe alive here is never touched. It is present only to guarantee the precondition's premise:
     at least one concrete FeatureGroup existed before strict mode filtered them all out.
     """
+    mark = FEATURE_GROUPS.mark()
     broken_fg = _make_broken_rule_fg()
     try:
         # An injected empty registry, not PluginRegistry.default().clear(): no global state is mutated,
@@ -395,7 +397,7 @@ def test_own_environment_precondition_is_projected_bare() -> None:
         del result
     finally:
         del broken_fg
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
     assert error is not None
     assert "Strict mode filtered out all FeatureGroups" in error

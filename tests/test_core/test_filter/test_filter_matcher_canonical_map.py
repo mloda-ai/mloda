@@ -6,7 +6,6 @@ functions and are dropped before any assert runs, so a failing assert never trip
 
 from __future__ import annotations
 
-import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -26,6 +25,7 @@ from mloda.user import Feature, FeatureName, FilterType, GlobalFilter, JoinSpec,
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.registry_isolation import FEATURE_GROUPS, reclaim_leaked_feature_groups
 
 
 HOST_FEATURE = "cmap_host_feat_728"  # the resolved feature the filters are matched against
@@ -101,8 +101,6 @@ def _drop_rows(global_filter: GlobalFilter) -> tuple[tuple[str, str, str], ...]:
 
 def _make_plain_matcher_fg() -> type[FeatureGroup]:
     """A throwaway group matching both module names through the default criteria."""
-    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
-    gc.collect()
 
     class PlainMatcherFG728(FeatureGroup):
         @classmethod
@@ -114,7 +112,6 @@ def _make_plain_matcher_fg() -> type[FeatureGroup]:
 
 def _make_scope_family_fg() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
     """A throwaway (base, child) pair; the child inherits both module names from the base."""
-    gc.collect()
 
     class ScopeBaseMatcherFG728(FeatureGroup):
         @classmethod
@@ -129,7 +126,6 @@ def _make_scope_family_fg() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
 
 def _make_plain_and_unrelated_fg() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
     """The plain matcher plus a throwaway group related only through the root, used as a class-object scope."""
-    gc.collect()
 
     class UnrelatedScopeFG728(FeatureGroup):
         pass
@@ -139,7 +135,6 @@ def _make_plain_and_unrelated_fg() -> tuple[type[FeatureGroup], type[FeatureGrou
 
 def _make_two_scope_target_fgs() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
     """Two unrelated throwaway matchers, each the class-object scope of one duplicate declaration."""
-    gc.collect()
 
     class ScopeTargetAMatcherFG728(FeatureGroup):
         @classmethod
@@ -156,7 +151,6 @@ def _make_two_scope_target_fgs() -> tuple[type[FeatureGroup], type[FeatureGroup]
 
 def _make_group_domain_fg() -> type[FeatureGroup]:
     """The same matcher declaring a non-default group domain."""
-    gc.collect()
 
     class GroupDomainMatcherFG728(FeatureGroup):
         @classmethod
@@ -172,7 +166,6 @@ def _make_group_domain_fg() -> type[FeatureGroup]:
 
 def _make_counting_matcher_fg() -> tuple[type[FeatureGroup], Callable[[], int]]:
     """A throwaway matcher whose match hook counts the asks about FILTER_FEATURE."""
-    gc.collect()
 
     class CountingMatcherFG728(FeatureGroup):
         calls: ClassVar[int] = 0
@@ -197,7 +190,6 @@ def _make_counting_matcher_fg() -> tuple[type[FeatureGroup], Callable[[], int]]:
 
 def _make_capability_reject_fg() -> tuple[type[FeatureGroup], Callable[[], int]]:
     """A throwaway matcher whose capability hook counts its calls and rejects every framework."""
-    gc.collect()
 
     class CapabilityRejectMatcherFG728(FeatureGroup):
         calls: ClassVar[int] = 0
@@ -223,7 +215,6 @@ def _make_capability_reject_fg() -> tuple[type[FeatureGroup], Callable[[], int]]
 
 def _make_capability_accept_fg() -> tuple[type[FeatureGroup], Callable[[], int]]:
     """A throwaway matcher whose capability hook counts its calls and accepts every framework."""
-    gc.collect()
 
     class CapabilityAcceptMatcherFG728(FeatureGroup):
         calls: ClassVar[int] = 0
@@ -249,7 +240,6 @@ def _make_capability_accept_fg() -> tuple[type[FeatureGroup], Callable[[], int]]
 
 def _make_capability_reject_pythondict_fg() -> tuple[type[FeatureGroup], Callable[[], int]]:
     """A throwaway matcher whose capability hook counts its calls and rejects PythonDictFramework alone."""
-    gc.collect()
 
     class CapabilityRejectPythonDictFG728(FeatureGroup):
         calls: ClassVar[int] = 0
@@ -277,7 +267,6 @@ def _make_capability_filter_reject_fg(
     rejected: frozenset[type[ComputeFramework]],
 ) -> tuple[type[FeatureGroup], Callable[[], int]]:
     """A throwaway matcher rejecting the given frameworks for FILTER_FEATURE alone, counting those hook calls."""
-    gc.collect()
 
     class CapabilityFilterRejectFG728(FeatureGroup):
         filter_calls: ClassVar[int] = 0
@@ -305,7 +294,6 @@ def _make_capability_filter_reject_fg(
 
 def _make_capability_raising_fg() -> type[FeatureGroup]:
     """A throwaway matcher whose capability hook raises."""
-    gc.collect()
 
     class CapabilityRaisingMatcherFG728(FeatureGroup):
         @classmethod
@@ -328,7 +316,6 @@ def _make_capability_raising_fg() -> type[FeatureGroup]:
 
 def _make_capability_option_recorder_fg() -> tuple[type[FeatureGroup], Callable[[], _ObservedOptions]]:
     """A throwaway matcher recording the option view its capability hook observes for FILTER_FEATURE."""
-    gc.collect()
 
     class CapabilityOptionRecorderFG728(FeatureGroup):
         observed: ClassVar[list[tuple[tuple[str, str], ...]]] = []
@@ -356,7 +343,6 @@ def _make_capability_option_recorder_fg() -> tuple[type[FeatureGroup], Callable[
 
 def _make_own_index_fg() -> tuple[type[FeatureGroup], Callable[[], int]]:
     """A throwaway matcher whose index hook counts its calls and declares one own index column."""
-    gc.collect()
 
     class OwnIndexMatcherFG728(FeatureGroup):
         calls: ClassVar[int] = 0
@@ -375,7 +361,6 @@ def _make_own_index_fg() -> tuple[type[FeatureGroup], Callable[[], int]]:
 
 def _make_option_recorder_fg() -> tuple[type[FeatureGroup], Callable[[], _ObservedOptions]]:
     """A throwaway matcher recording the option view its criteria hook observes for FILTER_FEATURE."""
-    gc.collect()
 
     class OptionRecorderMatcherFG728(FeatureGroup):
         observed: ClassVar[list[tuple[tuple[str, str], ...]]] = []
@@ -431,6 +416,7 @@ def _fixed_scope(scope: str | None) -> _ScopePick:
 
 def _drive_scoped_matching(make: _ScopeFactory, pick_scope: _ScopePick, probe_index: int = 0) -> _MatchingSnapshot:
     """Match one filter declared with the picked scope against the probe class at probe_index."""
+    mark = FEATURE_GROUPS.mark()
     made = make()
     classes: _ScopeClasses = made if isinstance(made, tuple) else (made,)
     # The Feature is built while the classes exist, so a class-object scope never leaves the driver.
@@ -459,7 +445,7 @@ def _drive_scoped_matching(make: _ScopeFactory, pick_scope: _ScopePick, probe_in
         )
     finally:
         del made, classes, scope, global_filter, matched
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 @dataclass(frozen=True)
@@ -473,6 +459,7 @@ class _TwoScopedSnapshot:
 
 def _drive_two_scope_duplicate_declarations() -> _TwoScopedSnapshot:
     """Declare one predicate twice, once per class scope, then probe each scope class in turn."""
+    mark = FEATURE_GROUPS.mark()
     fg_a, fg_b = _make_two_scope_target_fgs()
     global_filter = GlobalFilter()
     global_filter.add_filter(Feature(FILTER_FEATURE, feature_group=fg_a), FilterType.EQUAL, {"value": 1})
@@ -493,7 +480,7 @@ def _drive_two_scope_duplicate_declarations() -> _TwoScopedSnapshot:
         )
     finally:
         del fg_a, fg_b, global_filter, matched_a, matched_b
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 @dataclass(frozen=True)
@@ -506,6 +493,7 @@ class _DeclarationSnapshot:
 
 def _drive_two_pin_declaration() -> _DeclarationSnapshot:
     """Declare one two-pin filter feature; the shared validator must reject it before anything is stored."""
+    mark = FEATURE_GROUPS.mark()
     global_filter = GlobalFilter()
     pinned = Feature(FILTER_FEATURE)
     pinned.compute_frameworks = {PandasDataFrame, PyArrowTable}
@@ -514,11 +502,12 @@ def _drive_two_pin_declaration() -> _DeclarationSnapshot:
         return _DeclarationSnapshot(escaped=escaped, stored_count=len(global_filter.filters))
     finally:
         del global_filter, pinned
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 def _drive_matching_counted(make: _CounterFactory, pin_host: bool, pin_filter: bool = False) -> _MatchingSnapshot:
     """Match one registered filter against HOST_FEATURE, pinning either side when asked, and read the call counter."""
+    mark = FEATURE_GROUPS.mark()
     fg, read_calls = make()
     global_filter = GlobalFilter()
     filter_feature: Feature | str = FILTER_FEATURE
@@ -542,7 +531,7 @@ def _drive_matching_counted(make: _CounterFactory, pin_host: bool, pin_filter: b
         )
     finally:
         del fg, read_calls, global_filter, matched
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 def _framework_names(frameworks: set[type[ComputeFramework]] | None) -> tuple[str, ...] | None:
@@ -567,6 +556,7 @@ class _NarrowingSnapshot:
 
 def _drive_matching_two_framework_host(make: _CounterFactory) -> _NarrowingSnapshot:
     """Match one unpinned registered filter against a host riding PandasDataFrame and PyArrowTable."""
+    mark = FEATURE_GROUPS.mark()
     fg, read_calls = make()
     global_filter = GlobalFilter()
     global_filter.add_filter(FILTER_FEATURE, FilterType.EQUAL, {"value": 1})
@@ -590,11 +580,12 @@ def _drive_matching_two_framework_host(make: _CounterFactory) -> _NarrowingSnaps
         )
     finally:
         del fg, read_calls, global_filter, matched
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 def _drive_matching_raising_hook() -> _MatchingSnapshot:
     """Match one unpinned registered filter against a PythonDict-pinned host on the raising-hook probe."""
+    mark = FEATURE_GROUPS.mark()
     fg = _make_capability_raising_fg()
     global_filter = GlobalFilter()
     global_filter.add_filter(FILTER_FEATURE, FilterType.EQUAL, {"value": 1})
@@ -609,7 +600,7 @@ def _drive_matching_raising_hook() -> _MatchingSnapshot:
         )
     finally:
         del fg, global_filter, matched
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 @dataclass(frozen=True)
@@ -638,6 +629,7 @@ def _canonical_snapshot(result: EvaluationResult | None, escaped: str | None, ca
 
 def _drive_canonical(build: Callable[[], type[FeatureGroup]], scope: str | None = None) -> _CanonicalSnapshot:
     """Evaluate FILTER_FEATURE (optionally scope-constrained) against the probe alone."""
+    mark = FEATURE_GROUPS.mark()
     fg = build()
     plugins: FeatureGroupEnvironmentMapping = {fg: {PythonDictFramework}}
     result = None
@@ -650,11 +642,12 @@ def _drive_canonical(build: Callable[[], type[FeatureGroup]], scope: str | None 
         return snapshot
     finally:
         del fg, plugins, result
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 def _drive_both_seams_scoped(scope: str) -> tuple[_MatchingSnapshot, _CanonicalSnapshot]:
     """Ask both seams about FILTER_FEATURE scoped to `scope`, each against its own fresh counting matcher."""
+    mark = FEATURE_GROUPS.mark()
     fg, read_calls = _make_counting_matcher_fg()
     global_filter = GlobalFilter()
     global_filter.add_filter(Feature(FILTER_FEATURE, feature_group=scope), FilterType.EQUAL, {"value": 1})
@@ -671,7 +664,7 @@ def _drive_both_seams_scoped(scope: str) -> tuple[_MatchingSnapshot, _CanonicalS
         )
     finally:
         del fg, read_calls, global_filter, matched
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
     fg, read_calls = _make_counting_matcher_fg()
     plugins: FeatureGroupEnvironmentMapping = {fg: {PythonDictFramework}}
@@ -685,11 +678,12 @@ def _drive_both_seams_scoped(scope: str) -> tuple[_MatchingSnapshot, _CanonicalS
         return filter_side, canonical
     finally:
         del fg, read_calls, plugins, result
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 def _drive_canonical_counted(make: _CounterFactory, with_links: bool) -> _CanonicalSnapshot:
     """Evaluate FILTER_FEATURE against a counting probe, optionally under links naming only unknown columns."""
+    mark = FEATURE_GROUPS.mark()
     fg, read_calls = make()
     plugins: FeatureGroupEnvironmentMapping = {fg: {PythonDictFramework}}
     links = {Link("inner", JoinSpec(fg, (LINK_LEFT_728,)), JoinSpec(fg, (LINK_RIGHT_728,)))} if with_links else None
@@ -702,11 +696,12 @@ def _drive_canonical_counted(make: _CounterFactory, with_links: bool) -> _Canoni
         return snapshot
     finally:
         del fg, read_calls, plugins, links, result
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 def _drive_canonical_two_pin_message() -> str:
     """The canonical seam validates the pin before matching; hand back the raise's message as text."""
+    mark = FEATURE_GROUPS.mark()
     fg = _make_plain_matcher_fg()
     plugins: FeatureGroupEnvironmentMapping = {fg: {PythonDictFramework}}
     feature = Feature(FILTER_FEATURE)
@@ -720,7 +715,7 @@ def _drive_canonical_two_pin_message() -> str:
         return message
     finally:
         del fg, plugins, feature
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 def _domain_name_of(filter_feature: Feature) -> str | None:
@@ -742,6 +737,7 @@ def _drive_domain(
     build: Callable[[], type[FeatureGroup]], filter_domain: str | None, feature_domain: str | None
 ) -> _DomainSnapshot:
     """Call GlobalFilter.domain once and read the verdict plus the (possibly adopted) filter-feature domain."""
+    mark = FEATURE_GROUPS.mark()
     fg = build()
     global_filter = GlobalFilter()
     single = _single(Feature(FILTER_FEATURE, domain=filter_domain))
@@ -755,7 +751,7 @@ def _drive_domain(
         )
     finally:
         del fg, global_filter, single
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 @dataclass(frozen=True)
@@ -770,6 +766,7 @@ class _DomainAdoptionSnapshot:
 
 def _drive_group_domain_adoption() -> _DomainAdoptionSnapshot:
     """Match a domainless filter and host on the group-domain probe; adoption may only touch the matched copy."""
+    mark = FEATURE_GROUPS.mark()
     fg = _make_group_domain_fg()
     global_filter = GlobalFilter()
     global_filter.add_filter(FILTER_FEATURE, FilterType.EQUAL, {"value": 1})
@@ -789,7 +786,7 @@ def _drive_group_domain_adoption() -> _DomainAdoptionSnapshot:
         )
     finally:
         del fg, global_filter, matched
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 @dataclass(frozen=True)
@@ -818,6 +815,7 @@ def _drive_enriched_matching(
     pin_host: bool = False,
 ) -> _EnrichmentSnapshot:
     """Match the filter feature, declaring the given options (default: the shared key in group), against the host."""
+    mark = FEATURE_GROUPS.mark()
     fg, read_observed = make()
     global_filter = GlobalFilter()
     declared = Options(group={SHARED_KEY_728: FILTER_VALUE}) if filter_options is None else filter_options
@@ -852,7 +850,7 @@ def _drive_enriched_matching(
         )
     finally:
         del fg, read_observed, global_filter, matched
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 @dataclass(frozen=True)
@@ -865,6 +863,7 @@ class _CanonicalObservationSnapshot:
 
 def _drive_canonical_declared_options() -> _CanonicalObservationSnapshot:
     """Evaluate the option-declaring filter feature alone; the canonical seam has no host to enrich from."""
+    mark = FEATURE_GROUPS.mark()
     fg, read_observed = _make_option_recorder_fg()
     plugins: FeatureGroupEnvironmentMapping = {fg: {PythonDictFramework}}
     feature = Feature(FILTER_FEATURE, Options(group={SHARED_KEY_728: FILTER_VALUE}))
@@ -877,7 +876,7 @@ def _drive_canonical_declared_options() -> _CanonicalObservationSnapshot:
         return snapshot
     finally:
         del fg, read_observed, plugins, result
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestScopeGate:

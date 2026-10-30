@@ -214,7 +214,7 @@ class TestClassSourceHashCaching:
         ref = weakref.ref(cls)
         calls.clear()
         del first, second, cls
-        gc.collect()
+        gc.collect()  # the weakref assert below needs the class cycle actually collected
 
         assert second_error == first_error
         assert reads == 1, f"A failed lookup must be served from the cache, but getsource ran {reads} times"
@@ -596,7 +596,6 @@ class _FixturePkgHelper:
     def __init__(self, tmp_path: Path) -> None:
         self._tmp_path = tmp_path
         self._tops: list[str] = []
-        self._tracked: list["weakref.ReferenceType[Any]"] = []
 
     def write_base(self, top: str | None = None) -> str:
         resolved_top = top or _unique_top("fgv")
@@ -618,18 +617,12 @@ class _FixturePkgHelper:
         mod = importlib.import_module(f"{top}.{module}")
         return cast(type[Any], getattr(mod, attr))
 
-    def track(self, cls: type[Any]) -> None:
-        self._tracked.append(weakref.ref(cls))
-
     def purge(self, top: str) -> None:
         _purge_package(top)
 
     def teardown(self) -> None:
         for top in self._tops:
             _purge_package(top)
-        gc.collect()
-        alive = [ref for ref in self._tracked if ref() is not None]
-        assert not alive, f"fixture classes leaked past teardown: {alive}"
 
 
 @pytest.fixture
@@ -1294,7 +1287,7 @@ class TestStaticModuleSourceMatchesLiveSource:
             parts_warm = closure_parts(leaf_warm, False)
         finally:
             _purge_package(top)
-            gc.collect()
+            gc.collect()  # the purged package's classes sit in cycles; reclaim before the registry check
 
         assert not any(part.startswith(f"nosrc:{top}.lazy") for part in parts_cold), (
             f"the cold static module lookup must read source the same way the live index does; "
@@ -1535,7 +1528,7 @@ class TestImplementationHashCaching:
         ref = weakref.ref(leaf)
         del leaf
         fixture_pkg.purge(top)
-        gc.collect()
+        gc.collect()  # the weakref assert below needs the class cycle actually collected
 
         assert ref() is None, "implementation_hash must not pin a successfully hashed class alive via its cache"
 
@@ -1573,12 +1566,12 @@ class TestImplementationHashDoesNotRetainAst:
         )
         leaf = fixture_pkg.import_leaf(top, "sub", "Leaf")
 
-        gc.collect()
+        gc.collect()  # baseline must exclude already-dead AST nodes
         before = sum(1 for obj in gc.get_objects() if isinstance(obj, ast.AST))
 
         BaseFeatureGroupVersion.implementation_hash(leaf)
 
-        gc.collect()
+        gc.collect()  # only AST nodes still referenced count as retained
         after = sum(1 for obj in gc.get_objects() if isinstance(obj, ast.AST))
 
         growth = after - before

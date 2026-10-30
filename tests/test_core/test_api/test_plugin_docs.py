@@ -1,4 +1,3 @@
-import gc
 import inspect
 import logging
 from collections.abc import Callable
@@ -23,6 +22,12 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.user import PluginLoader
 from tests.helpers.docs_scope import shipped_feature_groups_collector
 from tests.helpers.plugin_stubs import make_raising_fg
+from tests.registry_isolation import (
+    COMPUTE_FRAMEWORKS,
+    FEATURE_GROUPS,
+    reclaim_leaked_feature_groups,
+    reclaim_leaked_subclasses,
+)
 
 # Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
 pytestmark = pytest.mark.timeout(30)
@@ -44,19 +49,6 @@ class _DocsCatalogExtender(Extender):
 def load_plugins() -> None:
     """Load all plugins before running tests in this module."""
     PluginLoader.all()
-
-
-@pytest.fixture(autouse=True)
-def _reap_pending_dead_plugin_classes() -> None:
-    """Collect dead test-local plugin classes before each test.
-
-    Plugin docs enumeration walks live __subclasses__() registries. Local plugin
-    classes from earlier tests on the same worker stay visible there until a gc
-    pass runs, so a pass landing between two enumeration calls inside one test
-    changes the result mid-test. Collecting up front makes enumeration stable
-    for the duration of each test.
-    """
-    gc.collect()
 
 
 class TestFeatureGroupInfo:
@@ -269,6 +261,7 @@ class TestGetFeatureGroupDocs:
     )
     def test_version_is_computed_only_for_classes_passing_the_filters(self, filter_kwarg: str, match: str) -> None:
         """version() hashes the class source, so a class the cheap filters exclude must not pay for it."""
+        mark = FEATURE_GROUPS.mark()
         version_calls: list[str] = []
 
         class _DocsVersionAfterFiltersFG(FeatureGroup):
@@ -294,7 +287,7 @@ class TestGetFeatureGroupDocs:
             assert version_calls == ["_DocsVersionAfterFiltersFG"]
         finally:
             del _DocsVersionAfterFiltersFG
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
 
 # Not frozen: a row's expected value is the very list or set the docs field returns, and the __hash__
@@ -392,7 +385,7 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
     degraded values.
 
     Isolation: every test double is minted inside its test function and reaped in a
-    ``finally`` block (``del`` plus ``gc.collect()``), because plugin docs walk the live
+    ``finally`` block (``del`` plus a reclaim of the new subclasses), because plugin docs walk the live
     ``__subclasses__()`` registry and a leaked class would corrupt sibling tests' catalog
     calls. No fixture may own the double, since only the test-local name holds it. This
     mirrors ``test_get_compute_framework_docs_degrades_when_is_available_raises``.
@@ -403,6 +396,7 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
         self, case: DegradedFieldCase, caplog: pytest.LogCaptureFixture
     ) -> None:
         """One broken hook degrades one documented field, the class stays in the catalog."""
+        mark = FEATURE_GROUPS.mark()
         # The hook is a string here, so a misspelled one would mint a double that breaks nothing.
         assert hasattr(FeatureGroup, case.hook), f"{case.hook} is not a FeatureGroup hook"
 
@@ -427,10 +421,11 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
             )
         finally:
             del double
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_degraded_compute_framework_rule_excluded_by_compute_framework_filter(self) -> None:
         """A class whose compute_framework_rule() raises is excluded by a compute_framework= filter."""
+        mark = FEATURE_GROUPS.mark()
         baseline = _shipped_feature_group_docs()
         canonical_name: str | None = None
         for fg in baseline:
@@ -453,10 +448,11 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
             assert "_DocsFrameworkRuleFilterBoomFG" not in {fg.name for fg in filtered}
         finally:
             del double
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_broken_feature_group_does_not_sink_the_catalog(self) -> None:
         """With a raising subclass live, every other feature group is still listed."""
+        mark = FEATURE_GROUPS.mark()
         baseline = {fg.name for fg in _shipped_feature_group_docs()}
         assert len(baseline) > 0, "Need a populated baseline catalog"
 
@@ -467,10 +463,11 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
             assert "_DocsSinkBoomFG" in degraded
         finally:
             del double
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_degraded_name_still_findable_by_name_filter(self) -> None:
         """A class whose get_class_name() raises is findable via name=<its real __name__>."""
+        mark = FEATURE_GROUPS.mark()
         double = make_raising_fg(
             "_DocsNameFilterBoomFG", "get_class_name", doc="Test double whose get_class_name() raises."
         )
@@ -479,7 +476,7 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
             assert [fg.name for fg in filtered] == ["_DocsNameFilterBoomFG"]
         finally:
             del double
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_degraded_description_still_findable_by_search_filter(self) -> None:
         """A class whose description() raises stays findable via search= on its docstring.
@@ -487,6 +484,7 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
         Degrading to the docstring keeps a broken plugin discoverable; degrading to ""
         would make it invisible to every search query.
         """
+        mark = FEATURE_GROUPS.mark()
         double = make_raising_fg(
             "_DocsSearchBoomFG", "description", doc="Test double whose description() raises, keyword lodestarquux."
         )
@@ -495,17 +493,18 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
             assert "_DocsSearchBoomFG" in searched, "A degraded description must stay searchable via the docstring"
         finally:
             del double
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_degraded_description_without_docstring_findable_by_class_name_search(self) -> None:
         """With no docstring, the degraded description is the class name and search= finds it there."""
+        mark = FEATURE_GROUPS.mark()
         double = make_raising_fg("_DocsSearchNoDocstringBoomFG", "description")
         try:
             searched = {fg.name for fg in get_feature_group_docs(search="_DocsSearchNoDocstringBoomFG")}
             assert "_DocsSearchNoDocstringBoomFG" in searched
         finally:
             del double
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_degraded_compute_frameworks_excluded_by_compute_framework_filter(self) -> None:
         """A class whose compute_framework_definition() raises is excluded by a compute_framework= filter.
@@ -513,6 +512,7 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
         This mirrors how a compute framework degraded to is_available=False is excluded
         by available_only=True: the degraded value, not the exception, drives the filter.
         """
+        mark = FEATURE_GROUPS.mark()
         baseline = _shipped_feature_group_docs()
         canonical_name: str | None = None
         for fg in baseline:
@@ -535,7 +535,7 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
             assert "_DocsFrameworkFilterBoomFG" not in {fg.name for fg in filtered}
         finally:
             del double
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestGetFeatureGroupDocsContractViolations:
@@ -553,6 +553,7 @@ class TestGetFeatureGroupDocsContractViolations:
 
     def test_description_returning_none_does_not_sink_the_search_filter(self) -> None:
         """description() -> None must not blow up search=, it degrades to the docstring."""
+        mark = FEATURE_GROUPS.mark()
 
         class _DocsDescriptionNoneFG(FeatureGroup):
             """Test double whose description() returns None, keyword ripcordquux."""
@@ -566,10 +567,11 @@ class TestGetFeatureGroupDocsContractViolations:
             assert "_DocsDescriptionNoneFG" in searched, "A None description must degrade to the docstring"
         finally:
             del _DocsDescriptionNoneFG
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_description_returning_none_degrades_to_class_docstring(self) -> None:
         """The unfiltered catalog reports the base-class-derived fallback, not None."""
+        mark = FEATURE_GROUPS.mark()
 
         class _DocsDescriptionNoneUnfilteredFG(FeatureGroup):
             """Test double whose description() returns None."""
@@ -587,10 +589,11 @@ class TestGetFeatureGroupDocsContractViolations:
             )
         finally:
             del _DocsDescriptionNoneUnfilteredFG
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_get_class_name_returning_non_str_does_not_sink_the_name_filter(self) -> None:
         """get_class_name() -> non-str must not blow up name=, it degrades to the class __name__."""
+        mark = FEATURE_GROUPS.mark()
 
         class _DocsClassNameNonStrFG(FeatureGroup):
             """Test double whose get_class_name() returns an int."""
@@ -604,10 +607,11 @@ class TestGetFeatureGroupDocsContractViolations:
             assert [fg.name for fg in filtered] == ["_DocsClassNameNonStrFG"]
         finally:
             del _DocsClassNameNonStrFG
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_get_class_name_returning_non_str_degrades_in_unfiltered_catalog(self) -> None:
         """The unfiltered catalog (which sorts by name) also survives a non-str name."""
+        mark = FEATURE_GROUPS.mark()
 
         class _DocsClassNameNonStrUnfilteredFG(FeatureGroup):
             """Test double whose get_class_name() returns an int."""
@@ -622,7 +626,7 @@ class TestGetFeatureGroupDocsContractViolations:
             assert by_name["_DocsClassNameNonStrUnfilteredFG"].name == "_DocsClassNameNonStrUnfilteredFG"
         finally:
             del _DocsClassNameNonStrUnfilteredFG
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_version_returning_non_str_does_not_sink_the_version_filter(self) -> None:
         """version() -> non-str must not blow up version_contains=, it degrades to "unavailable".
@@ -631,6 +635,7 @@ class TestGetFeatureGroupDocsContractViolations:
         and then dies in ``version_contains not in version``, exactly as the None description
         dies in the search filter.
         """
+        mark = FEATURE_GROUPS.mark()
 
         class _DocsVersionNonStrFG(FeatureGroup):
             """Test double whose version() returns an int."""
@@ -646,10 +651,11 @@ class TestGetFeatureGroupDocsContractViolations:
             )
         finally:
             del _DocsVersionNonStrFG
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_version_returning_non_str_degrades_to_unavailable(self) -> None:
         """The unfiltered catalog reports the "unavailable" sentinel, not the non-str value."""
+        mark = FEATURE_GROUPS.mark()
 
         class _DocsVersionNonStrUnfilteredFG(FeatureGroup):
             """Test double whose version() returns an int."""
@@ -664,7 +670,7 @@ class TestGetFeatureGroupDocsContractViolations:
             assert by_name["_DocsVersionNonStrUnfilteredFG"].version == "unavailable"
         finally:
             del _DocsVersionNonStrUnfilteredFG
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestDegradedReadLogging:
@@ -680,6 +686,8 @@ class TestDegradedReadLogging:
     def test_degraded_feature_group_read_logs_warning_naming_class_and_field(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
+        mark = FEATURE_GROUPS.mark()
+
         class _DocsWarnBoomFG(FeatureGroup):
             """Test double whose description() raises."""
 
@@ -701,12 +709,13 @@ class TestDegradedReadLogging:
             assert "boom" in matching[0], "Warning must carry the swallowed exception message"
         finally:
             del _DocsWarnBoomFG
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_version_raising_logs_exactly_one_warning_across_repeated_calls(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """A version() that raises degrades once; warn_once_for dedups the WARNING across repeated doc calls."""
+        mark = FEATURE_GROUPS.mark()
 
         class _DocsVersionRaisesFG(FeatureGroup):
             """Test double whose version() classmethod raises OSError."""
@@ -736,10 +745,11 @@ class TestDegradedReadLogging:
             assert "boom" in warnings[0], "Warning must carry the swallowed exception message"
         finally:
             del _DocsVersionRaisesFG
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_version_degradation_logs_warning_naming_class_and_field(self, caplog: pytest.LogCaptureFixture) -> None:
         """_safe_version is labelled, so a degraded version read (non-str return) logs a WARNING."""
+        mark = FEATURE_GROUPS.mark()
 
         class _DocsVersionWarnFG(FeatureGroup):
             """Test double whose version() returns an int."""
@@ -765,10 +775,11 @@ class TestDegradedReadLogging:
             )
         finally:
             del _DocsVersionWarnFG
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
     def test_degraded_compute_framework_read_logs_nothing(self, caplog: pytest.LogCaptureFixture) -> None:
         """Compute-framework field reads are unlabelled by design, so a degraded read is silent."""
+        mark = COMPUTE_FRAMEWORKS.mark()
 
         class _DocsSilentBoomCFW(ComputeFramework):
             """Test double whose availability probe raises."""
@@ -789,7 +800,7 @@ class TestDegradedReadLogging:
             assert messages == [], f"Unlabelled compute-framework reads must degrade silently, got {messages}"
         finally:
             del _DocsSilentBoomCFW
-            gc.collect()
+            reclaim_leaked_subclasses(COMPUTE_FRAMEWORKS, mark, __name__)
 
 
 class TestGetComputeFrameworkDocs:
@@ -850,6 +861,7 @@ class TestGetComputeFrameworkDocs:
         the availability probe routes through safe_field, and a degraded framework is excluded
         by available_only=True exactly as a genuinely unavailable one would be (issue #533).
         """
+        mark = COMPUTE_FRAMEWORKS.mark()
 
         class _DocsIsAvailableBoomCFW(ComputeFramework):
             """Test double whose availability probe raises."""
@@ -874,7 +886,7 @@ class TestGetComputeFrameworkDocs:
         finally:
             # Reap the test-local subclass so sibling tests are unaffected (live __subclasses__).
             del _DocsIsAvailableBoomCFW
-            gc.collect()
+            reclaim_leaked_subclasses(COMPUTE_FRAMEWORKS, mark, __name__)
 
 
 class TestSafeVersionGuard:

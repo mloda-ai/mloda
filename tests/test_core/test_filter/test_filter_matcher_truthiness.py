@@ -12,7 +12,6 @@ pins a throwaway FeatureGroup into its traceback and trips the no-leak fixture i
 
 from __future__ import annotations
 
-import gc
 import logging
 from collections.abc import Callable
 from copy import deepcopy
@@ -30,6 +29,7 @@ from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.user import Feature, FeatureName, FilterType, GlobalFilter, Options, PluginCollector, SingleFilter, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.registry_isolation import FEATURE_GROUPS, reclaim_leaked_feature_groups
 
 
 GF_LOGGER_NAME = "mloda.core.filter.global_filter"
@@ -139,8 +139,6 @@ def _reason_text(recorded: Any) -> str:
 
 def _make_non_bool_matcher_fg(returned: Any) -> type[FeatureGroup]:
     """A throwaway group whose hook returns the caller's value for FILTER_FEATURE and matches HOST_FEATURE."""
-    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
-    gc.collect()
 
     class NonBoolMatcherFG927(FeatureGroup):
         @classmethod
@@ -163,7 +161,6 @@ def _make_non_bool_matcher_fg(returned: Any) -> type[FeatureGroup]:
 
 def _make_mutating_exploding_bool_fg() -> type[FeatureGroup]:
     """A throwaway group whose hook WRITES to the shared options and then returns an unreadable value."""
-    gc.collect()
 
     class MutatingExplodingBoolFG927(FeatureGroup):
         @classmethod
@@ -199,6 +196,7 @@ class _CriteriaSnapshot:
 
 def _drive_criteria(returned: Any, caplog: pytest.LogCaptureFixture, calls: int = 1) -> _CriteriaSnapshot:
     """Call criteria `calls` times on ONE fresh GlobalFilter; the finally unbinds every name that pins the class."""
+    mark = FEATURE_GROUPS.mark()
     caplog.clear()
     fg = _make_non_bool_matcher_fg(returned)
     global_filter = GlobalFilter()
@@ -222,7 +220,7 @@ def _drive_criteria(returned: Any, caplog: pytest.LogCaptureFixture, calls: int 
         )
     finally:
         del fg, global_filter, declared
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 @dataclass(frozen=True)
@@ -236,6 +234,7 @@ class _MatchedFilterSnapshot:
 
 def _drive_identify_matched_filters(returned: Any) -> _MatchedFilterSnapshot:
     """Match one registered filter against HOST_FEATURE and read the attached filter names out as text."""
+    mark = FEATURE_GROUPS.mark()
     fg = _make_non_bool_matcher_fg(returned)
     global_filter = GlobalFilter()
     global_filter.add_filter(FILTER_FEATURE, FilterType.EQUAL, {"value": 1})
@@ -249,7 +248,7 @@ def _drive_identify_matched_filters(returned: Any) -> _MatchedFilterSnapshot:
         )
     finally:
         del fg, global_filter, matched
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 class _RawCriteriaGlobalFilter927(GlobalFilter):
@@ -268,6 +267,7 @@ class _RawCriteriaGlobalFilter927(GlobalFilter):
 
 def _drive_matched_filter_gate(raw: Any) -> _MatchedFilterSnapshot:
     """Match with criteria stubbed to a raw value, so the coercion inside criteria cannot mask the gate."""
+    mark = FEATURE_GROUPS.mark()
     # The hook is never consulted: the stub answers before identify_matched_filters would ask it.
     fg = _make_non_bool_matcher_fg(False)
     global_filter = _RawCriteriaGlobalFilter927()
@@ -283,7 +283,7 @@ def _drive_matched_filter_gate(raw: Any) -> _MatchedFilterSnapshot:
         )
     finally:
         del fg, global_filter, matched
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 @dataclass(frozen=True)
@@ -302,6 +302,7 @@ class _ResolutionSnapshot:
 
 def _drive_resolution(build: Callable[[], type[FeatureGroup]], caplog: pytest.LogCaptureFixture) -> _ResolutionSnapshot:
     """Call the resolution seam directly; the finally unbinds the identifier, which keys reasons by class."""
+    mark = FEATURE_GROUPS.mark()
     caplog.clear()
     fg = build()
     identifier = IdentifyFeatureGroupClass()
@@ -325,7 +326,7 @@ def _drive_resolution(build: Callable[[], type[FeatureGroup]], caplog: pytest.Lo
         )
     finally:
         del fg, identifier, feature, matched
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 @dataclass(frozen=True)
@@ -339,6 +340,7 @@ class _EliminationSnapshot:
 
 def _drive_filter_loop(returned: Any) -> _EliminationSnapshot:
     """Evaluate FILTER_FEATURE against the probe alone and read the near-miss ledger out as text."""
+    mark = FEATURE_GROUPS.mark()
     fg = _make_non_bool_matcher_fg(returned)
     plugins: FeatureGroupEnvironmentMapping = {fg: {PythonDictFramework}}
     result = None
@@ -356,7 +358,7 @@ def _drive_filter_loop(returned: Any) -> _EliminationSnapshot:
         return _EliminationSnapshot(escaped=escaped, identified=identified, eliminations=eliminations)
     finally:
         del fg, plugins, result
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestFalsyReturnIsANonMatch:
@@ -579,7 +581,6 @@ class TestRaisingBoolIsContained:
 
 def _make_e2e_probe_fg() -> type[FeatureGroup]:
     """A throwaway root group that resolves E2E_MAIN and answers None when matched for the filter feature."""
-    gc.collect()
 
     class NonBoolMatchE2EFG927(DataCreatorFeatureGroup):
         @classmethod
@@ -625,6 +626,7 @@ def _single_row(frame: Any, column: str) -> Any:
 
 def _run() -> tuple[dict[str, Any] | None, str | None]:
     """Run E2E_MAIN under a filter whose hook answers None; the escape is text, never an exception object."""
+    mark = FEATURE_GROUPS.mark()
     fg = _make_e2e_probe_fg()
     collector = PluginCollector.enabled_feature_groups({fg})
     global_filter = GlobalFilter()
@@ -638,13 +640,13 @@ def _run() -> tuple[dict[str, Any] | None, str | None]:
             global_filter=global_filter,
         )
     )
-    del fg, collector
-    gc.collect()
-    if results is None:
-        return None, escaped
-    assert len(results) == 1, f"expected exactly one result frame, got: {results!r}"
-    payload = _single_row(results[0], E2E_MAIN)
-    assert isinstance(payload, dict)
+    payload: Any = None
+    if results is not None:
+        assert len(results) == 1, f"expected exactly one result frame, got: {results!r}"
+        payload = _single_row(results[0], E2E_MAIN)
+        assert isinstance(payload, dict)
+    del fg, collector, global_filter, results
+    reclaim_leaked_feature_groups(mark, __name__)
     return payload, escaped
 
 
@@ -686,7 +688,6 @@ class UnnameableFalsy991(metaclass=UnnameableTypeMeta991):
 
 def _make_unnameable_group_fg() -> type[FeatureGroup]:
     """A throwaway group that answers None for the filter feature and cannot say what it is called."""
-    gc.collect()
 
     class UnnameableGroupFG991(FeatureGroup):
         @classmethod
@@ -727,6 +728,7 @@ def _drive_criteria_of(
     build: Callable[[], type[FeatureGroup]], caplog: pytest.LogCaptureFixture
 ) -> _DegradedReportSnapshot:
     """Call criteria once against a group `build` makes; the finally unbinds every name that pins the class."""
+    mark = FEATURE_GROUPS.mark()
     caplog.clear()
     fg = build()
     global_filter = GlobalFilter()
@@ -743,7 +745,7 @@ def _drive_criteria_of(
         )
     finally:
         del fg, global_filter
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 @dataclass(frozen=True)
@@ -757,6 +759,7 @@ class _MatchingPassSnapshot:
 
 def _drive_matching_pass(build: Callable[[], type[FeatureGroup]]) -> _MatchingPassSnapshot:
     """Match one registered filter against HOST_FEATURE and read the attached filter names out as text."""
+    mark = FEATURE_GROUPS.mark()
     fg = build()
     global_filter = GlobalFilter()
     global_filter.add_filter(FILTER_FEATURE, FilterType.EQUAL, {"value": 1})
@@ -770,7 +773,7 @@ def _drive_matching_pass(build: Callable[[], type[FeatureGroup]]) -> _MatchingPa
         )
     finally:
         del fg, global_filter, matched
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestReportingADetachedFilterStaysContained:
@@ -823,7 +826,6 @@ class TestReportingADetachedFilterStaysContained:
 
 def _make_unreadable_report_e2e_fg() -> type[FeatureGroup]:
     """The e2e twin of the probe above: it answers the filter feature with a value it cannot name."""
-    gc.collect()
 
     class UnreadableReportE2EFG991(DataCreatorFeatureGroup):
         @classmethod
@@ -859,6 +861,7 @@ def _make_unreadable_report_e2e_fg() -> type[FeatureGroup]:
 
 def _run_built(build: Callable[[], type[FeatureGroup]]) -> tuple[dict[str, Any] | None, str | None]:
     """Run E2E_MAIN under a filter matched by a group `build` makes; the escape is text, never an exception."""
+    mark = FEATURE_GROUPS.mark()
     fg = build()
     collector = PluginCollector.enabled_feature_groups({fg})
     global_filter = GlobalFilter()
@@ -872,13 +875,13 @@ def _run_built(build: Callable[[], type[FeatureGroup]]) -> tuple[dict[str, Any] 
             global_filter=global_filter,
         )
     )
-    del fg, collector
-    gc.collect()
-    if results is None:
-        return None, escaped
-    assert len(results) == 1, f"expected exactly one result frame, got: {results!r}"
-    payload = _single_row(results[0], E2E_MAIN)
-    assert isinstance(payload, dict)
+    payload: Any = None
+    if results is not None:
+        assert len(results) == 1, f"expected exactly one result frame, got: {results!r}"
+        payload = _single_row(results[0], E2E_MAIN)
+        assert isinstance(payload, dict)
+    del fg, collector, global_filter, results
+    reclaim_leaked_feature_groups(mark, __name__)
     return payload, escaped
 
 

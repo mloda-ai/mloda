@@ -1,13 +1,12 @@
 """An in_features value the matcher cannot resolve is a plain non-match at the resolution seam.
 
 The probe matches by options, not by name: a name that identifies the group carries its own sources and
-the option is never consulted (#944). The probe class is dropped under gc.collect() before any assert,
+the option is never consulted (#944). The probe class is reclaimed before any assert,
 so no failing assert pins it (tests/conftest.py).
 """
 
 from __future__ import annotations
 
-import gc
 from typing import Any
 
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -21,6 +20,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.core.prepare.resolution_types import EvaluationResult
+from tests.registry_isolation import FEATURE_GROUPS, reclaim_leaked_feature_groups
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
@@ -36,7 +36,6 @@ class InFeaturesFw884(ComputeFramework):
 
 def _make_in_features_mixin_fg() -> type[FeatureGroup]:
     """A mixin candidate matched by its options, so only the in_features gate can still reject it."""
-    gc.collect()  # class objects are cyclic: collect leftovers before defining a twin
 
     class InFeaturesMixinFG884(FeatureChainParserMixin, FeatureGroup):
         PREFIX_PATTERN = r".*__(?P<operation>\w+)_infeat884$"
@@ -54,6 +53,7 @@ def _make_in_features_mixin_fg() -> type[FeatureGroup]:
 
 def _resolve(in_features: Any) -> tuple[str | None, tuple[str, ...], tuple[tuple[str, str, str], ...]]:
     """Evaluate one feature carrying that value: (error type, winner names, (class, stage, reason) per elimination)."""
+    mark = FEATURE_GROUPS.mark()
     feature_group = _make_in_features_mixin_fg()
     options = Options(context={"operation": "op1", DefaultOptionKeys.in_features: in_features})
     feature = Feature(IN_FEATURES_FEATURE_884, options)
@@ -73,7 +73,7 @@ def _resolve(in_features: Any) -> tuple[str | None, tuple[str, ...], tuple[tuple
             sorted((g.get_class_name(), str(e.stage), str(e.reason)) for g, e in result.eliminations.items())
         )
     del result, plugins, feature, feature_group
-    gc.collect()
+    reclaim_leaked_feature_groups(mark, __name__)
     return error_type, identified, eliminations
 
 

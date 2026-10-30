@@ -6,7 +6,6 @@ traceback pins the class. The build-phase fail-closed contract (#790) is out of 
 tests/test_core/test_api/test_sbdg_resolve_feature_broken_rule.py. Doubles are dropped per test.
 """
 
-import gc
 import logging
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
@@ -30,6 +29,7 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (  # noqa: F401
     PythonDictFramework,
 )
+from tests.registry_isolation import FEATURE_GROUPS, reclaim_leaked_feature_groups
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     TOY_TOKEN,
     ToySourceFG,
@@ -81,8 +81,6 @@ def _capture(call: Callable[[], T]) -> tuple[T | None, str | None]:
 
 def _make_raising_matcher_fg() -> type[FeatureGroup]:
     """Build a candidate whose matcher raises, while still declaring its own feature name."""
-    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
-    gc.collect()
 
     class RaisingMatcherFG845(FeatureGroup):
         """Declares one feature name, but its criteria hook raises for every request."""
@@ -125,6 +123,7 @@ class _OwnFeatureSnapshot:
 
 def _evaluate_own_feature() -> _OwnFeatureSnapshot:
     """Evaluate the broken class's OWN feature name and read the result out as plain data."""
+    mark = FEATURE_GROUPS.mark()
     broken_fg = _make_raising_matcher_fg()
     try:
         feature = Feature(BROKEN_OWN_FEATURE)
@@ -150,7 +149,7 @@ def _evaluate_own_feature() -> _OwnFeatureSnapshot:
         return snapshot
     finally:
         del broken_fg
-        gc.collect()
+        reclaim_leaked_feature_groups(mark, __name__)
 
 
 class TestRaisingMatcherContainment:
@@ -158,6 +157,7 @@ class TestRaisingMatcherContainment:
 
     def test_unrelated_feature_is_not_poisoned(self) -> None:
         """resolve_feature of an unrelated name reports the ordinary no-match, never the bare raise."""
+        mark = FEATURE_GROUPS.mark()
         broken_fg = _make_raising_matcher_fg()
         try:
             result = resolve_feature(UNRELATED_FEATURE)
@@ -167,7 +167,7 @@ class TestRaisingMatcherContainment:
             del result
         finally:
             del broken_fg
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
         assert winner_name is None
         assert candidate_names == []
@@ -178,6 +178,7 @@ class TestRaisingMatcherContainment:
 
     def test_resolvable_neighbour_still_resolves(self) -> None:
         """A resolvable unrelated feature still wins its own group while the broken class exists."""
+        mark = FEATURE_GROUPS.mark()
         broken_fg = _make_raising_matcher_fg()
         try:
             result = resolve_feature(NEIGHBOR_FEATURE)
@@ -186,13 +187,14 @@ class TestRaisingMatcherContainment:
             del result
         finally:
             del broken_fg
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
         assert error is None
         assert winner_name == NEIGHBOR_CLASS_NAME
 
     def test_evaluate_skips_the_raising_candidate(self) -> None:
         """The seam does not propagate the raise: the broken candidate is skipped, the neighbour wins."""
+        mark = FEATURE_GROUPS.mark()
         broken_fg = _make_raising_matcher_fg()
         try:
             feature = Feature(NEIGHBOR_FEATURE)
@@ -207,7 +209,7 @@ class TestRaisingMatcherContainment:
             del plugins
         finally:
             del broken_fg
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
         assert escaped is None
         assert identified_names == [NEIGHBOR_CLASS_NAME]
@@ -250,6 +252,7 @@ class TestRaisingMatcherContainment:
 
     def test_resolve_feature_reports_the_matcher_error_for_the_own_feature(self) -> None:
         """The debug path agrees with the seam: same near-miss, not a bare provider crash message."""
+        mark = FEATURE_GROUPS.mark()
         broken_fg = _make_raising_matcher_fg()
         try:
             result = resolve_feature(BROKEN_OWN_FEATURE)
@@ -258,7 +261,7 @@ class TestRaisingMatcherContainment:
             del result
         finally:
             del broken_fg
-            gc.collect()
+            reclaim_leaked_feature_groups(mark, __name__)
 
         assert winner_name is None
         assert error is not None

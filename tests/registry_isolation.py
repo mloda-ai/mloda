@@ -1,4 +1,4 @@
-"""Shared registry-isolation helper (#845) for the discovery roots FeatureGroup, BaseTransformer and Implementation.
+"""Shared registry-isolation helper (#845) over FeatureGroup, BaseTransformer, Implementation, ComputeFramework, Extender.
 
 A subclass defined inside a test sits in a reference cycle, so it stays in ``root.__subclasses__()`` until
 cyclic GC runs and a later test on the same worker trips over it. A creation log replaces per-test tree walks.
@@ -9,12 +9,16 @@ from __future__ import annotations
 import gc
 import sys
 import weakref
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any, Generic, TypeVar
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 
 T = TypeVar("T")
 
@@ -62,6 +66,29 @@ class SubclassLog(Generic[T]):
 FEATURE_GROUPS = SubclassLog(FeatureGroup)
 TRANSFORMERS = SubclassLog(BaseTransformer)  # type: ignore[type-abstract]
 IMPLEMENTATIONS = SubclassLog(Implementation)  # type: ignore[type-abstract]
+COMPUTE_FRAMEWORKS = SubclassLog(ComputeFramework)
+EXTENDERS = SubclassLog(Extender)  # type: ignore[type-abstract]
+
+RECLAIM_LOGS: dict[type[Any], SubclassLog[Any]] = {
+    FeatureGroup: FEATURE_GROUPS,
+    BaseTransformer: TRANSFORMERS,
+    Implementation: IMPLEMENTATIONS,
+    ComputeFramework: COMPUTE_FRAMEWORKS,
+    Extender: EXTENDERS,
+}
+EXTRA_RECLAIM_ROOTS: tuple[type[Any], ...] = (ComputeFramework, Extender)
+YOUNG_WINDOW_THRESHOLD = 100_000
+
+
+@contextmanager
+def young_window() -> Iterator[None]:
+    """Raise the gen-0 threshold so automatic collections do not promote a class the test still holds."""
+    saved = gc.get_threshold()
+    gc.set_threshold(YOUNG_WINDOW_THRESHOLD, *saved[1:])
+    try:
+        yield
+    finally:
+        gc.set_threshold(*saved)
 
 
 def _is_owned_by_its_module(cls: type[Any]) -> bool:
@@ -93,19 +120,33 @@ def reclaim_leaked_subclasses(log: SubclassLog[T], mark: int, module_name: str) 
     if not new_reclaimable():
         return sorted(new_from_module(), key=lambda cls: cls.__name__)
     # Youngest generation first: a class the test just defined is almost always still in gen 0, where a
-    # collection is bounded by the young generation instead of the whole heap. Escalating costs the whole-heap
-    # scan, so it is spent only while this module still has a survivor, the one thing the caller asserts on.
-    # Another module's promoted transient therefore gets the gen-0 pass only, and the module that owns it pays
-    # the full ladder on its own tests (#995).
+    # collection is bounded by the young generation instead of the whole heap. Escalate to older generations
+    # only while any new reclaimable class survives, whichever module owns it. Trade-off: a new class from another
+    # module that is genuinely still alive now costs the full ladder in the test that created it.
     for generation in (0, 1, 2):
         gc.collect(generation)
-        if not new_from_module():
+        if not new_reclaimable():
             break
     if not new_from_module():
         return []
     # Something is left, so pay the second collection: it reclaims what the first one only made collectable.
     gc.collect()
     return sorted(new_from_module(), key=lambda cls: cls.__name__)
+
+
+def snapshot_roots() -> dict[type[Any], int]:
+    """Mark the creation log of every reclaimed root."""
+    return {root: log.mark() for root, log in RECLAIM_LOGS.items()}
+
+
+def reclaim_since(snapshot: dict[type[Any], int], module_name: str) -> list[type[Any]]:
+    """Reclaim every root since `snapshot`; report survivors of FeatureGroup, BaseTransformer, Implementation only."""
+    leaked: list[type[Any]] = []
+    for root, mark in snapshot.items():
+        survivors = reclaim_leaked_subclasses(RECLAIM_LOGS[root], mark, module_name)
+        if root in (FeatureGroup, BaseTransformer, Implementation):
+            leaked.extend(survivors)
+    return leaked
 
 
 def reclaim_leaked_feature_groups(mark: int, module_name: str) -> list[type[FeatureGroup]]:
@@ -117,3 +158,13 @@ def reclaim_leaked_transformers(mark: int, module_name: str) -> list[type[BaseTr
     """Same over BaseTransformer: a leftover subclass joins the worker's next ComputeFrameworkTransformer() discovery
     and makes the ComputeFramework carrying it unpicklable for multiprocessing."""
     return reclaim_leaked_subclasses(TRANSFORMERS, mark, module_name)
+
+
+def reclaim_released_implementations(mark: int, module_name: str) -> list[type[Any]]:
+    """Reclaim Implementation subclasses created since `mark`; return those from `module_name` still alive and loaded."""
+    reclaim_leaked_subclasses(IMPLEMENTATIONS, mark, module_name)
+    loaded = loaded_implementations()
+    return sorted(
+        (cls for cls in IMPLEMENTATIONS.live_since(mark) if cls in loaded and cls.__module__ == module_name),
+        key=lambda c: c.__name__,
+    )

@@ -104,6 +104,11 @@ def _is_owned_by_its_module(cls: type[Any]) -> bool:
     return vars(module).get(cls.__name__, None) is cls if module is not None else False
 
 
+def _owned_by(cls: type[Any], module_name: str) -> bool:
+    """A type()-built class with an ABCMeta base gets `__module__` 'abc', so one made during the test is its own."""
+    return cls.__module__ in (module_name, "abc")
+
+
 def reclaim_leaked_subclasses(log: SubclassLog[T], mark: int, module_name: str) -> list[type[T]]:
     """Collect subclasses logged since `mark`; return the ones from `module_name` that survived."""
 
@@ -113,7 +118,7 @@ def reclaim_leaked_subclasses(log: SubclassLog[T], mark: int, module_name: str) 
 
     def new_from_module() -> list[type[T]]:
         """Everything new this module owns, module-bound or not: a bound one is a leak no collection can fix."""
-        return [cls for cls in log.live_since(mark) if cls.__module__ == module_name]
+        return [cls for cls in log.live_since(mark) if _owned_by(cls, module_name)]
 
     # Cheap path: only collect when something collectable appeared. The gate reads ANY such new subclass, not
     # only this module's; only the RETURN value stays filtered to module_name.

@@ -11,6 +11,9 @@ from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.prepare import accessible_plugins
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
+from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
+    DynamicFeatureGroupCreator,
+)
 
 from tests.registry_isolation import (
     IMPLEMENTATIONS,
@@ -49,7 +52,7 @@ os.environ.setdefault("MLODA_MP_PRELOAD", ",".join(MP_PRELOAD_MODULES))
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 
 
-# Defined first on purpose: autouse fixtures tear down in reverse, so this runs after the registry reset.
+# Autouse fixtures in one module are ordered by name, and this one sorts first, so it tears down last.
 @pytest.fixture(autouse=True)
 def _no_feature_group_registry_pollution(request: pytest.FixtureRequest) -> Any:
     """Fail a test leaving its own FeatureGroup, BaseTransformer or Implementation subclass registered (#845).
@@ -98,6 +101,15 @@ def restore_default_plugin_registry() -> Any:
     registry.restore(snapshot)
     _clear_warned_unregistered()
     _clear_warn_once_for_registries()
+
+
+@pytest.fixture(autouse=True)
+def restore_dynamic_feature_group_cache(_no_feature_group_registry_pollution: None) -> Any:
+    """Restore DynamicFeatureGroupCreator's class cache, so classes a test cached do not read as leaks."""
+    before = dict(DynamicFeatureGroupCreator._created_classes)
+    yield
+    DynamicFeatureGroupCreator._created_classes.clear()
+    DynamicFeatureGroupCreator._created_classes.update(before)
 
 
 @pytest.fixture(autouse=True)

@@ -397,7 +397,7 @@ A column Arrow cannot build (for example bytes that are not UTF-8 in a text colu
 
 ### Window functions
 
-`with_row_number` appends a `ROW_NUMBER()` column; `window` appends an arbitrary window expression. Both quote every identifier and raise `ValueError` if the new `alias` collides with an existing column (the comparison ignores ASCII case) or if a `partition_by` / `order_by` column is not an exact column name.
+`with_row_number` appends a `ROW_NUMBER()` column; `window` appends an arbitrary window expression. Rows keep their input order. Both quote every identifier and raise `ValueError` if the new `alias` collides with an existing column (the comparison ignores ASCII case) or if a `partition_by` / `order_by` column is not an exact column name.
 
 ```py
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (

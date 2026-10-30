@@ -627,6 +627,28 @@ class SqliteRelation(SqlBaseRelation):
     def _project_raw(self, projection: str) -> "SqliteRelation":
         return self.select(_raw_sql=projection)
 
+    def _select_ordered(self, columns: Sequence[str], order_column: str) -> "SqliteRelation":
+        new_name = _next_table_name()
+        projection = ", ".join(quote_ident(c) for c in columns)
+        sql = (
+            f"CREATE TEMP VIEW {quote_ident(new_name)} AS "  # nosec
+            f"SELECT {projection} FROM {quote_ident(self._table_name)} ORDER BY {quote_ident(order_column)}"
+        )
+        self._connection.execute(sql)
+        hints = self._type_hints_for_current_columns()
+        types = None
+        if hints is not None:
+            hint_map = dict(zip(self.columns, hints, strict=True))
+            types = [hint_map[c] for c in columns]
+        fallback = None
+        source_types = self._unhinted_types()
+        if source_types is not None:
+            type_map = dict(zip(self.columns, source_types, strict=True))
+            fallback = [type_map[c] for c in columns]
+        return SqliteRelation(
+            self._connection, new_name, _is_view=True, _types=types, _probe=(projection, self), _fallback_types=fallback
+        )
+
     def _assert_window_supported(self) -> None:
         _assert_window_supported()
 

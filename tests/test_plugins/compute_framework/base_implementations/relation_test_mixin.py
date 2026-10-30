@@ -226,6 +226,17 @@ class RelationTestMixin:
         assert set(result.columns) == {"a", "c"}
         assert len(result) == 3
 
+    def test_append_columns_keeps_column_and_row_order(self, connection: Any, relation_class: Any) -> None:
+        """append_columns returns base then new columns in order, with rows in input order."""
+        rel = relation_class.from_dict(connection, {"a": [1, 2, 3], "b": ["x", "y", "z"]})
+        result = rel.append_columns({"x": [7, 8, 9], "y": [True, False, True]})
+        assert result.columns == ["a", "b", "x", "y"]
+        arrow = result.to_arrow_table()
+        assert arrow.column("a").to_pylist() == [1, 2, 3]
+        assert arrow.column("b").to_pylist() == ["x", "y", "z"]
+        assert arrow.column("x").to_pylist() == [7, 8, 9]
+        assert arrow.column("y").to_pylist() == [True, False, True]
+
     # --- append_column: helper-name collision and name-collision contract ---
 
     def test_append_column_when_name_param_collides_with_helper_candidate(

@@ -197,11 +197,7 @@ class DuckdbRelation(SqlBaseRelation):
         return self._relation.df()
 
     def __len__(self) -> int:
-        row = self._relation.aggregate("count_star()").fetchone()
-        if row is None:
-            raise RuntimeError("count_star() returned no rows")
-        result: int = row[0]
-        return result
+        return len(self._relation)
 
     def _project_raw(self, projection: str) -> "DuckdbRelation":
         return self.project(projection)
@@ -231,8 +227,9 @@ class DuckdbRelation(SqlBaseRelation):
         joined = left.join(right, f'"__l__".{qrn} = "__r__".{qrn}')
         keep = ", ".join(f'"__l__".{quote_ident(c)}' for c in self.columns)
         keep += "".join(f', "__r__".{quote_ident(n)}' for n in columns)
-        result = joined.order(f'"__l__".{qrn}').project(keep)
-        return DuckdbRelation(self._connection, result)
+        # DuckDB 2.0 drops the join aliases once order() is applied, so project the row number first.
+        kept = DuckdbRelation(self._connection, joined.project(f'{keep}, "__l__".{qrn} AS {qrn}'))
+        return kept._select_ordered([*self.columns, *columns], rn)
 
     @classmethod
     def from_arrow(cls, connection: duckdb.DuckDBPyConnection, arrow_table: pa.Table) -> "DuckdbRelation":

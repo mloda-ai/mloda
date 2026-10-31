@@ -1,6 +1,6 @@
 """Test helpers for subclass-tree walks and reclaiming transient subclasses."""
 
-import abc
+from abc import ABC, ABCMeta
 import gc
 import weakref
 from collections.abc import Callable
@@ -43,22 +43,22 @@ def collect_until_dead(reference: weakref.ref[type[Any]]) -> bool:
 
 def spy_on_plugin_subclasschecks(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Wrap ABCMeta.__subclasscheck__; the returned list collects calls whose cls is or derives from a plugin base."""
-    original = abc.ABCMeta.__subclasscheck__
+    original = ABCMeta.__subclasscheck__
     counted: list[str] = []
 
-    def spy(cls: abc.ABCMeta, subclass: type[Any]) -> bool:
+    def spy(cls: ABCMeta, subclass: type[Any]) -> bool:
         if any(base in cls.__mro__ for base in _PLUGIN_BASE_TYPES):
             counted.append(cls.__qualname__)
         return original(cls, subclass)
 
-    monkeypatch.setattr(abc.ABCMeta, "__subclasscheck__", spy)
+    monkeypatch.setattr(ABCMeta, "__subclasscheck__", spy)
     return counted
 
 
 def invalidate_abc_caches() -> None:
     """Bump ABCMeta's invalidation counter so every negative cache misses on its next check."""
 
-    class _Throwaway(abc.ABC):
+    class _Throwaway(ABC):
         pass
 
     class _Registered:

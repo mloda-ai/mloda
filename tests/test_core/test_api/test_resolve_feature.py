@@ -1097,9 +1097,7 @@ class {qualname}(_FG_BASE_):
 def _cleanup_main_after() -> Any:
     """Snapshot ``__main__`` attributes and pop any test-added keys afterwards, even on failure.
 
-    Guarantees the exec'd conflict classes cannot leak into ``FeatureGroup.__subclasses__()`` for
-    later tests on the same xdist worker: the yield teardown runs after the test frame unwinds (so
-    local class refs are gone), pops the newly-bound ``__main__`` keys.
+    The autouse leak fixture, which tears down after this one, then reclaims the exec'd conflict classes.
     """
     main_mod = sys.modules["__main__"]
     snapshot = set(main_mod.__dict__.keys())

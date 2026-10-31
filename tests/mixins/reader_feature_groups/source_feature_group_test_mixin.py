@@ -391,7 +391,6 @@ class SourceFeatureGroupTestMixin:
         feature = self._feature(self.present_column, {self.feature_group_class.__name__: self.own_pointer()})
         result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, None)
         assert sub in result.identified
-        # Drop every reference (the feature's input_data_match pins the class).
         del sub, mapping, result, feature
 
     def test_a_pointer_key_of_another_concrete_group_makes_the_searched_routes_decline_with_a_reason(self) -> None:

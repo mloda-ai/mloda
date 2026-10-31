@@ -8,6 +8,7 @@ import pytest
 from mloda.core.abstract_plugins.components import utils
 from mloda.provider import MatchRejection, collect_match_rejections
 from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.prepare import accessible_plugins
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
@@ -149,6 +150,21 @@ MIN_FROZEN_GRAPH_OBJECTS = 1000
 _froze_the_graph = False
 
 
+def _suite_will_freeze() -> bool:
+    return not os.getenv(NO_GC_FREEZE_ENV_VAR) and gc.get_freeze_count() <= MIN_FROZEN_GRAPH_OBJECTS
+
+
+# Imports every plugin module, and the backends they import at module level, before the freeze; only the default
+# registry is restored, so tests start from the same registry state. A separate hook keeps the contract test's fast
+# probes from paying the import.
+def pytest_collection_modifyitems(session: Any, config: Any, items: Any) -> None:
+    if not _suite_will_freeze():
+        return
+    snapshot = PluginRegistry.default().snapshot()
+    PluginLoader.all()
+    PluginRegistry.default().restore(snapshot)
+
+
 # The gc.collect() is load-bearing, not a tidy-up: a FeatureGroup subclass that is dead but not yet collected here
 # gets frozen alive and stays visible to get_all_subclasses(FeatureGroup) for the whole run, since objects frozen
 # before a collection are never reclaimed afterwards on any of 3.11-3.14. A non-empty permanent generation means a
@@ -158,9 +174,7 @@ _froze_the_graph = False
 def pytest_collection_finish(session: Any) -> None:
     """Freeze once all test modules are imported and no test has run, so later gc.collect() calls skip them."""
     global _froze_the_graph
-    if os.getenv(NO_GC_FREEZE_ENV_VAR):
-        return
-    if gc.get_freeze_count() > MIN_FROZEN_GRAPH_OBJECTS:
+    if not _suite_will_freeze():
         return
     gc.collect()
     gc.freeze()

@@ -56,8 +56,14 @@ _OWNERSHIP_VIOLATED = (
     "unfreeze only the freeze it made itself."
 )
 
+_PLUGINS_UNFROZEN = (
+    "Plugin modules imported after the freeze stay in the collected generations, so every full gc.collect() "
+    "rescans them. tests/conftest.py must run PluginLoader.all() in pytest_collection_modifyitems, before "
+    "pytest_collection_finish freezes."
+)
+
 # Only import gc and tests.conftest in the child: the probes must stay fast, and the freeze counts only need
-# a realistic imported graph, not the whole plugin universe.
+# a realistic imported graph, not the whole plugin universe (_PLUGIN_FREEZE_PROBE is the deliberate exception).
 _PAIRED_HOOKS_PROBE = """
 import gc
 
@@ -79,6 +85,21 @@ gc.freeze()
 host = gc.get_freeze_count()
 {hooks}
 print("{marker}", host, gc.get_freeze_count())
+"""
+
+_PLUGIN_FREEZE_PROBE = """
+import gc
+
+from tests import conftest
+from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+
+conftest.pytest_collection_modifyitems(session=None, config=None, items=[])
+conftest.pytest_collection_finish(session=None)
+loader = PluginLoader.all()
+unfrozen = {{id(o) for o in gc.get_objects()}}
+modules = list(loader.plugins.values())
+print("{marker}", len(modules), sum(1 for m in modules if id(vars(m)) in unfrozen))
+conftest.pytest_sessionfinish(session=None, exitstatus=0)
 """
 
 _SESSION_FINISH = "conftest.pytest_sessionfinish(session=None, exitstatus=0)"
@@ -181,6 +202,19 @@ def test_conftest_unfreezes_the_graph_at_session_finish() -> None:
     assert released * 10 < frozen, (
         f"pytest_sessionfinish left {released} of {frozen} objects frozen (count {baseline} before the freeze), "
         f"so it did not release the graph it froze. {_UNFREEZE_MISSING}"
+    )
+
+
+@pytest.mark.timeout(60)
+def test_plugin_modules_are_frozen_before_the_first_plugin_loader_call() -> None:
+    """Plugin modules loaded by the suite land in the permanent generation, even if collection never imported them."""
+    total, unfrozen = _freeze_counts(_PLUGIN_FREEZE_PROBE.format(marker=_PROBE_MARKER))
+
+    assert total > 0, (
+        "Positive control failed: the probe no longer sees any plugin module, so it cannot detect anything."
+    )
+    assert unfrozen == 0, (
+        f"{unfrozen} of {total} plugin modules are outside the permanent generation. {_PLUGINS_UNFROZEN}"
     )
 
 

@@ -744,6 +744,19 @@ class ExecutionPlan:
             return feature_a, feature_b, option_keys
         return None
 
+    @staticmethod
+    def direct_ancestors(uuid: UUID, ancestors_of: dict[UUID, set[UUID]]) -> set[UUID]:
+        """Transitive reduction of uuid's ancestors; assumes a transitively closed mapping."""
+        ancestors = ancestors_of.get(uuid, set())
+        covered: set[UUID] = set()
+        direct: set[UUID] = set()
+        for ancestor in sorted(ancestors, key=lambda a: len(ancestors_of.get(a, ())), reverse=True):
+            if ancestor in covered:
+                continue
+            direct.add(ancestor)
+            covered |= ancestors_of.get(ancestor, set())
+        return direct
+
     def _split_by_variant_conflicts(
         self,
         features: set[Feature],
@@ -759,10 +772,15 @@ class ExecutionPlan:
 
         member_uuids = {f.uuid: f for f in features}
 
+        direct_parents_memo: dict[UUID, list[UUID]] = {}
+
         def direct_parents(feature: Feature) -> list[UUID]:
-            ancestors = parent_to_children_mapping.get(feature.uuid, set())
-            direct = ancestors - {p for a in ancestors for p in parent_to_children_mapping.get(a, set())}
-            return sorted(uuid for uuid in direct if uuid in producer_index)
+            memoized = direct_parents_memo.get(feature.uuid)
+            if memoized is None:
+                direct = ExecutionPlan.direct_ancestors(feature.uuid, parent_to_children_mapping)
+                memoized = sorted(uuid for uuid in direct if uuid in producer_index)
+                direct_parents_memo[feature.uuid] = memoized
+            return memoized
 
         def same_group_ancestors(feature: Feature) -> list[Feature]:
             ancestors = parent_to_children_mapping.get(feature.uuid, set())
@@ -2356,11 +2374,8 @@ Available join types:
         # dependency is already captured, framework-correctly, by its own hop token elsewhere in
         # required_uuids - so it is skipped rather than read as a spurious bypass.
         #
-        # Complexity: memoization visits each step once, but FeatureGroupStep.required_uuids holds
-        # the FULL TRANSITIVE ancestor set, not just direct parents, so a chain of N same-framework
-        # steps makes this walk do O(N) token-loop work per step across O(N) steps, merging O(N)-sized
-        # by_owner dicts at each - roughly O(N^3) for one long single-framework chain, not the
-        # O(steps * features) bound elsewhere in this block.
+        # Complexity: required_uuids still holds the full transitive set, so each step scans O(N) tokens,
+        # but a dependency already folded through a larger reach is skipped: O(N^2 log N) per chain, not O(N^3).
         #
         # Recursion depth: an explicit worklist, not native recursion, walks the dependency DAG below,
         # so an arbitrarily long single-framework chain cannot raise RecursionError; this assumes the
@@ -2411,16 +2426,14 @@ Available join types:
 
                 by_owner: dict[UUID, set[UUID | None]] = defaultdict(set)
                 hops: set[UUID] = set()
+                contributions: list[tuple[UUID, UUID | None]] = []
                 for token in step.required_uuids:
                     hop_uuid = hop_uuid_by_route_token.get(token)
                     if hop_uuid is not None:
                         hops.add(hop_uuid)
                         owner = hop_source_owner_by_hop.get(hop_uuid)
                         if owner is not None:
-                            by_owner[owner].add(hop_uuid)
-                            for other_owner, markers in reach_cache[owner].items():
-                                by_owner[other_owner] |= markers
-                            hops |= all_hops_cache[owner]
+                            contributions.append((owner, hop_uuid))
                         continue
 
                     dep_uuid = owning_step_of.get(token)
@@ -2429,7 +2442,16 @@ Available join types:
                     dep_step = feature_group_steps_by_uuid.get(dep_uuid)
                     if dep_step is None or dep_step.compute_framework != step.compute_framework:
                         continue
-                    by_owner[dep_uuid].add(None)
+                    contributions.append((dep_uuid, None))
+
+                # A marker already at a key came from a fold that merged that dependency's whole reach and
+                # hops, so skipping loses nothing; folding the largest reach first makes a chain fold one
+                # dependency per step.
+                contributions.sort(key=lambda c: len(reach_cache[c[0]]), reverse=True)
+                for dep_uuid, marker in contributions:
+                    if marker in by_owner.get(dep_uuid, ()):
+                        continue
+                    by_owner[dep_uuid].add(marker)
                     for other_owner, markers in reach_cache[dep_uuid].items():
                         by_owner[other_owner] |= markers
                     hops |= all_hops_cache[dep_uuid]

@@ -1145,3 +1145,77 @@ def test_an_unmatched_discriminator_error_does_not_leak_secret_values() -> None:
     assert "hunter2" not in message
     assert "left_discriminator" in message
     assert "matched no TokenSelfSource node" in message
+
+
+class TokenPlainChainRoot(FeatureGroup):
+    pass
+
+
+class TokenPlainChainHead(FeatureGroup):
+    pass
+
+
+class TokenPlainChainMid(FeatureGroup):
+    pass
+
+
+class TokenPlainChainTail(FeatureGroup):
+    pass
+
+
+class TokenPlainChainBypass(FeatureGroup):
+    pass
+
+
+def test_plain_hop_owed_tokens_cover_a_same_framework_chain_but_not_a_descendant_bypassing_the_hop() -> None:
+    """A same-framework chain behind one hop is owed; a descendant that also reads the root directly is not."""
+    planned = _planned()
+    graph = planned.graph
+
+    root = feature("token_plain_chain_root", PythonDictFramework)
+    head = feature("token_plain_chain_head", PyArrowTable)
+    mid = feature("token_plain_chain_mid", PyArrowTable)
+    tail = feature("token_plain_chain_tail", PyArrowTable)
+    bypass = feature("token_plain_chain_bypass", PythonDictFramework)
+
+    graph.add_node(root.uuid, NodeProperties(root, TokenPlainChainRoot))
+    graph.adjacency_list[root.uuid] = [head.uuid, bypass.uuid]
+    graph.add_node(head.uuid, NodeProperties(head, TokenPlainChainHead))
+    graph.adjacency_list[head.uuid] = [mid.uuid]
+    graph.parent_to_children_mapping[head.uuid] = {root.uuid}
+    graph.add_node(mid.uuid, NodeProperties(mid, TokenPlainChainMid))
+    graph.adjacency_list[mid.uuid] = [tail.uuid]
+    graph.parent_to_children_mapping[mid.uuid] = {head.uuid, root.uuid}
+    graph.add_node(tail.uuid, NodeProperties(tail, TokenPlainChainTail))
+    graph.adjacency_list[tail.uuid] = [bypass.uuid]
+    graph.parent_to_children_mapping[tail.uuid] = {mid.uuid, head.uuid, root.uuid}
+    graph.add_node(bypass.uuid, NodeProperties(bypass, TokenPlainChainBypass))
+    graph.adjacency_list[bypass.uuid] = []
+    graph.parent_to_children_mapping[bypass.uuid] = {tail.uuid, mid.uuid, head.uuid, root.uuid}
+
+    for fg, feat in (
+        (TokenPlainChainRoot, root),
+        (TokenPlainChainHead, head),
+        (TokenPlainChainMid, mid),
+        (TokenPlainChainTail, tail),
+        (TokenPlainChainBypass, bypass),
+    ):
+        planned.queue.append((fg, {feat}))
+
+    plan = _create_execution_plan(planned)
+    steps = {s.feature_group: s for s in plan if isinstance(s, FeatureGroupStep)}
+    plain_hops = [
+        s
+        for s in plan
+        if isinstance(s, TransformFrameworkStep) and s.link_id is None and s.from_framework is PythonDictFramework
+    ]
+    assert len(plain_hops) == 1, f"expected exactly one plain PythonDict hop; got {plain_hops}"
+    hop = plain_hops[0]
+
+    chain_uuids = (
+        steps[TokenPlainChainHead].get_uuids()
+        | steps[TokenPlainChainMid].get_uuids()
+        | steps[TokenPlainChainTail].get_uuids()
+    )
+    assert hop.owed_tokens == chain_uuids
+    assert not (hop.owed_tokens & steps[TokenPlainChainBypass].get_uuids())

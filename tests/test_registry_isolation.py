@@ -276,12 +276,12 @@ class TestReclaimLeakedFeatureGroups:
             ),
             pytest.param(
                 lambda tmp_path: root_binding_groups(PyArrowTable, lambda *args: None)[:2],
-                "tests.mixins.",
+                registry_isolation.SHARED_TEST_MODULE_PREFIX,
                 id="root_binding_groups",
             ),
             pytest.param(
                 lambda tmp_path: (neutral_csv_group(tmp_path / "n.csv"),),
-                "tests.mixins.",
+                registry_isolation.SHARED_TEST_MODULE_PREFIX,
                 id="neutral_csv_group",
             ),
         ],
@@ -293,15 +293,16 @@ class TestReclaimLeakedFeatureGroups:
         mark = FEATURE_GROUPS.mark()
         held = build(tmp_path)
         modules = [c.__module__ for c in held]
+        # a trailing dot means prefix match (shared builders); otherwise the module must match exactly
+        assert all(
+            m == expected_module or (expected_module.endswith(".") and m.startswith(expected_module)) for m in modules
+        ), f"the probe/builder does not take {expected_module}, got {modules}; the test proves nothing"
         expected = sorted(c.__name__ for c in held)
         reported = [c.__name__ for c in reclaim_leaked_feature_groups(mark, __name__)]
         del held  # drop the strong references before asserting, so a failure leaves nothing behind
         gc.collect()
         gc.collect()
         assert reported == expected, f"a strongly held subclass must be reported, got {reported}"
-        assert all(m.startswith(expected_module) for m in modules), (
-            f"the builder must live under {expected_module} (tests/mixins/), got {modules}"
-        )
         survivors = {c.__name__ for c in FEATURE_GROUPS.live_since(mark)}
         assert not survivors & set(expected), "the deliberate leak must not outlive this test"
 

@@ -1483,8 +1483,6 @@ def test_a_redefined_implementation_with_different_source_conflicts_naming_imple
 
     assert "Implementation" in str(exc_info.value)
     assert "FeatureGroup" not in str(exc_info.value)
-    del stale, live
-    gc.collect()
 
 
 def test_a_disabled_stale_implementation_redefinition_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1496,5 +1494,3 @@ def test_a_disabled_stale_implementation_redefinition_does_not_raise(monkeypatch
 
     assert live in implementations
     assert stale not in implementations
-    del stale, live, implementations
-    gc.collect()

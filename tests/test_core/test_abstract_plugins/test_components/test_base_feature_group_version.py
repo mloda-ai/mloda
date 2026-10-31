@@ -1287,7 +1287,6 @@ class TestStaticModuleSourceMatchesLiveSource:
             parts_warm = closure_parts(leaf_warm, False)
         finally:
             _purge_package(top)
-            gc.collect()  # the purged package's classes sit in cycles; reclaim before the registry check
 
         assert not any(part.startswith(f"nosrc:{top}.lazy") for part in parts_cold), (
             f"the cold static module lookup must read source the same way the live index does; "
@@ -1585,6 +1584,7 @@ class TestImplementationHashDoesNotRetainAst:
 
         BaseFeatureGroupVersion.implementation_hash(leaf)
 
+        # these measuring collections promote `leaf`, so its teardown reclaim needing a full collection is inherent
         gc.collect()  # only AST nodes still referenced count as retained
         after = sum(1 for obj in gc.get_objects() if isinstance(obj, ast.AST))
 

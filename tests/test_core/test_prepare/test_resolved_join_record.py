@@ -861,7 +861,7 @@ def _without_depends(signatures: Iterable[JoinSignature]) -> frozenset[JoinSigna
     return frozenset(signature._replace(depends_on_links=()) for signature in signatures)
 
 
-def test_a_carrier_scan_ignores_a_redundant_edge_to_an_ancestor_of_a_skipped_parent() -> None:
+def test_a_carrier_scan_reads_only_the_direct_ancestors_not_the_full_closure() -> None:
     """The child reads M and M's ancestor K; only the direct parents M and right count, and both are skipped."""
     planned = _planned()
     left = feature("resolved_join_redundant_left", PyArrowTable)

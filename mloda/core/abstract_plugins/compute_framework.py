@@ -1,13 +1,12 @@
 import contextlib
 import pickle  # nosec B403
-import threading
-import weakref
 from abc import ABC
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from contextvars import ContextVar
 from typing import Any, NoReturn, final, get_origin
 from uuid import UUID, uuid4
+from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
@@ -46,8 +45,7 @@ from mloda.core.runtime.flight.flight_server import FlightServer
 
 _PYARROW_REASON = "this operation"
 
-_subclasses: weakref.WeakSet[type["ComputeFramework"]] = weakref.WeakSet()
-_subclasses_lock = threading.Lock()
+_registry: SubclassRegistry[type["ComputeFramework"]] = SubclassRegistry()
 
 _current_compute_framework: ContextVar["ComputeFramework | None"] = ContextVar(
     "_current_compute_framework", default=None
@@ -132,8 +130,7 @@ class ComputeFramework(ABC):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        with _subclasses_lock:
-            _subclasses.add(cls)
+        _registry.add(cls)
 
     # Class-level default so the attribute exists even when a subclass's __getstate__
     # returns a filtered dict that omits it (e.g. dropping unpicklable live state).
@@ -1383,8 +1380,7 @@ class ComputeFramework(ABC):
 
 def compute_framework_subclasses() -> set[type[ComputeFramework]]:
     """Every live ComputeFramework subclass, without walking the class tree."""
-    with _subclasses_lock:
-        return set(_subclasses)
+    return _registry.members()
 
 
 def unregistered_frameworks_hint(candidates: Iterable[object]) -> str | None:

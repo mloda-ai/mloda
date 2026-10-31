@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import inspect
 import logging
-import threading
-import weakref
 from collections.abc import Collection, Mapping
 from typing import Any, ClassVar, Callable, cast, final
 from abc import ABC
 
+from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -46,8 +45,7 @@ from mloda.core.abstract_plugins.components.utils import (
 
 logger = logging.getLogger(__name__)
 
-_subclasses: weakref.WeakSet[type["FeatureGroup"]] = weakref.WeakSet()
-_subclasses_lock = threading.Lock()
+_registry: SubclassRegistry[type["FeatureGroup"]] = SubclassRegistry()
 
 
 _INSTANCE_SHELLS: dict[type, type] = {}
@@ -133,8 +131,7 @@ class FeatureGroup(ABC):
         install_name_path_presence_guard(cls)
         install_required_when_guard(cls)
         cls._validate_subtype_declaration()
-        with _subclasses_lock:
-            _subclasses.add(cls)
+        _registry.add(cls)
 
     @classmethod
     def _overrides(cls, method_name: str) -> bool:
@@ -965,8 +962,7 @@ class FeatureGroup(ABC):
 
 def feature_group_subclasses() -> set[type[FeatureGroup]]:
     """Every live FeatureGroup subclass, without walking the class tree."""
-    with _subclasses_lock:
-        return set(_subclasses)
+    return _registry.members()
 
 
 def format_feature_group_class(fg_class: type[FeatureGroup]) -> str:

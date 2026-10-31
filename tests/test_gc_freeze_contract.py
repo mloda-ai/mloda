@@ -16,7 +16,9 @@ import gc
 import os
 import subprocess  # nosec B404
 import sys
+import types
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -25,7 +27,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 # The floor the conftest predicate uses to tell its own freeze from a host's, imported rather than copied so
 # the predicate and these assertions cannot drift apart.
-from tests.conftest import MIN_FROZEN_GRAPH_OBJECTS, NO_GC_FREEZE_ENV_VAR
+from tests.conftest import MIN_FROZEN_GRAPH_OBJECTS, NO_GC_FREEZE_ENV_VAR, drop_passing_report
 
 
 _THROWAWAY_NAME = "GcFreezeThrowawayFeatureGroup"
@@ -231,3 +233,64 @@ def test_conftest_never_unfreezes_a_freeze_it_does_not_own(hooks: str) -> None:
     assert remaining >= host // 2, (
         f"The host froze {host} objects and {remaining} are left after the conftest hooks ran. {_OWNERSHIP_VIOLATED}"
     )
+
+
+def _report(passed: bool) -> Any:
+    return types.SimpleNamespace(passed=passed)
+
+
+@pytest.mark.parametrize(
+    ("key", "passed"),
+    [("", True), ("passed", True), ("", False), ("passed", False), ("failed", False), ("skipped", False)],
+)
+def test_drop_passing_report_pops_only_a_passing_last_report(key: str, passed: bool) -> None:
+    earlier, last = _report(True), _report(passed)
+    stats: dict[str, list[Any]] = {key: [earlier, last]}
+
+    drop_passing_report(stats, last)
+
+    assert stats == ({key: [earlier]} if passed else {key: [earlier, last]})
+
+
+def test_drop_passing_report_leaves_a_passing_report_that_is_not_last() -> None:
+    first, last = _report(True), _report(True)
+    stats: dict[str, list[Any]] = {"": [first, last], "passed": [first, last]}
+
+    drop_passing_report(stats, first)
+
+    assert stats == {"": [first, last], "passed": [first, last]}
+
+
+def test_drop_passing_report_never_removes_keys_or_touches_other_categories() -> None:
+    only = _report(True)
+    failed, skipped, warning = _report(False), _report(False), _report(False)
+    stats: dict[str, list[Any]] = {
+        "": [only],
+        "passed": [only],
+        "failed": [failed],
+        "skipped": [skipped],
+        "xfailed": [],
+        "xpassed": [],
+        "warnings": [warning],
+    }
+
+    drop_passing_report(stats, only)
+
+    assert stats == {
+        "": [],
+        "passed": [],
+        "failed": [failed],
+        "skipped": [skipped],
+        "xfailed": [],
+        "xpassed": [],
+        "warnings": [warning],
+    }
+
+
+def test_a_worker_keeps_no_passing_report(request: pytest.FixtureRequest) -> None:
+    """Pins the report-drop hook wiring end to end: an xdist worker holds no passing report mid-run."""
+    tr = request.config.pluginmanager.get_plugin("terminalreporter")
+    if not hasattr(request.config, "workerinput") or tr is None:
+        return
+    assert not tr.stats.get("")
+    assert not tr.stats.get("passed")

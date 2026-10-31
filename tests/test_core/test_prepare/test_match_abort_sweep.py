@@ -278,7 +278,10 @@ class ExternalCall(NamedTuple):
 
 class _Definition(NamedTuple):
     module: str
-    node: ast.FunctionDef | ast.AsyncFunctionDef
+    name: str
+    lineno: int
+    called: frozenset[str]
+    swallows: bool
 
 
 class _Sweep(NamedTuple):
@@ -855,17 +858,22 @@ def _index() -> _Index:
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 called, raises = _scan(node)
-                functions.setdefault(node.name, []).append(_Definition(module, node))
+                swallows = _swallows(node)
+                functions.setdefault(node.name, []).append(
+                    _Definition(module, node.name, node.lineno, called, swallows)
+                )
                 calls.setdefault(node.name, set()).update(called)
                 if raises:
                     direct.add(node.name)
-                if _swallows(node):
+                if swallows:
                     direct_swallowers.add(node.name)
             elif isinstance(node, ast.ClassDef):
                 # A call on a CLASS name is an edge into what construction runs, which no call node names.
                 for child in node.body:
                     if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name in _CONSTRUCTORS:
-                        constructors.setdefault(node.name, []).append(_Definition(module, child))
+                        constructors.setdefault(node.name, []).append(
+                            _Definition(module, child.name, child.lineno, _scan(child)[0], _swallows(child))
+                        )
                 # Keyed by name like everything else here, so two same-named classes pool their bases.
                 bases.setdefault(node.name, set()).update(
                     base.id if isinstance(base, ast.Name) else ast.unparse(base) for base in node.bases
@@ -894,8 +902,8 @@ def sweep() -> _Sweep:
     visited: set[tuple[str, int]] = set()
     for seed in SEEDS:
         for definition in targets_of(seed):
-            if definition.module in MATCH_PATH_MODULES and (definition.module, definition.node.lineno) not in visited:
-                visited.add((definition.module, definition.node.lineno))
+            if definition.module in MATCH_PATH_MODULES and (definition.module, definition.lineno) not in visited:
+                visited.add((definition.module, definition.lineno))
                 queue.append(definition)
 
     reachable: set[tuple[str, str]] = set()
@@ -903,20 +911,20 @@ def sweep() -> _Sweep:
     swallowing: set[ExternalCall] = set()
     while queue:
         definition = queue.popleft()
-        reachable.add((definition.module, definition.node.name))
-        caller = f"{definition.module}::{definition.node.name}"
-        for called in _scan(definition.node)[0]:
+        reachable.add((definition.module, definition.name))
+        caller = f"{definition.module}::{definition.name}"
+        for called in definition.called:
             for target in targets_of(called):
                 if target.module in MATCH_PATH_MODULES:
-                    key = (target.module, target.node.lineno)
+                    key = (target.module, target.lineno)
                     if key not in visited:
                         visited.add(key)
                         queue.append(target)
                     continue
-                if target.node.name in index.raising:
-                    external.add(ExternalCall(target.module, target.node.name, caller))
-                if target.node.name in index.swallowing:
-                    swallowing.add(ExternalCall(target.module, target.node.name, caller))
+                if target.name in index.raising:
+                    external.add(ExternalCall(target.module, target.name, caller))
+                if target.name in index.swallowing:
+                    swallowing.add(ExternalCall(target.module, target.name, caller))
 
     sites: list[RaiseSite] = []
     handlers: list[HandlerSite] = []
@@ -1006,6 +1014,21 @@ def test_every_seed_resolves_inside_a_declared_module() -> None:
         f"SEEDS entries that name no definition in a declared module: {unresolved}. Rename the seed with the "
         "definition it points at."
     )
+
+
+def test_the_index_keeps_no_ast_alive() -> None:
+    """No indexed definition holds an AST node, so the parsed tree of mloda/ is freed after the build."""
+    index = _index()
+    held = [
+        (name, field)
+        for table in (index.functions, index.constructors)
+        for name, definitions in table.items()
+        for definition in definitions
+        for field in definition
+        if isinstance(field, ast.AST)
+    ]
+
+    assert not held, f"{len(held)} indexed definitions hold an ast.AST, e.g. {held[:3]}"
 
 
 def test_every_declared_module_is_reachable() -> None:
@@ -1162,7 +1185,7 @@ def test_the_swallowing_closure_is_transitive() -> None:
         definition for definition in _index().functions.get("contained_raise_reason", []) if definition.module == utils
     ]
 
-    assert definitions and not any(_swallows(definition.node) for definition in definitions), (
+    assert definitions and not any(definition.swallows for definition in definitions), (
         "contained_raise_reason now swallows in its own body; pick another transitive-only entry"
     )
 

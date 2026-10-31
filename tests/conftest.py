@@ -195,6 +195,34 @@ def pytest_sessionfinish(session: Any, exitstatus: Any) -> None:
     _froze_the_graph = False
 
 
+_terminal_reporter: Any = None
+
+
+def pytest_sessionstart(session: Any) -> None:
+    global _terminal_reporter
+    if hasattr(session.config, "workerinput"):
+        _terminal_reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+
+
+def drop_passing_report(stats: dict[str, list[Any]], report: Any) -> None:
+    """Pop a passing report that was just appended as the last entry of its stats lists."""
+    if not report.passed:
+        return
+    for key in ("", "passed"):
+        reports = stats.get(key)
+        if reports and reports[-1] is report:
+            reports.pop()
+
+
+# A worker's terminal reporter keeps every report for a summary only the controller prints, and those reports grow
+# the unfrozen heap that each full gc.collect() traverses.
+@pytest.hookimpl(trylast=True)
+def pytest_runtest_logreport(report: Any) -> None:
+    if _terminal_reporter is None:
+        return
+    drop_passing_report(_terminal_reporter.stats, report)
+
+
 CHECK_SKIP_COUNT_ENV_VAR = "CHECK_SKIP_COUNT"
 EXPECTED_SKIP_COUNT_ENV_VAR = "EXPECTED_SKIP_COUNT"
 

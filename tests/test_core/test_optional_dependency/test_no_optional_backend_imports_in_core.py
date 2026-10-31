@@ -116,7 +116,7 @@ def _backends(violations: list[str]) -> list[str]:
     return sorted(violation.rsplit("imports ", 1)[1] for violation in violations)
 
 
-# Whole-tree AST scan: 0.9s serial, up to 6.9s measured in a full -n 3 run on a loaded host.
+# Whole-tree AST scan: 0.9s serial, up to 6.9s under -n 3 on a loaded host, and has exceeded 10s on a loaded CI runner.
 @pytest.mark.timeout(30)
 def test_core_does_not_import_optional_backends() -> None:
     """Every module under mloda/ must be importable without any optional backend installed."""

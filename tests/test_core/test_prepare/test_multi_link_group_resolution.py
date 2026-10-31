@@ -966,8 +966,7 @@ def test_one_consumer_requested_with_one_option_variant_over_one_link_joins_it(
     assert _tie_values(results, consumer) == _tie_expected(["a"])
 
 
-# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(60)
+@_MULTIPROCESSING_TIMEOUT
 @pytest.mark.parametrize(
     "left, right, consumer",
     [pytest.param("pd", "pd", "pd", id="pd_pd_pd"), pytest.param("pa", "pd", "pd", id="pa_pd_pd")],
@@ -1990,7 +1989,7 @@ def test_a_consumer_on_the_other_sides_framework_keeps_the_rows_of_the_join_shap
     assert _side_path_values(results, RemedySecondNullSafeConsumer) == [expected]
 
 
-@pytest.mark.timeout(60)
+@_MULTIPROCESSING_TIMEOUT
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 def test_a_consumer_on_the_other_sides_framework_joins_both_members_with_multiprocessing(
     flight_server: Any, swap_link_sides: bool
@@ -2739,8 +2738,7 @@ _BELOW_MULTIPROCESSING = pytest.param(
     False,
     ParallelizationMode.MULTIPROCESSING,
     *_BELOW_ALONE,
-    # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-    marks=pytest.mark.timeout(60),
+    marks=_MULTIPROCESSING_TIMEOUT,
     id="alone-arrow_source-a_b-multiprocessing",
 )
 

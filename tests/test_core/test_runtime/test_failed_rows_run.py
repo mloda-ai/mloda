@@ -189,7 +189,7 @@ class TestExtenderSeesFailedRows:
 
 
 class TestMultiprocessingFailedRows:
-    # Spawning workers and the flight server exceeds the suite-wide timeout budget.
+    # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
     @pytest.mark.timeout(30)
     def test_report_crosses_the_worker_boundary(self, flight_server: Any) -> None:
         result = _run(FrOne, FrOther, modes={ParallelizationMode.MULTIPROCESSING}, flight_server=flight_server)

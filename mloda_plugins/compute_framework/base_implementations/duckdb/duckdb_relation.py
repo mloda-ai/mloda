@@ -110,9 +110,11 @@ class DuckdbRelation(SqlBaseRelation):
         """Execute a full SELECT statement against this relation under ``view_name``.
 
         Thin wrapper around ``DuckDBPyRelation.query``. SQL is inlined verbatim;
-        never pass user-controlled input.
+        never pass user-controlled input. Raises ValueError if DuckDB returns no relation.
         """
         new_rel = self._relation.query(view_name, sql)
+        if new_rel is None:
+            raise ValueError("DuckdbRelation.query expects a SELECT statement; DuckDB returned no relation.")
         return DuckdbRelation(self._connection, new_rel)
 
     def set_alias(self, alias: str) -> "DuckdbRelation":

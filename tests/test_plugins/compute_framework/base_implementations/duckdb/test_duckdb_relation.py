@@ -1,6 +1,6 @@
 """Tests for the DuckdbRelation class."""
 
-from typing import Any
+from typing import Any, cast
 import logging
 
 import pytest
@@ -249,6 +249,17 @@ class TestDuckdbRelation(SqlRelationWindowTestMixin, RelationTestMixin):
         result = sample_relation.query("data", "SELECT id, age FROM data WHERE age >= 35 ORDER BY id")
         ids = self.get_column_values(result, "id")
         assert ids == [3, 4, 5]
+
+    def test_query_raises_value_error_when_no_relation_returned(self, connection: Any) -> None:
+        """A statement that yields no relation must raise, not be wrapped."""
+
+        class NoRelation:
+            def query(self, view_name: str, sql: str) -> None:
+                return None
+
+        rel = DuckdbRelation(connection, cast(Any, NoRelation()))
+        with pytest.raises(ValueError, match="SELECT"):
+            rel.query("data", "SET threads = 1")
 
     def test_query_with_window_function(self, sample_relation: "DuckdbRelation") -> None:
         result = sample_relation.query(

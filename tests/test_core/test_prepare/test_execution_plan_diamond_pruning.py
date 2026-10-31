@@ -62,7 +62,7 @@ def _chain() -> tuple[dict[UUID, set[UUID]], UUID, set[UUID]]:
 
 
 @pytest.mark.parametrize("build", [_redundant_edge, _diamond, _chain], ids=["redundant_edge", "diamond", "chain"])
-def test_direct_ancestors_matches_the_transitive_reduction_formula(
+def test_direct_ancestors_keeps_only_immediate_parents(
     build: Callable[[], tuple[dict[UUID, set[UUID]], UUID, set[UUID]]],
 ) -> None:
     mapping, node, expected = build()

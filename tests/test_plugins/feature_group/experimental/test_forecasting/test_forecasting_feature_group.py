@@ -71,10 +71,19 @@ class TestForecastingFeatureGroup:
         assert ForecastingFeatureGroup.match_feature_group_criteria(base, Options())
         chained = "x__linear_forecast_7day~0__linear_forecast_3day"
         assert ForecastingFeatureGroup.match_feature_group_criteria(chained, Options())
+        assert ForecastingFeatureGroup.match_feature_group_criteria("price__ridge_forecast_30week", Options())
+        assert ForecastingFeatureGroup.match_feature_group_criteria("demand__randomforest_forecast_3month", Options())
+        assert ForecastingFeatureGroup.match_feature_group_criteria("temp__gbr_forecast_12hour", Options())
+        onehot_chain = "category__onehot_encoded__linear_forecast_7day"
+        assert ForecastingFeatureGroup.match_feature_group_criteria(onehot_chain, Options())
 
         # Invalid feature names
         assert not ForecastingFeatureGroup.match_feature_group_criteria("invalid_feature_name", Options())
         assert not ForecastingFeatureGroup.match_feature_group_criteria("sales__linear_7day", Options())
+        assert not ForecastingFeatureGroup.match_feature_group_criteria("sales__unknown_forecast_7day", Options())
+        assert not ForecastingFeatureGroup.match_feature_group_criteria("sales__linear_forecast_day", Options())
+        assert not ForecastingFeatureGroup.match_feature_group_criteria("sales__linear_forecast_7invalid", Options())
+        assert not ForecastingFeatureGroup.match_feature_group_criteria("a__b__linear_forecast_7day__foo", Options())
 
     def test_input_features(self) -> None:
         """Test extraction of input features."""
@@ -366,28 +375,6 @@ class TestForecastingFeatureGroup:
         options.add_to_group(DefaultOptionKeys.reference_time, 123)  # Not a string
         with pytest.raises(ValueError):
             ForecastingFeatureGroup.get_reference_time_column(options)
-
-    def test_matcher_accepts_valid_forecast_names(self) -> None:
-        """Test that the matcher accepts valid feature names."""
-        assert ForecastingFeatureGroup.match_feature_group_criteria("sales__linear_forecast_7day", Options())
-        assert ForecastingFeatureGroup.match_feature_group_criteria("price__ridge_forecast_30week", Options())
-        assert ForecastingFeatureGroup.match_feature_group_criteria("demand__randomforest_forecast_3month", Options())
-        assert ForecastingFeatureGroup.match_feature_group_criteria("temp__gbr_forecast_12hour", Options())
-        chained = "category__onehot_encoded__linear_forecast_7day"
-        assert ForecastingFeatureGroup.match_feature_group_criteria(chained, Options())
-        base, _part = FeatureGroup.split_output_part("sales__linear_forecast_7day~0") or ("", "")
-        assert ForecastingFeatureGroup.match_feature_group_criteria(base, Options())
-        selected_chain = "x__linear_forecast_7day~0__linear_forecast_3day"
-        assert ForecastingFeatureGroup.match_feature_group_criteria(selected_chain, Options())
-
-    def test_matcher_rejects_invalid_forecast_names(self) -> None:
-        """Test that the matcher rejects invalid feature names."""
-        assert not ForecastingFeatureGroup.match_feature_group_criteria("invalid_feature_name", Options())
-        assert not ForecastingFeatureGroup.match_feature_group_criteria("sales__linear_7day", Options())
-        assert not ForecastingFeatureGroup.match_feature_group_criteria("sales__unknown_forecast_7day", Options())
-        assert not ForecastingFeatureGroup.match_feature_group_criteria("sales__linear_forecast_day", Options())
-        assert not ForecastingFeatureGroup.match_feature_group_criteria("sales__linear_forecast_7invalid", Options())
-        assert not ForecastingFeatureGroup.match_feature_group_criteria("a__b__linear_forecast_7day__foo", Options())
 
     @pytest.mark.parametrize(
         "name",

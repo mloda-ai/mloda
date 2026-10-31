@@ -97,6 +97,7 @@ class TestAggregatedFeatureGroup:
         assert AggregatedFeatureGroup.match_feature_group_criteria("discount__median_aggr", options)
         assert AggregatedFeatureGroup.match_feature_group_criteria("sales__std_aggr", options)
         assert AggregatedFeatureGroup.match_feature_group_criteria("sales__var_aggr", options)
+        assert AggregatedFeatureGroup.match_feature_group_criteria("sales__mean_aggr", options)
 
         # Test with FeatureName objects
         assert AggregatedFeatureGroup.match_feature_group_criteria(FeatureName("sales__sum_aggr"), options)

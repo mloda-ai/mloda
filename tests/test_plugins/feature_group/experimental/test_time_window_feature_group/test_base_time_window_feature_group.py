@@ -109,6 +109,10 @@ class TestTimeWindowFeatureGroup:
         assert TimeWindowFeatureGroup.match_feature_group_criteria("humidity__max_7_hour_window", options)
         assert TimeWindowFeatureGroup.match_feature_group_criteria("pressure__min_2_day_window", options)
         assert TimeWindowFeatureGroup.match_feature_group_criteria("wind_speed__sum_4_day_window", options)
+        assert TimeWindowFeatureGroup.match_feature_group_criteria("pressure__min_2_minute_window", options)
+        assert TimeWindowFeatureGroup.match_feature_group_criteria("cpu__sum_10_second_window", options)
+        # Chained feature: the last __ segment should still be valid
+        assert TimeWindowFeatureGroup.match_feature_group_criteria("price__mean_imputed__sum_7_day_window", options)
 
         # Test with FeatureName objects
         assert TimeWindowFeatureGroup.match_feature_group_criteria(
@@ -120,6 +124,16 @@ class TestTimeWindowFeatureGroup:
         assert not TimeWindowFeatureGroup.match_feature_group_criteria("invalid_feature_name", options)
         assert not TimeWindowFeatureGroup.match_feature_group_criteria("avg_day_window_temperature", options)
         assert not TimeWindowFeatureGroup.match_feature_group_criteria("avg_3_invalid_window_temperature", options)
+        # Missing "window" suffix
+        assert not TimeWindowFeatureGroup.match_feature_group_criteria("temp__avg_3_day", options)
+        # Unsupported window function
+        assert not TimeWindowFeatureGroup.match_feature_group_criteria("temp__invalid_3_day_window", options)
+        # Unsupported time unit
+        assert not TimeWindowFeatureGroup.match_feature_group_criteria("temp__avg_3_invalid_window", options)
+        # Non-numeric window size
+        assert not TimeWindowFeatureGroup.match_feature_group_criteria("temp__avg_zero_day_window", options)
+        # Zero window size
+        assert not TimeWindowFeatureGroup.match_feature_group_criteria("temp__avg_0_day_window", options)
 
     def test_invalid_named_value_is_rejected_despite_valid_explicit_options(
         self, rejection_window: dict[str, MatchRejection]
@@ -293,30 +307,6 @@ class TestTimeWindowFeatureGroup:
     def test_core_rejects_a_missing_reference_time(self) -> None:
         df = pd.DataFrame({"x": [1.0]})
         assert_core_rejects_missing_input(PandasTimeWindow, df, "x__sum_2_hour_window", (REFERENCE_TIME,), ("x",))
-
-    def test_matcher_accepts_valid_time_window_names(self) -> None:
-        """Test that the matcher accepts valid feature names."""
-        assert TimeWindowFeatureGroup.match_feature_group_criteria("temperature__avg_3_day_window", Options())
-        assert TimeWindowFeatureGroup.match_feature_group_criteria("humidity__max_7_hour_window", Options())
-        assert TimeWindowFeatureGroup.match_feature_group_criteria("pressure__min_2_minute_window", Options())
-        assert TimeWindowFeatureGroup.match_feature_group_criteria("cpu__sum_10_second_window", Options())
-        # Chained feature: the last __ segment should still be valid
-        assert TimeWindowFeatureGroup.match_feature_group_criteria("price__mean_imputed__sum_7_day_window", Options())
-
-    def test_matcher_rejects_invalid_time_window_names(self) -> None:
-        """Test that the matcher rejects invalid feature names."""
-        # No double underscore separator
-        assert not TimeWindowFeatureGroup.match_feature_group_criteria("invalid_feature_name", Options())
-        # Missing "window" suffix
-        assert not TimeWindowFeatureGroup.match_feature_group_criteria("temp__avg_3_day", Options())
-        # Unsupported window function
-        assert not TimeWindowFeatureGroup.match_feature_group_criteria("temp__invalid_3_day_window", Options())
-        # Unsupported time unit
-        assert not TimeWindowFeatureGroup.match_feature_group_criteria("temp__avg_3_invalid_window", Options())
-        # Non-numeric window size
-        assert not TimeWindowFeatureGroup.match_feature_group_criteria("temp__avg_zero_day_window", Options())
-        # Zero window size
-        assert not TimeWindowFeatureGroup.match_feature_group_criteria("temp__avg_0_day_window", Options())
 
     def test_extract_time_window_params_string_based(self) -> None:
         """Test _extract_time_window_params with a string-parseable feature name."""

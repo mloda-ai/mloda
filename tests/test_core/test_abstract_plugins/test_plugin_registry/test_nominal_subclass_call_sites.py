@@ -1,9 +1,10 @@
-"""Bare ``issubclass`` calls under ``mloda/`` and ``mloda_plugins/`` are limited to a justified allowlist.
+"""Bare ``issubclass`` and plugin-base ``isinstance`` calls in ``mloda/`` and ``mloda_plugins/`` must be allowlisted.
 
 ``issubclass`` against an mloda ABC walks ABCMeta's descendants and grows its negative cache on every failed
-check against a base with many subclasses; ``is_nominal_subclass`` skips that walk. ``isinstance`` is swept only
-against the plugin bases (a negative check walks once per instance type, so only large trees seen by arbitrary types
-matter; PandasDataFrame and the Step/relation bases have small trees). Blind spots: aliased calls, other bases.
+check against a base with many subclasses; ``is_nominal_subclass`` skips that walk. A failed ``isinstance`` walks
+once per instance type until the next ABC invalidation, so it is swept only against the plugin root bases, whose trees
+are large. Blind spots: ``builtins.``-qualified or aliased calls, intermediate bases such as ``SourceFeatureGroup``,
+and code outside these two packages.
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ ALLOWED: dict[Site, str] = {
 }
 
 # isinstance sites against a plugin base, same key shape and rationale as ALLOWED.
-_FROM_CFW = "from_cfw is a ComputeFramework, UUID or None, a bounded set of instance types"
+_FROM_CFW = "from_cfw is a ComputeFramework, UUID or None, and the ComputeFramework tree is small"
 ALLOWED_ISINSTANCE: dict[Site, str] = {
     ("mloda/core/core/step/feature_group_step.py", "FeatureGroupStep._source_data", "ComputeFramework"): _FROM_CFW,
     ("mloda/core/core/step/join_step.py", "JoinStep.execute", "ComputeFramework"): _FROM_CFW,

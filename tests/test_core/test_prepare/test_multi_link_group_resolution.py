@@ -556,10 +556,13 @@ def test_a_mid_on_the_side_framework_between_a_link_side_and_its_consumer_is_cor
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(60)
+_MULTIPROCESSING_TIMEOUT = pytest.mark.timeout(60)
+_MULTIPROCESSING_MODE = pytest.param(ParallelizationMode.MULTIPROCESSING, marks=_MULTIPROCESSING_TIMEOUT)
+
+
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @pytest.mark.parametrize("direct", [False, True], ids=["indirect", "direct"])
-@pytest.mark.parametrize("mode", [ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING])
+@pytest.mark.parametrize("mode", [ParallelizationMode.THREADING, _MULTIPROCESSING_MODE])
 def test_a_pandas_mid_between_a_link_side_and_its_consumer_is_correct_in_parallel_modes(
     flight_server: Any, mode: ParallelizationMode, direct: bool, swap_link_sides: bool
 ) -> None:
@@ -694,12 +697,8 @@ SidePathDirectArrow = _side_path_consumer("SidePathDirectArrow", "mlg_a", {PyArr
 SidePathDirectSecond = _side_path_consumer("SidePathDirectSecond", "mlg_a", {SecondCfw}, base=_SidePathDirectConsumer)
 
 
-# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(60)
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
-@pytest.mark.parametrize(
-    "mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING]
-)
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING, _MULTIPROCESSING_MODE])
 def test_two_consumers_of_one_link_reading_a_side_through_different_mids_join_each_side_frame(
     flight_server: Any, mode: ParallelizationMode, swap_link_sides: bool
 ) -> None:
@@ -967,8 +966,7 @@ def test_one_consumer_requested_with_one_option_variant_over_one_link_joins_it(
     assert _tie_values(results, consumer) == _tie_expected(["a"])
 
 
-# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(60)
+@_MULTIPROCESSING_TIMEOUT
 @pytest.mark.parametrize(
     "left, right, consumer",
     [pytest.param("pd", "pd", "pd", id="pd_pd_pd"), pytest.param("pa", "pd", "pd", id="pa_pd_pd")],
@@ -1111,9 +1109,7 @@ def _nullable_column_values(results: list[Any], name: str) -> list[list[int | No
     return sorted((sorted(c, key=lambda v: (v is None, v or 0)) for c in columns), key=lambda c: [v or 0 for v in c])
 
 
-# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(60)
-@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING])
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, _MULTIPROCESSING_MODE])
 @pytest.mark.parametrize("right", ["pa_extra", "pd_extra"])
 def test_a_right_join_keeps_the_right_row_the_left_lacks_for_each_variant(
     flight_server: Any, mode: ParallelizationMode, right: str
@@ -1170,9 +1166,7 @@ def test_a_flexible_and_a_left_only_consumer_of_one_right_link_both_plan_on_the_
     assert {s.compute_framework for s in consumers} == {PyArrowTable}
 
 
-# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(60)
-@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING])
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, _MULTIPROCESSING_MODE])
 def test_a_flexible_and_a_left_only_consumer_of_one_right_link_return_the_right_join_values(
     flight_server: Any, mode: ParallelizationMode
 ) -> None:
@@ -1249,9 +1243,7 @@ def test_one_sided_variants_requested_next_to_their_shared_side_feature_return_b
     assert [1, 2, 3] in _column_values(results, "tie_left_val")
 
 
-# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(60)
-@pytest.mark.parametrize("mode", [ParallelizationMode.MULTIPROCESSING, ParallelizationMode.THREADING])
+@pytest.mark.parametrize("mode", [_MULTIPROCESSING_MODE, ParallelizationMode.THREADING])
 @pytest.mark.parametrize(
     "consumer, left, right",
     [_TIE_ONE_SIDED_SHAPES[0], _TIE_ONE_SIDED_SHAPES[1], _TIE_ONE_SIDED_SHAPES[3]],
@@ -1302,8 +1294,6 @@ def _carrier_alone(
     )
 
 
-# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(60)
 @pytest.mark.parametrize(
     "mode, swap_link_sides, consumer_kind",
     [
@@ -1317,7 +1307,11 @@ def _carrier_alone(
             ParallelizationMode.THREADING, False, "other_side_framework", id="threading_a_b_other_side_framework"
         ),
         pytest.param(
-            ParallelizationMode.MULTIPROCESSING, False, "carried_framework", id="multiprocessing_a_b_carried_framework"
+            ParallelizationMode.MULTIPROCESSING,
+            False,
+            "carried_framework",
+            marks=_MULTIPROCESSING_TIMEOUT,
+            id="multiprocessing_a_b_carried_framework",
         ),
     ],
 )
@@ -1352,8 +1346,6 @@ def _carrier_with_direct(
     )
 
 
-# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(60)
 @pytest.mark.parametrize(
     "mode, swap_link_sides, consumer_kind",
     [
@@ -1365,7 +1357,15 @@ def _carrier_with_direct(
         )
         for swap, swap_id in ((False, "a_b"), (True, "b_a"))
     ]
-    + [pytest.param(ParallelizationMode.MULTIPROCESSING, False, "carried_framework", id="multiprocessing-a_b")],
+    + [
+        pytest.param(
+            ParallelizationMode.MULTIPROCESSING,
+            False,
+            "carried_framework",
+            marks=_MULTIPROCESSING_TIMEOUT,
+            id="multiprocessing-a_b",
+        )
+    ],
 )
 def test_a_carrier_consumer_next_to_a_direct_consumer_of_one_link_waits_only_on_its_join(
     flight_server: Any, mode: ParallelizationMode, swap_link_sides: bool, consumer_kind: str
@@ -1989,7 +1989,7 @@ def test_a_consumer_on_the_other_sides_framework_keeps_the_rows_of_the_join_shap
     assert _side_path_values(results, RemedySecondNullSafeConsumer) == [expected]
 
 
-@pytest.mark.timeout(60)
+@_MULTIPROCESSING_TIMEOUT
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 def test_a_consumer_on_the_other_sides_framework_joins_both_members_with_multiprocessing(
     flight_server: Any, swap_link_sides: bool
@@ -2738,8 +2738,7 @@ _BELOW_MULTIPROCESSING = pytest.param(
     False,
     ParallelizationMode.MULTIPROCESSING,
     *_BELOW_ALONE,
-    # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-    marks=pytest.mark.timeout(60),
+    marks=_MULTIPROCESSING_TIMEOUT,
     id="alone-arrow_source-a_b-multiprocessing",
 )
 

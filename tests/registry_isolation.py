@@ -80,7 +80,7 @@ RECLAIM_LOGS: dict[type[Any], SubclassLog[Any]] = {
 }
 EXTRA_RECLAIM_ROOTS: tuple[type[Any], ...] = (ComputeFramework, Extender)
 YOUNG_WINDOW_THRESHOLD = 100_000
-# Per-call subclass builders shared across test modules live under tests/mixins/ so their held survivors are reported.
+# Shared per-call subclass builders live under tests/mixins/ (enforced by the guard in test_registry_isolation.py).
 SHARED_TEST_MODULE_PREFIX = "tests.mixins."
 
 

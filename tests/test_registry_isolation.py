@@ -267,7 +267,9 @@ class TestReclaimLeakedFeatureGroups:
         """A held type()-built subclass (__module__ 'abc' or a shared mixin module) is reported."""
         mark = FEATURE_GROUPS.mark()
         leaked_cls = type("LeakedTypeBuiltRegistryProbeFeatureGroup", (FeatureGroup,), dict(namespace))
-        assert leaked_cls.__module__ == expected_module, "the probe no longer takes the expected module"
+        assert leaked_cls.__module__ == expected_module, (
+            "the probe no longer takes the expected module; the test proves nothing"
+        )
         reported = [c.__name__ for c in reclaim_leaked_feature_groups(mark, __name__)]
         expected = leaked_cls.__name__
         del leaked_cls  # drop the strong reference before asserting, so a failure leaves nothing behind

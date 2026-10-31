@@ -1,7 +1,7 @@
 """The transformer registry is complete regardless of import order.
 
-The transformer files auto-load ONCE per process, unconditionally on first registry
-construction, so a stray module-scope import of a single
+The light transformer files auto-load once per process on first registry construction, and each
+heavy backend's once its library is imported (refreshed on a lookup miss), so a stray module-scope import of a single
 ``BaseTransformer`` subclass before the first ``ComputeFrameworkTransformer()`` construction
 cannot leave the registry partial (e.g. the ``(FileSource, pa.Table)`` edge missing, because
 no production module imports ``FileSourcePyArrowTransformer``).

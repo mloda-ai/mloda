@@ -144,6 +144,20 @@ class TestPluginLoader:
         assert any("transformer" in m for m in loaded), "No transformer files were loaded"
         assert not any("dataframe" in m for m in loaded), f"Dataframe file loaded unexpectedly: {loaded}"
 
+    def test_load_matching_skips_files_in_skip_dirs(self) -> None:
+        """skip_dirs excludes matching files whose parent directory is named, and only those."""
+        from unittest.mock import MagicMock
+
+        plugin_loader = PluginLoader()
+        mock_load_plugin = MagicMock()
+
+        with patch.object(plugin_loader, "_load_plugin", mock_load_plugin):
+            plugin_loader.load_matching("compute_framework", "*transformer*", skip_dirs={"pandas", "polars"})
+
+        loaded = [c.args[0] for c in mock_load_plugin.call_args_list]
+        assert any("pyarrow" in m for m in loaded), f"Unskipped transformer not loaded: {loaded}"
+        assert not any(".pandas." in m or ".polars." in m for m in loaded), f"Skipped dir loaded: {loaded}"
+
     def test_all_returns_cached_instance(self) -> None:
         """Repeated all() calls return the identical cached PluginLoader instance."""
         first = PluginLoader.all()

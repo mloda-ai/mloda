@@ -189,6 +189,7 @@ class TestSetupComputeFramework:
         registry_sees = held[0] in compute_framework_subclasses()
         _, class_message = safe_field_with_error(lambda: SetupComputeFramework([held[0]], features), None)
         _, name_message = safe_field_with_error(lambda: SetupComputeFramework([name], features), None)
+        _, base_message = safe_field_with_error(lambda: SetupComputeFramework([ComputeFramework], features), None)
         _, feature_message = safe_field_with_error(lambda: Feature("f", compute_framework=name), None)
         # The default set cannot report a framework it cannot see, so the drop there is by design.
         in_default = held[0] in SetupComputeFramework(None, features).compute_frameworks
@@ -205,6 +206,9 @@ class TestSetupComputeFramework:
         assert name_message is not None
         assert name_message.startswith("No given compute frameworks")
         assert name in name_message
+        assert base_message is not None
+        assert base_message.startswith("No given compute frameworks")
+        assert "__init_subclass__" not in base_message
         assert feature_message is not None
         assert feature_message.startswith("Compute framework via parameter")
         assert name in feature_message

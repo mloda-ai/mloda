@@ -93,6 +93,9 @@ def young_window() -> Iterator[None]:
         gc.set_threshold(*saved)
 
 
+SHARED_TEST_MODULE_PREFIX = "tests.mixins."
+
+
 def _is_owned_by_its_module(cls: type[Any]) -> bool:
     """Is this class still bound under its own name in its live module, and so owned by that module?
 
@@ -107,8 +110,8 @@ def _is_owned_by_its_module(cls: type[Any]) -> bool:
 
 
 def _owned_by(cls: type[Any], module_name: str) -> bool:
-    """A type()-built class with an ABCMeta base gets `__module__` 'abc', so one made during the test is its own."""
-    return cls.__module__ in (module_name, "abc")
+    """A type()-built subclass (module 'abc') or one built in a shared mixin module during the test is also its own."""
+    return cls.__module__ in (module_name, "abc") or cls.__module__.startswith(SHARED_TEST_MODULE_PREFIX)
 
 
 def reclaim_leaked_subclasses(log: SubclassLog[T], mark: int, module_name: str) -> list[type[T]]:

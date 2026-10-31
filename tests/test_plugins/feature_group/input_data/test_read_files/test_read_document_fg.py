@@ -91,6 +91,7 @@ class TestReadDocumentFGBase:
         doc = ReadDocumentFG.__doc__ or ""
         assert "tests/mixins/reader_feature_groups" in doc
         assert "read_document_fg_test_mixin" in doc
+        assert "gc.collect" in doc
 
     def test_the_abstract_base_never_claims_a_feature_named_after_it(self, tmp_path: Path) -> None:
         dac = DataAccessCollection(files={"toy": str(_write(tmp_path, "a.toydoc"))})

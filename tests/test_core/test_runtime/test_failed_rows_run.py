@@ -191,6 +191,7 @@ class TestExtenderSeesFailedRows:
 
 
 class TestMultiprocessingFailedRows:
+    @pytest.mark.subprocess
     def test_report_crosses_the_worker_boundary(self, flight_server: Any) -> None:
         result = _run(FrOne, FrOther, modes={ParallelizationMode.MULTIPROCESSING}, flight_server=flight_server)
 

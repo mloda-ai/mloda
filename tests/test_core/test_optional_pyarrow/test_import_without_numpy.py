@@ -79,6 +79,7 @@ except Exception as e:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_aggregated_feature_group_imports_with_numpy_blocked() -> None:
     """PyArrowAggregation and PyArrowTimeWindow must both import without numpy installed."""
     pytest.importorskip("pyarrow")
@@ -88,6 +89,7 @@ def test_aggregated_feature_group_imports_with_numpy_blocked() -> None:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_aggregated_feature_group_single_column_works_without_numpy() -> None:
     """Single-column aggregation must produce correct results without numpy installed at all."""
     pytest.importorskip("pyarrow")
@@ -97,6 +99,7 @@ def test_aggregated_feature_group_single_column_works_without_numpy() -> None:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_aggregated_feature_group_multi_column_raises_clear_error_without_numpy() -> None:
     """Multi-column aggregation without numpy must raise ImportError naming the mloda[numpy] extra."""
     pytest.importorskip("pyarrow")
@@ -108,6 +111,7 @@ def test_aggregated_feature_group_multi_column_raises_clear_error_without_numpy(
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_time_window_multi_column_raises_clear_error_without_numpy() -> None:
     """Multi-column time-window aggregation without numpy must raise ImportError naming the mloda[numpy] extra."""
     pytest.importorskip("pyarrow")

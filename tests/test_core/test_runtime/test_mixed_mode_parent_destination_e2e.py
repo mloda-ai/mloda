@@ -267,6 +267,7 @@ class _JoinLeftValPyArrowFG(FeatureGroup):
 
 @pytest.mark.timeout(30)
 @pytest.mark.skipif(pa is None, reason="PyArrow not installed.")
+@pytest.mark.subprocess
 class TestMixedModeParentDestinationE2E:
     @pytest.mark.skipif(duckdb is None, reason="DuckDB not installed.")
     def test_worker_source_feeds_parent_duckdb_destination(self, flight_server: Any) -> None:
@@ -481,6 +482,7 @@ class _MpTransformDestFG(FeatureGroup):
 
 @pytest.mark.timeout(30)
 @pytest.mark.skipif(pa is None, reason="PyArrow not installed.")
+@pytest.mark.subprocess
 class TestPureMultiprocessingTransformHopDoesNotLeakFlightTable:
     def test_pure_multiprocessing_transform_hop_does_not_leak_flight_table(self, flight_server: Any) -> None:
         """A source cfw whose last consumer is a TransformFrameworkStep must not leak under pure
@@ -707,6 +709,7 @@ class _CrossFwHopSiblingFG(FeatureGroup):
 
 @pytest.mark.timeout(30)
 @pytest.mark.skipif(pa is None, reason="PyArrow not installed.")
+@pytest.mark.subprocess
 class TestCrossFrameworkJoinHopDropTiming:
     """Guards that a cross-framework join's transported hop table and its source root both drop
     mid-run, and that the source root survives while a real reader is still pending."""
@@ -1271,6 +1274,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
     """Guards that a plain transform hop's source-side cfw drops once the hop finishes, but not
     while a real reader, such as an independent sibling or a diamond descendant, still needs it."""
 
+    @pytest.mark.subprocess
     def test_plain_hop_source_root_dropped_mid_run_not_only_at_finalize(
         self, flight_server: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -1323,6 +1327,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         leftover = FlightServer.list_flight_infos(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
+    @pytest.mark.subprocess
     def test_plain_hop_source_root_dropped_right_after_its_hop_when_its_class_is_shared_by_an_unrelated_join(
         self, flight_server: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -1415,6 +1420,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         leftover = FlightServer.list_flight_infos(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
+    @pytest.mark.subprocess
     def test_shared_root_survives_hop_until_independent_sibling_also_finishes(
         self, flight_server: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -1521,6 +1527,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
             assert len(result) == 1, f"seed {seed} produced {len(result)} results"
             assert list(result[0]["diamond_hop_result"]) == [3, 6, 9], f"seed {seed} produced a wrong result"
 
+    @pytest.mark.subprocess
     def test_hop_source_root_dropped_right_after_direct_consumer_not_whole_downstream_chain(
         self, flight_server: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:

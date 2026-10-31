@@ -1425,6 +1425,7 @@ def test_every_member_of_a_block_gets_the_blocks_reason() -> None:
 
 # Fresh interpreters cost roughly a second each, so this one needs more than the suite-wide per-test budget.
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
 def test_fresh_interpreters_choose_the_same_frameworks() -> None:
     seeds = [1, 2]
     outputs = run_probes(_PROBE, len(seeds), seeds=seeds)

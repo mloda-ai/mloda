@@ -61,6 +61,7 @@ def _run_isolation_script(script: str) -> subprocess.CompletedProcess[str]:
 class TestCoreDoesNotImportPyarrowEagerly:
     @pytest.mark.timeout(30)
     @pytest.mark.parametrize("module", _CORE_MODULES)
+    @pytest.mark.subprocess
     def test_core_module_import_does_not_load_pyarrow(self, module: str) -> None:
         result = _run_isolation_script(_IMPORT_SCRIPT.format(module=module))
 
@@ -72,6 +73,7 @@ class TestCoreDoesNotImportPyarrowEagerly:
         assert result.stdout.strip() == "ok"
 
     @pytest.mark.timeout(30)
+    @pytest.mark.subprocess
     def test_infer_type_from_py_type_does_not_load_pyarrow(self) -> None:
         """Hot path: inferring the type of a plain Python value must not pay for a pyarrow import either."""
         result = _run_isolation_script(_INFER_TYPE_SCRIPT.format(module=_DATA_TYPES_MODULE))

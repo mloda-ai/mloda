@@ -12,6 +12,8 @@ import importlib
 import inspect
 import subprocess  # nosec B404
 import sys
+
+import pytest
 from collections.abc import Sequence
 from pathlib import Path
 from types import ModuleType
@@ -202,6 +204,7 @@ def test_parser_does_not_import_the_author_guards() -> None:
     assert offenders == [], f"{parser_path.name} imports {offenders}, which closes the cycle"
 
 
+@pytest.mark.subprocess
 def test_parser_imports_in_a_clean_interpreter_without_the_author_guards() -> None:
     """Runtime counterpart of the static check: a fresh interpreter must not pull the guards in transitively."""
     # Safe: fixed argv (sys.executable plus a literal snippet), no shell, no user input.

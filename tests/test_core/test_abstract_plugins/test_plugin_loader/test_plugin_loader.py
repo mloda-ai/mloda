@@ -104,6 +104,7 @@ class TestPluginLoader:
         assert "mloda_plugins.feature_group.input_data.file_formats.csv_fg" not in plugin_loader.plugins
 
     @pytest.mark.timeout(60)
+    @pytest.mark.subprocess
     def test_a_plain_csv_run_all_works_after_plugin_loader_all_without_importing_the_groups(
         self, tmp_path: Path
     ) -> None:

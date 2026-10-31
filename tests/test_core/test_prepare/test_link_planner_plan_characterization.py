@@ -703,6 +703,7 @@ def test_a_left_join_inverted_after_queueing_swaps_the_merge_sides() -> None:
 
 # Fresh interpreters are slow to start, so this one needs more than the suite-wide per-test budget.
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
 def test_fresh_interpreters_plan_the_same_link_orientation() -> None:
     outputs = run_probes(_PROBE, _PROBE_PROCESSES)
 

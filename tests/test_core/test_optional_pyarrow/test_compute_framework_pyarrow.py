@@ -35,6 +35,7 @@ except Exception as e:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_upload_table_raises_import_error_without_pyarrow() -> None:
     """upload_table needs pyarrow to build the table it ships: it must say so, not fail with AttributeError."""
     result = run_blocked(_BODY)

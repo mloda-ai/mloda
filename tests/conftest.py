@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components import utils
+from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.provider import MatchRejection, collect_match_rejections
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
@@ -157,7 +158,15 @@ def _suite_will_freeze() -> bool:
 # Imports every plugin module, and the backends they import at module level, before the freeze; only the default
 # registry is restored, so tests start from the same registry state. A separate hook keeps the contract test's fast
 # probes from paying the import.
+@pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(session: Any, config: Any, items: Any) -> None:
+    # Runs before -m deselection: MULTIPROCESSING-parametrized cases spawn workers and belong to `tox -e subprocess`.
+    for item in items:
+        for value in getattr(getattr(item, "callspec", None), "params", {}).values():
+            members = value if isinstance(value, (set, frozenset, list, tuple)) else (value,)
+            if any(m is ParallelizationMode.MULTIPROCESSING for m in members):
+                item.add_marker(pytest.mark.subprocess)
+                break
     if not _suite_will_freeze():
         return
     snapshot = PluginRegistry.default().snapshot()

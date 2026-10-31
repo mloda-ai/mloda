@@ -69,6 +69,7 @@ class _HookRecordingExtender(Extender):
 
 @pytest.mark.timeout(30)
 class TestChildBootstrapFiresInsideSpawnedWorkerBeforeFirstCommand:
+    @pytest.mark.subprocess
     def test_bootstrap_marker_written_before_hook_marker(self, tmp_path: Path, flight_server: Any) -> None:
         marker_path = tmp_path / "child_bootstrap_marker.txt"
         bootstrap = _BootstrapMarker(marker_path)

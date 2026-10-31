@@ -36,6 +36,7 @@ except Exception as e:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_sqlite_from_dict_raises_import_error_without_pyarrow() -> None:
     """SqliteRelation.from_dict must raise ImportError mentioning pyarrow when pyarrow is absent."""
     result = run_blocked(_BODY)

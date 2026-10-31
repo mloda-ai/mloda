@@ -1226,6 +1226,7 @@ class _MultiprocessingHopFeatureGroup(DataCreatorFeatureGroup):
 
 @pytest.mark.timeout(30)
 class TestThreadHopInASpawnedWorkerReachesTheGate:
+    @pytest.mark.subprocess
     def test_hopped_load_in_a_multiprocessing_worker_reaches_the_gate(self, tmp_path: Path, flight_server: Any) -> None:
         output_path = tmp_path / "gate_calls.txt"
 
@@ -1245,6 +1246,7 @@ class TestThreadHopInASpawnedWorkerReachesTheGate:
         assert result[0][_MP_HOP_COLUMN] == [1, 2, 3] or list(result[0][_MP_HOP_COLUMN]) == [[1, 2, 3]]
         assert output_path.read_text(encoding="utf-8").splitlines() == ["gate"]
 
+    @pytest.mark.subprocess
     def test_api_data_load_in_a_multiprocessing_worker_is_observed(self, tmp_path: Path, flight_server: Any) -> None:
         output_path = tmp_path / "identity_calls.txt"
 

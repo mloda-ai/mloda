@@ -66,6 +66,7 @@ class _HandleBuildingExtender(Extender):
 
 @pytest.mark.timeout(30)
 class TestExtenderMaterializedOnlyInWorker:
+    @pytest.mark.subprocess
     def test_handle_build_fires_only_in_the_worker_pid_exactly_once(self, tmp_path: Path, flight_server: Any) -> None:
         output_path = tmp_path / "materialized_only_in_worker.json"
         extender = _HandleBuildingExtender(output_path)

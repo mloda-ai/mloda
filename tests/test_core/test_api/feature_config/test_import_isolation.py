@@ -23,6 +23,7 @@ FEATURE_CONFIG_MODULES = [
 
 
 @pytest.mark.parametrize("module_name", FEATURE_CONFIG_MODULES)
+@pytest.mark.subprocess
 def test_submodule_imports_in_fresh_interpreter(module_name: str) -> None:
     """Each feature_config submodule must import in a fresh interpreter.
 

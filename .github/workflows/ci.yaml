@@ -63,11 +63,8 @@ jobs:
         python -m pip install uv
         # Same tox pin as release.yaml; see the note there before bumping.
         uv tool install tox==4.64.1 --with tox-uv==1.36.0
-    - name: Use up to three pytest workers
-      run: |
-        nproc
-        # 4 workers on the 4-vCPU runner pushed subprocess-heavy tests past the per-test timeout.
-        echo "PYTEST_WORKERS=$(( $(nproc) < 3 ? $(nproc) : 3 ))" >> "$GITHUB_ENV"
+    - name: Use all runner CPUs as pytest workers
+      run: echo PYTEST_WORKERS=$(nproc) >> "$GITHUB_ENV"
     - name: Run tox ${{ matrix.toxenv }}
       run: tox ${{ matrix.toxenv }}
       timeout-minutes: 10
@@ -80,6 +77,35 @@ jobs:
           cat .venv
           exit 1
         fi
+
+  subprocess:
+    # Tests that spawn a Python process (multiprocessing mode, fresh-interpreter probes), kept off the main matrix.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install tox
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install uv
+        # Same tox pin as release.yaml; see the note there before bumping.
+        uv tool install tox==4.64.1 --with tox-uv==1.36.0
+    - name: Use all runner CPUs as pytest workers
+      run: echo PYTEST_WORKERS=$(nproc) >> "$GITHUB_ENV"
+    # 3.12 runs the shipped spawn default; the other entries use forkserver from tests/conftest.py.
+    - name: Use the spawn start method
+      if: matrix.python-version == '3.12'
+      run: echo "MLODA_MP_START_METHOD=spawn" >> "$GITHUB_ENV"
+    - name: Run tox -e subprocess
+      run: tox -e subprocess
+      timeout-minutes: 10
 
   lint:
     # ruff, licenses, mypy and bandit outside the test jobs; oldest and newest supported interpreter (typeshed differences).

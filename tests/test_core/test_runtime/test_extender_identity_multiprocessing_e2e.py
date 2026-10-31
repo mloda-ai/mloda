@@ -154,6 +154,7 @@ class TestExtenderIdentityAcrossFrameworksBuiltInTheParent:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 class TestExtenderIdentityNotSharedWithMultiprocessingResolvedFramework:
     """A mixed run (overall MULTIPROCESSING-enabled, real manager/register) must still give
     in-parent-resident frameworks the caller's shared extender, while a framework resolved to
@@ -209,6 +210,7 @@ class TestExtenderIdentityNotSharedWithMultiprocessingResolvedFramework:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 class TestHandleStrippingExtenderNeverLosesStateToTheRegisterProxy:
     """Parent-resident construction keeps the caller's own extender and its live handle;
     MULTIPROCESSING-resolved construction only attaches the still-pickled snapshot as
@@ -247,6 +249,7 @@ class TestHandleStrippingExtenderNeverLosesStateToTheRegisterProxy:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 class TestWorkerPayloadShipsTheParentsSelectionTable:
     def test_payload_table_keeps_parent_order_and_the_shipped_extender_objects(self) -> None:
         hook = ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE
@@ -362,6 +365,7 @@ class TestRunCompleteNotifiesTheCallersOwnExtenderInTheParent:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 class TestRunCompleteFiresAfterAMultiprocessingWorkerClosedItsExtender:
     def test_worker_close_sentinel_already_exists_when_the_parent_is_notified(
         self, tmp_path: Path, flight_server: Any
@@ -411,6 +415,7 @@ class TestRunCompleteFiresWhenSetupFails:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 class TestRunAllTwiceWithTheSameProbeCarriesPriorRunStateIntoTheSecondWorker:
     """The second worker sees the first run's on_run_complete state and its own graceful_shutdown_timeout."""
 
@@ -467,6 +472,7 @@ class _WorkerIdentityRecorder(Extender):
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 class TestPrepareOnceRunTwiceMultiprocessingWorkerIdentity:
     def test_each_run_reaches_its_worker_with_a_fresh_run_id_and_the_same_plan_id(
         self, tmp_path: Path, flight_server: Any
@@ -906,7 +912,13 @@ def _play(
 
 @pytest.mark.timeout(30)
 class TestLifecycleHooksFireExactlyOnceInOrder:
-    @pytest.mark.parametrize("scenario", list(_MATRIX))
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            pytest.param(name, marks=pytest.mark.subprocess) if name.endswith("_multiprocessing") else name
+            for name in _MATRIX
+        ],
+    )
     def test_hooks_fire_exactly_once_and_in_order(
         self, scenario: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flight_server: Any
     ) -> None:
@@ -997,6 +1009,7 @@ finally:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 @pytest.mark.skipif(sys.platform == "win32", reason="SIGTERM delivery via os.kill is POSIX only")
 def test_cancelled_threading_run_does_not_wait_for_the_step_thread_in_flight() -> None:
     completed = subprocess.run(  # nosec B603

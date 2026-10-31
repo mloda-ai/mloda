@@ -73,6 +73,7 @@ class _VerifiedContextRecordingExtender(Extender):
 
 @pytest.mark.timeout(30)
 class TestVerifiedContextReachesHookContextUnderMultiprocessing:
+    @pytest.mark.subprocess
     def test_tenant_project_principal_and_plan_time_plugin_version_survive_the_pickle_boundary_into_a_spawned_worker(
         self, tmp_path: Path, flight_server: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:

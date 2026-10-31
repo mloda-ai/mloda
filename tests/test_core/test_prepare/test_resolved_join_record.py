@@ -2057,6 +2057,7 @@ def test_the_resolver_snapshots_the_frameworks_a_feature_declared_and_never_narr
 
 # Fresh interpreters are slow to start, so this needs more than the suite-wide timeout.
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
 def test_fresh_interpreters_build_the_same_record_signature() -> None:
     outputs = run_probes(_PROBE, _PROBE_PROCESSES)
 

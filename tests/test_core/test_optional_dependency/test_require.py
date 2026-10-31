@@ -224,6 +224,7 @@ print("MESSAGES:" + json.dumps(messages))
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_require_reproduces_the_legacy_messages_byte_for_byte() -> None:
     """require must emit the exact strings the three hand-rolled helpers used, so no caller-facing text changes."""
     from tests.test_core.test_optional_pyarrow._pyarrow_blocker import run_blocked
@@ -252,6 +253,7 @@ print("LEAKED:" + ",".join(leaked))
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_importing_optional_dependency_imports_no_backend() -> None:
     """Importing the module must not pull in any optional backend, even where they are installed."""
     result = _run(_NO_EAGER_IMPORT_BODY)

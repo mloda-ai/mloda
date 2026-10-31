@@ -81,6 +81,7 @@ source .venv/bin/activate
 - **Type hints**: use modern forms (`list[str]`, `dict[str, int]`, `X | None`). Ruff enforces this via `UP006`, `UP007`, and `UP045`.
 - **Formatting**: ruff format with line length 120.
 - **Tests**: every new feature or bug fix must come with tests; follow the patterns in the existing `tests/` tree. Tests must be parallel-safe (pytest-xdist) and finish under the 10-second timeout. The default tox env asserts `EXPECTED_SKIP_COUNT` (value pinned in `tox.ini`); if a test you add is skipped, update the pinned value or unskip it.
+- **Subprocess tests**: mark any test that spawns a Python process (multiprocessing mode, fresh-interpreter probe) with `pytest.mark.subprocess`; it runs in `tox -e subprocess`, not the default env. `ParallelizationMode.MULTIPROCESSING`-parametrized cases get it automatically.
 - **Supply chain**: `[tool.uv] exclude-newer = "7 days"` in `pyproject.toml` defers new dependency releases by 7 days. Do not edit this without a reason.
 - **Licenses**: dependencies must satisfy the allowlist in `tox.ini` (Apache-2.0, BSD, MIT, MPL-2.0, PSF, ISC, LGPLv2+). Adding a dependency with a non-listed license fails tox.
 - **`attribution/ATTRIBUTION.md`**: `tox` regenerates this file from the installed dependency versions on every run, so a dependency change shows up as a diff here. This is intended: commit the update as part of the same change so the tracked file stays current. The release workflow does not regenerate it; it ships the committed copy, so keeping it up to date in PRs is what keeps releases accurate.

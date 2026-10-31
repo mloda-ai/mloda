@@ -779,6 +779,7 @@ class TestEnterPrestartsStandbyWorkers:
         manager.shutdown.assert_not_called()
 
     @pytest.mark.timeout(30)
+    @pytest.mark.subprocess
     def test_two_multiprocessing_orchestrators_share_the_manager_and_get_their_own_register(self) -> None:
         modes = {ParallelizationMode.MULTIPROCESSING}
         first = self._entering(WorkerManager())

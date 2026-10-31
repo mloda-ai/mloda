@@ -87,6 +87,7 @@ class TestWorkerManagerThreadTasks:
 class TestWorkerManagerProcessCreation:
     """Test worker process creation and registration."""
 
+    @pytest.mark.subprocess
     def test_create_worker_process_creates_process(self) -> None:
         """create_worker_process should create a new Process."""
         manager = WorkerManager()
@@ -101,6 +102,7 @@ class TestWorkerManagerProcessCreation:
         assert hasattr(cmd_queue, "put") and hasattr(cmd_queue, "get")
         assert hasattr(result_queue, "put") and hasattr(result_queue, "get")
 
+    @pytest.mark.subprocess
     def test_create_worker_process_registers_in_process_register(self) -> None:
         """create_worker_process should register process with CFW UUID."""
         manager = WorkerManager()
@@ -116,6 +118,7 @@ class TestWorkerManagerProcessCreation:
         assert registered_cmd_queue == cmd_queue
         assert registered_result_queue == result_queue
 
+    @pytest.mark.subprocess
     def test_create_worker_process_adds_result_queue_to_collection(self) -> None:
         """create_worker_process should add result queue to collection."""
         manager = WorkerManager()
@@ -127,6 +130,7 @@ class TestWorkerManagerProcessCreation:
 
         assert result_queue in manager.result_queues_collection
 
+    @pytest.mark.subprocess
     def test_create_worker_process_adds_process_to_tasks(self) -> None:
         """create_worker_process should add process to tasks list."""
         manager = WorkerManager()
@@ -400,6 +404,7 @@ class TestWorkerManagerStandbyWorkers:
 class TestWorkerManagerProcessRetrieval:
     """Test retrieving existing process information."""
 
+    @pytest.mark.subprocess
     def test_get_process_queues_returns_existing_process(self) -> None:
         """get_process_queues should return existing process/queues."""
         manager = WorkerManager()
@@ -612,6 +617,7 @@ class TestWorkerManagerDeadWorkerDetection:
     """Test detection of abnormally-terminated worker processes (e.g. OOM SIGKILL)."""
 
     @pytest.mark.timeout(30)
+    @pytest.mark.subprocess
     def test_find_dead_workers_detects_sigkilled_worker(self) -> None:
         """find_dead_workers must report a worker that died abnormally.
 
@@ -885,6 +891,7 @@ class TestWorkerManagerJoinAll:
         mock_process2.join.assert_called_once()
 
     @pytest.mark.timeout(30)
+    @pytest.mark.subprocess
     def test_join_all_terminates_real_worker_process(self) -> None:
         """join_all should terminate a real worker and return promptly.
 
@@ -920,6 +927,7 @@ class TestWorkerManagerJoinAll:
                 join_thread.join(timeout=1.0)
 
     @pytest.mark.timeout(30)
+    @pytest.mark.subprocess
     def test_join_all_terminates_an_unbound_real_standby(self) -> None:
         from mloda.core.runtime.worker.multiprocessing_worker import standby_worker
 
@@ -938,6 +946,7 @@ class TestWorkerManagerJoinAll:
                 process.join(timeout=5)
 
     @pytest.mark.timeout(30)
+    @pytest.mark.subprocess
     def test_real_standby_bound_to_a_target_runs_it_with_the_worker_index(self) -> None:
         from mloda.core.runtime.worker.multiprocessing_worker import standby_worker
 
@@ -996,6 +1005,7 @@ class TestWorkerManagerJoinAll:
         assert not [r for r in caplog.records if r.levelno == logging.ERROR]
 
     @pytest.mark.timeout(30)
+    @pytest.mark.subprocess
     def test_join_all_terminates_after_graceful_timeout_when_worker_ignores_stop(self) -> None:
         """A worker that never drains its command queue must still be terminated once
         graceful_timeout elapses."""
@@ -1083,6 +1093,7 @@ class TestWorkerManagerJoinAllScrubsCredentials:
 class TestWorkerManagerIntegration:
     """Integration tests for WorkerManager with multiple operations."""
 
+    @pytest.mark.subprocess
     def test_complete_workflow_with_process(self) -> None:
         """Test complete workflow: create process, send command, poll results, join."""
         manager = WorkerManager()
@@ -1115,6 +1126,7 @@ class TestWorkerManagerIntegration:
         # Join all
         manager.join_all()
 
+    @pytest.mark.subprocess
     def test_multiple_processes_for_different_cfws(self) -> None:
         """Test managing multiple processes for different CFWs."""
         manager = WorkerManager()
@@ -1142,6 +1154,7 @@ class TestWorkerManagerIntegration:
         assert retrieved1[0] == process1
         assert retrieved2[0] == process2
 
+    @pytest.mark.subprocess
     def test_mixed_threads_and_processes(self) -> None:
         """Test managing both threads and processes together."""
         manager = WorkerManager()

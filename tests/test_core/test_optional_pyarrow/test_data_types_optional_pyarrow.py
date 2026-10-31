@@ -40,6 +40,7 @@ except Exception as e:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_to_arrow_type_raises_import_error_without_pyarrow() -> None:
     """DataType.to_arrow_type must raise ImportError mentioning pyarrow when pyarrow absent."""
     result = run_blocked(_BODY_TO_ARROW)
@@ -50,6 +51,7 @@ def test_to_arrow_type_raises_import_error_without_pyarrow() -> None:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_from_arrow_type_raises_import_error_without_pyarrow() -> None:
     """DataType.from_arrow_type must raise ImportError mentioning pyarrow when pyarrow absent."""
     result = run_blocked(_BODY_FROM_ARROW)

@@ -61,6 +61,7 @@ def test_empty_result_default_succeeds_threading(flight_server: Any) -> None:
     assert len(records_from_frame(result[0])) == 0
 
 
+@pytest.mark.subprocess
 def test_empty_result_allowed_succeeds_multiprocessing(flight_server: Any) -> None:
     """The empty success path survives the flight-server upload in MULTIPROCESSING.
 

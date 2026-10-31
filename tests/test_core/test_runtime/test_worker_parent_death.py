@@ -159,6 +159,7 @@ class TestWorkerProcessDoesNotOutliveASigkilledParent:
 
     @pytest.mark.timeout(90)  # must exceed the sum of the internal waits
     @pytest.mark.parametrize("kind", ["bound_worker", "unbound_standby", "shared_manager"])
+    @pytest.mark.subprocess
     def test_real_worker_process_exits_after_its_real_parent_process_is_sigkilled(
         self, tmp_path: Path, kind: str
     ) -> None:
@@ -206,6 +207,7 @@ class TestWorkerProcessDoesNotOutliveASigkilledParent:
 class TestForkedChildOfAProcessHoldingMlodaProcesses:
     @pytest.mark.parametrize("variant", ["single_manager", "replaced_manager_still_in_use"])
     @pytest.mark.timeout(40)
+    @pytest.mark.subprocess
     def test_forked_child_exits_cleanly_and_the_parents_server_survives(self, variant: str, tmp_path: Path) -> None:
         replace = (
             "    sys.path.append(os.path.dirname(stderr_path))\n    m.shared_manager()\n"
@@ -254,6 +256,7 @@ class TestForkedChildOfAProcessHoldingMlodaProcesses:
         ids=["nothing", "stop_standbys", "join_all", "terminate_alive_processes", "end_flight_server_process"],
     )
     @pytest.mark.timeout(40)
+    @pytest.mark.subprocess
     def test_forked_child_running_cleanup_does_not_terminate_workers_or_the_flight_server(
         self, child_cleanup: str, tmp_path: Path
     ) -> None:
@@ -296,6 +299,7 @@ class TestForkedChildOfAProcessHoldingMlodaProcesses:
 
 class TestSharedManagerServerDoesNotOutliveACleanParentExit:
     @pytest.mark.timeout(40)
+    @pytest.mark.subprocess
     def test_server_is_gone_after_the_parent_interpreter_exits_normally(self, tmp_path: Path) -> None:
         probe = tmp_path / "probe.py"
         probe.write_text(

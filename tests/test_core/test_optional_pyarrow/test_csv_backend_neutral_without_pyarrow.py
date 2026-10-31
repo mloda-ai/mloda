@@ -121,6 +121,7 @@ finally:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_csv_reads_into_python_dict_without_pyarrow() -> None:
     """run_all on a CSV into PythonDict succeeds with pyarrow blocked."""
     result = run_blocked(_BODY_RUN_ALL)
@@ -137,6 +138,7 @@ def test_csv_reads_into_python_dict_without_pyarrow() -> None:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_column_names_uses_stdlib_without_pyarrow() -> None:
     """CsvFG.column_names returns ["A", "B"] via stdlib with pyarrow blocked."""
     result = run_blocked(_BODY_COLUMN_NAMES)

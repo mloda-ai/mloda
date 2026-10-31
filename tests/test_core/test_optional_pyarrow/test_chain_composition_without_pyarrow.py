@@ -117,6 +117,7 @@ sys.exit(0)
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_chain_composition_and_apply_work_without_pyarrow() -> None:
     """With pyarrow blocked, (A, C) composes to [_TransAB, _TransBC] over synthetic
     edges and ``apply_chain`` executes the move end to end.

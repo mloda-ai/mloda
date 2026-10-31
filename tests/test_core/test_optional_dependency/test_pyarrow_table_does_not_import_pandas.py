@@ -5,6 +5,8 @@ from __future__ import annotations
 import subprocess  # nosec
 import sys
 
+import pytest
+
 _PROBE = (
     "import sys\n"
     "import mloda_plugins.compute_framework.base_implementations.pyarrow.table\n"
@@ -12,6 +14,7 @@ _PROBE = (
 )
 
 
+@pytest.mark.subprocess
 def test_importing_pyarrow_table_does_not_import_pandas() -> None:
     result = subprocess.run(  # nosec B603
         [sys.executable, "-c", _PROBE],

@@ -30,6 +30,7 @@ except Exception as e:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_start_flight_server_process_raises_import_error_without_pyarrow() -> None:
     """start_flight_server_process must raise ImportError mentioning pyarrow when pyarrow is absent."""
     result = run_blocked(_BODY)

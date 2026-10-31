@@ -1,3 +1,5 @@
+import pytest
+
 from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.experimental.environment.installed_packages_feature_group import (
@@ -7,6 +9,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda.user import mloda
 
 
+@pytest.mark.subprocess
 def test_installed_packages_feature_group() -> None:
     feature_set = FeatureSet()
     result = InstalledPackagesFeatureGroup.calculate_feature(None, feature_set)
@@ -14,6 +17,7 @@ def test_installed_packages_feature_group() -> None:
     assert isinstance(result[InstalledPackagesFeatureGroup.get_class_name()], list)
 
 
+@pytest.mark.subprocess
 def test_installed_packages_feature_group_mlodaAPI() -> None:
     features: list[Feature | str] = [InstalledPackagesFeatureGroup.get_class_name()]
     result = mloda.run_all(features, compute_frameworks=[PandasDataFrame])

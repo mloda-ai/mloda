@@ -108,6 +108,7 @@ except Exception as e:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_csv_fg_imports_without_pyarrow() -> None:
     """CsvFG module must import successfully even when pyarrow is absent."""
     result = run_blocked(_BODY_CSV_IMPORT)
@@ -118,6 +119,7 @@ def test_csv_fg_imports_without_pyarrow() -> None:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_csv_fg_load_neutral_returns_file_source_without_pyarrow() -> None:
     """CsvFG.load_neutral returns a lightweight FileSource descriptor even when pyarrow
     is absent; a per-framework transformer materializes it later.
@@ -130,6 +132,7 @@ def test_csv_fg_load_neutral_returns_file_source_without_pyarrow() -> None:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_json_fg_imports_without_pyarrow() -> None:
     """JsonFG module must import successfully even when pyarrow is absent."""
     result = run_blocked(_BODY_JSON_IMPORT)
@@ -140,6 +143,7 @@ def test_json_fg_imports_without_pyarrow() -> None:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_parquet_fg_imports_without_pyarrow() -> None:
     """ParquetFG module must import successfully even when pyarrow is absent."""
     result = run_blocked(_BODY_PARQUET_IMPORT)
@@ -150,6 +154,7 @@ def test_parquet_fg_imports_without_pyarrow() -> None:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_feather_fg_imports_without_pyarrow() -> None:
     """FeatherFG module must import successfully even when pyarrow is absent."""
     result = run_blocked(_BODY_FEATHER_IMPORT)
@@ -160,6 +165,7 @@ def test_feather_fg_imports_without_pyarrow() -> None:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_orc_fg_imports_without_pyarrow() -> None:
     """OrcFG module must import successfully even when pyarrow is absent."""
     result = run_blocked(_BODY_ORC_IMPORT)
@@ -216,6 +222,7 @@ print("LOAD:" + load_result)
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_feather_fg_declines_with_an_install_hint_and_load_raises_without_pyarrow() -> None:
     """Without pyarrow the Feather group declines at match time, recording why, and load_neutral raises ImportError."""
     result = run_blocked(_BODY_FEATHER_DECLINE_AND_LOAD)
@@ -253,6 +260,7 @@ except Exception as e:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_dict_file_source_transformer_non_csv_raises_import_error_without_pyarrow() -> None:
     result = run_blocked(_BODY_DICT_TRANSFORMER_NON_CSV)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
@@ -305,6 +313,7 @@ print("LOAD:" + load_result)
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_yaml_fg_imports_without_yaml_and_load_raises() -> None:
     result = run_blocked(_BODY_YAML_IMPORT_AND_LOAD, module="yaml")
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
@@ -363,6 +372,7 @@ finally:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_document_groups_import_and_text_fg_loads_into_python_dict_without_pyarrow() -> None:
     result = run_blocked(_BODY_DOCUMENT_IMPORT_AND_LOAD)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
@@ -420,6 +430,7 @@ finally:
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_sqlite_fg_imports_and_loads_into_python_dict_without_pyarrow() -> None:
     result = run_blocked(_BODY_SQLITE_IMPORT_AND_LOAD)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"

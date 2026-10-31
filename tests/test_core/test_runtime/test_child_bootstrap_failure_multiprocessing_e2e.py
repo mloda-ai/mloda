@@ -38,6 +38,7 @@ class _RaisingBootstrap:
 
 @pytest.mark.timeout(30)
 class TestChildBootstrapFailureSurfacesThroughRunAll:
+    @pytest.mark.subprocess
     def test_run_all_raises_the_original_bootstrap_exception(self, flight_server: Any) -> None:
         with pytest.raises(RuntimeError, match="otel sdk misconfigured"):
             mloda.run_all(

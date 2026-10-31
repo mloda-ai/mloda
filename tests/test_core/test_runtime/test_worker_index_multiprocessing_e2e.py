@@ -94,6 +94,7 @@ class _WorkerIndexRecordingExtender(Extender):
 
 @pytest.mark.timeout(30)
 class TestWorkerIndexReachesHookContextUnderMultiprocessing:
+    @pytest.mark.subprocess
     def test_two_independent_root_feature_groups_each_see_a_worker_index_in_zero_or_one(
         self, tmp_path: Path, flight_server: Any
     ) -> None:

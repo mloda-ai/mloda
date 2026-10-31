@@ -542,6 +542,7 @@ def test_resolution_types_imports_neither_the_matcher_nor_the_renderer() -> None
     assert offenders == [], f"{path.name} imports {offenders}, but it is the base of the import order"
 
 
+@pytest.mark.subprocess
 def test_renderer_imports_in_a_clean_interpreter_without_the_matcher() -> None:
     """Runtime counterpart of the static check: a fresh interpreter must not pull the matcher in transitively."""
     # Safe: fixed argv (sys.executable plus a literal snippet), no shell, no user input.

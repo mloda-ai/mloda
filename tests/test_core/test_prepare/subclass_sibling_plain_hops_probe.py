@@ -129,4 +129,9 @@ def collect() -> dict[str, str]:
 
 
 if __name__ == "__main__":
+    # Skips the all-backend transformer auto-load; imports only the transformers this probe routes through.
+    from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
+    from mloda_plugins.compute_framework.base_implementations.python_dict import python_dict_pyarrow_transformer  # noqa: F401
+
+    ComputeFrameworkTransformer._auto_load_done = True
     print(json.dumps(collect(), sort_keys=True))

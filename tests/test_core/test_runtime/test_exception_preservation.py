@@ -258,6 +258,7 @@ def test_threading_secret_leak_scrubbed_in_logs(flight_server: Any, caplog: pyte
     _assert_scrubbed_debug_traceback(caplog, _LEAK_MARKER)
 
 
+@pytest.mark.subprocess
 def test_multiprocessing_secret_leak_scrubbed_in_logs(flight_server: Any, caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.DEBUG, logger=_RUNNER_LOGGER)
     with pytest.raises(OSError) as excinfo:
@@ -274,6 +275,7 @@ def test_multiprocessing_secret_leak_scrubbed_in_logs(flight_server: Any, caplog
 
 
 @pytest.mark.timeout(15)
+@pytest.mark.subprocess
 def test_multiprocessing_unpicklable_secret_leak_message_is_scrubbed(
     flight_server: Any, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -465,6 +467,7 @@ class UnpicklableErrorFeatureGroup(DataCreatorFeatureGroup):
 _ENABLED_UNPICKLABLE = PluginCollector.enabled_feature_groups({UnpicklableErrorFeatureGroup})
 
 
+@pytest.mark.subprocess
 def test_multiprocessing_preserves_picklable_exception_type(flight_server: Any) -> None:
     """MULTIPROCESSING ``run_all`` must surface the original ``ImportError`` type.
 
@@ -483,6 +486,7 @@ def test_multiprocessing_preserves_picklable_exception_type(flight_server: Any) 
         )
 
 
+@pytest.mark.subprocess
 def test_multiprocessing_preserves_missing_input_feature_error(flight_server: Any) -> None:
     """A declared input lost at runtime surfaces as MissingInputFeatureError with its fields intact."""
     with pytest.raises(MissingInputFeatureError) as excinfo:
@@ -502,6 +506,7 @@ def test_multiprocessing_preserves_missing_input_feature_error(flight_server: An
 
 
 @pytest.mark.timeout(15)
+@pytest.mark.subprocess
 def test_multiprocessing_unpicklable_exception_does_not_hang(flight_server: Any) -> None:
     """A NON-picklable worker exception must not hang the orchestrator loop.
 
@@ -542,6 +547,7 @@ def test_sync_row_leak_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> Non
     _assert_scrubbed_debug_traceback(caplog, _ROW_LEAK_MARKER)
 
 
+@pytest.mark.subprocess
 def test_multiprocessing_row_leak_scrubbed_in_logs(flight_server: Any, caplog: pytest.LogCaptureFixture) -> None:
     """Multiprocessing preserves raw row errors while scrubbing the DEBUG traceback."""
     caplog.set_level(logging.DEBUG, logger=_RUNNER_LOGGER)

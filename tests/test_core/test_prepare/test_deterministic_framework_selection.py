@@ -239,6 +239,7 @@ def test_feature_compute_framework_rejects_an_empty_set() -> None:
 
 # Fresh interpreters cost roughly a second each, so this one needs more than the suite-wide per-test budget.
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
 def test_fresh_interpreters_reduce_to_the_same_frameworks() -> None:
     outputs = run_probes(_PROBE, _PROBE_PROCESSES)
 

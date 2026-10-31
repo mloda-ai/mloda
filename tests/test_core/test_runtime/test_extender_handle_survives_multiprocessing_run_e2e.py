@@ -65,6 +65,7 @@ class _CallSitePidProbeExtender(Extender):
 
 @pytest.mark.timeout(30)
 class TestCallersOwnExtenderRunsInParentForASyncOnlyFramework:
+    @pytest.mark.subprocess
     def test_probe_records_the_call_from_the_parent_pid_with_its_handle_still_live(self, flight_server: Any) -> None:
         probe = _CallSitePidProbeExtender()
         live_handle = probe.handle

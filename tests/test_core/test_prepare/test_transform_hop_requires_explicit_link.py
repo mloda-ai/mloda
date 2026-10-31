@@ -17,6 +17,9 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from tests.helpers.probe_runner import run_probes
 from tests.test_core.test_prepare import link_side_paths_probe as hd_probe
 
+# Tests on a module-scoped probe fixture share one xdist group so each fixture runs once, not once per worker.
+_PROBE_GROUP = pytest.mark.xdist_group("transform_hop_probes")
+
 
 class UnlinkedRootA(DataCreatorFeatureGroup):
     @classmethod
@@ -96,6 +99,7 @@ _SUBCLASS_LINKED_HOP_AND_JOIN_EXPECTED = {"outcome": "accepted", "subclass_linke
 
 
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
 def test_subclass_linked_plain_hop_and_join_plan_the_same_way_under_every_hash_seed() -> None:
     outputs = run_probes(
         _SUBCLASS_LINKED_HOP_AND_JOIN_PROBE,
@@ -122,6 +126,7 @@ _SUBCLASS_SIBLING_PLAIN_HOPS_EXPECTED = {"outcome": "accepted", "p3_x": "[6, 8, 
 
 
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
 def test_subclass_sibling_plain_hops_both_survive_under_every_hash_seed() -> None:
     outputs = run_probes(
         _SUBCLASS_SIBLING_PLAIN_HOPS_PROBE,
@@ -152,6 +157,7 @@ _SUBCLASS_UNRELATED_ROOTS_SEEDS = [0, 1, 3, 4, 6]
 
 
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
 def test_subclass_unrelated_roots_reject_missing_links_under_every_hash_seed() -> None:
     cross_outputs = run_probes(
         _SUBCLASS_UNRELATED_ROOTS_CROSS_FRAMEWORK_PROBE,
@@ -493,6 +499,8 @@ def link_side_paths_outputs() -> list[dict[str, str]]:
 
 
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
+@_PROBE_GROUP
 def test_hop_parent_of_a_join_side_rejects_missing_links_under_every_hash_seed(
     link_side_paths_outputs: list[dict[str, str]],
 ) -> None:
@@ -507,6 +515,8 @@ def test_hop_parent_of_a_join_side_rejects_missing_links_under_every_hash_seed(
 
 
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
+@_PROBE_GROUP
 @pytest.mark.parametrize("shape", ["twin_sibling", "twin_chain"])
 def test_consumers_of_a_join_side_plan_and_run_correctly_under_every_hash_seed(
     shape: str, link_side_paths_outputs: list[dict[str, str]]
@@ -533,6 +543,8 @@ _HOP_DIAMOND_EXPECTED_VALUES = {
 
 
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
+@_PROBE_GROUP
 @pytest.mark.parametrize("shape", list(_HOP_DIAMOND_EXPECTED_VALUES))
 def test_same_root_diamond_with_a_hop_runs_correctly_under_every_hash_seed(
     shape: str, link_side_paths_outputs: list[dict[str, str]]
@@ -544,6 +556,8 @@ def test_same_root_diamond_with_a_hop_runs_correctly_under_every_hash_seed(
 
 
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
+@_PROBE_GROUP
 @pytest.mark.parametrize("shape", ["hop_diamond_two_pandas"])
 def test_same_root_diamond_with_an_ambiguous_redirect_is_rejected_with_its_real_cause_under_every_hash_seed(
     shape: str, link_side_paths_outputs: list[dict[str, str]]
@@ -557,6 +571,8 @@ def test_same_root_diamond_with_an_ambiguous_redirect_is_rejected_with_its_real_
 
 
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
+@_PROBE_GROUP
 def test_same_root_diamond_with_a_cycle_has_one_outcome_under_every_hash_seed(
     link_side_paths_outputs: list[dict[str, str]],
 ) -> None:
@@ -572,6 +588,7 @@ def test_same_root_diamond_with_a_cycle_has_one_outcome_under_every_hash_seed(
 
 
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
 @pytest.mark.parametrize("groups", [hd_probe.HD_DIAMOND_GROUPS, hd_probe.HD_MIRROR_GROUPS], ids=["plain", "mirror"])
 def test_same_root_diamond_with_a_hop_runs_with_multiprocessing(
     groups: set[type[FeatureGroup]], flight_server: Any
@@ -618,6 +635,8 @@ def two_joins_plans() -> list[dict[str, str]]:
 
 
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
+@_PROBE_GROUP
 def test_two_joins_feeding_one_consumer_are_planned_in_the_same_order_in_every_process(
     two_joins_plans: list[dict[str, str]],
 ) -> None:
@@ -628,6 +647,8 @@ def test_two_joins_feeding_one_consumer_are_planned_in_the_same_order_in_every_p
 
 
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
+@_PROBE_GROUP
 def test_two_joins_feeding_one_consumer_have_the_same_ordering_edge_in_every_process(
     two_joins_plans: list[dict[str, str]],
 ) -> None:

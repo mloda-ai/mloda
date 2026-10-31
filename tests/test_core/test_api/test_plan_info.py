@@ -1982,6 +1982,7 @@ class TestPlanLock:
 
     # Fresh interpreters are slow, so this needs more than the suite-wide timeout.
     @pytest.mark.timeout(60)
+    @pytest.mark.subprocess
     def test_plan_lock_text_is_stable_across_hash_seeds(self) -> None:
         outputs = run_probes(_PLAN_LOCK_PROBE, 0, seeds=[0, 1, 2])
 

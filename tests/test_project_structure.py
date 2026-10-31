@@ -415,12 +415,32 @@ class TestToxConfig:
 
     def test_ci_build_job_derives_workers_from_nproc(self) -> None:
         steps = self._workflow_jobs("ci.yaml")["build"]["steps"]
-        write = re.compile(r"PYTEST_WORKERS=\$\(\(.*nproc.*\b3\b.*\)\).*GITHUB_ENV")
+        write = re.compile(r"PYTEST_WORKERS=\$\(nproc\)\s*>>\s*\"?\$GITHUB_ENV")
         assert any(write.search(line) for s in steps for line in str(s.get("run", "")).splitlines()), (
-            "build job must write nproc, capped at 3, into PYTEST_WORKERS via $GITHUB_ENV"
+            "build job must write the uncapped nproc into PYTEST_WORKERS via $GITHUB_ENV"
         )
         hardcoded = [s for s in steps if "PYTEST_WORKERS" in (s.get("env") or {})]
         assert not hardcoded, "no build step may hardcode PYTEST_WORKERS in env"
+
+    def test_subprocess_marker_runs_in_its_own_env_and_ci_job(self) -> None:
+        parser = self._tox_parser()
+        assert "subprocess" in set(re.findall(r"[\w-]+", parser.get("tox", "envlist"))), "envlist needs subprocess"
+        assert re.search(
+            r"-m\s+['\"]?subprocess['\"]?(\s|$)", parser.get("testenv:subprocess", "commands", fallback="")
+        )
+        for section in ("testenv", "testenv:core", "testenv:installed"):
+            assert re.search(r"not subprocess", parser.get(section, "commands", fallback="")), (
+                f"[{section}] must deselect the subprocess marker"
+            )
+        job = self._workflow_jobs("ci.yaml").get("subprocess")
+        assert job, "ci.yaml needs a subprocess job"
+        runs = " ".join(str(s.get("run", "")) for s in job["steps"])
+        assert re.search(r"tox\s+-e\s+subprocess\b", runs), "subprocess job must run `tox -e subprocess`"
+        matrix = job["strategy"]["matrix"]
+        versions = {str(v) for v in matrix.get("python-version", [])}
+        versions |= {str(e["python-version"]) for e in matrix.get("include", []) if "python-version" in e}
+        assert versions == {"3.11", "3.12", "3.13", "3.14"}, f"subprocess job must cover python 3.11-3.14: {versions}"
+        assert "spawn" in yaml.safe_dump(job), "subprocess job must pin MLODA_MP_START_METHOD to spawn on one entry"
 
     def test_release_license_write_runs_lint_env(self) -> None:
         steps = [s for job in self._workflow_jobs("release.yaml").values() for s in job.get("steps", [])]

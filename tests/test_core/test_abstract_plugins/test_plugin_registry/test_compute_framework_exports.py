@@ -294,6 +294,7 @@ def _run_isolation_script(script: str) -> subprocess.CompletedProcess[str]:
 class TestFacadeImportIsDependencyFree:
     @pytest.mark.timeout(30)
     @pytest.mark.parametrize("facade", _FACADES)
+    @pytest.mark.subprocess
     def test_facade_import_pulls_in_no_plugin(self, facade: str) -> None:
         """The point of #726: a core-only install must never load mloda_plugins through a facade."""
         result = _run_isolation_script(_NO_PLUGIN_SCRIPT.format(facade=facade))
@@ -306,6 +307,7 @@ class TestFacadeImportIsDependencyFree:
 
     @pytest.mark.timeout(30)
     @pytest.mark.parametrize(("facade", "library"), _LIBRARY_PARAMS, ids=_LIBRARY_IDS)
+    @pytest.mark.subprocess
     def test_facade_import_pulls_in_no_backend_library(self, facade: str, library: str) -> None:
         """Importing a facade must not cost an optional backend import, whether or not it is installed."""
         result = _run_isolation_script(_NO_LIBRARY_SCRIPT.format(facade=facade, library=library))
@@ -336,6 +338,7 @@ _CYCLE_IDS = [f"{backend}:{order}" for backend, _deep, _symbol, order in _CYCLE_
 class TestImportOrderCycleGuard:
     @pytest.mark.timeout(30)
     @pytest.mark.parametrize(("backend_module", "deep_module", "symbol", "order"), _CYCLE_PARAMS, ids=_CYCLE_IDS)
+    @pytest.mark.subprocess
     def test_both_import_orders_resolve_the_same_class(
         self, backend_module: str, deep_module: str, symbol: str, order: str
     ) -> None:

@@ -779,6 +779,7 @@ class TestSqliteFGMultiprocessing:
             DataAccessCollection(credentials=[HashableDict({KEY: str(tmp_path / "mp_hashable.sqlite")})])
         assert "credential" in str(excinfo.value).lower()
 
+    @pytest.mark.subprocess
     def test_plain_dict_credentials_under_multiprocessing(self, people_db: str, flight_server: Any) -> None:
         result = mloda.run_all(
             ["name", "id"],

@@ -44,6 +44,7 @@ print("PYARROW_DISCOVERED:" + repr(PyArrowTable in PreFilterPlugins.get_cfw_subc
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_plugin_loader_all_without_pyarrow() -> None:
     """PluginLoader.all() must succeed even when pyarrow is unavailable."""
     result = run_blocked(_BODY_ALL)

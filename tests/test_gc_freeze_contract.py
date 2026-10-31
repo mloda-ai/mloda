@@ -23,6 +23,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 # The floor the conftest predicate uses to tell its own freeze from a host's, imported rather than copied so
@@ -191,6 +192,7 @@ def test_gc_collect_still_reaps_throwaway_feature_groups_under_a_frozen_graph() 
     )
 
 
+@pytest.mark.subprocess
 def test_conftest_unfreezes_the_graph_at_session_finish() -> None:
     """The hook pair is balanced: what pytest_collection_finish freezes, pytest_sessionfinish hands back."""
     baseline, frozen, released = _freeze_counts(_PAIRED_HOOKS_PROBE.format(marker=_PROBE_MARKER))
@@ -208,6 +210,7 @@ def test_conftest_unfreezes_the_graph_at_session_finish() -> None:
 
 
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
 def test_plugin_modules_are_frozen_before_the_first_plugin_loader_call() -> None:
     """Plugin modules loaded by the suite land in the permanent generation, even if collection never imported them."""
     total, unfrozen = _freeze_counts(_PLUGIN_FREEZE_PROBE.format(marker=_PROBE_MARKER))
@@ -221,6 +224,7 @@ def test_plugin_modules_are_frozen_before_the_first_plugin_loader_call() -> None
 
 
 @pytest.mark.parametrize("hooks", _HOST_HOOK_SEQUENCES, ids=_HOST_HOOK_IDS)
+@pytest.mark.subprocess
 def test_conftest_never_unfreezes_a_freeze_it_does_not_own(hooks: str) -> None:
     """A freeze made before the suite ran survives pytest_sessionfinish, whether or not collection finished."""
     host, remaining = _freeze_counts(_HOST_FREEZE_PROBE.format(hooks=hooks, marker=_PROBE_MARKER))
@@ -294,3 +298,22 @@ def test_a_worker_keeps_no_passing_report(request: pytest.FixtureRequest) -> Non
         return
     assert not tr.stats.get("")
     assert not tr.stats.get("passed")
+
+
+@pytest.mark.parametrize(
+    "modes",
+    [
+        ParallelizationMode.SYNC,
+        {ParallelizationMode.SYNC},
+        {ParallelizationMode.MULTIPROCESSING},
+        {ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
+        ParallelizationMode.MULTIPROCESSING,
+    ],
+    ids=["sync-enum", "sync-set", "mp-set", "mixed-set", "mp-enum"],
+)
+def test_multiprocessing_parametrized_cases_get_the_subprocess_marker(
+    request: pytest.FixtureRequest, modes: Any
+) -> None:
+    flat = modes if isinstance(modes, set) else {modes}
+    marked = request.node.get_closest_marker("subprocess") is not None
+    assert marked == (ParallelizationMode.MULTIPROCESSING in flat)

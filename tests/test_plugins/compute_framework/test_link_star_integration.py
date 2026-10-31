@@ -507,6 +507,7 @@ class TestHubOnTheRightOfBothLinks:
             assert _hub_right_run(link_factory, spoke_c, mode) == expected
 
     @pytest.mark.timeout(60)
+    @pytest.mark.subprocess
     def test_two_inner_links_sharing_the_right_side_return_the_matched_rows_with_multiprocessing(
         self, flight_server: Any
     ) -> None:
@@ -687,6 +688,7 @@ class TestTwoConsumersReadingDifferentSpokes:
             assert got[HubRightCPairConsumer.get_class_name()] == _Y_EXPECTED
 
     @pytest.mark.timeout(60)
+    @pytest.mark.subprocess
     def test_each_consumer_gets_only_its_own_join_rows_with_multiprocessing(self, flight_server: Any) -> None:
         got = _two_consumers_run(
             _star_links(HubRightCArrow, True),
@@ -776,6 +778,7 @@ class TestAConsumerReadingPartOfAStar:
     @pytest.mark.timeout(60)
     @pytest.mark.parametrize("hub_right", [True, False], ids=_ORIENTATION_IDS)
     @pytest.mark.parametrize("spoke_c", _SPOKES, ids=_SPOKE_IDS)
+    @pytest.mark.subprocess
     def test_a_consumer_missing_a_join_of_the_star_gets_its_own_rows_with_multiprocessing(
         self, spoke_c: type[FeatureGroup], hub_right: bool, flight_server: Any
     ) -> None:
@@ -858,6 +861,7 @@ class TestAConsumerReadingPartOfAStar:
         assert not any(cb_tokens[0] in step.children_if_root for step in plan if isinstance(step, FeatureGroupStep))
 
     @pytest.mark.timeout(60)
+    @pytest.mark.subprocess
     def test_a_consumer_missing_a_join_that_keeps_the_shared_group_gets_its_own_rows_with_multiprocessing(
         self, flight_server: Any
     ) -> None:
@@ -988,6 +992,7 @@ class TestStarNextToARivalGroup:
 
     @pytest.mark.timeout(60)
     @pytest.mark.parametrize("hub_right", [True, False], ids=_ORIENTATION_IDS)
+    @pytest.mark.subprocess
     def test_a_star_and_a_rival_join_of_the_same_group_each_get_their_own_rows_with_multiprocessing(
         self, hub_right: bool, flight_server: Any
     ) -> None:

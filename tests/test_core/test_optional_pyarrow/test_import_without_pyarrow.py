@@ -102,6 +102,7 @@ sys.exit(0)
 
 
 @pytest.mark.timeout(30)
+@pytest.mark.subprocess
 def test_import_and_run_without_pyarrow() -> None:
     """mloda.user import and a PythonDict end-to-end run must work without pyarrow."""
     result = subprocess.run(  # nosec

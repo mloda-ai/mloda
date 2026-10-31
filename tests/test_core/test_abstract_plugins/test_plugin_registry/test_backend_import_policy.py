@@ -110,6 +110,7 @@ print("OK")
 
 @pytest.mark.timeout(30)
 @pytest.mark.parametrize("backend", BACKENDS, ids=_DISCOVERY_IDS)
+@pytest.mark.subprocess
 def test_backend_module_imports_and_core_discovery_follows_without_its_library(backend: Backend) -> None:
     """With the library blocked: the module imports, exports its classes, and core discovery filters them."""
     body = _DISCOVERY_BODY.format(
@@ -133,6 +134,7 @@ def test_backend_module_imports_and_core_discovery_follows_without_its_library(b
 
 @pytest.mark.timeout(30)
 @pytest.mark.parametrize("backend", _IMPORT_CASES, ids=_PYARROW_IDS)
+@pytest.mark.subprocess
 def test_backend_module_imports_with_pyarrow_blocked(backend: Backend) -> None:
     """pyarrow is the library that leaks across backends (duckdb, sqlite, iceberg and spark all
     reference it), so every backend module must import with pyarrow blocked, not just with its own

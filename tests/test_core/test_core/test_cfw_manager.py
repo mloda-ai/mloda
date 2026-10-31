@@ -376,6 +376,7 @@ def isolated_shared_manager(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 @pytest.mark.usefixtures("isolated_shared_manager")
 class TestSharedManagerWithARealServer:
     @pytest.mark.timeout(30)
+    @pytest.mark.subprocess
     def test_two_calls_return_the_same_alive_manager(self) -> None:
         first = cfw_module.shared_manager()
         second = cfw_module.shared_manager()
@@ -384,6 +385,7 @@ class TestSharedManagerWithARealServer:
         assert first.is_alive()
 
     @pytest.mark.timeout(30)
+    @pytest.mark.subprocess
     def test_registers_from_one_manager_do_not_share_state(self) -> None:
         manager: Any = cfw_module.shared_manager()
         modes = {ParallelizationMode.MULTIPROCESSING}
@@ -403,6 +405,7 @@ class TestSharedManagerWithARealServer:
 
     @pytest.mark.parametrize("breakage", ["shutdown", "socket_file_removed"])
     @pytest.mark.timeout(30)
+    @pytest.mark.subprocess
     def test_an_unusable_cached_server_is_replaced_by_a_working_one(self, breakage: str) -> None:
         first = cfw_module.shared_manager()
         if breakage == "shutdown":
@@ -420,6 +423,7 @@ class TestSharedManagerWithARealServer:
         assert register.get_location() == "grpc://replacement"
 
     @pytest.mark.timeout(30)
+    @pytest.mark.subprocess
     def test_a_replaced_manager_with_a_user_keeps_its_server_until_the_last_release(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
@@ -437,6 +441,7 @@ class TestSharedManagerWithARealServer:
         assert second.is_alive()
 
     @pytest.mark.timeout(30)
+    @pytest.mark.subprocess
     def test_a_register_given_to_a_standby_bound_worker_is_gone_once_the_worker_and_parent_let_go(self) -> None:
         manager: Any = cfw_module.shared_manager()
         register = manager.CfwManager({ParallelizationMode.MULTIPROCESSING})

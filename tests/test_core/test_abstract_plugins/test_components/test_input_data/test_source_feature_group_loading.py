@@ -1137,6 +1137,7 @@ class TestFrameworkSubclassImplementation:
 
 @pytest.mark.timeout(30)
 class TestImplementationInASpawnWorker:
+    @pytest.mark.subprocess
     def test_implementation_from_the_groups_helper_module_serves_sync_and_multiprocessing(
         self, flight_server: Any
     ) -> None:

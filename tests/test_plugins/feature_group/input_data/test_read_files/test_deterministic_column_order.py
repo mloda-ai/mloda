@@ -21,6 +21,7 @@ _PROBE_SEEDS = [0, 1, 2]
 
 
 @pytest.mark.timeout(60)
+@pytest.mark.subprocess
 def test_run_all_csv_column_order_is_sorted_and_seed_independent() -> None:
     outputs = run_probes(_PROBE, count=len(_PROBE_SEEDS), seeds=_PROBE_SEEDS)
 

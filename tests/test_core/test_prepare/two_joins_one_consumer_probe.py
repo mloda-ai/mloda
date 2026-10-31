@@ -76,6 +76,13 @@ def _label(step: JoinStep) -> str:
     )
 
 
+if __name__ == "__main__":
+    # Skips the all-backend transformer auto-load; imports only the transformers this probe routes through.
+    from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
+
+    ComputeFrameworkTransformer._auto_load_done = True
+
+
 session = mloda.prepare(
     ["TjConsumer"],
     links={

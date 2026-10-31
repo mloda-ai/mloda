@@ -55,6 +55,7 @@ class _BufferingSinkExtender(Extender):
 
 @pytest.mark.timeout(30)
 class TestExtenderCloseFlushesBufferedEventsInAMultiprocessingWorker:
+    @pytest.mark.subprocess
     def test_sentinel_file_is_written_by_close_inside_the_spawned_worker(
         self, tmp_path: Path, flight_server: Any
     ) -> None:

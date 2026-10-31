@@ -188,11 +188,7 @@ class TestResolveGraph:
     @staticmethod
     def recorded_link_consumers(graph: Graph) -> set[uuid.UUID]:
         """Resolve the Index1 link between the two test root groups; return all uuids the trekker recorded."""
-        link = Link.inner(
-            JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
-            JoinSpec(BaseTestGraphFeatureGroup3, Index(tuple(["Index1"]))),
-        )
-        resolver = ResolveGraph(graph, {link})
+        resolver = ResolveGraph(graph, {_pair_link()})
         resolver.create_initial_queue()
         resolver.set_nodes_per_feature_group()
         resolver.resolve_links()
@@ -248,14 +244,18 @@ def _reference_pairs(
     return result
 
 
+def _uid(i: int) -> uuid.UUID:
+    return uuid.UUID(int=random.Random(i).getrandbits(128))  # nosec B311
+
+
 def _build_graph(nodes: Sequence[tuple[str, type[FeatureGroup]]], edges: list[tuple[int, int]]) -> Graph:
     graph = Graph()
     for i, (name, fg) in enumerate(nodes, start=1):
-        TestResolveGraph.node(graph, uuid.UUID(int=i), name, fg)
+        TestResolveGraph.node(graph, _uid(i), name, fg)
     for parent, child in edges:
         graph.add_edge(
-            uuid.UUID(int=parent + 1),
-            uuid.UUID(int=child + 1),
+            _uid(parent + 1),
+            _uid(child + 1),
             EdgeProperties(LinkChildFeatureGroup, LinkChildFeatureGroup),
         )
     graph.set_direct_parents_for_each_child()
@@ -263,7 +263,8 @@ def _build_graph(nodes: Sequence[tuple[str, type[FeatureGroup]]], edges: list[tu
     return graph
 
 
-_FGS: list[type[FeatureGroup]] = [BaseLinkTestFeatureGroup1, BaseTestGraphFeatureGroup3, LinkChildFeatureGroup]
+_A, _B, _C = BaseLinkTestFeatureGroup1, BaseTestGraphFeatureGroup3, LinkChildFeatureGroup
+_FGS: list[type[FeatureGroup]] = [_A, _B, _C]
 
 
 def _random_dag(seed: int) -> Graph:
@@ -273,8 +274,6 @@ def _random_dag(seed: int) -> Graph:
     edges = [(i, j) for j in range(n) for i in range(j) if rng.random() < 0.2]
     return _build_graph(nodes, edges)
 
-
-_A, _B, _C = BaseLinkTestFeatureGroup1, BaseTestGraphFeatureGroup3, LinkChildFeatureGroup
 
 _HAND_BUILT: dict[str, tuple[list[tuple[str, type[FeatureGroup]]], list[tuple[int, int]]]] = {
     "diamond": ([("a", _A), ("b", _B), ("c", _B), ("d", _C)], [(0, 1), (0, 2), (1, 3), (2, 3)]),

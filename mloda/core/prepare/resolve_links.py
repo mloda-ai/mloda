@@ -391,6 +391,11 @@ class ResolveLinks:
         if len(direct_parents) < 2:
             return []
 
+        # Every ancestor is a direct parent: all distinct pairs survive, skip the mask grouping.
+        if len(parents) == len(direct_parents):
+            ordered = sorted(parents, key=self._parent_sort_key)
+            return [(a, b) for a in ordered for b in ordered if a != b]
+
         masks: dict[UUID, int] = {}
         for i, d in enumerate(direct_parents):
             for p in {d} | self.graph.parent_to_children_mapping.get(d, set()):
@@ -405,10 +410,9 @@ class ResolveLinks:
             for m2, g2 in groups.items():
                 if m1 & m2 == 0:
                     pair_set.update((x, y) for x in g1 for y in g2)
-        if not pair_set:
-            return []
 
         members = {n for pair in pair_set for n in pair}
+        # Walk parents, not members: the stable sort then breaks key ties as the old sort over parents did.
         involved = [p for p in parents if p in members]
         rank = {p: i for i, p in enumerate(sorted(involved, key=self._parent_sort_key))}
         return sorted(pair_set, key=lambda pair: (rank[pair[0]], rank[pair[1]]))

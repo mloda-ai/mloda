@@ -129,14 +129,6 @@ class FlightServer:
                 for _ in client.do_action(action):
                     pass
 
-    @staticmethod
-    def sent_shutdown_signal(location: str) -> None:
-        flight = _flight()
-        with flight.FlightClient(location) as client:
-            action = flight.Action("shutdown", b"")
-            for _ in client.do_action(action):
-                pass
-
     def list_flights(self, context: Any, criteria: Any) -> Any:
         """List the available datasets (keys of the tables)."""
         pa = require("pyarrow", _FLIGHT_REASON)

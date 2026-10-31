@@ -84,22 +84,6 @@ class TestAggregatedFeatureGroup:
         with pytest.raises(ValueError):
             AggregatedFeatureGroup.get_aggregation_type("__sum_aggr")
 
-    def test_supports_aggregation_type(self) -> None:
-        """Test _supports_aggregation_type method."""
-        # Test with supported aggregation types
-        assert AggregatedFeatureGroup._supports_aggregation_type("sum")
-        assert AggregatedFeatureGroup._supports_aggregation_type("min")
-        assert AggregatedFeatureGroup._supports_aggregation_type("max")
-        assert AggregatedFeatureGroup._supports_aggregation_type("avg")
-        assert AggregatedFeatureGroup._supports_aggregation_type("mean")
-        assert AggregatedFeatureGroup._supports_aggregation_type("count")
-        assert AggregatedFeatureGroup._supports_aggregation_type("std")
-        assert AggregatedFeatureGroup._supports_aggregation_type("var")
-        assert AggregatedFeatureGroup._supports_aggregation_type("median")
-
-        # Test with unsupported aggregation type
-        assert not AggregatedFeatureGroup._supports_aggregation_type("unsupported")
-
     def test_match_feature_group_criteria(self) -> None:
         """Test match_feature_group_criteria method."""
         options = Options()

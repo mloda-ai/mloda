@@ -72,18 +72,6 @@ class FeatureChainParser:
     """
 
     @classmethod
-    def is_chained_feature(cls, feature_name: str) -> bool:
-        """Check if feature name contains the chain separator.
-
-        Args:
-            feature_name: The feature name to check
-
-        Returns:
-            True if the feature name contains CHAIN_SEPARATOR, False otherwise
-        """
-        return CHAIN_SEPARATOR in feature_name
-
-    @classmethod
     def parse_name(
         cls,
         feature_name: FeatureName | str,

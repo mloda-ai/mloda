@@ -367,27 +367,27 @@ class TestForecastingFeatureGroup:
         with pytest.raises(ValueError):
             ForecastingFeatureGroup.get_reference_time_column(options)
 
-    def test_has_valid_forecast_suffix_valid(self) -> None:
-        """Test that _has_valid_forecast_suffix returns True for valid feature names."""
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__linear_forecast_7day") is True
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix("price__ridge_forecast_30week") is True
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix("demand__randomforest_forecast_3month") is True
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix("temp__gbr_forecast_12hour") is True
+    def test_matcher_accepts_valid_forecast_names(self) -> None:
+        """Test that the matcher accepts valid feature names."""
+        assert ForecastingFeatureGroup.match_feature_group_criteria("sales__linear_forecast_7day", Options())
+        assert ForecastingFeatureGroup.match_feature_group_criteria("price__ridge_forecast_30week", Options())
+        assert ForecastingFeatureGroup.match_feature_group_criteria("demand__randomforest_forecast_3month", Options())
+        assert ForecastingFeatureGroup.match_feature_group_criteria("temp__gbr_forecast_12hour", Options())
         chained = "category__onehot_encoded__linear_forecast_7day"
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix(chained) is True
+        assert ForecastingFeatureGroup.match_feature_group_criteria(chained, Options())
         base, _part = FeatureGroup.split_output_part("sales__linear_forecast_7day~0") or ("", "")
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix(base) is True
+        assert ForecastingFeatureGroup.match_feature_group_criteria(base, Options())
         selected_chain = "x__linear_forecast_7day~0__linear_forecast_3day"
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix(selected_chain) is True
+        assert ForecastingFeatureGroup.match_feature_group_criteria(selected_chain, Options())
 
-    def test_has_valid_forecast_suffix_invalid(self) -> None:
-        """Test that _has_valid_forecast_suffix returns False for invalid feature names."""
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix("invalid_feature_name") is False
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__linear_7day") is False
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__unknown_forecast_7day") is False
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__linear_forecast_day") is False
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__linear_forecast_7invalid") is False
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix("a__b__linear_forecast_7day__foo") is False
+    def test_matcher_rejects_invalid_forecast_names(self) -> None:
+        """Test that the matcher rejects invalid feature names."""
+        assert not ForecastingFeatureGroup.match_feature_group_criteria("invalid_feature_name", Options())
+        assert not ForecastingFeatureGroup.match_feature_group_criteria("sales__linear_7day", Options())
+        assert not ForecastingFeatureGroup.match_feature_group_criteria("sales__unknown_forecast_7day", Options())
+        assert not ForecastingFeatureGroup.match_feature_group_criteria("sales__linear_forecast_day", Options())
+        assert not ForecastingFeatureGroup.match_feature_group_criteria("sales__linear_forecast_7invalid", Options())
+        assert not ForecastingFeatureGroup.match_feature_group_criteria("a__b__linear_forecast_7day__foo", Options())
 
     @pytest.mark.parametrize(
         "name",
@@ -400,7 +400,7 @@ class TestForecastingFeatureGroup:
     def test_names_the_hand_parser_rejected_are_still_rejected(self, name: str) -> None:
         with pytest.raises(ValueError):
             ForecastingFeatureGroup.parse_forecast_suffix(name)
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix(name) is False
+        assert not ForecastingFeatureGroup.match_feature_group_criteria(name, Options())
 
     @pytest.mark.parametrize(
         "name",
@@ -412,7 +412,7 @@ class TestForecastingFeatureGroup:
     def test_trailing_part_after_the_time_unit_is_rejected(self, name: str) -> None:
         with pytest.raises(ValueError):
             ForecastingFeatureGroup.parse_forecast_suffix(name)
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix(name) is False
+        assert not ForecastingFeatureGroup.match_feature_group_criteria(name, Options())
 
     @pytest.mark.parametrize(
         ("name", "expected"),
@@ -443,8 +443,7 @@ class TestForecastingFeatureGroup:
         name = "__linear_forecast_7day"
         with pytest.raises(ValueError):
             ForecastingFeatureGroup.parse_forecast_suffix(name)
-        with pytest.raises(ValueError):
-            ForecastingFeatureGroup._has_valid_forecast_suffix(name)
+        assert not ForecastingFeatureGroup.match_feature_group_criteria(name, Options())
 
     @pytest.mark.parametrize(
         ("name", "expected"),
@@ -459,7 +458,7 @@ class TestForecastingFeatureGroup:
             PREFIX_PATTERN = r".*__(?P<algorithm>[\w]+)_fcst_(?P<horizon>\d+)(?P<time_unit>[\w]+)$"
 
         assert FcstPatternGroup.parse_forecast_suffix(name) == expected
-        assert FcstPatternGroup._has_valid_forecast_suffix(name) is True
+        assert FcstPatternGroup.match_feature_group_criteria(name, Options())
         with pytest.raises(ValueError):
             FcstPatternGroup.parse_forecast_suffix("x__linear_forecast_7day")
 
@@ -744,7 +743,6 @@ class TestForecastingFeatureGroup:
     def test_invalid_selector_tails_do_not_match(self, name: str) -> None:
         """The matcher stays name-only: none of these tails is a forecasting feature name."""
         assert not ForecastingFeatureGroup.match_feature_group_criteria(name, Options())
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix(name) is False
 
     def test_unknown_part_raises(self) -> None:
         """A part matching no resolved column raises ValueError naming the part."""

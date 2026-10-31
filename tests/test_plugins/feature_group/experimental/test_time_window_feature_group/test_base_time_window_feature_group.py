@@ -294,29 +294,29 @@ class TestTimeWindowFeatureGroup:
         df = pd.DataFrame({"x": [1.0]})
         assert_core_rejects_missing_input(PandasTimeWindow, df, "x__sum_2_hour_window", (REFERENCE_TIME,), ("x",))
 
-    def test_has_valid_time_window_suffix_valid(self) -> None:
-        """Test that _has_valid_time_window_suffix returns True for valid feature names."""
-        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("temperature__avg_3_day_window") is True
-        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("humidity__max_7_hour_window") is True
-        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("pressure__min_2_minute_window") is True
-        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("cpu__sum_10_second_window") is True
+    def test_matcher_accepts_valid_time_window_names(self) -> None:
+        """Test that the matcher accepts valid feature names."""
+        assert TimeWindowFeatureGroup.match_feature_group_criteria("temperature__avg_3_day_window", Options())
+        assert TimeWindowFeatureGroup.match_feature_group_criteria("humidity__max_7_hour_window", Options())
+        assert TimeWindowFeatureGroup.match_feature_group_criteria("pressure__min_2_minute_window", Options())
+        assert TimeWindowFeatureGroup.match_feature_group_criteria("cpu__sum_10_second_window", Options())
         # Chained feature: the last __ segment should still be valid
-        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("price__mean_imputed__sum_7_day_window") is True
+        assert TimeWindowFeatureGroup.match_feature_group_criteria("price__mean_imputed__sum_7_day_window", Options())
 
-    def test_has_valid_time_window_suffix_invalid(self) -> None:
-        """Test that _has_valid_time_window_suffix returns False for invalid feature names."""
+    def test_matcher_rejects_invalid_time_window_names(self) -> None:
+        """Test that the matcher rejects invalid feature names."""
         # No double underscore separator
-        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("invalid_feature_name") is False
+        assert not TimeWindowFeatureGroup.match_feature_group_criteria("invalid_feature_name", Options())
         # Missing "window" suffix
-        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("temp__avg_3_day") is False
+        assert not TimeWindowFeatureGroup.match_feature_group_criteria("temp__avg_3_day", Options())
         # Unsupported window function
-        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("temp__invalid_3_day_window") is False
+        assert not TimeWindowFeatureGroup.match_feature_group_criteria("temp__invalid_3_day_window", Options())
         # Unsupported time unit
-        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("temp__avg_3_invalid_window") is False
+        assert not TimeWindowFeatureGroup.match_feature_group_criteria("temp__avg_3_invalid_window", Options())
         # Non-numeric window size
-        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("temp__avg_zero_day_window") is False
+        assert not TimeWindowFeatureGroup.match_feature_group_criteria("temp__avg_zero_day_window", Options())
         # Zero window size
-        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("temp__avg_0_day_window") is False
+        assert not TimeWindowFeatureGroup.match_feature_group_criteria("temp__avg_0_day_window", Options())
 
     def test_extract_time_window_params_string_based(self) -> None:
         """Test _extract_time_window_params with a string-parseable feature name."""
@@ -355,14 +355,13 @@ class TestTimeWindowFeatureGroup:
     def test_names_the_hand_parser_rejected_are_still_rejected(self, name: str) -> None:
         with pytest.raises(ValueError):
             TimeWindowFeatureGroup.parse_time_window_prefix(name)
-        assert TimeWindowFeatureGroup._has_valid_time_window_suffix(name) is False
+        assert not TimeWindowFeatureGroup.match_feature_group_criteria(name, Options())
 
     def test_empty_source_raises(self) -> None:
         name = "__sum_7_day_window"
         with pytest.raises(ValueError):
             TimeWindowFeatureGroup.parse_time_window_prefix(name)
-        with pytest.raises(ValueError):
-            TimeWindowFeatureGroup._has_valid_time_window_suffix(name)
+        assert not TimeWindowFeatureGroup.match_feature_group_criteria(name, Options())
 
     @pytest.mark.parametrize(
         ("name", "expected"),
@@ -377,7 +376,7 @@ class TestTimeWindowFeatureGroup:
             PREFIX_PATTERN = r".*__(?P<window_function>[\w]+)_(?P<window_size>\d+)_(?P<time_unit>[\w]+)_win$"
 
         assert WinPatternGroup.parse_time_window_prefix(name) == expected
-        assert WinPatternGroup._has_valid_time_window_suffix(name) is True
+        assert WinPatternGroup.match_feature_group_criteria(name, Options())
         with pytest.raises(ValueError):
             WinPatternGroup.parse_time_window_prefix("x__sum_7_day_window")
 

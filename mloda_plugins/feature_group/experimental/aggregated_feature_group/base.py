@@ -155,11 +155,6 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
         )
 
     @classmethod
-    def _supports_aggregation_type(cls, aggregation_type: str) -> bool:
-        """Check if this feature group supports the given aggregation type."""
-        return aggregation_type in cls.AGGREGATION_TYPES
-
-    @classmethod
     def aggregate(
         cls,
         data: Any,

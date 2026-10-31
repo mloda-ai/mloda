@@ -142,19 +142,6 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
         return with_key_features(source_features, [self.get_reference_time_column(options)])
 
     @classmethod
-    def _has_valid_time_window_suffix(cls, feature_name: str) -> bool:
-        """Check if feature_name has a suffix matching the time window pattern."""
-        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
-        if not parsed.matched:
-            return False
-        captures = cast(dict[str, str], parsed.named_captures)
-        if captures[cls.WINDOW_FUNCTION] not in cls.WINDOW_FUNCTIONS:
-            return False
-        if captures[cls.TIME_UNIT] not in cls.TIME_UNITS:
-            return False
-        return int(captures[cls.WINDOW_SIZE]) > 0
-
-    @classmethod
     def _extract_time_window_params(cls, feature: Feature) -> tuple[str | None, int | None, str | None]:
         """
         Extract time window parameters (window_function, window_size, time_unit) from a feature.

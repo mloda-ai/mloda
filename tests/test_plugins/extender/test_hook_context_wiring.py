@@ -22,8 +22,8 @@ from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureGro
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
+from tests.mixins.neutral_csv_source import neutral_csv_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
-    neutral_csv_group,
     toy_dac,
 )
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation import (

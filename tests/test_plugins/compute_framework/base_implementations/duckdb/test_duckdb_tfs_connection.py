@@ -25,7 +25,7 @@ from mloda.provider import DataCreatorFeatureGroup
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
-from tests.test_plugins.compute_framework.base_implementations.tfs_connection_e2e_mixin import (
+from tests.mixins.compute_frameworks.tfs_connection_e2e_mixin import (
     TfsConnectionEndToEndMixin,
     TfsRawValPyArrowSource,
     _ROOT_SEEN,

@@ -16,7 +16,7 @@ from mloda.user import Feature
 from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet
 from mloda.user import FeatureName, Options
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
-from tests.test_plugins.compute_framework.base_implementations.tfs_connection_e2e_mixin import (
+from tests.mixins.compute_frameworks.tfs_connection_e2e_mixin import (
     TfsConnectionEndToEndMixin,
     root_binding_groups,
 )

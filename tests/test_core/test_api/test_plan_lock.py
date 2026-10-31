@@ -33,8 +33,8 @@ from collections.abc import Iterator
 from mloda.core.abstract_plugins.components import base_feature_group_version
 from mloda.core.abstract_plugins.components.code_closure import closure_parts, dependency_entry
 from mloda.user import Feature, Options, PluginCollector, mloda
+from tests.mixins.neutral_csv_source import neutral_csv_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
-    neutral_csv_group,
     toy_dac,
 )
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation import ToyWorkerFG

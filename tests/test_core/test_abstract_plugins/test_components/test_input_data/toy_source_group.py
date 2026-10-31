@@ -7,13 +7,11 @@ the group's class-name option key. Names carry a ``toyfmt`` marker so the groups
 from __future__ import annotations
 
 from collections.abc import Collection
-from pathlib import Path
 from typing import Any, ClassVar
 
 import pyarrow as pa
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.provider import ClaimRoute, SourceFeatureGroup, NamePolicy, SourceMatch
@@ -52,20 +50,6 @@ def toy_token_request(group: type[ToySourceFG], column: str) -> dict[str, Any]:
 
 def foreign_dac() -> DataAccessCollection:
     return DataAccessCollection(credentials={"toyfmt_foreign": {"unrelated_key": {"toyfmt_col": [1]}}})
-
-
-def neutral_csv_group(path: Path) -> type[ToySourceFG]:
-    """A fresh ToySourceFG subclass whose neutral form is a csv FileSource written to path (no loaders)."""
-
-    class _NeutralCsvFG(ToySourceFG):
-        @classmethod
-        def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
-            names = sorted(features.get_all_names())
-            rows = zip(*(match.access[n] for n in names))
-            path.write_text(",".join(names) + "\n" + "\n".join(",".join(str(v) for v in r) for r in rows) + "\n")
-            return FileSource(path=str(path), format="csv", columns=tuple(names))
-
-    return _NeutralCsvFG
 
 
 def column_values(result: list[Any], column: str) -> list[Any]:

@@ -45,6 +45,7 @@ from typing import Literal, NamedTuple, TypeGuard, cast
 
 import pytest
 
+# Each xdist worker re-parses the match-path call graph: 1.7s serial, up to 9s measured under -n 8.
 pytestmark = pytest.mark.timeout(30)
 
 # Anchored via __file__, not the cwd: a cwd-relative root makes every lookup empty and the sweep vacuous.

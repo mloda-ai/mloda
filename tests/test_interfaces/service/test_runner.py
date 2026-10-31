@@ -60,8 +60,6 @@ from tests.test_interfaces.source_groups import (
     RunnerRaiseMcp5,
 )
 
-# Running resolves real FeatureGroups and reads source files; a cold cache under xdist load can exceed 10s.
-pytestmark = pytest.mark.timeout(30)
 
 CLOCK_START = 1_800_000_000.0
 KEY = b"r" * 32

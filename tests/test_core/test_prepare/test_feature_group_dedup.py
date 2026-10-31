@@ -42,9 +42,6 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
 
-# Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
-pytestmark = pytest.mark.timeout(30)
-
 
 # Module-level reference store. This simulates IPython's ``_oh``/``Out[N]`` history,
 # which keeps strong refs to all cell-evaluated objects. It MUST be module-scoped so

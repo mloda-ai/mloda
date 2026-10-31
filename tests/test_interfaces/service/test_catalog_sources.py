@@ -15,8 +15,6 @@ from mloda.user import PluginCollector, PluginLoader
 from tests.helpers.docs_scope import small_feature_group_registry
 from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS
 
-# Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
-pytestmark = pytest.mark.timeout(30)
 
 LOAD = "PluginLoader.all"
 ENUMERATE = "get_feature_group_docs"

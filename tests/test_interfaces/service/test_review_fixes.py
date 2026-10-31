@@ -32,8 +32,6 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS
 
-# Planning and running resolve real FeatureGroups and read source files; a cold cache can exceed 10s.
-pytestmark = pytest.mark.timeout(30)
 
 CLOCK_START = 1_800_000_000.0
 KEY = b"m" * 32

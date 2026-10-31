@@ -141,8 +141,6 @@ def covered_classes(contract: MixinContract) -> set[str]:
     }
 
 
-# The PluginLoader import costs a few seconds cold, hence the raised timeout.
-@pytest.mark.timeout(30)
 @pytest.mark.parametrize("contract", CONTRACTS, ids=[contract.mixin.__name__ for contract in CONTRACTS])
 def test_every_concrete_implementation_has_a_mixin_consumer(contract: MixinContract) -> None:
     implementations = concrete_plugin_classes(contract.base)

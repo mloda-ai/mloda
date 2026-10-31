@@ -20,8 +20,6 @@ from mloda.interfaces.service.request import (
 )
 from tests.test_interfaces.source_groups import CALLER_LOCKED_KEY, CallerLockedMcp6  # noqa: F401
 
-# PluginLoader.all() can take seconds on a cold import under xdist load.
-pytestmark = pytest.mark.timeout(30)
 
 SECRET = "s3://user:pw@host/x"  # nosec B105
 KEY = CsvFG.data_access_name()

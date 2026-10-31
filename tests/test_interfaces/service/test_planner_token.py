@@ -16,8 +16,6 @@ from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS
 
-# Planning resolves real FeatureGroups and reads source files; a cold cache under xdist load can exceed 10s.
-pytestmark = pytest.mark.timeout(30)
 
 CLOCK_START = 1_800_000_000.0
 KEY = b"k" * 32

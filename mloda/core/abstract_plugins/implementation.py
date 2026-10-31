@@ -5,7 +5,7 @@ import types
 import typing
 import weakref
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, ClassVar, Generic, TypeVar
@@ -27,6 +27,11 @@ G = TypeVar("G", bound=FeatureGroup)
 
 _CONCRETE_VERDICTS: weakref.WeakKeyDictionary[type, bool] = weakref.WeakKeyDictionary()
 _PAIR_VERDICTS: weakref.WeakKeyDictionary[type, bool] = weakref.WeakKeyDictionary()
+
+# typing's private, uncached Generic subscription; the public one's LRU cache holds every argument strongly.
+_GENERIC_GETITEM: Callable[..., Any] = inspect.unwrap(
+    getattr(typing, "_generic_class_getitem", None) or Generic.__dict__["__class_getitem__"].__func__
+)
 
 
 def _has_abstract_member(cls: Any) -> bool:
@@ -90,6 +95,10 @@ class Implementation(ABC, Generic[G]):
     compute_framework: ClassVar[type[ComputeFramework]]
     supported: ClassVar[frozenset[str] | None] = None
     divergent: ClassVar[Mapping[str, str]] = types.MappingProxyType({})
+
+    def __class_getitem__(cls, params: Any) -> Any:
+        """Subscribe without typing's cache, so a reloaded or redefined group can be reclaimed."""
+        return _GENERIC_GETITEM(cls, params)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)

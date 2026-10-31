@@ -767,7 +767,7 @@ def test_join_served_sibling_parent_does_not_bridge_two_unrelated_declared_side_
 
 
 # ---------------------------------------------------------------------------
-# _same_framework_lineage computes each node's direct parents once per shared memo
+# _same_framework_lineage with a shared _LineageMemo
 # ---------------------------------------------------------------------------
 
 
@@ -785,7 +785,7 @@ class _CountingMapping(dict[UUID, set[UUID]]):
         return super().__getitem__(key)
 
 
-def test_same_framework_lineage_lookups_stay_below_cubic_on_a_chain_with_a_framework_boundary() -> None:
+def test_same_framework_lineage_lookups_stay_quadratic_on_a_chain_with_a_framework_boundary() -> None:
     size, boundary = 40, 20
     nodes = [uuid4() for _ in range(size)]
     graph = _framework_graph(
@@ -812,17 +812,17 @@ def test_same_framework_lineage_lookups_stay_below_cubic_on_a_chain_with_a_frame
 
 
 def test_same_framework_lineage_on_a_diamond_with_a_shared_memo() -> None:
-    top, left, right, bottom = uuid4(), uuid4(), uuid4(), uuid4()
+    leaf, left, right, root = uuid4(), uuid4(), uuid4(), uuid4()
     graph = _framework_graph(
-        (top, "dm_top", PandasDataFrame),
+        (leaf, "dm_leaf", PandasDataFrame),
         (left, "dm_left", PandasDataFrame),
         (right, "dm_right", PandasDataFrame),
-        (bottom, "dm_bottom", PandasDataFrame),
+        (root, "dm_root", PandasDataFrame),
     )
-    graph.parent_to_children_mapping = {top: {left, right, bottom}, left: {bottom}, right: {bottom}, bottom: set()}
+    graph.parent_to_children_mapping = {leaf: {left, right, root}, left: {root}, right: {root}, root: set()}
 
     memo = _LineageMemo()
-    assert ExecutionPlan._same_framework_lineage(top, graph, memo) == {top, left, right, bottom}
-    assert ExecutionPlan._same_framework_lineage(left, graph, memo) == {left, bottom}
-    assert ExecutionPlan._same_framework_lineage(right, graph, memo) == {right, bottom}
-    assert ExecutionPlan._same_framework_lineage(bottom, graph, memo) == {bottom}
+    assert ExecutionPlan._same_framework_lineage(leaf, graph, memo) == {leaf, left, right, root}
+    assert ExecutionPlan._same_framework_lineage(left, graph, memo) == {left, root}
+    assert ExecutionPlan._same_framework_lineage(right, graph, memo) == {right, root}
+    assert ExecutionPlan._same_framework_lineage(root, graph, memo) == {root}

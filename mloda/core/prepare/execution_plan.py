@@ -104,7 +104,7 @@ class _JoinServedParent(NamedTuple):
 
 
 class _LineageMemo:
-    """Per-add_tfs memo of lineages, direct parents and the graph's reverse edges (built on first use)."""
+    """Per-add_tfs memo of lineages, per-node direct parents and reverse edges (the latter built on first use)."""
 
     def __init__(self, join_adjacency: dict[UUID, set[UUID]] | None = None) -> None:
         self.join_adjacency = join_adjacency

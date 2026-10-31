@@ -375,7 +375,7 @@ class TestToxConfig:
         ("env", "python", "pins", "modules"),
         [
             ("pandas2", "3.11", ("pandas<3", "numpy<2.4"), ("pandas", "numpy")),
-            ("duckdb2", "3.13", ("duckdb>=2,<3",), ("duckdb",)),
+            ("duckdb1", "3.13", ("duckdb<2",), ("duckdb",)),
         ],
     )
     def test_ci_runs_pinned_major_env(

@@ -20,7 +20,7 @@
 | debugpy                   | 1.8.20          | MIT License                                        |
 | decorator                 | 5.3.1           | BSD-2-Clause                                       |
 | defusedxml                | 0.7.1           | Python Software Foundation License                 |
-| duckdb                    | 1.5.2           | MIT License                                        |
+| duckdb                    | 2.0.0           | MIT License                                        |
 | entrypoints               | 0.4             | MIT License                                        |
 | execnet                   | 2.1.2           | MIT License                                        |
 | executing                 | 2.2.1           | MIT License                                        |

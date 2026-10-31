@@ -14,8 +14,6 @@ from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FailedRows
 from mloda.user import ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
-pytestmark = pytest.mark.timeout(30)
-
 
 class _ReportingBase(DataCreatorFeatureGroup):
     REPORTS: tuple[tuple[Any, str], ...] = ()
@@ -191,6 +189,8 @@ class TestExtenderSeesFailedRows:
 
 
 class TestMultiprocessingFailedRows:
+    # Spawning workers and the flight server exceeds the suite-wide timeout budget.
+    @pytest.mark.timeout(30)
     def test_report_crosses_the_worker_boundary(self, flight_server: Any) -> None:
         result = _run(FrOne, FrOther, modes={ParallelizationMode.MULTIPROCESSING}, flight_server=flight_server)
 

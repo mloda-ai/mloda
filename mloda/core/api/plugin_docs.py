@@ -21,7 +21,7 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import SO
 from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
 from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.feature_group import FeatureGroup, feature_group_subclasses
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.components.utils import as_str, get_all_subclasses, safe_field, safe_field_with_error
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
@@ -144,7 +144,7 @@ def get_feature_group_docs(
         List of FeatureGroupInfo objects sorted by name.
     """
     allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
-    all_feature_groups: set[type[FeatureGroup]] = get_all_subclasses(FeatureGroup)
+    all_feature_groups: set[type[FeatureGroup]] = feature_group_subclasses()
     if registered_only:
         registered = registry_for(plugin_collector).registered_classes()
         all_feature_groups = {fg for fg in all_feature_groups if fg in registered}

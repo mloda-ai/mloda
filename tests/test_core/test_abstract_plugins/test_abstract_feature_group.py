@@ -1,4 +1,7 @@
+import gc
+import weakref
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any, ClassVar, Generic, TypeVar
 
 import numpy as np
@@ -7,10 +10,19 @@ from mloda.user import DataAccessCollection
 from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.provider import FeatureGroup
+from mloda.user import PluginLoader
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.property_spec import property_spec
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field_with_error
+from mloda.core.abstract_plugins.feature_group import feature_group_subclasses
+from mloda.core.api.plugin_docs import get_feature_group_docs
+from mloda.core.prepare.accessible_plugins import PreFilterPlugins
+from mloda.interfaces.service.catalog import plugin_collector_for
+from mloda.interfaces.service.config import Settings
+from mloda.interfaces.service.request import caller_refused_option_keys
+from tests.helpers.subclass_walks import count_root_walks
 
 
 class BaseTestFeatureGroup1(FeatureGroup):
@@ -311,3 +323,108 @@ def test_declared_input_features_does_not_grow_mixin_subclasses() -> None:
     for _ in range(50):
         _DeclaredInputsProbeRecordingGroup.declared_input_features(Options(), name)
     assert len(_DeclaredInputsProbeRecording.__subclasses__()) == after_first
+
+
+class TestFeatureGroupSubclassRegistry:
+    """`feature_group_subclasses()` mirrors the live FeatureGroup tree without walking it."""
+
+    def test_registry_equals_the_walk(self) -> None:
+        PluginLoader.all()
+        registry = feature_group_subclasses()
+        if registry != get_all_subclasses(FeatureGroup):
+            gc.collect()
+            registry = feature_group_subclasses()
+
+        assert registry == get_all_subclasses(FeatureGroup)
+        assert len(registry) > 0
+        assert FeatureGroup not in registry
+
+    def test_registry_tracks_a_transient_subclass(self) -> None:
+        class _CooperativeMixin:
+            def __init_subclass__(cls, **kwargs: Any) -> None:
+                super().__init_subclass__(**kwargs)
+
+        class ZzTransientRegistryGroup(_CooperativeMixin, FeatureGroup):
+            pass
+
+        present = ZzTransientRegistryGroup in feature_group_subclasses()
+        name = ZzTransientRegistryGroup.__name__
+        ref = weakref.ref(ZzTransientRegistryGroup)
+        del ZzTransientRegistryGroup
+        for generation in (0, 1, 2):
+            if ref() is None:
+                break
+            gc.collect(generation)
+        collected = ref() is None
+        names = {fg.__name__ for fg in feature_group_subclasses()}
+
+        assert present
+        assert collected
+        assert name not in names
+
+    def test_definition_rejected_by_class_validation_is_never_registered(self) -> None:
+        def make() -> type[FeatureGroup]:
+            class ZzRejectedRegistryGroup(FeatureGroup):
+                PROPERTY_MAPPING = {"key": "not a PropertySpec"}  # type: ignore[dict-item]
+
+            return ZzRejectedRegistryGroup
+
+        _, message = safe_field_with_error(make, FeatureGroup)
+        walk_names = {fg.__name__ for fg in get_all_subclasses(FeatureGroup)}
+        registry_names = {fg.__name__ for fg in feature_group_subclasses()}
+        gc.collect()
+
+        assert message is not None
+        assert "ZzRejectedRegistryGroup" in walk_names
+        assert "ZzRejectedRegistryGroup" not in registry_names
+
+    def test_group_skipping_registration_is_invisible_to_registry_readers(self) -> None:
+        class _SkipsRegistration:
+            def __init_subclass__(cls, **kwargs: Any) -> None:
+                pass
+
+        def make() -> type[FeatureGroup]:
+            class ZzUnregisteredRegistryGroup(_SkipsRegistration, FeatureGroup):
+                pass
+
+            return ZzUnregisteredRegistryGroup
+
+        held = [make()]
+        name = held[0].__name__
+        ref = weakref.ref(held[0])
+        walk_sees = held[0] in get_all_subclasses(FeatureGroup)
+        registry_sees = held[0] in feature_group_subclasses()
+        prefilter_sees = held[0] in PreFilterPlugins.get_featuregroup_subclasses()
+        docs_names = {info.name for info in get_feature_group_docs(name=name)}
+
+        del held[:]
+        for generation in (0, 1, 2):
+            if ref() is None:
+                break
+            gc.collect(generation)
+        collected = ref() is None
+
+        assert walk_sees
+        assert not registry_sees
+        assert not prefilter_sees
+        assert name not in docs_names
+        assert collected
+
+    @pytest.mark.parametrize(
+        "reader",
+        [
+            lambda: PreFilterPlugins.get_featuregroup_subclasses(),
+            lambda: plugin_collector_for(Settings()),
+            lambda: caller_refused_option_keys(),
+            lambda: get_feature_group_docs(name="zz_no_such_feature_group"),
+        ],
+        ids=["prefilter_featuregroup_subclasses", "plugin_collector_for", "caller_refused_option_keys", "docs"],
+    )
+    def test_readers_of_all_feature_groups_never_walk_the_tree(
+        self, monkeypatch: pytest.MonkeyPatch, reader: Callable[[], Any]
+    ) -> None:
+        root_walks = count_root_walks(monkeypatch, FeatureGroup)
+        reader()
+        monkeypatch.undo()
+
+        assert root_walks == []

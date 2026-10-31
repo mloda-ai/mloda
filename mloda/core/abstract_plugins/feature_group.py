@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import inspect
 import logging
+import threading
+import weakref
 from collections.abc import Collection, Mapping
 from typing import Any, ClassVar, Callable, cast, final
 from abc import ABC
@@ -44,6 +46,9 @@ from mloda.core.abstract_plugins.components.utils import (
 
 logger = logging.getLogger(__name__)
 
+_subclasses: weakref.WeakSet[type["FeatureGroup"]] = weakref.WeakSet()
+_subclasses_lock = threading.Lock()
+
 
 _INSTANCE_SHELLS: dict[type, type] = {}
 
@@ -62,6 +67,9 @@ def _instance_shell(cls: type) -> type:
 
 class FeatureGroup(ABC):
     """Base class for all feature groups.
+
+    A subclass that defines `__init_subclass__` must call `super().__init_subclass__()`, since that call
+    is what registers it as a known feature group.
 
     Feature groups that derive new features from existing ones (chained
     features) should also inherit from ``FeatureChainParserMixin``. The mixin
@@ -125,6 +133,8 @@ class FeatureGroup(ABC):
         install_name_path_presence_guard(cls)
         install_required_when_guard(cls)
         cls._validate_subtype_declaration()
+        with _subclasses_lock:
+            _subclasses.add(cls)
 
     @classmethod
     def _overrides(cls, method_name: str) -> bool:
@@ -951,6 +961,12 @@ class FeatureGroup(ABC):
         This is a convention, which means we can refer to a class via this.
         """
         return f"{cls.get_class_name()}_"
+
+
+def feature_group_subclasses() -> set[type[FeatureGroup]]:
+    """Every live FeatureGroup subclass, without walking the class tree."""
+    with _subclasses_lock:
+        return set(_subclasses)
 
 
 def format_feature_group_class(fg_class: type[FeatureGroup]) -> str:

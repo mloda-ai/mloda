@@ -1,4 +1,3 @@
-import gc
 import weakref
 from typing import Any
 
@@ -12,6 +11,8 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from mloda.provider import ComputeFramework
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field_with_error
 from mloda.core.abstract_plugins.compute_framework import compute_framework_subclasses
+
+from tests.helpers.subclass_walks import collect_until_dead
 
 
 class TestSetupComputeFramework:
@@ -193,11 +194,7 @@ class TestSetupComputeFramework:
         in_default = held[0] in SetupComputeFramework(None, features).compute_frameworks
 
         del held[:]
-        for generation in (0, 1, 2):
-            if ref() is None:
-                break
-            gc.collect(generation)
-        collected = ref() is None
+        collected = collect_until_dead(ref)
 
         assert walk_sees
         assert not registry_sees

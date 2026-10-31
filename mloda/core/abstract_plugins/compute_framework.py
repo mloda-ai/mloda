@@ -1011,7 +1011,7 @@ class ComputeFramework(ABC):
 
     @final
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ComputeFramework):
+        if not is_nominal_subclass(type(other), ComputeFramework):
             return False
         return type(self) is type(other) and self.children_if_root == other.children_if_root
 

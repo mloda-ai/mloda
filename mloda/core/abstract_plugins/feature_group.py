@@ -40,6 +40,7 @@ from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.utils import (
     contained_raise_reason,
     is_match_abort,
+    is_nominal_subclass,
     safe_field,
 )
 
@@ -907,7 +908,7 @@ class FeatureGroup(ABC):
         """
         Checks if this feature group is equal to another object.
         """
-        if isinstance(another, FeatureGroup):
+        if is_nominal_subclass(type(another), FeatureGroup):
             return type(self) is type(another)
         return NotImplemented
 

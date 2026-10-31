@@ -240,24 +240,17 @@ def _report(passed: bool) -> Any:
     return types.SimpleNamespace(passed=passed)
 
 
-@pytest.mark.parametrize("key", ["", "passed"])
-def test_drop_passing_report_pops_a_passing_last_report(key: str) -> None:
-    earlier, last = _report(True), _report(True)
+@pytest.mark.parametrize(
+    ("key", "passed"),
+    [("", True), ("passed", True), ("", False), ("passed", False), ("failed", False), ("skipped", False)],
+)
+def test_drop_passing_report_pops_only_a_passing_last_report(key: str, passed: bool) -> None:
+    earlier, last = _report(True), _report(passed)
     stats: dict[str, list[Any]] = {key: [earlier, last]}
 
     drop_passing_report(stats, last)
 
-    assert stats == {key: [earlier]}
-
-
-@pytest.mark.parametrize("key", ["", "passed", "failed", "skipped"])
-def test_drop_passing_report_keeps_non_passing_reports(key: str) -> None:
-    last = _report(False)
-    stats: dict[str, list[Any]] = {key: [last]}
-
-    drop_passing_report(stats, last)
-
-    assert stats == {key: [last]}
+    assert stats == ({key: [earlier]} if passed else {key: [earlier, last]})
 
 
 def test_drop_passing_report_leaves_a_passing_report_that_is_not_last() -> None:

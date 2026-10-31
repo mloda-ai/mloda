@@ -4,7 +4,8 @@ A subclass declares ``suffixes()`` and ``column_names(path)``; the base claims a
 Third-party groups should run the contract mixins in mloda's ``tests/mixins/reader_feature_groups/``
 (``read_file_fg_test_mixin``); the mixins need an autouse fixture that runs ``gc.collect()`` after each test to
 reclaim their test-local subclasses (mloda's ``_no_feature_group_registry_pollution`` in ``tests/conftest.py`` is the
-stricter version), plus the ``rejection_window`` and ``make_implementation`` fixtures from ``tests/conftest.py``.
+stricter version), plus the ``rejection_window`` and ``make_implementation`` fixtures from ``tests/conftest.py``,
+which build on ``tests/registry_isolation.py``.
 """
 
 import os

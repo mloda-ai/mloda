@@ -80,6 +80,7 @@ RECLAIM_LOGS: dict[type[Any], SubclassLog[Any]] = {
 }
 EXTRA_RECLAIM_ROOTS: tuple[type[Any], ...] = (ComputeFramework, Extender)
 YOUNG_WINDOW_THRESHOLD = 100_000
+SHARED_TEST_MODULE_PREFIX = "tests.mixins."
 
 
 @contextmanager
@@ -91,9 +92,6 @@ def young_window() -> Iterator[None]:
         yield
     finally:
         gc.set_threshold(*saved)
-
-
-SHARED_TEST_MODULE_PREFIX = "tests.mixins."
 
 
 def _is_owned_by_its_module(cls: type[Any]) -> bool:

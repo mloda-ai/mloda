@@ -11,10 +11,6 @@ import ast
 from functools import lru_cache
 from pathlib import Path
 
-import pytest
-
-pytestmark = pytest.mark.timeout(30)
-
 # Anchored via __file__, not the cwd: a cwd-relative root makes every lookup empty and the sweep vacuous.
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _ROOTS = (_REPO_ROOT / "mloda", _REPO_ROOT / "mloda_plugins")

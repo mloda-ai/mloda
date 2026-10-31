@@ -440,7 +440,11 @@ class TestToxConfig:
         versions = {str(v) for v in matrix.get("python-version", [])}
         versions |= {str(e["python-version"]) for e in matrix.get("include", []) if "python-version" in e}
         assert versions == {"3.11", "3.12", "3.13", "3.14"}, f"subprocess job must cover python 3.11-3.14: {versions}"
-        assert "spawn" in yaml.safe_dump(job), "subprocess job must pin MLODA_MP_START_METHOD to spawn on one entry"
+        assert any(
+            re.search(r"MLODA_MP_START_METHOD=spawn\b", str(s.get("run", "")))
+            and re.search(r"3\.12", str(s.get("if", "")))
+            for s in job["steps"]
+        ), "subprocess job needs a step writing MLODA_MP_START_METHOD=spawn only for python 3.12"
 
     def test_release_license_write_runs_lint_env(self) -> None:
         steps = [s for job in self._workflow_jobs("release.yaml").values() for s in job.get("steps", [])]
@@ -450,6 +454,7 @@ class TestToxConfig:
             run = str(step.get("run", ""))
             envs = {env for arg in re.findall(r"-e\s+(\S+)", run) for env in arg.split(",")}
             assert "lint" in envs, f"license step must run tox -e with lint: {run}"
+            assert "subprocess" in envs, f"license step must run tox -e with subprocess: {run}"
 
     def test_ci_cancels_only_superseded_pr_runs(self) -> None:
         concurrency = self._workflow("ci.yaml").get("concurrency", {})

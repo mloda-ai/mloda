@@ -560,7 +560,6 @@ def test_a_mid_on_the_side_framework_between_a_link_side_and_its_consumer_is_cor
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @pytest.mark.parametrize("direct", [False, True], ids=["indirect", "direct"])
 @pytest.mark.parametrize("mode", [ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING])
-@pytest.mark.subprocess
 def test_a_pandas_mid_between_a_link_side_and_its_consumer_is_correct_in_parallel_modes(
     flight_server: Any, mode: ParallelizationMode, direct: bool, swap_link_sides: bool
 ) -> None:
@@ -701,7 +700,6 @@ SidePathDirectSecond = _side_path_consumer("SidePathDirectSecond", "mlg_a", {Sec
 @pytest.mark.parametrize(
     "mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING]
 )
-@pytest.mark.subprocess
 def test_two_consumers_of_one_link_reading_a_side_through_different_mids_join_each_side_frame(
     flight_server: Any, mode: ParallelizationMode, swap_link_sides: bool
 ) -> None:
@@ -1118,7 +1116,6 @@ def _nullable_column_values(results: list[Any], name: str) -> list[list[int | No
 @pytest.mark.timeout(60)
 @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING])
 @pytest.mark.parametrize("right", ["pa_extra", "pd_extra"])
-@pytest.mark.subprocess
 def test_a_right_join_keeps_the_right_row_the_left_lacks_for_each_variant(
     flight_server: Any, mode: ParallelizationMode, right: str
 ) -> None:
@@ -1177,7 +1174,6 @@ def test_a_flexible_and_a_left_only_consumer_of_one_right_link_both_plan_on_the_
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
 @pytest.mark.timeout(60)
 @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING])
-@pytest.mark.subprocess
 def test_a_flexible_and_a_left_only_consumer_of_one_right_link_return_the_right_join_values(
     flight_server: Any, mode: ParallelizationMode
 ) -> None:
@@ -1262,7 +1258,6 @@ def test_one_sided_variants_requested_next_to_their_shared_side_feature_return_b
     [_TIE_ONE_SIDED_SHAPES[0], _TIE_ONE_SIDED_SHAPES[1], _TIE_ONE_SIDED_SHAPES[3]],
 )
 @pytest.mark.parametrize("join_type", ["inner", "right"])
-@pytest.mark.subprocess
 def test_one_sided_option_variants_over_one_link_join_each_variant_in_parallel_modes(
     flight_server: Any, mode: ParallelizationMode, consumer: type[FeatureGroup], left: str, right: str, join_type: str
 ) -> None:
@@ -1327,7 +1322,6 @@ def _carrier_alone(
         ),
     ],
 )
-@pytest.mark.subprocess
 def test_a_carrier_consumer_over_a_link_across_distinct_frameworks_is_correct(
     flight_server: Any, mode: ParallelizationMode, swap_link_sides: bool, consumer_kind: str
 ) -> None:
@@ -1374,7 +1368,6 @@ def _carrier_with_direct(
     ]
     + [pytest.param(ParallelizationMode.MULTIPROCESSING, False, "carried_framework", id="multiprocessing-a_b")],
 )
-@pytest.mark.subprocess
 def test_a_carrier_consumer_next_to_a_direct_consumer_of_one_link_waits_only_on_its_join(
     flight_server: Any, mode: ParallelizationMode, swap_link_sides: bool, consumer_kind: str
 ) -> None:
@@ -2756,7 +2749,6 @@ _BELOW_MULTIPROCESSING = pytest.param(
 @pytest.mark.parametrize(
     "layout, swap_link_sides, mode, requested, links, expected", [*_BELOW_CASES, _BELOW_MULTIPROCESSING]
 )
-@pytest.mark.subprocess
 def test_a_feature_below_a_join_consumer_reads_the_joined_frame(
     request: pytest.FixtureRequest,
     layout: str,

@@ -614,12 +614,12 @@ class TestFixtureIsNotCopied:
 
 
 _CACHE_RESTORE_PROBE = "CacheRestorePinProbeFeatureGroup"
+_CACHE_RESTORE_FIXTURE = "restore_dynamic_feature_group_cache"
 
 
 class TestDynamicFeatureGroupCacheIsRestoredBetweenTests:
-    """test_a is also pinned by the leak check; test_b checks the class is gone in the next test."""
-
-    # Under xdist `--dist load` the pair can split across workers; then test_b passes without test_a having run there.
+    """test_a's leak-check teardown is the deterministic pin; test_b checks the next test sees no leftover.
+    test_b passes trivially if xdist runs it on another worker than test_a."""
 
     def test_a_creates_a_cached_class(self) -> None:
         DynamicFeatureGroupCreator.create({}, class_name=_CACHE_RESTORE_PROBE)
@@ -627,4 +627,4 @@ class TestDynamicFeatureGroupCacheIsRestoredBetweenTests:
 
     def test_b_the_next_test_no_longer_sees_it(self, request: pytest.FixtureRequest) -> None:
         assert _CACHE_RESTORE_PROBE not in DynamicFeatureGroupCreator._created_classes
-        assert "restore_dynamic_feature_group_cache" in request.fixturenames
+        assert _CACHE_RESTORE_FIXTURE in request.fixturenames

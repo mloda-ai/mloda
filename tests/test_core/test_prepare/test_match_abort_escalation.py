@@ -9,7 +9,6 @@ normal path covered here is ``match_parser_criteria``. ``utils.safe_field``
 is the deliberate exception: it degrades one field in a rendering path and swallows a marked exception.
 """
 
-import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -80,8 +79,6 @@ def _capture(call: Callable[[], T]) -> tuple[T | None, str | None]:
 
 def _make_marked_raise_fg() -> type[FeatureGroup]:
     """Candidate whose matcher raises a MARKED ValueError for its own feature name."""
-    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
-    gc.collect()
 
     class MarkedRaiseFG845e(FeatureGroup):
         """Stands in for framework-owned code raising inside the match hook."""
@@ -113,7 +110,6 @@ def _make_marked_raise_fg() -> type[FeatureGroup]:
 
 def _make_unmarked_raise_fg() -> type[FeatureGroup]:
     """Twin of the marked double, raising the same ValueError type WITHOUT the marker."""
-    gc.collect()
 
     class UnmarkedRaiseFG845e(FeatureGroup):
         """Stands in for a plugin matcher that simply breaks: contained as a non-match (#845)."""
@@ -166,7 +162,6 @@ def _evaluate_marked_raise() -> str | None:
         return escaped
     finally:
         del broken_fg
-        gc.collect()
 
 
 def _evaluate_unmarked_raise() -> _ContainedSnapshot:
@@ -193,7 +188,6 @@ def _evaluate_unmarked_raise() -> _ContainedSnapshot:
         return snapshot
     finally:
         del broken_fg
-        gc.collect()
 
 
 class TestEscalateMatchAbortPreservesTheException:
@@ -273,7 +267,6 @@ def _both_categories_options() -> Options:
 
 def _make_both_categories_fg() -> type[FeatureGroup]:
     """Candidate whose inherited chain-parser matcher hits the marked both-categories raise."""
-    gc.collect()
 
     class BothCategoriesFG845f(BothCategoriesMixin845f, FeatureGroup):
         """Stands in for a normal chain-parser group asked to match a contradictory option set."""
@@ -300,12 +293,10 @@ def _evaluate_both_categories() -> _RaiseReadout | None:
         return readout
     finally:
         del probe_fg
-        gc.collect()
 
 
 def _make_is_root_fg(raiser: Callable[[], None]) -> type[FeatureGroup]:
     """Candidate whose input_features raises whatever ``raiser`` raises."""
-    gc.collect()
 
     class IsRootProbeFG845f(FeatureGroup):
         """Stands in for a group whose input_features cannot answer for this feature name."""
@@ -327,7 +318,6 @@ def _is_root_outcome(raiser: Callable[[], None]) -> tuple[bool | None, _RaiseRea
         return verdict, readout
     finally:
         del probe_fg
-        gc.collect()
 
 
 def _raise_marked_value_error() -> None:
@@ -431,7 +421,6 @@ class TestResolveFeatureStillNeverRaises:
             del result
         finally:
             del marked_fg
-            gc.collect()
 
         assert winner_name is None
         assert error is not None

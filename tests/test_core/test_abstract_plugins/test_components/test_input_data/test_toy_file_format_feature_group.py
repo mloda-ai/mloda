@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import gc
 import inspect
 import os
 from collections.abc import Collection
@@ -336,7 +335,6 @@ class TestUserinfoUriPlanIdentity:
         assert "hunter2" not in repr(explained)
         assert "hunter2" not in str(explained)
         del explained, steps, ToyfmtUriPlanFG
-        gc.collect()
 
 
 class TestFileSourceUriProjection:
@@ -425,7 +423,6 @@ class TestUriSourceCollision:
             f"s3://bob:pw2@b/x{TOY_SUFFIX}",  # nosec B105
         }
         del matches, group
-        gc.collect()
 
     def test_a_single_handle_keeps_the_unsuffixed_source(self) -> None:
         group = self._group()
@@ -433,7 +430,6 @@ class TestUriSourceCollision:
         matches = group.find_sources(group.CLAIM_ROUTES[0], self.COLUMN, Options(), dac)
         assert [match.source for match in matches] == [f"s3://b/x{TOY_SUFFIX}"]
         del matches, group
-        gc.collect()
 
     def test_the_ambiguity_abort_names_both_suffixed_sources_without_the_passwords(self) -> None:
         group = self._group()
@@ -450,7 +446,6 @@ class TestUriSourceCollision:
         assert "pw1" not in text
         assert "pw2" not in text
         del excinfo, plugins, group
-        gc.collect()
 
 
 class TestAbstractReadFileFGWithAPin:

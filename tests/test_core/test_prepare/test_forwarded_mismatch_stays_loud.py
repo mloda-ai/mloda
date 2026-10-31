@@ -5,7 +5,6 @@ the rival wins and the forwarded value is silently ignored. Every existing test 
 matcher directly, so these pins go through the resolution seam. Doubles are dropped per test.
 """
 
-import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -54,8 +53,6 @@ def _forwarded_mismatch_options() -> Options:
 
 def _make_mismatch_fg() -> type[FeatureGroup]:
     """Chain-parsed candidate whose matcher raises the framework forwarded/name mismatch ValueError."""
-    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
-    gc.collect()
 
     class ForwardMismatchLoudFG845r(FeatureChainParserMixin, FeatureGroup):
         """Binds the probe type from the feature name, so a contradicting forwarded value is a mismatch."""
@@ -80,7 +77,6 @@ def _make_mismatch_fg() -> type[FeatureGroup]:
 
 def _make_rival_fg() -> type[FeatureGroup]:
     """Rival candidate claiming the same feature name cleanly, with no interest in the forwarded option."""
-    gc.collect()
 
     class RivalNameOwnerFG845r(FeatureGroup):
         """Matches the probe feature name unconditionally: the group that would silently win today."""
@@ -131,7 +127,6 @@ def _evaluate_at_seam(options: Options, with_rival: bool) -> _SeamSnapshot:
     finally:
         del mismatch_fg
         del rival_fg
-        gc.collect()
 
 
 class TestForwardedMismatchStaysLoudAtTheSeam:

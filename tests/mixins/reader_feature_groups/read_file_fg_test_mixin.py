@@ -6,7 +6,6 @@ Every test-local subclass of the group is gated by an explicit plugin mapping.
 
 from __future__ import annotations
 
-import gc
 import os
 import stat
 from pathlib import Path
@@ -710,7 +709,6 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         )
         values = result[0].column(column).to_pylist()
         del sub, result, gated, load_neutral, impl
-        gc.collect()
         return values
 
     def test_file_a_load_neutral_override_is_used_under_pyarrow_table(self) -> None:

@@ -6,7 +6,6 @@ Every test-local subclass of the group is gated by an explicit pointer on its pa
 
 from __future__ import annotations
 
-import gc
 import itertools
 import os
 from pathlib import Path
@@ -240,7 +239,6 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin):
         result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, None)
         assert "hunter2" not in result.eliminations[sub].reason
         del sub, mapping, result, feature
-        gc.collect()
 
     def test_doc_a_pointer_to_a_handed_over_suffix_names_document_suffixes(self) -> None:
         sub = self._gated_subclass()
@@ -252,7 +250,6 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin):
         assert DOCUMENT_SUFFIXES_OPTION in result.eliminations[sub].reason, result.eliminations[sub]
         assert "does not end in" not in result.eliminations[sub].reason
         del sub, mapping, result, feature
-        gc.collect()
 
     def test_doc_a_folder_with_one_fitting_and_one_other_file_resolves(self) -> None:
         folder = self.tmp_path / "mixed_folder"
@@ -452,7 +449,6 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin):
             assert sub in result.identified, name
             del result, feature
         del sub, mapping
-        gc.collect()
 
     def test_doc_a_subclass_loads_the_requested_columns_under_the_parent_names(self) -> None:
         sub = self._gated_subclass()
@@ -468,4 +464,3 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin):
             assert result == [{requested: full[requested] for requested in names}], names
             del result
         del sub
-        gc.collect()

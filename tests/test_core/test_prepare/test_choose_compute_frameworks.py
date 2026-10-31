@@ -2,12 +2,11 @@
 Graphs are built by hand; no run or Engine is involved.
 """
 
-import gc
 import inspect
 import itertools
 import sys
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -220,12 +219,6 @@ class ChooserGenericNeutralFG(ChooserNeutralFG):
 
 
 H = ChooserHomeFramework
-
-
-@pytest.fixture(autouse=True, scope="module")
-def _collect_local_classes() -> Iterator[None]:
-    yield
-    gc.collect()
 
 
 class _Net:

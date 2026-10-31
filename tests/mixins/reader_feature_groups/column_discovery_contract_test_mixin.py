@@ -5,7 +5,6 @@ describe_columns, load_neutral and count_rows, and declines at match time with a
 Unprefixed so pytest skips it standalone.
 """
 
-import gc
 import os
 import shutil
 import sys
@@ -169,4 +168,3 @@ class ColumnDiscoveryContractTestMixin:
 
         assert _CountRowsProbeFG.count_rows(match_of(data_file), PyArrowTable) is None
         del _CountRowsProbeFG
-        gc.collect()

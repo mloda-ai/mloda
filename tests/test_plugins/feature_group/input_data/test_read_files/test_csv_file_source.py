@@ -22,7 +22,6 @@ Contract:
 from __future__ import annotations
 
 import csv
-import gc
 import os
 import tempfile
 from collections.abc import Iterator
@@ -283,7 +282,6 @@ class TestCsvFGCountRows:
         match = _match(csv_path_with_blanks_and_embedded_newline)
         assert _CsvCountRowsLoadNeutralProbeFG.count_rows(match, PythonDictFramework) is None
         del _CsvCountRowsLoadNeutralProbeFG
-        gc.collect()
 
     def test_count_rows_reports_none_for_a_subclass_with_a_dict_loader(
         self, csv_path_with_blanks_and_embedded_newline: str, make_implementation: Any

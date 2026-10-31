@@ -659,7 +659,6 @@ _ROOTS = (FeatureGroup, BaseTransformer, Implementation)
 
 
 def _is_own_module(node: ast.expr, module_name: str) -> bool:
-    """True for `__name__` or the literal module name."""
     return (isinstance(node, ast.Name) and node.id == "__name__") or (
         isinstance(node, ast.Constant) and node.value == module_name
     )
@@ -705,7 +704,6 @@ def _sets_foreign_module(cls: ast.ClassDef, module_name: str) -> bool:
 
 
 def _walk_builder_sites(source: str, module_name: str) -> list[tuple[str, int]]:
-    """Return (enclosing function path, line) for every flagged builder site in source."""
     tree = ast.parse(source)
     imports = _top_level_imports(tree)
     classes = {s.name: s for s in tree.body if isinstance(s, ast.ClassDef)}
@@ -734,7 +732,6 @@ def _walk_builder_sites(source: str, module_name: str) -> list[tuple[str, int]]:
 
 
 def _builder_sites(source: str, module_name: str) -> list[str]:
-    """Sorted, deduplicated enclosing-function paths of every flagged builder site."""
     return sorted({path for path, _ in _walk_builder_sites(source, module_name)})
 
 

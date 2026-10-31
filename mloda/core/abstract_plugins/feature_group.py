@@ -6,7 +6,6 @@ from collections.abc import Collection, Mapping
 from typing import Any, ClassVar, Callable, cast, final
 from abc import ABC
 
-from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -29,6 +28,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     option_key_is_present,
 )
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
+from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection

@@ -27,8 +27,9 @@ class SubclassRegistry(Generic[T]):
             if snapshot is None:
                 epoch = self._gc_epoch
                 snapshot = frozenset(self._members)
-                if epoch == self._gc_epoch:  # a snapshot spanning a gc pass could pin classes it should free
-                    self._snapshot = snapshot
+                self._snapshot = snapshot
+                if epoch != self._gc_epoch:  # checked after the store so a gc pass starting mid-build is caught
+                    self._snapshot = None
         return set(snapshot)
 
     def _on_gc(self, phase: str, info: dict[str, int]) -> None:

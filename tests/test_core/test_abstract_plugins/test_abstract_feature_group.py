@@ -1,7 +1,7 @@
 import gc
 import weakref
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from typing import Any, ClassVar, Generic, TypeVar
 
 import numpy as np
@@ -15,6 +15,7 @@ from mloda.user import Feature
 from mloda.user import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.property_spec import property_spec
+from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field_with_error
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
 from mloda.core.abstract_plugins.feature_group import feature_group_subclasses
@@ -341,8 +342,32 @@ class _CountingWeakSet(weakref.WeakSet[Any]):
         return super().__iter__()
 
 
+_RegistryFactory = Callable[[bool], tuple[SubclassRegistry[type], _CountingWeakSet]]
+
+
 class TestFeatureGroupSubclassRegistry:
     """`feature_group_subclasses()` mirrors the live FeatureGroup tree without walking it."""
+
+    @pytest.fixture
+    def counting_registry(self) -> Generator[_RegistryFactory, None, None]:
+        was_enabled = gc.isenabled()
+        gc.disable()
+        created: list[SubclassRegistry[type]] = []
+
+        def build(collect_on_first: bool) -> tuple[SubclassRegistry[type], _CountingWeakSet]:
+            counter = _CountingWeakSet(collect_on_first=collect_on_first)
+            registry: SubclassRegistry[type] = SubclassRegistry()
+            registry._members = counter
+            created.append(registry)
+            return registry, counter
+
+        yield build
+
+        for registry in created:
+            if registry._on_gc in gc.callbacks:
+                gc.callbacks.remove(registry._on_gc)
+        if was_enabled:
+            gc.enable()
 
     def test_registry_equals_the_walk(self) -> None:
         PluginLoader.all()
@@ -360,6 +385,8 @@ class TestFeatureGroupSubclassRegistry:
         [(FeatureGroup, feature_group_subclasses), (ComputeFramework, compute_framework_subclasses)],
     )
     def test_registry_tracks_a_transient_subclass(self, base: type, reader: Callable[[], set[Any]]) -> None:
+        gc.collect(0)
+
         class _CooperativeMixin:
             def __init_subclass__(cls, **kwargs: Any) -> None:
                 super().__init_subclass__(**kwargs)
@@ -389,12 +416,8 @@ class TestFeatureGroupSubclassRegistry:
         assert reader() == expected
         assert len(expected) > 0
 
-    def test_snapshot_is_built_once_until_add(self) -> None:
-        from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
-
-        counter = _CountingWeakSet()
-        registry: SubclassRegistry[type] = SubclassRegistry()
-        registry._members = counter
+    def test_snapshot_is_built_once_until_add(self, counting_registry: _RegistryFactory) -> None:
+        registry, counter = counting_registry(False)
         first, second = type("A", (), {}), type("B", (), {})
         registry.add(first)
 
@@ -407,12 +430,8 @@ class TestFeatureGroupSubclassRegistry:
         assert registry.members() == {first, second}
         assert counter.iterations == 2
 
-    def test_snapshot_overlapping_a_gc_pass_is_not_stored(self) -> None:
-        from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
-
-        counter = _CountingWeakSet(collect_on_first=True)
-        registry: SubclassRegistry[type] = SubclassRegistry()
-        registry._members = counter
+    def test_snapshot_overlapping_a_gc_pass_is_not_stored(self, counting_registry: _RegistryFactory) -> None:
+        registry, counter = counting_registry(True)
         cls = type("A", (), {})
         registry.add(cls)
 

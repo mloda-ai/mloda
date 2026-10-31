@@ -19,7 +19,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.interfaces.service.catalog import MAX_DESCRIPTION_LENGTH, Catalog, plugin_collector_for, sanitize_text
 from mloda.interfaces.service.config import Settings, SourceConfig
@@ -89,7 +89,7 @@ def _strictness(label: str) -> int:
 
 def _file_identity(step: PlanStep) -> str | None:
     fg = step.feature_group
-    if not (isinstance(fg, type) and issubclass(fg, ReadFileFG)):
+    if not is_nominal_subclass(fg, ReadFileFG):
         return None
     return step.data_access_identity
 
@@ -109,7 +109,7 @@ def _alias_of(step: PlanStep, sources: Mapping[str, SourceConfig]) -> str | None
 def _inline_alias(step: PlanStep, inline: Mapping[str, Mapping[str, Any]]) -> str | None:
     """The inline set owning the columns of an api_data step."""
     group = step.feature_group
-    if not (isinstance(group, type) and issubclass(group, ApiDataFG)):
+    if not is_nominal_subclass(group, ApiDataFG):
         return None
     if not (step.data_access_identity or "").startswith("api_data:"):
         return None
@@ -457,7 +457,7 @@ class Planner:
         details: list[dict[str, str]] = []
         for step in steps:
             group = step.feature_group
-            if step.step_kind != "compute" or not (isinstance(group, type) and issubclass(group, FeatureGroup)):
+            if step.step_kind != "compute" or not is_nominal_subclass(group, FeatureGroup):
                 continue
             for name in step.feature_names:
                 path = f"/features/{request_names.index(name)}" if name in request_names else "/features"
@@ -597,7 +597,7 @@ class Planner:
     @staticmethod
     def _count(path: str, step: PlanStep) -> int | None:
         fg = step.feature_group
-        if not (isinstance(fg, type) and issubclass(fg, ReadFileFG)) or step.compute_framework is None:
+        if not is_nominal_subclass(fg, ReadFileFG) or step.compute_framework is None:
             return None
         count = partial(fg.count_rows, SourceMatch(source=path, access=path), step.compute_framework)
         return safe_field(count, None, catching=READER_ERRORS)

@@ -12,6 +12,7 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import COLUMN_SEPARATOR
 from mloda.core.abstract_plugins.components.options import Options
@@ -294,7 +295,7 @@ class Catalog:
         )
         options, missing = _options(fg, self._settings.allow_options)
         in_features = None
-        if issubclass(fg, FeatureChainParserMixin):
+        if is_nominal_subclass(fg, FeatureChainParserMixin):
             in_features = {"min": fg.MIN_IN_FEATURES, "max": fg.MAX_IN_FEATURES}
         return {
             "name": name,

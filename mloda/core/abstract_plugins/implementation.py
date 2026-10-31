@@ -14,7 +14,7 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import (
     BaseFeatureGroupVersion,
     ThirdPartyVersionMode,
 )
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses, is_nominal_subclass
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
@@ -47,7 +47,7 @@ def _is_concrete(cls: Any) -> bool:
 
 
 def _serves_groups(group: Any) -> bool:
-    return isinstance(group, type) and issubclass(group, (SourceFeatureGroup, OperationFeatureGroup))
+    return is_nominal_subclass(group, (SourceFeatureGroup, OperationFeatureGroup))
 
 
 def _declared_groups(node: Any, subst: Mapping[Any, Any]) -> list[type]:
@@ -57,7 +57,7 @@ def _declared_groups(node: Any, subst: Mapping[Any, Any]) -> list[type]:
     if origin is Implementation:
         group = args[0] if args else None
         return [group] if isinstance(group, type) and group is not Any and typing.get_origin(group) is None else []
-    if not (isinstance(origin, type) and issubclass(origin, Implementation)):
+    if not (is_nominal_subclass(origin, Implementation)):
         return []
     mapping = dict(zip(getattr(origin, "__parameters__", ()), args))
     declared: list[type] = []
@@ -67,7 +67,7 @@ def _declared_groups(node: Any, subst: Mapping[Any, Any]) -> list[type]:
 
 
 def _mismatched_group(cls: Any, group: Any) -> type | None:
-    return next((g for g in _declared_groups(cls, {}) if not issubclass(group, g)), None)
+    return next((g for g in _declared_groups(cls, {}) if not is_nominal_subclass(group, g)), None)
 
 
 def _names_a_pair(cls: Any) -> bool:
@@ -76,8 +76,7 @@ def _names_a_pair(cls: Any) -> bool:
     return (
         _serves_groups(group)
         and _mismatched_group(cls, group) is None
-        and isinstance(framework, type)
-        and issubclass(framework, ComputeFramework)
+        and is_nominal_subclass(framework, ComputeFramework)
     )
 
 
@@ -116,7 +115,7 @@ class Implementation(ABC, Generic[G]):
                 f"{cls.__name__}.feature_group must be {declared.__name__} or a subclass "
                 f"(Implementation[{declared.__name__}]), got {group.__name__}."
             )
-        if not (isinstance(framework, type) and issubclass(framework, ComputeFramework)):
+        if not (is_nominal_subclass(framework, ComputeFramework)):
             raise TypeError(f"{cls.__name__} must set compute_framework to a ComputeFramework subclass.")
 
     @classmethod
@@ -171,7 +170,9 @@ def serving_implementation(
         for framework_class in compute_framework.__mro__:
             candidates = by_pair.get((klass, framework_class))
             if candidates:
-                return next(c for c in candidates if not any(o is not c and issubclass(o, c) for o in candidates))
+                return next(
+                    c for c in candidates if not any(o is not c and is_nominal_subclass(o, c) for o in candidates)
+                )
         if stop_after is not None and stop_after in klass.__dict__:
             return None
     return None

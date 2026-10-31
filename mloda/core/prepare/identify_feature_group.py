@@ -183,8 +183,8 @@ def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | 
     """
     if isinstance(scope, type):
         return is_nominal_subclass(feature_group, scope)
-    # Name first: __name__ is an attribute read no plugin can raise out of, while issubclass() on an ABCMeta
-    # class is the expensive check, so the name gate keeps it off nearly every MRO entry.
+    # Name first: __name__ is an attribute read no plugin can raise out of, so the name gate keeps the
+    # subclass check off nearly every MRO entry.
     return any(
         ancestor.__name__ == scope and ancestor is not FeatureGroup and is_nominal_subclass(ancestor, FeatureGroup)
         for ancestor in feature_group.__mro__

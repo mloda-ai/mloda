@@ -546,7 +546,6 @@ class TestPluginDiscoveryAvoidsAbcWalk:
             monkeypatch.undo()
             del chain_collector, api_collector, link_collector, prepare_all, prepare_link
             del _PrepareWalkDerivedFG, _PrepareWalkApiFG, _PrepareWalkLeftFG, _PrepareWalkRightFG, _PrepareWalkJoinedFG
-            gc.collect()
 
     def test_virtual_abc_subclasses_are_not_plugins(self) -> None:
         class _VirtualHostFG(FeatureGroup):

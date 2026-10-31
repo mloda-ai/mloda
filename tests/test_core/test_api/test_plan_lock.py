@@ -2,12 +2,14 @@
 
 import collections
 import dataclasses
+import gc
 import hashlib
 import importlib.util
 import json
 import sys
 import types
 import uuid
+import weakref
 from pathlib import Path
 from collections.abc import Callable
 from typing import Any, cast
@@ -362,6 +364,7 @@ def test_a_dependency_version_change_moves_the_implementation_version_but_not_th
 
 
 _IMPL_MODULE = "lock_edit_impl_module"
+# A subscription is cached by typing and would pin the group past the purge.
 _IMPL_SRC = """\
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -384,7 +387,7 @@ def helper() -> int:
     return {value}
 
 
-class LockEditImpl(Implementation[LockEditGroup]):
+class LockEditImpl(Implementation):
     feature_group = LockEditGroup
     compute_framework = PythonDictFramework
 
@@ -409,6 +412,20 @@ def _load_impl(
     monkeypatch.setitem(sys.modules, _IMPL_MODULE, module)
     spec.loader.exec_module(module)
     return cast("type[Implementation[Any]]", module.LockEditImpl)
+
+
+def test_a_loaded_impl_group_is_reclaimed_once_its_module_is_dropped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    impl = _load_impl(tmp_path, 1, monkeypatch)
+    ref = weakref.ref(sys.modules[_IMPL_MODULE].LockEditGroup)
+    assert ref() is not None
+
+    del impl
+    del sys.modules[_IMPL_MODULE]
+    gc.collect()  # the weakref assert below needs the class cycle actually collected
+
+    assert ref() is None, "the Implementation[...] subscription must not pin the group after the module is dropped"
 
 
 @pytest.mark.parametrize("neutral", [False, True])

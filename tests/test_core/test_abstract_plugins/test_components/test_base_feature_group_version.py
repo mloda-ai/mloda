@@ -1321,6 +1321,7 @@ class TestVersionUsesImplementationHash:
 
 _IMPL_HELPER_TMPL = "def load() -> int:\n    return {value}\n"
 
+# A subscription is cached by typing and would pin the group past the purge.
 _IMPL_LEAF_TMPL = """\
 from {top}.helper import load
 from mloda.provider import Implementation
@@ -1332,7 +1333,7 @@ class VersionImplFG(ToySourceBase):
     pass
 
 
-class Leaf(Implementation[VersionImplFG]):
+class Leaf(Implementation):
     feature_group = VersionImplFG
     compute_framework = PythonDictFramework
 
@@ -1387,6 +1388,19 @@ class TestImplementationVersion:
         assert BaseFeatureGroupVersion.version(leaf) == leaf.version()
         with pytest.raises(ValueError, match="Implementation"):
             BaseFeatureGroupVersion.version(dict)
+
+    def test_loaded_implementation_does_not_keep_its_group_alive(self, fixture_pkg: _FixturePkgHelper) -> None:
+        top = _unique_top("fgv_impl")
+        self._write(fixture_pkg, top, 1)
+        leaf = fixture_pkg.import_leaf(top)
+        ref = weakref.ref(leaf.feature_group)
+        assert ref() is not None
+
+        del leaf
+        fixture_pkg.purge(top)
+        gc.collect()  # the weakref assert below needs the class cycle actually collected
+
+        assert ref() is None, "the Implementation[...] subscription must not pin the group after purge"
 
 
 # --------------------------------------------------------------------------

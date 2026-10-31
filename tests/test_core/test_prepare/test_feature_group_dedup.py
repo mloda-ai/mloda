@@ -52,9 +52,9 @@ pytestmark = pytest.mark.timeout(30)
 # the references survive across all assertions inside a single test.
 #
 # IMPORTANT: Tests MUST use a unique qualname (e.g., ``MyFG_TestN``) per test —
-# ``_REF_STORE`` is never cleared during the session, so any class registered here
-# survives in ``FeatureGroup.__subclasses__()`` and would interfere with later
-# tests that share the same qualname. Filter by ``__qualname__`` when asserting.
+# a class registered in ``_REF_STORE`` may still be in
+# ``FeatureGroup.__subclasses__()`` until the teardown reclaim, and would interfere
+# with later tests that share the same qualname. Filter by ``__qualname__`` when asserting.
 _REF_STORE: list[Any] = []
 
 
@@ -124,14 +124,14 @@ def _cleanup_main_module_attrs() -> Any:
 
     This guarantees parallel-safety under ``pytest-xdist -n 8`` and prevents
     bleed-over of test-defined classes into other tests sharing the same xdist worker.
-    Note: classes referenced from ``_REF_STORE`` still survive in
-    ``FeatureGroup.__subclasses__()`` for the lifetime of the test process,
-    which is intentional. Tests filter by their unique qualname to avoid
-    interference from other tests.
+    ``_REF_STORE`` is emptied on teardown so its classes can be reclaimed; tests
+    still use a unique qualname in case a class lingers in ``__subclasses__()``.
     """
     main_mod = sys.modules["__main__"]
     snapshot = set(main_mod.__dict__.keys())
+    assert not _REF_STORE, "_REF_STORE was not emptied by the previous test's teardown"
     yield
+    _REF_STORE.clear()
     new_keys = set(main_mod.__dict__.keys()) - snapshot
     for k in new_keys:
         main_mod.__dict__.pop(k, None)
@@ -956,10 +956,9 @@ def test_get_feature_group_docs_annotates_unintrospectable_class_with_unavailabl
 
     NOTE: this class is held only via a LOCAL reference (enough to keep it alive in
     ``FeatureGroup.__subclasses__()`` during the call). It is deliberately NOT
-    appended to ``_REF_STORE``: that would permanently leak a non-``__main__``
-    class into every later ``get_feature_group_docs()`` result on the same xdist
-    worker. After the assertions the local ref is deleted and ``gc.collect()`` runs
-    so the class is unregistered from ``__subclasses__``.
+    appended to ``_REF_STORE`` so it can be dropped before the test ends. After the
+    assertions the local ref is deleted and ``gc.collect()`` runs so the class is
+    unregistered from ``__subclasses__``.
     """
     fake_module = "some_fake_module_name_xyz_19"
     fake_cls = cast(

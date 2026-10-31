@@ -198,9 +198,9 @@ def pytest_sessionfinish(session: Any, exitstatus: Any) -> None:
 _terminal_reporter: Any = None
 
 
-def pytest_configure(config: Any) -> None:
+def pytest_sessionstart(session: Any) -> None:
     global _terminal_reporter
-    _terminal_reporter = config.pluginmanager.get_plugin("terminalreporter")
+    _terminal_reporter = session.config.pluginmanager.get_plugin("terminalreporter")
 
 
 def drop_passing_report(stats: dict[str, list[Any]], report: Any) -> None:

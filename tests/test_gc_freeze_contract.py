@@ -27,6 +27,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 # The floor the conftest predicate uses to tell its own freeze from a host's, imported rather than copied so
 # the predicate and these assertions cannot drift apart.
+from tests import conftest
 from tests.conftest import MIN_FROZEN_GRAPH_OBJECTS, NO_GC_FREEZE_ENV_VAR, drop_passing_report
 
 
@@ -292,3 +293,8 @@ def test_drop_passing_report_never_removes_keys_or_touches_other_categories() ->
         "xpassed": [],
         "warnings": [warning],
     }
+
+
+def test_conftest_captures_the_terminal_reporter(request: pytest.FixtureRequest) -> None:
+    """The reporter must be captured once it is registered, or the report drop never runs."""
+    assert conftest._terminal_reporter is request.config.pluginmanager.get_plugin("terminalreporter")

@@ -113,11 +113,8 @@ class TestDynamicFeatureGroupFactory:
         name = "DynamicCachedRejectedInputDataFeatureGroup"
         DynamicFeatureGroupCreator.create({"calculate_feature": lambda cls, data, features: None}, class_name=name)
 
-        try:
-            with pytest.raises(ValueError, match="DataCreatorFeatureGroup"):
-                DynamicFeatureGroupCreator.create({"input_data": lambda: None}, class_name=name)
-        finally:
-            DynamicFeatureGroupCreator._created_classes.pop(name, None)
+        with pytest.raises(ValueError, match="DataCreatorFeatureGroup"):
+            DynamicFeatureGroupCreator.create({"input_data": lambda: None}, class_name=name)
 
     def test_dynamic_feature_group_creator_consuming_a_document_group(self) -> None:
         properties: dict[str, Any] = {

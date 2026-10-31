@@ -5,8 +5,6 @@ class, which cannot be pickled by module path. It must not touch SYNC mode at al
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-
 import pytest
 
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -21,12 +19,6 @@ from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dyna
 )
 
 _ORCHESTRATOR_PROBE_CLASS_NAME = "OrchestratorProbeDynamicFeatureGroup"
-
-
-@pytest.fixture(autouse=True)
-def _cleanup_dynamic_feature_groups() -> Iterator[None]:
-    yield
-    DynamicFeatureGroupCreator._created_classes.pop(_ORCHESTRATOR_PROBE_CLASS_NAME, None)
 
 
 def _plan_with_unpicklable_feature_group_step() -> ExecutionPlan:

@@ -2,7 +2,9 @@
 
 import gc
 import importlib
+import types
 import typing
+import weakref
 from abc import abstractmethod
 from collections.abc import Iterator
 from pathlib import Path
@@ -29,6 +31,7 @@ from mloda.provider import SourceFeatureGroup
 from mloda.user import DataAccessCollection, Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.helpers.subclass_walks import collect_until_dead
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group import (
     OpToyBareFG,
     OpToyFG,
@@ -56,6 +59,27 @@ SENTINEL = [{"toyfmt_ld": 111}, {"toyfmt_ld": 222}]
 _T = TypeVar("_T")
 _G = TypeVar("_G", bound=FeatureGroup)
 _G2 = TypeVar("_G2", bound=FeatureGroup)
+
+_RELOADED_IMPL_SOURCE = """
+from mloda.core.abstract_plugins.implementation import Implementation
+
+
+class ReloadedGroup(_SOURCE_GROUP_):
+    pass
+
+
+class ReloadedMid(Implementation[_G_]):
+    pass
+
+
+class ReloadedImpl({base}[ReloadedGroup]):
+    feature_group = ReloadedGroup
+    compute_framework = _FRAMEWORK_
+
+    @classmethod
+    def calculate(cls, *args):
+        return None
+"""
 
 
 def _release_subscripted_generics() -> None:
@@ -457,6 +481,20 @@ class TestImplementationDefinition:
             del _Mid
         del _BaseImpl
         _release_subscripted_generics()
+
+    @pytest.mark.parametrize("base", ["Implementation", "ReloadedMid"])
+    def test_a_reloaded_group_is_reclaimed_while_its_module_lives(self, base: str) -> None:
+        module = types.ModuleType(__name__)
+        module.__dict__.update(_SOURCE_GROUP_=ToySourceFG, _G_=_G, _FRAMEWORK_=PythonDictFramework)
+        source = _RELOADED_IMPL_SOURCE.format(base=base)
+        exec(source, module.__dict__)  # nosec B102
+        stale = weakref.ref(module.ReloadedGroup)
+        exec(source, module.__dict__)  # nosec B102
+
+        reclaimed = collect_until_dead(stale)
+        _release_subscripted_generics()
+
+        assert reclaimed
 
     @pytest.mark.parametrize(
         "case",

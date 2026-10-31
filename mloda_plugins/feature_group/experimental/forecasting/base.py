@@ -429,19 +429,6 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Opera
         return algorithm, horizon, time_unit, cls._extract_single_source_feature(feature)
 
     @classmethod
-    def _has_valid_forecast_suffix(cls, feature_name: str) -> bool:
-        """Check if feature_name has a suffix matching the forecast pattern."""
-        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
-        if not parsed.matched:
-            return False
-        captures = cast(dict[str, str], parsed.named_captures)
-        if captures[cls.ALGORITHM] not in cls.FORECASTING_ALGORITHMS:
-            return False
-        if captures[cls.TIME_UNIT] not in cls.TIME_UNITS:
-            return False
-        return int(captures[cls.HORIZON]) > 0
-
-    @classmethod
     def _extract_forecast_params(cls, feature: Feature) -> tuple[str | None, int | None, str | None]:
         """
         Extract forecast-specific parameters (algorithm, horizon, time_unit) from a feature.

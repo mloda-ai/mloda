@@ -166,17 +166,3 @@ class DataType(Enum):
     def from_arrow_type_safe(cls, arrow_type: pa.DataType) -> DataType | None:
         """Non-raising counterpart of from_arrow_type: returns None for unsupported types."""
         return cls._arrow_type_to_dtype_or_none(arrow_type)
-
-    @classmethod
-    def infer_arrow_type(cls, value: Any) -> pa.DataType:
-        """
-        Infers the PyArrow DataType directly from a Python value.
-
-        Args:
-            value (Any): The Python value to infer the type from.
-
-        Returns:
-            pa.DataType: The inferred PyArrow DataType.
-        """
-        data_type = cls.infer_type_from_py_type(value)
-        return cls.to_arrow_type(data_type)

@@ -219,7 +219,7 @@ class LinkTrekker:
     def create_data_ordered(self) -> None:
         # fill ordered dict by priority
 
-        for o_id, oo_uuids in self.order.items():
+        for o_id in self.order:
             for k, v in self._sorted_data():
                 if k[0].uuid == o_id:
                     self.data_ordered[k] = v

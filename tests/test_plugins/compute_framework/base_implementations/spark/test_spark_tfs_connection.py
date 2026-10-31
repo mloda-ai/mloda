@@ -17,7 +17,7 @@ from tests.test_plugins.compute_framework.base_implementations.spark.conftest im
     PYSPARK_AVAILABLE,
     SKIP_REASON,
 )
-from tests.test_plugins.compute_framework.base_implementations.tfs_connection_e2e_mixin import (
+from tests.mixins.compute_frameworks.tfs_connection_e2e_mixin import (
     TfsConnectionEndToEndMixin,
 )
 

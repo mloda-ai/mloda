@@ -93,10 +93,10 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_w
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation_impl import (
     ToyWorkerPythonDict,
 )
+from tests.mixins.neutral_csv_source import neutral_csv_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     ToyBoundedNeutralDictFG,
     ToySourceBase,
-    neutral_csv_group,
     toy_dac,
 )
 from mloda.steward import (

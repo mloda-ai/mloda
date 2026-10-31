@@ -29,7 +29,7 @@ from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet
 from mloda.user import FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.test_plugins.compute_framework.base_implementations.tfs_connection_e2e_mixin import (
+from tests.mixins.compute_frameworks.tfs_connection_e2e_mixin import (
     TfsConnectionEndToEndMixin,
     TfsRawValPyArrowSource,
 )

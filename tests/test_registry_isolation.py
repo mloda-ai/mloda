@@ -23,12 +23,15 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 from mloda.provider import SubtypeDeclaration
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
     DynamicFeatureGroupCreator,
 )
 
 from tests import registry_isolation, registry_isolation_probe
+from tests.mixins.neutral_csv_source import neutral_csv_group
+from tests.mixins.compute_frameworks.tfs_connection_e2e_mixin import root_binding_groups
 from tests.helpers.subclass_walks import count_root_walks
 from tests.registry_isolation import (
     FEATURE_GROUPS,
@@ -253,31 +256,54 @@ class TestReclaimLeakedFeatureGroups:
         )
 
     @pytest.mark.parametrize(
-        ("namespace", "expected_module"),
+        ("build", "expected_module"),
         [
-            pytest.param({}, "abc", id="type_built_abc"),
             pytest.param(
-                {"__module__": "tests.mixins.registry_isolation_leak_probe"},
+                lambda tmp_path: (type("LeakedTypeBuiltRegistryProbeFeatureGroup", (FeatureGroup,), {}),),
+                "abc",
+                id="type_built_abc",
+            ),
+            pytest.param(
+                lambda tmp_path: (
+                    type(
+                        "LeakedTypeBuiltRegistryProbeFeatureGroup",
+                        (FeatureGroup,),
+                        {"__module__": "tests.mixins.registry_isolation_leak_probe"},
+                    ),
+                ),
                 "tests.mixins.registry_isolation_leak_probe",
                 id="mixin_module",
             ),
+            pytest.param(
+                lambda tmp_path: root_binding_groups(PyArrowTable, lambda *args: None)[:2],
+                "tests.mixins.",
+                id="root_binding_groups",
+            ),
+            pytest.param(
+                lambda tmp_path: (neutral_csv_group(tmp_path / "n.csv"),),
+                "tests.mixins.",
+                id="neutral_csv_group",
+            ),
         ],
     )
-    def test_reports_a_strongly_held_type_built_subclass(self, namespace: dict[str, str], expected_module: str) -> None:
-        """A held type()-built subclass (__module__ 'abc' or a shared mixin module) is reported."""
+    def test_reports_a_strongly_held_subclass(
+        self, tmp_path: Path, build: Callable[[Path], tuple[type[FeatureGroup], ...]], expected_module: str
+    ) -> None:
+        """A held subclass built by a probe or a shared helper is reported."""
         mark = FEATURE_GROUPS.mark()
-        leaked_cls = type("LeakedTypeBuiltRegistryProbeFeatureGroup", (FeatureGroup,), dict(namespace))
-        assert leaked_cls.__module__ == expected_module, (
-            "the probe no longer takes the expected module; the test proves nothing"
-        )
+        held = build(tmp_path)
+        modules = [c.__module__ for c in held]
+        expected = sorted(c.__name__ for c in held)
         reported = [c.__name__ for c in reclaim_leaked_feature_groups(mark, __name__)]
-        expected = leaked_cls.__name__
-        del leaked_cls  # drop the strong reference before asserting, so a failure leaves nothing behind
+        del held  # drop the strong references before asserting, so a failure leaves nothing behind
         gc.collect()
         gc.collect()
-        assert reported == [expected], f"a strongly held type()-built subclass must be reported, got {reported}"
+        assert reported == expected, f"a strongly held subclass must be reported, got {reported}"
+        assert all(m.startswith(expected_module) for m in modules), (
+            f"the builder must live under {expected_module} (tests/mixins/), got {modules}"
+        )
         survivors = {c.__name__ for c in FEATURE_GROUPS.live_since(mark)}
-        assert expected not in survivors, "the deliberate leak must not outlive this test"
+        assert not survivors & set(expected), "the deliberate leak must not outlive this test"
 
 
 def _build_type_built_subclass_and_promote(name: str) -> None:

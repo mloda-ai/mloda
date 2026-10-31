@@ -6,8 +6,6 @@ pickle for."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-
 import pytest
 
 from mloda.core.core.step.join_step import JoinStep
@@ -23,12 +21,6 @@ from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dyna
 )
 
 _DYNAMIC_CLASS_NAME = "ReviewProbeDynamicFeatureGroup_ValidateLinkTest"
-
-
-@pytest.fixture(autouse=True)
-def _cleanup_dynamic_feature_groups() -> Iterator[None]:
-    yield
-    DynamicFeatureGroupCreator._created_classes.pop(_DYNAMIC_CLASS_NAME, None)
 
 
 class ValidateLinkLeft(FeatureGroup):

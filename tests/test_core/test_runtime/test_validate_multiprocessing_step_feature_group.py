@@ -5,8 +5,6 @@ queued to a multiprocessing worker would otherwise fail deep inside pickle for."
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-
 import pytest
 
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -27,12 +25,6 @@ from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dyna
 )
 
 _DYNAMIC_CLASS_NAME = "ReviewProbeDynamicFeatureGroup_ValidateStepTest"
-
-
-@pytest.fixture(autouse=True)
-def _cleanup_dynamic_feature_groups() -> Iterator[None]:
-    yield
-    DynamicFeatureGroupCreator._created_classes.pop(_DYNAMIC_CLASS_NAME, None)
 
 
 class ValidateStepFeatureGroup(FeatureGroup):

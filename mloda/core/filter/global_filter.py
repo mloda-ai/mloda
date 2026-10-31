@@ -5,6 +5,7 @@ from itertools import chain
 from typing import Any
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.domain import Domain
@@ -370,7 +371,7 @@ class GlobalFilter:
         host_match_key = _PROBE_HOST_KEY.get()
         if (
             host_match_key is not None
-            and issubclass(feature_group, _FileSourceFG)
+            and is_nominal_subclass(feature_group, _FileSourceFG)
             and probe.rejection is not None
             and host_match_key[1] in probe.rejection.candidates
         ):

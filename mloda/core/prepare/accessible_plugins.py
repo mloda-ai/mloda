@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.base_feature_group_version import (
     SOURCE_INTROSPECTION_ERRORS,
     BaseFeatureGroupVersion,
@@ -372,7 +373,7 @@ class PreFilterPlugins:
             entry.__name__
             for entry in plugin_collector.enabled_feature_group_classes
             if isinstance(entry, type)
-            and issubclass(entry, FeatureGroup)
+            and is_nominal_subclass(entry, FeatureGroup)
             and entry is not FeatureGroup
             and entry not in universe
         )
@@ -504,7 +505,7 @@ class PreFilterPlugins:
             by_pair.setdefault((impl.feature_group, impl.compute_framework), []).append(impl)
         for members in by_pair.values():
             for first, second in itertools.combinations(sorted(members, key=_qualified_name), 2):
-                if issubclass(first, second) or issubclass(second, first):
+                if is_nominal_subclass(first, second) or is_nominal_subclass(second, first):
                     continue
                 raise EnvironmentPreconditionError(
                     f"Implementations {_qualified_name(first)} and {_qualified_name(second)} both serve "
@@ -564,14 +565,14 @@ class PreFilterPlugins:
                 identity = f"{feature_group.__module__}:{feature_group.__qualname__}"
                 raise FrameworkDeclarationError(identity, exc) from exc
             new_set_of_compute_frameworks = {cp_fg for cp_fg in definition if cp_fg in compute_frameworks}
-            if issubclass(feature_group, OperationFeatureGroup):
+            if is_nominal_subclass(feature_group, OperationFeatureGroup):
                 new_set_of_compute_frameworks = {
                     cp_fg
                     for cp_fg in new_set_of_compute_frameworks
                     if feature_group.select_implementation(cp_fg, self.implementations) is not None
                 }
                 if not new_set_of_compute_frameworks and any(
-                    issubclass(feature_group, impl.feature_group) for impl in self.implementations
+                    is_nominal_subclass(feature_group, impl.feature_group) for impl in self.implementations
                 ):
                     reason = self._disabled_implementation_reason(feature_group, compute_frameworks)
                     if reason is not None:

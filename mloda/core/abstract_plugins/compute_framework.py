@@ -6,6 +6,7 @@ from collections.abc import Set as AbstractSet
 from contextvars import ContextVar
 from typing import Any, NoReturn, final, get_origin
 from uuid import UUID, uuid4
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
@@ -747,7 +748,7 @@ class ComputeFramework(ABC):
             return result
         from mloda.core.abstract_plugins.data_creator_feature_group import DataCreatorFeatureGroup
 
-        if isinstance(feature_group, type) and issubclass(feature_group, DataCreatorFeatureGroup):
+        if is_nominal_subclass(feature_group, DataCreatorFeatureGroup):
             return result
         existing = self._extract_column_names(self.data)
         if any(key in existing for key in result):

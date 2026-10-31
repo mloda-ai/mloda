@@ -7,6 +7,7 @@ from typing import Any, cast
 from uuid import UUID
 import uuid
 
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.index.add_index_feature import create_index_feature
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.input_data.reader_probe import (
@@ -578,8 +579,8 @@ class Engine:
 
     def _link_sides(self, link: Link, feature_group_class: type[FeatureGroup], feature: Feature) -> tuple[bool, bool]:
         """Sides match by class or subclass; discriminators narrow only when the class matches both sides."""
-        left = issubclass(feature_group_class, link.left_feature_group)
-        right = issubclass(feature_group_class, link.right_feature_group)
+        left = is_nominal_subclass(feature_group_class, link.left_feature_group)
+        right = is_nominal_subclass(feature_group_class, link.right_feature_group)
 
         if left and right:
             left = link.left_discriminator is None or Link.matches_discriminator(
@@ -850,7 +851,7 @@ class Engine:
 
     def _missing_link_column_message(self, group: type[FeatureGroup], feature: Feature, column: str, link: Link) -> str:
         head = f"The link index column '{column}' of feature '{feature.name}' (link {link}) is in none of the sources"
-        if feature.input_data_match is None or not issubclass(group, SourceFeatureGroup):
+        if feature.input_data_match is None or not is_nominal_subclass(group, SourceFeatureGroup):
             return head
         match = feature.input_data_match[1]
         pointed = group.is_pointed(str(feature.name), feature.options, self.data_access_collection)
@@ -861,7 +862,7 @@ class Engine:
         self, group: type[FeatureGroup], feature: Feature, column: str, read: bool = True
     ) -> SourceProbeOutcome | None:
         """Asks the matched source whether it has the column, through the INPUT_DATA_MATCH gate."""
-        if feature.input_data_match is None or not issubclass(group, SourceFeatureGroup):
+        if feature.input_data_match is None or not is_nominal_subclass(group, SourceFeatureGroup):
             return None
         reader, match = feature.input_data_match
         return probe_source_group(
@@ -1208,7 +1209,7 @@ class Engine:
         """REQUIRED frameworks a neutral FileSource load of a file root cannot reach, with the reason."""
         if not (
             isinstance(feature_group_class, type)
-            and issubclass(feature_group_class, ReadFileFG)
+            and is_nominal_subclass(feature_group_class, ReadFileFG)
             and not feature_group_class.overrides_load_neutral(ReadFileFG)
         ):
             return {}

@@ -4,6 +4,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Generator, NamedTuple
 from uuid import UUID, uuid4
 
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_access_collection import resolve_connection_handle
 from mloda.core.abstract_plugins.components.error_utils import REPORT_URL, internal_invariant_error
@@ -360,7 +361,7 @@ class ExecutionPlan:
                 pre_execution_plan.append(element)
                 continue
 
-            elif issubclass(element[0], FeatureGroup):
+            elif is_nominal_subclass(element[0], FeatureGroup):
                 if not isinstance(element[1], set):
                     raise ValueError(f"Element {element} is not a valid element.")
 
@@ -606,7 +607,7 @@ class ExecutionPlan:
         ):
             if discriminator is None:
                 continue
-            nodes = [n for n in graph.nodes.values() if issubclass(n.feature_group_class, group)]
+            nodes = [n for n in graph.nodes.values() if is_nominal_subclass(n.feature_group_class, group)]
             if any(Link.matches_discriminator(discriminator, n.feature.options) for n in nodes):
                 continue
             seen: set[str] = set()
@@ -3898,11 +3899,11 @@ Available join types:
                 self.add_single_filters_to_feature_set(feature_group, feature_set)
 
                 input_data_match = feature_set.input_data_match
-                if issubclass(feature_group, SourceFeatureGroup) and input_data_match is not None:
+                if is_nominal_subclass(feature_group, SourceFeatureGroup) and input_data_match is not None:
                     feature_set.implementation = feature_group.select_implementation(
                         cf, input_data_match[1], self.implementations
                     )
-                elif issubclass(feature_group, OperationFeatureGroup):
+                elif is_nominal_subclass(feature_group, OperationFeatureGroup):
                     feature_set.implementation = feature_group.select_implementation(cf, self.implementations)
 
                 feature_group_step = FeatureGroupStep(

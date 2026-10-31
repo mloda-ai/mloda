@@ -7,6 +7,7 @@ from difflib import get_close_matches
 from dataclasses import dataclass, replace
 from typing import Any, cast
 
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 
 # Not a re-export facade: every import here is used by this module and ruff F401 fails any added just to re-export.
@@ -92,11 +93,11 @@ import logging
 
 def _operation_implementation_reason(feature_group: type[FeatureGroup]) -> str | None:
     """Why an operation group has no accessible implementation, else None."""
-    if not issubclass(feature_group, OperationFeatureGroup):
+    if not is_nominal_subclass(feature_group, OperationFeatureGroup):
         return None
-    if not any(issubclass(feature_group, impl.feature_group) for impl in loaded_implementations()):
+    if not any(is_nominal_subclass(feature_group, impl.feature_group) for impl in loaded_implementations()):
         return "no Implementation of it is loaded; import its implementation modules or call PluginLoader.all()"
-    if not any(issubclass(feature_group, impl.feature_group) for impl in current_implementations()):
+    if not any(is_nominal_subclass(feature_group, impl.feature_group) for impl in current_implementations()):
         return "its implementations are all disabled or denied for this run"
     return None
 
@@ -181,11 +182,11 @@ def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | 
     make it a wildcard.
     """
     if isinstance(scope, type):
-        return issubclass(feature_group, scope)
+        return is_nominal_subclass(feature_group, scope)
     # Name first: __name__ is an attribute read no plugin can raise out of, while issubclass() on an ABCMeta
     # class is the expensive check, so the name gate keeps it off nearly every MRO entry.
     return any(
-        ancestor.__name__ == scope and ancestor is not FeatureGroup and issubclass(ancestor, FeatureGroup)
+        ancestor.__name__ == scope and ancestor is not FeatureGroup and is_nominal_subclass(ancestor, FeatureGroup)
         for ancestor in feature_group.__mro__
     )
 
@@ -225,7 +226,7 @@ def _pin_conflict(
         if group is None:
             continue
         value = feature.options[key]
-        if issubclass(group, _FileSourceFG) and isinstance(value, (str, os.PathLike)):
+        if is_nominal_subclass(group, _FileSourceFG) and isinstance(value, (str, os.PathLike)):
             pointer = os.path.abspath(value)
             if pointer == pinned_abs:
                 continue
@@ -253,7 +254,7 @@ def validate_source_pointers(
         return
     excluded = excluded or {}
     loaded = concrete_source_groups()
-    accessible_sources = [fg for fg in accessible_plugins if issubclass(fg, SourceFeatureGroup)]
+    accessible_sources = [fg for fg in accessible_plugins if is_nominal_subclass(fg, SourceFeatureGroup)]
     for key in keys:
         group = loaded.get(key)
         if group is None:
@@ -500,7 +501,7 @@ class IdentifyFeatureGroupClass:
             ancestor.__name__
             for fg in accessible_plugins
             for ancestor in fg.__mro__
-            if ancestor is not FeatureGroup and issubclass(ancestor, FeatureGroup)
+            if ancestor is not FeatureGroup and is_nominal_subclass(ancestor, FeatureGroup)
         }
         return tuple(get_close_matches(scope, sorted(names), n=3, cutoff=0.6))
 
@@ -608,7 +609,7 @@ class IdentifyFeatureGroupClass:
         for candidate in accessible_plugins:
             if inspect.isabstract(candidate):
                 continue
-            if not any(issubclass(candidate, abstract_fg) for abstract_fg in result.abstract_matched):
+            if not any(is_nominal_subclass(candidate, abstract_fg) for abstract_fg in result.abstract_matched):
                 continue
             frameworks.update(self._declared_framework_names(candidate))
         return tuple(sorted(frameworks))
@@ -886,8 +887,8 @@ class IdentifyFeatureGroupClass:
         self._environment = resolution_environment(accessible_plugins, links, data_access_collection, self._excluded)
         identified: FeatureGroupEnvironmentMapping = {}
         items = list(accessible_plugins.items())
-        others = [item for item in items if not issubclass(item[0], SourceFeatureGroup)]
-        sources = [item for item in items if issubclass(item[0], SourceFeatureGroup)]
+        others = [item for item in items if not is_nominal_subclass(item[0], SourceFeatureGroup)]
+        sources = [item for item in items if is_nominal_subclass(item[0], SourceFeatureGroup)]
         # Non-source candidates go first so a searched source route can step aside for a name one of them computes.
         self._collect_candidates(feature, others, links, data_access_collection, identified)
         if sources:
@@ -949,7 +950,7 @@ class IdentifyFeatureGroupClass:
         remaining = [
             fg
             for fg in sorted(self._deferred_aborts, key=_candidate_sort_key)
-            if not any(survivor is not fg and issubclass(survivor, fg) for survivor in identified)
+            if not any(survivor is not fg and is_nominal_subclass(survivor, fg) for survivor in identified)
         ]
         if not remaining:
             return
@@ -965,7 +966,7 @@ class IdentifyFeatureGroupClass:
             if fg().is_root(self._matched_options[fg], self._hook_name(fg, feature))
         ]
         for fg in remaining:
-            if not computing or any(not issubclass(survivor, fg) for survivor in reading):
+            if not computing or any(not is_nominal_subclass(survivor, fg) for survivor in reading):
                 abort = self._deferred_aborts[fg]
                 refusal = abort.__cause__
                 raise escalate_match_abort(
@@ -1372,7 +1373,7 @@ class IdentifyFeatureGroupClass:
                 if i_feature_group == o_feature_group:
                     continue
 
-                if issubclass(i_feature_group, o_feature_group):
+                if is_nominal_subclass(i_feature_group, o_feature_group):
                     fgs_to_pop.add(o_feature_group)
 
         for fg in fgs_to_pop:

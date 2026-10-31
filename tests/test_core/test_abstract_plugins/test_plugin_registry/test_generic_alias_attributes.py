@@ -74,6 +74,28 @@ class TestIsClassHelper:
         assert _is_class(FeatureGroup) is True
         assert _is_class(object()) is False
 
+    def test_is_nominal_subclass_follows_the_mro_only(self) -> None:
+        from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
+
+        class _Direct(FeatureGroup):
+            pass
+
+        class _Indirect(_Direct):
+            pass
+
+        class _Unrelated:
+            pass
+
+        assert is_nominal_subclass(tuple[str, ...], FeatureGroup) is False
+        assert is_nominal_subclass(list[int], FeatureGroup) is False
+        assert is_nominal_subclass(object(), FeatureGroup) is False
+        assert is_nominal_subclass(None, FeatureGroup) is False
+        assert is_nominal_subclass(FeatureGroup, FeatureGroup) is True
+        assert is_nominal_subclass(_Direct, FeatureGroup) is True
+        assert is_nominal_subclass(_Indirect, FeatureGroup) is True
+        assert is_nominal_subclass(_Indirect, (_Unrelated, FeatureGroup)) is True
+        assert is_nominal_subclass(_Unrelated, FeatureGroup) is False
+
 
 class TestEntryPointManifestRejectsGenericAlias:
     def test_entry_point_manifest_reports_generic_alias_as_non_class(self) -> None:

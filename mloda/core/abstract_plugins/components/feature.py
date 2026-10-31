@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from copy import copy
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.data_types import DataType
 
 if TYPE_CHECKING:
@@ -48,7 +49,7 @@ def normalize_feature_group_scope(
         return stripped or None
     if feature_group is FeatureGroup:
         raise TypeError(root_rejection)
-    if isinstance(feature_group, type) and issubclass(feature_group, FeatureGroup):
+    if is_nominal_subclass(feature_group, FeatureGroup):
         return feature_group
     raise TypeError(
         f"feature_group must be a FeatureGroup subclass, a class-name string, or None, "

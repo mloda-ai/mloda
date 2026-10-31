@@ -14,8 +14,6 @@ from mloda.provider import ApiDataFG
 from mloda.user import PluginLoader, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
-# Docs enumeration source-hashes every FeatureGroup subclass; a cold cache under xdist load can exceed the default timeout.
-pytestmark = pytest.mark.timeout(30)
 
 ENV_VAR = "MLODA_PLUGIN_REGISTRY_STRICT"
 

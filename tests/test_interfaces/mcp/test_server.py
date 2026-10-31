@@ -36,8 +36,7 @@ from tests.test_interfaces.source_groups import (  # noqa: E402
     RunnerMissingInputMcp5,
 )
 
-# The tools resolve real FeatureGroups and read source files; a cold cache under xdist load can exceed 10s.
-pytestmark = [pytest.mark.timeout(30), pytest.mark.anyio]
+pytestmark = pytest.mark.anyio
 
 CLOCK_START = 1_800_000_000.0
 ENV: dict[str, str] = {"MLODA_MCP_SIGNING_KEY": "k" * 32}

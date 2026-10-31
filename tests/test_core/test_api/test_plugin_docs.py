@@ -29,8 +29,6 @@ from tests.registry_isolation import (
     reclaim_leaked_subclasses,
 )
 
-# Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
-pytestmark = pytest.mark.timeout(30)
 
 SAFE_FIELD_LOGGER = "mloda.core.abstract_plugins.components.utils"
 

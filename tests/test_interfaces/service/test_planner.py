@@ -54,8 +54,6 @@ from tests.test_interfaces.source_groups import (
     PlanRaiseMcp5,
 )
 
-# Planning resolves real FeatureGroups and reads source files; a cold cache under xdist load can exceed 10s.
-pytestmark = pytest.mark.timeout(30)
 
 SECRET = "s3://user:pw@host/x"  # nosec B105
 DENIED = "PlannerDeniedMcp4"

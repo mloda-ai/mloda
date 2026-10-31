@@ -42,8 +42,6 @@ from tests.test_interfaces.source_groups import (
     RunnerRaiseMcp5,
 )
 
-# The CLI resolves real FeatureGroups and reads source files; a cold cache under xdist load can exceed 10s.
-pytestmark = pytest.mark.timeout(30)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MAIN_PATH = REPO_ROOT / "mloda" / "interfaces" / "cli" / "main.py"

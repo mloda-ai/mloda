@@ -11,8 +11,6 @@ import ast
 from copy import copy
 from pathlib import Path
 
-import pytest
-
 import mloda
 import mloda_plugins
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -136,7 +134,6 @@ def _configured_forms() -> set[str]:
     }
 
 
-@pytest.mark.timeout(30)
 def test_no_module_mutates_compute_frameworks_in_place() -> None:
     """Scope: every module under mloda/ and mloda_plugins/."""
     # Vacuity floor, NOT a target: a sweep over half the tree would pass this guard trivially.

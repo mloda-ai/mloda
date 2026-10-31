@@ -16,8 +16,6 @@ so clearing it inside a test is safe.
 
 from typing import Any
 
-import pytest
-
 import mloda.steward
 import mloda.user
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -32,9 +30,6 @@ from mloda.core.api.plugin_docs import (
     get_extender_docs,
     get_feature_group_docs,
 )
-
-# Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
-pytestmark = pytest.mark.timeout(30)
 
 
 class TestPublicRegistryExports:

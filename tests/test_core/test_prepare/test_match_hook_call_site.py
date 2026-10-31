@@ -16,7 +16,6 @@ from typing import NamedTuple
 
 import pytest
 
-pytestmark = pytest.mark.timeout(30)
 
 # Anchored via __file__, not the cwd: a cwd-relative root makes every lookup empty and the sweep vacuous.
 _REPO_ROOT = Path(__file__).resolve().parents[3]

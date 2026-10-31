@@ -37,6 +37,7 @@ from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import Sklea
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 
+# Whole-tree source scan: 1.25s serial, but past 10s (up to 32s) measured in a full -n 3 run on a loaded host.
 pytestmark = pytest.mark.timeout(30)
 
 # Anchor the scan root to the repo layout via __file__, not the cwd: a cwd-relative root makes the

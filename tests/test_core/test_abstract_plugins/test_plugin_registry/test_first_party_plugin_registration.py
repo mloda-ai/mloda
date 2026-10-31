@@ -21,9 +21,8 @@ Exclusions from the guard:
 
 Parallel-safety: the import sweep is cached per worker, doubles with a spoofed first-party ``__module__`` are
 built in fixtures and reclaimed after teardown, and the autouse conftest fixture restores the default registry
-and the warn-mode dedup set around every test, so clearing the registry here is safe. The sweep costs a few
-seconds cold, hence the raised timeouts; the optional-dependency skip policy it relies on is exercised by
-``tox -e core`` (tox.ini), which collects tests/test_core/ with only the test and pandas extras installed.
+and the warn-mode dedup set around every test, so clearing the registry here is safe. The optional-dependency
+skip policy the sweep relies on is exercised by ``tox -e core`` (tox.ini), which collects tests/test_core/ with only the test and pandas extras installed.
 """
 
 import importlib
@@ -273,9 +272,8 @@ def make_drift_probe() -> Iterator[Callable[[str, str], str]]:
     created.clear()
 
 
-@pytest.mark.timeout(30)
 class TestEveryWheelOwnedPluginIsRegistered:
-    """The guard itself: the import sweep costs a few seconds cold, hence the raised timeout."""
+    """The guard itself."""
 
     def test_the_sweep_finds_the_known_wheel_owned_plugins(self) -> None:
         """Positive control: `unregistered == []` is vacuously true on an empty candidate set."""
@@ -316,7 +314,6 @@ class TestEveryWheelOwnedPluginIsRegistered:
         assert unregistered == [], _fix_hint(Implementation, unregistered)
 
 
-@pytest.mark.timeout(30)
 class TestGuardDetectsCoreDrift:
     """The guard must have teeth: it fails on exactly the drift that happened in #726."""
 
@@ -347,7 +344,6 @@ class TestGuardDetectsCoreDrift:
 class TestCompositeExtenderExclusion:
     """CompositeExtender is waived by name in _NOT_REGISTRY_GATED, not by a private-name rule."""
 
-    @pytest.mark.timeout(30)
     def test_composite_extender_is_waived_and_would_otherwise_be_flagged(self) -> None:
         assert _is_bundled_plugin(CompositeExtender), "sanity: it ships in the wheel"
         assert not inspect.isabstract(CompositeExtender), "sanity: it is concrete"

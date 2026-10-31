@@ -20,8 +20,6 @@ import mloda.interfaces.mcp.main as mcp_main
 from mloda.interfaces.service.config import Settings, load_settings
 from tests.helpers.docs_scope import shipped_feature_group_registry
 
-# serve builds the catalog over every loaded FeatureGroup; a cold cache under xdist load can exceed 10s.
-pytestmark = pytest.mark.timeout(30)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MAIN_PATH = REPO_ROOT / "mloda" / "interfaces" / "mcp" / "main.py"

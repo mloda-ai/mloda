@@ -37,8 +37,6 @@ from tests.test_interfaces.source_groups import (
     CallerOpenMcp7,
 )
 
-# Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
-pytestmark = pytest.mark.timeout(30)
 
 SECRET = "s3://user:pw@host/x"  # nosec B105
 DENIED = "CatalogDeniedMcp3"

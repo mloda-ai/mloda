@@ -1413,8 +1413,7 @@ Available join types:
         sides: set[bool] = set()
         carried_children: set[UUID] = set()
         for child in children_uuids:
-            parents = graph.parent_to_children_mapping[child]
-            for parent in parents - self.get_parent_parents(parents, graph):
+            for parent in self.direct_ancestors(child, graph.parent_to_children_mapping):
                 if parent in side_members or nodes[parent].feature.get_compute_framework() in frameworks:
                     continue
                 above = graph.parent_to_children_mapping.get(parent, set())
@@ -1879,9 +1878,7 @@ Available join types:
 
                 parents: set[UUID] = set()
                 for member_uuid in ep.get_uuids():
-                    member_parents = graph.parent_to_children_mapping.get(member_uuid, set())
-                    direct_parents = member_parents - self.get_parent_parents(member_parents, graph)
-                    parents |= direct_parents
+                    parents |= self.direct_ancestors(member_uuid, graph.parent_to_children_mapping)
                 if ep.own_frame:
                     need_to_upload_collector.update(parents)
 
@@ -2562,14 +2559,6 @@ Available join types:
             if store_val == next(iter(js.destination_framework_uuids)) and left_most_index == js.link.left_index:
                 inner_ep.tfs_ids = {store_val}
                 inner_ep.features.any_uuid = store_val
-
-    def get_parent_parents(self, parents: set[UUID], graph: Graph) -> set[UUID]:
-        parent_parents = set()
-        for parent in parents:
-            parent_parent = graph.parent_to_children_mapping.get(parent, set())
-            if len(parent_parent) > 0:
-                parent_parents.update(parent_parent)
-        return parent_parents
 
     @staticmethod
     def _reject_mixed_member_bucket(

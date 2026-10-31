@@ -14,6 +14,7 @@ from mloda.core.core.engine import Engine
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
+from mloda.core.prepare.declared_sides import DeclaredSideSplit
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
@@ -858,6 +859,34 @@ def _one_record(plan: ExecutionPlan, link: Link) -> ResolvedJoin:
 
 def _without_depends(signatures: Iterable[JoinSignature]) -> frozenset[JoinSignature]:
     return frozenset(signature._replace(depends_on_links=()) for signature in signatures)
+
+
+def test_a_carrier_scan_ignores_a_redundant_edge_to_an_ancestor_of_a_skipped_parent() -> None:
+    """The child reads M and M's ancestor K; only the direct parents M and right count, and both are skipped."""
+    planned = _planned()
+    left = feature("resolved_join_redundant_left", PyArrowTable)
+    right = feature("resolved_join_redundant_right", PandasDataFrame)
+    skipped_ancestor = feature("resolved_join_redundant_k", PythonDictFramework)
+    middle = feature("resolved_join_redundant_m", PyArrowTable)
+    child = feature("resolved_join_redundant_child", PyArrowTable)
+    for node in (left, right, skipped_ancestor, middle, child):
+        planned.graph.add_node(node.uuid, NodeProperties(node, ResolvedJoinChild))
+    # Closed mapping: every node maps to all of its ancestors.
+    mapping = planned.graph.parent_to_children_mapping
+    mapping[skipped_ancestor.uuid] = {left.uuid}
+    mapping[middle.uuid] = {skipped_ancestor.uuid, left.uuid}
+    mapping[child.uuid] = {middle.uuid, skipped_ancestor.uuid, left.uuid, right.uuid}
+    split = DeclaredSideSplit(
+        frozenset({left.uuid}), frozenset({right.uuid}), frozenset({left.uuid}), frozenset({right.uuid})
+    )
+
+    carriers, sides, carried_children = ExecutionPlan()._carrier_scan(
+        {child.uuid}, split, planned.graph, {PyArrowTable}
+    )
+
+    assert carriers == frozenset()
+    assert sides == set()
+    assert carried_children == set()
 
 
 def test_a_record_is_inverted_exactly_when_its_destination_is_the_right_side() -> None:

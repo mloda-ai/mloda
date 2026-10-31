@@ -57,7 +57,7 @@ def _declared_groups(node: Any, subst: Mapping[Any, Any]) -> list[type]:
     if origin is Implementation:
         group = args[0] if args else None
         return [group] if isinstance(group, type) and group is not Any and typing.get_origin(group) is None else []
-    if not (is_nominal_subclass(origin, Implementation)):
+    if not is_nominal_subclass(origin, Implementation):
         return []
     mapping = dict(zip(getattr(origin, "__parameters__", ()), args))
     declared: list[type] = []
@@ -115,7 +115,7 @@ class Implementation(ABC, Generic[G]):
                 f"{cls.__name__}.feature_group must be {declared.__name__} or a subclass "
                 f"(Implementation[{declared.__name__}]), got {group.__name__}."
             )
-        if not (is_nominal_subclass(framework, ComputeFramework)):
+        if not is_nominal_subclass(framework, ComputeFramework):
             raise TypeError(f"{cls.__name__} must set compute_framework to a ComputeFramework subclass.")
 
     @classmethod

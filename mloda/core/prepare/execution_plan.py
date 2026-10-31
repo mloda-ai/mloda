@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_access_collection import resolve_connection_handle
 from mloda.core.abstract_plugins.components.error_utils import REPORT_URL, internal_invariant_error
-from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.components.index.index import Index
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -360,7 +360,7 @@ class ExecutionPlan:
                 pre_execution_plan.append(element)
                 continue
 
-            elif issubclass(element[0], FeatureGroup):
+            elif is_nominal_subclass(element[0], FeatureGroup):
                 if not isinstance(element[1], set):
                     raise ValueError(f"Element {element} is not a valid element.")
 
@@ -606,7 +606,7 @@ class ExecutionPlan:
         ):
             if discriminator is None:
                 continue
-            nodes = [n for n in graph.nodes.values() if issubclass(n.feature_group_class, group)]
+            nodes = [n for n in graph.nodes.values() if is_nominal_subclass(n.feature_group_class, group)]
             if any(Link.matches_discriminator(discriminator, n.feature.options) for n in nodes):
                 continue
             seen: set[str] = set()
@@ -1987,7 +1987,7 @@ Available join types:
                         owners_a = {owning_step_of.get(u, u) for u in closure_a}
                         if any(owning_step_of.get(u, u) in owners_a for u in closure_b):
                             return True
-                    if issubclass(hop_a.from_feature_group, hop_b.from_feature_group) or issubclass(
+                    if is_nominal_subclass(hop_a.from_feature_group, hop_b.from_feature_group) or is_nominal_subclass(
                         hop_b.from_feature_group, hop_a.from_feature_group
                     ):
                         join_adjacent = isinstance(hop_a, _JoinServedParent) or isinstance(hop_b, _JoinServedParent)
@@ -2065,9 +2065,9 @@ Available join types:
                 def _subclass_only_linked(hop_a: TransformFrameworkStep, hop_b: TransformFrameworkStep) -> bool:
                     if hop_a.from_feature_group is hop_b.from_feature_group:
                         return False
-                    return issubclass(hop_a.from_feature_group, hop_b.from_feature_group) or issubclass(
-                        hop_b.from_feature_group, hop_a.from_feature_group
-                    )
+                    return is_nominal_subclass(
+                        hop_a.from_feature_group, hop_b.from_feature_group
+                    ) or is_nominal_subclass(hop_b.from_feature_group, hop_a.from_feature_group)
 
                 for group in hop_groups:
                     tfs_members = [hop for hop, _member_parent in group if isinstance(hop, TransformFrameworkStep)]
@@ -2179,12 +2179,12 @@ Available join types:
                         rep_a, rep_b = reps_by_frame[0][1], reps_by_frame[1][1]
                         linked = (joined_key in frame_parents and bool(serving)) or any(
                             (
-                                issubclass(rep_a, js.link.left_feature_group)
-                                and issubclass(rep_b, js.link.right_feature_group)
+                                is_nominal_subclass(rep_a, js.link.left_feature_group)
+                                and is_nominal_subclass(rep_b, js.link.right_feature_group)
                             )
                             or (
-                                issubclass(rep_b, js.link.left_feature_group)
-                                and issubclass(rep_a, js.link.right_feature_group)
+                                is_nominal_subclass(rep_b, js.link.left_feature_group)
+                                and is_nominal_subclass(rep_a, js.link.right_feature_group)
                             )
                             for js in left_join_frameworks
                         )
@@ -3455,7 +3455,7 @@ Available join types:
                 continue
 
             # Use polymorphic matching: concrete class should be subclass of link's base class
-            if not issubclass(graph.nodes[uuid].feature_group_class, link_fw[0].left_feature_group):
+            if not is_nominal_subclass(graph.nodes[uuid].feature_group_class, link_fw[0].left_feature_group):
                 continue
 
             if link_fw[0].left_discriminator is not None:
@@ -3472,7 +3472,7 @@ Available join types:
                     continue
 
                 # Use polymorphic matching: concrete class should be subclass of link's base class
-                if not issubclass(graph.nodes[_uuid].feature_group_class, link_fw[0].right_feature_group):
+                if not is_nominal_subclass(graph.nodes[_uuid].feature_group_class, link_fw[0].right_feature_group):
                     continue
 
                 if link_fw[0].right_discriminator is not None:
@@ -3898,11 +3898,11 @@ Available join types:
                 self.add_single_filters_to_feature_set(feature_group, feature_set)
 
                 input_data_match = feature_set.input_data_match
-                if issubclass(feature_group, SourceFeatureGroup) and input_data_match is not None:
+                if is_nominal_subclass(feature_group, SourceFeatureGroup) and input_data_match is not None:
                     feature_set.implementation = feature_group.select_implementation(
                         cf, input_data_match[1], self.implementations
                     )
-                elif issubclass(feature_group, OperationFeatureGroup):
+                elif is_nominal_subclass(feature_group, OperationFeatureGroup):
                     feature_set.implementation = feature_group.select_implementation(cf, self.implementations)
 
                 feature_group_step = FeatureGroupStep(

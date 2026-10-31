@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Any, Final
 from abc import ABC
 
-from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.version import get_mloda_version
 
 # Exceptions inspect.getsource raises for dynamically built classes (no source backing / built-in).
@@ -77,7 +77,7 @@ class BaseFeatureGroupVersion(ABC):
         from mloda.core.abstract_plugins.feature_group import FeatureGroup
         from mloda.core.abstract_plugins.implementation import Implementation
 
-        if not issubclass(target_class, (FeatureGroup, Implementation)):
+        if not is_nominal_subclass(target_class, (FeatureGroup, Implementation)):
             raise ValueError(f"target_class must be a subclass of FeatureGroup or Implementation: {target_class}")
 
         cached = _class_source_hash_cache.get(target_class)
@@ -167,7 +167,7 @@ class BaseFeatureGroupVersion(ABC):
         from mloda.core.abstract_plugins.feature_group import FeatureGroup
         from mloda.core.abstract_plugins.implementation import Implementation
 
-        if not issubclass(target_class, (FeatureGroup, Implementation)):
+        if not is_nominal_subclass(target_class, (FeatureGroup, Implementation)):
             raise ValueError(f"target_class must be a subclass of FeatureGroup or Implementation: {target_class}")
 
         return f"{cls.mloda_version()}-{cls.module_name(target_class)}-{cls.implementation_hash(target_class)}"

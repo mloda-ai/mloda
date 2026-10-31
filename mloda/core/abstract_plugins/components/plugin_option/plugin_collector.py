@@ -3,6 +3,7 @@ from collections.abc import Iterable
 from copy import copy as shallow_copy
 from typing import TYPE_CHECKING, Any
 
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
 
@@ -28,7 +29,7 @@ def _validate_strict_mode(mode: str) -> None:
 def _reject_implementations(classes: Iterable[Any]) -> None:
     """Raise TypeError for Implementation classes passed where FeatureGroups are expected."""
     for cls in classes:
-        if isinstance(cls, type) and issubclass(cls, Implementation):
+        if is_nominal_subclass(cls, Implementation):
             group = getattr(cls, "feature_group", None)
             group_name = group.__name__ if group is not None else "its feature_group"
             impl_name = cls.__name__

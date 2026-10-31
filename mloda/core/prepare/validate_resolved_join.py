@@ -8,6 +8,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.link import JoinType
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -189,7 +190,7 @@ def _foreign_members(group: type[FeatureGroup], uuids: Iterable[UUID], graph: Gr
     return sorted(
         nodes[uuid].feature_group_class.get_class_name()
         for uuid in uuids
-        if not issubclass(nodes[uuid].feature_group_class, group)
+        if not is_nominal_subclass(nodes[uuid].feature_group_class, group)
     )
 
 

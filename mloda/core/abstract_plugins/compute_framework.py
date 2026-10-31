@@ -15,7 +15,7 @@ from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseM
 from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
 from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
-from mloda.core.abstract_plugins.components.utils import as_str, safe_field
+from mloda.core.abstract_plugins.components.utils import as_str, is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import (
     InputCheck,
     MissingInputFeatureError,
@@ -747,7 +747,7 @@ class ComputeFramework(ABC):
             return result
         from mloda.core.abstract_plugins.data_creator_feature_group import DataCreatorFeatureGroup
 
-        if isinstance(feature_group, type) and issubclass(feature_group, DataCreatorFeatureGroup):
+        if is_nominal_subclass(feature_group, DataCreatorFeatureGroup):
             return result
         existing = self._extract_column_names(self.data)
         if any(key in existing for key in result):

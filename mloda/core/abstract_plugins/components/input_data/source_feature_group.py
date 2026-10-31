@@ -35,7 +35,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
 )
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY, Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
-from mloda.core.abstract_plugins.components.utils import defer_match_abort, escalate_match_abort
+from mloda.core.abstract_plugins.components.utils import defer_match_abort, escalate_match_abort, is_nominal_subclass
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -92,7 +92,7 @@ def implementation_path(feature_group: type, implementation: Any, match: Any) ->
     """module:qualname of the implementation, "neutral" for a source group with a match and none, else None."""
     if implementation is not None:
         return f"{implementation.__module__}:{implementation.__qualname__}"
-    if match is not None and issubclass(feature_group, SourceFeatureGroup):
+    if match is not None and is_nominal_subclass(feature_group, SourceFeatureGroup):
         return "neutral"
     return None
 
@@ -279,7 +279,7 @@ class SourceFeatureGroup(FeatureGroup):
         return tuple(
             klass.__name__
             for klass in cls.__mro__
-            if issubclass(klass, SourceFeatureGroup)
+            if is_nominal_subclass(klass, SourceFeatureGroup)
             and klass is not SourceFeatureGroup
             and (klass is cls or not inspect.isabstract(klass))
         )
@@ -305,7 +305,7 @@ class SourceFeatureGroup(FeatureGroup):
         if scope is None:
             return False
         for klass in cls.__mro__:
-            if not (isinstance(klass, type) and issubclass(klass, SourceFeatureGroup)):
+            if not is_nominal_subclass(klass, SourceFeatureGroup):
                 continue
             if klass is not cls and inspect.isabstract(klass):
                 continue

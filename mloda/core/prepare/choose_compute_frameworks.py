@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.link import JoinType, Link
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -300,7 +301,7 @@ class ChooseComputeFrameworks:
 
     def _block_differs(self, block: _Block) -> dict[Framework, tuple[str, ...]]:
         """Per framework, the declared divergences of the implementations serving the block's features."""
-        if not self.implementations or not issubclass(block.fg, OperationFeatureGroup):
+        if not self.implementations or not is_nominal_subclass(block.fg, OperationFeatureGroup):
             return {}
         result: dict[Framework, tuple[str, ...]] = {}
         for framework in block.domain:
@@ -315,7 +316,7 @@ class ChooseComputeFrameworks:
     def _block_home(self, block: _Block) -> tuple[frozenset[Framework] | None, str | None]:
         """Frameworks that read the source in place, or on a default run take its neutral type, with the reason."""
         match = block.features[0].input_data_match
-        if match is None or not issubclass(block.fg, SourceFeatureGroup):
+        if match is None or not is_nominal_subclass(block.fg, SourceFeatureGroup):
             return None, None
         conn = block.fg.match_connection(match[1])
         if conn is not None:

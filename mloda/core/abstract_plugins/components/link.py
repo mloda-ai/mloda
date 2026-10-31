@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from mloda.core.abstract_plugins.components.credential_scrub import _mask_secret_keys, redact_option_value
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable
-from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
@@ -642,7 +642,7 @@ class Link:
         other_right_feature_group: type[Any],
     ) -> bool:
         """Subclass match (inheritance). Returns True if both sides are subclasses."""
-        return issubclass(other_left_feature_group, self.left_feature_group) and issubclass(
+        return is_nominal_subclass(other_left_feature_group, self.left_feature_group) and is_nominal_subclass(
             other_right_feature_group, self.right_feature_group
         )
 

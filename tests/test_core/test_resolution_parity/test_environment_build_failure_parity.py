@@ -518,7 +518,7 @@ def test_enabled_group_missing_from_registry_warns_when_other_groups_survive(
         _, message = safe_field_with_error(
             lambda: PreFilterPlugins(
                 PreFilterPlugins.get_cfw_subclasses(),
-                PluginCollector.enabled_feature_groups({held[0], CollectorFilteredProbe850}),
+                PluginCollector.enabled_feature_groups({held[0], CollectorFilteredProbe850, FeatureGroup}),
             ),
             None,
         )
@@ -530,6 +530,7 @@ def test_enabled_group_missing_from_registry_warns_when_other_groups_survive(
 
     assert message is None
     assert any(name in w and "super().__init_subclass__()" in w for w in warnings)
+    assert not any("'FeatureGroup'" in w for w in warnings)
     assert collected
 
 

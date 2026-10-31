@@ -371,7 +371,10 @@ class PreFilterPlugins:
         names = sorted(
             entry.__name__
             for entry in plugin_collector.enabled_feature_group_classes
-            if isinstance(entry, type) and issubclass(entry, FeatureGroup) and entry not in universe
+            if isinstance(entry, type)
+            and issubclass(entry, FeatureGroup)
+            and entry is not FeatureGroup
+            and entry not in universe
         )
         if not names:
             return ""

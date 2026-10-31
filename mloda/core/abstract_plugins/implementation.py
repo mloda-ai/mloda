@@ -28,7 +28,7 @@ G = TypeVar("G", bound=FeatureGroup)
 _CONCRETE_VERDICTS: weakref.WeakKeyDictionary[type, bool] = weakref.WeakKeyDictionary()
 _PAIR_VERDICTS: weakref.WeakKeyDictionary[type, bool] = weakref.WeakKeyDictionary()
 
-# typing's Generic subscription without its LRU cache, which holds every argument strongly.
+# typing's private, uncached Generic subscription; the public one's LRU cache holds every argument strongly.
 _GENERIC_GETITEM: Callable[..., Any] = inspect.unwrap(
     getattr(typing, "_generic_class_getitem", None) or Generic.__dict__["__class_getitem__"].__func__
 )

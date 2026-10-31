@@ -30,6 +30,7 @@ from mloda_plugins.feature_group.experimental.data_quality.missing_value.python_
 from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
     DynamicFeatureGroupCreator,
 )
+from tests.helpers.subclass_walks import collect_until_dead
 from tests.test_core.test_abstract_plugins.test_abstract_feature_group import BaseTestFeatureGroup1
 from tests.test_core.test_prepare.test_feature_group_dedup import _exec_fg_in_module
 
@@ -214,11 +215,11 @@ class TestClassSourceHashCaching:
         ref = weakref.ref(cls)
         calls.clear()
         del first, second, cls
-        gc.collect()  # the weakref assert below needs the class cycle actually collected
+        collected = collect_until_dead(ref)
 
         assert second_error == first_error
         assert reads == 1, f"A failed lookup must be served from the cache, but getsource ran {reads} times"
-        assert ref() is None, "A class whose lookup failed must stay garbage-collectable"
+        assert collected, "A class whose lookup failed must stay garbage-collectable"
 
 
 class TestMlodaVersionMemoization:
@@ -1397,9 +1398,9 @@ class TestImplementationVersion:
 
         del leaf
         fixture_pkg.purge(top)
-        gc.collect()  # the weakref assert below needs the class cycle actually collected
+        collected = collect_until_dead(ref)
 
-        assert ref() is None, "the Implementation[...] subscription must not pin the group after purge"
+        assert collected, "the Implementation[...] subscription must not pin the group after purge"
 
 
 # --------------------------------------------------------------------------
@@ -1541,9 +1542,9 @@ class TestImplementationHashCaching:
         ref = weakref.ref(leaf)
         del leaf
         fixture_pkg.purge(top)
-        gc.collect()  # the weakref assert below needs the class cycle actually collected
+        collected = collect_until_dead(ref)
 
-        assert ref() is None, "implementation_hash must not pin a successfully hashed class alive via its cache"
+        assert collected, "implementation_hash must not pin a successfully hashed class alive via its cache"
 
 
 def _two_hundred_functions_ast_retention_module_src() -> str:

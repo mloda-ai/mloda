@@ -2,8 +2,6 @@
 Integration tests for the AggregatedFeatureGroup with mloda.
 """
 
-import gc
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -25,10 +23,8 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 
 
 @pytest.fixture(autouse=True, scope="module")
-def _collect_local_classes() -> Iterator[None]:
+def _load_all_plugins() -> None:
     PluginLoader.all()
-    yield
-    gc.collect()
 
 
 class AggregatedParserTestDataCreator(ATestDataCreator):

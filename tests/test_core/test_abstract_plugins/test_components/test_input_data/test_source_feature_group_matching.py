@@ -1,6 +1,5 @@
 """SourceFeatureGroup class-definition rule, claim-route matching, pointing, ambiguity and plan identity."""
 
-import gc
 import logging
 from abc import abstractmethod
 from collections.abc import Collection
@@ -97,7 +96,6 @@ class TestClassDefinitionRule:
             type("ToyfmtBadMixinReadFile", (_BadSpecMixin, ReadFileFG), attributes if own_mapping else {})
         message = str(exc_info.value)
         del exc_info
-        gc.collect()
 
         assert "ToyfmtBadMixinReadFile.PROPERTY_MAPPING['toyfmt_bad'] is a int, not a PropertySpec" in message
 
@@ -234,7 +232,6 @@ class TestDeclaredNamesProbeOnlyDeclaredNames:
         assert group not in result.eliminations
         assert group not in result.identified
         del group, result, feature
-        gc.collect()
 
     def test_a_declared_name_still_probes_and_claims(self) -> None:
         calls: list[str] = []
@@ -244,7 +241,6 @@ class TestDeclaredNamesProbeOnlyDeclaredNames:
         assert calls == ["toyfmt_declared_col"]
         assert group in result.identified
         del group, result
-        gc.collect()
 
     def test_a_pointed_undeclared_name_still_probes_and_records_the_undeclared_reason(self) -> None:
         calls: list[str] = []
@@ -256,7 +252,6 @@ class TestDeclaredNamesProbeOnlyDeclaredNames:
         assert group not in result.identified
         assert "is not a name ToyfmtSpyDeclaredFG declares" in result.eliminations[group].reason
         del group, result, feature
-        gc.collect()
 
     def test_a_required_option_declared_route_skips_an_undeclared_name(self) -> None:
         calls: list[str] = []
@@ -280,7 +275,6 @@ class TestDeclaredNamesProbeOnlyDeclaredNames:
         assert calls == []
         assert ToyfmtSpyRequiredFG not in result.eliminations
         del ToyfmtSpyRequiredFG, result, feature
-        gc.collect()
 
 
 class TestRequiredOptionRoute:
@@ -1404,7 +1398,6 @@ class TestForeignPointerMakesSearchedRoutesDecline:
         assert set(result.identified) == {group_a}
         assert "options point at _QueryDBA" in result.eliminations[group_b].reason
         del group_a, group_b, result, feature
-        gc.collect()
 
     def test_a_group_without_a_query_route_keeps_the_foreign_pointer_reason_on_query_text(self) -> None:
         route = ClaimRoute("toy", NamePolicy.CHECKED, False, required_options=("query_text",))
@@ -1417,7 +1410,6 @@ class TestForeignPointerMakesSearchedRoutesDecline:
         assert "options point at _QueryToyFG" in reason
         assert "query_text" not in reason
         del pointed, result, feature
-        gc.collect()
 
 
 class TestUnreachablePointerRaises:
@@ -1558,7 +1550,6 @@ class TestHasSource:
         assert calls == []
         assert outer == {}
         del group
-        gc.collect()
 
     def test_a_true_probe_checks_no_name_and_leaves_the_options_untouched(self) -> None:
         options = Options({"toyfmt_required": 1})

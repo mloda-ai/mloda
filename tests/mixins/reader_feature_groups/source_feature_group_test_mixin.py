@@ -5,7 +5,6 @@ own (no Test prefix).
 """
 
 import copy
-import gc
 import importlib
 from typing import Any, ClassVar, cast
 
@@ -392,9 +391,8 @@ class SourceFeatureGroupTestMixin:
         feature = self._feature(self.present_column, {self.feature_group_class.__name__: self.own_pointer()})
         result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, None)
         assert sub in result.identified
-        # Drop every reference (the feature's input_data_match pins the class) so the subclass can be collected.
+        # Drop every reference (the feature's input_data_match pins the class).
         del sub, mapping, result, feature
-        gc.collect()
 
     def test_a_pointer_key_of_another_concrete_group_makes_the_searched_routes_decline_with_a_reason(self) -> None:
         sub = self._gated_subclass()
@@ -409,4 +407,3 @@ class SourceFeatureGroupTestMixin:
         assert f"options point at {sub.__name__}" in reason
         assert "does not search the collection" in reason
         del sub, mapping, result, feature
-        gc.collect()

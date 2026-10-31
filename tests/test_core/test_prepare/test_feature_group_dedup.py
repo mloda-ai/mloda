@@ -13,7 +13,6 @@ exec'd classes (mirroring how IPython sets up ``<ipython-input-N-...>`` entries)
 
 from __future__ import annotations
 
-import gc
 import linecache
 import sys
 import textwrap
@@ -957,8 +956,8 @@ def test_get_feature_group_docs_annotates_unintrospectable_class_with_unavailabl
     NOTE: this class is held only via a LOCAL reference (enough to keep it alive in
     ``FeatureGroup.__subclasses__()`` during the call). It is deliberately NOT
     appended to ``_REF_STORE`` so it can be dropped before the test ends. After the
-    assertions the local ref is deleted and ``gc.collect()`` runs so the class is
-    unregistered from ``__subclasses__``.
+    assertions the local ref is deleted and the autouse leak fixture reclaims the
+    class after the test.
     """
     fake_module = "some_fake_module_name_xyz_19"
     fake_cls = cast(
@@ -988,10 +987,8 @@ def test_get_feature_group_docs_annotates_unintrospectable_class_with_unavailabl
     other_entries = [item for item in result if item.module != fake_module]
     assert len(other_entries) > 0, "the rest of the catalog must still be documented alongside the annotated class"
 
-    # Cleanup: drop the only strong ref and collect so the fake class vanishes
-    # from FeatureGroup.__subclasses__() and cannot leak into later tests.
+    # Cleanup: drop the only strong ref; the autouse leak fixture reclaims the class.
     del fake_cls
-    gc.collect()
 
 
 # ---------------------------------------------------------------------------
@@ -1081,7 +1078,6 @@ def test_get_feature_group_docs_reload_conflict_collapses_to_live_class() -> Non
     del mod
     del v1
     del v2
-    gc.collect()
 
     assert len(entry_versions) == 1, (
         f"a redefinition conflict must collapse to the live class: expected exactly one "
@@ -1274,8 +1270,7 @@ def test_class_source_hash_accepts_nested_class_with_flush_left_multiline_string
     perfectly valid class that hashed fine before the validation was added.
 
     Cleanup: the class is held only via a LOCAL reference (NOT ``_REF_STORE``)
-    and is deleted plus ``gc.collect()``'d at the end so it does not leak into
-    other tests' ``FeatureGroup.__subclasses__()`` views.
+    and is deleted at the end; the autouse leak fixture reclaims it after the test.
     """
     import hashlib
     import inspect
@@ -1302,10 +1297,8 @@ case25 flush-left line at column zero
         f"expected {expected[:16]}..., got {h[:16]}..."
     )
 
-    # Cleanup: drop the only strong ref and collect so the nested class vanishes
-    # from FeatureGroup.__subclasses__() and cannot leak into later tests.
+    # Cleanup: drop the only strong ref; the autouse leak fixture reclaims the class.
     del MyFG_NestedFlushLeft25
-    gc.collect()
 
 
 # ---------------------------------------------------------------------------

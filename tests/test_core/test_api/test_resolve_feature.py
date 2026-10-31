@@ -7,7 +7,6 @@ and candidate tracking.
 """
 
 import ast
-import gc
 import inspect
 import linecache
 import sys
@@ -1100,14 +1099,13 @@ def _cleanup_main_after() -> Any:
 
     Guarantees the exec'd conflict classes cannot leak into ``FeatureGroup.__subclasses__()`` for
     later tests on the same xdist worker: the yield teardown runs after the test frame unwinds (so
-    local class refs are gone), pops the newly-bound ``__main__`` keys, and collects.
+    local class refs are gone), pops the newly-bound ``__main__`` keys.
     """
     main_mod = sys.modules["__main__"]
     snapshot = set(main_mod.__dict__.keys())
     yield
     for key in set(main_mod.__dict__.keys()) - snapshot:
         main_mod.__dict__.pop(key, None)
-    gc.collect()
 
 
 class TestResolveFeatureRaisingMatchDuringConflict:

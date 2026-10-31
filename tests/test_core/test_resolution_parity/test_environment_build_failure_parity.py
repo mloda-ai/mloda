@@ -496,6 +496,12 @@ def test_enabled_group_missing_from_registry_is_named_when_collector_filters_eve
         ),
         None,
     )
+    _, base_message = safe_field_with_error(
+        lambda: PreFilterPlugins(
+            PreFilterPlugins.get_cfw_subclasses(), PluginCollector.enabled_feature_groups({FeatureGroup})
+        ),
+        None,
+    )
 
     del held[:]
     collected = _reclaimed(ref)
@@ -506,6 +512,9 @@ def test_enabled_group_missing_from_registry_is_named_when_collector_filters_eve
     assert "FeatureGroup.__init_subclass__" in message
     assert "super().__init_subclass__()" in message
     assert collected
+    assert base_message is not None
+    assert "filtered out every FeatureGroup" in base_message
+    assert "__init_subclass__" not in base_message
 
 
 def test_enabled_group_missing_from_registry_warns_when_other_groups_survive(

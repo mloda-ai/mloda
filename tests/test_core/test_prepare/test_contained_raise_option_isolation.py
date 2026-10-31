@@ -5,7 +5,6 @@ returns True must keep its write (that is how a matched reader is linked through
 is per candidate, not a whole-loop snapshot. Doubles carry an ``845`` suffix and are dropped per test.
 """
 
-import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -48,8 +47,6 @@ def _capture(call: Callable[[], T]) -> tuple[T | None, str | None]:
 
 def _make_mutating_raise_fg() -> type[FeatureGroup]:
     """Candidate that writes to the shared options and then raises an UNMARKED exception."""
-    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
-    gc.collect()
 
     class MutatingRaiseFG845r(FeatureGroup):
         """Stands in for a plugin matcher that configures the feature before it breaks."""
@@ -82,7 +79,6 @@ def _make_mutating_raise_fg() -> type[FeatureGroup]:
 
 def _make_mutating_raise_fg_marks_non_forwarded() -> type[FeatureGroup]:
     """Candidate that marks a key non-forwarded (forward=False) and then raises an UNMARKED exception."""
-    gc.collect()
 
     class MutatingRaiseMarksNonForwardedFG845r(FeatureGroup):
         """Stands in for a connection matcher that stamps its connection key before it breaks."""
@@ -115,7 +111,6 @@ def _make_mutating_raise_fg_marks_non_forwarded() -> type[FeatureGroup]:
 
 def _make_clean_owner_fg() -> type[FeatureGroup]:
     """Rival candidate that claims the same feature name cleanly and writes nothing."""
-    gc.collect()
 
     class CleanNameOwnerFG845r(FeatureGroup):
         """The winner whose options must not carry the eliminated candidate's write."""
@@ -136,7 +131,6 @@ def _make_clean_owner_fg() -> type[FeatureGroup]:
 
 def _make_mutating_match_fg() -> type[FeatureGroup]:
     """Candidate that writes to the shared options and RETURNS TRUE, the linked-reader pattern."""
-    gc.collect()
 
     class MutatingMatchFG845r(FeatureGroup):
         """Stands in for the match hook that links its matched reader through the shared options."""
@@ -203,7 +197,6 @@ def _evaluate(builders: tuple[Callable[[], type[FeatureGroup]], ...]) -> _Option
     finally:
         candidates.clear()
         del candidates
-        gc.collect()
 
 
 class TestContainedRaiseLeavesNoPartialMutation:

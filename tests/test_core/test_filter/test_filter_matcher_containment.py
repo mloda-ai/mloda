@@ -7,7 +7,6 @@ assert never pins a throwaway FeatureGroup into its traceback and trips the no-l
 
 from __future__ import annotations
 
-import gc
 import logging
 from collections.abc import Callable
 from copy import deepcopy
@@ -67,8 +66,6 @@ def _single(filter_feature_name: str, options: Options | None = None) -> SingleF
 
 def _make_raising_filter_matcher_fg() -> type[FeatureGroup]:
     """A throwaway group whose hook raises for FILTER_FEATURE_RAISING and matches its other names."""
-    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
-    gc.collect()
 
     class RaisingFilterMatcherFG899(FeatureGroup):
         @classmethod
@@ -91,7 +88,6 @@ def _make_raising_filter_matcher_fg() -> type[FeatureGroup]:
 
 def _make_escalating_filter_matcher_fg(marker: BaseException) -> type[FeatureGroup]:
     """A throwaway group whose hook raises the caller's own exception object, so identity is assertable."""
-    gc.collect()
 
     class EscalatingFilterMatcherFG899(FeatureGroup):
         @classmethod
@@ -120,7 +116,6 @@ class TestFilterMatcherContainment:
         fg = _make_raising_filter_matcher_fg()
         matched, escaped = _capture(partial(GlobalFilter().criteria, fg, _single(FILTER_FEATURE_RAISING), None))
         del fg
-        gc.collect()
 
         assert escaped is None, f"the raise must not cross GlobalFilter.criteria: {escaped}"
         assert matched is False, f"a raising hook is a non-match for that filter, got: {matched!r}"
@@ -140,7 +135,6 @@ class TestFilterMatcherContainment:
         # Drop the retained traceback: its frames pin the throwaway class through the hook's `cls`.
         marker.__traceback__ = None
         del fg, caught
-        gc.collect()
 
         assert is_marker, f"the marked exception itself must escape, got: {type_name}: {message}"
         assert type_name == RAISE_TYPE_NAME
@@ -157,7 +151,6 @@ class TestFilterMatcherContainment:
         )
         names = [] if matched is None else sorted(single.name for single in matched)
         del fg, matched, global_filter
-        gc.collect()
 
         assert escaped is None, f"the raise must not cross identify_matched_filters: {escaped}"
         assert names == [FILTER_FEATURE_OK], f"only the raising filter may be dropped, got: {names}"
@@ -173,7 +166,6 @@ class TestFilterMatcherContainment:
         messages = [record.getMessage() for record in records]
         exc_infos = [record.exc_info for record in records]
         del fg
-        gc.collect()
 
         assert escaped is None, f"the raise must not cross GlobalFilter.criteria: {escaped}"
         assert len(messages) == 1, f"exactly one WARNING must report the dropped filter, got: {messages}"
@@ -204,7 +196,6 @@ class HostileFilterMatcherError899(Exception):
 
 def _make_hostile_filter_matcher_fg() -> type[FeatureGroup]:
     """A throwaway group whose hook raises an exception hostile to every read the except block makes."""
-    gc.collect()
 
     class HostileFilterMatcherFG899(FeatureGroup):
         @classmethod
@@ -304,7 +295,6 @@ def _drive_criteria(
         )
     finally:
         del fg, global_filter, declared, ledger, items
-        gc.collect()
 
 
 class TestDroppedFilterIsRecorded:
@@ -367,7 +357,6 @@ class TestDroppedFilterIsRecorded:
         # Drop the retained traceback: its frames pin the throwaway class through the hook's `cls`.
         marker.__traceback__ = None
         del fg, global_filter, ledger
-        gc.collect()
 
         assert escaped == f"{RAISE_TYPE_NAME}: {ESCALATE_MESSAGE}"
         assert has_ledger, "GlobalFilter must expose a dropped_filters ledger"
@@ -386,7 +375,6 @@ class TestDroppedFilterIsRecorded:
 
 def _make_in_features_mixin_fg() -> type[FeatureGroup]:
     """A throwaway mixin group that matches on its option set, so only the in_features gate can reject a filter."""
-    gc.collect()
 
     class InFeaturesMixinFilterFG884(FeatureChainParserMixin, FeatureGroup):
         PROPERTY_MAPPING = {"operation": property_spec("operation", allowed_values=("op1",), context=True)}
@@ -457,7 +445,6 @@ class TestHostileExceptionStaysInsideTheExceptBlock:
 
 def _make_e2e_probe_fg(escalate: bool) -> type[FeatureGroup]:
     """A throwaway root group that resolves E2E_MAIN but raises when matched for the filter feature."""
-    gc.collect()
 
     class FilterMatchRaiserFG899(DataCreatorFeatureGroup):
         @classmethod
@@ -519,13 +506,12 @@ def _run(escalate: bool) -> tuple[dict[str, Any] | None, str | None]:
             global_filter=global_filter,
         )
     )
-    del fg, collector
-    gc.collect()
-    if results is None:
-        return None, escaped
-    assert len(results) == 1, f"expected exactly one result frame, got: {results!r}"
-    payload = _single_row(results[0], E2E_MAIN)
-    assert isinstance(payload, dict)
+    payload: Any = None
+    if results is not None:
+        assert len(results) == 1, f"expected exactly one result frame, got: {results!r}"
+        payload = _single_row(results[0], E2E_MAIN)
+        assert isinstance(payload, dict)
+    del fg, collector, global_filter, results
     return payload, escaped
 
 

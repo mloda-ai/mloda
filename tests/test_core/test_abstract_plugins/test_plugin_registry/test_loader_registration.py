@@ -412,7 +412,7 @@ class TestPluginDiscoveryAvoidsAbcWalk:
             f"(baseline {baseline}, with extras {with_extra})"
         )
 
-    def test_prepare_triggers_no_abc_subclass_check_against_plugin_classes(
+    def test_prepare_and_run_trigger_no_abc_subclass_check_against_plugin_classes(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from collections import Counter
@@ -444,6 +444,11 @@ class TestPluginDiscoveryAvoidsAbcWalk:
             def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
                 return {Feature(OPTOY_CHAIN_SRC + OPTOY_CHAIN_SUFFIX)}
 
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                data["prepare_walk_derived"] = 1
+                return data
+
         class _PrepareWalkApiFG(FeatureGroup):
             @classmethod
             def match_feature_group_criteria(
@@ -456,6 +461,11 @@ class TestPluginDiscoveryAvoidsAbcWalk:
 
             def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
                 return {Feature(name="walk_id", index=Index(("walk_id",)))}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                data["prepare_walk_api"] = 1
+                return data
 
         class _PrepareWalkLeftFG(DataCreatorFeatureGroup):
             @classmethod
@@ -497,6 +507,11 @@ class TestPluginDiscoveryAvoidsAbcWalk:
                 return {Feature("pw_left_val"), Feature("pw_right_val")}
 
             @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                data["prepare_walk_joined"] = 1
+                return data
+
+            @classmethod
             def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
                 return {PandasDataFrame}
 
@@ -510,13 +525,13 @@ class TestPluginDiscoveryAvoidsAbcWalk:
         )
         api_collector = PluginCollector.enabled_feature_groups({ApiDataFG, _PrepareWalkApiFG})
 
-        def prepare_all(
+        def run_all_scenarios(
             chain: PluginCollector = chain_collector,
             api: PluginCollector = api_collector,
             joined: PluginCollector = link_collector,
             link: Link = prepare_link,
         ) -> None:
-            mloda.prepare(
+            mloda.run_all(
                 [
                     Feature(OPTOY_CHAIN_SRC + OPTOY_CHAIN_SUFFIX, implementation=OpToyChainPandas),
                     "prepare_walk_derived",
@@ -524,13 +539,13 @@ class TestPluginDiscoveryAvoidsAbcWalk:
                 compute_frameworks=[PandasDataFrame],
                 plugin_collector=chain,
             )
-            mloda.prepare(
+            mloda.run_all(
                 ["prepare_walk_api"],
                 compute_frameworks=[PandasDataFrame],
                 api_data={"WalkSet": {"walk_id": [1, 2]}},
                 plugin_collector=api,
             )
-            mloda.prepare(
+            mloda.run_all(
                 ["prepare_walk_joined"],
                 compute_frameworks=[PandasDataFrame],
                 links={link},
@@ -538,13 +553,13 @@ class TestPluginDiscoveryAvoidsAbcWalk:
             )
 
         try:
-            prepare_all()  # warm-up so the result does not depend on test order
+            run_all_scenarios()  # warm-up so the result does not depend on test order
             counted = _spy_on_plugin_subclasschecks(monkeypatch)
-            prepare_all()
-            assert counted == [], f"prepare ran ABC subclass checks against plugin classes: {Counter(counted)}"
+            run_all_scenarios()
+            assert counted == [], f"prepare and run ran ABC subclass checks against plugin classes: {Counter(counted)}"
         finally:
             monkeypatch.undo()
-            del chain_collector, api_collector, link_collector, prepare_all, prepare_link
+            del chain_collector, api_collector, link_collector, run_all_scenarios, prepare_link
             del _PrepareWalkDerivedFG, _PrepareWalkApiFG, _PrepareWalkLeftFG, _PrepareWalkRightFG, _PrepareWalkJoinedFG
 
     def test_virtual_abc_subclasses_are_not_plugins(self) -> None:

@@ -789,7 +789,7 @@ class ComputeFramework(ABC):
         try:
             features.filter_engine = self.filter_engine
 
-            if not issubclass(features.filter_engine(), BaseFilterEngine):
+            if not is_nominal_subclass(features.filter_engine(), BaseFilterEngine):
                 raise ValueError(f"Filter engine {self.filter_engine} not supported by {self.__class__.__name__}")
 
         except NotImplementedError:
@@ -1389,7 +1389,7 @@ def unregistered_frameworks_hint(candidates: Iterable[object]) -> str | None:
     names = sorted(
         c.__name__
         for c in candidates
-        if isinstance(c, type) and issubclass(c, ComputeFramework) and c is not ComputeFramework and c not in registered
+        if is_nominal_subclass(c, ComputeFramework) and c is not ComputeFramework and c not in registered
     )
     if not names:
         return None

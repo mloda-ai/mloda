@@ -21,7 +21,7 @@ from mloda.core.abstract_plugins.components.input_data.source_feature_group impo
 )
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.options import Options, _safe_deepcopy
-from mloda.core.abstract_plugins.components.utils import as_str, safe_field
+from mloda.core.abstract_plugins.components.utils import as_str, is_nominal_subclass, safe_field
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.prepare.choose_compute_frameworks import _refine
@@ -499,10 +499,10 @@ def _replaced_implementations(
     parents = [
         base
         for base in impl.__mro__[1:]
-        if issubclass(base, Implementation)
+        if is_nominal_subclass(base, Implementation)
         and _is_concrete(base)
-        and issubclass(step.feature_group, base.feature_group)
-        and issubclass(step.compute_framework, base.compute_framework)
+        and is_nominal_subclass(step.feature_group, base.feature_group)
+        and is_nominal_subclass(step.compute_framework, base.compute_framework)
     ]
     return tuple(sorted(parents, key=_class_path))
 

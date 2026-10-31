@@ -1,6 +1,7 @@
 from typing import Any
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef, api_data_scope
 from mloda.core.abstract_plugins.components.failed_rows import collect_failed_rows
@@ -67,7 +68,7 @@ class FeatureGroupStep(Step):
         match = self.features.input_data_match
         access = None if match is None else match[1].access
         with collect_failed_rows(self.feature_group.get_class_name()) as collector:
-            if isinstance(access, ApiDataRef) and issubclass(self.feature_group, ApiDataFG):
+            if isinstance(access, ApiDataRef) and is_nominal_subclass(self.feature_group, ApiDataFG):
                 key = access.key
                 with api_data_scope(lambda: cfw_register.get_api_data_by_name(key), key):
                     data = self.run_calculate_feature(cfw, data)

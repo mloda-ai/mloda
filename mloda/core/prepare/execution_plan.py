@@ -104,11 +104,12 @@ class _JoinServedParent(NamedTuple):
 
 
 class _LineageMemo:
-    """Per-add_tfs memo of same-framework lineages and the graph's reverse edges, the latter built on first use."""
+    """Per-add_tfs memo of lineages, direct parents and the graph's reverse edges (built on first use)."""
 
     def __init__(self, join_adjacency: dict[UUID, set[UUID]] | None = None) -> None:
         self.join_adjacency = join_adjacency
         self.lineages: dict[UUID, set[UUID]] = {}
+        self.direct_parents: dict[UUID, set[UUID]] = {}
         self._edge_parents: dict[UUID, set[UUID]] | None = None
 
     def edge_parents(self, graph: Graph) -> dict[UUID, set[UUID]]:
@@ -706,11 +707,18 @@ class ExecutionPlan:
             return props.feature.get_compute_framework() if props is not None else None
 
         ancestors = graph.parent_to_children_mapping
-        edge_parents = (memo or _LineageMemo()).edge_parents(graph)
+        local_memo = memo if memo is not None else _LineageMemo()
+        edge_parents = local_memo.edge_parents(graph)
 
         def direct_parents(node: UUID) -> set[UUID]:
-            above = ancestors.get(node, set())
-            return edge_parents.get(node, set()) | (above - set().union(*(ancestors.get(a, set()) for a in above)))
+            cached = local_memo.direct_parents.get(node)
+            if cached is None:
+                above = ancestors.get(node, set())
+                cached = edge_parents.get(node, set()) | (
+                    above - set().union(*(ancestors.get(a, set()) for a in above))
+                )
+                local_memo.direct_parents[node] = cached
+            return cached
 
         own_framework = framework(uuid)
         lineage = {uuid}

@@ -12,7 +12,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda.core.prepare.execution_plan import ExecutionPlan
+from mloda.core.prepare.execution_plan import ExecutionPlan, _LineageMemo
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.provider import ComputeFramework
@@ -764,3 +764,65 @@ def test_join_served_sibling_parent_does_not_bridge_two_unrelated_declared_side_
             [scenario.producer_s1, scenario.producer_s2, scenario.join_step, scenario.consumer_step],
             scenario.graph,
         )
+
+
+# ---------------------------------------------------------------------------
+# _same_framework_lineage computes each node's direct parents once per shared memo
+# ---------------------------------------------------------------------------
+
+
+class _CountingMapping(dict[UUID, set[UUID]]):
+    """Counts every ``get`` and ``__getitem__`` lookup."""
+
+    lookups = 0
+
+    def get(self, key: UUID, default: Any = None) -> Any:
+        self.lookups += 1
+        return super().get(key, default)
+
+    def __getitem__(self, key: UUID) -> set[UUID]:
+        self.lookups += 1
+        return super().__getitem__(key)
+
+
+def test_same_framework_lineage_lookups_stay_below_cubic_on_a_chain_with_a_framework_boundary() -> None:
+    size, boundary = 40, 20
+    nodes = [uuid4() for _ in range(size)]
+    graph = _framework_graph(
+        *((node, f"chain_{i}", PyArrowTable if i == boundary else PandasDataFrame) for i, node in enumerate(nodes))
+    )
+    mapping = _CountingMapping({node: set(nodes[i + 1 :]) for i, node in enumerate(nodes)})
+    graph.parent_to_children_mapping = mapping
+
+    memo = _LineageMemo()
+    lineages = {node: ExecutionPlan._same_framework_lineage(node, graph, memo) for node in reversed(nodes)}
+
+    for i, node in enumerate(nodes):
+        if i < boundary:
+            expected = set(nodes[i:boundary])
+        elif i == boundary:
+            expected = {node}
+        else:
+            expected = set(nodes[i:])
+        assert lineages[node] == expected, f"wrong lineage for chain node {i}"
+
+    assert mapping.lookups <= size * size, (
+        f"{mapping.lookups} ancestor lookups for a chain of {size} nodes, expected at most {size * size}"
+    )
+
+
+def test_same_framework_lineage_on_a_diamond_with_a_shared_memo() -> None:
+    top, left, right, bottom = uuid4(), uuid4(), uuid4(), uuid4()
+    graph = _framework_graph(
+        (top, "dm_top", PandasDataFrame),
+        (left, "dm_left", PandasDataFrame),
+        (right, "dm_right", PandasDataFrame),
+        (bottom, "dm_bottom", PandasDataFrame),
+    )
+    graph.parent_to_children_mapping = {top: {left, right, bottom}, left: {bottom}, right: {bottom}, bottom: set()}
+
+    memo = _LineageMemo()
+    assert ExecutionPlan._same_framework_lineage(top, graph, memo) == {top, left, right, bottom}
+    assert ExecutionPlan._same_framework_lineage(left, graph, memo) == {left, bottom}
+    assert ExecutionPlan._same_framework_lineage(right, graph, memo) == {right, bottom}
+    assert ExecutionPlan._same_framework_lineage(bottom, graph, memo) == {bottom}

@@ -26,6 +26,7 @@ from mloda.provider import CHAIN_SEPARATOR, SourceFeatureGroup
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation  # noqa: F401
 from tests.mixins.reader_feature_groups.source_feature_group_test_mixin import SourceFeatureGroupTestMixin
 
 if TYPE_CHECKING:

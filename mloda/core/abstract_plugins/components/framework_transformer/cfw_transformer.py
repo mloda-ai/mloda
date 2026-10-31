@@ -1,4 +1,5 @@
 import logging
+import threading
 import weakref
 from collections import deque
 from typing import Any, ClassVar
@@ -34,6 +35,7 @@ class ComputeFrameworkTransformer:
 
     _auto_load_done: ClassVar[bool] = False
     _lazy_dirs_loaded: ClassVar[set[str]] = set()
+    _load_lock: ClassVar[threading.RLock] = threading.RLock()
     _warned_zero_edge: ClassVar["weakref.WeakSet[type[BaseTransformer]]"] = weakref.WeakSet()
 
     def __init__(self) -> None:
@@ -44,6 +46,7 @@ class ComputeFrameworkTransformer:
         available BaseTransformer subclasses.
         """
         self.transformer_map: dict[tuple[type[Any], type[Any]], type[BaseTransformer]] = {}
+        self._seen_lazy_dirs: frozenset[str] = frozenset()
         self.initilize_transformer()
 
     def add(self, transformer: type[BaseTransformer]) -> bool:
@@ -114,11 +117,8 @@ class ComputeFrameworkTransformer:
         """
         Initialize the transformer registry with all available transformers.
 
-        This method discovers all BaseTransformer subclasses and adds them
-        to the registry. The transformer files from the compute_framework group
-        are auto-loaded once per process via load_matching, so a stray
-        module-scope import of a single transformer cannot leave the registry
-        partial.
+        Loads the light transformer files and those of already imported backends,
+        then registers every BaseTransformer subclass.
         """
         self._load_available()
         self._register_all()
@@ -128,16 +128,17 @@ class ComputeFrameworkTransformer:
         """Load the light transformer files once, and each heavy backend's once its gate module is imported."""
         from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 
-        loader = PluginLoader()
-        if not cls._auto_load_done:
-            loader.load_matching("compute_framework", "*transformer*", skip_dirs=_LAZY_TRANSFORMER_GATES)
-            cls._auto_load_done = True
-        for directory, gate in _LAZY_TRANSFORMER_GATES.items():
-            if directory in cls._lazy_dirs_loaded:
-                continue
-            if force or loaded(gate) is not None:
-                loader.load_matching("compute_framework", f"{directory}/*transformer*")
-                cls._lazy_dirs_loaded.add(directory)
+        with cls._load_lock:
+            loader = PluginLoader()
+            if not cls._auto_load_done:
+                loader.load_matching("compute_framework", "*transformer*", skip_dirs=_LAZY_TRANSFORMER_GATES)
+                cls._auto_load_done = True
+            for directory, gate in _LAZY_TRANSFORMER_GATES.items():
+                if directory in cls._lazy_dirs_loaded:
+                    continue
+                if force or loaded(gate) is not None:
+                    loader.load_matching("compute_framework", f"{directory}/*transformer*")
+                    cls._lazy_dirs_loaded.add(directory)
 
     @classmethod
     def load_all_transformers(cls) -> None:

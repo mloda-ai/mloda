@@ -80,11 +80,15 @@ def test_transformer_registry_is_complete_once_every_installed_backend_is_import
         _PLAN_FG
         + _PLAN
         + "import importlib, importlib.util\n"
+        + "from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import "
+        + "ComputeFrameworkTransformer\n"
+        + "early = ComputeFrameworkTransformer()\n"
         + f"for gate in {_GATES!r}:\n"
         + "    if importlib.util.find_spec(gate.split('.')[0]) is not None:\n"
         + "        importlib.import_module(gate)\n"
-        + "from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import "
-        + "ComputeFrameworkTransformer\n"
+        + "if importlib.util.find_spec('pandas') is not None:\n"
+        + "    import pandas, pyarrow\n"
+        + "    print('CHAIN' if early.get_transformation_chain(pandas.DataFrame, pyarrow.Table) is not None else 'NOCHAIN')\n"
         + "def keys():\n"
         + "    return sorted(str(k) for k in ComputeFrameworkTransformer().transformer_map)\n"
         + "before = keys()\n"
@@ -94,6 +98,7 @@ def test_transformer_registry_is_complete_once_every_installed_backend_is_import
     result = _run_probe(body)
 
     assert result.returncode == 0, f"probe failed:\n{result.stdout}\n{result.stderr}"
+    assert "NOCHAIN" not in result.stdout, f"early transformer found no pandas to pyarrow chain:\n{result.stdout}"
     assert result.stdout.strip().splitlines()[-1] == "SAME", f"registry was partial:\n{result.stdout}"
 
 

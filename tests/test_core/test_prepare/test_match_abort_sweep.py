@@ -860,7 +860,7 @@ def _index() -> _Index:
                 called, raises = _scan(node)
                 swallows = _swallows(node)
                 functions.setdefault(node.name, []).append(
-                    _Definition(module, node.name, node.lineno, frozenset(called), swallows)
+                    _Definition(module, node.name, node.lineno, called, swallows)
                 )
                 calls.setdefault(node.name, set()).update(called)
                 if raises:

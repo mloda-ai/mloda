@@ -200,7 +200,8 @@ _terminal_reporter: Any = None
 
 def pytest_sessionstart(session: Any) -> None:
     global _terminal_reporter
-    _terminal_reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    if hasattr(session.config, "workerinput"):
+        _terminal_reporter = session.config.pluginmanager.get_plugin("terminalreporter")
 
 
 def drop_passing_report(stats: dict[str, list[Any]], report: Any) -> None:
@@ -217,7 +218,7 @@ def drop_passing_report(stats: dict[str, list[Any]], report: Any) -> None:
 # the unfrozen heap that each full gc.collect() traverses.
 @pytest.hookimpl(trylast=True)
 def pytest_runtest_logreport(report: Any) -> None:
-    if not os.getenv("PYTEST_XDIST_WORKER") or _terminal_reporter is None:
+    if _terminal_reporter is None:
         return
     drop_passing_report(_terminal_reporter.stats, report)
 

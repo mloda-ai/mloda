@@ -9,8 +9,7 @@ from enum import Enum
 from typing import Any, Final
 from abc import ABC
 
-from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
-from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.version import get_mloda_version
 
 # Exceptions inspect.getsource raises for dynamically built classes (no source backing / built-in).

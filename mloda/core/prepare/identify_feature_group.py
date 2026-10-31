@@ -7,7 +7,6 @@ from difflib import get_close_matches
 from dataclasses import dataclass, replace
 from typing import Any, cast
 
-from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 
 # Not a re-export facade: every import here is used by this module and ruff F401 fails any added just to re-export.
@@ -69,6 +68,7 @@ from mloda.core.abstract_plugins.components.utils import (
     as_str,
     contained_raise_log_level,
     escalate_match_abort,
+    is_nominal_subclass,
     is_deferred_match_abort,
     is_match_abort,
     contained_raise_reason,

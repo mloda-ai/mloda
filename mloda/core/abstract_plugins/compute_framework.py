@@ -6,7 +6,6 @@ from collections.abc import Set as AbstractSet
 from contextvars import ContextVar
 from typing import Any, NoReturn, final, get_origin
 from uuid import UUID, uuid4
-from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
@@ -16,7 +15,7 @@ from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseM
 from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
 from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
-from mloda.core.abstract_plugins.components.utils import as_str, safe_field
+from mloda.core.abstract_plugins.components.utils import as_str, is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import (
     InputCheck,
     MissingInputFeatureError,

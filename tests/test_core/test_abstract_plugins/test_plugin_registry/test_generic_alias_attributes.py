@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     PluginRegistry,
@@ -75,8 +76,6 @@ class TestIsClassHelper:
         assert _is_class(object()) is False
 
     def test_is_nominal_subclass_follows_the_mro_only(self) -> None:
-        from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
-
         class _Direct(FeatureGroup):
             pass
 

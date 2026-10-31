@@ -7,7 +7,6 @@ from typing import Any, cast
 from uuid import UUID
 import uuid
 
-from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.index.add_index_feature import create_index_feature
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.input_data.reader_probe import (
@@ -77,6 +76,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import scrub_creden
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.match_hook import call_match_hook
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 
 
 logger = logging.getLogger(__name__)
@@ -1208,8 +1208,7 @@ class Engine:
     ) -> dict[type[ComputeFramework], str]:
         """REQUIRED frameworks a neutral FileSource load of a file root cannot reach, with the reason."""
         if not (
-            isinstance(feature_group_class, type)
-            and is_nominal_subclass(feature_group_class, ReadFileFG)
+            is_nominal_subclass(feature_group_class, ReadFileFG)
             and not feature_group_class.overrides_load_neutral(ReadFileFG)
         ):
             return {}

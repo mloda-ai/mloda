@@ -8,7 +8,6 @@ from collections.abc import Sequence
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
-from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.base_feature_group_version import (
     SOURCE_INTROSPECTION_ERRORS,
     BaseFeatureGroupVersion,
@@ -28,7 +27,7 @@ from mloda.core.abstract_plugins.implementation import (
     loaded_implementations,
 )
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses, is_nominal_subclass, safe_field
 
 if TYPE_CHECKING:
     from mloda.core.prepare.resolution_types import ResolutionRecord
@@ -372,10 +371,7 @@ class PreFilterPlugins:
         names = sorted(
             entry.__name__
             for entry in plugin_collector.enabled_feature_group_classes
-            if isinstance(entry, type)
-            and is_nominal_subclass(entry, FeatureGroup)
-            and entry is not FeatureGroup
-            and entry not in universe
+            if is_nominal_subclass(entry, FeatureGroup) and entry is not FeatureGroup and entry not in universe
         )
         if not names:
             return ""

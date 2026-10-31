@@ -4,7 +4,6 @@ from collections.abc import Mapping, Sequence
 from copy import copy
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
-from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.data_types import DataType
 
 if TYPE_CHECKING:
@@ -28,7 +27,7 @@ from mloda.core.abstract_plugins.components.options import (
     reject_reserved_reader_key,
     validate_forwarding_directives,
 )
-from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 
 

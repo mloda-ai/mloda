@@ -7,7 +7,6 @@ from abc import abstractmethod
 from collections.abc import Callable, Collection, Iterable, Mapping
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -36,7 +35,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
 )
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY, Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
-from mloda.core.abstract_plugins.components.utils import defer_match_abort, escalate_match_abort
+from mloda.core.abstract_plugins.components.utils import defer_match_abort, escalate_match_abort, is_nominal_subclass
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.data_types import DataType

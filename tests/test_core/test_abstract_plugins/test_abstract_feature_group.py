@@ -1,7 +1,7 @@
 import gc
 import weakref
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from typing import Any, ClassVar, Generic, TypeVar
 
 import numpy as np
@@ -15,7 +15,9 @@ from mloda.user import Feature
 from mloda.user import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.property_spec import property_spec
+from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field_with_error
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
 from mloda.core.abstract_plugins.feature_group import feature_group_subclasses
 from mloda.core.api.plugin_docs import get_feature_group_docs
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
@@ -325,8 +327,47 @@ def test_declared_input_features_does_not_grow_mixin_subclasses() -> None:
     assert len(_DeclaredInputsProbeRecording.__subclasses__()) == after_first
 
 
+class _CountingWeakSet(weakref.WeakSet[Any]):
+    """WeakSet counting iterations, optionally running a gen-0 gc pass mid-first-iteration."""
+
+    def __init__(self, collect_on_first: bool = False) -> None:
+        super().__init__()
+        self.iterations = 0
+        self._collect_on_first = collect_on_first
+
+    def __iter__(self) -> Any:
+        self.iterations += 1
+        if self._collect_on_first and self.iterations == 1:
+            gc.collect(0)
+        return super().__iter__()
+
+
+_RegistryFactory = Callable[[bool], tuple[SubclassRegistry[type], _CountingWeakSet]]
+
+
 class TestFeatureGroupSubclassRegistry:
     """`feature_group_subclasses()` mirrors the live FeatureGroup tree without walking it."""
+
+    @pytest.fixture
+    def counting_registry(self) -> Generator[_RegistryFactory, None, None]:
+        was_enabled = gc.isenabled()
+        gc.disable()
+        created: list[SubclassRegistry[type]] = []
+
+        def build(collect_on_first: bool) -> tuple[SubclassRegistry[type], _CountingWeakSet]:
+            counter = _CountingWeakSet(collect_on_first=collect_on_first)
+            registry: SubclassRegistry[type] = SubclassRegistry()
+            registry._members = counter
+            created.append(registry)
+            return registry, counter
+
+        yield build
+
+        for registry in created:
+            if registry._on_gc in gc.callbacks:
+                gc.callbacks.remove(registry._on_gc)
+        if was_enabled:
+            gc.enable()
 
     def test_registry_equals_the_walk(self) -> None:
         PluginLoader.all()
@@ -339,28 +380,65 @@ class TestFeatureGroupSubclassRegistry:
         assert len(registry) > 0
         assert FeatureGroup not in registry
 
-    def test_registry_tracks_a_transient_subclass(self) -> None:
+    @pytest.mark.parametrize(
+        "base, reader",
+        [(FeatureGroup, feature_group_subclasses), (ComputeFramework, compute_framework_subclasses)],
+    )
+    def test_registry_tracks_a_transient_subclass(self, base: type, reader: Callable[[], set[Any]]) -> None:
+        gc.collect(0)
+
         class _CooperativeMixin:
             def __init_subclass__(cls, **kwargs: Any) -> None:
                 super().__init_subclass__(**kwargs)
 
-        class ZzTransientRegistryGroup(_CooperativeMixin, FeatureGroup):
+        class ZzTransientRegistryGroup(_CooperativeMixin, base):  # type: ignore[misc]
             pass
 
-        present = ZzTransientRegistryGroup in feature_group_subclasses()
+        present = ZzTransientRegistryGroup in reader()
         name = ZzTransientRegistryGroup.__name__
         ref = weakref.ref(ZzTransientRegistryGroup)
         del ZzTransientRegistryGroup
-        for generation in (0, 1, 2):
-            if ref() is None:
-                break
-            gc.collect(generation)
+        gc.collect(0)
         collected = ref() is None
-        names = {fg.__name__ for fg in feature_group_subclasses()}
+        names = {c.__name__ for c in reader()}
 
         assert present
         assert collected
         assert name not in names
+
+    @pytest.mark.parametrize("reader", [feature_group_subclasses, compute_framework_subclasses])
+    def test_mutating_a_returned_set_does_not_change_the_next_read(self, reader: Callable[[], set[Any]]) -> None:
+        PluginLoader.all()
+        before = reader()
+        expected = set(before)
+        before.clear()
+
+        assert reader() == expected
+        assert len(expected) > 0
+
+    def test_snapshot_is_built_once_until_add(self, counting_registry: _RegistryFactory) -> None:
+        registry, counter = counting_registry(False)
+        first, second = type("A", (), {}), type("B", (), {})
+        registry.add(first)
+
+        assert registry.members() == {first}
+        assert registry.members() == {first}
+        assert counter.iterations == 1
+
+        registry.add(second)
+
+        assert registry.members() == {first, second}
+        assert counter.iterations == 2
+
+    def test_snapshot_overlapping_a_gc_pass_is_not_stored(self, counting_registry: _RegistryFactory) -> None:
+        registry, counter = counting_registry(True)
+        cls = type("A", (), {})
+        registry.add(cls)
+
+        assert registry.members() == {cls}
+        assert counter.iterations == 1
+        assert registry.members() == {cls}
+        assert counter.iterations == 2
 
     def test_definition_rejected_by_class_validation_is_never_registered(self) -> None:
         def make() -> type[FeatureGroup]:

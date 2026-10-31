@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import gc
 import importlib
 import inspect
 import os
@@ -258,7 +257,6 @@ class TestProviderHooks:
 
         assert is_match_abort(excinfo.value)
         del excinfo, group
-        gc.collect()
 
 
 class TestStockFormats:

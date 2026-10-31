@@ -1,4 +1,3 @@
-import gc
 import os
 from typing import Any, cast
 
@@ -97,7 +96,6 @@ class TestTwoReader:
             )
         assert "Multiple feature groups found" in str(excinfo.value)
         del sibling_a, sibling_b, excinfo
-        gc.collect()
 
     def test_a_pointer_wins_over_the_same_column_in_the_collection(self) -> None:
         feature_list: list[Feature] = []

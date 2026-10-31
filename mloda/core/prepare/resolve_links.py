@@ -361,6 +361,7 @@ class ResolveLinks:
                 if node.feature is not None and node.feature.link is not None:
                     pinned_links.append(node.feature.link)
 
+            # Edge parents, not the reduced ancestor set: reads_both must see a parent also reachable through another.
             direct_parents = self.graph.parents_by_direct_.get(child, set())
             closures = [{d} | self.graph.parent_to_children_mapping.get(d, set()) for d in direct_parents]
 

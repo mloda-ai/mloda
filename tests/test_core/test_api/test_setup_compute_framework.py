@@ -208,7 +208,7 @@ class TestSetupComputeFramework:
         assert name in name_message
         assert base_message is not None
         assert base_message.startswith("No given compute frameworks")
-        assert "super().__init_subclass__()" not in base_message
+        assert "__init_subclass__" not in base_message
         assert feature_message is not None
         assert feature_message.startswith("Compute framework via parameter")
         assert name in feature_message

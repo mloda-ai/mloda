@@ -252,11 +252,24 @@ class TestReclaimLeakedFeatureGroups:
             f"the ladder must escalate past generation 0 for a promoted class, got generations {collections}"
         )
 
-    def test_reports_a_strongly_held_type_built_subclass(self) -> None:
-        """A held type()-built subclass (__module__ 'abc') is reported, not silently ignored."""
+    @pytest.mark.parametrize(
+        ("namespace", "expected_module"),
+        [
+            pytest.param({}, "abc", id="type_built_abc"),
+            pytest.param(
+                {"__module__": "tests.mixins.registry_isolation_leak_probe"},
+                "tests.mixins.registry_isolation_leak_probe",
+                id="mixin_module",
+            ),
+        ],
+    )
+    def test_reports_a_strongly_held_type_built_subclass(self, namespace: dict[str, str], expected_module: str) -> None:
+        """A held type()-built subclass (__module__ 'abc' or a shared mixin module) is reported."""
         mark = FEATURE_GROUPS.mark()
-        leaked_cls = type("LeakedTypeBuiltRegistryProbeFeatureGroup", (FeatureGroup,), {})
-        assert leaked_cls.__module__ == "abc", "the probe no longer takes its module from abc; the test proves nothing"
+        leaked_cls = type("LeakedTypeBuiltRegistryProbeFeatureGroup", (FeatureGroup,), dict(namespace))
+        assert leaked_cls.__module__ == expected_module, (
+            "the probe no longer takes the expected module; the test proves nothing"
+        )
         reported = [c.__name__ for c in reclaim_leaked_feature_groups(mark, __name__)]
         expected = leaked_cls.__name__
         del leaked_cls  # drop the strong reference before asserting, so a failure leaves nothing behind

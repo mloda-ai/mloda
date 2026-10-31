@@ -14,7 +14,9 @@ Red failure. Every feature group and compute framework double is suffixed ``011`
 groups become global ``FeatureGroup`` subclasses and must not collide with other suites.
 """
 
+import gc
 import importlib
+import weakref
 from abc import abstractmethod
 from collections.abc import Mapping
 from typing import Any, ClassVar
@@ -643,6 +645,47 @@ class TestEliminationStages:
             stage="frameworks_not_enabled", reason=reason
         )
         assert f"  - ElimNotEnabledFG011 (compute framework): {reason}" in str(err)
+
+    def test_frameworks_not_enabled_stage_names_an_unregistered_framework(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class _SkipsRegistration:
+            def __init_subclass__(cls, **kwargs: Any) -> None:
+                pass
+
+        def make() -> type[ComputeFramework]:
+            class ZzElimUnregisteredFw011(_SkipsRegistration, ComputeFramework):
+                pass
+
+            return ZzElimUnregisteredFw011
+
+        held = [make()]
+        ref = weakref.ref(held[0])
+        with monkeypatch.context() as m:
+            m.setattr(ElimNotEnabledFG011, "FRAMEWORK_RULE", {held[0]})
+            pre = PreFilterPlugins({PyArrowTable}, PluginCollector.enabled_feature_groups({ElimNotEnabledFG011}))
+            accessible = pre.accessible_plugins[ElimNotEnabledFG011]
+            err = _fail(Feature(NOT_ENABLED_FEATURE), pre.accessible_plugins, excluded=pre.excluded_feature_groups)
+            elimination = err.result.eliminations[ElimNotEnabledFG011]
+            message = str(err)
+
+        del err, pre
+        del held[:]
+        for generation in (0, 1, 2):
+            if ref() is None:
+                break
+            gc.collect(generation)
+        collected = ref() is None
+
+        reason = (
+            "none of its compute frameworks are enabled for this run; ['ZzElimUnregisteredFw011'] subclass "
+            "ComputeFramework without reaching ComputeFramework.__init_subclass__: an __init_subclass__ "
+            "override must call super().__init_subclass__()."
+        )
+        assert accessible == set()
+        assert elimination == Elimination(stage="frameworks_not_enabled", reason=reason)
+        assert f"  - ElimNotEnabledFG011 (compute framework): {reason}" in message
+        assert collected
 
     @pytest.mark.parametrize(
         ("bare", "accessible", "reason", "rendered"),

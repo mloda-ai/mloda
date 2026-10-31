@@ -1,6 +1,9 @@
+import random
+from collections.abc import Sequence
 import uuid
 
 import pytest
+from mloda.core.prepare.resolve_links import ResolveLinks
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import EdgeProperties, NodeProperties
 from mloda.core.prepare.choose_compute_frameworks import ChooseComputeFrameworks
@@ -216,3 +219,124 @@ class TestResolveGraph:
             graph.add_edge(parent, child, edge)
 
         assert self.recorded_link_consumers(graph) == {uuid_3}
+
+
+def _pair_link() -> Link:
+    return Link.inner(
+        JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
+        JoinSpec(BaseTestGraphFeatureGroup3, Index(tuple(["Index1"]))),
+    )
+
+
+def _reference_pairs(
+    resolver: ResolveLinks, child: uuid.UUID, parents: set[uuid.UUID]
+) -> list[tuple[uuid.UUID, uuid.UUID]]:
+    """Pair selection of the original double loop."""
+    graph = resolver.graph
+    direct_parents = graph.parents_by_direct_.get(child, set())
+    closures = [{d} | graph.parent_to_children_mapping.get(d, set()) for d in direct_parents]
+    ordered_parents = sorted(parents, key=resolver._parent_sort_key)
+    result: list[tuple[uuid.UUID, uuid.UUID]] = []
+    for parent_in in ordered_parents:
+        for parent_out in ordered_parents:
+            if parent_in == parent_out:
+                continue
+            reads_both = parent_in in direct_parents and parent_out in direct_parents
+            if not reads_both and any(parent_in in c and parent_out in c for c in closures):
+                continue
+            result.append((parent_in, parent_out))
+    return result
+
+
+def _build_graph(nodes: Sequence[tuple[str, type[FeatureGroup]]], edges: list[tuple[int, int]]) -> Graph:
+    graph = Graph()
+    for i, (name, fg) in enumerate(nodes, start=1):
+        TestResolveGraph.node(graph, uuid.UUID(int=i), name, fg)
+    for parent, child in edges:
+        graph.add_edge(
+            uuid.UUID(int=parent + 1),
+            uuid.UUID(int=child + 1),
+            EdgeProperties(LinkChildFeatureGroup, LinkChildFeatureGroup),
+        )
+    graph.set_direct_parents_for_each_child()
+    graph.set_all_parents_for_each_child()
+    return graph
+
+
+_FGS: list[type[FeatureGroup]] = [BaseLinkTestFeatureGroup1, BaseTestGraphFeatureGroup3, LinkChildFeatureGroup]
+
+
+def _random_dag(seed: int) -> Graph:
+    rng = random.Random(seed)  # nosec B311
+    n = rng.randint(15, 25)
+    nodes = [(f"N{rng.randint(0, 4)}", rng.choice(_FGS)) for _ in range(n)]
+    edges = [(i, j) for j in range(n) for i in range(j) if rng.random() < 0.2]
+    return _build_graph(nodes, edges)
+
+
+_A, _B, _C = BaseLinkTestFeatureGroup1, BaseTestGraphFeatureGroup3, LinkChildFeatureGroup
+
+_HAND_BUILT: dict[str, tuple[list[tuple[str, type[FeatureGroup]]], list[tuple[int, int]]]] = {
+    "diamond": ([("a", _A), ("b", _B), ("c", _B), ("d", _C)], [(0, 1), (0, 2), (1, 3), (2, 3)]),
+    "three_direct_shared_and_private": (
+        [("r", _A), ("p1", _B), ("p2", _A), ("p3", _B), ("x", _A), ("y", _B), ("c", _C)],
+        [(0, 1), (0, 2), (0, 3), (4, 1), (5, 3), (1, 6), (2, 6), (3, 6)],
+    ),
+    "direct_parent_is_ancestor_of_other": (
+        [("a", _A), ("b", _B), ("c", _B), ("d", _C)],
+        [(0, 1), (1, 2), (0, 3), (1, 3), (2, 3)],
+    ),
+    "two_disjoint_deep_branches": (
+        [("a0", _A), ("a1", _B), ("a2", _A), ("b0", _B), ("b1", _A), ("b2", _B), ("c", _C)],
+        [(0, 1), (1, 2), (3, 4), (4, 5), (2, 6), (5, 6)],
+    ),
+    "tied_sort_keys": (
+        [("same", _A), ("same", _A), ("same", _B), ("same", _B), ("same", _C), ("same", _C)],
+        [(0, 4), (1, 4), (2, 4), (3, 4), (0, 5), (4, 5), (3, 5)],
+    ),
+}
+
+
+class TestLinkCandidatePairs:
+    @staticmethod
+    def _assert_equivalent(graph: Graph) -> None:
+        resolver = ResolveLinks(graph, {_pair_link()})
+        assert graph.parent_to_children_mapping
+        for child, parents in graph.parent_to_children_mapping.items():
+            expected = _reference_pairs(resolver, child, parents)
+            assert resolver._link_candidate_pairs(child, parents) == expected
+
+    @pytest.mark.parametrize("case", sorted(_HAND_BUILT))
+    def test_hand_built_graphs_match_reference(self, case: str) -> None:
+        nodes, edges = _HAND_BUILT[case]
+        self._assert_equivalent(_build_graph(nodes, edges))
+
+    @pytest.mark.parametrize("seed", range(8))
+    def test_random_dags_match_reference(self, seed: int) -> None:
+        self._assert_equivalent(_random_dag(seed))
+
+    @staticmethod
+    def _count_sort_key_calls(graph: Graph, monkeypatch: pytest.MonkeyPatch) -> int:
+        calls: list[uuid.UUID] = []
+        original = ResolveLinks._parent_sort_key
+
+        def spy(self: ResolveLinks, parent: uuid.UUID) -> tuple[str, str, str]:
+            calls.append(parent)
+            return original(self, parent)
+
+        monkeypatch.setattr(ResolveLinks, "_parent_sort_key", spy)
+        ResolveLinks(graph, {_pair_link()}).match_links()
+        return len(calls)
+
+    def test_pure_chain_makes_no_sort_key_calls(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        n = 80
+        nodes = [(f"n{i}", _A if i % 2 else _B) for i in range(n)]
+        graph = _build_graph(nodes, [(i, i + 1) for i in range(n - 1)])
+        assert self._count_sort_key_calls(graph, monkeypatch) == 0
+
+    def test_chain_with_shared_root_is_linear_in_sort_key_calls(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        n = 80
+        nodes = [("root", _A)] + [(f"n{i}", _A if i % 2 else _B) for i in range(n)]
+        edges = [(0, i) for i in range(1, n + 1)] + [(i, i + 1) for i in range(1, n)]
+        graph = _build_graph(nodes, edges)
+        assert self._count_sort_key_calls(graph, monkeypatch) <= 4 * (n + 1)

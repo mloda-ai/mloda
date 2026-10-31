@@ -352,6 +352,10 @@ class ResolveLinks:
             return
 
         for child, parents in self.graph.parent_to_children_mapping.items():
+            pairs = self._link_candidate_pairs(child, parents)
+            if not pairs:
+                continue
+
             # A Link pinned on any one of the child's parent features governs the
             # whole join for that feature-group pair, including the (by-key) index
             # pair that carries no pin of its own.
@@ -361,37 +365,53 @@ class ResolveLinks:
                 if node.feature is not None and node.feature.link is not None:
                     pinned_links.append(node.feature.link)
 
-            # Edge parents, not the reduced ancestor set: reads_both must see a parent also reachable through another.
-            direct_parents = self.graph.parents_by_direct_.get(child, set())
-            closures = [{d} | self.graph.parent_to_children_mapping.get(d, set()) for d in direct_parents]
+            for parent_in, parent_out in pairs:
+                r_left = self.graph.get_nodes()[parent_in]
+                r_right = self.graph.get_nodes()[parent_out]
+                left_fg = r_left.feature_group_class
+                right_fg = r_right.feature_group_class
 
-            ordered_parents = sorted(parents, key=self._parent_sort_key)
-            for parent_in in ordered_parents:
-                for parent_out in ordered_parents:
-                    if parent_in == parent_out:
-                        continue
+                # Two-pass matching: exact match first, then polymorphic
+                matched_links = self._find_matching_links(
+                    left_fg,
+                    right_fg,
+                    r_right.feature,
+                    left_feature=r_left.feature,
+                    pinned_links=pinned_links,
+                )
 
-                    # Only the feature that brings both join sides together is bound to the link.
-                    reads_both = parent_in in direct_parents and parent_out in direct_parents
-                    if not reads_both and any(parent_in in c and parent_out in c for c in closures):
-                        continue
+                for matched_link in matched_links:
+                    self.occurrences.append((matched_link, parent_in, parent_out, child))
 
-                    r_left = self.graph.get_nodes()[parent_in]
-                    r_right = self.graph.get_nodes()[parent_out]
-                    left_fg = r_left.feature_group_class
-                    right_fg = r_right.feature_group_class
+    def _link_candidate_pairs(self, child: UUID, parents: set[UUID]) -> list[tuple[UUID, UUID]]:
+        """Ordered parent pairs that may carry a link: direct parent pairs plus pairs sharing no closure."""
+        # Edge parents, not the reduced ancestor set: reads_both must see a parent also reachable through another.
+        direct_parents = self.graph.parents_by_direct_.get(child, set())
+        # Ancestors are the union of the direct parents' closures, so a single closure holds every pair.
+        if len(direct_parents) < 2:
+            return []
 
-                    # Two-pass matching: exact match first, then polymorphic
-                    matched_links = self._find_matching_links(
-                        left_fg,
-                        right_fg,
-                        r_right.feature,
-                        left_feature=r_left.feature,
-                        pinned_links=pinned_links,
-                    )
+        masks: dict[UUID, int] = {}
+        for i, d in enumerate(direct_parents):
+            for p in {d} | self.graph.parent_to_children_mapping.get(d, set()):
+                masks[p] = masks.get(p, 0) | (1 << i)
 
-                    for matched_link in matched_links:
-                        self.occurrences.append((matched_link, parent_in, parent_out, child))
+        groups: dict[int, list[UUID]] = {}
+        for node_id, mask in masks.items():
+            groups.setdefault(mask, []).append(node_id)
+
+        pair_set: set[tuple[UUID, UUID]] = {(a, b) for a in direct_parents for b in direct_parents if a != b}
+        for m1, g1 in groups.items():
+            for m2, g2 in groups.items():
+                if m1 & m2 == 0:
+                    pair_set.update((x, y) for x in g1 for y in g2)
+        if not pair_set:
+            return []
+
+        members = {n for pair in pair_set for n in pair}
+        involved = [p for p in parents if p in members]
+        rank = {p: i for i, p in enumerate(sorted(involved, key=self._parent_sort_key))}
+        return sorted(pair_set, key=lambda pair: (rank[pair[0]], rank[pair[1]]))
 
     def _parent_sort_key(self, parent: UUID) -> tuple[str, str, str]:
         node = self.graph.get_nodes()[parent]

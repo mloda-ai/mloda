@@ -7,7 +7,9 @@ imported heap (pandas, polars, duckdb, pyarrow, sklearn, every plugin and test m
 hundreds of milliseconds and gc dominates the suite's wall time. Freezing the imported graph into the
 permanent generation once collection has finished makes those collects free without weakening the isolation
 they buy, but only if the freeze is owned: gc.unfreeze() is process-global, so the suite may only undo a
-freeze it made itself.
+freeze it made itself. The file also pins that a timeout alarm landing in a gc callback still fails the test,
+because pytest.ini promotes that unraisable warning to an error, and that the backstop re-arms the alarm
+after a swallowed timeout.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ import os
 import subprocess  # nosec B404
 import sys
 import types
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -233,6 +236,186 @@ def test_conftest_never_unfreezes_a_freeze_it_does_not_own(hooks: str) -> None:
     assert remaining >= host // 2, (
         f"The host froze {host} objects and {remaining} are left after the conftest hooks ran. {_OWNERSHIP_VIOLATED}"
     )
+
+
+_SWALLOWED_TIMEOUT_PROBE = """
+import gc
+import time
+
+
+def test_timeout_inside_gc_callback() -> None:
+    def slow_stop(phase: str, info: dict[str, int]) -> None:
+        if phase == "stop":
+            time.sleep(10)
+
+    gc.callbacks.append(slow_stop)
+    try:
+        gc.collect()
+    finally:
+        gc.callbacks.remove(slow_stop)
+"""
+
+
+_HANG_AFTER_SWALLOW_PROBE = """
+import gc
+import time
+
+
+def test_hang_after_swallowed_timeout() -> None:
+    def slow_stop(phase: str, info: dict[str, int]) -> None:
+        if phase == "stop":
+            time.sleep(10)
+
+    gc.callbacks.append(slow_stop)
+    try:
+        gc.collect()
+    finally:
+        gc.callbacks.remove(slow_stop)
+    time.sleep(25)
+    print("HANG_SURVIVED")
+"""
+
+
+def _run_timeout_probe(
+    tmp_path: Path,
+    ini_path: Path,
+    *,
+    probe: str = _SWALLOWED_TIMEOUT_PROBE,
+    extra_args: Sequence[str] = (),
+    with_repo_on_path: bool = False,
+    func_only: bool = True,
+    timeout: float = 40,
+) -> subprocess.CompletedProcess[str]:
+    """Run a timeout probe (default _SWALLOWED_TIMEOUT_PROBE) in an inner pytest under the given ini."""
+    probe_file = tmp_path / "test_probe.py"
+    probe_file.write_text(probe)
+    child_env = {name: value for name, value in os.environ.items() if name != "PYTEST_ADDOPTS"}
+    if with_repo_on_path:
+        inherited = child_env.get("PYTHONPATH")
+        child_env["PYTHONPATH"] = str(_REPO_ROOT) if not inherited else os.pathsep.join([str(_REPO_ROOT), inherited])
+    # Safe: fixed argv (sys.executable plus paths built from tmp_path and the repo root), no shell, no user input.
+    return subprocess.run(  # nosec B603
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            str(probe_file),
+            "-c",
+            str(ini_path),
+            "--rootdir",
+            str(tmp_path),
+            "--timeout=1",
+            "-o",
+            "timeout_func_only=true" if func_only else "timeout_func_only=false",
+            "--timeout-method=signal",
+            "-p",
+            "no:cacheprovider",
+            "-p",
+            "no:xdist",
+            "-p",
+            "no:mloda",
+            "-q",
+            *extra_args,
+        ],
+        cwd=str(tmp_path),
+        env=child_env,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+@pytest.mark.timeout(60)
+def test_timeout_firing_in_a_gc_callback_fails_the_test_instead_of_being_swallowed(tmp_path: Path) -> None:
+    """The suite collects constantly, so a timeout alarm often fires in a gc callback and must still fail the test."""
+    control_ini = tmp_path / "empty.ini"
+    control_ini.write_text("[pytest]\n")
+    control = _run_timeout_probe(tmp_path, control_ini)
+    output = f"stdout:\n{control.stdout}\nstderr:\n{control.stderr}"
+
+    assert control.returncode == 0 and "1 passed" in control.stdout, (
+        f"Positive control failed: with an empty ini the swallowed timeout should pass the probe.\n{output}"
+    )
+    assert "PytestUnraisableExceptionWarning" in control.stdout, (
+        f"Positive control failed: the probe did not land the timeout in a gc callback.\n{output}"
+    )
+
+    real = _run_timeout_probe(tmp_path, _REPO_ROOT / "pytest.ini")
+    output = f"stdout:\n{real.stdout}\nstderr:\n{real.stderr}"
+
+    assert real.returncode == 1 and "1 failed" in real.stdout, (
+        f"A pytest-timeout swallowed inside a gc callback still passes under pytest.ini.\n{output}"
+    )
+    assert "from pytest-timeout" in real.stdout and "PytestUnraisableExceptionWarning" in real.stdout, (
+        f"The failure is not the swallowed pytest-timeout one promoted from the unraisable warning.\n{output}"
+    )
+
+
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize("func_only", [True, False], ids=["call_timer", "protocol_timer"])
+def test_hang_after_a_swallowed_timeout_is_still_stopped(tmp_path: Path, func_only: bool) -> None:
+    """A hang after a swallowed timeout is stopped with either the call-phase or the whole-protocol timer."""
+    real = _run_timeout_probe(
+        tmp_path,
+        _REPO_ROOT / "pytest.ini",
+        probe=_HANG_AFTER_SWALLOW_PROBE,
+        extra_args=("-p", "tests.helpers.timeout_backstop"),
+        with_repo_on_path=True,
+        func_only=func_only,
+    )
+    output = f"stdout:\n{real.stdout}\nstderr:\n{real.stderr}"
+
+    assert real.returncode == 1, f"Expected a failed run.\n{output}"
+    assert "1 failed" in real.stdout and "1 error" in real.stdout, (
+        f"The repeated alarm did not fail the call and promote the swallowed one as a teardown error.\n{output}"
+    )
+    assert "from pytest-timeout" in real.stdout, f"The failure is not a pytest-timeout one.\n{output}"
+    assert "HANG_SURVIVED" not in real.stdout, f"A one-shot alarm let the hang run to the end.\n{output}"
+
+
+_CLEANUP_AFTER_TIMEOUT_PROBE = """
+import time
+
+
+def test_cleanup_after_timeout() -> None:
+    try:
+        time.sleep(25)
+    finally:
+        time.sleep(1.5)
+        print("CLEANUP_FINISHED")
+"""
+
+
+@pytest.mark.timeout(60)
+def test_cleanup_after_an_ordinary_timeout_is_not_cut_short(tmp_path: Path) -> None:
+    """Only a swallowed timeout re-arms the alarm, so an ordinary one leaves cleanup unbounded like pytest-timeout."""
+    real = _run_timeout_probe(
+        tmp_path,
+        _REPO_ROOT / "pytest.ini",
+        probe=_CLEANUP_AFTER_TIMEOUT_PROBE,
+        extra_args=("-p", "tests.helpers.timeout_backstop"),
+        with_repo_on_path=True,
+        func_only=False,
+    )
+    output = f"stdout:\n{real.stdout}\nstderr:\n{real.stderr}"
+
+    assert real.returncode == 1 and "1 failed" in real.stdout, f"Expected one failed test.\n{output}"
+    assert "from pytest-timeout" in real.stdout, f"The failure is not a pytest-timeout one.\n{output}"
+    assert "CLEANUP_FINISHED" in real.stdout, f"The cleanup was cut short by a repeated alarm.\n{output}"
+    assert "During handling of the above exception" not in real.stdout, (
+        f"A second timeout was raised inside the cleanup.\n{output}"
+    )
+
+
+def test_conftest_registers_the_timeout_backstop(request: pytest.FixtureRequest) -> None:
+    hook = request.config.hook
+
+    for name in ("pytest_timeout_set_timer", "pytest_timeout_cancel_timer"):
+        impls = getattr(hook, name).get_hookimpls()
+        assert any(impl.function.__module__ == "tests.helpers.timeout_backstop" for impl in impls), (
+            f"No {name} impl from tests.helpers.timeout_backstop is registered, so the real suite "
+            "would lose the backstop."
+        )
 
 
 def _report(passed: bool) -> Any:

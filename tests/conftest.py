@@ -16,6 +16,8 @@ from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dyna
     DynamicFeatureGroupCreator,
 )
 
+# The re-export registers the timeout backstop hook for the suite.
+from tests.helpers.timeout_backstop import pytest_timeout_cancel_timer, pytest_timeout_set_timer  # noqa: F401
 from tests.registry_isolation import (
     IMPLEMENTATIONS,
     reclaim_released_implementations,

@@ -603,8 +603,9 @@ def test_azure_container_uri_kept_unchanged() -> None:
         ("s3://bucket:9000/x.csv", "s3://bucket:9000/x.csv"),
         ("abfss://cont@acct.dfs.core.windows.net/a%20b.csv", "abfss://cont@acct.dfs.core.windows.net/a%20b.csv"),
         ("s3://bucket]/x.csv", "s3://bucket]/x.csv"),
-        ("https://user:123/PW@host/x", "https://host/x"),  # nosec B105
-        ("https://user:123/PW@host:8080/x", "https://host:8080/x"),  # nosec B105
+        ("https://user:123/PW@host/x", "https://user:123/PW@host/x"),  # nosec B105
+        ("https://user:123/PW@host:8080/x", "https://user:123/PW@host:8080/x"),  # nosec B105
+        ("https://evil.example:8443/x@trusted.corp/data.csv", "https://evil.example:8443/x@trusted.corp/data.csv"),
         ("https://host:8443/a@b.csv", "https://host:8443/a@b.csv"),
     ],
 )
@@ -1274,6 +1275,18 @@ class TestScrubUriFailClosed:
             pytest.param(
                 "https://host/db%3Fpassword%3Dhunter2/x:y=z", "hunter2", id="encoded-secret-before-fallback-pair"
             ),
+            pytest.param("https://host/r/s3%3A%2F%2Ftoken%40bucket/x", "token", id="encoded-userinfo-in-path"),
+            pytest.param(
+                "https://proxy/f/https%3A%2F%2Falice%3A123%2Fpw9secret%40inner",  # nosec B105
+                "pw9secret",
+                id="encoded-digit-userinfo-slash-password",
+            ),
+            pytest.param("https://host/x/scott%2Ftiger%40db%3A1521", "tiger", id="encoded-slash-password-at-host"),
+            pytest.param(
+                "https://host/a/user%2Fhunter2%40db.example.com:5432/x", "hunter2", id="encoded-slash-encoded-at"
+            ),
+            pytest.param("https://host/a/user%2Fhunter2@db.example.com:5432/x", "hunter2", id="encoded-slash-raw-at"),
+            pytest.param("https://h/x%22password%22%3A%22hunter2%22", "hunter2", id="encoded-json-pair-in-path"),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:
@@ -1352,6 +1365,25 @@ class TestRegisteredSecretsScope:
         dac = DataAccessCollection(credentials={"h1": {"token": _LITERAL}})
 
         assert dac.redact(f"MLODAREDACTED then {_LITERAL}") == "MLODAREDACTED then ***"
+
+    @pytest.mark.parametrize(
+        ("literal", "text"),
+        [
+            ("hunter2!xyz", "https://host/t/hunter2%21xyz"),  # nosec B105
+            ("abc/def+ghi=", "https://host/files/abc%2Fdef%2Bghi%3D.csv"),  # nosec B105
+            ("s3cret pass word", "https://host/f/s3cret%20pass%20word/x"),  # nosec B105
+        ],
+    )
+    def test_percent_encoded_literal_in_a_uri_path_is_masked(self, literal: str, text: str) -> None:
+        from urllib.parse import quote
+
+        from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+        with registered_secrets_scope(frozenset({literal})):
+            masked = scrub_credentials(text)
+
+        assert literal not in masked
+        assert quote(literal, safe="") not in masked
 
 
 def test_mask_literals_masks_every_occurrence_and_merges_overlaps() -> None:

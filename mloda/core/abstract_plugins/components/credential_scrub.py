@@ -21,10 +21,12 @@ _FREE_TEXT_URI_PATTERN = re.compile(
 
 # Same anti-backtracking lookbehind as above: only a scheme-shaped run right after a non-scheme
 # char is even attempted.
-_USERINFO_FALLBACK_PATTERN = re.compile(
-    r"(?<![A-Za-z0-9+.-])(?P<scheme>(?:jdbc:)?[A-Za-z][A-Za-z0-9+.-]*)://"
-    r"[^\s/?#@:]*:(?!\d+(?:[?#\s]|$|/(?![^\s/?#@]+@[\w.~-]+(?::\d+)?/)))(?:(?!://)[^\s@])*@"
-)
+_USERINFO_HEAD = r"(?<![A-Za-z0-9+.-])(?P<scheme>(?:jdbc:)?[A-Za-z][A-Za-z0-9+.-]*)://[^\s/?#@:]*:(?!\d+(?:[?#\s]|$|"
+_USERINFO_TAIL = r"))(?:(?!://)[^\s@])*@"
+# strip_uri_userinfo feeds a data-access identity, which must name the host a client contacts: `host:port/path` is a host.
+_USERINFO_FALLBACK_PATTERN = re.compile(_USERINFO_HEAD + r"/" + _USERINFO_TAIL)
+# scrub_credentials reads `name:123/x@host/` as `user:pwd@` (a password), since free text has no such constraint.
+_FREE_TEXT_USERINFO_PATTERN = re.compile(_USERINFO_HEAD + r"/(?![^\s/?#@]+@[\w.~-]+(?::\d+)?/)" + _USERINFO_TAIL)
 
 # Shared suffix a credential-shaped key name must end with, reused by the keyword and quoted-key patterns.
 _SECRET_NAME = (  # nosec B105
@@ -121,7 +123,8 @@ def _cut_hidden_percent(scheme: str, host: str, path: str) -> str:
         return path
     decoded = unquote(path)
     probe = f"{scheme}://{host}{decoded}"
-    if "%" not in decoded and _scrub_passes(probe) == probe:
+    hides = "%" in decoded or any(mark in decoded for mark in ("@", "'", '"', "://", *_REGISTERED_SECRETS.get()))
+    if not hides and _scrub_passes(probe) == probe:
         return path
     head = path.partition("%")[0]
     return head[: head.rfind("/") + 1]
@@ -135,9 +138,9 @@ def _scrub_uri_match(match: re.Match[str]) -> str:
     return f"{scheme}://{host}{_cut_hidden_percent(scheme, host, _cut_key_value_path(path))}"
 
 
-def _drop_free_text_userinfo(text: str) -> str:
+def _drop_free_text_userinfo(text: str, pattern: re.Pattern[str] = _FREE_TEXT_USERINFO_PATTERN) -> str:
     """Fallback for a userinfo-shaped `scheme://name:pwd@` prefix; drops through the first non-port `@`."""
-    return _USERINFO_FALLBACK_PATTERN.sub(r"\g<scheme>://", text)
+    return pattern.sub(r"\g<scheme>://", text)
 
 
 _USER_ONLY_PATTERN = re.compile(
@@ -154,7 +157,7 @@ def _drop_user_only(match: re.Match[str]) -> str:
 
 def strip_uri_userinfo(text: str) -> str:
     """Drop `user:pwd@` and `user@` userinfo after every `scheme://`, keeping an Azure container."""
-    return _USER_ONLY_PATTERN.sub(_drop_user_only, _drop_free_text_userinfo(text))
+    return _USER_ONLY_PATTERN.sub(_drop_user_only, _drop_free_text_userinfo(text, _USERINFO_FALLBACK_PATTERN))
 
 
 _PLACEHOLDER = "\ue000"

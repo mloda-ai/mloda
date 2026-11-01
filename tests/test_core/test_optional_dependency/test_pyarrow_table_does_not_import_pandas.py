@@ -143,7 +143,7 @@ def test_a_lazy_pandas_import_in_calculate_feature_still_converts_to_pyarrow() -
 
 
 @pytest.mark.timeout(60)
-def test_standby_worker_warms_exactly_the_given_gate() -> None:
+def test_standby_worker_warms_exactly_the_given_module() -> None:
     body = (
         "import sys\n"
         + _STANDBY_IMPORTS
@@ -159,7 +159,7 @@ def test_standby_worker_warms_exactly_the_given_gate() -> None:
 
 @pytest.mark.timeout(60)
 def test_worker_unpickling_pyarrow_payload_from_all_backends_parent_imports_no_heavy_backend() -> None:
-    """Variant: the FG class stays out of the payload (it lives in A's __main__); steps ship cfw class and features."""
+    """Unpickling the payload imports no heavy backend; the FG class is left out as it lives in the producer's __main__."""
     producer = (
         _PLAN_FG
         + "import importlib, importlib.util\n"

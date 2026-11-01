@@ -22,6 +22,7 @@ import pyarrow as pa
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
+    _rebuild_transformer,
 )
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 
@@ -87,11 +88,11 @@ def test_reduce_carries_only_transformers_outside_the_base_implementations() -> 
             return data
 
         @classmethod
-        def transform_other_fw_to_fw(cls, data: Any) -> Any:
+        def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
             return data
 
     rebuild, args = ComputeFrameworkTransformer().__reduce__()[:2]
-    assert rebuild.__name__ == "_rebuild_transformer"
+    assert rebuild is _rebuild_transformer
     carried = args[0]
 
     assert _LocalTransformer in carried

@@ -26,7 +26,7 @@ from tests.helpers.plan_stubs import ReiterablePlan
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.prepare.execution_plan import ExecutionPlan
 
-from mloda.core.runtime.run import ExecutionOrchestrator, planned_worker_count
+from mloda.core.runtime.run import ExecutionOrchestrator, planned_worker_count, planned_worker_modules
 from mloda.core.runtime.worker_manager import WorkerManager
 from tests.test_core.test_prepare.test_multi_link_group_resolution import SidePathPandasP, _side_path_prepare
 import mloda.core.core.cfw_manager as cfw_manager_module
@@ -692,13 +692,9 @@ class TestPlannedWorkerModules:
     mp = {ParallelizationMode.MULTIPROCESSING}
 
     def test_chain_plan_yields_the_python_dict_module(self) -> None:
-        from mloda.core.runtime.run import planned_worker_modules
-
         assert planned_worker_modules(_chain_plan(), self.mp) == (_PYDICT_MODULE,)
 
     def test_side_path_plan_yields_the_modules_of_both_transfer_sides(self) -> None:
-        from mloda.core.runtime.run import planned_worker_modules
-
         plan = _side_path_prepare(
             SidePathPandasP, False, False, ParallelizationMode.MULTIPROCESSING
         ).engine.execution_planner
@@ -723,13 +719,9 @@ class TestPlannedWorkerModules:
         "modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}], ids=["sync", "thread"]
     )
     def test_non_multiprocessing_modes_yield_nothing(self, modes: set[ParallelizationMode]) -> None:
-        from mloda.core.runtime.run import planned_worker_modules
-
         assert planned_worker_modules(_chain_plan(), modes) == ()
 
     def test_every_candidate_framework_of_a_feature_is_included(self) -> None:
-        from mloda.core.runtime.run import planned_worker_modules
-
         session = mloda.prepare(
             [Feature(name="planned_worker_modules_multi_col")],
             compute_frameworks=["PythonDictFramework", "PyArrowTable"],

@@ -12,11 +12,17 @@ registry, then asserts the registry is still complete.
 
 from __future__ import annotations
 
+import copy
+import pickle  # nosec B403
+from typing import Any
+
 import pandas as pd
 import pyarrow as pa
 
+from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
+    _rebuild_transformer,
 )
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 
@@ -43,3 +49,71 @@ def test_registry_is_complete_despite_module_scope_transformer_import() -> None:
 
     missing = {pair for pair in expected_pairs if pair not in transformer_map}
     assert not missing, f"Registry incomplete after a module-scope transformer import; missing: {missing}"
+
+
+def test_pickle_and_deepcopy_rebuild_the_registry_instead_of_shipping_it() -> None:
+    t = ComputeFrameworkTransformer()
+    t.transformer_map[(object, int)] = BaseTransformer  # type: ignore[type-abstract]
+    original_keys = set(t.transformer_map) - {(object, int)}
+
+    for clone in (pickle.loads(pickle.dumps(t)), copy.deepcopy(t)):  # nosec B301
+        assert clone is not t
+        assert (object, int) not in clone.transformer_map
+        assert original_keys <= set(clone.transformer_map)
+
+
+def test_deepcopy_keeps_a_transformer_subclass() -> None:
+    class _Sub(ComputeFrameworkTransformer):
+        pass
+
+    assert type(copy.deepcopy(_Sub())) is _Sub
+
+
+def test_registry_order_is_independent_of_import_order() -> None:
+    seen: list[type[BaseTransformer]] = []
+    for cls in ComputeFrameworkTransformer().transformer_map.values():
+        if cls not in seen:
+            seen.append(cls)
+
+    assert seen == sorted(seen, key=lambda c: (c.__module__, c.__qualname__))
+
+
+def test_reduce_carries_only_transformers_outside_the_base_implementations() -> None:
+    class _Left:
+        pass
+
+    class _Right:
+        pass
+
+    class _LocalTransformer(BaseTransformer):
+        @classmethod
+        def framework(cls) -> Any:
+            return _Left
+
+        @classmethod
+        def other_framework(cls) -> Any:
+            return _Right
+
+        @classmethod
+        def import_fw(cls) -> None:
+            pass
+
+        @classmethod
+        def import_other_fw(cls) -> None:
+            pass
+
+        @classmethod
+        def transform_fw_to_other_fw(cls, data: Any) -> Any:
+            return data
+
+        @classmethod
+        def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
+            return data
+
+    rebuild, args = ComputeFrameworkTransformer().__reduce__()[:2]
+    assert rebuild is _rebuild_transformer
+    assert args[0] is ComputeFrameworkTransformer
+    carried = args[1]
+
+    assert _LocalTransformer in carried
+    assert not [c for c in carried if c.__module__.startswith("mloda_plugins.compute_framework.base_implementations.")]

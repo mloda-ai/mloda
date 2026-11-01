@@ -18,6 +18,15 @@ _LAZY_TRANSFORMER_GATES = {
     "spark": "pyspark.sql",
 }
 
+_BUILTIN_PREFIX = "mloda_plugins.compute_framework.base_implementations."
+
+
+def _rebuild_transformer(
+    cls: type["ComputeFrameworkTransformer"], carried: tuple[type[BaseTransformer], ...]
+) -> "ComputeFrameworkTransformer":
+    """Carried classes are unpickled first, so their modules are imported and subclass discovery registers them."""
+    return cls()
+
 
 class ComputeFrameworkTransformer:
     """
@@ -145,14 +154,17 @@ class ComputeFrameworkTransformer:
         """Load every backend's transformer files, whether or not its library is imported yet."""
         cls._load_available(force=True)
 
-    @classmethod
-    def loaded_backend_gates(cls) -> tuple[str, ...]:
-        """Gate modules of the heavy backends already imported in this process."""
-        return tuple(gate for gate in _LAZY_TRANSFORMER_GATES.values() if loaded(gate) is not None)
+    def __reduce__(self) -> tuple[Any, ...]:
+        """Pickle and deepcopy rebuild the registry from what the receiving process has loaded, not the parent's map."""
+        carried = tuple(
+            dict.fromkeys(t for t in self.transformer_map.values() if not t.__module__.startswith(_BUILTIN_PREFIX))
+        )
+        return (_rebuild_transformer, (type(self), carried))
 
     def _register_all(self) -> None:
         self._seen_lazy_dirs = frozenset(ComputeFrameworkTransformer._lazy_dirs_loaded)
-        for transformer in get_all_subclasses(BaseTransformer):
+        # Sorted so map insertion order (the BFS tie-break) is the same in every process.
+        for transformer in sorted(get_all_subclasses(BaseTransformer), key=lambda c: (c.__module__, c.__qualname__)):
             self.add(transformer)
 
     def _refresh(self) -> bool:

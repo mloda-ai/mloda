@@ -40,12 +40,12 @@ def _parent_gone() -> bool:
 def standby_worker(
     command_queue: multiprocessing.Queue[Any],
     result_queue: multiprocessing.Queue[Any],
-    warm_gates: tuple[str, ...] = (),
+    warm_modules: tuple[str, ...] = (),
 ) -> None:
-    """Pre-warm the given backends, then wait to be bound to a cfw and run `worker`."""
-    for gate in warm_gates:
-        importlib.import_module(gate)
-    ComputeFrameworkTransformer()  # loads the light transformer files and those of the warmed gates
+    """Pre-warm the given modules, then wait to be bound to a cfw and run `worker`."""
+    for module in warm_modules:
+        importlib.import_module(module)
+    ComputeFrameworkTransformer()  # loads the light transformer files and those of the warmed modules
     while True:
         try:
             command = command_queue.get(block=False)

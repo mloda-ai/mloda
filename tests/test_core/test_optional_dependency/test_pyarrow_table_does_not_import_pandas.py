@@ -6,13 +6,11 @@ stays complete for the backends a request does use. A standby worker for such a 
 
 from __future__ import annotations
 
+import ast
 import subprocess  # nosec
 import sys
-from unittest.mock import patch
 
 import pytest
-
-from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 
 _PROBE = (
     "import sys\n"
@@ -80,23 +78,11 @@ _HEAVY_LOADED = f"print([m for m in {_HEAVY!r} if m in sys.modules])\n"
 
 
 @pytest.mark.timeout(60)
-def test_planning_and_standby_for_a_pyarrow_request_import_no_heavy_backend() -> None:
-    body = (
-        _PLAN_FG
-        + _PLAN
-        + _HEAVY_LOADED
-        + _STANDBY_IMPORTS
-        + "gates = ComputeFrameworkTransformer.loaded_backend_gates()\n"
-        + "standby_worker(q, q, gates)\n"
-        + "print(gates)\n"
-        + _HEAVY_LOADED
-    )
-    result = _run_probe(body)
+def test_planning_a_pyarrow_request_imports_no_heavy_backend() -> None:
+    result = _run_probe(_PLAN_FG + _PLAN + _HEAVY_LOADED)
 
     assert result.returncode == 0, f"probe failed:\n{result.stdout}\n{result.stderr}"
-    lines = result.stdout.strip().splitlines()
-    assert lines[-3] == "[]", f"backends imported while planning:\n{result.stdout}"
-    assert lines[-2:] == ["()", "[]"], f"standby imported backends:\n{result.stdout}"
+    assert result.stdout.strip().splitlines()[-1] == "[]", f"backends imported while planning:\n{result.stdout}"
 
 
 @pytest.mark.timeout(60)
@@ -145,7 +131,7 @@ def test_a_lazy_pandas_import_in_calculate_feature_still_converts_to_pyarrow() -
 
 
 @pytest.mark.timeout(60)
-def test_standby_worker_warms_exactly_the_given_gate() -> None:
+def test_standby_worker_warms_exactly_the_given_module() -> None:
     body = (
         "import sys\n"
         + _STANDBY_IMPORTS
@@ -159,7 +145,44 @@ def test_standby_worker_warms_exactly_the_given_gate() -> None:
     assert result.stdout.strip().splitlines()[-2:] == ["True", "['pandas']"], f"unexpected warm:\n{result.stdout}"
 
 
-def test_loaded_backend_gates_returns_loaded_gates_in_dict_order() -> None:
-    target = "mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer.loaded"
-    with patch(target, side_effect=lambda gate: object() if gate in ("pandas", "pyspark.sql") else None):
-        assert ComputeFrameworkTransformer.loaded_backend_gates() == ("pandas", "pyspark.sql")
+@pytest.mark.timeout(60)
+def test_worker_unpickling_pyarrow_payload_from_all_backends_parent_imports_no_heavy_backend() -> None:
+    """Standby warm plus unpickle imports no heavy backend in a parent with every backend loaded."""
+    producer = (
+        _PLAN_FG
+        + "import importlib, importlib.util\n"
+        + f"for gate in {_GATES!r}:\n"
+        + "    if importlib.util.find_spec(gate.split('.')[0]) is not None:\n"
+        + "        importlib.import_module(gate)\n"
+        + "from multiprocessing.reduction import ForkingPickler\n"
+        + "from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode\n"
+        + "from mloda.core.core.step.feature_group_step import FeatureGroupStep\n"
+        + "session = mloda.prepare(['LazyFG'], compute_frameworks=[PyArrowTable], plugin_collector=collector, "
+        + "parallelization_modes={ParallelizationMode.MULTIPROCESSING})\n"
+        + "plan = session.engine.execution_planner\n"
+        + "steps = [s for s in plan if isinstance(s, FeatureGroupStep)]\n"
+        + "assert steps\n"
+        + "payload = [PyArrowTable()] + [(s.compute_framework, s.features) for s in steps]\n"
+        + "from mloda.core.runtime.run import planned_worker_modules\n"
+        + "modules = planned_worker_modules(plan, {ParallelizationMode.MULTIPROCESSING})\n"
+        + "print(repr(modules))\n"
+        + "print(bytes(ForkingPickler.dumps(payload)).hex())\n"
+    )
+    produced = _run_probe(producer)
+    assert produced.returncode == 0, f"producer failed:\n{produced.stdout}\n{produced.stderr}"
+    modules_line, hex_payload = produced.stdout.strip().splitlines()[-2:]
+    modules = ast.literal_eval(modules_line)
+    assert isinstance(modules, tuple)
+    assert not [m for m in _HEAVY if any(m in name.split(".") for name in modules)], f"heavy warm set: {modules}"
+
+    consumer = (
+        "import sys, pickle\n"
+        + _STANDBY_IMPORTS
+        + f"standby_worker(q, q, {modules!r})\n"
+        + f"pickle.loads(bytes.fromhex({hex_payload!r}))\n"
+        + _HEAVY_LOADED
+    )
+    result = _run_probe(consumer)
+
+    assert result.returncode == 0, f"consumer failed:\n{result.stdout}\n{result.stderr}"
+    assert result.stdout.strip().splitlines()[-1] == "[]", f"worker imported backends:\n{result.stdout}"

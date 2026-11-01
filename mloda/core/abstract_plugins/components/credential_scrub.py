@@ -4,6 +4,7 @@ import re
 from collections.abc import Iterable, Mapping
 from contextvars import ContextVar, Token
 from typing import Any
+from urllib.parse import unquote
 
 _AZURE_CONTAINER_SCHEMES = frozenset({"abfs", "abfss", "wasb", "wasbs"})
 _AZURE_CONTAINER_PATTERN = re.compile(r"[a-z0-9-]{3,63}|\$(?:root|web|logs)")
@@ -22,13 +23,13 @@ _FREE_TEXT_URI_PATTERN = re.compile(
 # char is even attempted.
 _USERINFO_FALLBACK_PATTERN = re.compile(
     r"(?<![A-Za-z0-9+.-])(?P<scheme>(?:jdbc:)?[A-Za-z][A-Za-z0-9+.-]*)://"
-    r"[^\s/?#@:]*:(?!\d+(?:[/?#\s]|$))(?:(?!://)[^\s@])*@"
+    r"[^\s/?#@:]*:(?!\d+(?:[?#\s]|$|/(?![^\s/?#@]+@[\w.~-]+(?::\d+)?/)))(?:(?!://)[^\s@])*@"
 )
 
 # Shared suffix a credential-shaped key name must end with, reused by the keyword and quoted-key patterns.
 _SECRET_NAME = (  # nosec B105
     r"(?:password|passwd|pwd|secret|token|signature|sig|api[_-]?key|access[_-]?key|"
-    r"account[_-]?key|secret[_-]?key|private[_-]?key)"
+    r"account[_-]?key|secret[_-]?key|private[_-]?key|sessionid|sessid)"
 )
 
 _KNOWN_SCHEMES = r"(?i:bearer|basic|token|digest|apikey|negotiate)"
@@ -111,10 +112,19 @@ def _uri_projection(match: re.Match[str]) -> str | None:
         return f"{scheme}://{container}{host}"
     if any("=" in segment.partition(":")[2] for segment in path.split("/")):
         return None
-    head, percent, _ = path.partition("%")
-    if percent:
-        path = head[: head.rfind("/") + 1]
-    return f"{scheme}://{container}{host}{path}"
+    return f"{scheme}://{container}{host}{_cut_hidden_percent(scheme, host, path)}"
+
+
+def _cut_hidden_percent(scheme: str, host: str, path: str) -> str:
+    """Keep a percent-encoded path unless its decoded form hides a credential; then cut at the first escape."""
+    if "%" not in path:
+        return path
+    decoded = unquote(path)
+    probe = f"{scheme}://{host}{decoded}"
+    if "%" not in decoded and _scrub_passes(probe) == probe:
+        return path
+    head = path.partition("%")[0]
+    return head[: head.rfind("/") + 1]
 
 
 def _scrub_uri_match(match: re.Match[str]) -> str:
@@ -122,7 +132,7 @@ def _scrub_uri_match(match: re.Match[str]) -> str:
     projection = _uri_projection(match)
     if projection is not None:
         return projection
-    return f"{scheme}://{host}{_cut_key_value_path(path)}"
+    return f"{scheme}://{host}{_cut_hidden_percent(scheme, host, _cut_key_value_path(path))}"
 
 
 def _drop_free_text_userinfo(text: str) -> str:
@@ -218,16 +228,20 @@ def scrub_credentials(text: str) -> str:
     registered = _REGISTERED_SECRETS.get()
     if registered:
         text = placeholder_mask(text, registered)
+    text = _scrub_passes(text)
+    if registered:
+        text = text.replace(_PLACEHOLDER, "***")
+    return text
+
+
+def _scrub_passes(text: str) -> str:
     text = _drop_free_text_userinfo(text)
     text = _FREE_TEXT_URI_PATTERN.sub(_scrub_uri_match, text)
     text = _AUTHORIZATION_PATTERN.sub(lambda m: m["head"] + (f"{m['scheme']} ***" if m["scheme"] else "***"), text)
     text = _BEARER_PATTERN.sub(r"\g<scheme> ***", text)
     text = _KEYWORD_PATTERN.sub(r"\g<keyword>\g<sep>***", text)
     text = _QUOTED_KEY_PATTERN.sub(r"\g<lead>\g<quote>\g<keyword>\g<quote>: \g<quote>***\g<quote>", text)
-    text = _SLASH_DSN_PATTERN.sub(r"\g<user>/***@", text)
-    if registered:
-        text = text.replace(_PLACEHOLDER, "***")
-    return text
+    return _SLASH_DSN_PATTERN.sub(r"\g<user>/***@", text)
 
 
 def _mask_item(item: Any, literals: frozenset[str], memo: dict[int, Any] | None = None) -> Any:

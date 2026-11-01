@@ -10,6 +10,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.credential_scrub import (
+    _SECRET_KEY,
     redact_mapping,
     redact_option_value,
     scrub_credentials,
@@ -437,6 +438,38 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
     ),
     ("truncated_text", "{'password': ('a', ('b', 'hunter2z9'", ["hunter2z9"], []),
     ("stray_foreign_closer", "{'password': [a)b, 'hunter2z9']}", ["hunter2z9"], []),
+    ("jsessionid_path_param", "https://host/x;jsessionid=SECRET", ["SECRET"], ["https://host/x;jsessionid=***"]),
+    ("phpsessid_keyword", "PHPSESSID=SECRET", ["SECRET"], ["PHPSESSID=***"]),
+    ("sessionid_quoted_dict", "{'sessionid': 'SECRET'}", ["SECRET"], ["'sessionid'"]),
+    ("aspnet_sessionid_keyword", "ASP.NET_SessionId=SECRET", ["SECRET"], ["ASP.NET_SessionId="]),
+    ("digit_userinfo_slash_password", "https://user:123/PW@host/x", ["PW", "user"], ["https://host/x"]),
+    (
+        "digit_userinfo_slash_password_port",
+        "https://user:123/PW@host:8080/x",
+        ["PW", "user"],
+        ["https://host:8080/x"],
+    ),
+    ("percent_encoded_keyword_letter", "https://host/x;pass%77ord=hunter2", ["hunter2"], ["https://host/"]),
+    ("percent_encoded_key_underscore", "https://host/x;api%5Fkey=SECRET", ["SECRET"], ["https://host/"]),
+    (
+        "percent_encoded_inner_uri_userinfo",
+        "https://proxy/fetch/https%3A%2F%2Falice%3Ahunter2%40inner.host%2Fx",
+        ["hunter2", "alice"],
+        ["https://proxy/fetch/"],
+    ),
+    (
+        "percent_encoded_bearer_token",
+        "https://host/api/Bearer%20eyJhbGciOiJIUzI1NiJ9.abc",
+        ["eyJhbGciOiJIUzI1NiJ9"],
+        ["https://host/api/"],
+    ),
+    ("percent_encoded_colon_key_value", "https://host/db%3Ajob=SECRETVAL", ["SECRETVAL"], ["https://host/"]),
+    (
+        "percent_encoded_fallback_prefix_password",
+        "https://host/db%3Fpassword%3Dhunter2/x:y=z",
+        ["hunter2"],
+        ["https://host/"],
+    ),
 ]
 
 
@@ -565,6 +598,17 @@ UNCHANGED_LOOKALIKE_CASES: list[str] = [
     "author: bob",
     'Authorization-Info: nextnonce="abc123def"',
     "x_authorization: denied for role x",
+    "session_id=abc",
+    "https://host:8443/a@b.csv",
+    "https://host:8443/pkg@1.2.3",
+    "https://host:8443/image@sha256:abc",
+    "https://host:8443/image@sha256:abc/x",
+    "https://host:8443/a/b@c/d",
+    "https://user:123/PW@host",
+    "https://host/a%20b.csv",
+    "https://host/t%3A00.csv",
+    "https://acct.blob.core.windows.net/c/year%3D2024/a.parquet",
+    "https://host/caf%C3%A9.csv",
 ]
 
 
@@ -590,10 +634,30 @@ def test_azure_container_uri_kept_unchanged() -> None:
         ("s3://bucket:9000/x.csv", "s3://bucket:9000/x.csv"),
         ("abfss://cont@acct.dfs.core.windows.net/a%20b.csv", "abfss://cont@acct.dfs.core.windows.net/a%20b.csv"),
         ("s3://bucket]/x.csv", "s3://bucket]/x.csv"),
+        ("https://user:123/PW@host/x", "https://host/x"),  # nosec B105
+        ("https://user:123/PW@host:8080/x", "https://host:8080/x"),  # nosec B105
+        ("https://host:8443/a@b.csv", "https://host:8443/a@b.csv"),
+        ("https://host:8443/pkg@1.2.3", "https://host:8443/pkg@1.2.3"),
+        ("https://host:8443/image@sha256:abc/x", "https://host:8443/image@sha256:abc/x"),
+        ("https://user:123/PW@host", "https://user:123/PW@host"),  # nosec B105
     ],
 )
 def test_strip_uri_userinfo(text: str, expected: str) -> None:
     assert strip_uri_userinfo(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("key", "masked"),
+    [
+        ("sessionid", True),
+        ("sessionId", True),
+        ("PHPSESSID", True),
+        ("session_id", False),
+        ("session-id", False),
+    ],
+)
+def test_secret_key_session_id_names(key: str, masked: bool) -> None:
+    assert (_SECRET_KEY.fullmatch(key) is not None) is masked
 
 
 def test_strip_uri_userinfo_never_raises_on_a_bad_bracket_host() -> None:
@@ -983,8 +1047,8 @@ def test_redact_option_value_shared_inner_dict_without_cycle_renders_both_masked
 
 class TestScrubUriProjection:
     """A fullmatching scheme://... drops user info, query and fragment. A jdbc: scheme drops the path entirely;
-    any other scheme cuts its path back to the last / before the first percent-escape, and fails closed when a
-    path segment has a : followed by =. An azure container userinfo is kept only when it fullmatches an azure
+    any other scheme keeps a percent-escaped path unless its decoded form is malformed or still scrubs (then it
+    cuts back to the last / before the first %), and fails closed when a path segment has a : followed by =. An azure container userinfo is kept only when it fullmatches an azure
     container name or a well-known $root/$web/$logs alias."""
 
     @pytest.mark.parametrize(
@@ -1118,24 +1182,63 @@ class TestScrubUriProjection:
             ),
             pytest.param(
                 "s3://bucket/my%20file.csv",
-                "s3://bucket/",
-                id="path-cut-back-to-segment-before-percent-encoded-space",
+                "s3://bucket/my%20file.csv",
+                id="percent-encoded-space-kept",
             ),
             pytest.param(
                 "s3://bucket/2024%2F01/a.parquet",
-                "s3://bucket/",
-                id="path-cut-back-to-segment-before-percent-encoded-slash",
+                "s3://bucket/2024%2F01/a.parquet",
+                id="percent-encoded-slash-kept",
             ),
             pytest.param(
                 "s3://bucket/dir/my%20file.csv",
-                "s3://bucket/dir/",
-                id="path-cut-back-to-parent-dir-before-percent-escape",
+                "s3://bucket/dir/my%20file.csv",
+                id="percent-encoded-space-in-subdir-kept",
             ),
             pytest.param(
                 "https://host/a/b%20c/d.csv",
-                "https://host/a/",
-                id="path-cut-back-to-segment-before-mid-path-percent-escape",
+                "https://host/a/b%20c/d.csv",
+                id="mid-path-percent-encoded-space-kept",
             ),
+            pytest.param("https://host/a%20b.csv", "https://host/a%20b.csv", id="percent-encoded-space-root-kept"),
+            pytest.param("https://host/t%3A00.csv", "https://host/t%3A00.csv", id="percent-encoded-colon-kept"),
+            pytest.param(
+                "https://acct.blob.core.windows.net/c/year%3D2024/a.parquet",
+                "https://acct.blob.core.windows.net/c/year%3D2024/a.parquet",
+                id="percent-encoded-equals-hive-partition-kept",
+            ),
+            pytest.param("https://host/caf%C3%A9.csv", "https://host/caf%C3%A9.csv", id="utf8-escape-kept"),
+            pytest.param("https://host/a/b%3Fc/d.csv", "https://host/a/", id="encoded-question-mark-mid-path-cut"),
+            pytest.param("https://host/x;pass%77ord=hunter2", "https://host/", id="encoded-keyword-letter-cut"),
+            pytest.param(
+                "https://proxy/fetch/https%3A%2F%2Falice%3Ahunter2%40inner.host%2Fx",
+                "https://proxy/fetch/",
+                id="encoded-inner-uri-userinfo-cut",
+            ),
+            pytest.param("https://host/a/b%ZZc/d.csv", "https://host/a/", id="malformed-percent-escape-cut"),
+            pytest.param("https://user:123/PW@host/x", "https://host/x", id="digit-userinfo-slash-password"),
+            pytest.param(
+                "https://user:123/PW@host:8080/x", "https://host:8080/x", id="digit-userinfo-slash-password-port"
+            ),
+            pytest.param("https://host:8443/a@b.csv", "https://host:8443/a@b.csv", id="path-at-file-kept"),
+            pytest.param("https://host:8443/pkg@1.2.3", "https://host:8443/pkg@1.2.3", id="path-at-version-kept"),
+            pytest.param(
+                "https://host:8443/image@sha256:abc", "https://host:8443/image@sha256:abc", id="path-at-digest-kept"
+            ),
+            pytest.param(
+                "https://host:8443/image@sha256:abc/x",
+                "https://host:8443/image@sha256:abc/x",
+                id="path-at-digest-with-tail-kept",
+            ),
+            pytest.param("https://host:8443/a/b@c/d", "https://host:8443/a/b@c/d", id="path-at-mid-segment-kept"),
+            pytest.param("https://user:123/PW@host", "https://user:123/PW@host", id="digit-userinfo-no-path-kept"),
+            pytest.param("https://host:8443/a@b/c.csv", "https://b/c.csv", id="ambiguous-path-at-host-shape-dropped"),
+            pytest.param(
+                "https://host:8443/alice@corp.com/report.csv",
+                "https://corp.com/report.csv",
+                id="ambiguous-path-email-shape-dropped",
+            ),
+            pytest.param("https://host:80/pkg@1.2.3/", "https://1.2.3/", id="ambiguous-path-version-slash-dropped"),
             pytest.param("file:///C:/data/x.csv", "file:///C:/data/x.csv", id="windows-drive-colon-in-file-uri-kept"),
             pytest.param(
                 "s3://bucket/2024-01-01T00:00:00/part.parquet",
@@ -1200,6 +1303,13 @@ class TestScrubUriFailClosed:
             ),
             pytest.param("postgresql://u:12?ss@host/db", "ss", id="colon-digit-question-mark-in-userinfo"),
             pytest.param("DRIVER={x};Server=https://host;PWD=secret", "secret", id="keyword-string-with-scheme"),
+            pytest.param("https://user:123/PW@host/x", "PW", id="digit-userinfo-slash-password"),
+            pytest.param("https://host/x;pass%77ord=hunter2", "hunter2", id="encoded-keyword-letter-in-path"),
+            pytest.param("https://host/x;api%5Fkey=SECRET", "SECRET", id="encoded-underscore-in-secret-key"),
+            pytest.param("https://host/db%3Ajob=SECRETVAL", "SECRETVAL", id="encoded-colon-then-equals-in-path"),
+            pytest.param(
+                "https://host/db%3Fpassword%3Dhunter2/x:y=z", "hunter2", id="encoded-secret-before-fallback-pair"
+            ),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:

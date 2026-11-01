@@ -81,7 +81,14 @@ RECLAIM_LOGS: dict[type[Any], SubclassLog[Any]] = {
 EXTRA_RECLAIM_ROOTS: tuple[type[Any], ...] = (ComputeFramework, Extender)
 REPORTED_ROOTS: tuple[type[Any], ...] = (FeatureGroup, BaseTransformer, Implementation)
 YOUNG_WINDOW_THRESHOLD = 100_000
-# Shared per-call subclass builders live under tests/mixins/ (enforced by the guard in test_registry_isolation.py).
+# Shared per-call subclass builders live under tests/mixins/ (enforced by the guard in
+# test_registry_isolation.py). Test modules (test_*.py) are skipped by the guard even
+# when another test imports them (e.g. tests.test_core.test_prepare.test_multi_link_group_resolution
+# imported by test_execution_orchestrator): builders in test files execute only at module
+# import time and bind their classes at module level (so _is_owned_by_its_module treats them
+# as module-owned and skips them), rather than acting as per-call builders reachable by
+# importing tests. If a helper module ever needs per-call builders shared across test files,
+# it must live under tests/mixins/ or pass the caller module explicitly as __module__.
 SHARED_TEST_MODULE_PREFIX = "tests.mixins."
 
 

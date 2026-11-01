@@ -920,6 +920,13 @@ class TestSharedSubclassBuildersLiveUnderMixins:
             f"or take the caller's module as __module__: {found}"
         )
 
+    def test_shared_test_module_prefix_documents_test_module_gap(self) -> None:
+        import inspect
+
+        source = inspect.getsource(registry_isolation)
+        assert 'SHARED_TEST_MODULE_PREFIX = "tests.mixins."' in source
+        assert "Test modules (test_*.py) are skipped by the guard even" in source
+
     def test_allowlist_has_no_stale_entries(self) -> None:
         stale = sorted(set(_SHARED_BUILDER_ALLOWLIST) - set(_shared_builder_hits()))
         assert not stale, f"allowlist entries no longer match a builder site: {stale}"

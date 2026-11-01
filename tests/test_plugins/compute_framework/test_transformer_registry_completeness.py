@@ -53,10 +53,29 @@ def test_registry_is_complete_despite_module_scope_transformer_import() -> None:
 
 def test_pickle_and_deepcopy_rebuild_the_registry_instead_of_shipping_it() -> None:
     t = ComputeFrameworkTransformer()
+    t.transformer_map[(object, int)] = BaseTransformer  # type: ignore[type-abstract]
+    original_keys = set(t.transformer_map) - {(object, int)}
 
     for clone in (pickle.loads(pickle.dumps(t)), copy.deepcopy(t)):  # nosec B301
         assert clone is not t
-        assert set(clone.transformer_map) == set(t.transformer_map)
+        assert (object, int) not in clone.transformer_map
+        assert original_keys <= set(clone.transformer_map)
+
+
+def test_deepcopy_keeps_a_transformer_subclass() -> None:
+    class _Sub(ComputeFrameworkTransformer):
+        pass
+
+    assert type(copy.deepcopy(_Sub())) is _Sub
+
+
+def test_registry_order_is_independent_of_import_order() -> None:
+    seen: list[type[BaseTransformer]] = []
+    for cls in ComputeFrameworkTransformer().transformer_map.values():
+        if cls not in seen:
+            seen.append(cls)
+
+    assert seen == sorted(seen, key=lambda c: (c.__module__, c.__qualname__))
 
 
 def test_reduce_carries_only_transformers_outside_the_base_implementations() -> None:
@@ -93,7 +112,8 @@ def test_reduce_carries_only_transformers_outside_the_base_implementations() -> 
 
     rebuild, args = ComputeFrameworkTransformer().__reduce__()[:2]
     assert rebuild is _rebuild_transformer
-    carried = args[0]
+    assert args[0] is ComputeFrameworkTransformer
+    carried = args[1]
 
     assert _LocalTransformer in carried
     assert not [c for c in carried if c.__module__.startswith("mloda_plugins.compute_framework.base_implementations.")]

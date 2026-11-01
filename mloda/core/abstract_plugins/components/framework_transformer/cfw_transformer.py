@@ -21,9 +21,11 @@ _LAZY_TRANSFORMER_GATES = {
 _BUILTIN_PREFIX = "mloda_plugins.compute_framework.base_implementations."
 
 
-def _rebuild_transformer(carried: tuple[type[BaseTransformer], ...]) -> "ComputeFrameworkTransformer":
+def _rebuild_transformer(
+    cls: type["ComputeFrameworkTransformer"], carried: tuple[type[BaseTransformer], ...]
+) -> "ComputeFrameworkTransformer":
     """Carried classes are unpickled first, so their modules are imported and subclass discovery registers them."""
-    return ComputeFrameworkTransformer()
+    return cls()
 
 
 class ComputeFrameworkTransformer:
@@ -157,11 +159,12 @@ class ComputeFrameworkTransformer:
         carried = tuple(
             dict.fromkeys(t for t in self.transformer_map.values() if not t.__module__.startswith(_BUILTIN_PREFIX))
         )
-        return (_rebuild_transformer, (carried,))
+        return (_rebuild_transformer, (type(self), carried))
 
     def _register_all(self) -> None:
         self._seen_lazy_dirs = frozenset(ComputeFrameworkTransformer._lazy_dirs_loaded)
-        for transformer in get_all_subclasses(BaseTransformer):
+        # Sorted so map insertion order (the BFS tie-break) is the same in every process.
+        for transformer in sorted(get_all_subclasses(BaseTransformer), key=lambda c: (c.__module__, c.__qualname__)):
             self.add(transformer)
 
     def _refresh(self) -> bool:

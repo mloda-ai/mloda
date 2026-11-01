@@ -6,6 +6,7 @@ stays complete for the backends a request does use. A standby worker for such a 
 
 from __future__ import annotations
 
+import ast
 import subprocess  # nosec
 import sys
 
@@ -32,7 +33,6 @@ def test_importing_pyarrow_table_does_not_import_pandas() -> None:
     )
 
 
-_PYARROW_MODULE = "mloda_plugins.compute_framework.base_implementations.pyarrow.table"
 _HEAVY = ("pandas", "polars", "pyiceberg", "pyspark", "duckdb")
 _GATES = ("duckdb", "pyiceberg.table", "pandas", "polars", "pyspark.sql")
 
@@ -78,23 +78,11 @@ _HEAVY_LOADED = f"print([m for m in {_HEAVY!r} if m in sys.modules])\n"
 
 
 @pytest.mark.timeout(60)
-def test_planning_and_standby_for_a_pyarrow_request_import_no_heavy_backend() -> None:
-    body = (
-        _PLAN_FG
-        + _PLAN
-        + _HEAVY_LOADED
-        + _STANDBY_IMPORTS
-        + f"modules = ({_PYARROW_MODULE!r},)\n"
-        + "standby_worker(q, q, modules)\n"
-        + "print(modules)\n"
-        + _HEAVY_LOADED
-    )
-    result = _run_probe(body)
+def test_planning_a_pyarrow_request_imports_no_heavy_backend() -> None:
+    result = _run_probe(_PLAN_FG + _PLAN + _HEAVY_LOADED)
 
     assert result.returncode == 0, f"probe failed:\n{result.stdout}\n{result.stderr}"
-    lines = result.stdout.strip().splitlines()
-    assert lines[-3] == "[]", f"backends imported while planning:\n{result.stdout}"
-    assert lines[-2:] == [str((_PYARROW_MODULE,)), "[]"], f"standby imported backends:\n{result.stdout}"
+    assert result.stdout.strip().splitlines()[-1] == "[]", f"backends imported while planning:\n{result.stdout}"
 
 
 @pytest.mark.timeout(60)
@@ -159,7 +147,7 @@ def test_standby_worker_warms_exactly_the_given_module() -> None:
 
 @pytest.mark.timeout(60)
 def test_worker_unpickling_pyarrow_payload_from_all_backends_parent_imports_no_heavy_backend() -> None:
-    """Unpickling the payload imports no heavy backend; the FG class is left out as it lives in the producer's __main__."""
+    """Standby warm plus unpickle imports no heavy backend in a parent with every backend loaded."""
     producer = (
         _PLAN_FG
         + "import importlib, importlib.util\n"
@@ -175,16 +163,24 @@ def test_worker_unpickling_pyarrow_payload_from_all_backends_parent_imports_no_h
         + "steps = [s for s in plan if isinstance(s, FeatureGroupStep)]\n"
         + "assert steps\n"
         + "payload = [PyArrowTable()] + [(s.compute_framework, s.features) for s in steps]\n"
+        + "from mloda.core.runtime.run import planned_worker_modules\n"
+        + "modules = planned_worker_modules(plan, {ParallelizationMode.MULTIPROCESSING})\n"
+        + "print(repr(modules))\n"
         + "print(bytes(ForkingPickler.dumps(payload)).hex())\n"
     )
     produced = _run_probe(producer)
     assert produced.returncode == 0, f"producer failed:\n{produced.stdout}\n{produced.stderr}"
-    hex_payload = produced.stdout.strip().splitlines()[-1]
+    modules_line, hex_payload = produced.stdout.strip().splitlines()[-2:]
+    modules = ast.literal_eval(modules_line)
+    assert isinstance(modules, tuple)
+    assert not [m for m in _HEAVY if any(m in name.split(".") for name in modules)], f"heavy warm set: {modules}"
 
     consumer = (
         "import sys, pickle\n"
-        "import mloda.core.runtime.worker.multiprocessing_worker\n"
-        f"pickle.loads(bytes.fromhex({hex_payload!r}))\n" + _HEAVY_LOADED
+        + _STANDBY_IMPORTS
+        + f"standby_worker(q, q, {modules!r})\n"
+        + f"pickle.loads(bytes.fromhex({hex_payload!r}))\n"
+        + _HEAVY_LOADED
     )
     result = _run_probe(consumer)
 

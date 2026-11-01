@@ -34,6 +34,7 @@ from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecut
 from mloda.core.core.cfw_manager import CfwManager, shared_manager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
+from mloda.core.core.step.join_step import JoinStep
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -709,11 +710,34 @@ class TestPlannedWorkerModules:
 
         result = planned_worker_modules(plan, self.mp)
 
-        assert isinstance(result, tuple)
         assert result == tuple(
             sorted(expected | {s.compute_framework.__module__ for s in plan if isinstance(s, FeatureGroupStep)})
         )
-        assert expected <= set(result)
+
+    def test_transfer_and_join_steps_outside_any_feature_group_step_are_included(self) -> None:
+        def _fw(module: str) -> type:
+            return type("Fw", (), {"__module__": module})
+
+        def _step(spec: type, mode: ParallelizationMode, **attrs: Any) -> Mock:
+            step = Mock(spec=spec)
+            step.get_parallelization_mode.return_value = {mode}
+            for name, value in attrs.items():
+                setattr(step, name, value)
+            return step
+
+        mp = ParallelizationMode.MULTIPROCESSING
+        tfs = _step(TransformFrameworkStep, mp, from_framework=_fw("fw.tfs_from"), to_framework=_fw("fw.tfs_to"))
+        join = _step(JoinStep, mp, source_framework=_fw("fw.join_src"), destination_framework=_fw("fw.join_dst"))
+        skipped = _step(
+            TransformFrameworkStep,
+            ParallelizationMode.THREADING,
+            from_framework=_fw("fw.skipped_from"),
+            to_framework=_fw("fw.skipped_to"),
+        )
+
+        result = planned_worker_modules(ReiterablePlan(tfs, join, skipped), self.mp)
+
+        assert result == ("fw.join_dst", "fw.join_src", "fw.tfs_from", "fw.tfs_to")
 
     @pytest.mark.parametrize(
         "modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}], ids=["sync", "thread"]

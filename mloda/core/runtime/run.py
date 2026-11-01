@@ -607,8 +607,8 @@ class ExecutionOrchestrator:
             )
 
             # Cold starts overlap Manager and flight server startup; count is capped at the CPU count.
-            # A bound worker unpickles the parent's cfw transformer map, which imports exactly these
-            # backends, so the standby warms them off the critical path.
+            # A bound worker unpickles the parent's cfw transformer map, which imports the backends
+            # loaded here; the standby warms those off the critical path.
             self.worker_manager.prestart_workers(
                 min(planned_worker_count(self.execution_planner, parallelization_modes), os.cpu_count() or 1),
                 standby_worker,

@@ -45,7 +45,7 @@ def standby_worker(
     """Pre-warm the given backends, then wait to be bound to a cfw and run `worker`."""
     for gate in warm_gates:
         importlib.import_module(gate)
-    ComputeFrameworkTransformer()
+    ComputeFrameworkTransformer()  # loads the light transformer files and those of the warmed gates
     while True:
         try:
             command = command_queue.get(block=False)

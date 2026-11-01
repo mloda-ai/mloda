@@ -12,7 +12,6 @@ The scopes used here (python_dict, sqlite, node_centrality) need no optional dep
 The autouse conftest fixture restores the default registry around every test, so clearing it inside a test is safe.
 """
 
-import abc
 import gc
 import inspect
 import pathlib
@@ -26,7 +25,6 @@ import pytest
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     _PLUGIN_BASE_TYPES,
     PluginRegistry,
@@ -34,6 +32,7 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     register_plugin,
 )
 from mloda.user import PluginLoader
+from tests.helpers.subclass_walks import invalidate_abc_caches, spy_on_plugin_subclasschecks
 
 PYTHON_DICT_FRAMEWORK_MODULE = "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework"
 
@@ -299,30 +298,6 @@ class TestLoaderRegistrationSkipsAbstractClasses:
         )
 
 
-def _spy_on_plugin_subclasschecks(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Wrap ABCMeta.__subclasscheck__; the returned list collects calls whose cls is a plugin base, FeatureGroup, or Implementation."""
-    original = abc.ABCMeta.__subclasscheck__
-    counted: list[str] = []
-
-    def spy(cls: abc.ABCMeta, subclass: type[Any]) -> bool:
-        if FeatureGroup in cls.__mro__ or Implementation in cls.__mro__ or cls in _PLUGIN_BASE_TYPES:
-            counted.append(cls.__qualname__)
-        return original(cls, subclass)
-
-    monkeypatch.setattr(abc.ABCMeta, "__subclasscheck__", spy)
-    return counted
-
-
-def _invalidate_abc_caches() -> None:
-    class _Throwaway(abc.ABC):
-        pass
-
-    class _Registered:
-        pass
-
-    _Throwaway.register(_Registered)
-
-
 class TestPluginDiscoveryAvoidsAbcWalk:
     """Plugin discovery must not pay the ABC subclass-tree walk for classes it will not register."""
 
@@ -356,7 +331,7 @@ class TestPluginDiscoveryAvoidsAbcWalk:
         setattr(module, "alias", tuple[str, ...])
 
         try:
-            counted = _spy_on_plugin_subclasschecks(monkeypatch)
+            counted = spy_on_plugin_subclasschecks(monkeypatch)
 
             keys = register_module_plugins(module)
 
@@ -375,9 +350,9 @@ class TestPluginDiscoveryAvoidsAbcWalk:
     ) -> None:
         # The call count stands in for wall time to stay stable under xdist load.
         PluginLoader.all(force_reload=True)
-        counted = _spy_on_plugin_subclasschecks(monkeypatch)
+        counted = spy_on_plugin_subclasschecks(monkeypatch)
 
-        _invalidate_abc_caches()
+        invalidate_abc_caches()
         counted.clear()
         PluginLoader.all(force_reload=True)
         baseline = len(counted)
@@ -396,7 +371,7 @@ class TestPluginDiscoveryAvoidsAbcWalk:
                         },
                     )
                 )
-            _invalidate_abc_caches()
+            invalidate_abc_caches()
             counted.clear()
             PluginLoader.all(force_reload=True)
             with_extra = len(counted)
@@ -554,7 +529,9 @@ class TestPluginDiscoveryAvoidsAbcWalk:
 
         try:
             run_all_scenarios()  # warm-up so the result does not depend on test order
-            counted = _spy_on_plugin_subclasschecks(monkeypatch)
+            # Invalidation makes negative isinstance checks miss the cache and reach the spy.
+            invalidate_abc_caches()
+            counted = spy_on_plugin_subclasschecks(monkeypatch)
             run_all_scenarios()
             assert counted == [], f"prepare and run ran ABC subclass checks against plugin classes: {Counter(counted)}"
         finally:

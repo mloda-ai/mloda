@@ -5,7 +5,7 @@ import reprlib
 import traceback
 import weakref
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, TypeGuard, TypeVar
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 
@@ -252,3 +252,12 @@ def get_all_subclasses(cls: Any) -> set[type[Any]]:
         all_subclasses.update(get_all_subclasses(subclass))
 
     return all_subclasses
+
+
+def is_nominal_subclass(obj: object, bases: type[T] | tuple[type[T], ...]) -> TypeGuard[type[T]]:
+    """Nominal MRO check that skips ABCMeta's descendant walk and ignores virtual registrations."""
+    if not isinstance(obj, type):
+        return False
+    if isinstance(bases, type):
+        bases = (bases,)
+    return any(base in obj.__mro__ for base in bases)

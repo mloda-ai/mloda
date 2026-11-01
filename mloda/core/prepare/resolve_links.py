@@ -6,6 +6,7 @@ from uuid import UUID
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.abstract_plugins.components.link import JoinType, Link
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.prepare.stable_text import stable_text
 from mloda.core.prepare.validators.resolve_link_validator import ResolveLinkValidator
 
@@ -498,9 +499,9 @@ class ResolveLinks:
                 # Only allow when one side is exact (distance 0) AND
                 # the Link's classes are not related by inheritance
                 # (to prevent sibling class mismatches)
-                link_classes_related = issubclass(link.left_feature_group, link.right_feature_group) or issubclass(
-                    link.right_feature_group, link.left_feature_group
-                )
+                link_classes_related = is_nominal_subclass(
+                    link.left_feature_group, link.right_feature_group
+                ) or is_nominal_subclass(link.right_feature_group, link.left_feature_group)
                 if not link_classes_related and (left_dist == 0 or right_dist == 0):
                     max_dist = max(left_dist, right_dist)
                     link_distances.append((link, max_dist))

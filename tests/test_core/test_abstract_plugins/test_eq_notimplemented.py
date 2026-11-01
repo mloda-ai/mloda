@@ -13,6 +13,8 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.helpers.subclass_walks import invalidate_abc_caches, spy_on_plugin_subclasschecks
 
 
 class _EqTestFeatureGroup(FeatureGroup):
@@ -38,10 +40,37 @@ class TestFeatureGroupEqTypeMismatch:
             pytest.param(object(), id="object"),
         ],
     )
-    def test_feature_group_eq_non_feature_group_returns_false(self, other: Any) -> None:
-        """Comparing a FeatureGroup to a non-FeatureGroup type should return False, not raise."""
+    def test_feature_group_eq_non_feature_group_returns_false(
+        self, other: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Comparing a FeatureGroup to a non-FeatureGroup type returns False without an ABC subclass walk."""
         instance = _EqTestFeatureGroup()
+        invalidate_abc_caches()
+        counted = spy_on_plugin_subclasschecks(monkeypatch)
         assert (instance == other) is False
+        assert counted == []
+
+
+class TestComputeFrameworkEqTypeMismatch:
+    """ComputeFramework.__eq__ should return False for non-ComputeFramework types without an ABC walk."""
+
+    @pytest.mark.parametrize(
+        "other",
+        [
+            pytest.param(None, id="None"),
+            pytest.param(42, id="int"),
+            pytest.param("string", id="str"),
+            pytest.param(object(), id="object"),
+        ],
+    )
+    def test_compute_framework_eq_non_compute_framework_returns_false(
+        self, other: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cfw = PythonDictFramework()
+        invalidate_abc_caches()
+        counted = spy_on_plugin_subclasschecks(monkeypatch)
+        assert (cfw == other) is False
+        assert counted == []
 
 
 class TestFeatureNameEqTypeMismatch:

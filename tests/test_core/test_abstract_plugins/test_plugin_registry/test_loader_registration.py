@@ -12,7 +12,6 @@ The scopes used here (python_dict, sqlite, node_centrality) need no optional dep
 The autouse conftest fixture restores the default registry around every test, so clearing it inside a test is safe.
 """
 
-import abc
 import gc
 import inspect
 import pathlib
@@ -23,6 +22,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
@@ -32,6 +32,7 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     register_plugin,
 )
 from mloda.user import PluginLoader
+from tests.helpers.subclass_walks import invalidate_abc_caches, spy_on_plugin_subclasschecks
 
 PYTHON_DICT_FRAMEWORK_MODULE = "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework"
 
@@ -297,30 +298,6 @@ class TestLoaderRegistrationSkipsAbstractClasses:
         )
 
 
-def _spy_on_plugin_subclasschecks(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Wrap ABCMeta.__subclasscheck__; the returned list collects calls whose cls is a plugin base or subclass."""
-    original = abc.ABCMeta.__subclasscheck__
-    counted: list[str] = []
-
-    def spy(cls: abc.ABCMeta, subclass: type[Any]) -> bool:
-        if FeatureGroup in cls.__mro__ or cls in _PLUGIN_BASE_TYPES:
-            counted.append(cls.__qualname__)
-        return original(cls, subclass)
-
-    monkeypatch.setattr(abc.ABCMeta, "__subclasscheck__", spy)
-    return counted
-
-
-def _invalidate_abc_caches() -> None:
-    class _Throwaway(abc.ABC):
-        pass
-
-    class _Registered:
-        pass
-
-    _Throwaway.register(_Registered)
-
-
 class TestPluginDiscoveryAvoidsAbcWalk:
     """Plugin discovery must not pay the ABC subclass-tree walk for classes it will not register."""
 
@@ -354,7 +331,7 @@ class TestPluginDiscoveryAvoidsAbcWalk:
         setattr(module, "alias", tuple[str, ...])
 
         try:
-            counted = _spy_on_plugin_subclasschecks(monkeypatch)
+            counted = spy_on_plugin_subclasschecks(monkeypatch)
 
             keys = register_module_plugins(module)
 
@@ -373,9 +350,9 @@ class TestPluginDiscoveryAvoidsAbcWalk:
     ) -> None:
         # The call count stands in for wall time to stay stable under xdist load.
         PluginLoader.all(force_reload=True)
-        counted = _spy_on_plugin_subclasschecks(monkeypatch)
+        counted = spy_on_plugin_subclasschecks(monkeypatch)
 
-        _invalidate_abc_caches()
+        invalidate_abc_caches()
         counted.clear()
         PluginLoader.all(force_reload=True)
         baseline = len(counted)
@@ -394,7 +371,7 @@ class TestPluginDiscoveryAvoidsAbcWalk:
                         },
                     )
                 )
-            _invalidate_abc_caches()
+            invalidate_abc_caches()
             counted.clear()
             PluginLoader.all(force_reload=True)
             with_extra = len(counted)
@@ -409,6 +386,158 @@ class TestPluginDiscoveryAvoidsAbcWalk:
             f"cold load did {with_extra - baseline} extra ABC subclass checks for 300 extra FeatureGroups "
             f"(baseline {baseline}, with extras {with_extra})"
         )
+
+    def test_prepare_and_run_trigger_no_abc_subclass_check_against_plugin_classes(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from collections import Counter
+
+        from mloda.core.abstract_plugins.components.feature import Feature
+        from mloda.core.abstract_plugins.components.feature_name import FeatureName
+        from mloda.core.abstract_plugins.components.options import Options
+        from mloda.provider import ApiDataFG, DataCreatorFeatureGroup, FeatureSet
+        from mloda.user import Index, JoinSpec, Link, PluginCollector, mloda
+        from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group import (
+            OPTOY_CHAIN_SRC,
+            OPTOY_CHAIN_SUFFIX,
+            OpToyChainFG,
+            OpToyChainPandas,
+            OpToyChainSourceFG,
+        )
+
+        class _PrepareWalkDerivedFG(FeatureGroup):
+            @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: Any,
+                options: Any,
+                data_access_collection: Any = None,
+            ) -> bool:
+                return str(feature_name) == "prepare_walk_derived"
+
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+                return {Feature(OPTOY_CHAIN_SRC + OPTOY_CHAIN_SUFFIX)}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                data["prepare_walk_derived"] = 1
+                return data
+
+        class _PrepareWalkApiFG(FeatureGroup):
+            @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: Any,
+                options: Any,
+                data_access_collection: Any = None,
+            ) -> bool:
+                return str(feature_name) == "prepare_walk_api"
+
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+                return {Feature(name="walk_id", index=Index(("walk_id",)))}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                data["prepare_walk_api"] = 1
+                return data
+
+        class _PrepareWalkLeftFG(DataCreatorFeatureGroup):
+            @classmethod
+            def feature_names_supported(cls) -> set[str]:
+                return {"pw_key", "pw_left_val"}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return {"pw_key": [1, 2], "pw_left_val": [10, 20]}
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+                return {PandasDataFrame}
+
+        class _PrepareWalkRightFG(DataCreatorFeatureGroup):
+            @classmethod
+            def feature_names_supported(cls) -> set[str]:
+                return {"pw_rkey", "pw_right_val"}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return {"pw_rkey": [1, 2], "pw_right_val": [1, 2]}
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+                return {PandasDataFrame}
+
+        class _PrepareWalkJoinedFG(FeatureGroup):
+            @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: Any,
+                options: Any,
+                data_access_collection: Any = None,
+            ) -> bool:
+                return str(feature_name) == "prepare_walk_joined"
+
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+                return {Feature("pw_left_val"), Feature("pw_right_val")}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                data["prepare_walk_joined"] = 1
+                return data
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+                return {PandasDataFrame}
+
+        assert OpToyChainPandas.feature_group is OpToyChainFG
+        link_collector = PluginCollector.enabled_feature_groups(
+            {_PrepareWalkLeftFG, _PrepareWalkRightFG, _PrepareWalkJoinedFG}
+        )
+        prepare_link = Link.inner(JoinSpec(_PrepareWalkLeftFG, "pw_key"), JoinSpec(_PrepareWalkRightFG, "pw_rkey"))
+        chain_collector = PluginCollector.enabled_feature_groups(
+            {OpToyChainSourceFG, OpToyChainFG, _PrepareWalkDerivedFG}
+        )
+        api_collector = PluginCollector.enabled_feature_groups({ApiDataFG, _PrepareWalkApiFG})
+
+        def run_all_scenarios(
+            chain: PluginCollector = chain_collector,
+            api: PluginCollector = api_collector,
+            joined: PluginCollector = link_collector,
+            link: Link = prepare_link,
+        ) -> None:
+            mloda.run_all(
+                [
+                    Feature(OPTOY_CHAIN_SRC + OPTOY_CHAIN_SUFFIX, implementation=OpToyChainPandas),
+                    "prepare_walk_derived",
+                ],
+                compute_frameworks=[PandasDataFrame],
+                plugin_collector=chain,
+            )
+            mloda.run_all(
+                ["prepare_walk_api"],
+                compute_frameworks=[PandasDataFrame],
+                api_data={"WalkSet": {"walk_id": [1, 2]}},
+                plugin_collector=api,
+            )
+            mloda.run_all(
+                ["prepare_walk_joined"],
+                compute_frameworks=[PandasDataFrame],
+                links={link},
+                plugin_collector=joined,
+            )
+
+        try:
+            run_all_scenarios()  # warm-up so the result does not depend on test order
+            # Invalidation makes negative isinstance checks miss the cache and reach the spy.
+            invalidate_abc_caches()
+            counted = spy_on_plugin_subclasschecks(monkeypatch)
+            run_all_scenarios()
+            assert counted == [], f"prepare and run ran ABC subclass checks against plugin classes: {Counter(counted)}"
+        finally:
+            monkeypatch.undo()
+            del chain_collector, api_collector, link_collector, run_all_scenarios, prepare_link
+            del _PrepareWalkDerivedFG, _PrepareWalkApiFG, _PrepareWalkLeftFG, _PrepareWalkRightFG, _PrepareWalkJoinedFG
 
     def test_virtual_abc_subclasses_are_not_plugins(self) -> None:
         class _VirtualHostFG(FeatureGroup):
@@ -430,6 +559,8 @@ class TestPluginDiscoveryAvoidsAbcWalk:
         try:
             _VirtualHostFG.register(_VirtualX)
             assert issubclass(_VirtualX, FeatureGroup), "sanity: X is a virtual FeatureGroup subclass"
+
+            assert not is_nominal_subclass(_VirtualX, FeatureGroup)
 
             with pytest.raises(ValueError, match="is not a subclass of FeatureGroup"):
                 PluginRegistry().register(_VirtualX)

@@ -23,7 +23,13 @@ from mloda.core.abstract_plugins.components.input_data.file_source_fg import _Fi
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, feature_group_subclasses
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
-from mloda.core.abstract_plugins.components.utils import as_str, get_all_subclasses, safe_field, safe_field_with_error
+from mloda.core.abstract_plugins.components.utils import (
+    as_str,
+    get_all_subclasses,
+    is_nominal_subclass,
+    safe_field,
+    safe_field_with_error,
+)
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
@@ -96,7 +102,7 @@ def _resolved_subtype_fields(
 
 def _owned_suffixes(fg_class: type[FeatureGroup]) -> tuple[str, ...]:
     """Return the sorted default-owned suffixes of a file source group, () for other groups or a raising read."""
-    if not issubclass(fg_class, _FileSourceFG):
+    if not is_nominal_subclass(fg_class, _FileSourceFG):
         return ()
     return safe_field(lambda: tuple(sorted(set(fg_class.default_owned_suffixes()))), ())
 

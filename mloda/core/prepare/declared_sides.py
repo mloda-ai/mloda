@@ -6,6 +6,7 @@ from typing import Any, NamedTuple, TypeVar
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.link import JoinType, Link
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.resolve_links import inheritance_distance
 
@@ -38,7 +39,7 @@ def _member_links(link: Link, first: type, second: type) -> str:
     def one(left_name: str, right_name: str) -> str:
         return f"{factory}(JoinSpec({left_name}, ...), JoinSpec({right_name}, ...))"
 
-    if issubclass(first, link.left_feature_group):
+    if is_nominal_subclass(first, link.left_feature_group):
         return f"{one(first.__name__, right)} and {one(second.__name__, right)}"
     if link.jointype in (JoinType.INNER, JoinType.OUTER):
         # symmetric joins: members lead, so the remedy reads the same for either link orientation
@@ -133,9 +134,9 @@ def split_by_declared_side(link: Link, uuids: set[UUID], graph: Graph) -> Declar
 
     for uuid in uuids:
         feature_group_class = nodes[uuid].feature_group_class
-        if issubclass(feature_group_class, link.left_feature_group):
+        if is_nominal_subclass(feature_group_class, link.left_feature_group):
             left_by_distance[inheritance_distance(feature_group_class, link.left_feature_group)].add(uuid)
-        if issubclass(feature_group_class, link.right_feature_group):
+        if is_nominal_subclass(feature_group_class, link.right_feature_group):
             right_by_distance[inheritance_distance(feature_group_class, link.right_feature_group)].add(uuid)
 
     return DeclaredSideSplit(

@@ -5,6 +5,7 @@ from collections.abc import Collection
 from typing import Any
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations, serving_implementation
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
@@ -98,7 +99,7 @@ class ResolveImplementationPins:
             names_by_group[impl.feature_group].append(impl)
         assigned: list[tuple[UUID, type[Implementation[Any]]]] = []
         for group, impls in names_by_group.items():
-            steps = [s for s in chain if issubclass(self.graph.nodes[s].feature_group_class, group)]
+            steps = [s for s in chain if is_nominal_subclass(self.graph.nodes[s].feature_group_class, group)]
             if not steps:
                 raise ImplementationPinError(
                     f"Step {request} pins implementation {impls[0].__name__}, which keys no feature group of its chain."
@@ -122,7 +123,7 @@ class ResolveImplementationPins:
         return assigned
 
     def _serving(self, group: type[FeatureGroup], framework: Framework) -> type[Implementation[Any]] | None:
-        stop_after = "load_neutral" if issubclass(group, SourceFeatureGroup) else None
+        stop_after = "load_neutral" if is_nominal_subclass(group, SourceFeatureGroup) else None
         return serving_implementation(group, framework, self.accessible, stop_after=stop_after)
 
     def _allowed(self, uuid: UUID, impl: type[Implementation[Any]]) -> frozenset[Framework]:
@@ -132,7 +133,7 @@ class ResolveImplementationPins:
         serves = {
             fw
             for fw in feature.compute_frameworks or ()
-            if (served := self._serving(group, fw)) is not None and issubclass(served, impl)
+            if (served := self._serving(group, fw)) is not None and is_nominal_subclass(served, impl)
         }
         if not serves:
             reason = (

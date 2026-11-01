@@ -10,7 +10,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import option_key_is_present
 from mloda.core.abstract_plugins.components.property_spec import is_no_default
-from mloda.core.abstract_plugins.components.utils import as_str, safe_field
+from mloda.core.abstract_plugins.components.utils import as_str, contained_raise_reason, is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options, _isolate_forwarded_value, reject_reserved_reader_key
 from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
@@ -20,7 +20,6 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import featur
 from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
-from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.prepare.identify_feature_group import matches_feature_group_scope, validate_single_framework_pin
@@ -370,7 +369,7 @@ class GlobalFilter:
         host_match_key = _PROBE_HOST_KEY.get()
         if (
             host_match_key is not None
-            and issubclass(feature_group, _FileSourceFG)
+            and is_nominal_subclass(feature_group, _FileSourceFG)
             and probe.rejection is not None
             and host_match_key[1] in probe.rejection.candidates
         ):

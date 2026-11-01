@@ -15,7 +15,7 @@ from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseM
 from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
 from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
-from mloda.core.abstract_plugins.components.utils import as_str, safe_field
+from mloda.core.abstract_plugins.components.utils import as_str, is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import (
     InputCheck,
     MissingInputFeatureError,
@@ -747,7 +747,7 @@ class ComputeFramework(ABC):
             return result
         from mloda.core.abstract_plugins.data_creator_feature_group import DataCreatorFeatureGroup
 
-        if isinstance(feature_group, type) and issubclass(feature_group, DataCreatorFeatureGroup):
+        if is_nominal_subclass(feature_group, DataCreatorFeatureGroup):
             return result
         existing = self._extract_column_names(self.data)
         if any(key in existing for key in result):
@@ -789,7 +789,7 @@ class ComputeFramework(ABC):
         try:
             features.filter_engine = self.filter_engine
 
-            if not issubclass(features.filter_engine(), BaseFilterEngine):
+            if not is_nominal_subclass(features.filter_engine(), BaseFilterEngine):
                 raise ValueError(f"Filter engine {self.filter_engine} not supported by {self.__class__.__name__}")
 
         except NotImplementedError:
@@ -1011,7 +1011,7 @@ class ComputeFramework(ABC):
 
     @final
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ComputeFramework):
+        if not is_nominal_subclass(type(other), ComputeFramework):
             return False
         return type(self) is type(other) and self.children_if_root == other.children_if_root
 
@@ -1389,7 +1389,7 @@ def unregistered_frameworks_hint(candidates: Iterable[object]) -> str | None:
     names = sorted(
         c.__name__
         for c in candidates
-        if isinstance(c, type) and issubclass(c, ComputeFramework) and c is not ComputeFramework and c not in registered
+        if is_nominal_subclass(c, ComputeFramework) and c is not ComputeFramework and c not in registered
     )
     if not names:
         return None

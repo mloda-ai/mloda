@@ -27,7 +27,7 @@ from mloda.core.abstract_plugins.components.options import (
     reject_reserved_reader_key,
     validate_forwarding_directives,
 )
-from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 
 
@@ -48,7 +48,7 @@ def normalize_feature_group_scope(
         return stripped or None
     if feature_group is FeatureGroup:
         raise TypeError(root_rejection)
-    if isinstance(feature_group, type) and issubclass(feature_group, FeatureGroup):
+    if is_nominal_subclass(feature_group, FeatureGroup):
         return feature_group
     raise TypeError(
         f"feature_group must be a FeatureGroup subclass, a class-name string, or None, "

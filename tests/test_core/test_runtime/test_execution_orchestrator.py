@@ -668,6 +668,81 @@ class TestPlannedWorkerCount:
         assert planned_worker_count(_chain_plan(_ChainReducingChildFG), {ParallelizationMode.MULTIPROCESSING}) == 2
 
 
+_PYDICT_MODULE = PythonDictFramework.__module__
+_PYARROW_MODULE = PyArrowTable.__module__
+
+
+class _MultiCandidateFG(DataCreatorFeatureGroup):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"planned_worker_modules_multi_col"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework, PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"planned_worker_modules_multi_col": [1, 2, 3]}
+
+
+class TestPlannedWorkerModules:
+    """planned_worker_modules lists the cfw modules a MULTIPROCESSING worker may need."""
+
+    mp = {ParallelizationMode.MULTIPROCESSING}
+
+    def test_chain_plan_yields_the_python_dict_module(self) -> None:
+        from mloda.core.runtime.run import planned_worker_modules
+
+        assert planned_worker_modules(_chain_plan(), self.mp) == (_PYDICT_MODULE,)
+
+    def test_side_path_plan_yields_the_modules_of_both_transfer_sides(self) -> None:
+        from mloda.core.runtime.run import planned_worker_modules
+
+        plan = _side_path_prepare(
+            SidePathPandasP, False, False, ParallelizationMode.MULTIPROCESSING
+        ).engine.execution_planner
+        expected: set[str] = set()
+        tfs_seen = False
+        for step in plan:
+            if isinstance(step, TransformFrameworkStep):
+                tfs_seen = True
+                expected.add(step.from_framework.__module__)
+                expected.add(step.to_framework.__module__)
+        assert tfs_seen
+
+        result = planned_worker_modules(plan, self.mp)
+
+        assert isinstance(result, tuple)
+        assert result == tuple(
+            sorted(expected | {s.compute_framework.__module__ for s in plan if isinstance(s, FeatureGroupStep)})
+        )
+        assert expected <= set(result)
+
+    @pytest.mark.parametrize(
+        "modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}], ids=["sync", "thread"]
+    )
+    def test_non_multiprocessing_modes_yield_nothing(self, modes: set[ParallelizationMode]) -> None:
+        from mloda.core.runtime.run import planned_worker_modules
+
+        assert planned_worker_modules(_chain_plan(), modes) == ()
+
+    def test_every_candidate_framework_of_a_feature_is_included(self) -> None:
+        from mloda.core.runtime.run import planned_worker_modules
+
+        session = mloda.prepare(
+            [Feature(name="planned_worker_modules_multi_col")],
+            compute_frameworks=["PythonDictFramework", "PyArrowTable"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_MultiCandidateFG}),
+            parallelization_modes=self.mp,
+        )
+        assert session.engine is not None
+
+        result = planned_worker_modules(session.engine.execution_planner, self.mp)
+
+        assert result == tuple(sorted({_PYDICT_MODULE, _PYARROW_MODULE}))
+
+
 class TestEnterPrestartsStandbyWorkers:
     """__enter__ prestarts standbys (MULTIPROCESSING only, after preflight); compute never does."""
 
@@ -706,16 +781,13 @@ class TestEnterPrestartsStandbyWorkers:
         with (
             patch("mloda.core.runtime.run.planned_worker_count", return_value=3) as count,
             patch("mloda.core.runtime.run.shared_manager"),
-            patch(
-                "mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer."
-                "ComputeFrameworkTransformer.loaded_backend_gates",
-                return_value=("pandas",),
-            ),
+            patch("mloda.core.runtime.run.planned_worker_modules", return_value=("m",)) as mods,
         ):
             orchestrator.__enter__(modes)
 
         count.assert_called_once_with(orchestrator.execution_planner, modes)
-        worker_manager.prestart_workers.assert_called_once_with(3, standby_worker, (("pandas",),))
+        mods.assert_called_once_with(orchestrator.execution_planner, modes)
+        worker_manager.prestart_workers.assert_called_once_with(3, standby_worker, (("m",),))
 
     def test_prestart_happens_before_the_manager_starts(self) -> None:
         worker_manager = Mock()

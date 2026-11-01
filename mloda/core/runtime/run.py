@@ -13,7 +13,6 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.runtime.worker_manager import WorkerManager
@@ -102,6 +101,23 @@ def planned_worker_count(execution_plan: Any, register_modes: set[Parallelizatio
             count += 1
             seen.update(step.children_if_root)
     return count
+
+
+def planned_worker_modules(execution_plan: Any, register_modes: set[ParallelizationMode]) -> tuple[str, ...]:
+    """Cfw modules a standby warms: every framework class the plan's multiprocessing steps ship to a worker."""
+    classes: list[Any] = []
+    for step in execution_plan:
+        if ParallelizationMode.MULTIPROCESSING not in register_modes & step.get_parallelization_mode():
+            continue
+        if isinstance(step, FeatureGroupStep):
+            classes.append(step.compute_framework)
+            for feature in step.features.features:
+                classes.extend(feature.compute_frameworks or ())
+        elif isinstance(step, TransformFrameworkStep):
+            classes.extend((step.from_framework, step.to_framework))
+        elif isinstance(step, JoinStep):
+            classes.extend((step.source_framework, step.destination_framework))
+    return tuple(sorted({cls.__module__ for cls in classes if cls is not None}))
 
 
 class ExecutionOrchestrator:
@@ -607,12 +623,11 @@ class ExecutionOrchestrator:
             )
 
             # Cold starts overlap Manager and flight server startup; count is capped at the CPU count.
-            # A bound worker unpickles the parent's cfw transformer map, which imports the backends
-            # loaded here; the standby warms those off the critical path.
+            # A bound worker imports the cfw classes its steps reference; the standby warms those off the critical path.
             self.worker_manager.prestart_workers(
                 min(planned_worker_count(self.execution_planner, parallelization_modes), os.cpu_count() or 1),
                 standby_worker,
-                (ComputeFrameworkTransformer.loaded_backend_gates(),),
+                (planned_worker_modules(self.execution_planner, parallelization_modes),),
             )
             manager: Any = shared_manager()
             self.manager = manager

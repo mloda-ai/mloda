@@ -8,11 +8,8 @@ from __future__ import annotations
 
 import subprocess  # nosec
 import sys
-from unittest.mock import patch
 
 import pytest
-
-from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 
 _PROBE = (
     "import sys\n"
@@ -35,6 +32,7 @@ def test_importing_pyarrow_table_does_not_import_pandas() -> None:
     )
 
 
+_PYARROW_MODULE = "mloda_plugins.compute_framework.base_implementations.pyarrow.table"
 _HEAVY = ("pandas", "polars", "pyiceberg", "pyspark", "duckdb")
 _GATES = ("duckdb", "pyiceberg.table", "pandas", "polars", "pyspark.sql")
 
@@ -86,9 +84,9 @@ def test_planning_and_standby_for_a_pyarrow_request_import_no_heavy_backend() ->
         + _PLAN
         + _HEAVY_LOADED
         + _STANDBY_IMPORTS
-        + "gates = ComputeFrameworkTransformer.loaded_backend_gates()\n"
-        + "standby_worker(q, q, gates)\n"
-        + "print(gates)\n"
+        + f"modules = ({_PYARROW_MODULE!r},)\n"
+        + "standby_worker(q, q, modules)\n"
+        + "print(modules)\n"
         + _HEAVY_LOADED
     )
     result = _run_probe(body)
@@ -96,7 +94,7 @@ def test_planning_and_standby_for_a_pyarrow_request_import_no_heavy_backend() ->
     assert result.returncode == 0, f"probe failed:\n{result.stdout}\n{result.stderr}"
     lines = result.stdout.strip().splitlines()
     assert lines[-3] == "[]", f"backends imported while planning:\n{result.stdout}"
-    assert lines[-2:] == ["()", "[]"], f"standby imported backends:\n{result.stdout}"
+    assert lines[-2:] == [str((_PYARROW_MODULE,)), "[]"], f"standby imported backends:\n{result.stdout}"
 
 
 @pytest.mark.timeout(60)
@@ -159,7 +157,36 @@ def test_standby_worker_warms_exactly_the_given_gate() -> None:
     assert result.stdout.strip().splitlines()[-2:] == ["True", "['pandas']"], f"unexpected warm:\n{result.stdout}"
 
 
-def test_loaded_backend_gates_returns_loaded_gates_in_dict_order() -> None:
-    target = "mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer.loaded"
-    with patch(target, side_effect=lambda gate: object() if gate in ("pandas", "pyspark.sql") else None):
-        assert ComputeFrameworkTransformer.loaded_backend_gates() == ("pandas", "pyspark.sql")
+@pytest.mark.timeout(60)
+def test_worker_unpickling_pyarrow_payload_from_all_backends_parent_imports_no_heavy_backend() -> None:
+    """Variant: the FG class stays out of the payload (it lives in A's __main__); steps ship cfw class and features."""
+    producer = (
+        _PLAN_FG
+        + "import importlib, importlib.util\n"
+        + f"for gate in {_GATES!r}:\n"
+        + "    if importlib.util.find_spec(gate.split('.')[0]) is not None:\n"
+        + "        importlib.import_module(gate)\n"
+        + "from multiprocessing.reduction import ForkingPickler\n"
+        + "from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode\n"
+        + "from mloda.core.core.step.feature_group_step import FeatureGroupStep\n"
+        + "session = mloda.prepare(['LazyFG'], compute_frameworks=[PyArrowTable], plugin_collector=collector, "
+        + "parallelization_modes={ParallelizationMode.MULTIPROCESSING})\n"
+        + "plan = session.engine.execution_planner\n"
+        + "steps = [s for s in plan if isinstance(s, FeatureGroupStep)]\n"
+        + "assert steps\n"
+        + "payload = [PyArrowTable()] + [(s.compute_framework, s.features) for s in steps]\n"
+        + "print(bytes(ForkingPickler.dumps(payload)).hex())\n"
+    )
+    produced = _run_probe(producer)
+    assert produced.returncode == 0, f"producer failed:\n{produced.stdout}\n{produced.stderr}"
+    hex_payload = produced.stdout.strip().splitlines()[-1]
+
+    consumer = (
+        "import sys, pickle\n"
+        "import mloda.core.runtime.worker.multiprocessing_worker\n"
+        f"pickle.loads(bytes.fromhex({hex_payload!r}))\n" + _HEAVY_LOADED
+    )
+    result = _run_probe(consumer)
+
+    assert result.returncode == 0, f"consumer failed:\n{result.stdout}\n{result.stderr}"
+    assert result.stdout.strip().splitlines()[-1] == "[]", f"worker imported backends:\n{result.stdout}"

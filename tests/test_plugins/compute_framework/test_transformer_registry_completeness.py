@@ -12,9 +12,14 @@ registry, then asserts the registry is still complete.
 
 from __future__ import annotations
 
+import copy
+import pickle  # nosec B403
+from typing import Any
+
 import pandas as pd
 import pyarrow as pa
 
+from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
 )
@@ -43,3 +48,51 @@ def test_registry_is_complete_despite_module_scope_transformer_import() -> None:
 
     missing = {pair for pair in expected_pairs if pair not in transformer_map}
     assert not missing, f"Registry incomplete after a module-scope transformer import; missing: {missing}"
+
+
+def test_pickle_and_deepcopy_rebuild_the_registry_instead_of_shipping_it() -> None:
+    t = ComputeFrameworkTransformer()
+
+    for clone in (pickle.loads(pickle.dumps(t)), copy.deepcopy(t)):  # nosec B301
+        assert clone is not t
+        assert set(clone.transformer_map) == set(t.transformer_map)
+
+
+def test_reduce_carries_only_transformers_outside_the_base_implementations() -> None:
+    class _Left:
+        pass
+
+    class _Right:
+        pass
+
+    class _LocalTransformer(BaseTransformer):
+        @classmethod
+        def framework(cls) -> Any:
+            return _Left
+
+        @classmethod
+        def other_framework(cls) -> Any:
+            return _Right
+
+        @classmethod
+        def import_fw(cls) -> None:
+            pass
+
+        @classmethod
+        def import_other_fw(cls) -> None:
+            pass
+
+        @classmethod
+        def transform_fw_to_other_fw(cls, data: Any) -> Any:
+            return data
+
+        @classmethod
+        def transform_other_fw_to_fw(cls, data: Any) -> Any:
+            return data
+
+    rebuild, args = ComputeFrameworkTransformer().__reduce__()[:2]
+    assert rebuild.__name__ == "_rebuild_transformer"
+    carried = args[0]
+
+    assert _LocalTransformer in carried
+    assert not [c for c in carried if c.__module__.startswith("mloda_plugins.compute_framework.base_implementations.")]

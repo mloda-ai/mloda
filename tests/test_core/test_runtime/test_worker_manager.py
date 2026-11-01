@@ -221,6 +221,16 @@ class TestWorkerManagerStandbyWorkers:
         assert len({id(first_cmd), id(first_res), id(second_cmd), id(second_res)}) == 4
         assert ctx.Process.call_args_list[0].kwargs["args"] == (first_cmd, first_res)
 
+    def test_prestart_appends_extra_args_after_the_queues(self) -> None:
+        manager = WorkerManager()
+        ctx = _mock_ctx(_live_process())
+
+        with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=ctx):
+            manager.prestart_workers(1, _noop_target, (("pandas",),))
+
+        ((_, first_cmd, first_res),) = manager.standby
+        assert ctx.Process.call_args_list[0].kwargs["args"] == (first_cmd, first_res, ("pandas",))
+
     @pytest.mark.parametrize("count", [0, -1])
     def test_prestart_with_non_positive_count_spawns_nothing(self, count: int) -> None:
         manager = WorkerManager()

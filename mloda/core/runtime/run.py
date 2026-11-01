@@ -13,6 +13,7 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.runtime.worker_manager import WorkerManager
@@ -606,9 +607,12 @@ class ExecutionOrchestrator:
             )
 
             # Cold starts overlap Manager and flight server startup; count is capped at the CPU count.
+            # A bound worker unpickles the parent's cfw transformer map, which imports the backends
+            # loaded here; the standby warms those off the critical path.
             self.worker_manager.prestart_workers(
                 min(planned_worker_count(self.execution_planner, parallelization_modes), os.cpu_count() or 1),
                 standby_worker,
+                (ComputeFrameworkTransformer.loaded_backend_gates(),),
             )
             manager: Any = shared_manager()
             self.manager = manager

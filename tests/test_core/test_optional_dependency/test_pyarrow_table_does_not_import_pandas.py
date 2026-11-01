@@ -1,15 +1,18 @@
 """The pyarrow backend does not depend on pandas, so importing its table module must not import pandas.
 
 Planning a PyArrow-only request must not import any heavy backend either, yet the transformer registry
-stays complete for the backends a request does use.
+stays complete for the backends a request does use. A standby worker for such a request imports none either.
 """
 
 from __future__ import annotations
 
 import subprocess  # nosec
 import sys
+from unittest.mock import patch
 
 import pytest
+
+from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 
 _PROBE = (
     "import sys\n"
@@ -65,13 +68,35 @@ def _run_probe(body: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+_STANDBY_IMPORTS = (
+    "import queue\n"
+    "from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import "
+    "ComputeFrameworkTransformer\n"
+    "from mloda.core.runtime.worker.multiprocessing_worker import standby_worker\n"
+    "q = queue.Queue()\n"
+    "q.put('STOP')\n"
+)
+_HEAVY_LOADED = f"print([m for m in {_HEAVY!r} if m in sys.modules])\n"
+
+
 @pytest.mark.timeout(60)
-def test_planning_a_pyarrow_request_imports_no_heavy_backend() -> None:
-    body = _PLAN_FG + _PLAN + f"print([m for m in {_HEAVY!r} if m in sys.modules])\n"
+def test_planning_and_standby_for_a_pyarrow_request_import_no_heavy_backend() -> None:
+    body = (
+        _PLAN_FG
+        + _PLAN
+        + _HEAVY_LOADED
+        + _STANDBY_IMPORTS
+        + "gates = ComputeFrameworkTransformer.loaded_backend_gates()\n"
+        + "standby_worker(q, q, gates)\n"
+        + "print(gates)\n"
+        + _HEAVY_LOADED
+    )
     result = _run_probe(body)
 
     assert result.returncode == 0, f"probe failed:\n{result.stdout}\n{result.stderr}"
-    assert result.stdout.strip().splitlines()[-1] == "[]", f"backends imported while planning:\n{result.stdout}"
+    lines = result.stdout.strip().splitlines()
+    assert lines[-3] == "[]", f"backends imported while planning:\n{result.stdout}"
+    assert lines[-2:] == ["()", "[]"], f"standby imported backends:\n{result.stdout}"
 
 
 @pytest.mark.timeout(60)
@@ -117,3 +142,24 @@ def test_a_lazy_pandas_import_in_calculate_feature_still_converts_to_pyarrow() -
 
     assert result.returncode == 0, f"probe failed:\n{result.stdout}\n{result.stderr}"
     assert result.stdout.strip().splitlines()[-1] == "OK"
+
+
+@pytest.mark.timeout(60)
+def test_standby_worker_warms_exactly_the_given_gate() -> None:
+    body = (
+        "import sys\n"
+        + _STANDBY_IMPORTS
+        + "standby_worker(q, q, ('pandas',))\n"
+        + "print('pandas' in ComputeFrameworkTransformer._lazy_dirs_loaded)\n"
+        + _HEAVY_LOADED
+    )
+    result = _run_probe(body)
+
+    assert result.returncode == 0, f"probe failed:\n{result.stdout}\n{result.stderr}"
+    assert result.stdout.strip().splitlines()[-2:] == ["True", "['pandas']"], f"unexpected warm:\n{result.stdout}"
+
+
+def test_loaded_backend_gates_returns_loaded_gates_in_dict_order() -> None:
+    target = "mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer.loaded"
+    with patch(target, side_effect=lambda gate: object() if gate in ("pandas", "pyspark.sql") else None):
+        assert ComputeFrameworkTransformer.loaded_backend_gates() == ("pandas", "pyspark.sql")

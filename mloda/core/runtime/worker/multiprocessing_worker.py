@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import logging
 import multiprocessing
 import pickle  # nosec B403
@@ -36,9 +37,15 @@ def _parent_gone() -> bool:
     return parent is not None and not parent.is_alive()
 
 
-def standby_worker(command_queue: multiprocessing.Queue[Any], result_queue: multiprocessing.Queue[Any]) -> None:
-    """Pre-warm backend imports, then wait to be bound to a cfw and run `worker`."""
-    ComputeFrameworkTransformer.load_all_transformers()
+def standby_worker(
+    command_queue: multiprocessing.Queue[Any],
+    result_queue: multiprocessing.Queue[Any],
+    warm_gates: tuple[str, ...] = (),
+) -> None:
+    """Pre-warm the given backends, then wait to be bound to a cfw and run `worker`."""
+    for gate in warm_gates:
+        importlib.import_module(gate)
+    ComputeFrameworkTransformer()  # loads the light transformer files and those of the warmed gates
     while True:
         try:
             command = command_queue.get(block=False)

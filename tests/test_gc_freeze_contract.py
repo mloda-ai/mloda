@@ -18,6 +18,7 @@ import os
 import subprocess  # nosec B404
 import sys
 import types
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -254,11 +255,42 @@ def test_timeout_inside_gc_callback() -> None:
 """
 
 
-def _run_timeout_probe(tmp_path: Path, ini_path: Path) -> subprocess.CompletedProcess[str]:
-    """Run _SWALLOWED_TIMEOUT_PROBE in an inner pytest under the given ini."""
+_HANG_AFTER_SWALLOW_PROBE = """
+import gc
+import time
+
+
+def test_hang_after_swallowed_timeout() -> None:
+    def slow_stop(phase: str, info: dict[str, int]) -> None:
+        if phase == "stop":
+            time.sleep(10)
+
+    gc.callbacks.append(slow_stop)
+    try:
+        gc.collect()
+    finally:
+        gc.callbacks.remove(slow_stop)
+    time.sleep(25)
+    print("HANG_SURVIVED")
+"""
+
+
+def _run_timeout_probe(
+    tmp_path: Path,
+    ini_path: Path,
+    *,
+    probe: str = _SWALLOWED_TIMEOUT_PROBE,
+    extra_args: Sequence[str] = (),
+    with_repo_on_path: bool = False,
+    timeout: float = 40,
+) -> subprocess.CompletedProcess[str]:
+    """Run a timeout probe (default _SWALLOWED_TIMEOUT_PROBE) in an inner pytest under the given ini."""
     probe_file = tmp_path / "test_probe.py"
-    probe_file.write_text(_SWALLOWED_TIMEOUT_PROBE)
+    probe_file.write_text(probe)
     child_env = {name: value for name, value in os.environ.items() if name != "PYTEST_ADDOPTS"}
+    if with_repo_on_path:
+        inherited = child_env.get("PYTHONPATH")
+        child_env["PYTHONPATH"] = str(_REPO_ROOT) if not inherited else os.pathsep.join([str(_REPO_ROOT), inherited])
     # Safe: fixed argv (sys.executable plus paths built from tmp_path and the repo root), no shell, no user input.
     return subprocess.run(  # nosec B603
         [
@@ -281,12 +313,13 @@ def _run_timeout_probe(tmp_path: Path, ini_path: Path) -> subprocess.CompletedPr
             "-p",
             "no:mloda",
             "-q",
+            *extra_args,
         ],
         cwd=str(tmp_path),
         env=child_env,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=timeout,
     )
 
 
@@ -313,6 +346,34 @@ def test_timeout_firing_in_a_gc_callback_fails_the_test_instead_of_being_swallow
     )
     assert "from pytest-timeout" in real.stdout and "PytestUnraisableExceptionWarning" in real.stdout, (
         f"The failure is not the swallowed pytest-timeout one promoted from the unraisable warning.\n{output}"
+    )
+
+
+@pytest.mark.timeout(60)
+def test_hang_after_a_swallowed_timeout_is_still_stopped(tmp_path: Path) -> None:
+    """Exercises the call-phase timer; the backstop wrapper is path independent."""
+    real = _run_timeout_probe(
+        tmp_path,
+        _REPO_ROOT / "pytest.ini",
+        probe=_HANG_AFTER_SWALLOW_PROBE,
+        extra_args=("-p", "tests.helpers.timeout_backstop"),
+        with_repo_on_path=True,
+    )
+    output = f"stdout:\n{real.stdout}\nstderr:\n{real.stderr}"
+
+    assert "1 failed" in real.stdout and "1 error" in real.stdout, (
+        f"The repeated alarm did not fail the call and promote the swallowed one as a teardown error.\n{output}"
+    )
+    assert "from pytest-timeout" in real.stdout, f"The failure is not a pytest-timeout one.\n{output}"
+    assert "HANG_SURVIVED" not in real.stdout, f"A one-shot alarm let the hang run to the end.\n{output}"
+
+
+def test_conftest_registers_the_timeout_backstop(request: pytest.FixtureRequest) -> None:
+    impls = request.config.hook.pytest_timeout_set_timer.get_hookimpls()
+
+    assert any(impl.function.__module__ == "tests.helpers.timeout_backstop" for impl in impls), (
+        "No pytest_timeout_set_timer impl from tests.helpers.timeout_backstop is registered, so the real suite "
+        "would lose the backstop."
     )
 
 

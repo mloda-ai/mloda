@@ -5,7 +5,7 @@ import os
 import sys
 import threading
 import time
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from importlib.metadata import EntryPoints
 from pathlib import Path
 
@@ -329,15 +329,15 @@ class PluginLoader:
     def __repr__(self) -> str:
         return f"PluginLoader plugins: {self.plugins}"
 
-    def load_matching(self, group_name: str, pattern: str) -> None:
-        """Load only files within a group whose filename matches a glob pattern."""
+    def load_matching(self, group_name: str, pattern: str, skip_dirs: Collection[str] = ()) -> None:
+        """Load only files within a group whose filename matches a glob pattern, except those in skip_dirs."""
         group_path = self._get_group_path(group_name)
         if not group_path.is_dir():
             raise ValueError(f"Group '{group_name}' does not exist in the package '{self.base_package}'")
         for item in group_path.rglob("*.py"):
             if item.name == "__init__.py":
                 continue
-            if not item.match(pattern):
+            if not item.match(pattern) or item.parent.name in skip_dirs:
                 continue
             relative_path = item.relative_to(group_path.parent).with_suffix("")
             module_path = ".".join(relative_path.parts)

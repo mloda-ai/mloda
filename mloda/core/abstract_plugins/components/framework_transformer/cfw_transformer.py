@@ -1,12 +1,22 @@
 import logging
+import threading
 import weakref
 from collections import deque
 from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.optional_dependency import loaded
 
 logger = logging.getLogger(__name__)
+
+_LAZY_TRANSFORMER_GATES = {
+    "duckdb": "duckdb",
+    "iceberg": "pyiceberg.table",
+    "pandas": "pandas",
+    "polars": "polars",
+    "spark": "pyspark.sql",
+}
 
 
 class ComputeFrameworkTransformer:
@@ -14,8 +24,8 @@ class ComputeFrameworkTransformer:
     Manages transformations between different compute frameworks.
 
     This class maintains a registry of available transformers and provides
-    methods to add new transformers. It auto-loads transformer files once per
-    process, gated on ``_auto_load_done``.
+    methods to add new transformers. Heavy backends' transformer files load only once
+    their library is imported (see ``_LAZY_TRANSFORMER_GATES``).
 
     The transformer registry is a mapping from framework pairs to transformer
     classes, allowing the system to find the appropriate transformer for
@@ -24,6 +34,8 @@ class ComputeFrameworkTransformer:
     """
 
     _auto_load_done: ClassVar[bool] = False
+    _lazy_dirs_loaded: ClassVar[set[str]] = set()
+    _load_lock: ClassVar[threading.RLock] = threading.RLock()
     _warned_zero_edge: ClassVar["weakref.WeakSet[type[BaseTransformer]]"] = weakref.WeakSet()
 
     def __init__(self) -> None:
@@ -34,6 +46,7 @@ class ComputeFrameworkTransformer:
         available BaseTransformer subclasses.
         """
         self.transformer_map: dict[tuple[type[Any], type[Any]], type[BaseTransformer]] = {}
+        self._seen_lazy_dirs: frozenset[str] = frozenset()
         self.initilize_transformer()
 
     def add(self, transformer: type[BaseTransformer]) -> bool:
@@ -104,21 +117,53 @@ class ComputeFrameworkTransformer:
         """
         Initialize the transformer registry with all available transformers.
 
-        This method discovers all BaseTransformer subclasses and adds them
-        to the registry. The transformer files from the compute_framework group
-        are auto-loaded once per process via load_matching, so a stray
-        module-scope import of a single transformer cannot leave the registry
-        partial.
+        Loads the light transformer files and those of already imported backends,
+        then registers every BaseTransformer subclass.
         """
+        self._load_available()
+        self._register_all()
+
+    @classmethod
+    def _load_available(cls, force: bool = False) -> None:
+        """Load the light transformer files once, and each heavy backend's once its gate module is imported."""
         from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 
-        if not ComputeFrameworkTransformer._auto_load_done:
-            PluginLoader().load_matching("compute_framework", "*transformer*")
-            ComputeFrameworkTransformer._auto_load_done = True
+        with cls._load_lock:
+            loader = PluginLoader()
+            if not cls._auto_load_done:
+                loader.load_matching("compute_framework", "*transformer*", skip_dirs=_LAZY_TRANSFORMER_GATES)
+                cls._auto_load_done = True
+            for directory, gate in _LAZY_TRANSFORMER_GATES.items():
+                if directory in cls._lazy_dirs_loaded:
+                    continue
+                if force or loaded(gate) is not None:
+                    loader.load_matching("compute_framework", f"{directory}/*transformer*")
+                    cls._lazy_dirs_loaded.add(directory)
 
-        transformers = get_all_subclasses(BaseTransformer)
-        for transformer in transformers:
+    @classmethod
+    def load_all_transformers(cls) -> None:
+        """Load every backend's transformer files, whether or not its library is imported yet."""
+        cls._load_available(force=True)
+
+    def _register_all(self) -> None:
+        self._seen_lazy_dirs = frozenset(ComputeFrameworkTransformer._lazy_dirs_loaded)
+        for transformer in get_all_subclasses(BaseTransformer):
             self.add(transformer)
+
+    def _refresh(self) -> bool:
+        """Pick up transformer files whose backend was imported since the last load; True if any were added."""
+        self._load_available()
+        if frozenset(ComputeFrameworkTransformer._lazy_dirs_loaded) == self._seen_lazy_dirs:
+            return False
+        self._register_all()
+        return True
+
+    def direct_transformer(self, source: type[Any], target: type[Any]) -> type[BaseTransformer] | None:
+        """Direct transformer for a pair, refreshing the registry once on a miss."""
+        found = self.transformer_map.get((source, target))
+        if found is None and self._refresh():
+            found = self.transformer_map.get((source, target))
+        return found
 
     def get_transformation_chain(
         self, from_framework: type[Any], to_framework: type[Any]
@@ -167,6 +212,8 @@ class ComputeFrameworkTransformer:
                     return chain
                 queue.append(dst)
 
+        if self._refresh():
+            return self.get_transformation_chain(from_framework, to_framework)
         return None
 
     def apply_chain(

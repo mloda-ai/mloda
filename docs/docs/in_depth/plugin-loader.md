@@ -23,8 +23,8 @@ Creates a loader, loads all bundled plugins, then folds in installed [entry poin
 ### `load_group(group_name: str)`
 Loads all plugins from a specific group folder, including nested subdirectories. Supports slash-separated paths for subdirectories (e.g. `"feature_group/input_data/document_formats"`).
 
-### `load_matching(group_name: str, pattern: str)`
-Loads only files within a group whose filename matches a glob pattern (e.g. `"*transformer*"`). Useful when only a subset of files in a group is needed.
+### `load_matching(group_name: str, pattern: str, skip_dirs=())`
+Loads only files within a group whose filename matches a glob pattern (e.g. `"*transformer*"`), skipping files whose parent directory name is in `skip_dirs`. Useful when only a subset of files in a group is needed.
 
 ### `load_all_plugins()`
 Loads all plugin groups.

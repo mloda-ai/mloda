@@ -287,7 +287,7 @@ class ComputeFramework(ABC):
             return None
 
         # A direct transformer always applies (e.g. FileSource -> pa.Table, FileSource -> dict).
-        direct = self.transformer.transformer_map.get((_from_fw, _to_fw))
+        direct = self.transformer.direct_transformer(_from_fw, _to_fw)
         if direct is not None:
             return direct.transform(_from_fw, _to_fw, data, self.framework_connection_object)
 
@@ -1245,7 +1245,7 @@ class ComputeFramework(ABC):
             _from_fw = type(self.data)
             _to_fw = pa.Table
 
-            transformer_cls = self.transformer.transformer_map.get((_from_fw, _to_fw), None)
+            transformer_cls = self.transformer.direct_transformer(_from_fw, _to_fw)
             if transformer_cls is not None:
                 self.data = transformer_cls.transform(_from_fw, _to_fw, self.data, self.framework_connection_object)
 
@@ -1269,7 +1269,7 @@ class ComputeFramework(ABC):
         _from_fw = type(data)
         _to_fw = cls.expected_data_framework()
 
-        transformer_cls = transformer.transformer_map.get((_from_fw, _to_fw), None)
+        transformer_cls = transformer.direct_transformer(_from_fw, _to_fw)
         if transformer_cls is not None:
             return transformer_cls.transform(_from_fw, _to_fw, data, None)
 

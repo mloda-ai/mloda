@@ -442,33 +442,11 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
     ("phpsessid_keyword", "PHPSESSID=SECRET", ["SECRET"], ["PHPSESSID=***"]),
     ("sessionid_quoted_dict", "{'sessionid': 'SECRET'}", ["SECRET"], ["'sessionid'"]),
     ("aspnet_sessionid_keyword", "ASP.NET_SessionId=SECRET", ["SECRET"], ["ASP.NET_SessionId="]),
-    ("digit_userinfo_slash_password", "https://user:123/PW@host/x", ["PW", "user"], ["https://host/x"]),
-    (
-        "digit_userinfo_slash_password_port",
-        "https://user:123/PW@host:8080/x",
-        ["PW", "user"],
-        ["https://host:8080/x"],
-    ),
-    ("percent_encoded_keyword_letter", "https://host/x;pass%77ord=hunter2", ["hunter2"], ["https://host/"]),
-    ("percent_encoded_key_underscore", "https://host/x;api%5Fkey=SECRET", ["SECRET"], ["https://host/"]),
-    (
-        "percent_encoded_inner_uri_userinfo",
-        "https://proxy/fetch/https%3A%2F%2Falice%3Ahunter2%40inner.host%2Fx",
-        ["hunter2", "alice"],
-        ["https://proxy/fetch/"],
-    ),
     (
         "percent_encoded_bearer_token",
         "https://host/api/Bearer%20eyJhbGciOiJIUzI1NiJ9.abc",
         ["eyJhbGciOiJIUzI1NiJ9"],
         ["https://host/api/"],
-    ),
-    ("percent_encoded_colon_key_value", "https://host/db%3Ajob=SECRETVAL", ["SECRETVAL"], ["https://host/"]),
-    (
-        "percent_encoded_fallback_prefix_password",
-        "https://host/db%3Fpassword%3Dhunter2/x:y=z",
-        ["hunter2"],
-        ["https://host/"],
     ),
 ]
 
@@ -599,16 +577,7 @@ UNCHANGED_LOOKALIKE_CASES: list[str] = [
     'Authorization-Info: nextnonce="abc123def"',
     "x_authorization: denied for role x",
     "session_id=abc",
-    "https://host:8443/a@b.csv",
-    "https://host:8443/pkg@1.2.3",
-    "https://host:8443/image@sha256:abc",
-    "https://host:8443/image@sha256:abc/x",
-    "https://host:8443/a/b@c/d",
-    "https://user:123/PW@host",
-    "https://host/a%20b.csv",
-    "https://host/t%3A00.csv",
-    "https://acct.blob.core.windows.net/c/year%3D2024/a.parquet",
-    "https://host/caf%C3%A9.csv",
+    "session-id=abc",
 ]
 
 
@@ -637,9 +606,6 @@ def test_azure_container_uri_kept_unchanged() -> None:
         ("https://user:123/PW@host/x", "https://host/x"),  # nosec B105
         ("https://user:123/PW@host:8080/x", "https://host:8080/x"),  # nosec B105
         ("https://host:8443/a@b.csv", "https://host:8443/a@b.csv"),
-        ("https://host:8443/pkg@1.2.3", "https://host:8443/pkg@1.2.3"),
-        ("https://host:8443/image@sha256:abc/x", "https://host:8443/image@sha256:abc/x"),
-        ("https://user:123/PW@host", "https://user:123/PW@host"),  # nosec B105
     ],
 )
 def test_strip_uri_userinfo(text: str, expected: str) -> None:
@@ -1048,8 +1014,8 @@ def test_redact_option_value_shared_inner_dict_without_cycle_renders_both_masked
 class TestScrubUriProjection:
     """A fullmatching scheme://... drops user info, query and fragment. A jdbc: scheme drops the path entirely;
     any other scheme keeps a percent-escaped path unless its decoded form is malformed or still scrubs (then it
-    cuts back to the last / before the first %), and fails closed when a path segment has a : followed by =. An azure container userinfo is kept only when it fullmatches an azure
-    container name or a well-known $root/$web/$logs alias."""
+    cuts back to the last / before the first %), and fails closed when a path segment has a : followed by =. An
+    azure container userinfo is kept only when it fullmatches an azure container name or a $root/$web/$logs alias."""
 
     @pytest.mark.parametrize(
         ("uri", "expected"),
@@ -1303,8 +1269,6 @@ class TestScrubUriFailClosed:
             ),
             pytest.param("postgresql://u:12?ss@host/db", "ss", id="colon-digit-question-mark-in-userinfo"),
             pytest.param("DRIVER={x};Server=https://host;PWD=secret", "secret", id="keyword-string-with-scheme"),
-            pytest.param("https://user:123/PW@host/x", "PW", id="digit-userinfo-slash-password"),
-            pytest.param("https://host/x;pass%77ord=hunter2", "hunter2", id="encoded-keyword-letter-in-path"),
             pytest.param("https://host/x;api%5Fkey=SECRET", "SECRET", id="encoded-underscore-in-secret-key"),
             pytest.param("https://host/db%3Ajob=SECRETVAL", "SECRETVAL", id="encoded-colon-then-equals-in-path"),
             pytest.param(

@@ -8,7 +8,8 @@ hundreds of milliseconds and gc dominates the suite's wall time. Freezing the im
 permanent generation once collection has finished makes those collects free without weakening the isolation
 they buy, but only if the freeze is owned: gc.unfreeze() is process-global, so the suite may only undo a
 freeze it made itself. The file also pins that a timeout alarm landing in a gc callback still fails the test,
-because pytest.ini promotes that unraisable warning to an error.
+because pytest.ini promotes that unraisable warning to an error, and that the backstop re-arms the alarm
+after a swallowed timeout.
 """
 
 from __future__ import annotations
@@ -282,6 +283,7 @@ def _run_timeout_probe(
     probe: str = _SWALLOWED_TIMEOUT_PROBE,
     extra_args: Sequence[str] = (),
     with_repo_on_path: bool = False,
+    func_only: bool = True,
     timeout: float = 40,
 ) -> subprocess.CompletedProcess[str]:
     """Run a timeout probe (default _SWALLOWED_TIMEOUT_PROBE) in an inner pytest under the given ini."""
@@ -304,7 +306,7 @@ def _run_timeout_probe(
             str(tmp_path),
             "--timeout=1",
             "-o",
-            "timeout_func_only=true",
+            "timeout_func_only=true" if func_only else "timeout_func_only=false",
             "--timeout-method=signal",
             "-p",
             "no:cacheprovider",
@@ -350,17 +352,20 @@ def test_timeout_firing_in_a_gc_callback_fails_the_test_instead_of_being_swallow
 
 
 @pytest.mark.timeout(60)
-def test_hang_after_a_swallowed_timeout_is_still_stopped(tmp_path: Path) -> None:
-    """Exercises the call-phase timer; the backstop wrapper is path independent."""
+@pytest.mark.parametrize("func_only", [True, False], ids=["call_timer", "protocol_timer"])
+def test_hang_after_a_swallowed_timeout_is_still_stopped(tmp_path: Path, func_only: bool) -> None:
+    """A hang after a swallowed timeout is stopped with either the call-phase or the whole-protocol timer."""
     real = _run_timeout_probe(
         tmp_path,
         _REPO_ROOT / "pytest.ini",
         probe=_HANG_AFTER_SWALLOW_PROBE,
         extra_args=("-p", "tests.helpers.timeout_backstop"),
         with_repo_on_path=True,
+        func_only=func_only,
     )
     output = f"stdout:\n{real.stdout}\nstderr:\n{real.stderr}"
 
+    assert real.returncode == 1, f"Expected a failed run.\n{output}"
     assert "1 failed" in real.stdout and "1 error" in real.stdout, (
         f"The repeated alarm did not fail the call and promote the swallowed one as a teardown error.\n{output}"
     )
@@ -368,13 +373,49 @@ def test_hang_after_a_swallowed_timeout_is_still_stopped(tmp_path: Path) -> None
     assert "HANG_SURVIVED" not in real.stdout, f"A one-shot alarm let the hang run to the end.\n{output}"
 
 
-def test_conftest_registers_the_timeout_backstop(request: pytest.FixtureRequest) -> None:
-    impls = request.config.hook.pytest_timeout_set_timer.get_hookimpls()
+_CLEANUP_AFTER_TIMEOUT_PROBE = """
+import time
 
-    assert any(impl.function.__module__ == "tests.helpers.timeout_backstop" for impl in impls), (
-        "No pytest_timeout_set_timer impl from tests.helpers.timeout_backstop is registered, so the real suite "
-        "would lose the backstop."
+
+def test_cleanup_after_timeout() -> None:
+    try:
+        time.sleep(25)
+    finally:
+        time.sleep(1.5)
+        print("CLEANUP_FINISHED")
+"""
+
+
+@pytest.mark.timeout(60)
+def test_cleanup_after_an_ordinary_timeout_is_not_cut_short(tmp_path: Path) -> None:
+    """Only a swallowed timeout re-arms the alarm, so an ordinary one leaves cleanup unbounded like pytest-timeout."""
+    real = _run_timeout_probe(
+        tmp_path,
+        _REPO_ROOT / "pytest.ini",
+        probe=_CLEANUP_AFTER_TIMEOUT_PROBE,
+        extra_args=("-p", "tests.helpers.timeout_backstop"),
+        with_repo_on_path=True,
+        func_only=False,
     )
+    output = f"stdout:\n{real.stdout}\nstderr:\n{real.stderr}"
+
+    assert real.returncode == 1 and "1 failed" in real.stdout, f"Expected one failed test.\n{output}"
+    assert "from pytest-timeout" in real.stdout, f"The failure is not a pytest-timeout one.\n{output}"
+    assert "CLEANUP_FINISHED" in real.stdout, f"The cleanup was cut short by a repeated alarm.\n{output}"
+    assert "During handling of the above exception" not in real.stdout, (
+        f"A second timeout was raised inside the cleanup.\n{output}"
+    )
+
+
+def test_conftest_registers_the_timeout_backstop(request: pytest.FixtureRequest) -> None:
+    hook = request.config.hook
+
+    for name in ("pytest_timeout_set_timer", "pytest_timeout_cancel_timer"):
+        impls = getattr(hook, name).get_hookimpls()
+        assert any(impl.function.__module__ == "tests.helpers.timeout_backstop" for impl in impls), (
+            f"No {name} impl from tests.helpers.timeout_backstop is registered, so the real suite "
+            "would lose the backstop."
+        )
 
 
 def _report(passed: bool) -> Any:

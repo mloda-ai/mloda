@@ -235,6 +235,82 @@ def test_conftest_never_unfreezes_a_freeze_it_does_not_own(hooks: str) -> None:
     )
 
 
+_SWALLOWED_TIMEOUT_PROBE = """
+import gc
+import time
+
+
+def test_timeout_inside_gc_callback() -> None:
+    def slow_stop(phase: str, info: dict[str, int]) -> None:
+        if phase == "stop":
+            time.sleep(1.5)
+
+    gc.callbacks.append(slow_stop)
+    try:
+        gc.collect()
+    finally:
+        gc.callbacks.remove(slow_stop)
+"""
+
+
+def _run_timeout_probe(tmp_path: Path, ini_path: Path) -> subprocess.CompletedProcess[str]:
+    """Run _SWALLOWED_TIMEOUT_PROBE in an inner pytest under the given ini."""
+    probe_file = tmp_path / "test_probe.py"
+    probe_file.write_text(_SWALLOWED_TIMEOUT_PROBE)
+    child_env = {name: value for name, value in os.environ.items() if name != "PYTEST_ADDOPTS"}
+    # Safe: fixed argv (sys.executable plus paths built from tmp_path and the repo root), no shell, no user input.
+    return subprocess.run(  # nosec B603
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            str(probe_file),
+            "-c",
+            str(ini_path),
+            "--rootdir",
+            str(tmp_path),
+            "--timeout=0.5",
+            "--timeout-method=signal",
+            "-p",
+            "no:cacheprovider",
+            "-p",
+            "no:xdist",
+            "-p",
+            "no:mloda",
+            "-q",
+        ],
+        cwd=str(tmp_path),
+        env=child_env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+
+@pytest.mark.timeout(60)
+def test_timeout_firing_in_a_gc_callback_fails_the_test_instead_of_being_swallowed(tmp_path: Path) -> None:
+    """The suite collects constantly, so a timeout alarm often fires in a gc callback and must still fail the test."""
+    control_ini = tmp_path / "empty.ini"
+    control_ini.write_text("[pytest]\n")
+    control = _run_timeout_probe(tmp_path, control_ini)
+    output = f"stdout:\n{control.stdout}\nstderr:\n{control.stderr}"
+
+    assert control.returncode == 0 and "1 passed" in control.stdout, (
+        f"Positive control failed: with an empty ini the swallowed timeout should pass the probe.\n{output}"
+    )
+    assert "PytestUnraisableExceptionWarning" in control.stdout, (
+        f"Positive control failed: the probe did not land the timeout in a gc callback.\n{output}"
+    )
+
+    real = _run_timeout_probe(tmp_path, _REPO_ROOT / "pytest.ini")
+    output = f"stdout:\n{real.stdout}\nstderr:\n{real.stderr}"
+
+    assert real.returncode == 1 and "1 failed" in real.stdout, (
+        f"A pytest-timeout swallowed inside a gc callback still passes under pytest.ini.\n{output}"
+    )
+    assert "from pytest-timeout" in real.stdout, f"The failure is not the pytest-timeout one.\n{output}"
+
+
 def _report(passed: bool) -> Any:
     return types.SimpleNamespace(passed=passed)
 

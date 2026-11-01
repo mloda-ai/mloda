@@ -6,6 +6,9 @@ wrappers over one root-agnostic core in ``tests.registry_isolation``) plus one a
 
 from __future__ import annotations
 
+import abc
+import ast
+import builtins
 import gc
 import sys
 import types
@@ -36,6 +39,8 @@ from tests.helpers.subclass_walks import count_root_walks
 from tests.registry_isolation import (
     FEATURE_GROUPS,
     IMPLEMENTATIONS,
+    REPORTED_ROOTS,
+    SHARED_TEST_MODULE_PREFIX,
     TRANSFORMERS,
     SubclassLog,
     reclaim_leaked_feature_groups,
@@ -651,6 +656,273 @@ class TestFixtureIsNotCopied:
         assert list(found) == [TESTS_ROOT / "conftest.py"], (
             f"the single definition must live in tests/conftest.py, found {locations}"
         )
+
+
+_UNRESOLVED = object()
+
+
+def _is_own_module(node: ast.expr, module_name: str) -> bool:
+    return (isinstance(node, ast.Name) and node.id == "__name__") or (
+        isinstance(node, ast.Constant) and node.value == module_name
+    )
+
+
+def _base_info(
+    node: ast.expr, imports: dict[str, Any], classes: dict[str, ast.ClassDef], seen: frozenset[str]
+) -> tuple[str, type[Any] | None]:
+    """Classify a base as 'root', 'other' or 'unknown' (plus the resolved root class) without importing modules."""
+    if not isinstance(node, ast.Name):
+        return "unknown", None
+    if node.id in classes:
+        if node.id in seen:
+            return "other", None
+        for base in classes[node.id].bases:
+            kind, root = _base_info(base, imports, classes, seen | {node.id})
+            if kind == "root":
+                return kind, root
+        return "other", None
+    if node.id in imports:
+        obj = imports[node.id]
+        if isinstance(obj, type):
+            return ("root", obj) if issubclass(obj, REPORTED_ROOTS) else ("other", None)
+    elif isinstance(getattr(builtins, node.id, None), type):
+        return "other", None
+    return "unknown", None
+
+
+def _base_kind(node: ast.expr, imports: dict[str, Any], classes: dict[str, ast.ClassDef], seen: frozenset[str]) -> str:
+    return _base_info(node, imports, classes, seen)[0]
+
+
+def _top_level_imports(tree: ast.Module) -> dict[str, Any]:
+    found: dict[str, Any] = {}
+    for stmt in tree.body:
+        if not isinstance(stmt, ast.ImportFrom) or stmt.level or not stmt.module:
+            continue
+        module = None if stmt.module == "tests" or stmt.module.startswith("tests.") else sys.modules.get(stmt.module)
+        for alias in stmt.names:
+            found[alias.asname or alias.name] = getattr(module, alias.name, _UNRESOLVED)
+    return found
+
+
+def _sets_foreign_module(cls: ast.ClassDef, module_name: str) -> bool:
+    for stmt in cls.body:
+        if isinstance(stmt, ast.Assign):
+            names = [t.id for t in stmt.targets if isinstance(t, ast.Name)]
+        elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name) and stmt.value is not None:
+            names = [stmt.target.id]
+        else:
+            continue
+        if "__module__" in names and stmt.value is not None and not _is_own_module(stmt.value, module_name):
+            return True
+    return False
+
+
+def _is_module_key(node: ast.expr | None) -> bool:
+    return isinstance(node, ast.Constant) and node.value == "__module__"
+
+
+def _mentions_module(func: ast.AST) -> bool:
+    """Does this function name `__module__` in a dict entry, keyword, subscript assign or class-body assign?"""
+    for node in ast.walk(func):
+        if isinstance(node, ast.Dict) and any(_is_module_key(k) for k in node.keys):
+            return True
+        if isinstance(node, ast.keyword) and node.arg == "__module__":
+            return True
+        if isinstance(node, ast.Assign | ast.AnnAssign):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for t in targets:
+                if (isinstance(t, ast.Name) and t.id == "__module__") or (
+                    isinstance(t, ast.Subscript) and _is_module_key(t.slice)
+                ):
+                    return True
+    return False
+
+
+def _is_invisible_build(call: ast.Call, imports: dict[str, Any], classes: dict[str, ast.ClassDef]) -> bool:
+    """A 3-arg class build whose bases are unknown or a root with a plain `type` metaclass takes the helper's module."""
+    if len(call.args) != 3 or call.keywords or not isinstance(call.args[1], ast.Tuple):
+        return False
+    for elt in call.args[1].elts:
+        kind, root = _base_info(elt, imports, classes, frozenset())
+        if kind == "unknown" or (root is not None and not issubclass(type(root), abc.ABCMeta)):
+            return True
+    return False
+
+
+def _walk_builder_sites(source: str, module_name: str) -> list[tuple[str, int]]:
+    tree = ast.parse(source)
+    imports = _top_level_imports(tree)
+    classes = {s.name: s for s in tree.body if isinstance(s, ast.ClassDef)}
+    sites: list[tuple[str, int]] = []
+
+    def visit(node: ast.AST, path: list[str], func: ast.AST | None) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.ClassDef):
+                if func is not None and not _sets_foreign_module(child, module_name):
+                    kinds = [_base_kind(b, imports, classes, frozenset()) for b in child.bases]
+                    if "root" in kinds or "unknown" in kinds:
+                        sites.append((".".join(path), child.lineno))
+                visit(child, [*path, child.name], func)
+            elif isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+                visit(child, [*path, child.name], child)
+            else:
+                if func is not None:
+                    own: list[ast.expr] = []
+                    if isinstance(child, ast.Dict):
+                        own = [v for k, v in zip(child.keys, child.values, strict=True) if _is_module_key(k)]
+                    elif isinstance(child, ast.Assign) and any(
+                        isinstance(t, ast.Subscript) and _is_module_key(t.slice) for t in child.targets
+                    ):
+                        own = [child.value]
+                    elif isinstance(child, ast.Call):
+                        own = [k.value for k in child.keywords if k.arg == "__module__"]
+                    if any(_is_own_module(v, module_name) for v in own):
+                        sites.append((".".join(path), getattr(child, "lineno", 0)))
+                    elif isinstance(child, ast.Call) and not _mentions_module(func):
+                        if _is_invisible_build(child, imports, classes):
+                            sites.append((".".join(path), child.lineno))
+                visit(child, path, func)
+
+    visit(tree, [], None)
+    return sites
+
+
+def _builder_sites(source: str, module_name: str) -> list[str]:
+    return sorted({path for path, _ in _walk_builder_sites(source, module_name)})
+
+
+def _shared_builder_hits() -> dict[str, str]:
+    """Map '<module>:<path>' to 'file:line' for builder sites in shared helper modules outside tests/mixins/."""
+    hits: dict[str, str] = {}
+    mixins = TESTS_ROOT.parent.joinpath(*SHARED_TEST_MODULE_PREFIX.strip(".").split("."))
+    for file in sorted(TESTS_ROOT.rglob("*.py")):
+        if file.name.startswith("test_") or file.name == "__init__.py" or "__pycache__" in file.parts:
+            continue
+        if mixins in file.parents:
+            continue
+        module_name = ".".join(file.relative_to(TESTS_ROOT.parent).with_suffix("").parts)
+        for path, line in sorted(_walk_builder_sites(file.read_text(), module_name), key=lambda s: s[1]):
+            hits.setdefault(f"{module_name}:{path}", f"{file.relative_to(TESTS_ROOT)}:{line}")
+    return hits
+
+
+_SHARED_BUILDER_ALLOWLIST: dict[str, str] = {
+    "tests.registry_isolation_probe:define_helper_subclass": "deliberate foreign-module probe for the reclaim gate",
+    "tests.test_core.test_prepare.link_side_paths_probe:_sum_group": "called only at import, classes bound at module level",
+    "tests.conftest:make_implementation.make": "the fixture's teardown reports every leaked Implementation it built",
+}
+
+_FG_IMPORT = "from mloda.core.abstract_plugins.feature_group import FeatureGroup\n"
+_EXT_IMPORT = "from mloda.core.abstract_plugins.function_extender import Extender\n"
+
+_BUILDER_CASES: list[Any] = [
+    pytest.param(
+        _FG_IMPORT + "def make():\n    class G(FeatureGroup): pass\n", ["make"], id="nested-from-feature-group"
+    ),
+    pytest.param(
+        _FG_IMPORT + "def make():\n    class G(FeatureGroup):\n        __module__ = __name__\n",
+        ["make"],
+        id="nested-module-is-dunder-name",
+    ),
+    pytest.param("def make(base):\n    class G(base): pass\n", ["make"], id="nested-parameter-base"),
+    pytest.param(
+        _FG_IMPORT + "class Cls:\n    def method(self):\n        class G(FeatureGroup): pass\n",
+        ["Cls.method"],
+        id="nested-in-method",
+    ),
+    pytest.param(
+        _FG_IMPORT + "class Local(FeatureGroup): pass\ndef make():\n    class G(Local): pass\n",
+        ["make"],
+        id="base-is-same-source-feature-group-subclass",
+    ),
+    pytest.param(
+        _FG_IMPORT + "def make(name):\n    return type(name, (FeatureGroup,), {'__module__': __name__})\n",
+        ["make"],
+        id="type-with-dunder-name-module",
+    ),
+    pytest.param(
+        "def make(meta, base, name):\n    return meta(name, (base,), {'__module__': __name__})\n",
+        ["make"],
+        id="metaclass-call-with-dunder-name-module",
+    ),
+    pytest.param(
+        _FG_IMPORT + "def outer():\n    def inner():\n        class G(FeatureGroup): pass\n",
+        ["outer.inner"],
+        id="nested-function-chain",
+    ),
+    pytest.param(
+        _FG_IMPORT + "def make(module):\n    class G(FeatureGroup):\n        __module__ = module\n",
+        [],
+        id="ok-module-is-parameter",
+    ),
+    pytest.param("def make():\n    class G: pass\n", [], id="ok-no-bases"),
+    pytest.param(_EXT_IMPORT + "def make():\n    class E(Extender): pass\n", [], id="ok-extender-base"),
+    pytest.param(
+        _FG_IMPORT + "def make(name, module):\n    return type(name, (FeatureGroup,), {'__module__': module})\n",
+        [],
+        id="ok-type-with-parameter-module",
+    ),
+    pytest.param(
+        _FG_IMPORT + "def make(name):\n    return type(name, (FeatureGroup,), {})\n", [], id="ok-type-without-module"
+    ),
+    pytest.param(_FG_IMPORT + "class G(FeatureGroup): pass\n", [], id="ok-module-level-class"),
+    pytest.param(
+        "from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer\n"
+        "def make(name):\n    return type(name, (BaseTransformer,), {})\n",
+        ["make"],
+        id="transformer-type-without-module",
+    ),
+    pytest.param(
+        "def make(name, base):\n    return type(name, (base,), {})\n",
+        ["make"],
+        id="parameter-base-type-without-module",
+    ),
+    pytest.param(
+        "def make(name, base):\n    ns = {}\n    ns['__module__'] = __name__\n    return type(name, (base,), ns)\n",
+        ["make"],
+        id="subscript-module-is-dunder-name",
+    ),
+    pytest.param(
+        "def make(name, base):\n    return type(name, (base,), dict(__module__=__name__))\n",
+        ["make"],
+        id="dict-call-module-is-dunder-name",
+    ),
+    pytest.param("def make():\n    class E(Exception): pass\n", [], id="ok-builtin-base"),
+    pytest.param(
+        _FG_IMPORT + "def make(module):\n    class G(FeatureGroup):\n        __module__: str = module\n",
+        [],
+        id="ok-annotated-foreign-module",
+    ),
+    pytest.param(
+        "def make(name, base, module):\n    ns = {'__module__': module}\n    return type(name, (base,), ns)\n",
+        [],
+        id="ok-namespace-variable-with-foreign-module",
+    ),
+]
+
+
+class TestSharedSubclassBuildersLiveUnderMixins:
+    """Shared helpers outside tests/mixins/ must not build subclasses the leak report cannot see.
+
+    Every builder in a shared module is checked, not only imported ones, so a helper that is not shared is allowlisted.
+    """
+
+    @pytest.mark.parametrize(("source", "expected"), _BUILDER_CASES)
+    def test_builder_sites(self, source: str, expected: list[str]) -> None:
+        assert _builder_sites(source, "tests.helpers.fake") == expected
+
+    def test_no_shared_builder_outside_mixins(self) -> None:
+        hits = _shared_builder_hits()
+        found = [f"{key} at {where}" for key, where in sorted(hits.items()) if key not in _SHARED_BUILDER_ALLOWLIST]
+        assert not found, (
+            "shared helpers build subclasses whose leaks are invisible; move the builder under tests/mixins/ "
+            f"or take the caller's module as __module__: {found}"
+        )
+
+    def test_allowlist_has_no_stale_entries(self) -> None:
+        stale = sorted(set(_SHARED_BUILDER_ALLOWLIST) - set(_shared_builder_hits()))
+        assert not stale, f"allowlist entries no longer match a builder site: {stale}"
 
 
 _CACHE_RESTORE_PROBE = "CacheRestorePinProbeFeatureGroup"

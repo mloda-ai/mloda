@@ -79,8 +79,9 @@ RECLAIM_LOGS: dict[type[Any], SubclassLog[Any]] = {
     Extender: EXTENDERS,
 }
 EXTRA_RECLAIM_ROOTS: tuple[type[Any], ...] = (ComputeFramework, Extender)
+REPORTED_ROOTS: tuple[type[Any], ...] = (FeatureGroup, BaseTransformer, Implementation)
 YOUNG_WINDOW_THRESHOLD = 100_000
-# Per-call subclass builders shared across test modules live under tests/mixins/ so their held survivors are reported.
+# Shared per-call subclass builders live under tests/mixins/ (enforced by the guard in test_registry_isolation.py).
 SHARED_TEST_MODULE_PREFIX = "tests.mixins."
 
 
@@ -150,7 +151,7 @@ def reclaim_since(snapshot: dict[type[Any], int], module_name: str) -> list[type
     leaked: list[type[Any]] = []
     for root, mark in snapshot.items():
         survivors = reclaim_leaked_subclasses(RECLAIM_LOGS[root], mark, module_name)
-        if root in (FeatureGroup, BaseTransformer, Implementation):
+        if root in REPORTED_ROOTS:
             leaked.extend(survivors)
     return leaked
 

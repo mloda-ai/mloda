@@ -7,7 +7,8 @@ imported heap (pandas, polars, duckdb, pyarrow, sklearn, every plugin and test m
 hundreds of milliseconds and gc dominates the suite's wall time. Freezing the imported graph into the
 permanent generation once collection has finished makes those collects free without weakening the isolation
 they buy, but only if the freeze is owned: gc.unfreeze() is process-global, so the suite may only undo a
-freeze it made itself.
+freeze it made itself. The file also pins that a timeout alarm landing in a gc callback still fails the test,
+because pytest.ini promotes that unraisable warning to an error.
 """
 
 from __future__ import annotations
@@ -243,7 +244,7 @@ import time
 def test_timeout_inside_gc_callback() -> None:
     def slow_stop(phase: str, info: dict[str, int]) -> None:
         if phase == "stop":
-            time.sleep(1.5)
+            time.sleep(10)
 
     gc.callbacks.append(slow_stop)
     try:
@@ -269,7 +270,9 @@ def _run_timeout_probe(tmp_path: Path, ini_path: Path) -> subprocess.CompletedPr
             str(ini_path),
             "--rootdir",
             str(tmp_path),
-            "--timeout=0.5",
+            "--timeout=1",
+            "-o",
+            "timeout_func_only=true",
             "--timeout-method=signal",
             "-p",
             "no:cacheprovider",
@@ -308,7 +311,9 @@ def test_timeout_firing_in_a_gc_callback_fails_the_test_instead_of_being_swallow
     assert real.returncode == 1 and "1 failed" in real.stdout, (
         f"A pytest-timeout swallowed inside a gc callback still passes under pytest.ini.\n{output}"
     )
-    assert "from pytest-timeout" in real.stdout, f"The failure is not the pytest-timeout one.\n{output}"
+    assert "from pytest-timeout" in real.stdout and "PytestUnraisableExceptionWarning" in real.stdout, (
+        f"The failure is not the swallowed pytest-timeout one promoted from the unraisable warning.\n{output}"
+    )
 
 
 def _report(passed: bool) -> Any:

@@ -75,13 +75,13 @@ class WorkerManager:
 
         return process, command_queue, result_queue
 
-    def prestart_workers(self, count: int, target: Callable[..., None]) -> None:
+    def prestart_workers(self, count: int, target: Callable[..., None], args: tuple[Any, ...] = ()) -> None:
         """Start unbound daemon workers that create_worker_process later binds to a cfw."""
         for _ in range(max(count, 0)):
             ctx = mp_start_context()
             command_queue: multiprocessing.Queue[Any] = ctx.Queue()
             result_queue: multiprocessing.Queue[Any] = ctx.Queue()
-            process = start_daemon_process(ctx, target, (command_queue, result_queue))
+            process = start_daemon_process(ctx, target, (command_queue, result_queue, *args))
             self.standby.append((process, command_queue, result_queue))
             self.tasks.append(process)
             process.start()

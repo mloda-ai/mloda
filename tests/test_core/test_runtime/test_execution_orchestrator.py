@@ -706,11 +706,16 @@ class TestEnterPrestartsStandbyWorkers:
         with (
             patch("mloda.core.runtime.run.planned_worker_count", return_value=3) as count,
             patch("mloda.core.runtime.run.shared_manager"),
+            patch(
+                "mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer."
+                "ComputeFrameworkTransformer.loaded_backend_gates",
+                return_value=("pandas",),
+            ),
         ):
             orchestrator.__enter__(modes)
 
         count.assert_called_once_with(orchestrator.execution_planner, modes)
-        worker_manager.prestart_workers.assert_called_once_with(3, standby_worker)
+        worker_manager.prestart_workers.assert_called_once_with(3, standby_worker, (("pandas",),))
 
     def test_prestart_happens_before_the_manager_starts(self) -> None:
         worker_manager = Mock()

@@ -145,6 +145,11 @@ class ComputeFrameworkTransformer:
         """Load every backend's transformer files, whether or not its library is imported yet."""
         cls._load_available(force=True)
 
+    @classmethod
+    def loaded_backend_gates(cls) -> tuple[str, ...]:
+        """Gate modules of the heavy backends already imported in this process."""
+        return tuple(gate for gate in _LAZY_TRANSFORMER_GATES.values() if loaded(gate) is not None)
+
     def _register_all(self) -> None:
         self._seen_lazy_dirs = frozenset(ComputeFrameworkTransformer._lazy_dirs_loaded)
         for transformer in get_all_subclasses(BaseTransformer):

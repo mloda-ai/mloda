@@ -13,7 +13,6 @@ import functools
 import gc
 import re
 import sys
-import textwrap
 import types
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -799,10 +798,10 @@ def _builder_sites(source: str, module_name: str) -> list[str]:
 
 
 # Parsing every test file with ast is slow; this prefilter extracts only the import statements to parse.
-_NAME = r"[\w.]+(?:[ \t]+as[ \t]+\w+)?"
+_NAME = r"\w+(?:\.\w+)*(?:[ \t]+as[ \t]+\w+)?"
 _IMPORT_STATEMENT = re.compile(
     rf"^[ \t]*(?:import[ \t]+{_NAME}(?:[ \t]*,[ \t]*{_NAME})*"
-    rf"|from[ \t]+[\w.]+[ \t]+import[ \t]+(?:\((?:[^)#]|#[^\n]*)*\)|[\w ,\t]+))[ \t]*(?:#[^\n]*)?$",
+    rf"|from[ \t]+(?:\.*\w+(?:\.\w+)*|\.+)[ \t]+import[ \t]+(?:\((?:[^)#]|#[^\n]*+)*\)|\*|[\w ,\t]+))[ \t]*(?:#[^\n]*)?$",
     re.MULTILINE,
 )
 
@@ -828,7 +827,7 @@ def _test_imports(source: str, package: str) -> dict[str, set[str] | None]:
             found[module] = {name}
 
     for match in _IMPORT_STATEMENT.finditer(source):
-        for node in ast.parse(textwrap.dedent(match.group())).body:
+        for node in ast.parse(match.group().strip()).body:
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if _test_module_exists(alias.name):
@@ -838,33 +837,53 @@ def _test_imports(source: str, package: str) -> dict[str, set[str] | None]:
                 parts = [*base, *(node.module.split(".") if node.module else [])]
                 parent = ".".join(parts)
                 for alias in node.names:
-                    if _test_module_exists(f"{parent}.{alias.name}"):
+                    if alias.name == "*":
+                        if parent and _test_module_exists(parent):
+                            add(parent, None)
+                    elif _test_module_exists(f"{parent}.{alias.name}"):
                         add(f"{parent}.{alias.name}", None)
-                    elif parent and alias.name != "*" and _test_module_exists(parent):
+                    elif parent and _test_module_exists(parent):
                         add(parent, alias.name)
     return found
 
 
 def _reachable_names(tree: ast.Module, imported: set[str] | None) -> set[str]:
-    """Top-level defs an importer can reach (all non-test defs when `imported` is None), transitively."""
-    defs = {s.name: s for s in tree.body if isinstance(s, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)}
+    """Top-level defs and simple assigned names an importer can reach (all non-test defs if None), transitively."""
+    nodes: dict[str, ast.AST] = {}
+    for s in tree.body:
+        if isinstance(s, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            nodes[s.name] = s
+        elif isinstance(s, ast.Assign) and len(s.targets) == 1 and isinstance(s.targets[0], ast.Name):
+            nodes[s.targets[0].id] = s
+        elif isinstance(s, ast.AnnAssign) and isinstance(s.target, ast.Name) and s.value is not None:
+            nodes[s.target.id] = s
     if imported is None:
-        pending = [n for n in defs if not n.startswith(("test_", "Test"))]
+        pending = [n for n, d in nodes.items() if isinstance(d, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)]
+        pending = [n for n in pending if not n.startswith(("test_", "Test"))]
     else:
-        pending = [n for n in imported if n in defs]
+        pending = [n for n in imported if n in nodes]
     reached: set[str] = set()
     while pending:
         name = pending.pop()
         if name in reached:
             continue
         reached.add(name)
-        pending.extend(n.id for n in ast.walk(defs[name]) if isinstance(n, ast.Name) and n.id in defs)
+        node = nodes[name]
+        skip: set[int] = set()
+        if isinstance(node, ast.Assign | ast.AnnAssign):
+            skip = {id(c.func) for c in ast.walk(node) if isinstance(c, ast.Call)}
+        pending.extend(n.id for n in ast.walk(node) if isinstance(n, ast.Name) and n.id in nodes and id(n) not in skip)
     return reached
 
 
-def _reachable_builder_sites(source: str, module_name: str, imported: set[str] | None) -> list[str]:
+def _reachable_sites(source: str, module_name: str, imported: set[str] | None) -> list[tuple[str, int]]:
     reached = _reachable_names(ast.parse(source), imported)
-    return sorted({path for path, _ in _walk_builder_sites(source, module_name) if path.split(".")[0] in reached})
+    sites = [(p, line) for p, line in _walk_builder_sites(source, module_name) if p.split(".")[0] in reached]
+    return sorted(sites, key=lambda s: s[1])
+
+
+def _reachable_builder_sites(source: str, module_name: str, imported: set[str] | None) -> list[str]:
+    return sorted({path for path, _ in _reachable_sites(source, module_name, imported)})
 
 
 def _imported_test_modules() -> dict[str, set[str] | None]:
@@ -886,15 +905,13 @@ def _imported_test_modules() -> dict[str, set[str] | None]:
 
 @functools.cache
 def _shared_builder_hits() -> dict[str, str]:
-    """Map '<module>:<path>' to 'file:line' for builder sites in shared helper modules outside tests/mixins/."""
+    """Map '<module>:<path>' to 'file:line' for builder sites in shared helpers outside tests/mixins/ and in reachable defs of imported test modules."""
     hits: dict[str, str] = {}
     for module_name, imported in sorted(_imported_test_modules().items()):
         file = TESTS_ROOT.parent.joinpath(*module_name.split(".")).with_suffix(".py")
         source = file.read_text(encoding="utf-8")
-        reached = _reachable_names(ast.parse(source), imported)
-        for path, line in sorted(_walk_builder_sites(source, module_name), key=lambda s: s[1]):
-            if path.split(".")[0] in reached:
-                hits.setdefault(f"{module_name}:{path}", f"{file.relative_to(TESTS_ROOT)}:{line}")
+        for path, line in _reachable_sites(source, module_name, imported):
+            hits.setdefault(f"{module_name}:{path}", f"{file.relative_to(TESTS_ROOT)}:{line}")
     mixins = TESTS_ROOT.parent.joinpath(*SHARED_TEST_MODULE_PREFIX.strip(".").split("."))
     for file in sorted(TESTS_ROOT.rglob("*.py")):
         if file.name.startswith("test_") or file.name == "__init__.py" or "__pycache__" in file.parts:
@@ -1022,6 +1039,17 @@ _TEST_IMPORT_CASES: list[Any] = [
     ),
     pytest.param("from . import test_data_converter\n", _TD + ".multi_index", {_TDC: None}, id="relative-from-dot"),
     pytest.param(f"from {_PS} import a\nimport {_PS}\n", "tests", {_PS: None}, id="name-and-whole-merge-to-none"),
+    pytest.param(f"from {_PS} import *  # noqa: F403\n", "tests", {_PS: None}, id="star-import-is-whole-module"),
+    pytest.param(
+        '"""\n    import pandas.\n    from tests import the thing.\n"""\n', "tests", {}, id="docstring-prose-is-ignored"
+    ),
+    pytest.param(f"def f():\n    from {_PS} import (\na,\n)\n", "tests", {_PS: {"a"}}, id="continuation-less-indented"),
+    pytest.param(
+        "from tests.x import (\n" + "    # some comment text here, long enough\n" * 12 + "    b) + 1\n",
+        "tests",
+        {},
+        id="unclosed-parenthesis-with-comments",
+    ),
 ]
 
 _REACHABLE_CASES: list[Any] = [
@@ -1061,6 +1089,28 @@ _REACHABLE_CASES: list[Any] = [
         [],
         id="import-time-only-builder",
     ),
+    pytest.param(
+        "import functools\n"
+        + _FG_IMPORT
+        + "def make(n):\n    class G(FeatureGroup): pass\nmake_one = functools.partial(make, 1)\n",
+        {"make_one"},
+        ["make"],
+        id="partial-alias-reaches-builder",
+    ),
+    pytest.param(
+        _FG_IMPORT + "def make():\n    class G(FeatureGroup): pass\nBUILDERS = {'a': make}\n",
+        {"BUILDERS"},
+        ["make"],
+        id="dict-registry-reaches-builder",
+    ),
+    pytest.param(
+        _FG_IMPORT
+        + "def make():\n    return type('X', (FeatureGroup,), {'__module__': __name__})\n"
+        + "def wrap(x):\n    return x\nX = wrap(make())\n",
+        {"X"},
+        [],
+        id="call-result-inside-wrapper-is-import-time",
+    ),
 ]
 
 
@@ -1093,6 +1143,10 @@ class TestSharedSubclassBuildersLiveUnderMixins:
     @pytest.mark.parametrize(("source", "imported", "expected"), _REACHABLE_CASES)
     def test_reachable_builder_sites(self, source: str, imported: set[str] | None, expected: list[str]) -> None:
         assert _reachable_builder_sites(source, "tests.test_fake", imported) == expected
+
+    def test_reachable_sites_report_lines(self) -> None:
+        source = _FG_IMPORT + "def make():\n    class G(FeatureGroup): pass\n"
+        assert _reachable_sites(source, "tests.test_fake", {"make"}) == [("make", 3)]
 
     def test_scan_sees_test_modules_that_other_tests_import(self) -> None:
         module = "tests.test_core.test_prepare.test_multi_link_group_resolution"

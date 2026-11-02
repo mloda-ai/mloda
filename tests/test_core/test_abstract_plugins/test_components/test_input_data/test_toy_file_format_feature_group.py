@@ -311,8 +311,13 @@ class TestUserinfoUriPlanIdentity:
                 "s3://bucket/dir;jsessionid=***/plan{s}",
                 "SECRETSESSION",
             ),
+            (
+                "s3://bucket/dir;%74oken=SECRETENCODED/plan{s}",  # nosec B105
+                "s3://bucket/dir***/plan{s}",
+                "SECRETENCODED",
+            ),
         ],
-        ids=["userinfo-password", "session-id-path-param"],
+        ids=["userinfo-password", "session-id-path-param", "encoded-path-param"],
     )
     def test_plan_step_identity_and_render_hide_the_password(self, template: str, expected: str, secret: str) -> None:
         column = "toyfmt_uri_plan_col"
@@ -401,6 +406,27 @@ class TestFileSourceUriProjection:
             ("zip://d;token=SECRET::s3://bucket/x{s}", "zip://d;token=***::s3://bucket/x{s}"),  # nosec B105
             ("s3://b/token=abc;v=1/x{s}", "s3://b/token=abc;v=1/x{s}"),  # nosec B105
             ("s3://b/my.token.dir;v=1/x{s}", "s3://b/my.token.dir;v=1/x{s}"),
+            ("s3://b/d;%74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/d;token%3DSECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/d%3Btoken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/d;%2574oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/d;token%3DSE%2FCRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/d;%252525252525" + "74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
+            ("zip://d;%74oken=SECRET::s3://bucket/x{s}", "zip://d***::s3://bucket/x{s}"),  # nosec B105
+            ("s3://u:pw@b/d;%74oken=SECRET/x{s}?q=1", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/100%25{s}", "s3://b/100%25{s}"),
+            ("s3://b/100%2541{s}", "s3://b/100%2541{s}"),
+            ("s3://b/my%2520file{s}", "s3://b/my%2520file{s}"),
+            ("s3://b/d;v%3D1/x{s}", "s3://b/d;v%3D1/x{s}"),
+            ("s3://b/d%3Bv=1/x{s}", "s3://b/d%3Bv=1/x{s}"),
+            ("s3://b/token%3Dabc;v=1/x{s}", "s3://b/token%3Dabc;v=1/x{s}"),  # nosec B105
+            ("s3://b/d;v=1%3Btoken=SECRET/x{s}", "s3://b/d;v=1%3Btoken=***/x{s}"),  # nosec B105
+            ("s3://b/d;%2F%74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/d;%252F%74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/d;v%3A%3A%74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/my%25252520file{s}", "s3://b/my%25252520file{s}"),
+            ("s3://b/a%2Ftoken=abc/x{s}", "s3://b/a%2Ftoken=abc/x{s}"),  # nosec B105
+            ("s3://b/d;v=1%2Fx/y{s}", "s3://b/d;v=1%2Fx/y{s}"),
         ],
         ids=[
             "slash-in-password",
@@ -439,6 +465,27 @@ class TestFileSourceUriProjection:
             "chain-separator-kept",
             "kept-secret-text-before-semicolon",
             "kept-dot-in-filename",
+            "encoded-key",
+            "encoded-equals",
+            "encoded-semicolon",
+            "double-encoded-key",
+            "encoded-slash-in-value",
+            "decode-cap-hit",
+            "encoded-chain-kept",
+            "encoded-with-userinfo-query",
+            "kept-percent-literal",
+            "kept-double-encoded-percent-digits",
+            "kept-double-encoded-space",
+            "kept-encoded-equals-param",
+            "kept-encoded-semicolon-param",
+            "kept-encoded-equals-before-param",
+            "raw-masked-then-decoded",
+            "encoded-slash-before-key",
+            "double-encoded-slash-before-key",
+            "encoded-chain-before-key",
+            "kept-four-level-encoded-clean",
+            "kept-encoded-slash-no-param",
+            "kept-encoded-slash-clean-param",
         ],
     )
     def test_uri_projection(self, template: str, expected: str) -> None:

@@ -172,9 +172,37 @@ _PATH_PARAMETER_KEY = re.compile(
 )
 
 
+_MAX_DECODE_ROUNDS = 4
+_PART_SPLIT = re.compile(r"(/|::)")
+_PART_HEAD_END = re.compile(r"[;%]")
+
+
+def _mask_raw_path_parameters(text: str) -> str:
+    return _PATH_PARAMETER_SPAN.sub(lambda m: _PATH_PARAMETER_KEY.sub(r"\g<key>\g<sep>***", m.group(0)), text)
+
+
+def _hides_credential(part: str) -> bool:
+    decoded = part
+    for _ in range(_MAX_DECODE_ROUNDS + 1):
+        nxt = unquote(decoded)
+        if nxt == decoded:
+            probe = decoded.replace("::", "__").replace("/", "_")
+            return _mask_raw_path_parameters(probe) != probe
+        decoded = nxt
+    return True
+
+
 def _mask_path_parameters(uri: str) -> str:
-    """Mask credential-named `key=value` values inside the `;` parameter region of each path segment."""
-    return _PATH_PARAMETER_SPAN.sub(lambda m: _PATH_PARAMETER_KEY.sub(r"\g<key>\g<sep>***", m.group(0)), uri)
+    """Mask credential-named `;key=value` path parameter values, including percent-encoded ones."""
+    masked = _mask_raw_path_parameters(uri)
+    if "%" not in masked:
+        return masked
+    parts = _PART_SPLIT.split(masked)
+    for i in range(0, len(parts), 2):
+        part = parts[i]
+        if "%" in part and _hides_credential(part):
+            parts[i] = _PART_HEAD_END.split(part, maxsplit=1)[0] + "***"
+    return "".join(parts)
 
 
 _PLACEHOLDER = "\ue000"

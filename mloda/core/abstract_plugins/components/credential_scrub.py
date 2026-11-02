@@ -96,6 +96,10 @@ _SLASH_DSN_PATTERN = re.compile(
 )
 
 
+# Non-whitespace text after a jdbc match, cut at the next `://` so repeated URIs scan linearly.
+_JDBC_TAIL_PATTERN = re.compile(r"(?:(?!://)\S)*")
+
+
 def _cut_key_value_path(path: str) -> str:
     """The path up to (excluding) the first segment that looks like key=value after a ':'."""
     segments = path.split("/")
@@ -111,7 +115,9 @@ def _uri_projection(match: re.Match[str]) -> str | None:
     if userinfo and scheme.lower() in _AZURE_CONTAINER_SCHEMES and _AZURE_CONTAINER_PATTERN.fullmatch(userinfo):
         container = f"{userinfo}@"
     if scheme.startswith("jdbc:"):
-        return f"{scheme}://{container}{host}"
+        tail = _JDBC_TAIL_PATTERN.search(match.string, match.end())
+        if any(mark in path + (tail[0] if tail else "") for mark in "=;@"):
+            return f"{scheme}://{container}{host}"
     if any("=" in segment.partition(":")[2] for segment in path.split("/")):
         return None
     return f"{scheme}://{container}{host}{_cut_hidden_percent(scheme, host, path)}"

@@ -444,9 +444,9 @@ class SourceFeatureGroup(FeatureGroup):
 
     @classmethod
     def _reject_abstract(cls, name: str, options: Options, data_access_collection: DataAccessCollection | None) -> str:
-        """Record the abstract-class rejection when pointed; returns its reason."""
+        """Record the abstract-class rejection only when an options key names it; returns its reason."""
         reason = f"{cls.get_class_name()} is abstract; missing {sorted(cls.__abstractmethods__)}"
-        if cls.is_pointed(name, options, data_access_collection):
+        if any(key in cls.pointer_keys() for key in options.keys()):
             record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
         return reason
 

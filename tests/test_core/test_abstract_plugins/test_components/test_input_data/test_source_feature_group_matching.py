@@ -12,6 +12,7 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
+from mloda.core.prepare.resolution_failure_renderer import TROUBLESHOOTING_URL
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.core.abstract_plugins.components.input_data.claim_route import feature_group_scope
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import (
@@ -811,6 +812,18 @@ class TestScopePointingRefinement:
 
         assert set(result.identified) == {_MidHasColumn}
 
+    @pytest.mark.parametrize("scope", [_AbstractToyMid, "_AbstractToyMid"])
+    def test_abstract_base_scope_with_no_source_lists_no_abstract_near_miss(self, scope: object) -> None:
+        feature = Feature(COL, feature_group=scope)  # type: ignore[arg-type]
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            evaluate_or_raise(feature, _plugins(_AbstractToyMid, _MidHasColumn), None, None)
+
+        assert str(exc_info.value) == (
+            "No feature groups found for feature name: 'toyfmt_col'. Scoped to feature group: '_AbstractToyMid'."
+            "\nUse resolve_feature(name, options=..., feature_group=...) to debug feature resolution."
+            f"\nFor troubleshooting guide, see: {TROUBLESHOOTING_URL}"
+        )
+
     def test_concrete_ancestor_scope_still_points_and_aborts_on_missing_column(self) -> None:
         feature = Feature(COL, feature_group=ToySourceFG)
         with pytest.raises(FeatureResolutionError, match="h1:toy"):
@@ -1095,14 +1108,11 @@ class TestAbstractGroupsNeverClaim:
     def test_matcher_does_not_call_the_abstract_hooks(self) -> None:
         assert _AbstractRouted._matches_by_default_rules(COL, Options(), toy_dac(h1={COL: [1]})) is False
 
-    def test_scoped_abstract_group_records_its_missing_abstract_methods(
-        self, rejection_window: dict[str, MatchRejection]
-    ) -> None:
+    def test_scope_root_abstract_group_records_nothing(self, rejection_window: dict[str, MatchRejection]) -> None:
         with feature_group_scope(_AbstractRoutedChild):
             assert _AbstractRoutedChild._matches_by_default_rules(COL, Options(), toy_dac(h1={COL: [1]})) is False
 
-        reason = rejection_window["_AbstractRoutedChild"].reason
-        assert str(sorted(_AbstractRoutedChild.__abstractmethods__)) in reason
+        assert "_AbstractRoutedChild" not in rejection_window
 
     def test_pointed_abstract_group_records_its_missing_abstract_methods(
         self, rejection_window: dict[str, MatchRejection]

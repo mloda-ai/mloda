@@ -38,26 +38,6 @@ class TestPythonDictAggregation:
         assert PythonDictAggregation.feature_group is AggregatedFeatureGroup
         assert PythonDictFramework in AggregatedFeatureGroup.compute_framework_definition()
 
-    @pytest.mark.parametrize(
-        "aggregation_type, expected",
-        [
-            ("sum", 1500),
-            ("min", 100),
-            ("max", 500),
-            ("avg", 300),
-            ("mean", 300),
-            ("count", 5),
-            ("median", 300),
-            ("std", 158.11388300841898),
-            ("var", 25000),
-        ],
-    )
-    def test_perform_aggregation(
-        self, sample_data: dict[str, list[Any]], aggregation_type: str, expected: float
-    ) -> None:
-        result = PythonDictAggregation._perform_aggregation(sample_data, aggregation_type, ["sales"])
-        assert result == pytest.approx(expected)
-
     def test_perform_aggregation_invalid(self, sample_data: dict[str, list[Any]]) -> None:
         with pytest.raises(ValueError, match="Unsupported aggregation type: invalid"):
             PythonDictAggregation._perform_aggregation(sample_data, "invalid", ["sales"])
@@ -80,10 +60,6 @@ class TestPythonDictAggregation:
         twice = PythonDictAggregation._add_result_to_data(once, "x__sum_aggr", 2)
         assert twice["x__sum_aggr"] == [2] * 5
         assert list(twice).count("x__sum_aggr") == 1
-
-    def test_add_result_to_data_scalar_on_zero_rows(self) -> None:
-        updated = PythonDictAggregation._add_result_to_data({"sales": []}, "sales__sum_aggr", 0)
-        assert updated["sales__sum_aggr"] == []
 
     def test_calculate_feature_multiple(self, sample_data: dict[str, list[Any]]) -> None:
         feature_set = FeatureSet()

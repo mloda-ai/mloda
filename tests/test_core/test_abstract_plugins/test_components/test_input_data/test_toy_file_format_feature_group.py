@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import itertools
 import os
+import time
 from collections.abc import Collection
 from pathlib import Path
 from typing import Any, cast
@@ -368,6 +369,14 @@ class TestFileSourceUriProjection:
         first = source(f"s3://u:hunter2@bucket/a%2Fb{TOY_SUFFIX}").source  # nosec B105
         second = source(f"s3://u:hunter2@bucket/a%2Fc{TOY_SUFFIX}").source  # nosec B105
         assert first != second
+
+    def test_long_encoded_head_cuts_quickly(self) -> None:
+        uri = "s3://b/" + "%25" * 8000 + ";x/x" + TOY_SUFFIX
+        started = time.monotonic()
+        match = ToyFileFormatFG._source(uri)
+        assert time.monotonic() - started < 5
+        assert match.source == "s3://b/" + "%25" * 8000 + ";***/x" + TOY_SUFFIX
+        assert match.access == uri
 
     @pytest.mark.parametrize(
         "template,expected",

@@ -182,15 +182,16 @@ def _decode_to_fixpoint(part: str) -> str | None:
 
 
 def _clean_head(part: str) -> str:
-    head = ""
-    for i, char in enumerate(part):
-        if char not in ";%":
-            continue
-        decoded = _decode_to_fixpoint(part[:i])
+    candidates = [i for i, char in enumerate(part) if char in ";%"]
+    low, high = 0, len(candidates)
+    while low < high:  # cleanliness is monotone: a dirty prefix keeps every longer one dirty
+        mid = (low + high) // 2
+        decoded = _decode_to_fixpoint(part[: candidates[mid]])
         if decoded is None or any(mark in decoded for mark in ";?#"):
-            break
-        head = part[:i]
-    return head
+            high = mid
+        else:
+            low = mid + 1
+    return part[: candidates[low - 1]] if low else ""
 
 
 def _cut_path_parameter_regions(uri: str) -> str:

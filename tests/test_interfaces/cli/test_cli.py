@@ -200,18 +200,33 @@ def _assert_no_withheld_values(outcome: _Outcome) -> None:
         assert customer_id not in outcome.err
 
 
+EXPLAIN_TEXT = "step 1  CsvFG  customer_id, income, segment  (source sales)\n"
+
+
 class TestExplainParity:
+    @pytest.mark.parametrize("extra", [[], ["--format", "json"]])
     def test_explain_file_prints_exactly_the_service_result(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, extra: list[str]
     ) -> None:
         config = _config(tmp_path)
         _elsewhere(tmp_path, monkeypatch)
 
-        outcome = _cli(["explain", str(_request_file(tmp_path)), "--config", str(config)])
+        outcome = _cli(["explain", str(_request_file(tmp_path)), "--config", str(config), *extra])
 
         assert outcome.code == 0, outcome.err
         assert outcome.json() == _expected_explain(config)
         assert "plan_id" in outcome.json()
+
+    def test_text_format_prints_one_line_per_step(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli(["explain", str(_request_file(tmp_path)), "--format", "text", "--config", str(config)])
+
+        assert outcome.code == 0, outcome.err
+        assert outcome.err == ""
+        assert outcome.out == EXPLAIN_TEXT
+        _assert_no_paths(outcome.out, tmp_path)
 
     def test_explain_stdin_prints_exactly_the_service_result(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -256,13 +271,14 @@ class TestExplainErrors:
             ({"features": [{"name": "income", "options": {RESERVED_READER_OPTION_KEY: SECRET}}]}, "policy_denied"),
         ],
     )
+    @pytest.mark.parametrize("extra", [[], ["--format", "text"]])
     def test_error_result_goes_to_stdout_with_exit_2(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request_value: Any, code: str
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request_value: Any, code: str, extra: list[str]
     ) -> None:
         config = _config(tmp_path)
         _elsewhere(tmp_path, monkeypatch)
 
-        outcome = _cli(["explain", str(_request_file(tmp_path, request_value)), "--config", str(config)])
+        outcome = _cli(["explain", str(_request_file(tmp_path, request_value)), "--config", str(config), *extra])
 
         assert outcome.code == 2
         assert _error_code(outcome) == code

@@ -32,6 +32,14 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 # Only this token, never an identifier or comment, must be searched for in scrub assertions below.
 _LEAK_MARKER = "hunter2z9"
 _LEAK_MESSAGE = f"failed for https://u:p@h/db?sig={_LEAK_MARKER}"
+_REGISTERED = "Zq81Lm5Vx0Rb7Ye3Hw29"  # nosec B105
+
+
+class _ContainerLeakError(Exception):
+    def __init__(self, message: str = "failed") -> None:
+        super().__init__(message)
+        self.as_dict = {"k": _REGISTERED}
+        self.as_list = [_REGISTERED]
 
 
 class _StateHoldingExtender(Extender):
@@ -1114,6 +1122,33 @@ class TestSyncExecuteStep:
         assert call_args.kwargs["exception"] is boom
         assert _LEAK_MARKER in str(boom)
 
+    def test_registered_secret_in_container_attributes_is_masked_in_place(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+        cfw_register = Mock(spec=CfwManager)
+        executor = ComputeFrameworkExecutor(cfw_register, Mock(spec=WorkerManager))
+        step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
+        step.tfs_ids = []
+        step.features = Mock()
+        step.features.any_uuid = uuid4()
+        step.children_if_root = []
+        step.compute_framework = Mock()
+        step.compute_framework.get_class_name.return_value = "TestCFW"
+        cfw_uuid = uuid4()
+        cfw_register.resolve_cfw_uuid_by_tfs_ids.return_value = cfw_uuid
+        executor.cfw_collection[cfw_uuid] = Mock(spec=ComputeFramework)
+        boom = _ContainerLeakError()
+        step.execute.side_effect = boom
+
+        with registered_secrets_scope(frozenset({_REGISTERED})):
+            executor.sync_execute_step(step)
+
+        cfw_register.set_error.assert_called_once()
+        assert cfw_register.set_error.call_args.kwargs["exception"] is boom
+        assert _REGISTERED not in repr(boom.as_dict)
+        assert _REGISTERED not in repr(boom.as_list)
+
 
 class TestThreadExecuteStep:
     """Tests for thread_execute_step method."""
@@ -1236,6 +1271,22 @@ class TestThreadExecuteStep:
         assert _LEAK_MARKER not in error_msg
         assert _LEAK_MARKER not in exc_info
         assert call_args.kwargs["exception"] is boom
+
+    def test_thread_worker_masks_registered_secret_in_container_attributes(self) -> None:
+        cfw_register = Mock(spec=CfwManager)
+        step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
+        boom = _ContainerLeakError()
+        step.execute.side_effect = boom
+
+        thread_worker(
+            step, cfw_register, Mock(spec=ComputeFramework), None, registered_secrets=frozenset({_REGISTERED})
+        )
+
+        cfw_register.set_error.assert_called_once()
+        assert cfw_register.set_error.call_args.kwargs["exception"] is boom
+        assert _REGISTERED not in repr(boom.as_dict)
+        assert _REGISTERED not in repr(boom.as_list)
 
     def test_thread_worker_scrubs_secret_in_chained_cause(self) -> None:
         """A secret in the exception's __cause__ must not reach set_error's msg/exc_info either."""

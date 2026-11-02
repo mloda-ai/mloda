@@ -5,6 +5,7 @@ seam, and the extender-close cleanup path.
 import inspect
 import logging
 import multiprocessing
+import pickle  # nosec B403
 import queue
 import threading
 import time
@@ -105,6 +106,25 @@ class _LeakRaisingCommand:
 
     def execute(self, *args: Any, **kwargs: Any) -> Any:
         raise RuntimeError(_LEAK_MESSAGE)
+
+
+_REGISTERED = "Zq81Lm5Vx0Rb7Ye3Hw29"  # nosec B105
+
+
+class _ContainerLeakError(Exception):
+    """Module-level so it pickles."""
+
+    def __init__(self, message: str = "failed") -> None:
+        super().__init__(message)
+        self.as_dict = {"k": _REGISTERED}
+        self.as_list = [_REGISTERED]
+
+
+class _ContainerLeakRaisingCommand:
+    """Module-level so it pickles through the spawn-context queue."""
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        raise _ContainerLeakError()
 
 
 class _ChainedLeakRaisingCommand:
@@ -459,6 +479,34 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         assert _LEAK_MARKER not in error_msg
         assert _LEAK_MARKER not in exc_info
         assert command_queue.get(timeout=2) == "STOP"
+
+    def test_registered_secret_in_container_attributes_is_masked_before_set_error(self) -> None:
+        ctx = mp_start_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.get_run_context.return_value = RunContext()
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+        command_queue.put(_ContainerLeakRaisingCommand())
+
+        worker(
+            command_queue,
+            result_queue,
+            cfw_register,
+            cfw,
+            uuid4(),
+            registered_secrets=frozenset({_REGISTERED}),
+            worker_index=0,
+        )
+
+        cfw_register.set_error.assert_called_once()
+        exc = cfw_register.set_error.call_args.kwargs["exception"]
+        assert _REGISTERED not in repr(exc.as_dict)
+        assert _REGISTERED not in repr(exc.as_list)
+        restored = pickle.loads(pickle.dumps(exc))  # nosec B301
+        assert _REGISTERED not in repr(restored.as_dict)
+        assert _REGISTERED not in repr(restored.as_list)
 
     def test_command_exception_with_secret_in_chained_cause_is_scrubbed(self) -> None:
         ctx = mp_start_context()

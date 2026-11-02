@@ -495,6 +495,7 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
         "{'password': ('a', ('b', ['c', 'd']), 'hunter2z9'), 'user': 'bob'}",
         "{'password': '***', 'user': 'bob'}",
     ),
+    ("private_use_char_in_input_is_replaced", "a\ue001bcd rest", "a\ufffdbcd rest"),
 ]
 
 
@@ -599,6 +600,7 @@ def test_azure_container_uri_kept_unchanged() -> None:
         ("s3://tok@bucket/x.csv", "s3://bucket/x.csv"),
         ("simplecache::s3://tok@bucket/x.csv", "simplecache::s3://bucket/x.csv"),
         ("jdbc:hive2://tok@host/x.csv", "jdbc:hive2://host/x.csv"),
+        ("jdbc:h2:tcp://u:pw@host/db", "jdbc:h2:tcp://host/db"),  # nosec B105
         ("s3://bucket/a@b.csv", "s3://bucket/a@b.csv"),
         ("s3://bucket:9000/x.csv", "s3://bucket:9000/x.csv"),
         ("abfss://cont@acct.dfs.core.windows.net/a%20b.csv", "abfss://cont@acct.dfs.core.windows.net/a%20b.csv"),
@@ -746,8 +748,8 @@ def test_repeated_scheme_prefix_scrubs_fast() -> None:
     assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated scheme prefix"
 
 
-def test_repeated_jdbc_scheme_prefix_scrubs_fast() -> None:
-    text = "jdbc:x://" * 20_000
+@pytest.mark.parametrize("text", ["jdbc:x://" * 20_000, "jdbc:x:" * 20_000, "jdbc:" * 20_000])
+def test_repeated_jdbc_scheme_prefix_scrubs_fast(text: str) -> None:
     start = time.perf_counter()
     scrub_credentials(text)
     elapsed = time.perf_counter() - start
@@ -1156,6 +1158,24 @@ class TestScrubUriProjection:
                 id="jdbc-informix-drops-path-with-secret",
             ),
             pytest.param(
+                "jdbc:h2:tcp://host/~/test;USER=sa;PASSWORD=hunter2", "jdbc:h2:tcp://host", id="jdbc-h2-tcp-drops-path"
+            ),
+            pytest.param("jdbc:h2:tcp://host/~/test", "jdbc:h2:tcp://host/~/test", id="jdbc-h2-tcp-keeps-clean-path"),
+            pytest.param(
+                "jdbc:mysql:loadbalance://h1:3306/db",
+                "jdbc:mysql:loadbalance://h1:3306/db",
+                id="jdbc-mysql-loadbalance-keeps-clean-path",
+            ),
+            pytest.param(
+                "jdbc:jtds:sqlserver://h/db;user=u;password=x", "jdbc:jtds:sqlserver://h", id="jdbc-jtds-drops-path"
+            ),
+            pytest.param("jdbc:a:b:c:d://h/x;k=v", "jdbc:a:b:c:d://h", id="jdbc-four-words-boundary"),
+            pytest.param(
+                "jdbc:jtds:sqlserver://h/db;user=u;password=x, next",
+                "jdbc:jtds:sqlserver://h next",
+                id="jdbc-jtds-drops-path-keeps-text-after-whitespace",
+            ),
+            pytest.param(
                 "postgresql://host/db%3Bpassword=hunter2",
                 "postgresql://host/",
                 id="path-cut-back-to-segment-before-percent-encoded-semicolon",
@@ -1310,6 +1330,9 @@ class TestScrubUriFailClosed:
             ),
             pytest.param("https://host/a/user%2Fhunter2@db.example.com:5432/x", "hunter2", id="encoded-slash-raw-at"),
             pytest.param("https://h/x%22password%22%3A%22hunter2%22", "hunter2", id="encoded-json-pair-in-path"),
+            pytest.param("jdbc:postgresql://h/db;password=hun]ter2", "ter2", id="jdbc-close-bracket-in-secret"),
+            pytest.param("jdbc:postgresql://h/db;password=hun>ter2", "ter2", id="jdbc-gt-in-secret"),
+            pytest.param("jdbc:h2:tcp://host/~/t;PASSWORD=hun]ter2", "ter2", id="jdbc-h2-close-bracket-in-secret"),
             pytest.param(
                 "jdbc:postgresql://h/scott/tiger'@host:1521/svc", "tiger", id="jdbc-quote-before-at-after-path"
             ),

@@ -1120,6 +1120,9 @@ class TestScrubUriProjection:
             ),
             pytest.param("jdbc:postgresql://h:5432/db1", "jdbc:postgresql://h:5432/db1", id="jdbc-keeps-db1"),
             pytest.param("jdbc:postgresql://h:5432/db2", "jdbc:postgresql://h:5432/db2", id="jdbc-keeps-db2"),
+            pytest.param(
+                "'jdbc:postgresql://h:5432/db1'", "'jdbc:postgresql://h:5432/db1'", id="jdbc-quoted-clean-path-kept"
+            ),
             pytest.param("jdbc:hive2://host:10000/a/b", "jdbc:hive2://host:10000/a/b", id="jdbc-keeps-multi-segment"),
             pytest.param("jdbc:postgresql://h/my%20db", "jdbc:postgresql://h/my%20db", id="jdbc-keeps-percent-encoded"),
             pytest.param(
@@ -1307,6 +1310,12 @@ class TestScrubUriFailClosed:
             ),
             pytest.param("https://host/a/user%2Fhunter2@db.example.com:5432/x", "hunter2", id="encoded-slash-raw-at"),
             pytest.param("https://h/x%22password%22%3A%22hunter2%22", "hunter2", id="encoded-json-pair-in-path"),
+            pytest.param(
+                "jdbc:postgresql://h/scott/tiger'@host:1521/svc", "tiger", id="jdbc-quote-before-at-after-path"
+            ),
+            pytest.param(
+                'jdbc:postgresql://h/scott/tiger"@host:1521/svc', "tiger", id="jdbc-double-quote-before-at-after-path"
+            ),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:

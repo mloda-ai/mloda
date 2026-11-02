@@ -1,8 +1,7 @@
 """The ``mloda`` command line: try a demo, explain and run feature requests, or serve them over MCP.
 
-Results are printed as the services return them; exit code 2 means an error result or nothing could run,
-exit code 3 a completed run that reported failed rows. ``explain --format text`` prints the plan steps one per
-line instead of the service JSON.
+Results are printed as the services return them (``explain --format text`` prints one line per plan step);
+exit code 2 means an error result or nothing could run, exit code 3 a completed run that reported failed rows.
 """
 
 import argparse

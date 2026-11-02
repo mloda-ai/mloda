@@ -9,19 +9,18 @@ from urllib.parse import unquote
 _AZURE_CONTAINER_SCHEMES = frozenset({"abfs", "abfss", "wasb", "wasbs"})
 _AZURE_CONTAINER_PATTERN = re.compile(r"[a-z0-9-]{3,63}|\$(?:root|web|logs)")
 
-# Lookbehind on the scheme, not a bare \b: without it, backtracking a scheme match that fails
-# mid-alphanumeric-run against a long run of letters/digits is quadratic in the run's length.
+# The lookbehind (not a bare \b) avoids quadratic backtracking on long alphanumeric runs; the jdbc
+# subprotocol group is bounded (up to four words after `jdbc:`, e.g. `jdbc:h2:tcp`) for the same reason.
+_SCHEME = r"(?<![A-Za-z0-9+.-])(?P<scheme>(?:jdbc:(?:[A-Za-z][A-Za-z0-9+.-]*:){0,3})?[A-Za-z][A-Za-z0-9+.-]*)"
 _FREE_TEXT_URI_PATTERN = re.compile(
-    r"(?<![A-Za-z0-9+.-])(?P<scheme>(?:jdbc:)?[A-Za-z][A-Za-z0-9+.-]*)://"
+    _SCHEME + r"://"
     r"(?:(?P<userinfo>[^/?#\s]*)@)?"
     r"(?P<host>(?:\[[0-9A-Fa-f:.]+\]|[\w.~-]*)(?::\d+)?)"
     r"(?P<path>/[^\s?#\"'<>\]]*)?"
     r"(?:[?#][^\s\"'<>)\]]*)?"
 )
 
-# Same anti-backtracking lookbehind as above: only a scheme-shaped run right after a non-scheme
-# char is even attempted.
-_USERINFO_HEAD = r"(?<![A-Za-z0-9+.-])(?P<scheme>(?:jdbc:)?[A-Za-z][A-Za-z0-9+.-]*)://[^\s/?#@:]*:(?!\d+(?:[?#\s]|$|"
+_USERINFO_HEAD = _SCHEME + r"://[^\s/?#@:]*:(?!\d+(?:[?#\s]|$|"
 _USERINFO_TAIL = r"))(?:(?!://)[^\s@])*@"
 # strip_uri_userinfo feeds a data-access identity, which must name the host a client contacts: `host:port/path` is a host.
 _USERINFO_FALLBACK_PATTERN = re.compile(_USERINFO_HEAD + r"/" + _USERINFO_TAIL)
@@ -98,6 +97,8 @@ _SLASH_DSN_PATTERN = re.compile(
 
 # Non-whitespace text after a jdbc match, cut at the next `://` so repeated URIs scan linearly.
 _JDBC_TAIL_PATTERN = re.compile(r"(?:(?!://)\S)*")
+_JDBC_CUT = ""
+_JDBC_CUT_PATTERN = re.compile(_JDBC_CUT + r"(?:(?!://)\S)*")
 
 
 def _cut_key_value_path(path: str) -> str:
@@ -117,7 +118,7 @@ def _uri_projection(match: re.Match[str]) -> str | None:
     if scheme.startswith("jdbc:"):
         tail = _JDBC_TAIL_PATTERN.search(match.string, match.end())
         if any(mark in path + (tail[0] if tail else "") for mark in "=;@"):
-            return f"{scheme}://{container}{host}"
+            return f"{scheme}://{container}{host}{_JDBC_CUT}"
     if any("=" in segment.partition(":")[2] for segment in path.split("/")):
         return None
     return f"{scheme}://{container}{host}{_cut_hidden_percent(scheme, host, path)}"
@@ -149,9 +150,7 @@ def _drop_free_text_userinfo(text: str, pattern: re.Pattern[str] = _FREE_TEXT_US
     return pattern.sub(r"\g<scheme>://", text)
 
 
-_USER_ONLY_PATTERN = re.compile(
-    r"(?<![A-Za-z0-9+.-])(?P<scheme>(?:jdbc:)?[A-Za-z][A-Za-z0-9+.-]*)://(?P<userinfo>[^/?#\s@]*)@"
-)
+_USER_ONLY_PATTERN = re.compile(_SCHEME + r"://(?P<userinfo>[^/?#\s@]*)@")
 
 
 def _drop_user_only(match: re.Match[str]) -> str:
@@ -257,6 +256,7 @@ def scrub_credentials(text: str) -> str:
 def _scrub_passes(text: str) -> str:
     text = _drop_free_text_userinfo(text)
     text = _FREE_TEXT_URI_PATTERN.sub(_scrub_uri_match, text)
+    text = _JDBC_CUT_PATTERN.sub("", text)  # a dropped jdbc path also takes its token tail
     text = _AUTHORIZATION_PATTERN.sub(lambda m: m["head"] + (f"{m['scheme']} ***" if m["scheme"] else "***"), text)
     text = _BEARER_PATTERN.sub(r"\g<scheme> ***", text)
     text = _KEYWORD_PATTERN.sub(r"\g<keyword>\g<sep>***", text)

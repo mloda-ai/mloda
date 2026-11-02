@@ -160,6 +160,14 @@ def strip_uri_userinfo(text: str) -> str:
     return _USER_ONLY_PATTERN.sub(_drop_user_only, _drop_free_text_userinfo(text, _USERINFO_FALLBACK_PATTERN))
 
 
+_PATH_PARAMETER_PATTERN = re.compile(rf";(?P<key>[\w-]*{_SECRET_NAME})=[^;/]*", re.IGNORECASE)
+
+
+def _mask_path_parameters(uri: str) -> str:
+    """Mask the value of credential-named `;key=value` path parameters."""
+    return _PATH_PARAMETER_PATTERN.sub(r";\g<key>=***", uri)
+
+
 _PLACEHOLDER = "\ue000"
 _REGISTERED_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_registered_secrets", default=frozenset())
 

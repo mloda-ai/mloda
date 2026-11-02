@@ -5,7 +5,11 @@ import os
 from abc import abstractmethod
 from typing import Any, ClassVar, cast
 
-from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials, strip_uri_userinfo
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    _mask_path_parameters,
+    scrub_credentials,
+    strip_uri_userinfo,
+)
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import (
     ClaimRoute,
@@ -175,7 +179,7 @@ class _FileSourceFG(SourceFeatureGroup):
     @staticmethod
     def _source(path: str) -> SourceMatch:
         if "://" in path:
-            source = strip_uri_userinfo(path).partition("?")[0].partition("#")[0]
+            source = _mask_path_parameters(strip_uri_userinfo(path).partition("?")[0].partition("#")[0])
             return SourceMatch(source=source, access=path)
         return SourceMatch(source=os.path.abspath(path), access=path)
 

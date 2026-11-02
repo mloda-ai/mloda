@@ -783,20 +783,16 @@ class TestApiDataNeutralType:
 class TestApiDataScopeAndShapes:
     """Scope binding, subclass transport, THREADING, non-mapping values and foreign-pointer claims."""
 
-    def test_read_returns_a_shallow_copy_of_a_dict_set(self) -> None:
-        values = {"x": [1]}
-        with api_data_scope(lambda: values, "copy_key"):
-            read = read_api_data("copy_key")
-            assert read == values
-            assert read is not values
-
     def test_read_outside_any_scope_raises(self) -> None:
         with pytest.raises(ValueError, match="Cols"):
             read_api_data("Cols")
 
     def test_read_with_a_different_key_than_the_bound_one_raises(self) -> None:
-        with api_data_scope(lambda: {"x": [1]}, "bound_key"):
-            assert read_api_data("bound_key") == {"x": [1]}
+        values = {"x": [1]}
+        with api_data_scope(lambda: values, "bound_key"):
+            read = read_api_data("bound_key")
+            assert read == values
+            assert read is not values
             with pytest.raises(ValueError, match=r"(?s)(?=.*other_key)"):
                 read_api_data("other_key")
 

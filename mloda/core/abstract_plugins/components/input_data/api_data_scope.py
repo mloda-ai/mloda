@@ -29,7 +29,7 @@ def api_data_scope(lookup: Callable[[], Any], key: str) -> Iterator[None]:
 
 
 def read_api_data(key: str) -> Any:
-    """The values of the set bound by the active scope; a dict set comes back as a copy."""
+    """The values of the set bound by the active scope; a dict set comes back as a shallow copy."""
     lookup = _API_DATA_LOOKUP.get()
     if lookup is None:
         raise ValueError(

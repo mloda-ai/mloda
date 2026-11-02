@@ -270,7 +270,11 @@ class TestImplementationsConformToTheReferenceContract:
 
     @pytest.mark.parametrize("aggregation_type", sorted(AGGREGATION_UNIVERSE))
     @pytest.mark.parametrize("scalar", NAN_LIKE_VALUES)
-    @pytest.mark.parametrize("shape", [_SINGLE_COLUMN, _MULTI_COLUMNS], ids=["single", "multi"])
+    @pytest.mark.parametrize(
+        "shape",
+        [_SINGLE_COLUMN, _MULTI_COLUMNS, _ALL_MISSING_SINGLE, _MULTI_WITH_MISSING_ROW],
+        ids=["single", "multi", "all_missing", "multi_missing_row"],
+    )
     def test_python_dict_treats_nan_like_cells_as_missing(
         self, shape: dict[str, list[float | None]], scalar: Any, aggregation_type: str
     ) -> None:
@@ -280,5 +284,6 @@ class TestImplementationsConformToTheReferenceContract:
         }
         actual = _python_dict_result(aggregation_type, columns)
         expected = _reference_result(aggregation_type, shape)
-        assert len(actual) == len(expected)
-        assert all(same(a, e) for a, e in zip(actual, expected))
+        assert len(actual) == len(expected), f"{actual} vs {expected}"
+        differing = [f"{a} != reference {e}" for a, e in zip(actual, expected) if not same(a, e)]
+        assert not differing, differing

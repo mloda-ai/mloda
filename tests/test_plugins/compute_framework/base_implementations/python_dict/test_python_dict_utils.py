@@ -1,5 +1,4 @@
-"""Red-phase tests for the ``columnar_to_rows``, ``homogenize_rows`` (issue 648) and ``result_rows``
-(issue 717) python_dict_utils helpers."""
+"""Tests for the python_dict_utils helpers."""
 
 from collections.abc import Callable
 from decimal import Decimal
@@ -315,6 +314,7 @@ class TestIsMissing:
             pytest.param(np.datetime64("NaT"), id="datetime64_nat"),
             pytest.param(np.timedelta64("NaT"), id="timedelta64_nat"),
             pytest.param(complex("nan"), id="complex_nan"),
+            pytest.param(np.float64("nan"), id="np_float64_nan"),
             *NAN_LIKE_VALUES,
         ],
     )
@@ -326,6 +326,10 @@ class TestIsMissing:
         [
             pytest.param(0, id="zero"),
             pytest.param(1.5, id="float"),
+            pytest.param(np.float64(1.0), id="np_float64"),
+            pytest.param(np.int64(1), id="np_int64"),
+            pytest.param(complex(1, 0), id="complex"),
+            pytest.param(float("inf"), id="float_inf"),
             pytest.param("", id="empty_str"),
             pytest.param("nan", id="nan_str"),
             pytest.param(False, id="false"),

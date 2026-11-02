@@ -109,7 +109,7 @@ OPTIONAL_DEPENDENCIES = ("some_optional_lib",)
 
 The declaration is scoped to the distribution that published it (matched by the installed package, not the entry-point name), so two unrelated packages reusing the same entry-point label never collide.
 
-A root may name a namespace subpackage: `mloda.enterprise` covers `mloda.enterprise` and every module under it, but not `mloda.enterprisex` or the rest of `mloda`. Declare the top package the extra installs, since Python reports the shallowest missing package (`mloda.enterprise`, not `mloda.enterprise.extenders.audit`, when no enterprise package is installed).
+A root may name a namespace subpackage: `mloda.enterprise` covers itself and every module under it, but not `mloda.enterprisex` or the rest of `mloda`. Declare the top package the extra installs, since Python reports the shallowest missing package.
 
 ### Loading
 

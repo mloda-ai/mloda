@@ -72,7 +72,6 @@ CORE_PLUGIN_MODULES: tuple[str, ...] = (
 
 
 def _module_under(name: str | None, root: str) -> bool:
-    """True if name is root or a submodule of it."""
     return name is not None and (name == root or name.startswith(f"{root}."))
 
 

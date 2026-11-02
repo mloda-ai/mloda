@@ -1,5 +1,5 @@
 import copy
-import pickle
+import pickle  # nosec B403
 from copy import deepcopy
 from itertools import islice
 from typing import Any
@@ -665,7 +665,7 @@ class TestOptionsWithCredentialValues:
         marked = Options(group={"chs_vault_token": "chs-vault-main"})
         marked.credential_handle_keys = frozenset({"chs_vault_token"})
 
-        restored = pickle.loads(pickle.dumps(marked))
+        restored = pickle.loads(pickle.dumps(marked))  # nosec B301
 
         assert restored.credential_handle_keys == frozenset({"chs_vault_token"})
         assert "chs-vault-main" in str(restored)

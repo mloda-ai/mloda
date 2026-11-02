@@ -1,0 +1,54 @@
+"""The bundled ``mloda demo``: the README first example on in-memory data, with its resolved plan."""
+
+from collections.abc import Mapping, Sequence
+from typing import Any, TextIO
+
+from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
+from mloda.interfaces.service.config import Settings
+from mloda.user import PluginCollector
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
+
+REQUEST: dict[str, Any] = {
+    "features": ["customer_id", "income", "income__mean_imputed", "age__median_imputed"],
+    "data": {
+        "SampleData": {
+            "customer_id": ["C001", "C002", "C003", "C004", "C005"],
+            "age": [25, None, 45, 30, 50],
+            "income": [50000, 75000, None, 60000, 85000],
+        }
+    },
+}
+SETTINGS = Settings(mode="execute", inline_data=True, trusted_caller=True)
+COLLECTOR = PluginCollector.enabled_feature_groups({ApiDataFG, MissingValueFeatureGroup})
+README_URL = "https://github.com/mloda-ai/mloda#30-second-example"
+
+
+def _aligned(rows: Sequence[Sequence[str]]) -> list[str]:
+    widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]
+    return ["  ".join(cell.ljust(width) for cell, width in zip(row, widths)).rstrip() for row in rows]
+
+
+def _plan_detail(step: Mapping[str, Any]) -> str:
+    detail = ", ".join(step["features"])
+    if step["source"]:
+        return f"{detail}  (source {step['source']})"
+    if step["inputs"]:
+        return f"{detail}  (from {', '.join(step['inputs'])})"
+    return detail
+
+
+def write_demo(explained: Mapping[str, Any], ran: Mapping[str, Any], out: TextIO) -> None:
+    """Print the run result tables, the resolved plan and the onward lines."""
+    out.write("Result\n")
+    blocks = []
+    for table in ran["tables"]:
+        names = [column["name"] for column in table["columns"]]
+        rows = [names] + [[str(row.get(name)) for name in names] for row in table["rows"]]
+        blocks.append("\n".join(_aligned(rows)))
+    out.write("\n\n".join(blocks) + "\n\nPlan\n")
+    steps = explained["steps"]
+    labels = [step["feature_group"] if step["kind"] == "compute" else step["kind"] for step in steps]
+    lines = _aligned([[f"step {step['step']}", label, _plan_detail(step)] for step, label in zip(steps, labels)])
+    out.write("\n".join(lines) + "\n\nNext\n")
+    out.write(f"Edit the README example: {README_URL}\n")
+    out.write('DataFrames: pip install "mloda[pandas]"\n')

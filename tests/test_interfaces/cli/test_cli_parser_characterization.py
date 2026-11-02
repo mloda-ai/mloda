@@ -15,19 +15,20 @@ from mloda.core.version import get_mloda_version
 from mloda.interfaces.cli.main import _parser, main
 
 ROOT_HELP = """\
-usage: mloda [-h] [--version] {explain,run,mcp} ...
+usage: mloda [-h] [--version] {demo,explain,run,mcp} ...
 
 Explain, run or serve mloda feature requests.
 
 positional arguments:
-  {explain,run,mcp}
-    explain          Plan a feature request and print the plan.
-    run              Plan and execute a feature request and print its preview.
-    mcp              Serve the feature catalog, explain and run to MCP clients.
+  {demo,explain,run,mcp}
+    demo                Run a bundled example and show how mloda resolved it.
+    explain             Plan a feature request and print the plan.
+    run                 Plan and execute a feature request and print its preview.
+    mcp                 Serve the feature catalog, explain and run to MCP clients.
 
 options:
-  -h, --help         show this help message and exit
-  --version          show program's version number and exit
+  -h, --help            show this help message and exit
+  --version             show program's version number and exit
 """
 
 EXPLAIN_USAGE = """\
@@ -131,7 +132,14 @@ MCP_SERVE_DEFAULTS: dict[str, Any] = {
     "port": 8000,
 }
 
-ROOT_USAGE = "usage: mloda [-h] [--version] {explain,run,mcp} ...\n"
+ROOT_USAGE = "usage: mloda [-h] [--version] {demo,explain,run,mcp} ...\n"
+
+DEMO_HELP = """\
+usage: mloda demo [-h]
+
+options:
+  -h, --help  show this help message and exit
+"""
 
 
 @pytest.fixture(autouse=True)
@@ -152,6 +160,7 @@ def _cli(argv: Sequence[str]) -> tuple[int, str, str]:
     ("argv", "expected"),
     [
         (["--help"], ROOT_HELP),
+        (["demo", "--help"], DEMO_HELP),
         (["explain", "--help"], EXPLAIN_HELP),
         (["run", "--help"], RUN_HELP),
         (["mcp", "--help"], MCP_HELP),
@@ -169,6 +178,7 @@ def test_version_flag_prints_the_installed_version() -> None:
 @pytest.mark.parametrize(
     ("argv", "expected"),
     [
+        (["demo"], {"command": "demo"}),
         (
             ["explain", "req.json"],
             {
@@ -276,7 +286,8 @@ def test_parsed_namespace_is_pinned(argv: list[str], expected: dict[str, Any]) -
         ([], ROOT_USAGE + "mloda: error: the following arguments are required: command\n"),
         (
             ["bogus"],
-            ROOT_USAGE + "mloda: error: argument command: invalid choice: bogus (choose from explain, run, mcp)\n",
+            ROOT_USAGE
+            + "mloda: error: argument command: invalid choice: bogus (choose from demo, explain, run, mcp)\n",
         ),
         (
             ["run", "req.json", "--format", "xml"],

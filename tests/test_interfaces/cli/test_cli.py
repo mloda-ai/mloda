@@ -831,6 +831,7 @@ class TestUsage:
         assert outcome.code == 0
         printed = self._printed(outcome, capsys)
         assert "usage" in printed.lower()
+        assert "demo" in printed
         assert "explain" in printed
         assert "run" in printed
 
@@ -847,6 +848,64 @@ class TestUsage:
 
         assert outcome.code == 2
         assert "usage" in self._printed(outcome, capsys).lower()
+
+
+DEMO_STDOUT = """\
+Result
+customer_id  income
+C001         50000
+C002         75000
+C003         None
+C004         60000
+C005         85000
+
+income__mean_imputed  age__median_imputed
+50000                 25
+75000                 37.5
+67500                 45
+60000                 30
+85000                 50
+
+Plan
+step 1  ApiDataFG                 age, customer_id, income  (source SampleData)
+step 2  MissingValueFeatureGroup  age__median_imputed, income__mean_imputed  (from age, income)
+
+Next
+Edit the README example: https://github.com/mloda-ai/mloda#30-second-example
+DataFrames: pip install "mloda[pandas]"
+"""
+
+
+class TestDemo:
+    def test_demo_prints_result_plan_and_next_steps(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli(["demo"], env={})
+
+        assert outcome.code == 0, outcome.err
+        assert outcome.out == DEMO_STDOUT
+        assert outcome.err == ""
+
+    @pytest.mark.parametrize(
+        ("toml", "env"),
+        [
+            ("[mcp]\nnot_a_key = 1\n", {}),
+            (None, {"MLODA_MCP_MODE": "plan"}),
+            ("[mcp]\nnot_a_key = 1\n", {"MLODA_MCP_MODE": "plan"}),
+        ],
+    )
+    def test_demo_ignores_config_file_and_mcp_env(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, toml: str | None, env: dict[str, str]
+    ) -> None:
+        cwd = _elsewhere(tmp_path, monkeypatch)
+        if toml is not None:
+            (cwd / "mloda.toml").write_text(toml, encoding="utf-8")
+
+        outcome = _cli(["demo"], env=env)
+
+        assert outcome.code == 0, outcome.err
+        assert outcome.out == DEMO_STDOUT
+        assert outcome.err == ""
 
 
 class TestPackaging:

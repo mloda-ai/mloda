@@ -10,6 +10,7 @@
 
 ```bash
 pip install mloda
+uvx mloda demo   # or try it first without installing anything
 ```
 
 ## 30-Second Example

@@ -73,7 +73,18 @@ def main(readme: Path, dist: Path) -> int:
         script = Path(tmp) / "first_example.py"
         script.write_text(code, encoding="utf-8")
         run = _run("run README first example", [python, "-I", str(script)], env=_clean_env())
+        mloda_script = str(
+            venv / ("Scripts" if os.name == "nt" else "bin") / ("mloda.exe" if os.name == "nt" else "mloda")
+        )
+        demo = _run("run mloda demo", [mloda_script, "demo"], env=_clean_env())
         print(_summary())
+        if demo.returncode != 0 or demo.stderr.strip():
+            print(f"mloda demo failed, exit code {demo.returncode}\nstdout:\n{demo.stdout}\nstderr:\n{demo.stderr}")
+            return 1
+        missing = [s for s in ("ApiDataFG", "MissingValueFeatureGroup", "37.5", _PANDAS_HINT) if s not in demo.stdout]
+        if missing:
+            print(f"mloda demo output lacks {missing}\nstdout:\n{demo.stdout}\nstderr:\n{demo.stderr}")
+            return 1
         if run.returncode != 0:
             print(f"first example failed, exit code {run.returncode}\nstdout:\n{run.stdout}\nstderr:\n{run.stderr}")
             return 1

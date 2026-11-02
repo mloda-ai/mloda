@@ -131,6 +131,12 @@ class TestIcebergFrameworkSupportedParallelizationModes:
 class TestSetupComputeFrameworkParallelizationModeFiltering:
     """Tests for SetupComputeFramework filtering by parallelization_modes."""
 
+    @pytest.fixture(autouse=True)
+    def _frameworks_available(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Make the mode filter, not library availability, decide the outcome."""
+        for framework in (SparkFramework, IcebergFramework, DuckDBFramework):
+            monkeypatch.setattr(framework, "is_available", staticmethod(lambda: True))
+
     def test_multiprocessing_mode_excludes_sqlite_framework(self) -> None:
         """Passing parallelization_modes={MULTIPROCESSING} with user_compute_frameworks=[SqliteFramework]
         must raise ValueError because SqliteFramework only supports SYNC.

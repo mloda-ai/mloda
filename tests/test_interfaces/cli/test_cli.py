@@ -895,7 +895,13 @@ DataFrames: pip install "mloda[pandas]"
 
 class TestDemo:
     def test_plan_lines_name_the_groups_of_transform_and_join_steps(self) -> None:
-        idle: dict[str, Any] = {"features": [], "source": None, "inputs": [], "source_feature_group": None}
+        idle: dict[str, Any] = {
+            "features": [],
+            "source": None,
+            "inputs": [],
+            "source_feature_group": None,
+            "join_type": None,
+        }
         steps = [
             {
                 **idle,
@@ -904,12 +910,16 @@ class TestDemo:
                 "feature_group": "CsvFG",
                 "features": ["customer_id", "income"],
                 "source": "sales",
-                "join_type": None,
             },
-            {**idle, "step": 2, "kind": "transform", "feature_group": "JsonFG", "source_feature_group": "CsvFG"}
-            | {"join_type": None},
-            {**idle, "step": 3, "kind": "join", "feature_group": "CsvFG", "source_feature_group": "JsonFG"}
-            | {"join_type": "inner"},
+            {**idle, "step": 2, "kind": "transform", "feature_group": "JsonFG", "source_feature_group": "CsvFG"},
+            {
+                **idle,
+                "step": 3,
+                "kind": "join",
+                "feature_group": "CsvFG",
+                "source_feature_group": "JsonFG",
+                "join_type": "inner",
+            },
         ]
 
         assert demo.plan_lines(steps) == [

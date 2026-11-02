@@ -132,7 +132,9 @@ class PythonDictFramework(ComputeFramework):
             if isinstance(val, bytes):
                 return DataType.BINARY
             if isinstance(val, datetime.datetime):
-                return DataType.TIMESTAMP_MICROS
+                return DataType.TIMESTAMP_MICROS if val.utcoffset() is None else DataType.TIMESTAMP_MICROS_TZ
+            if isinstance(val, list):
+                return DataType.LIST
             if isinstance(val, datetime.date):
                 return DataType.DATE
             if isinstance(val, decimal.Decimal):

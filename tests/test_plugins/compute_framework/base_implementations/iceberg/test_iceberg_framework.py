@@ -42,6 +42,9 @@ try:
         NestedField,
         StringType,
         TimestampType,
+        TimestamptzType,
+        ListType,
+        StructType,
     )
 except ImportError:
     logger.warning("PyIceberg or PyArrow is not installed. Some tests will be skipped.")
@@ -57,6 +60,9 @@ except ImportError:
     NestedField = None  # type: ignore
     StringType = None  # type: ignore
     TimestampType = None  # type: ignore
+    TimestamptzType = None  # type: ignore
+    ListType = None  # type: ignore
+    StructType = None  # type: ignore
 
 
 _ICEBERG_TYPE_MAP: dict[DataType, Any] = (
@@ -293,6 +299,20 @@ class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
+    EXTENDED_SKIPS = {
+        "int8_col": "Iceberg has no 8-bit integer type",
+        "uint8_col": "Iceberg has no unsigned integer types",
+        "uint64_col": "Iceberg has no unsigned integer types",
+        "int16_col": "Iceberg has no 16-bit integer type",
+        "uint16_col": "Iceberg has no unsigned integer types",
+        "uint32_col": "Iceberg has no unsigned integer types",
+    }
+
+    @pytest.fixture
+    def extended_sample_data(self, spec: ColumnSpec) -> Any:
+        self._skip_if_unsupported(spec)
+        return self._build_iceberg((spec,))
+
     @pytest.fixture
     def validator_sample_data(self) -> Any:
         return self._build_iceberg(self.VALIDATOR_COLUMNS)
@@ -301,14 +321,29 @@ class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def precision_sample_data(self) -> Any:
         return self._build_iceberg(self.PRECISION_COLUMNS)
 
+    @staticmethod
+    def _iceberg_type(spec: ColumnSpec) -> Any:
+        # Extended columns derive their Iceberg type from the explicit Arrow type (ListType needs an element type).
+        if spec.data_type == DataType.TIMESTAMP_MICROS_TZ:
+            return TimestamptzType()
+        if spec.data_type == DataType.LIST:
+            element = spec.arrow_type.value_type  # type: ignore[union-attr]
+            if element == pa.string():
+                return ListType(100, StringType(), element_required=False)
+            if element == pa.int64():
+                return ListType(100, LongType(), element_required=False)
+            struct = StructType(NestedField(101, "x", LongType(), required=False))
+            return ListType(100, struct, element_required=False)
+        return _ICEBERG_TYPE_MAP[spec.data_type]
+
     def _build_iceberg(self, columns: tuple[ColumnSpec, ...]) -> Any:
         # Iceberg needs explicit NestedField/IcebergType per column; the schema carries no
         # values. _ICEBERG_TYPE_MAP omits TIMESTAMP_MILLIS, so unsupported columns are
         # filtered out (the MILLIS test methods skip explicitly).
         fields = [
-            NestedField(i + 1, c.name, _ICEBERG_TYPE_MAP[c.data_type])
+            NestedField(i + 1, c.name, self._iceberg_type(c))
             for i, c in enumerate(columns)
-            if c.data_type in _ICEBERG_TYPE_MAP
+            if c.arrow_type is not None or c.data_type in _ICEBERG_TYPE_MAP
         ]
         return self._wrap_schema(Schema(*fields))
 

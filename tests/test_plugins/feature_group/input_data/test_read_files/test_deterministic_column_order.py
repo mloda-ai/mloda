@@ -160,13 +160,23 @@ class TestDeterministicColumnOrder:
         assert described == {"a": DataType.INT64, "b": DataType.STRING}
 
     def test_parquet_describe_columns_maps_unmapped_nested_type_to_none(self, tmp_path: Path) -> None:
-        table = pa.Table.from_pydict({"a": [1, 2, 3], "nested": [[1, 2], [3], []]})
+        nested = pa.array([{"x": 1}, {"x": 2}, {"x": 3}], type=pa.struct([("x", pa.int64())]))
+        table = pa.table({"a": pa.array([1, 2, 3]), "nested": nested})
         file_path = str(tmp_path / "nested.parquet")
         pyarrow_parquet.write_table(table, file_path)
 
         described = _group("parquet_fg", "ParquetFG").describe_columns(_match(file_path))
 
         assert described == {"a": DataType.INT64, "nested": None}
+
+    def test_parquet_describe_columns_maps_list_type_to_list(self, tmp_path: Path) -> None:
+        table = pa.Table.from_pydict({"a": [1, 2, 3], "nested": [[1, 2], [3], []]})
+        file_path = str(tmp_path / "list.parquet")
+        pyarrow_parquet.write_table(table, file_path)
+
+        described = _group("parquet_fg", "ParquetFG").describe_columns(_match(file_path))
+
+        assert described == {"a": DataType.INT64, "nested": DataType.LIST}
 
     def test_parquet_column_names_returns_top_level_names_for_nested_column(self, tmp_path: Path) -> None:
         """Must report top-level names, not pyarrow's leaf-flattened nested fields, and agree with describe_columns."""

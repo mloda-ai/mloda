@@ -5,13 +5,14 @@ from typing import Any
 import pytest
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
-from mloda.user import FeatureName
+from mloda.user import DataType, FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dict_interchange_output_schema_test_mixin import (
@@ -324,12 +325,24 @@ class TestDuckDBDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
         return DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
     @pytest.fixture
+    def extended_sample_data(self, spec: ColumnSpec, connection: Any) -> Any:
+        self._skip_if_unsupported(spec)
+        return DuckdbRelation.from_arrow(connection, self._arrow_table((spec,)))
+
+    @pytest.fixture
     def validator_sample_data(self, connection: Any) -> Any:
         return DuckdbRelation.from_arrow(connection, self._arrow_table(self.VALIDATOR_COLUMNS))
 
     @pytest.fixture
     def precision_sample_data(self, connection: Any) -> Any:
         return DuckdbRelation.from_arrow(connection, self._arrow_table(self.PRECISION_COLUMNS))
+
+    @pytest.mark.parametrize("list_size", [-1, 2])
+    def test_list_of_decimal_resolves_to_list(self, framework_instance: Any, connection: Any, list_size: int) -> None:
+        list_type = pa.list_(pa.decimal128(10, 2), list_size)
+        table = pa.table({"c": pa.array([[Decimal("1.00"), Decimal("2.00")]], type=list_type)})
+        relation = DuckdbRelation.from_arrow(connection, table)
+        assert framework_instance._extract_column_data_type(relation, "c") == DataType.LIST
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")

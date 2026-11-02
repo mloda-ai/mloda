@@ -54,9 +54,40 @@ class TestFromArrowType:
     def test_to_arrow_type_decimal_is_decimal128_38_18(self) -> None:
         assert DataType.to_arrow_type(DataType.DECIMAL) == pa.decimal128(38, 18)
 
+    def test_from_arrow_type_widths_without_member_resolve_to_next_lossless(self) -> None:
+        assert DataType.from_arrow_type(pa.int16()) == DataType.INT32
+        assert DataType.from_arrow_type(pa.uint16()) == DataType.INT32
+        assert DataType.from_arrow_type(pa.uint32()) == DataType.INT64
+
+    @pytest.mark.parametrize("unit", ["s", "ms", "us", "ns"])
+    @pytest.mark.parametrize("tz", ["UTC", "Europe/Berlin"])
+    def test_from_arrow_type_tz_aware_any_unit(self, unit: str, tz: str) -> None:
+        assert DataType.from_arrow_type(pa.timestamp(unit, tz=tz)) == DataType.TIMESTAMP_MICROS_TZ
+
+    @pytest.mark.parametrize(
+        "arrow_type",
+        [
+            pa.list_(pa.int32()),
+            pa.list_(pa.string()),
+            pa.large_list(pa.int64()),
+            pa.list_(pa.int32(), 3),
+            pa.list_(pa.struct([("x", pa.int32())])),
+        ],
+    )
+    def test_from_arrow_type_list_family(self, arrow_type: pa.DataType) -> None:
+        assert DataType.from_arrow_type(arrow_type) == DataType.LIST
+
+    @pytest.mark.parametrize("data_type", [DataType.TIMESTAMP_MICROS_TZ, DataType.LIST])
+    def test_to_arrow_type_raises_without_data(self, data_type: DataType) -> None:
+        with pytest.raises(ValueError):
+            DataType.to_arrow_type(data_type)
+
     def test_from_arrow_type_round_trip(self) -> None:
         """Test that converting to arrow and back preserves the DataType."""
         all_data_types = [
+            DataType.INT8,
+            DataType.UINT8,
+            DataType.UINT64,
             DataType.INT32,
             DataType.INT64,
             DataType.FLOAT,
@@ -80,7 +111,7 @@ class TestFromArrowType:
         """Test that unsupported PyArrow types raise ValueError."""
         # Test with a type that shouldn't be supported
         with pytest.raises(ValueError, match="Unsupported.*"):
-            DataType.from_arrow_type(pa.list_(pa.int32()))
+            DataType.from_arrow_type(pa.map_(pa.string(), pa.int32()))
 
         with pytest.raises(ValueError, match="Unsupported.*"):
             DataType.from_arrow_type(pa.struct([("field1", pa.int32())]))
@@ -131,9 +162,29 @@ class TestInferTypeFromPyType:
     def test_infer_arrow_timestamp_scalar(self) -> None:
         assert DataType.infer_type_from_py_type(pa.scalar(1, type=pa.timestamp("us"))) == DataType.TIMESTAMP_MICROS
 
+    def test_infer_aware_datetime_maps_to_timestamp_tz(self) -> None:
+        aware = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.UTC)
+        assert DataType.infer_type_from_py_type(aware) == DataType.TIMESTAMP_MICROS_TZ
+
+    def test_infer_arrow_tz_timestamp_scalar(self) -> None:
+        scalar = pa.scalar(1, type=pa.timestamp("us", tz="UTC"))
+        assert DataType.infer_type_from_py_type(scalar) == DataType.TIMESTAMP_MICROS_TZ
+
+    def test_infer_arrow_tz_timestamp_array(self) -> None:
+        array = pa.array([1, 2], type=pa.timestamp("us", tz="UTC"))
+        assert DataType.infer_type_from_py_type(array) == DataType.TIMESTAMP_MICROS_TZ
+
+    def test_infer_arrow_naive_timestamp_array(self) -> None:
+        array = pa.array([1, 2], type=pa.timestamp("us"))
+        assert DataType.infer_type_from_py_type(array) == DataType.TIMESTAMP_MICROS
+
+    def test_infer_list(self) -> None:
+        assert DataType.infer_type_from_py_type([1, 2, 3]) == DataType.LIST
+        assert DataType.infer_type_from_py_type([]) == DataType.LIST
+
     def test_infer_unsupported_type(self) -> None:
         with pytest.raises(ValueError, match="Unsupported data type"):
-            DataType.infer_type_from_py_type([1, 2, 3])
+            DataType.infer_type_from_py_type({"a": 1})
 
     def test_boolean_before_int(self) -> None:
         """bool is a subclass of int, so must be checked first."""

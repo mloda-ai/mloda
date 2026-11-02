@@ -1386,10 +1386,10 @@ def compute_framework_subclasses() -> set[type[ComputeFramework]]:
 
 
 def unavailable_framework_message(framework: type[ComputeFramework]) -> str:
-    message = f"{framework.get_class_name()} is not available: its library is not installed."
+    name = framework.get_class_name()
     if framework.INSTALL_HINT is None:
-        return message
-    return f"{message} Install it with: {framework.INSTALL_HINT}"
+        return f"{name} is not available in this environment."
+    return f"{name} is not available: its library is not installed. Install it with: {framework.INSTALL_HINT}"
 
 
 def unregistered_frameworks_hint(candidates: Iterable[object]) -> str | None:

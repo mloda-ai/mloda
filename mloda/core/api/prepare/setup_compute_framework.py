@@ -40,11 +40,7 @@ class SetupComputeFramework:
                 user_compute_frameworks, available_compute_frameworks
             )
             if not any(cls.is_available() for cls in matched):
-                raise ValueError(
-                    " ".join(
-                        unavailable_framework_message(cls) for cls in sorted(matched, key=lambda c: c.get_class_name())
-                    )
-                )
+                raise ValueError(" ".join(sorted({unavailable_framework_message(cls) for cls in matched})))
             # Same-named classes share the index of the first entry naming them.
             preference = {s: self._position(s, user_compute_frameworks) for s in matched}
             available_compute_frameworks = matched

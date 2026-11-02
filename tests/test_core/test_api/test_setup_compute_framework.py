@@ -294,8 +294,25 @@ class TestSetupComputeFramework:
             SetupComputeFramework(["ZzSetupNoHintFramework"], features)
 
         message = str(exc_info.value)
-        assert "ZzSetupNoHintFramework is not available: its library is not installed." in message
+        assert "ZzSetupNoHintFramework is not available in this environment." in message
+        assert "library is not installed" not in message
         assert "Install it" not in message
+
+    def test_identical_unavailable_messages_are_listed_once(self, features: Features) -> None:
+        def make() -> type[ComputeFramework]:
+            class ZzSetupDuplicateMessageFramework(ComputeFramework):
+                @staticmethod
+                def is_available() -> bool:
+                    return False
+
+            return ZzSetupDuplicateMessageFramework
+
+        first, second = make(), make()
+
+        with pytest.raises(ValueError) as exc_info:
+            SetupComputeFramework([first, second], features)
+
+        assert str(exc_info.value).count("ZzSetupDuplicateMessageFramework is not available") == 1
 
     def test_unavailable_framework_with_custom_install_hint_names_it(self, features: Features) -> None:
         class ZzSetupCustomHintFramework(ComputeFramework):

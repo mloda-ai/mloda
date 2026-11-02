@@ -12,6 +12,9 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.python_dict import PythonDictAggregation
 
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
+from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_calculate_test_mixin import (
+    AggregatedCalculateTestMixin,
+)
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
     AggregatedZeroRowTestMixin,
 )
@@ -65,17 +68,6 @@ class TestPythonDictAggregation:
         assert twice["x__sum_aggr"] == [2] * 5
         assert list(twice).count("x__sum_aggr") == 1
 
-    def test_calculate_feature_multiple(self, sample_data: dict[str, list[Any]]) -> None:
-        feature_set = FeatureSet()
-        feature_set.add(Feature("sales__sum_aggr"))
-        feature_set.add(Feature("price__avg_aggr"))
-
-        result = PythonDictAggregation.calculate(AggregatedFeatureGroup, sample_data, feature_set, None)
-
-        assert result["sales__sum_aggr"] == [1500] * 5
-        assert result["price__avg_aggr"] == [pytest.approx(9.0)] * 5
-        assert result["sales"] == [100, 200, 300, 400, 500]
-
     def test_calculate_leaves_the_input_dict_unchanged(self, sample_data: dict[str, list[Any]]) -> None:
         feature_set = FeatureSet()
         feature_set.add(Feature("sales__sum_aggr"))
@@ -91,6 +83,10 @@ class TestPythonDictAggregation:
 
 
 class TestPythonDictAggregatedZeroRow(PythonDictZeroRowAdapter, AggregatedZeroRowTestMixin):
+    feature_group_class = PythonDictAggregation
+
+
+class TestPythonDictAggregatedCalculate(PythonDictZeroRowAdapter, AggregatedCalculateTestMixin):
     feature_group_class = PythonDictAggregation
 
 

@@ -45,9 +45,18 @@ class ZeroRowResultTypeTestMixin:
     def column_type(self, result: Any, column: str) -> Any:
         raise NotImplementedError
 
-    def calculate(self, table: pa.Table, feature: Feature) -> Any:
+    @abstractmethod
+    def column_names(self, result: Any) -> list[str]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def column_values(self, result: Any, column: str) -> list[Any]:
+        raise NotImplementedError
+
+    def calculate(self, table: pa.Table, *features: Feature) -> Any:
         feature_set = FeatureSet()
-        feature_set.add(feature)
+        for feature in features:
+            feature_set.add(feature)
         data = self.from_arrow(table)
         if issubclass(self.feature_group_class, Implementation):
             return self.feature_group_class.calculate(self.feature_group_class.feature_group, data, feature_set, None)
@@ -73,6 +82,12 @@ class PandasZeroRowAdapter(ZeroRowResultTypeTestMixin):
     def column_type(self, result: Any, column: str) -> Any:
         return result[column].dtype
 
+    def column_names(self, result: Any) -> list[str]:
+        return list(result.columns)
+
+    def column_values(self, result: Any, column: str) -> list[Any]:
+        return result[column].tolist()
+
 
 class PyArrowZeroRowAdapter(ZeroRowResultTypeTestMixin):
     """pyarrow Table containers; the null type means the column lost its type."""
@@ -87,6 +102,12 @@ class PyArrowZeroRowAdapter(ZeroRowResultTypeTestMixin):
 
     def column_type(self, result: Any, column: str) -> Any:
         return result.column(column).type
+
+    def column_names(self, result: Any) -> list[str]:
+        return list(result.schema.names)
+
+    def column_values(self, result: Any, column: str) -> list[Any]:
+        return result.column(column).to_pylist()
 
 
 class PolarsLazyZeroRowAdapter(ZeroRowResultTypeTestMixin):
@@ -103,6 +124,12 @@ class PolarsLazyZeroRowAdapter(ZeroRowResultTypeTestMixin):
     def column_type(self, result: Any, column: str) -> Any:
         return result.collect()[column].dtype
 
+    def column_names(self, result: Any) -> list[str]:
+        return list(result.collect_schema().names())
+
+    def column_values(self, result: Any, column: str) -> list[Any]:
+        return result.collect()[column].to_list()
+
 
 class PythonDictZeroRowAdapter(ZeroRowResultTypeTestMixin):
     """Columnar dicts hold dtype-less lists, so the check reduces to: the result column exists with zero rows."""
@@ -117,3 +144,9 @@ class PythonDictZeroRowAdapter(ZeroRowResultTypeTestMixin):
 
     def column_type(self, result: Any, column: str) -> Any:
         return type(result[column])
+
+    def column_names(self, result: Any) -> list[str]:
+        return list(result)
+
+    def column_values(self, result: Any, column: str) -> list[Any]:
+        return list(result[column])

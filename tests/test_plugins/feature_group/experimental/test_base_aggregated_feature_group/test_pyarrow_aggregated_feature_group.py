@@ -14,6 +14,9 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 
+from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_calculate_test_mixin import (
+    AggregatedCalculateTestMixin,
+)
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
     AggregatedZeroRowTestMixin,
 )
@@ -175,65 +178,10 @@ class TestPyArrowAggregation:
         with pytest.raises(ValueError):
             PyArrowAggregation._perform_aggregation(sample_table, "invalid", ["sales"])
 
-    def test_calculate_feature_single(self, sample_table: pa.Table, feature_set_sum: FeatureSet) -> None:
-        """Test calculate_feature method with a single aggregation."""
-        result = PyArrowAggregation.calculate(AggregatedFeatureGroup, sample_table, feature_set_sum, None)
-
-        # Check that the result contains the original data plus the aggregated feature
-        assert "sales__sum_aggr" in result.schema.names
-        assert result.column("sales__sum_aggr")[0].as_py() == 1500  # Sum of [100, 200, 300, 400, 500]
-
-        # Check that the original data is preserved
-        assert "sales" in result.schema.names
-        assert "quantity" in result.schema.names
-        assert "price" in result.schema.names
-        assert "discount" in result.schema.names
-        assert "customer_rating" in result.schema.names
-
-    def test_calculate_feature_multiple(self, sample_table: pa.Table, feature_set_multiple: FeatureSet) -> None:
-        """Test calculate_feature method with multiple aggregations."""
-        result = PyArrowAggregation.calculate(AggregatedFeatureGroup, sample_table, feature_set_multiple, None)
-
-        # Check that the result contains all aggregated features
-        assert "sales__sum_aggr" in result.schema.names
-        assert result.column("sales__sum_aggr")[0].as_py() == 1500  # Sum of [100, 200, 300, 400, 500]
-
-        assert "price__avg_aggr" in result.schema.names
-        assert result.column("price__avg_aggr")[0].as_py() == 9.0  # Avg of [10.0, 9.5, 9.0, 8.5, 8.0]
-
-        assert "discount__min_aggr" in result.schema.names
-        assert result.column("discount__min_aggr")[0].as_py() == 0.1  # Min of [0.1, 0.2, 0.15, 0.25, 0.1]
-
-        assert "customer_rating__max_aggr" in result.schema.names
-        assert result.column("customer_rating__max_aggr")[0].as_py() == 5  # Max of [4, 5, 3, 4, 5]
-
-        # Check that the original data is preserved
-        assert "sales" in result.schema.names
-        assert "quantity" in result.schema.names
-        assert "price" in result.schema.names
-        assert "discount" in result.schema.names
-        assert "customer_rating" in result.schema.names
-
     def test_calculate_feature_missing_source(self, sample_table: pa.Table) -> None:
         """Test calculate_feature method with missing source feature."""
         error = assert_core_rejects_missing_input(PyArrowAggregation, sample_table, "missing__sum_aggr", ("missing",))
         assert "sales" in error.available_columns
-
-    def test_calculate_feature_invalid_aggregation(self, sample_table: pa.Table) -> None:
-        """Test calculate_feature method with invalid aggregation type."""
-        # Temporarily modify the AGGREGATION_TYPES to simulate an invalid aggregation type
-        original_types = AggregatedFeatureGroup.AGGREGATION_TYPES.copy()
-        try:
-            AggregatedFeatureGroup.AGGREGATION_TYPES = {"sum": "Sum of values"}
-
-            feature_set = FeatureSet()
-            feature_set.add(Feature("sales__min_aggr"))
-
-            with pytest.raises(ValueError, match="Unsupported aggregation type: min"):
-                PyArrowAggregation.calculate(AggregatedFeatureGroup, sample_table, feature_set, None)
-        finally:
-            # Restore the original AGGREGATION_TYPES
-            AggregatedFeatureGroup.AGGREGATION_TYPES = original_types
 
     def test_add_result_to_data_zero_rows_keeps_scalar_type(self, zero_row_table: pa.Table) -> None:
         """_add_result_to_data given a typed null scalar on a zero-row table must keep that type."""
@@ -260,6 +208,10 @@ class TestPyArrowAggregation:
 
 
 class TestPyArrowAggregatedZeroRow(PyArrowZeroRowAdapter, AggregatedZeroRowTestMixin):
+    feature_group_class = PyArrowAggregation
+
+
+class TestPyArrowAggregatedCalculate(PyArrowZeroRowAdapter, AggregatedCalculateTestMixin):
     feature_group_class = PyArrowAggregation
 
 

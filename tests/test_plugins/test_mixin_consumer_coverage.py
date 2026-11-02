@@ -23,6 +23,9 @@ from mloda_plugins.feature_group.experimental.data_quality.missing_value.base im
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import FilterEngineTestMixin
 from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import MaskEngineTestMixin
+from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_calculate_test_mixin import (
+    AggregatedCalculateTestMixin,
+)
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
     AggregatedZeroRowTestMixin,
 )
@@ -51,6 +54,17 @@ CONTRACTS: tuple[MixinContract, ...] = (
     MixinContract(
         AggregatedFeatureGroup,
         AggregatedZeroRowTestMixin,
+        "feature_group_class",
+        (
+            f"{_EXPERIMENTAL}.test_base_aggregated_feature_group.test_aggregated_feature_group",
+            f"{_EXPERIMENTAL}.test_base_aggregated_feature_group.test_polars_lazy_aggregated_feature_group",
+            f"{_EXPERIMENTAL}.test_base_aggregated_feature_group.test_pyarrow_aggregated_feature_group",
+            f"{_EXPERIMENTAL}.test_base_aggregated_feature_group.test_python_dict_aggregated_feature_group",
+        ),
+    ),
+    MixinContract(
+        AggregatedFeatureGroup,
+        AggregatedCalculateTestMixin,
         "feature_group_class",
         (
             f"{_EXPERIMENTAL}.test_base_aggregated_feature_group.test_aggregated_feature_group",

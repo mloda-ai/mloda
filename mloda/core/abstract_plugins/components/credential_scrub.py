@@ -97,8 +97,9 @@ _SLASH_DSN_PATTERN = re.compile(
 
 # Non-whitespace text after a jdbc match, cut at the next `://` so repeated URIs scan linearly.
 _JDBC_TAIL_PATTERN = re.compile(r"(?:(?!://)\S)*")
-_JDBC_CUT = ""
-_JDBC_CUT_PATTERN = re.compile(_JDBC_CUT + r"(?:(?!://)\S)*")
+# Private-use marker _uri_projection appends after a dropped jdbc path; _scrub_passes cuts it with the token tail.
+_JDBC_CUT = "\ue001"
+_JDBC_CUT_PATTERN = re.compile(_JDBC_CUT + _JDBC_TAIL_PATTERN.pattern)
 
 
 def _cut_key_value_path(path: str) -> str:
@@ -254,6 +255,7 @@ def scrub_credentials(text: str) -> str:
 
 
 def _scrub_passes(text: str) -> str:
+    text = text.replace(_JDBC_CUT, "\ufffd")
     text = _drop_free_text_userinfo(text)
     text = _FREE_TEXT_URI_PATTERN.sub(_scrub_uri_match, text)
     text = _JDBC_CUT_PATTERN.sub("", text)  # a dropped jdbc path also takes its token tail

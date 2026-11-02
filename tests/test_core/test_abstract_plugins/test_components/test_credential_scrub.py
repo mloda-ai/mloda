@@ -495,6 +495,7 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
         "{'password': ('a', ('b', ['c', 'd']), 'hunter2z9'), 'user': 'bob'}",
         "{'password': '***', 'user': 'bob'}",
     ),
+    ("private_use_char_in_input_is_replaced", "a\ue001bcd rest", "a\ufffdbcd rest"),
 ]
 
 
@@ -1169,6 +1170,11 @@ class TestScrubUriProjection:
                 "jdbc:jtds:sqlserver://h/db;user=u;password=x", "jdbc:jtds:sqlserver://h", id="jdbc-jtds-drops-path"
             ),
             pytest.param("jdbc:a:b:c:d://h/x;k=v", "jdbc:a:b:c:d://h", id="jdbc-four-words-boundary"),
+            pytest.param(
+                "jdbc:jtds:sqlserver://h/db;user=u;password=x, next",
+                "jdbc:jtds:sqlserver://h next",
+                id="jdbc-jtds-drops-path-keeps-text-after-whitespace",
+            ),
             pytest.param(
                 "postgresql://host/db%3Bpassword=hunter2",
                 "postgresql://host/",

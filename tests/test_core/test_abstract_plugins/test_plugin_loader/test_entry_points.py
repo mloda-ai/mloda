@@ -1040,6 +1040,92 @@ class TestLoadEntryPointsOptionalDependenciesDeclaration:
             f"expected the skip to be logged at WARNING naming the entry point, got: {warning_messages}"
         )
 
+    @staticmethod
+    def _dotted_root_distribution(
+        base_dir: Path, pkg: str, import_target: str, declared_root: str, existing_pkgs: tuple[str, ...]
+    ) -> None:
+        manifest = f"""
+        import {import_target}
+
+        from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+
+        class EpDottedFG(FeatureGroup):
+            pass
+
+
+        FEATURE_GROUPS = [EpDottedFG]
+        """
+        _build_distribution(
+            base_dir,
+            pkg,
+            manifest,
+            f"""
+            [mloda.feature_groups]
+            demo = {pkg}.manifest:FEATURE_GROUPS
+
+            [mloda.optional_dependencies]
+            demo = {pkg}.optional_deps:OPTIONAL_DEPENDENCIES
+            """,
+        )
+        _write_module(base_dir, pkg, "optional_deps", f"OPTIONAL_DEPENDENCIES = frozenset({{{declared_root!r}}})")
+        for existing in existing_pkgs:
+            init = base_dir / Path(*existing.split(".")) / "__init__.py"
+            init.parent.mkdir(parents=True, exist_ok=True)
+            init.write_text("")
+        importlib.invalidate_caches()
+
+    @pytest.mark.parametrize(
+        ("case", "missing_suffix", "existing_suffixes", "foreign"),
+        [
+            pytest.param("same_eq", "enterprise", (), False, id="same_namespace_whole_subpackage_missing"),
+            pytest.param(
+                "same_deep", "enterprise.feature_groups", ("enterprise",), False, id="same_namespace_deeper_missing"
+            ),
+            pytest.param("foreign", "enterprise", (), True, id="foreign_namespace"),
+        ],
+    )
+    def test_declared_dotted_root_skips_entry_point(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        case: str,
+        missing_suffix: str,
+        existing_suffixes: tuple[str, ...],
+        foreign: bool,
+    ) -> None:
+        pkg = f"eptest_dotroot_{case}"
+        ns = f"eptest_dotroot_{case}_other" if foreign else pkg
+        missing = f"{ns}.{missing_suffix}"
+        existing = tuple(f"{ns}.{s}" for s in existing_suffixes) + ((ns,) if foreign else ())
+        self._dotted_root_distribution(tmp_path, pkg, f"{ns}.enterprise.feature_groups.x", f"{ns}.enterprise", existing)
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        keys = PluginLoader().load_entry_points()
+
+        assert not any(key.startswith(f"{pkg}.") for key in keys)
+        assert PluginRegistry.default().get(f"{pkg}.manifest:EpDottedFG") is None
+        assert PluginLoader.skipped_plugins() == {f"demo ({pkg}.manifest:FEATURE_GROUPS)": missing}
+
+    @pytest.mark.parametrize(
+        ("case", "imported_suffix", "missing_suffix"),
+        [
+            pytest.param("sibling", "other.x", "other", id="undeclared_sibling"),
+            pytest.param("noboundary", "enterprisex.x", "enterprisex", id="no_dot_boundary"),
+        ],
+    )
+    def test_declared_dotted_root_does_not_cover_unrelated_module(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str, imported_suffix: str, missing_suffix: str
+    ) -> None:
+        pkg = f"eptest_dotneg_{case}"
+        self._dotted_root_distribution(tmp_path, pkg, f"{pkg}.{imported_suffix}", f"{pkg}.enterprise", ())
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with pytest.raises(ModuleNotFoundError) as exc_info:
+            PluginLoader().load_entry_points()
+
+        assert exc_info.value.name == f"{pkg}.{missing_suffix}"
+
 
 def _build_malformed_marker_distribution(base_dir: Path, pkg_name: str, marker_source: str) -> None:
     """A distribution whose only entry point is a `mloda.optional_dependencies` marker labelled `pkg_name`."""

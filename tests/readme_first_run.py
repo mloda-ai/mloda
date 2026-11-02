@@ -18,6 +18,7 @@ _FIRST_EXAMPLE = re.compile(
     re.DOTALL,
 )
 _ABSENT_MODULES = ("pandas", "pyarrow", "numpy")
+_PANDAS_HINT = 'pip install "mloda[pandas]"'
 _timings: list[tuple[str, float]] = []
 
 
@@ -76,11 +77,30 @@ def main(readme: Path, dist: Path) -> int:
         if run.returncode != 0:
             print(f"first example failed, exit code {run.returncode}\nstdout:\n{run.stdout}\nstderr:\n{run.stderr}")
             return 1
+        if run.stderr.strip():
+            print(f"first example must run quietly, stderr was:\n{run.stderr}")
+            return 1
         if expected is None:
             print("README has no ```text block after the first example")
             return 1
         if run.stdout.strip() != expected.strip():
             print(f"stdout differs from README\nexpected:\n{expected.strip()}\nactual:\n{run.stdout.strip()}")
+            return 1
+
+        pandas_code = code.replace('"PythonDictFramework"', '"PandasDataFrame"')
+        assert pandas_code != code, 'README first example must name "PythonDictFramework"'
+        pandas_script = Path(tmp) / "pandas_example.py"
+        pandas_script.write_text(pandas_code, encoding="utf-8")
+        # Not recorded in the time-to-first-success timings.
+        # Safe: argv is the temp venv python and a script written above, no shell.
+        pandas_run = subprocess.run(  # nosec B603
+            [python, "-I", str(pandas_script)], capture_output=True, text=True, env=_clean_env(), timeout=300
+        )
+        if pandas_run.returncode == 0:
+            print("pandas request must fail on a bare install, but exited 0")
+            return 1
+        if _PANDAS_HINT not in pandas_run.stderr or "No feature groups found" in pandas_run.stderr:
+            print(f"pandas request must name the missing extra {_PANDAS_HINT}, stderr was:\n{pandas_run.stderr}")
             return 1
     return 0
 

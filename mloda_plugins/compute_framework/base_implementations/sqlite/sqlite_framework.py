@@ -34,6 +34,8 @@ def _regexp(pattern: str, string: str | None) -> bool:
 
 
 class SqliteFramework(ComputeFramework):
+    INSTALL_HINT = 'pip install "mloda[sqlite]"'
+
     def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
         if framework_connection_object is None:
             raise ValueError(

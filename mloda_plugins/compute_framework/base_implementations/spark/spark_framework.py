@@ -48,6 +48,8 @@ class SparkFramework(ComputeFramework):
     It requires a SparkSession to be provided through the framework connection object.
     """
 
+    INSTALL_HINT = 'pip install "mloda[spark]"'
+
     def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
         """Use given SparkSession connection."""
         if SparkSession is None:

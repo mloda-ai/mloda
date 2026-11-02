@@ -42,6 +42,18 @@ def _write_fake_base_package_bad_from_import(
     importlib.invalidate_caches()
 
 
+def _assert_skip_logged_at_debug_only(caplog: pytest.LogCaptureFixture, missing: str) -> None:
+    debug_messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.DEBUG and record.name == plugin_loader_module.__name__
+    ]
+    assert any(missing in message for message in debug_messages), (
+        f"expected a DEBUG message naming the missing module, got: {debug_messages}"
+    )
+    assert not [record for record in caplog.records if record.levelno >= logging.WARNING]
+
+
 def _raise_import_error(module_name: str, message: str = "boom") -> None:
     """Raise ImportError from a frame whose f_globals['__name__'] is module_name."""
     code = compile(f"raise ImportError({message!r})", "<tb_test>", "exec")
@@ -295,17 +307,14 @@ class TestLoadPluginTransitiveOptionalDependency:
         loader = PluginLoader()
         loader.base_package = base_pkg
 
-        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+        with caplog.at_level(logging.DEBUG, logger=plugin_loader_module.__name__):
             loader._load_plugin(submodule)
 
         assert f"{base_pkg}.{submodule}" not in loader.plugins
-        warning_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
-        assert any(missing_subdep in message for message in warning_messages), (
-            f"expected a WARNING message naming the missing transitive module, got: {warning_messages}"
-        )
+        _assert_skip_logged_at_debug_only(caplog, missing_subdep)
         assert PluginLoader.skipped_plugins() == {f"{base_pkg}.{submodule}": missing_subdep}
 
-    def test_second_load_of_same_skipped_module_warns_only_once(
+    def test_second_load_of_same_skipped_module_logs_skip_only_once(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         optional_root_pkg = "pltest_repeat_optional_dep"
@@ -326,16 +335,19 @@ class TestLoadPluginTransitiveOptionalDependency:
         loader = PluginLoader()
         loader.base_package = base_pkg
 
-        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+        with caplog.at_level(logging.DEBUG, logger=plugin_loader_module.__name__):
             loader._load_plugin(submodule)
             loader._load_plugin(submodule)
 
-        warning_count = sum(
+        skip_count = sum(
             1
             for record in caplog.records
-            if record.levelno == logging.WARNING and record.name == plugin_loader_module.__name__
+            if record.levelno == logging.DEBUG
+            and record.name == plugin_loader_module.__name__
+            and missing_subdep in record.getMessage()
         )
-        assert warning_count == 1, f"expected exactly one WARNING across two loads, got {warning_count}"
+        assert skip_count == 1, f"expected exactly one DEBUG skip record across two loads, got {skip_count}"
+        assert not [record for record in caplog.records if record.levelno >= logging.WARNING]
 
     def test_module_healed_after_dependency_becomes_importable_drops_from_record(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -446,14 +458,11 @@ class TestLoadPluginPlainImportError:
         loader = PluginLoader()
         loader.base_package = base_pkg
 
-        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+        with caplog.at_level(logging.DEBUG, logger=plugin_loader_module.__name__):
             loader._load_plugin(submodule)
 
         assert f"{base_pkg}.{submodule}" not in loader.plugins
-        warning_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
-        assert any(root_module in message for message in warning_messages), (
-            f"expected a WARNING message naming the missing root, got: {warning_messages}"
-        )
+        _assert_skip_logged_at_debug_only(caplog, root_module)
         assert PluginLoader.skipped_plugins() == {f"{base_pkg}.{submodule}": root_module}
 
     def test_undeclared_root_import_error_still_propagates(
@@ -510,15 +519,12 @@ class TestLoadGroupContinuesPastSkippedPlugin:
         loader = PluginLoader()
         loader.base_package = base_pkg
 
-        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+        with caplog.at_level(logging.DEBUG, logger=plugin_loader_module.__name__):
             loader.load_group(group_name)
 
         assert f"{base_pkg}.{group_name}.broken" not in loader.plugins
         assert f"{base_pkg}.{group_name}.good" in loader.plugins
-        warning_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
-        assert any(missing_subdep in message for message in warning_messages), (
-            f"expected a WARNING message naming the missing transitive module, got: {warning_messages}"
-        )
+        _assert_skip_logged_at_debug_only(caplog, missing_subdep)
         assert PluginLoader.skipped_plugins() == {f"{base_pkg}.{group_name}.broken": missing_subdep}
 
 

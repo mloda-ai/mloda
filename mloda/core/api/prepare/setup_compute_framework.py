@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from mloda.core.abstract_plugins.compute_framework import (
     ComputeFramework,
     compute_framework_subclasses,
+    unavailable_framework_message,
     unregistered_frameworks_hint,
 )
 from mloda.core.abstract_plugins.components.feature_collection import Features
@@ -38,6 +39,8 @@ class SetupComputeFramework:
             matched = self.filter_user_set_in_available_sub_classes(
                 user_compute_frameworks, available_compute_frameworks
             )
+            if not any(cls.is_available() for cls in matched):
+                raise ValueError(" ".join(sorted({unavailable_framework_message(cls) for cls in matched})))
             # Same-named classes share the index of the first entry naming them.
             preference = {s: self._position(s, user_compute_frameworks) for s in matched}
             available_compute_frameworks = matched
@@ -66,6 +69,11 @@ class SetupComputeFramework:
         available = PreFilterPlugins.get_cfw_subclasses()
         matches = [cls for cls in available if cls is output or cls.get_class_name() == output]
         if not matches:
+            unavailable = [
+                cls for cls in compute_framework_subclasses() if cls is output or cls.get_class_name() == output
+            ]
+            if len(unavailable) == 1:
+                raise ValueError(f"output_framework {output!r}: {unavailable_framework_message(unavailable[0])}")
             names = sorted(cls.get_class_name() for cls in available)
             raise ValueError(f"output_framework {output!r} is not an available compute framework: {names}.")
         if len(matches) > 1:
@@ -76,12 +84,15 @@ class SetupComputeFramework:
         self, features: Features, available_compute_frameworks: set[type[ComputeFramework]]
     ) -> None:
         for feature in features.collection:
-            if feature.compute_frameworks and not any(
-                cf in available_compute_frameworks for cf in feature.compute_frameworks
-            ):
-                raise ValueError(
-                    f"Feature {feature.name} has compute frameworks {feature.compute_frameworks} not in {available_compute_frameworks}."
-                )
+            if not feature.compute_frameworks:
+                continue
+            none_available = not any(cf.is_available() for cf in feature.compute_frameworks)
+            hint = " ".join(sorted({unavailable_framework_message(cf) for cf in feature.compute_frameworks}))
+            if not any(cf in available_compute_frameworks for cf in feature.compute_frameworks):
+                message = f"Feature {feature.name} has compute frameworks {feature.compute_frameworks} not in {available_compute_frameworks}."
+                raise ValueError(f"{message} {hint}" if none_available else message)
+            if none_available:
+                raise ValueError(f"Feature {feature.name}: {hint}")
 
     def _filter_by_parallelization_modes(
         self,

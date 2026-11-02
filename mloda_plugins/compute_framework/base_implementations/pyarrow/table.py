@@ -57,6 +57,8 @@ def arrow_append_columns(data: Any, columns: dict[str, Any]) -> Any | None:
 
 
 class PyArrowTable(ComputeFramework):
+    INSTALL_HINT = 'pip install "mloda[pyarrow]"'
+
     @staticmethod
     def is_available() -> bool:
         """Check if PyArrow is installed and available."""

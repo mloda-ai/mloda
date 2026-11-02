@@ -395,7 +395,7 @@ class PluginLoader:
                 already_recorded = self._skipped.get(full_module_name) == dependency
                 self._skipped[full_module_name] = dependency
                 if not already_recorded:
-                    logger.warning("Skipping plugin %s: missing optional dependency %s", full_module_name, dependency)
+                    logger.debug("Skipping plugin %s: missing optional dependency %s", full_module_name, dependency)
                 return
             raise
 

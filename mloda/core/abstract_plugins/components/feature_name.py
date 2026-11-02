@@ -6,6 +6,3 @@ class FeatureName(str):
         if isinstance(name, FeatureName):
             return name
         return super().__new__(cls, name)
-
-    def __repr__(self) -> str:
-        return f"FeatureName({super().__repr__()})"

@@ -80,7 +80,11 @@ class RunResult(list[Any]):
                 snapshot = {**snapshot, "connection_handle": self._connection_handles.get(id(feature.connection))}
             return snapshot
 
-        group: dict[Any, Any] | None = None if isinstance(feature, str) else {}
+        group: dict[Any, Any] | None = None
+        if not isinstance(feature, str):
+            group = snapshot_group(feature.options.group)
+            if feature.connection is not None:
+                group["connection_handle"] = self._connection_handles.get(id(feature.connection))
         digests = {} if isinstance(feature, str) else match_digests(feature.options.group)
         pinned = None if isinstance(feature, str) else feature.compute_frameworks
         frames = self.frames()

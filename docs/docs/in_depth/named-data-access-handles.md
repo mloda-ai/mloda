@@ -237,6 +237,8 @@ PROPERTY_MAPPING = {
 }
 ```
 
+A handle value is a public name, never a secret: it appears in errors, the plan and the content hash.
+
 The option is a group option (never context), strictly validated, and never settable by an MCP caller. Planning
 fails, in `prepare()`, `explain()` and `run_all()` alike, with an error naming the option, group and handle (never a
 credential value) when:

@@ -51,6 +51,8 @@ from tests.test_core.test_abstract_plugins.test_multi_column_auto_resolution imp
     MultiColumnProducer,
     MultiColumnTestDataCreator,
 )
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsVaultFG
 from tests.test_core.test_api.test_plan_info import PlanInfoPandasSource
 
 _PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoPandasSource, AggregatedFeatureGroup})
@@ -708,6 +710,28 @@ class TestRunResultFrameFor:
 
         assert "s3cretpw" not in str(ambiguous.value)
         assert "s3cretpw" not in str(no_match.value)
+        assert "source_table" in str(no_match.value)
+        assert "'C'" in str(no_match.value)
+
+    def test_frame_for_a_handle_feature_succeeds_and_a_miss_names_the_requested_options(self) -> None:
+        secret = "chs-secret-value-1234"  # nosec B105
+
+        def feature(other: int) -> Feature:
+            return Feature("chs_vault_a", options={HANDLE_KEY: "vault-main", "chs_other": other})
+
+        results = mlodaAPI.run_all(
+            [feature(5)],
+            compute_frameworks=[PandasDataFrame],
+            parallelization_modes={ParallelizationMode.SYNC},
+            data_access_collection=DataAccessCollection(credentials={"vault-main": {"key": secret}}),
+            plugin_collector=PluginCollector.enabled_feature_groups({ChsVaultFG}),
+        )
+
+        assert results.frame_for(feature(5)) is not None
+        with pytest.raises(ValueError) as no_match:
+            results.frame_for(feature(6))
+        assert "chs_other" in str(no_match.value)
+        assert secret not in str(no_match.value)
 
     def test_multi_output_feature_is_found_by_its_base_name(self) -> None:
         results = mlodaAPI.run_all(

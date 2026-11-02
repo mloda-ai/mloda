@@ -1,4 +1,5 @@
 import copy
+import pickle
 from copy import deepcopy
 from itertools import islice
 from typing import Any
@@ -659,6 +660,15 @@ class TestOptionsWithCredentialValues:
         assert hash(marked) == hash(plain)
         assert Options().credential_handle_keys == frozenset()
         assert "chs-vault-main" in str(marked.rebuild({"chs_vault_token": "chs-vault-main"}, {}))
+
+    def test_the_handle_key_mark_survives_a_pickle_round_trip(self) -> None:
+        marked = Options(group={"chs_vault_token": "chs-vault-main"})
+        marked.credential_handle_keys = frozenset({"chs_vault_token"})
+
+        restored = pickle.loads(pickle.dumps(marked))
+
+        assert restored.credential_handle_keys == frozenset({"chs_vault_token"})
+        assert "chs-vault-main" in str(restored)
 
     def test_str_redacts_a_reader_tuple_in_reserved_key_context(self) -> None:
         """Only the reserved reader tuple is masked; a plain non-reader dict stays readable."""

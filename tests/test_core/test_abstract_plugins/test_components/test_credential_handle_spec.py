@@ -1,4 +1,4 @@
-"""credential_handle_spec: builder invariants, plan-time handle validation, plan records and display."""
+"""credential_handle_spec: plan-time handle validation, plan records and display."""
 
 from abc import abstractmethod
 from collections.abc import Callable
@@ -18,7 +18,7 @@ from mloda.provider import (
     credential_handle_spec,
 )
 from mloda.steward import plan_content_hash
-from mloda.user import Credential, Feature, FeatureName, PluginCollector, mloda
+from mloda.user import Credential, Feature, FeatureName, FilterType, GlobalFilter, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 SECRET = "chs-secret-value-1234"  # nosec B105
@@ -361,6 +361,46 @@ class TestPlanTimeRefusals:
         assert SECRET not in message
 
 
+class TestGlobalFilterFeatures:
+    """A feature added only through a global filter is validated like any requested feature."""
+
+    @staticmethod
+    def _prepare_with_filter(filter_feature: Feature) -> Any:
+        global_filter = GlobalFilter()
+        global_filter.add_filter(filter_feature, FilterType.EQUAL, {"value": 1})
+        return mloda.prepare(
+            [_vault("vault-main")],
+            compute_frameworks=[PandasDataFrame],
+            data_access_collection=_dac(**{"vault-main": {"key": SECRET}}),
+            plugin_collector=_plugins(ChsVaultFG),
+            global_filter=global_filter,
+        )
+
+    def test_an_unknown_handle_is_refused_naming_the_handle(self) -> None:
+        with pytest.raises(ValueError) as exc:
+            self._prepare_with_filter(_vault("vault-typo", "chs_vault_b"))
+
+        assert "vault-typo" in str(exc.value)
+        assert SECRET not in str(exc.value)
+
+    def test_a_non_str_handle_value_is_refused_without_printing_it(self) -> None:
+        feature = Feature("chs_vault_b", options={HANDLE_KEY: {"password": OTHER_SECRET}})
+
+        with pytest.raises(ValueError) as exc:
+            self._prepare_with_filter(feature)
+
+        assert OTHER_SECRET not in str(exc.value)
+
+    def test_a_handle_in_context_is_refused_naming_the_key(self) -> None:
+        feature = Feature("chs_vault_b", options=Options(group={}, context={HANDLE_KEY: "vault-main"}))
+
+        with pytest.raises(ValueError) as exc:
+            self._prepare_with_filter(feature)
+
+        assert HANDLE_KEY in str(exc.value)
+        assert "group" in str(exc.value)
+
+
 class TestPlanRecords:
     def test_two_handles_split_two_steps_each_recording_its_handle(self) -> None:
         dac = _dac(**{"vault-a": {"key": SECRET}, "vault-b": {"key": OTHER_SECRET}})
@@ -460,3 +500,13 @@ class TestDisplay:
         options = next(iter(session.engine.feature_group_collection[ChsRawSecretFG])).options
 
         assert SECRET not in str(options)
+
+    def test_a_mark_copied_from_another_group_does_not_survive_intake(self) -> None:
+        options = Options(group={HANDLE_KEY: SECRET})
+        options.credential_handle_keys = frozenset({HANDLE_KEY})
+
+        session = _prepare([Feature("chs_raw_a", options=options)], None, _plugins(ChsRawSecretFG))
+
+        stored = next(iter(session.engine.feature_group_collection[ChsRawSecretFG])).options
+        assert SECRET not in str(stored)
+        assert stored.credential_handle_keys == frozenset()

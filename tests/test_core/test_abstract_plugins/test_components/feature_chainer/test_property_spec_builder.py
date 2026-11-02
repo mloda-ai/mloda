@@ -787,10 +787,28 @@ class TestCredentialHandleSpecBuilder:
         with pytest.raises(ValueError):
             credential_handle_spec("Vault.", **{field: bad})
 
-    @pytest.mark.parametrize("overrides", [{"context": True}, {"strict_validation": False}, {"caller_settable": True}])
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"context": True},
+            {"strict_validation": False},
+            {"caller_settable": True},
+            {"match_guard": lambda value: True, "expected": "a name"},
+            {"allowed_values": ("vault-x",)},
+            {"required_when": lambda options: True},
+            {"name_converter": str},
+        ],
+    )
     def test_direct_construction_cannot_loosen_the_fixed_fields(self, overrides: dict[str, Any]) -> None:
+        fixed = {
+            "context": False,
+            "strict_validation": True,
+            "caller_settable": False,
+            "element_validator": credential_handle_spec("Vault.").element_validator,
+        }
+        CredentialHandleSpec("Vault.", **fixed)
         with pytest.raises(ValueError):
-            CredentialHandleSpec("Vault.", **overrides)
+            CredentialHandleSpec("Vault.", **{**fixed, **overrides})
 
     def test_direct_construction_requires_the_element_validator(self) -> None:
         with pytest.raises(ValueError):

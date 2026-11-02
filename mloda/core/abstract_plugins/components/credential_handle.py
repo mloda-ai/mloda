@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.components.property_spec import NO_DEFAULT, PropertySpec
-from mloda.core.abstract_plugins.components.utils import escalate_match_abort
+from mloda.core.abstract_plugins.components.utils import PREFIX_OPTION_KEY_FLAG, escalate_match_abort
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -26,7 +26,7 @@ def _handle_element_validator(value: Any) -> bool:
     error = ValueError(
         f"A credential handle must be a non-empty str naming a registered credential, got {type(value).__name__}."
     )
-    error.__dict__["prefix_option_key"] = True
+    error.__dict__[PREFIX_OPTION_KEY_FLAG] = True
     raise escalate_match_abort(error)
 
 
@@ -53,6 +53,9 @@ class CredentialHandleSpec(PropertySpec):
             raise ValueError(f"{prefix}: context=False, strict_validation=True and caller_settable=False are fixed.")
         if self.element_validator is not _handle_element_validator:
             raise ValueError(f"{prefix}: the handle element validator is fixed.")
+        for name in ("match_guard", "allowed_values", "required_when", "name_converter"):
+            if getattr(self, name) is not None:
+                raise ValueError(f"{prefix}: {name} must stay None for a credential handle.")
         object.__setattr__(self, "required_fields", _field_names(self, "required_fields", self.required_fields))
         object.__setattr__(self, "public_fields", _field_names(self, "public_fields", self.public_fields))
 

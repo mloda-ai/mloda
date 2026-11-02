@@ -17,6 +17,7 @@ E = TypeVar("E", bound=BaseException)
 
 # Provenance marker for a framework-owned raise. Not an exception type: the object must stay exactly as raised.
 MATCH_ABORT_FLAG = "_mloda_match_abort"
+PREFIX_OPTION_KEY_FLAG = "prefix_option_key"
 DEFERRED_MATCH_ABORT_FLAG = "_mloda_deferred_match_abort"
 
 # Exception classes a user callable raises when it merely cannot judge a value.

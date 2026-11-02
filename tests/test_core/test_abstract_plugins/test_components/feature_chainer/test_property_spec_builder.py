@@ -18,6 +18,7 @@ PROPERTY_MAPPING key. See ``test_property_mapping_spec_shape.py``.
 from __future__ import annotations
 
 import copy
+import dataclasses
 import pickle  # nosec B403
 from typing import Any
 
@@ -33,7 +34,9 @@ from mloda.core.abstract_plugins.components.property_spec import _NoDefault, is_
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import NO_DEFAULT, PropertySpec, property_spec
+from mloda.core.abstract_plugins.components.credential_handle import CredentialHandleSpec
+from mloda.core.abstract_plugins.components.utils import is_match_abort
+from mloda.provider import NO_DEFAULT, PropertySpec, credential_handle_spec, property_spec, validate_property_values
 
 
 def _build(*args: Any, **kwargs: Any) -> PropertySpec:
@@ -758,20 +761,68 @@ class TestPropertySpecCallerSettable:
 class TestCredentialHandleSpecBuilder:
     """``credential_handle_spec`` is a PropertySpec builder with the handle fields fixed."""
 
-    def test_builder_is_exported_and_returns_a_property_spec_with_fixed_fields(self) -> None:
-        from mloda.provider import credential_handle_spec
+    def test_builder_fixes_the_marker_fields(self) -> None:
+        spec = credential_handle_spec("Vault.")
 
-        spec = credential_handle_spec("Vault.", required_fields=("a",), public_fields=("b",))
-
+        assert isinstance(spec, CredentialHandleSpec)
         assert isinstance(spec, PropertySpec)
         assert (spec.context, spec.strict_validation, spec.caller_settable) == (False, True, False)
-        assert (spec.required_fields, spec.public_fields) == (("a",), ("b",))
+        assert callable(spec.element_validator)
+        assert (spec.required_fields, spec.public_fields) == ((), ())
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            spec.required_fields = ("x",)  # type: ignore[misc]
 
     def test_builder_rejects_the_property_spec_keywords_it_fixes(self) -> None:
-        from mloda.provider import credential_handle_spec
-
         with pytest.raises(TypeError):
             credential_handle_spec("Vault.", context=True)  # type: ignore[call-arg]
+
+    def test_field_lists_are_materialized_to_tuples(self) -> None:
+        spec = credential_handle_spec("Vault.", required_fields=["a", "b"], public_fields=["c"])  # type: ignore[arg-type]
+
+        assert (spec.required_fields, spec.public_fields) == (("a", "b"), ("c",))
+
+    @pytest.mark.parametrize("field", ["required_fields", "public_fields"])
+    @pytest.mark.parametrize("bad", [("",), (1,), "abc"])
+    def test_malformed_field_names_are_refused(self, field: str, bad: Any) -> None:
+        with pytest.raises(ValueError):
+            credential_handle_spec("Vault.", **{field: bad})
+
+    @pytest.mark.parametrize("overrides", [{"context": True}, {"strict_validation": False}, {"caller_settable": True}])
+    def test_direct_construction_cannot_loosen_the_fixed_fields(self, overrides: dict[str, Any]) -> None:
+        with pytest.raises(ValueError):
+            CredentialHandleSpec("Vault.", **overrides)
+
+    def test_direct_construction_requires_the_element_validator(self) -> None:
+        with pytest.raises(ValueError):
+            CredentialHandleSpec("Vault.", context=False, strict_validation=True, caller_settable=False)
+
+    def test_str_none_and_missing_defaults_are_accepted(self) -> None:
+        assert credential_handle_spec("Vault.", default="vault-x").default == "vault-x"
+        assert credential_handle_spec("Vault.", default=None).default is None
+        assert credential_handle_spec("Vault.").default is NO_DEFAULT
+
+    @pytest.mark.parametrize("bad", [5, ["vault-x"], ""])
+    def test_non_str_default_is_refused_at_construction(self, bad: Any) -> None:
+        with pytest.raises(ValueError):
+            credential_handle_spec("Vault.", default=bad)
+
+    def test_element_validator_accepts_str_and_aborts_on_anything_else(self) -> None:
+        validator = credential_handle_spec("Vault.").element_validator
+        assert validator is not None
+        assert validator("vault-x") is True
+
+        with pytest.raises(ValueError) as exc:
+            validator(987654321)
+        assert is_match_abort(exc.value)
+        assert "int" in str(exc.value)
+        assert "987654321" not in str(exc.value)
+
+    def test_the_spec_flows_through_validate_property_values(self) -> None:
+        mapping = {"vault_token": credential_handle_spec("Vault.")}
+
+        validate_property_values({"vault_token": "vault-x"}, mapping, closed_world=True)
+        with pytest.raises(ValueError):
+            validate_property_values({"vault_token": 987654321}, mapping, closed_world=True)
 
 
 class TestPropertySpecNameConverter:

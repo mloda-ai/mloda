@@ -41,9 +41,9 @@ It never holds option values, `data_access_identity`, feature group or implement
 
 ## Declared credential handles
 
-The content hash includes the name of a declared credential handle, never the credential. A CI lock check registers a
-placeholder credential under each declared handle (for example `Credential(key="ci-placeholder")` under
-`pii-hmac-key`, 8 characters or longer), because `explain()` validates handles like `prepare()`. See
+The content hash includes the name of a declared credential handle, never the credential. `explain()` validates
+handles like `prepare()`, so a CI lock check registers a placeholder credential (8 characters or longer, with the
+required fields) under each declared handle. See
 [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle).
 
 ## Structure hash

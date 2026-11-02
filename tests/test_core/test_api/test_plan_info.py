@@ -1252,22 +1252,6 @@ class TestPlanStepFeatureSetOptions:
         )
         assert "chs-nested-secret-1" not in str(nested)
 
-    def test_a_declared_handle_shows_in_the_explain_snapshot_under_a_credential_shaped_key(self) -> None:
-        from tests.test_core.test_abstract_plugins.test_components.test_credential_handle_spec import ChsVaultFG
-
-        explained = mloda.explain(
-            [Feature("chs_vault_a", options={"chs_vault_token": "chs-vault-main"})],
-            compute_frameworks=[PandasDataFrame],
-            data_access_collection=DataAccessCollection(
-                credentials={"chs-vault-main": {"key": "chs-secret-value-1234"}}
-            ),
-            plugin_collector=PluginCollector.enabled_feature_groups({ChsVaultFG}),
-        )
-
-        step = next(s for s in explained if s.feature_group is ChsVaultFG)
-        assert step.feature_set_options is not None
-        assert step.feature_set_options.group["chs_vault_token"] == "chs-vault-main"
-
     @pytest.mark.parametrize("container", [list, tuple])
     def test_the_snapshot_masks_a_credential_key_inside_a_sequence_of_mappings(self, container: type) -> None:
         sources = container([{"password": "plan-seq-secret", "host": "h"}])  # nosec B105

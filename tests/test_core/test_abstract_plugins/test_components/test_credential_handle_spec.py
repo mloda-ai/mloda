@@ -1,74 +1,38 @@
 """credential_handle_spec: builder invariants, plan-time handle validation, plan records and display."""
 
-import dataclasses
 from abc import abstractmethod
 from collections.abc import Callable
 from typing import Any
 
-import pandas as pd
 import pytest
 
-from mloda.core.abstract_plugins.components.credential_handle import CredentialHandleSpec
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsRawSecretFG, ChsSource, ChsVaultFG
 from mloda.provider import (
-    NO_DEFAULT,
     ComputeFramework,
-    DataCreatorFeatureGroup,
     FeatureGroup,
-    FeatureSet,
-    PropertySpec,
     credential_handle_spec,
-    property_spec,
-    validate_property_values,
 )
 from mloda.steward import plan_content_hash
 from mloda.user import Credential, Feature, FeatureName, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
-HANDLE_KEY = "chs_vault_token"
 SECRET = "chs-secret-value-1234"  # nosec B105
 OTHER_SECRET = "chs-other-secret-5678"  # nosec B105
 BYTES_SECRET = b"chs-bytes-secret-9012"
 
 
-class _ChsSource(DataCreatorFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pd.DataFrame({name: [1, 2, 3] for name in features.get_all_names()})
-
-
-class ChsVaultFG(_ChsSource):
-    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"chs_vault_a", "chs_vault_b"}
-
-
-class ChsFallbackFG(_ChsSource):
+class ChsFallbackFG(ChsSource):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"chs_vault_a"}
 
 
-class ChsRawSecretFG(_ChsSource):
-    PROPERTY_MAPPING = {HANDLE_KEY: property_spec("Raw secret, not a handle.", default=None)}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"chs_raw_a"}
-
-
-class ChsDefaultFG(_ChsSource):
+class ChsDefaultFG(ChsSource):
     PROPERTY_MAPPING = {
         "chs_default_handle": credential_handle_spec("Defaulted handle.", default="vault-default"),
         "chs_optional_handle": credential_handle_spec("Optional handle.", default=None),
@@ -79,7 +43,7 @@ class ChsDefaultFG(_ChsSource):
         return {"chs_default_a"}
 
 
-class ChsTwoHandleFG(_ChsSource):
+class ChsTwoHandleFG(ChsSource):
     PROPERTY_MAPPING = {
         "chs_two_z_handle": credential_handle_spec("Second handle."),
         "chs_two_a_handle": credential_handle_spec("First handle."),
@@ -90,7 +54,7 @@ class ChsTwoHandleFG(_ChsSource):
         return {"chs_two_a"}
 
 
-class ChsFieldsFG(_ChsSource):
+class ChsFieldsFG(ChsSource):
     PROPERTY_MAPPING = {
         "chs_fields_handle": credential_handle_spec("Needs fields.", required_fields=("chs_user", "chs_pass"))
     }
@@ -100,7 +64,7 @@ class ChsFieldsFG(_ChsSource):
         return {"chs_fields_a"}
 
 
-class ChsCustomMatchFG(_ChsSource):
+class ChsCustomMatchFG(ChsSource):
     PROPERTY_MAPPING = {"chs_custom_handle": credential_handle_spec("Custom matcher handle.")}
 
     @classmethod
@@ -117,7 +81,7 @@ class ChsCustomMatchFG(_ChsSource):
         return str(feature_name) == "chs_custom_a"
 
 
-class ChsAbstractFG(_ChsSource):
+class ChsAbstractFG(ChsSource):
     PROPERTY_MAPPING = {"chs_abstract_handle": credential_handle_spec("Abstract handle.")}
 
     @classmethod
@@ -128,13 +92,13 @@ class ChsAbstractFG(_ChsSource):
     def chs_hook(self) -> None: ...
 
 
-class ChsConcreteFG(_ChsSource):
+class ChsConcreteFG(ChsSource):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"chs_abstract_a"}
 
 
-class ChsGatedFG(_ChsSource):
+class ChsGatedFG(ChsSource):
     PROPERTY_MAPPING = {"chs_gated_handle": credential_handle_spec("Gated handle.")}
 
     @classmethod
@@ -146,7 +110,7 @@ class ChsGatedFG(_ChsSource):
         return Domain("chs_dom_a")
 
 
-class ChsOpenDomainFG(_ChsSource):
+class ChsOpenDomainFG(ChsSource):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"chs_domain_a"}
@@ -156,7 +120,7 @@ class ChsOpenDomainFG(_ChsSource):
         return Domain("chs_dom_b")
 
 
-class ChsFrameworkLoserFG(_ChsSource):
+class ChsFrameworkLoserFG(ChsSource):
     PROPERTY_MAPPING = {"chs_loser_handle": credential_handle_spec("Loses on framework.")}
 
     @classmethod
@@ -175,7 +139,7 @@ class ChsFrameworkLoserFG(_ChsSource):
         return False
 
 
-class ChsLoserWinnerFG(_ChsSource):
+class ChsLoserWinnerFG(ChsSource):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"chs_loser_a"}
@@ -225,67 +189,6 @@ def _refusal(
 
 def _steps(session: Any, group: type[FeatureGroup]) -> list[FeatureGroupStep]:
     return [s for s in session.engine.execution_planner if isinstance(s, FeatureGroupStep) and s.feature_group is group]
-
-
-class TestSpecBuilder:
-    def test_builder_fixes_the_marker_fields(self) -> None:
-        spec = credential_handle_spec("Vault.")
-
-        assert isinstance(spec, CredentialHandleSpec)
-        assert isinstance(spec, PropertySpec)
-        assert (spec.context, spec.strict_validation, spec.caller_settable) == (False, True, False)
-        assert callable(spec.element_validator)
-        assert (spec.required_fields, spec.public_fields) == ((), ())
-        with pytest.raises(dataclasses.FrozenInstanceError):
-            spec.required_fields = ("x",)  # type: ignore[misc]
-
-    def test_field_lists_are_materialized_to_tuples(self) -> None:
-        spec = credential_handle_spec("Vault.", required_fields=["a", "b"], public_fields=["c"])  # type: ignore[arg-type]
-
-        assert (spec.required_fields, spec.public_fields) == (("a", "b"), ("c",))
-
-    @pytest.mark.parametrize("field", ["required_fields", "public_fields"])
-    @pytest.mark.parametrize("bad", [("",), (1,), "abc"])
-    def test_malformed_field_names_are_refused(self, field: str, bad: Any) -> None:
-        with pytest.raises(ValueError):
-            credential_handle_spec("Vault.", **{field: bad})
-
-    @pytest.mark.parametrize("overrides", [{"context": True}, {"strict_validation": False}, {"caller_settable": True}])
-    def test_direct_construction_cannot_loosen_the_fixed_fields(self, overrides: dict[str, Any]) -> None:
-        with pytest.raises(ValueError):
-            CredentialHandleSpec("Vault.", **overrides)
-
-    def test_direct_construction_requires_the_element_validator(self) -> None:
-        with pytest.raises(ValueError):
-            CredentialHandleSpec("Vault.", context=False, strict_validation=True, caller_settable=False)
-
-    def test_str_none_and_missing_defaults_are_accepted(self) -> None:
-        assert credential_handle_spec("Vault.", default="vault-x").default == "vault-x"
-        assert credential_handle_spec("Vault.", default=None).default is None
-        assert credential_handle_spec("Vault.").default is NO_DEFAULT
-
-    @pytest.mark.parametrize("bad", [5, ["vault-x"], ""])
-    def test_non_str_default_is_refused_at_construction(self, bad: Any) -> None:
-        with pytest.raises(ValueError):
-            credential_handle_spec("Vault.", default=bad)
-
-    def test_element_validator_accepts_str_and_aborts_on_anything_else(self) -> None:
-        validator = credential_handle_spec("Vault.").element_validator
-        assert validator is not None
-        assert validator("vault-x") is True
-
-        with pytest.raises(ValueError) as exc:
-            validator(987654321)
-        assert is_match_abort(exc.value)
-        assert "int" in str(exc.value)
-        assert "987654321" not in str(exc.value)
-
-    def test_the_spec_flows_through_validate_property_values(self) -> None:
-        mapping = {HANDLE_KEY: credential_handle_spec("Vault.")}
-
-        validate_property_values({HANDLE_KEY: "vault-x"}, mapping, closed_world=True)
-        with pytest.raises(ValueError):
-            validate_property_values({HANDLE_KEY: 987654321}, mapping, closed_world=True)
 
 
 class TestPlanTimeRefusals:

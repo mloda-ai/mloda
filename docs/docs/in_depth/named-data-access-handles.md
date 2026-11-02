@@ -237,14 +237,14 @@ PROPERTY_MAPPING = {
 }
 ```
 
-The spec is a group option (never context), strictly validated, and never settable by an MCP caller. Core checks it
-at plan time, in `prepare()`, `explain()` and `run_all()` alike, and ends planning with an error that names the
-option, the group and the handle (never a credential value) when:
+The option is a group option (never context), strictly validated, and never settable by an MCP caller. Planning
+fails, in `prepare()`, `explain()` and `run_all()` alike, with an error naming the option, group and handle (never a
+credential value) when:
 
 - the key is set in `Options.context` instead of the group options;
 - the value is not a non-empty `str`;
 - the handle is not registered, or is registered under another kind (the message lists the named credential handles);
-- the handle is an unnamed credential: a declared handle must be named, no implicit pick;
+- the handle is an unnamed credential (a declared handle must be named);
 - a field in `required_fields` is missing from the credential;
 - the credential holds a `bytes` or `bytearray` value at any depth. This is refused for now; store a hex or base64
   `str` and decode it in the plugin.

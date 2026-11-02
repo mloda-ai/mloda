@@ -553,7 +553,7 @@ class TestCallerSettable:
     def test_a_declared_credential_handle_key_is_refused_even_when_listed(
         self, tmp_path: Path, shape: str, listed: bool
     ) -> None:
-        from tests.test_core.test_abstract_plugins.test_components.test_credential_handle_spec import (
+        from tests.helpers.credential_handle_stubs import (
             HANDLE_KEY,
             ChsVaultFG,
         )

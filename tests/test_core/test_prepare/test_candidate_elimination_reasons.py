@@ -32,7 +32,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, unavailable_framework_message
 from mloda.core.abstract_plugins.implementation import accessible_implementations
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
@@ -646,6 +646,32 @@ class TestEliminationStages:
         )
         assert f"  - ElimNotEnabledFG011 (compute framework): {reason}" in str(err)
 
+    @pytest.mark.parametrize(
+        ("hint", "suffix"),
+        [
+            pytest.param(None, "ElimFwOne011 is not available in this environment.", id="no_hint"),
+            pytest.param(
+                "pip install elim-backend",
+                "ElimFwOne011 is not available: its library is not installed. Install it with: pip install elim-backend",
+                id="hinted",
+            ),
+        ],
+    )
+    def test_frameworks_not_enabled_stage_names_an_unavailable_framework(
+        self, monkeypatch: pytest.MonkeyPatch, hint: str | None, suffix: str
+    ) -> None:
+        monkeypatch.setattr(ElimFwOne011, "is_available", staticmethod(lambda: False))
+        monkeypatch.setattr(ElimFwOne011, "INSTALL_HINT", hint)
+        plugins: FeatureGroupEnvironmentMapping = {ElimNotEnabledFG011: set()}
+
+        err = _fail(Feature(NOT_ENABLED_FEATURE), plugins)
+
+        reason = f"none of its compute frameworks are enabled for this run; {suffix}"
+        assert err.result.eliminations[ElimNotEnabledFG011] == Elimination(
+            stage="frameworks_not_enabled", reason=reason
+        )
+        assert f"  - ElimNotEnabledFG011 (compute framework): {reason}" in str(err)
+
     def test_frameworks_not_enabled_stage_names_an_unregistered_framework(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -757,6 +783,24 @@ class TestEliminationStages:
         err = _fail(feature, plugins)
 
         reason = "pinned compute framework 'ElimFwThree011' is not among its supported ['ElimFwOne011']"
+        assert err.result.eliminations[ElimPinFG011] == Elimination(stage="framework_pin", reason=reason)
+        assert f"  - ElimPinFG011 (compute framework pin): {reason}" in str(err)
+
+    @pytest.mark.parametrize("hint", [None, "pip install elim-backend"], ids=["no_hint", "hinted"])
+    def test_framework_pin_stage_for_an_unavailable_framework(
+        self, monkeypatch: pytest.MonkeyPatch, hint: str | None
+    ) -> None:
+        monkeypatch.setattr(ElimFwThree011, "is_available", staticmethod(lambda: False))
+        monkeypatch.setattr(ElimFwThree011, "INSTALL_HINT", hint)
+        feature = Feature(PIN_FEATURE, compute_framework="ElimFwThree011")
+        plugins: FeatureGroupEnvironmentMapping = {ElimPinFG011: {ElimFwOne011}}
+
+        err = _fail(feature, plugins)
+
+        reason = (
+            "pinned compute framework 'ElimFwThree011' is not among its supported ['ElimFwOne011']; "
+            + unavailable_framework_message(ElimFwThree011)
+        )
         assert err.result.eliminations[ElimPinFG011] == Elimination(stage="framework_pin", reason=reason)
         assert f"  - ElimPinFG011 (compute framework pin): {reason}" in str(err)
 

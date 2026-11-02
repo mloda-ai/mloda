@@ -78,6 +78,7 @@ from mloda.core.abstract_plugins.components.utils import (
 from mloda.core.abstract_plugins.compute_framework import (
     ComputeFramework,
     compute_framework_subclasses,
+    unavailable_framework_message,
     unregistered_frameworks_hint,
 )
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -106,7 +107,12 @@ def _no_framework_enabled_reason(declared: frozenset[type[ComputeFramework]]) ->
     """Why no declared compute framework is enabled, naming unregistered ones when found."""
     hint = unregistered_frameworks_hint(declared)
     reason = "none of its compute frameworks are enabled for this run"
-    return f"{reason}; {hint}" if hint else reason
+    if hint:
+        reason += f"; {hint}"
+    for cf in sorted(declared, key=lambda c: c.get_class_name()):
+        if not cf.is_available():
+            reason += f"; {unavailable_framework_message(cf)}"
+    return reason
 
 
 logger = logging.getLogger(__name__)
@@ -853,13 +859,14 @@ class IdentifyFeatureGroupClass:
                 continue
 
             if not self._filter_feature_group_by_framework(supported_frameworks, feature):
-                pin_name = feature.get_compute_framework().get_class_name()
+                pin = feature.get_compute_framework()
                 supported_names = sorted(cfw.get_class_name() for cfw in supported_frameworks)
-                self._record_elimination(
-                    feature_group,
-                    "framework_pin",
-                    f"pinned compute framework '{pin_name}' is not among its supported {supported_names}",
+                pin_reason = (
+                    f"pinned compute framework '{pin.get_class_name()}' is not among its supported {supported_names}"
                 )
+                if not pin.is_available():
+                    pin_reason += f"; {unavailable_framework_message(pin)}"
+                self._record_elimination(feature_group, "framework_pin", pin_reason)
                 continue
 
             if not self._filter_feature_group_by_links(feature_group, links):

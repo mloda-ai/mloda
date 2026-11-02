@@ -5,7 +5,7 @@ from itertools import chain
 from typing import Any
 from uuid import UUID
 
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, unavailable_framework_message
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import option_key_is_present
@@ -573,9 +573,10 @@ class GlobalFilter:
     @staticmethod
     def _framework_pin_reason(filter: SingleFilter, feat: Feature) -> str:
         """Name the filter's pinned framework and the host's allowed set."""
-        pinned = filter.filter_feature.get_compute_framework().get_class_name()
+        pin = filter.filter_feature.get_compute_framework()
         allowed = sorted(cfw.get_class_name() for cfw in feat.compute_frameworks or ())
-        return f"pinned compute framework '{pinned}' is not in the feature's allowed set {allowed}"
+        reason = f"pinned compute framework '{pin.get_class_name()}' is not in the feature's allowed set {allowed}"
+        return reason if pin.is_available() else f"{reason}; {unavailable_framework_message(pin)}"
 
     def add_time_and_time_travel_filters(
         self,

@@ -1,11 +1,18 @@
 import weakref
 from typing import Any
 
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.data_creator_feature_group import DataCreatorFeatureGroup
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
 import pytest
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda.core.api.request import SetupConfigurationError
 from mloda.user import Feature
-from mloda.user import Features, ParallelizationMode, mloda
+from mloda.user import Features, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -16,6 +23,45 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses, saf
 from mloda.core.abstract_plugins.compute_framework import compute_framework_subclasses
 
 from tests.helpers.subclass_walks import collect_until_dead
+
+
+PIN_SRC_FEATURE = "setupcfw_pin_hint_source"
+PIN_CONSUMER_FEATURE = "setupcfw_pin_hint_consumer"
+
+
+class SetupCfwPinHintSourceFG(DataCreatorFeatureGroup):
+    """Serves the source feature on PythonDictFramework only."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {PIN_SRC_FEATURE}
+
+    @classmethod
+    def compute_framework_rule(cls) -> Any:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {PIN_SRC_FEATURE: [1]}
+
+
+class SetupCfwPinHintConsumerFG(FeatureGroup):
+    """Needs its source computed on PandasDataFrame."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {PIN_CONSUMER_FEATURE}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(PIN_SRC_FEATURE, compute_framework="PandasDataFrame")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> Any:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {PIN_CONSUMER_FEATURE: [1]}
 
 
 class TestSetupComputeFramework:
@@ -373,6 +419,21 @@ class TestSetupComputeFramework:
         assert "Feature pinned_feature" in message
         assert "PandasDataFrame is not available" in message
         assert 'pip install "mloda[pandas]"' in message
+
+    def test_unavailable_input_feature_pin_names_install_hint_in_resolution_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._unavailable(monkeypatch, PandasDataFrame)
+        collector = PluginCollector.enabled_feature_groups({SetupCfwPinHintSourceFG, SetupCfwPinHintConsumerFG})
+
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            mloda.run_all(
+                [PIN_CONSUMER_FEATURE], compute_frameworks=["PythonDictFramework"], plugin_collector=collector
+            )
+
+        message = str(exc_info.value)
+        assert 'pip install "mloda[pandas]"' in message
+        assert "needed by" in message
 
     def test_unavailable_pin_outside_requested_list_names_both_problems(
         self, monkeypatch: pytest.MonkeyPatch, features: Features

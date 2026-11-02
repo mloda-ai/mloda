@@ -161,6 +161,7 @@ BACKEND_NEUTRAL: frozenset[str] = frozenset(
         "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_type_semantics",
         "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
         "mloda_plugins.feature_group.experimental.aggregated_feature_group.base",
+        "mloda_plugins.feature_group.experimental.aggregated_feature_group.python_dict",
         "mloda_plugins.feature_group.experimental.clustering.base",
         "mloda_plugins.feature_group.experimental.data_quality.missing_value.base",
         "mloda_plugins.feature_group.experimental.data_quality.missing_value.python_dict",

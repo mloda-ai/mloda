@@ -22,7 +22,7 @@ from mloda.user import PluginLoader, mloda
 PluginLoader.all()
 
 result = mloda.run_all(
-    features=["customer_id", "income", "income__mean_imputed", "age__median_imputed"],
+    features=["customer_id", "income", "income__sum_aggr", "age__avg_aggr"],
     compute_frameworks=["PythonDictFramework"],
     api_data={"SampleData": {
         "customer_id": ["C001", "C002", "C003", "C004", "C005"],
@@ -34,7 +34,7 @@ print(result)
 ```
 
 ```text
-[{'customer_id': ['C001', 'C002', 'C003', 'C004', 'C005'], 'income': [50000, 75000, None, 60000, 85000]}, {'age__median_imputed': [25, 37.5, 45, 30, 50], 'income__mean_imputed': [50000, 75000, 67500, 60000, 85000]}]
+[{'customer_id': ['C001', 'C002', 'C003', 'C004', 'C005'], 'income': [50000, 75000, None, 60000, 85000]}, {'age__avg_aggr': [37.5, 37.5, 37.5, 37.5, 37.5], 'income__sum_aggr': [270000, 270000, 270000, 270000, 270000]}]
 ```
 
 Copy, paste, run. mloda resolves dependencies, chains plugins, delivers data.

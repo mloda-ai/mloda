@@ -158,7 +158,7 @@ class TestPandasAggregation:
         assert PandasAggregation.compute_framework is PandasDataFrame
         assert PandasAggregation.feature_group is AggregatedFeatureGroup
         assert PandasDataFrame in AggregatedFeatureGroup.compute_framework_definition()
-        assert PythonDictFramework not in AggregatedFeatureGroup.compute_framework_definition()
+        assert PythonDictFramework in AggregatedFeatureGroup.compute_framework_definition()
 
     def test_perform_aggregation_sum(self, sample_dataframe: pd.DataFrame) -> None:
         """Test _perform_aggregation method with sum aggregation."""

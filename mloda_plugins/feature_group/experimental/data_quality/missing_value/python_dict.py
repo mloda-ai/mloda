@@ -5,16 +5,13 @@ from __future__ import annotations
 import numbers
 import statistics
 from collections import Counter
-from decimal import Decimal
 from typing import Any
 
 from mloda.provider import ComputeFramework, FeatureSet, Implementation
 
 from mloda.user.python_dict import PythonDictFramework, row_count
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import is_missing
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
-
-_PLAIN_TYPES = frozenset({str, int, bool, bytes})
-_NAT_TYPES = frozenset({("pandas", "NaTType"), ("numpy", "datetime64"), ("numpy", "timedelta64")})
 
 
 class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup]):
@@ -54,27 +51,8 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
         """Copy data with NaN-like cells replaced by None in the given columns."""
         normalized = dict(data)
         for name in columns:
-            normalized[name] = [None if cls._is_missing(v) else v for v in data[name]]
+            normalized[name] = [None if is_missing(v) else v for v in data[name]]
         return normalized
-
-    @staticmethod
-    def _is_missing(v: Any) -> bool:
-        """Type-based check that never calls a user-defined comparison."""
-        t = type(v)
-        if v is None:
-            return True
-        if t in _PLAIN_TYPES:
-            return False
-        if t is float:
-            return bool(v != v)
-        module = t.__module__.split(".")[0]
-        if module == "pandas" and t.__name__ == "NAType":
-            return True
-        if (module, t.__name__) in _NAT_TYPES:
-            return bool(v != v)
-        if isinstance(v, Decimal):
-            return v.is_nan()
-        return module in ("builtins", "numpy") and isinstance(v, numbers.Complex) and bool(v != v)
 
     @classmethod
     def _mode_of(cls, values: list[Any]) -> Any:
@@ -208,7 +186,7 @@ class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup])
         keyless: list[int] = []
         for i in range(row_count(data)):
             group_key = tuple(data[feature][i] for feature in group_by_features)
-            if any(cls._is_missing(v) for v in group_key):
+            if any(is_missing(v) for v in group_key):
                 keyless.append(i)
                 continue
             if group_key not in groups:

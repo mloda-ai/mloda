@@ -859,16 +859,16 @@ C003         None
 C004         60000
 C005         85000
 
-income__mean_imputed  age__median_imputed
-50000                 25
-75000                 37.5
-67500                 45
-60000                 30
-85000                 50
+income__sum_aggr  age__avg_aggr
+270000            37.5
+270000            37.5
+270000            37.5
+270000            37.5
+270000            37.5
 
 Plan
-step 1  ApiDataFG                 age, customer_id, income  (source SampleData)
-step 2  MissingValueFeatureGroup  age__median_imputed, income__mean_imputed  (from age, income)
+step 1  ApiDataFG               age, customer_id, income  (source SampleData)
+step 2  AggregatedFeatureGroup  age__avg_aggr, income__sum_aggr  (from age, income)
 
 Next
 Edit the README example: https://github.com/mloda-ai/mloda#30-second-example

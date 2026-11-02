@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import ComputeFramework, FeatureSet
+from mloda.provider import ApiDataFG, ComputeFramework, FeatureSet
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.user import Options
@@ -16,6 +16,12 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation  # noqa: F401
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.python_dict import (
+    PythonDictAggregation,  # noqa: F401
+)
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+    PythonDictFramework,
+)
 from mloda.provider import DefaultOptionKeys
 
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import column_values
@@ -50,7 +56,7 @@ class AggregatedNanSourceCreator(ATestDataCreator):
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame, PyArrowTable}
+        return {PandasDataFrame, PyArrowTable, PythonDictFramework}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -131,6 +137,22 @@ _NAN_SUM_CASES = [
         id="pyarrow_implementation_pin",
     ),
     pytest.param(
+        _NAN_SUM,
+        [PythonDictFramework, PandasDataFrame],
+        {},
+        "PythonDictFramework",
+        "your list order",
+        id="unpinned_python_dict_listed_first",
+    ),
+    pytest.param(
+        _NAN_SUM,
+        [PythonDictFramework, PandasDataFrame],
+        {"implementation": "PythonDictAggregation"},
+        "PythonDictFramework",
+        "pinned",
+        id="python_dict_implementation_pin",
+    ),
+    pytest.param(
         _PANDAS_ONLY_SUM,
         [PandasDataFrame, PyArrowTable],
         {},
@@ -181,6 +203,23 @@ class TestAggregationImplementationChoice:
         step = next(s for s in steps if s.feature_group is AggregatedFeatureGroup)
 
         assert step.implementation is PandasAggregation
+
+
+class TestAggregationOnApiData:
+    """A default run over a dict-of-lists api_data set aggregates on the dict framework."""
+
+    def test_unpinned_api_data_aggregation_runs_on_the_dict_framework(self) -> None:
+        plugins = PluginCollector.enabled_feature_groups({ApiDataFG, AggregatedFeatureGroup})
+        api_data = {"AggApi": {"aggr_api_x": [1.0, 2.0, 3.0]}}
+        feature = "aggr_api_x__sum_aggr"
+
+        steps = mloda.explain([feature], api_data=api_data, plugin_collector=plugins)
+        step = next(s for s in steps if s.step_kind == "compute" and s.feature_group is AggregatedFeatureGroup)
+        assert step.compute_framework is PythonDictFramework
+        assert step.compute_framework_reason == "loads natively"
+
+        results = mloda.run_all([feature], api_data=api_data, plugin_collector=plugins)
+        assert column_values(results, feature) == [6.0] * 3
 
 
 class TestAggregatedFeatureGroupIntegration:

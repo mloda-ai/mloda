@@ -1013,10 +1013,11 @@ def test_redact_option_value_shared_inner_dict_without_cycle_renders_both_masked
 
 
 class TestScrubUriProjection:
-    """A fullmatching scheme://... drops user info, query and fragment. A jdbc: scheme drops the path entirely;
-    any other scheme keeps a percent-escaped path unless its decoded form is malformed or still scrubs (then it
-    cuts back to the last / before the first %), and fails closed when a path segment has a : followed by =. An
-    azure container userinfo is kept only when it fullmatches an azure container name or a $root/$web/$logs alias."""
+    """A fullmatching scheme://... drops user info, query and fragment. A jdbc: path is dropped when it has =, ; or @,
+    else handled like any other scheme; any other scheme keeps a percent-escaped path unless its decoded form is
+    malformed or still scrubs (then it cuts back to the last / before the first %), and fails closed when a path
+    segment has a : followed by =. An azure container userinfo is kept only when it fullmatches an azure container
+    name or a $root/$web/$logs alias."""
 
     @pytest.mark.parametrize(
         ("uri", "expected"),
@@ -1114,8 +1115,27 @@ class TestScrubUriProjection:
             pytest.param("http://[::1]/x", "http://[::1]/x", id="ipv6-host-without-at-sign"),
             pytest.param(
                 "jdbc:postgresql://u:p@host:5432/db?ssl=true",
-                "jdbc:postgresql://host:5432",
-                id="jdbc-scheme-drops-path-entirely",
+                "jdbc:postgresql://host:5432/db",
+                id="jdbc-keeps-clean-path-drops-userinfo-and-query",
+            ),
+            pytest.param("jdbc:postgresql://h:5432/db1", "jdbc:postgresql://h:5432/db1", id="jdbc-keeps-db1"),
+            pytest.param("jdbc:postgresql://h:5432/db2", "jdbc:postgresql://h:5432/db2", id="jdbc-keeps-db2"),
+            pytest.param("jdbc:hive2://host:10000/a/b", "jdbc:hive2://host:10000/a/b", id="jdbc-keeps-multi-segment"),
+            pytest.param("jdbc:postgresql://h/my%20db", "jdbc:postgresql://h/my%20db", id="jdbc-keeps-percent-encoded"),
+            pytest.param(
+                "jdbc:derby://host:1527/db;user=u;password=hunter2",
+                "jdbc:derby://host:1527",
+                id="jdbc-derby-drops-semicolon-path",
+            ),
+            pytest.param(
+                "jdbc:postgresql://h/db/hunter2@x:5432/y",
+                "jdbc:postgresql://h",
+                id="jdbc-drops-path-with-at-sign",
+            ),
+            pytest.param(
+                "jdbc:postgresql://h/db%3Bpassword%3Dhunter2",
+                "jdbc:postgresql://h/",
+                id="jdbc-encoded-secret-cuts-path",
             ),
             pytest.param(
                 "jdbc:db2://host:50000/DB:password=hunter2",

@@ -110,7 +110,7 @@ def _uri_projection(match: re.Match[str]) -> str | None:
     container = ""
     if userinfo and scheme.lower() in _AZURE_CONTAINER_SCHEMES and _AZURE_CONTAINER_PATTERN.fullmatch(userinfo):
         container = f"{userinfo}@"
-    if scheme.startswith("jdbc:"):
+    if scheme.startswith("jdbc:") and any(mark in path for mark in "=;@"):
         return f"{scheme}://{container}{host}"
     if any("=" in segment.partition(":")[2] for segment in path.split("/")):
         return None

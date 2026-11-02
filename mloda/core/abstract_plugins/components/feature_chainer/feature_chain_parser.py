@@ -168,6 +168,8 @@ class FeatureChainParser:
                 verdict = bool(element_validator(found_property_val))
             except Exception as exc:
                 if is_match_abort(exc):  # a marked abort must escape, not become a rejection
+                    if exc.__dict__.get("prefix_option_key") is True:
+                        raise escalate_match_abort(ValueError(f"Option '{property_name}': {exc}")) from None
                     raise
                 # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
                 level = contained_raise_log_level(exc)

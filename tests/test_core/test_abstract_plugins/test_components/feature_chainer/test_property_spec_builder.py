@@ -755,6 +755,25 @@ class TestPropertySpecCallerSettable:
             property_spec("d", caller_settable=not_a_bool)
 
 
+class TestCredentialHandleSpecBuilder:
+    """``credential_handle_spec`` is a PropertySpec builder with the handle fields fixed."""
+
+    def test_builder_is_exported_and_returns_a_property_spec_with_fixed_fields(self) -> None:
+        from mloda.provider import credential_handle_spec
+
+        spec = credential_handle_spec("Vault.", required_fields=("a",), public_fields=("b",))
+
+        assert isinstance(spec, PropertySpec)
+        assert (spec.context, spec.strict_validation, spec.caller_settable) == (False, True, False)
+        assert (spec.required_fields, spec.public_fields) == (("a",), ("b",))
+
+    def test_builder_rejects_the_property_spec_keywords_it_fixes(self) -> None:
+        from mloda.provider import credential_handle_spec
+
+        with pytest.raises(TypeError):
+            credential_handle_spec("Vault.", context=True)  # type: ignore[call-arg]
+
+
 class TestPropertySpecNameConverter:
     """``name_converter`` passthrough: an opt-in per-key converter for name-captured text."""
 

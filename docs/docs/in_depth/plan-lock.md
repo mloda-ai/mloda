@@ -39,6 +39,13 @@ It never holds option values, `data_access_identity`, feature group or implement
 - Data.
 - Extenders.
 
+## Declared credential handles
+
+The content hash includes the name of a declared credential handle, never the credential. A CI lock check registers a
+placeholder credential under each declared handle (for example `Credential(key="ci-placeholder")` under
+`pii-hmac-key`, 8 characters or longer), because `explain()` validates handles like `prepare()`. See
+[Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle).
+
 ## Structure hash
 
 `plan_structure_hash(plan)` (from `mloda.steward`) is the sha256 hex of the lock text, so an equal hash means an equal lock file. A session with extenders carries it as `PlanContext.structure_hash`. Like the lock it excludes option values and data access values (a user-named connection handle appears in `leaves_connection`, so renaming one changes the lock; auto handles never appear), so it is a plan-shape fingerprint, not a reproducibility or audit fingerprint. It includes the reason text and the lock format number, so it can change between mloda releases. The churn sources below apply.

@@ -73,6 +73,7 @@ from mloda.core.abstract_plugins.components.input_data.match_cache import run_ma
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+from mloda.core.abstract_plugins.components.credential_handle import credential_handle_keys
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.match_hook import call_match_hook
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
@@ -986,6 +987,13 @@ class Engine:
                 declared_options,
                 feature_group_class.options_with_defaults(declared_options, bindings),
             )
+            handle_keys = frozenset(credential_handle_keys(feature_group_class))
+            if handle_keys:
+                resolved = entry[1]
+                if resolved is declared_options:
+                    resolved = declared_options.rebuild(declared_options.group, declared_options.context)
+                resolved.credential_handle_keys = handle_keys
+                entry = (declared_options, resolved)
             self._intake_options_memo[memo_key] = entry
         feature.options = entry[1]
         feature_collection = self.feature_group_collection[feature_group_class]

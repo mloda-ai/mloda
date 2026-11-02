@@ -635,6 +635,31 @@ class TestOptionsWithCredentialValues:
         options = Options(group={"credential_option_key": Credential(sqlite="/secret/path/analytics.db")})
         assert "/secret/path/analytics.db" not in str(options)
 
+    def test_str_prints_a_marked_handle_key_as_given_and_masks_an_unmarked_one(self) -> None:
+        handle = "chs-vault-main"
+        unmarked = Options(group={"chs_vault_token": handle})
+        marked = Options(group={"chs_vault_token": handle})
+        marked.credential_handle_keys = frozenset({"chs_vault_token"})
+
+        assert handle not in str(unmarked)
+        assert handle in str(marked)
+
+    def test_a_marked_key_masks_a_non_str_value(self) -> None:
+        options = Options(group={"chs_vault_token": {"password": "chs-nested-secret-1"}})
+        options.credential_handle_keys = frozenset({"chs_vault_token"})
+
+        assert "chs-nested-secret-1" not in str(options)
+
+    def test_the_handle_key_mark_survives_rebuild_and_stays_out_of_hash_and_equality(self) -> None:
+        marked = Options(group={"chs_vault_token": "chs-vault-main"})
+        marked.credential_handle_keys = frozenset({"chs_vault_token"})
+        plain = Options(group={"chs_vault_token": "chs-vault-main"})
+
+        assert marked == plain
+        assert hash(marked) == hash(plain)
+        assert Options().credential_handle_keys == frozenset()
+        assert "chs-vault-main" in str(marked.rebuild({"chs_vault_token": "chs-vault-main"}, {}))
+
     def test_str_redacts_a_reader_tuple_in_reserved_key_context(self) -> None:
         """Only the reserved reader tuple is masked; a plain non-reader dict stays readable."""
         options = Options(

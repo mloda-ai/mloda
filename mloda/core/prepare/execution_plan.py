@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Any, Generator, NamedTuple
 from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
+from mloda.core.abstract_plugins.components.credential_handle import declared_credential_handles
+from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.data_access_collection import resolve_connection_handle
 from mloda.core.abstract_plugins.components.error_utils import REPORT_URL, internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
@@ -281,6 +283,9 @@ class ExecutionPlan:
                     step.compute_framework, step.features.options
                 )
                 step.source_connection_handle = self._source_handle(step)
+                step.credential_handles = declared_credential_handles(
+                    step.feature_group, step.features.options or Options()
+                )
             elif isinstance(step, JoinStep):
                 consumers = [owner[u] for u in records.get(step.uuid, ()) if u in owner] or [
                     owner[u] for u in step.destination_framework_uuids if u in owner

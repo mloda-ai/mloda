@@ -10,6 +10,7 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
 from mloda.core.abstract_plugins.components.credential_scrub import _SECRET_KEY, _mask_secret_keys, redact_option_value
 from mloda.core.abstract_plugins.components.credential import Credential
+from mloda.core.abstract_plugins.components.credential_handle import credential_handle_keys
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.input_data.input_data_load import (
     _is_fallback_identity,
@@ -197,7 +198,11 @@ class PlanStep:
         return self._data_access_identity_is_fallback
 
 
-def _snapshot_option(key: Any, value: Any, source_group_names: Iterable[str]) -> Any:
+def _snapshot_option(
+    key: Any, value: Any, source_group_names: Iterable[str], handle_keys: Collection[str] = frozenset()
+) -> Any:
+    if key in handle_keys and isinstance(value, str):
+        return value
     if isinstance(key, str) and _SECRET_KEY.fullmatch(key):
         return "***"
     if not isinstance(value, Mapping):
@@ -208,10 +213,10 @@ def _snapshot_option(key: Any, value: Any, source_group_names: Iterable[str]) ->
     return _mask_secret_keys(_safe_deepcopy(value, {}))
 
 
-def snapshot_group(group: Mapping[Any, Any]) -> dict[Any, Any]:
-    """Snapshot a group mapping with the plan-step redaction rule."""
+def snapshot_group(group: Mapping[Any, Any], handle_keys: Collection[str] = frozenset()) -> dict[Any, Any]:
+    """Snapshot a group mapping with the plan-step redaction rule; a str under a handle key stays as given."""
     names = concrete_source_groups().keys()
-    return {key: _snapshot_option(key, value, names) for key, value in group.items()}
+    return {key: _snapshot_option(key, value, names, handle_keys) for key, value in group.items()}
 
 
 _PROCESS_KEY = secrets.token_bytes(32)
@@ -361,7 +366,11 @@ def build_plan_steps(
             ):
                 leaves_handle = home(step)
             options = step.features.options
-            snapshot = None if options is None else Options(group=snapshot_group(options.group))
+            snapshot = (
+                None
+                if options is None
+                else Options(group=snapshot_group(options.group, frozenset(credential_handle_keys(step.feature_group))))
+            )
             hash_options = snapshot
             if snapshot is not None and snapshot.group.get("connection_handle") in auto_handles:
                 hash_options = Options(group={**snapshot.group, "connection_handle": "<unnamed>"})

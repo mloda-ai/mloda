@@ -548,6 +548,27 @@ class TestCallerSettable:
         assert not _has_detail(error, problem="option_not_allowed")
         assert SECRET not in json.dumps(result)
 
+    @pytest.mark.parametrize("listed", [False, True])
+    @pytest.mark.parametrize("shape", ["options", "group_options"])
+    def test_a_declared_credential_handle_key_is_refused_even_when_listed(
+        self, tmp_path: Path, shape: str, listed: bool
+    ) -> None:
+        from tests.test_core.test_abstract_plugins.test_components.test_credential_handle_spec import (
+            HANDLE_KEY,
+            ChsVaultFG,
+        )
+
+        assert ChsVaultFG.PROPERTY_MAPPING is not None
+        allow = (HANDLE_KEY,) if listed else ()
+        feature = {"name": "income", shape: {HANDLE_KEY: "vault-main"}}
+
+        result = _explain(tmp_path, {"features": [feature]}, allow_options=allow)
+
+        error = _error(result, "policy_denied")
+        assert _has_detail(error, path=f"/features/0/{shape}/{HANDLE_KEY}", problem="option_not_caller_settable")
+        assert not _has_detail(error, problem="option_not_allowed")
+        assert "vault-main" not in json.dumps(result)
+
     @pytest.mark.parametrize(("feature", "path"), LOCKED_CASES)
     def test_trusted_caller_may_set_flagged_key(self, tmp_path: Path, feature: dict[str, Any], path: str) -> None:
         result = _explain(tmp_path, {"features": [feature]}, trusted_caller=True)

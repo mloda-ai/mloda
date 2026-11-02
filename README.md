@@ -36,6 +36,8 @@ print(result)
 [{'customer_id': ['C001', 'C002', 'C003', 'C004', 'C005'], 'income': [50000, 75000, None, 60000, 85000]}, {FeatureName('age__median_imputed'): [25, 37.5, 45, 30, 50], FeatureName('income__mean_imputed'): [50000, 75000, 67500, 60000, 85000]}]
 ```
 
+Copy, paste, run. mloda resolves dependencies, chains plugins, delivers data.
+
 Prefer DataFrames? Install a backend extra:
 
 ```bash
@@ -58,8 +60,6 @@ result = mloda.run_all(
 )
 print(result)
 ```
-
-Copy, paste, run. mloda resolves dependencies, chains plugins, delivers data.
 
 ---
 

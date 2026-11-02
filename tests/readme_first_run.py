@@ -58,12 +58,14 @@ def main(readme: Path, dist: Path) -> int:
         assert created.returncode == 0, f"{created.stdout}\n{created.stderr}"
         install = _run(
             "uv pip install mloda (offline wheel, no extras)",
-            ["uv", "pip", "install", "--python", python, "--no-index", str(wheels[0])],
+            ["uv", "pip", "install", "--python", python, "--no-index", "--no-config", str(wheels[0])],
         )
         assert install.returncode == 0, f"{install.stdout}\n{install.stderr}"
         probe = "import importlib.util as u; print([m for m in %r if u.find_spec(m)])" % (_ABSENT_MODULES,)
         # Safe: argv is the temp venv python and a constant script, no shell.
-        probed = subprocess.run([python, "-c", probe], capture_output=True, text=True, timeout=60)  # nosec B603
+        probed = subprocess.run(  # nosec B603
+            [python, "-I", "-c", probe], capture_output=True, text=True, env=_clean_env(), timeout=60
+        )
         present = probed.stdout.strip()
         assert present == "[]", f"bare install must not contain optional backends, found {present}"
 

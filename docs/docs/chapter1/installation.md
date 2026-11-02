@@ -44,7 +44,7 @@ print(metadata.version("mloda"))
 A plain `pip install mloda` is enough to run this with the built-in Python dict backend:
 
 ```python
-from mloda.user import mloda, PluginLoader
+from mloda.user import PluginLoader, mloda
 PluginLoader.all()
 
 result = mloda.run_all(

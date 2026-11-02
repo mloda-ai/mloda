@@ -418,6 +418,10 @@ class TestToxConfig:
         code, output = first_example(_read_text(PROJECT_ROOT / "README.md"))
         assert "PythonDictFramework" in code, "the first README example must run on a bare install"
         assert output and output.strip(), "the first README example must be followed by its ```text output"
+        install_page = _read_text(PROJECT_ROOT / "docs/docs/chapter1/installation.md")
+        assert code in install_page and output.strip() in install_page, (
+            "the install page Quick Start must mirror the README first example"
+        )
 
     def test_ci_runs_lint_env(self) -> None:
         jobs = self._workflow_jobs("ci.yaml")

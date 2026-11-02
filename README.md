@@ -38,7 +38,7 @@ print(result)
 
 Copy, paste, run. mloda resolves dependencies, chains plugins, delivers data.
 
-Prefer DataFrames? Install a backend extra such as `pip install "mloda[pandas]"` and set `compute_frameworks=["PandasDataFrame"]`.
+The same request runs on other compute frameworks, so pick the one that fits your data: pandas or Polars for DataFrames, DuckDB or SQLite for SQL, Spark for scale. Install its extra (for example `pip install "mloda[pandas]"`) and set `compute_frameworks=["PandasDataFrame"]`.
 
 ---
 

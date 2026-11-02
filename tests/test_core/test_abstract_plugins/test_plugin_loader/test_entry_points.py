@@ -129,8 +129,7 @@ def _own_package_broken_manifest_source(pkg_name: str, class_name: str) -> str:
 
 
 def _transitive_optional_dependency_manifest_source(optional_root_pkg: str, class_name: str) -> str:
-    """A manifest importing an installed optional root whose own __init__.py fails on a missing
-    transitive dependency."""
+    """A manifest that imports `optional_root_pkg` and defines one feature group."""
     return f"""
     import {optional_root_pkg}
 
@@ -1099,23 +1098,47 @@ class TestLoadEntryPointsOptionalDependenciesDeclaration:
         assert PluginLoader.skipped_plugins() == {f"demo ({pkg}.manifest:FEATURE_GROUPS)": missing}
 
     @pytest.mark.parametrize(
-        ("case", "imported_suffix", "missing_suffix"),
+        ("pkg", "import_target", "declared_root", "missing"),
         [
-            pytest.param("sibling", "other.x", "other", id="undeclared_sibling"),
-            pytest.param("noboundary", "enterprisex.x", "enterprisex", id="no_dot_boundary"),
+            pytest.param(
+                "eptest_dotneg_sibling",
+                "eptest_dotneg_sibling.other.x",
+                "eptest_dotneg_sibling.enterprise",
+                "eptest_dotneg_sibling.other",
+                id="undeclared_sibling",
+            ),
+            pytest.param(
+                "eptest_dotneg_noboundary",
+                "eptest_dotneg_noboundary.enterprisex.x",
+                "eptest_dotneg_noboundary.enterprise",
+                "eptest_dotneg_noboundary.enterprisex",
+                id="no_dot_boundary",
+            ),
+            pytest.param(
+                "eptest_dotneg_parent",
+                "eptest_dotneg_parent_other.enterprise.feature_groups.x",
+                "eptest_dotneg_parent_other.enterprise",
+                "eptest_dotneg_parent_other",
+                id="missing_parent_of_declared_root",
+            ),
         ],
     )
     def test_declared_dotted_root_does_not_cover_unrelated_module(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str, imported_suffix: str, missing_suffix: str
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pkg: str,
+        import_target: str,
+        declared_root: str,
+        missing: str,
     ) -> None:
-        pkg = f"eptest_dotneg_{case}"
-        _build_declared_root_distribution(tmp_path, pkg, f"{pkg}.{imported_suffix}", f"{pkg}.enterprise", ())
+        _build_declared_root_distribution(tmp_path, pkg, import_target, declared_root, ())
         monkeypatch.syspath_prepend(str(tmp_path))
 
         with pytest.raises(ModuleNotFoundError) as exc_info:
             PluginLoader().load_entry_points()
 
-        assert exc_info.value.name == f"{pkg}.{missing_suffix}"
+        assert exc_info.value.name == missing
 
 
 def _build_malformed_marker_distribution(base_dir: Path, pkg_name: str, marker_source: str) -> None:

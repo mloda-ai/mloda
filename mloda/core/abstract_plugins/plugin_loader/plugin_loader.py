@@ -234,17 +234,17 @@ class PluginLoader:
                     manifest = entry_point.load()
                 except ImportError as e:
                     root = e.name.split(".")[0] if e.name else None
-                    own_root = entry_point.module.split(".")[0]
+                    own_module = entry_point.module
+                    own_root = own_module.split(".")[0]
                     dist_name = entry_point.dist.name if entry_point.dist is not None else None
                     optional_roots = declared_optional.get((dist_name, entry_point.name), OPTIONAL_PLUGIN_DEPENDENCIES)
                     # Roots the entry point's own module is at or under are never eligible, so a namespace collision
                     # can't misattribute the plugin's own bug; the rest gate both the name and the traceback match.
-                    own_module = entry_point.module
                     eligible_roots = [r for r in optional_roots if not _module_under(own_module, r)]
                     name_match = any(_module_under(e.name, r) for r in eligible_roots)
                     if root == own_root and not name_match:
                         if isinstance(e, ModuleNotFoundError) and (
-                            e.name == entry_point.module or entry_point.module.startswith(f"{e.name}.")
+                            e.name == own_module or own_module.startswith(f"{e.name}.")
                         ):
                             dist_label = f"distribution '{dist_name}'" if dist_name else "an unidentified distribution"
                             raise ModuleNotFoundError(

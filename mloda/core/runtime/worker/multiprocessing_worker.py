@@ -11,7 +11,11 @@ from uuid import UUID
 from queue import Empty
 
 from mloda.core.abstract_plugins.close_context import CloseContext, CloseReason
-from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    current_registered_secrets,
+    redact_exception,
+    registered_secrets_scope,
+)
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -151,6 +155,7 @@ def _handle_command_result(
 
 def _report_failure(cfw_register: CfwManager, command_queue: multiprocessing.Queue[Any], e: BaseException) -> None:
     try:
+        redact_exception(e, current_registered_secrets())
         msg, exc_info = failure_report(e)
         if cfw_register:
             try:

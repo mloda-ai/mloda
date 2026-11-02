@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Any, Callable
 from uuid import UUID, uuid4
 
+from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets, redact_exception
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -16,7 +17,6 @@ from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep, resolve_join_source_cfw
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
 from mloda.core.runtime.worker_manager import WorkerManager
 from mloda.core.runtime.worker.thread_worker import thread_worker
 from mloda.core.runtime.worker.multiprocessing_worker import worker
@@ -356,6 +356,7 @@ class ComputeFrameworkExecutor:
             step.step_is_done = True
 
         except Exception as e:
+            redact_exception(e, current_registered_secrets())
             msg, exc_info = failure_report(e)
             self.cfw_register.set_error(msg, exc_info, exception=e)
 

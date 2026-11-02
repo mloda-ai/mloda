@@ -294,28 +294,48 @@ def _scrub_passes(text: str) -> str:
     return _SLASH_DSN_PATTERN.sub(r"\g<user>/***@", text)
 
 
-def _mask_item(item: Any, literals: frozenset[str], memo: dict[int, Any] | None = None) -> Any:
-    """Mask str leaves, recursing into tuples, lists and dicts (types kept, cycles terminate via ``memo``)."""
+# Bounds recursion so a deeply nested attribute cannot hit RecursionError on the failure path.
+_MAX_MASK_DEPTH = 32
+
+
+def _mask_item(item: Any, literals: frozenset[str], memo: dict[int, Any] | None = None, depth: int = 0) -> Any:
+    """Mask str leaves in tuples, lists and dicts; return ``item`` itself when nothing inside changed."""
     if isinstance(item, str):
-        return mask_literals(item, literals)
+        masked_str = mask_literals(item, literals)
+        return item if masked_str == item else masked_str
     if not isinstance(item, (tuple, list, dict)):
         return item
+    if depth > _MAX_MASK_DEPTH:
+        return "***"
     memo = {} if memo is None else memo
     if id(item) in memo:
         return memo[id(item)]
     if isinstance(item, list):
         masked_list: list[Any] = []
         memo[id(item)] = masked_list
-        masked_list.extend(_mask_item(element, literals, memo) for element in item)
+        masked_list.extend(_mask_item(element, literals, memo, depth + 1) for element in item)
+        if all(new is old for new, old in zip(masked_list, item)):
+            memo[id(item)] = item
+            return item
         return masked_list
     if isinstance(item, dict):
         masked_dict: dict[Any, Any] = {}
         memo[id(item)] = masked_dict
+        unchanged = True
         for key, element in item.items():
-            masked_dict[_mask_item(key, literals, memo)] = _mask_item(element, literals, memo)
+            new_key = _mask_item(key, literals, memo, depth + 1)
+            new_element = _mask_item(element, literals, memo, depth + 1)
+            masked_dict[new_key] = new_element
+            unchanged = unchanged and new_key is key and new_element is element
+        if unchanged:
+            memo[id(item)] = item
+            return item
         return masked_dict
-    memo[id(item)] = item
-    elements = [_mask_item(element, literals, memo) for element in item]
+    memo[id(item)] = "***"
+    elements = [_mask_item(element, literals, memo, depth + 1) for element in item]
+    if all(new is old for new, old in zip(elements, item)):
+        memo[id(item)] = item
+        return item
     result = item._make(elements) if hasattr(item, "_make") else tuple(elements)
     memo[id(item)] = result
     return result
@@ -332,10 +352,15 @@ def redact_exception(exc: BaseException, literals: frozenset[str]) -> BaseExcept
         if id(current) in seen:
             continue
         seen.add(id(current))
-        object.__setattr__(current, "args", _mask_item(tuple(current.args), literals))
-        for name, value in list(vars(current).items()):
-            if isinstance(value, str) and not name.startswith("__"):
-                object.__setattr__(current, name, mask_literals(value, literals))
+        masked_args = _mask_item(current.args, literals)
+        if masked_args is not current.args:
+            object.__setattr__(current, "args", masked_args)
+        attributes = vars(current)
+        for name, value in list(attributes.items()):
+            if isinstance(value, (str, dict, list, tuple)) and not name.startswith("__"):
+                masked = _mask_item(value, literals)
+                if masked is not value:
+                    attributes[name] = masked
         if isinstance(current, OSError):
             for name in ("strerror", "filename", "filename2"):
                 object.__setattr__(current, name, _mask_item(getattr(current, name), literals))

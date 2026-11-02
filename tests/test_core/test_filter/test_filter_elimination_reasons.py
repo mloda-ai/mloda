@@ -22,7 +22,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     NAME_STAGE,
     record_match_rejection,
 )
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, unavailable_framework_message
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.filter.global_filter import _STAGE_DEPTH
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -1057,6 +1057,22 @@ class TestEachGateRecordsItsOwnFact:
         assert PythonDictFramework.__name__ in reason, f"the reason must name the feature's own framework: {reason}"
         assert "resolved" not in reason, f"the host is no longer resolved at match time: {reason}"
         assert reason == PIN_REASON, f"the reason must name the host's allowed set: {reason}"
+
+    def test_the_framework_pin_gate_appends_the_install_hint_when_the_pin_is_unavailable(
+        self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(PandasDataFrame, "is_available", staticmethod(lambda: False))
+        snapshot = _drive_matching(
+            [_make_plain_fg],
+            caplog,
+            filter_feature=_filter_feature(pin=PandasDataFrame),
+            make_host=partial(_host_feature, pin=PythonDictFramework),
+        )
+
+        assert len(snapshot.rows) == 1, f"exactly one fact, got: {snapshot.rows}"
+        _, _, stage, reason = snapshot.rows[0]
+        assert stage == FRAMEWORK_PIN_STAGE
+        assert reason == PIN_REASON + "; " + unavailable_framework_message(PandasDataFrame).rstrip(".")
 
 
 class TestAPlainNonMatchIsNotAFact:

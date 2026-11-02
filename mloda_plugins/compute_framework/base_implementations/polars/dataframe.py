@@ -87,9 +87,15 @@ class PolarsDataFrame(ComputeFramework):
     def _polars_type_to_data_type(dtype: Any) -> DataType | None:
         if pl is None:
             return None
-        if dtype == pl.Int32:
+        if dtype == pl.Int8:
+            return DataType.INT8
+        if dtype == pl.UInt8:
+            return DataType.UINT8
+        if dtype == pl.UInt64:
+            return DataType.UINT64
+        if dtype in (pl.Int16, pl.UInt16, pl.Int32):
             return DataType.INT32
-        if dtype == pl.Int64:
+        if dtype in (pl.Int64, pl.UInt32):
             return DataType.INT64
         if dtype == pl.Float32:
             return DataType.FLOAT
@@ -103,6 +109,10 @@ class PolarsDataFrame(ComputeFramework):
             return DataType.BINARY
         if dtype == pl.Date:
             return DataType.DATE
+        if isinstance(dtype, (pl.List, pl.Array)):
+            return DataType.LIST
+        if isinstance(dtype, pl.Datetime) and dtype.time_zone is not None:
+            return DataType.TIMESTAMP_MICROS_TZ
         if isinstance(dtype, pl.Datetime):
             return DataType.TIMESTAMP_MILLIS if dtype.time_unit == "ms" else DataType.TIMESTAMP_MICROS
         if isinstance(dtype, pl.Decimal):

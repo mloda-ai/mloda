@@ -36,6 +36,7 @@ class ColumnSpec:
     name: str
     data_type: DataType
     values: tuple[Any, ...]
+    arrow_type: pa.DataType | None = None
 
 
 _TS_VALUES: tuple[datetime, ...] = (
@@ -57,12 +58,35 @@ _PYARROW_TYPE_MAP: dict[DataType, pa.DataType] = {
 }
 
 
+EXTENDED_COLUMNS: tuple[ColumnSpec, ...] = (
+    ColumnSpec("int8_col", DataType.INT8, (1, 2, 3), pa.int8()),
+    ColumnSpec("uint8_col", DataType.UINT8, (1, 2, 3), pa.uint8()),
+    ColumnSpec("uint64_col", DataType.UINT64, (1, 2, 3), pa.uint64()),
+    ColumnSpec("int16_col", DataType.INT32, (1, 2, 3), pa.int16()),
+    ColumnSpec("uint16_col", DataType.INT32, (1, 2, 3), pa.uint16()),
+    ColumnSpec("uint32_col", DataType.INT64, (1, 2, 3), pa.uint32()),
+    ColumnSpec("timestamp_us_tz_col", DataType.TIMESTAMP_MICROS_TZ, _TS_VALUES, pa.timestamp("us", tz="UTC")),
+    ColumnSpec("timestamp_ns_tz_col", DataType.TIMESTAMP_MICROS_TZ, _TS_VALUES, pa.timestamp("ns", tz="UTC")),
+    ColumnSpec("list_str_col", DataType.LIST, (["a"], ["b", "c"], []), pa.list_(pa.string())),
+    ColumnSpec(
+        "list_struct_col",
+        DataType.LIST,
+        ([{"x": 1}], [{"x": 2}, {"x": 3}], []),
+        pa.list_(pa.struct([("x", pa.int64())])),
+    ),
+    ColumnSpec("list_fixed_col", DataType.LIST, ([1, 2], [3, 4], [5, 6]), pa.list_(pa.int64(), 2)),
+)
+
+
 class DataTypeValidatorFrameworkTestMixin:
     """Shared tests for DataTypeValidator enforcement across all compute frameworks.
 
     The mixin is intentionally named without a `Test` prefix so pytest does not collect it
     standalone. Framework subclasses pick up the test methods by inheritance.
+    ``EXTENDED_SKIPS`` maps an extended column name to the reason a framework cannot hold it.
     """
+
+    EXTENDED_SKIPS: dict[str, str] = {}
 
     VALIDATOR_COLUMNS: tuple[ColumnSpec, ...] = (
         ColumnSpec("int_col", DataType.INT64, (1, 2, 3)),
@@ -93,7 +117,26 @@ class DataTypeValidatorFrameworkTestMixin:
         Reads ``c.values`` exactly once, here. Subclasses convert the resulting
         table into their framework-native container via ``from_arrow(...)``.
         """
-        return pa.table({c.name: pa.array(list(c.values), type=_PYARROW_TYPE_MAP[c.data_type]) for c in columns})
+        return pa.table(
+            {c.name: pa.array(list(c.values), type=c.arrow_type or _PYARROW_TYPE_MAP[c.data_type]) for c in columns}
+        )
+
+    def _skip_if_unsupported(self, spec: ColumnSpec) -> None:
+        """Skip the extended case before any data is built when the framework cannot hold the column."""
+        reason = self.EXTENDED_SKIPS.get(spec.name)
+        if reason is not None:
+            pytest.skip(reason)
+
+    @pytest.fixture
+    def extended_sample_data(self, spec: ColumnSpec) -> Any:
+        self._skip_if_unsupported(spec)
+        return self.from_arrow(self._arrow_table((spec,)))
+
+    @pytest.mark.parametrize("spec", EXTENDED_COLUMNS, ids=lambda s: s.name)
+    def test_extended_column_resolves_to_expected_data_type(
+        self, framework_instance: Any, extended_sample_data: Any, spec: ColumnSpec
+    ) -> None:
+        assert framework_instance._extract_column_data_type(extended_sample_data, spec.name) == spec.data_type
 
     def from_arrow(self, table: pa.Table) -> Any:
         """Convert a canonical pa.Table to framework-native data.

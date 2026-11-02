@@ -28,6 +28,7 @@ try:
         DoubleType,
         FloatType,
         IntegerType,
+        ListType,
         LongType,
         StringType,
         TimestampType,
@@ -44,6 +45,7 @@ except ImportError:
     DoubleType = None  # type: ignore[assignment,misc]
     FloatType = None  # type: ignore[assignment,misc]
     IntegerType = None  # type: ignore[assignment,misc]
+    ListType = None  # type: ignore[assignment,misc]
     LongType = None  # type: ignore[assignment,misc]
     StringType = None  # type: ignore[assignment,misc]
     TimestampType = None  # type: ignore[assignment,misc]
@@ -212,8 +214,12 @@ class IcebergFramework(ComputeFramework):
                 return DataType.BINARY
             if isinstance(field_type, DateType):
                 return DataType.DATE
-            if isinstance(field_type, (TimestampType, TimestamptzType)):
+            if isinstance(field_type, TimestamptzType):
+                return DataType.TIMESTAMP_MICROS_TZ
+            if isinstance(field_type, TimestampType):
                 return DataType.TIMESTAMP_MICROS
+            if isinstance(field_type, ListType):
+                return DataType.LIST
             if isinstance(field_type, DecimalType):
                 return DataType.DECIMAL
             return None

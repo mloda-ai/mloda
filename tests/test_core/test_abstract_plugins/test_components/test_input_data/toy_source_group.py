@@ -32,19 +32,19 @@ def toy_dac(**sources: dict[str, list[Any]]) -> DataAccessCollection:
 TOY_TOKEN = "tkn_Zq81Lm5Vx0Rb7Ye3Hw29"  # nosec B105
 
 
-def toy_token_dac(**sources: dict[str, list[Any]]) -> DataAccessCollection:
-    """Like toy_dac, with a registered token string next to each toy source."""
+def toy_token_dac(*, token_key: str = "token", **sources: dict[str, list[Any]]) -> DataAccessCollection:
+    """Like toy_dac, with a registered token string under `token_key` next to each toy source."""
     return DataAccessCollection(
-        credentials={handle: {TOY_KEY: cols, "token": TOY_TOKEN} for handle, cols in sources.items()}
+        credentials={handle: {TOY_KEY: cols, token_key: TOY_TOKEN} for handle, cols in sources.items()}
     )
 
 
-def toy_token_request(group: type[ToySourceFG], column: str) -> dict[str, Any]:
+def toy_token_request(group: type[ToySourceFG], column: str, *, token_key: str = "token") -> dict[str, Any]:
     """Keyword arguments that run or plan `column` through only `group` over a token-bearing toy source."""
     return {
         "compute_frameworks": ["PythonDictFramework"],
         "plugin_collector": PluginCollector.enabled_feature_groups({group}),
-        "data_access_collection": toy_token_dac(h1={column: [1]}),
+        "data_access_collection": toy_token_dac(token_key=token_key, h1={column: [1]}),
     }
 
 

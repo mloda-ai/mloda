@@ -1096,7 +1096,17 @@ def test_multiple_message_never_contains_a_credential_secret(tmp_path: Path) -> 
     conn.commit()
     conn.close()
     secret = "scope-reader-secret-value"  # nosec B105
-    dac = DataAccessCollection(files={csv_path}, credentials=Credential(sqlite=db_path, password=secret))  # nosec B106
+    hmac_value = "scope-reader-hmac-value"  # nosec B105
+    dac = DataAccessCollection(
+        files={csv_path},
+        credentials=Credential(
+            sqlite=db_path,
+            password=secret,  # nosec B106
+            host="db.internal.example",
+            table_name="scope_reader_table",
+            hmac=hmac_value,
+        ),
+    )
 
     with pytest.raises(FeatureResolutionError, match="Multiple feature groups found") as exc_info:
         mloda.run_all(
@@ -1111,6 +1121,7 @@ def test_multiple_message_never_contains_a_credential_secret(tmp_path: Path) -> 
     assert "SqliteFG" in message
     assert f"SqliteFG: {db_path}::scope_reader_table" in message
     assert secret not in message
+    assert hmac_value not in message
 
 
 def test_mistyped_string_scope_suggests_the_intended_group(tmp_path: Path) -> None:

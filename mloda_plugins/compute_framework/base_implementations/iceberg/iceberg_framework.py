@@ -63,6 +63,8 @@ class IcebergFramework(ComputeFramework):
     provided via set_framework_connection_object() before use.
     """
 
+    INSTALL_HINT = 'pip install "mloda[iceberg]"'
+
     def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
         """
         Set the Iceberg catalog for table operations.

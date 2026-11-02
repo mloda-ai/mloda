@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from mloda.core.abstract_plugins.compute_framework import (
     ComputeFramework,
     compute_framework_subclasses,
+    unavailable_framework_message,
     unregistered_frameworks_hint,
 )
 from mloda.core.abstract_plugins.components.feature_collection import Features
@@ -38,6 +39,12 @@ class SetupComputeFramework:
             matched = self.filter_user_set_in_available_sub_classes(
                 user_compute_frameworks, available_compute_frameworks
             )
+            if not any(cls.is_available() for cls in matched):
+                raise ValueError(
+                    " ".join(
+                        unavailable_framework_message(cls) for cls in sorted(matched, key=lambda c: c.get_class_name())
+                    )
+                )
             # Same-named classes share the index of the first entry naming them.
             preference = {s: self._position(s, user_compute_frameworks) for s in matched}
             available_compute_frameworks = matched
@@ -66,6 +73,11 @@ class SetupComputeFramework:
         available = PreFilterPlugins.get_cfw_subclasses()
         matches = [cls for cls in available if cls is output or cls.get_class_name() == output]
         if not matches:
+            unavailable = [
+                cls for cls in compute_framework_subclasses() if cls is output or cls.get_class_name() == output
+            ]
+            if len(unavailable) == 1:
+                raise ValueError(f"output_framework {output!r}: {unavailable_framework_message(unavailable[0])}")
             names = sorted(cls.get_class_name() for cls in available)
             raise ValueError(f"output_framework {output!r} is not an available compute framework: {names}.")
         if len(matches) > 1:

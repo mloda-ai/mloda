@@ -59,6 +59,8 @@ class DuckDBFramework(ComputeFramework):
     This framework does not support multiprocessing, so it should not be used with multiprocessing.
     """
 
+    INSTALL_HINT = 'pip install "mloda[duckdb]"'
+
     def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
         """Use given DuckDB connection.
 

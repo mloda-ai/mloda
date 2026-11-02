@@ -254,6 +254,89 @@ class TestSetupComputeFramework:
         with pytest.raises(ValueError, match="ZzSetupUnavailableOutputFramework"):
             SetupComputeFramework(None, features, output_framework="ZzSetupUnavailableOutputFramework")
 
+    @staticmethod
+    def _unavailable(monkeypatch: pytest.MonkeyPatch, *frameworks: type[ComputeFramework]) -> None:
+        for framework in frameworks:
+            monkeypatch.setattr(framework, "is_available", staticmethod(lambda: False))
+
+    def test_all_requested_unavailable_raises_naming_framework_and_install_hint(
+        self, monkeypatch: pytest.MonkeyPatch, features: Features
+    ) -> None:
+        self._unavailable(monkeypatch, PandasDataFrame)
+
+        with pytest.raises(ValueError) as exc_info:
+            SetupComputeFramework(["PandasDataFrame"], features)
+
+        assert (
+            'PandasDataFrame is not available: its library is not installed. Install it with: pip install "mloda[pandas]"'
+            in str(exc_info.value)
+        )
+
+    def test_all_requested_unavailable_lists_each_framework(
+        self, monkeypatch: pytest.MonkeyPatch, features: Features
+    ) -> None:
+        self._unavailable(monkeypatch, PandasDataFrame, PyArrowTable)
+
+        with pytest.raises(ValueError) as exc_info:
+            SetupComputeFramework(["PandasDataFrame", "PyArrowTable"], features)
+
+        message = str(exc_info.value)
+        assert 'pip install "mloda[pandas]"' in message
+        assert 'pip install "mloda[pyarrow]"' in message
+
+    def test_unavailable_framework_without_install_hint_gets_generic_message(self, features: Features) -> None:
+        class ZzSetupNoHintFramework(ComputeFramework):
+            @staticmethod
+            def is_available() -> bool:
+                return False
+
+        with pytest.raises(ValueError) as exc_info:
+            SetupComputeFramework(["ZzSetupNoHintFramework"], features)
+
+        message = str(exc_info.value)
+        assert "ZzSetupNoHintFramework is not available: its library is not installed." in message
+        assert "Install it" not in message
+
+    def test_unavailable_framework_with_custom_install_hint_names_it(self, features: Features) -> None:
+        class ZzSetupCustomHintFramework(ComputeFramework):
+            INSTALL_HINT = "pip install my-backend"
+
+            @staticmethod
+            def is_available() -> bool:
+                return False
+
+        with pytest.raises(ValueError, match="Install it with: pip install my-backend"):
+            SetupComputeFramework(["ZzSetupCustomHintFramework"], features)
+
+    def test_mixed_available_and_unavailable_keeps_today_behaviour(
+        self, monkeypatch: pytest.MonkeyPatch, features: Features
+    ) -> None:
+        self._unavailable(monkeypatch, PandasDataFrame)
+        monkeypatch.setattr(PyArrowTable, "is_available", staticmethod(lambda: True))
+
+        setup_compute_framework = SetupComputeFramework(["PandasDataFrame", "PyArrowTable"], features)
+
+        assert setup_compute_framework.framework_preference == {PandasDataFrame: 0, PyArrowTable: 1}
+
+    def test_unavailable_request_through_run_all_raises_setup_configuration_error_with_hint(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._unavailable(monkeypatch, PandasDataFrame)
+
+        with pytest.raises(SetupConfigurationError, match=r'pip install "mloda\[pandas\]"'):
+            mloda.run_all(["some_feature"], compute_frameworks=["PandasDataFrame"])
+
+    def test_unavailable_output_framework_appends_install_hint(self, features: Features) -> None:
+        class ZzSetupHintedOutputFramework(ComputeFramework):
+            INSTALL_HINT = "pip install my-backend"
+
+            @staticmethod
+            def is_available() -> bool:
+                return False
+
+        with pytest.raises(ValueError, match="pip install my-backend"):
+            SetupComputeFramework(None, features, output_framework="ZzSetupHintedOutputFramework")
+
     def test_unknown_output_framework_through_mloda_api_raises_setup_configuration_error(self) -> None:
         with pytest.raises(SetupConfigurationError, match="NoSuchFramework"):
             mloda.prepare(["some_feature"], output_framework="NoSuchFramework")

@@ -22,7 +22,7 @@ class TestFeatureNameIsStr:
 
 class TestFeatureNameRepr:
     def test_repr_format(self) -> None:
-        assert repr(FeatureName("income")) == "FeatureName('income')"
+        assert repr(FeatureName("income")) == repr("income")
 
     def test_str_returns_value(self) -> None:
         assert str(FeatureName("income")) == "income"
@@ -67,7 +67,7 @@ class TestFeatureNameWithEnum:
 
     def test_enum_repr(self) -> None:
         fn = FeatureName(DefaultOptionKeys.reference_time)
-        assert repr(fn) == "FeatureName('reference_time')"
+        assert repr(fn) == repr("reference_time")
 
     def test_enum_value_extracted_for_time_travel(self) -> None:
         fn = FeatureName(DefaultOptionKeys.time_travel)

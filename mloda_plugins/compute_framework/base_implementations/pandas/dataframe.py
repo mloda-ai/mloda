@@ -18,6 +18,8 @@ _PANDAS_LOCAL_VARIABLE_PREFIX = "local variable"
 
 
 class PandasDataFrame(ComputeFramework):
+    INSTALL_HINT = 'pip install "mloda[pandas]"'
+
     @staticmethod
     def is_available() -> bool:
         """Check if Pandas is installed and available."""

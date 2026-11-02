@@ -155,6 +155,8 @@ Why it works this way:
 
 For example, without `polars` installed, `from mloda.user.polars import PolarsDataFrame` still works, `PolarsDataFrame.is_available()` returns `False`, and mloda plans with the remaining frameworks.
 
+If `compute_frameworks` names only unavailable frameworks, mloda raises an error that names the install command.
+
 ##### Framework Examples
 
 Example using PythonDictFramework:

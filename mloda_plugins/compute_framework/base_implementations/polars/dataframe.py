@@ -18,6 +18,8 @@ except ImportError:
 
 
 class PolarsDataFrame(ComputeFramework):
+    INSTALL_HINT = 'pip install "mloda[polars]"'
+
     @staticmethod
     def is_available() -> bool:
         """Check if Polars is installed and available."""

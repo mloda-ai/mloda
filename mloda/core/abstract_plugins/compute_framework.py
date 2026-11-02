@@ -4,7 +4,7 @@ from abc import ABC
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from contextvars import ContextVar
-from typing import Any, NoReturn, final, get_origin
+from typing import Any, ClassVar, NoReturn, final, get_origin
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -131,6 +131,8 @@ class ComputeFramework(ABC):
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         _registry.add(cls)
+
+    INSTALL_HINT: ClassVar[str | None] = None  # command that installs this framework's libraries
 
     # Class-level default so the attribute exists even when a subclass's __getstate__
     # returns a filtered dict that omits it (e.g. dropping unpicklable live state).
@@ -1381,6 +1383,13 @@ class ComputeFramework(ABC):
 def compute_framework_subclasses() -> set[type[ComputeFramework]]:
     """Every live ComputeFramework subclass, without walking the class tree."""
     return _registry.members()
+
+
+def unavailable_framework_message(framework: type[ComputeFramework]) -> str:
+    message = f"{framework.get_class_name()} is not available: its library is not installed."
+    if framework.INSTALL_HINT is None:
+        return message
+    return f"{message} Install it with: {framework.INSTALL_HINT}"
 
 
 def unregistered_frameworks_hint(candidates: Iterable[object]) -> str | None:

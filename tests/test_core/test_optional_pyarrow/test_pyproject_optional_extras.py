@@ -5,12 +5,24 @@ These tests parse pyproject.toml directly (no subprocess needed).
 
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 from typing import Any
 
 import pytest
+from mloda.provider import ComputeFramework
 from packaging.requirements import Requirement
+
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
+from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
+from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 
 _PYPROJECT = Path(__file__).parent.parent.parent.parent / "pyproject.toml"
 
@@ -52,6 +64,32 @@ def test_all_extra_references(referenced_extra: str) -> None:
     assert any(f"mloda[{referenced_extra}]" in dep for dep in all_deps), (
         f"Expected mloda[{referenced_extra}] in all extra. Got: {all_deps}"
     )
+
+
+_BUILTIN_FRAMEWORKS = [
+    PandasDataFrame,
+    PolarsDataFrame,
+    PolarsLazyDataFrame,
+    PyArrowTable,
+    DuckDBFramework,
+    IcebergFramework,
+    SparkFramework,
+    SqliteFramework,
+    PythonDictFramework,
+]
+
+
+@pytest.mark.parametrize("framework", _BUILTIN_FRAMEWORKS, ids=lambda fw: fw.__name__)
+def test_builtin_framework_install_hint_names_an_existing_extra(framework: type[ComputeFramework]) -> None:
+    """Every built-in framework except PythonDictFramework has an INSTALL_HINT naming a real extra."""
+    hint = framework.INSTALL_HINT
+    if framework is PythonDictFramework:
+        assert hint is None
+        return
+    assert hint is not None, f"{framework.__name__} has no INSTALL_HINT"
+    match = re.fullmatch(r'pip install "mloda\[(\w+)\]"', hint)
+    assert match, f"Unexpected INSTALL_HINT shape: {hint}"
+    assert match.group(1) in _load_optional_deps()
 
 
 def test_core_dependencies_stay_empty() -> None:

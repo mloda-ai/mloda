@@ -83,9 +83,8 @@ def _protected_paths() -> list[str]:
     return sorted(docs | _markdown_referenced_by_tests())
 
 
-# Composed, not a bare literal: MD_LITERAL scans tests/ for markdown names and treats every one that
-# exists in the repo as content the suite depends on, which would wrongly mark the root README protected.
-ROOT_README = "README" + ".md"
+# The root README is executed by tests/test_documentation, so MD_LITERAL rightly marks it protected.
+ROOT_README = "README.md"
 
 # Patterns paired with GitHub's own documented example matches (filter pattern cheat sheet).
 GLOBSTAR_MATCHES: list[tuple[str, str]] = [
@@ -138,6 +137,7 @@ def test_pattern_does_not_match_beyond_github_semantics(pattern: str, path: str)
 def test_protected_set_is_not_stale() -> None:
     protected = _protected_paths()
     assert "docs/docs/index.md" in protected, "docs/ markdown is executed by tests/test_documentation"
+    assert ROOT_README in protected, "README.md is executed by tests/test_documentation and tox -e bare"
     assert "CONTRIBUTING.md" in protected, "CONTRIBUTING.md content is asserted by tests/test_project_structure.py"
     assert "CLAUDE.md" in protected, "CLAUDE.md content is asserted by tests/test_agent_docs_sync.py"
     assert "AGENTS.md" in protected, "AGENTS.md content is asserted by tests/test_agent_docs_sync.py"

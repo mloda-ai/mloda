@@ -196,20 +196,6 @@ def test_internal_link_targets_exist(fpath: Path) -> None:
     assert not errors, f"{fpath} has broken internal links:\n" + "\n".join(errors)
 
 
-# Temporarily disabled - README being refactored
-# def test_readme() -> None:
-#     """
-#     Test all Python code blocks in README.md.
-#
-#     This test uses mktestdocs to extract and execute all Python code blocks
-#     from the README, ensuring all examples are correct and runnable.
-#
-#     README examples generate their data in memory, so no external files are needed.
-#     """
-#     readme_path = Path("README.md")
-#
-#     if not readme_path.exists():
-#         pytest.skip("README.md not found in repository root")
-#
-#     # Run mktestdocs on README with memory mode to avoid file pollution
-#     check_md_file(fpath=readme_path, memory=True)
+@pytest.mark.timeout(120)
+def test_readme() -> None:
+    run_md_file_isolated(REPO_ROOT / "README.md")

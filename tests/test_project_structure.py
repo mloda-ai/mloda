@@ -10,6 +10,8 @@ import yaml
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 
+from tests.readme_first_run import first_example
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -398,6 +400,27 @@ class TestToxConfig:
         matrix = self._workflow_jobs("ci.yaml")["build"]["strategy"]["matrix"]["include"]
         assert any(str(e.get("python-version")) == python and e.get("toxenv") == f"-e {env}" for e in matrix), (
             f"ci.yaml build matrix needs an include entry for python {python} with toxenv '-e {env}': {matrix}"
+        )
+
+    def test_bare_env_runs_readme_first_example_in_ci(self) -> None:
+        """The bare env installs no extras and runs the README first example; CI must run it."""
+        parser = self._tox_parser()
+        sections = [name for name in parser.sections() if name.replace(" ", "") == "testenv:bare"]
+        assert len(sections) == 1, f"tox.ini needs exactly one [testenv:bare] section: {parser.sections()}"
+        assert parser.getboolean(sections[0], "skip_install", fallback=False), "[testenv:bare] must skip_install"
+        assert "tests.readme_first_run" in parser.get(sections[0], "commands", fallback=""), (
+            "[testenv:bare] commands must run tests.readme_first_run"
+        )
+        matrix = self._workflow_jobs("ci.yaml")["build"]["strategy"]["matrix"]["include"]
+        assert any(e.get("toxenv") == "-e bare" for e in matrix), f"ci.yaml build matrix needs '-e bare': {matrix}"
+
+    def test_readme_first_example_is_a_python_block_with_output(self) -> None:
+        code, output = first_example(_read_text(PROJECT_ROOT / "README.md"))
+        assert "PythonDictFramework" in code, "the first README example must run on a bare install"
+        assert output and output.strip(), "the first README example must be followed by its ```text output"
+        install_page = _read_text(PROJECT_ROOT / "docs/docs/chapter1/installation.md")
+        assert code in install_page and output.strip() in install_page, (
+            "the install page Quick Start must mirror the README first example"
         )
 
     def test_ci_runs_lint_env(self) -> None:

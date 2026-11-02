@@ -21,17 +21,24 @@ from mloda.user import PluginLoader, mloda
 PluginLoader.all()
 
 result = mloda.run_all(
-    features=["customer_id", "income", "income__sum_aggr", "age__avg_aggr"],
-    compute_frameworks=["PandasDataFrame"],
+    features=["customer_id", "income", "income__mean_imputed", "age__median_imputed"],
+    compute_frameworks=["PythonDictFramework"],
     api_data={"SampleData": {
         "customer_id": ["C001", "C002", "C003", "C004", "C005"],
-        "age": [25, 35, 45, 30, 50],
-        "income": [50000, 75000, 90000, 60000, 85000]
-    }}
+        "age": [25, None, 45, 30, 50],
+        "income": [50000, 75000, None, 60000, 85000],
+    }},
 )
+print(result)
+```
+
+```text
+[{'customer_id': ['C001', 'C002', 'C003', 'C004', 'C005'], 'income': [50000, 75000, None, 60000, 85000]}, {FeatureName('age__median_imputed'): [25, 37.5, 45, 30, 50], FeatureName('income__mean_imputed'): [50000, 75000, 67500, 60000, 85000]}]
 ```
 
 Copy, paste, run. mloda resolves dependencies, chains plugins, delivers data.
+
+The same request runs on other compute frameworks, so pick the one that fits your data: pandas or Polars for DataFrames, DuckDB or SQLite for SQL, Spark for scale. Install its extra (for example `pip install "mloda[pandas]"`) and set `compute_frameworks=["PandasDataFrame"]`.
 
 ---
 
@@ -173,7 +180,7 @@ Gather context from multiple sources declaratively - mloda validates and deliver
 
 *Example: This shows the API pattern. Requires custom FeatureGroup implementations for your data sources.*
 
-```python
+```py
 from mloda.user import Feature, mloda
 
 # Build complete context from multiple sources
@@ -201,7 +208,7 @@ Build RAG pipelines declaratively - mloda chains the steps for you.
 
 *Example: This shows the chaining syntax. Requires custom FeatureGroup implementations for retrieval and processing.*
 
-```python
+```py
 # String-based chaining: query -> validate -> retrieve -> redact
 Feature(name="user_query__injection_checked__retrieved__pii_redacted")
 
@@ -221,7 +228,7 @@ mloda resolves the full chain - you declare the end result, not the steps.
 
 Beyond string-based chaining, you can declare dependencies directly via `input_features()`. Each plugin states what it needs, mloda resolves the rest. Because resolution depends on which plugins are registered, the same request can have different chain lengths per environment: realtime might resolve `income` straight from a live source, while a RAG pipeline routes it through ETL, validation, and enrichment first. The calling code stays the same:
 
-```python
+```py
 class RiskAssessment(FeatureGroup):
     def input_features(self, options, feature_name):
         return {Feature("debt_to_income"), Feature("age"), Feature("employment_years")}
@@ -242,7 +249,7 @@ result = mloda.run_all(features=[Feature(name="risk_assessment")], ...)
 
 Mix multiple backends in a single pipeline - mloda routes each feature to the right framework:
 
-```python
+```py
 result = mloda.run_all(
     features=[...],
     compute_frameworks=["PandasDataFrame", "PolarsDataFrame", "SparkFramework"]
@@ -259,7 +266,7 @@ Add your own frameworks - mloda is extensible.
 
 Wrap plugin execution for logging, validation, or lineage tracking:
 
-```python
+```py
 import time
 from mloda.steward import Extender, ExtenderHook
 

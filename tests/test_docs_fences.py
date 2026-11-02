@@ -22,6 +22,7 @@ VOCABULARY_HINT = (
 # Repo-relative doc path -> permitted number of ```py blocks. An absent file permits zero.
 # Adding a ```py block to a docs/docs page means raising its entry here (see CONTRIBUTING.md).
 ILLUSTRATIVE_BLOCK_ALLOWLIST: dict[str, int] = {
+    "README.md": 5,
     "docs/docs/chapter1/api-request.md": 1,
     "docs/docs/chapter1/compute-frameworks.md": 4,
     "docs/docs/chapter1/extender.md": 1,
@@ -171,8 +172,12 @@ def _violations_in_file(path: Path) -> list[str]:
     return messages
 
 
+def _fenced_files() -> list[Path]:
+    return [*doc_files(), REPO_ROOT / "README.md"]
+
+
 def _fence_violations() -> list[str]:
-    return [message for path in doc_files() for message in _violations_in_file(path)]
+    return [message for path in _fenced_files() for message in _violations_in_file(path)]
 
 
 def _stale_allowlist_keys(allowlist: Mapping[str, int]) -> list[str]:
@@ -196,7 +201,7 @@ def test_doc_fences_use_the_documented_vocabulary() -> None:
 
 def test_illustrative_py_blocks_match_allowlist() -> None:
     errors: list[str] = []
-    for path in doc_files():
+    for path in _fenced_files():
         actual = sum(1 for fence in _iter_fence_openings(path) if fence.info.strip() == ILLUSTRATIVE_TAG)
         allowed = ILLUSTRATIVE_BLOCK_ALLOWLIST.get(path.relative_to(REPO_ROOT).as_posix(), 0)
         if actual > allowed:

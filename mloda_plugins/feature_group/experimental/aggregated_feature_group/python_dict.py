@@ -22,7 +22,7 @@ class PythonDictAggregation(Implementation[AggregatedFeatureGroup]):
         cls, group: type[AggregatedFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
     ) -> Any:
         return group.aggregate(
-            dict(data),
+            data,
             features,
             perform=cls._perform_aggregation,
             add_column=cls._add_result_to_data,

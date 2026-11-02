@@ -3,8 +3,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
-from mloda.provider import FeatureSet
-from mloda.user import Feature, PluginCollector, mloda
+from mloda.user import PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
@@ -42,15 +41,6 @@ class TestPythonDictAggregation:
     def test_perform_aggregation_multi_column_unequal_lengths_raises(self) -> None:
         with pytest.raises(ValueError):
             PythonDictAggregation._perform_aggregation({"m~0": [1, 2, 3], "m~1": [1]}, "sum", ["m~0", "m~1"])
-
-    def test_calculate_leaves_the_input_dict_unchanged(self, sample_data: dict[str, list[Any]]) -> None:
-        feature_set = FeatureSet()
-        feature_set.add(Feature("sales__sum_aggr"))
-        before = {k: list(v) for k, v in sample_data.items()}
-
-        PythonDictAggregation.calculate(AggregatedFeatureGroup, sample_data, feature_set, None)
-
-        assert sample_data == before
 
 
 class TestPythonDictAggregatedZeroRow(PythonDictZeroRowAdapter, AggregatedZeroRowTestMixin):

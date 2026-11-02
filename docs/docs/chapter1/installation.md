@@ -41,13 +41,34 @@ print(metadata.version("mloda"))
 
 ## 4. Quick Start
 
-The example below uses the Pandas backend. Install its extra first:
+A plain `pip install mloda` is enough to run this with the built-in Python dict backend:
+
+```python
+from mloda.user import mloda, PluginLoader
+PluginLoader.all()
+
+result = mloda.run_all(
+    features=["customer_id", "income", "income__mean_imputed", "age__median_imputed"],
+    compute_frameworks=["PythonDictFramework"],
+    api_data={"SampleData": {
+        "customer_id": ["C001", "C002", "C003", "C004", "C005"],
+        "age": [25, None, 45, 30, 50],
+        "income": [50000, 75000, None, 60000, 85000],
+    }},
+)
+print(result)
+```
+
+```text
+[{'customer_id': ['C001', 'C002', 'C003', 'C004', 'C005'], 'income': [50000, 75000, None, 60000, 85000]}, {FeatureName('age__median_imputed'): [25, 37.5, 45, 30, 50], FeatureName('income__mean_imputed'): [50000, 75000, 67500, 60000, 85000]}]
+```
+
+Prefer DataFrames? Install a backend extra:
 
 ```bash
 pip install "mloda[pandas]"
+# or mloda[polars], mloda[pyarrow], mloda[duckdb], mloda[spark]
 ```
-
-Then run:
 
 ```python
 from mloda.user import mloda, PluginLoader
@@ -61,6 +82,7 @@ result = mloda.run_all(
         "income": [50000, 75000, 90000]
     }}
 )
+print(result)
 ```
 
 `api_data` passes inline data to mloda. Each top-level key (e.g. `"SampleData"`)

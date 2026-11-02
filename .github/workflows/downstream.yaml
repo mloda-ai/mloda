@@ -1,0 +1,76 @@
+name: Downstream
+
+# Runs mloda-registry's suite against this checkout of core. Not a required check, so a red run never blocks a merge.
+on:
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - mloda/**
+      - mloda_plugins/**
+      - pyproject.toml
+      - MANIFEST.in
+      - .github/workflows/downstream.yaml
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+    inputs:
+      registry-ref:
+        description: mloda-registry branch, tag or SHA to test against
+        required: false
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: downstream-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  # Another downstream repo gets its own job: setups differ too much for a matrix.
+  mloda-registry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        path: core
+        persist-credentials: false
+    - uses: actions/checkout@v4
+      with:
+        repository: mloda-ai/mloda-registry
+        ref: ${{ inputs.registry-ref || 'main' }}
+        path: mloda-registry
+        persist-credentials: false
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Set up uv
+      # Same pin as mloda-registry's ci.yaml: its uv.lock format depends on the uv minor.
+      run: python -m pip install "uv>=0.13.4,<0.14"
+    - name: Sync the registry's locked environment
+      working-directory: mloda-registry
+      run: uv sync --frozen --all-packages --extra dev
+    - name: Replace the locked mloda with this checkout
+      working-directory: mloda-registry
+      # Bypasses the registry's mloda version ceiling on purpose; the guard fails if the PyPI build is still installed.
+      run: |
+        uv pip install --reinstall-package mloda ../core
+        uv run --no-sync python -c "import importlib.metadata as m; d = m.distribution('mloda').read_text('direct_url.json'); assert d and 'file://' in d, d; print(m.version('mloda'), d)"
+    - name: Run the registry suite
+      id: registry-tests
+      working-directory: mloda-registry
+      # From the checkout root: the registry's end-to-end tests resolve config/ relative to the cwd.
+      shell: bash
+      run: uv run --no-sync pytest -n 4 --dist worksteal -rfE 2>&1 | tee pytest.log
+    - name: List failing downstream tests
+      if: failure() && steps.registry-tests.conclusion == 'failure'
+      working-directory: mloda-registry
+      run: |
+        {
+          echo '### Failing downstream tests'
+          echo '```'
+          grep -E '^(FAILED|ERROR) ' pytest.log | head -n 200
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"

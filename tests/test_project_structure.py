@@ -474,3 +474,56 @@ class TestToxConfig:
         assert "pull_request" in group and "run_id" in group, (
             f"concurrency group must be unique per push run (run_id) and shared per PR: {group}"
         )
+
+    def test_downstream_canary_runs_registry_suite_on_core_head(self) -> None:
+        """downstream.yaml installs core's PR head into mloda-registry's env and runs its suite."""
+        config: dict[Any, Any] = self._workflow("downstream.yaml")
+        triggers: Any = config.get("on", config.get(True))
+        assert triggers["pull_request"]["branches"] == ["main"], "must trigger on pull_request to main"
+        assert "schedule" in triggers and "workflow_dispatch" in triggers, "needs schedule and workflow_dispatch"
+
+        with open(PROJECT_ROOT / "pyproject.toml", "rb") as f:
+            find: dict[str, Any] = tomllib.load(f)["tool"]["setuptools"]["packages"]["find"]
+        paths = triggers["pull_request"]["paths"]
+        packages = {entry.replace(".*", "").replace("*", "") for entry in find["include"]}
+        expected = {f"{pkg}/**" for pkg in packages} | {
+            "pyproject.toml",
+            "MANIFEST.in",
+            ".github/workflows/downstream.yaml",
+        }
+        assert expected <= set(paths), f"paths missing: {sorted(expected - set(paths))}"
+
+        jobs = self._workflow_jobs("downstream.yaml")
+        assert len(jobs) == 1, "expected exactly one job"
+        steps: list[dict[str, Any]] = next(iter(jobs.values()))["steps"]
+        checkouts = [s for s in steps if str(s.get("uses", "")).startswith("actions/checkout@")]
+        registry = [s for s in checkouts if s.get("with", {}).get("repository") == "mloda-ai/mloda-registry"]
+        core = [s for s in checkouts if "repository" not in s.get("with", {}) and s.get("with", {}).get("path")]
+        assert registry and registry[0]["with"].get("path"), "need a registry checkout with a path"
+        assert core, "need a core checkout with a path"
+        registry_path = registry[0]["with"]["path"]
+        core_path = core[0]["with"]["path"]
+
+        install_idx = next(
+            (
+                i
+                for i, s in enumerate(steps)
+                if s.get("working-directory") == registry_path
+                and "--reinstall-package mloda" in s.get("run", "")
+                and f"../{core_path}" in s.get("run", "")
+            ),
+            None,
+        )
+        assert install_idx is not None, "no registry step reinstalling mloda from ../<core path>"
+        later = steps[install_idx + 1 :]
+        assert any(
+            s.get("working-directory") == registry_path and "pytest" in s.get("run", "") and "--no-sync" in s["run"]
+            for s in later
+        ), "no later registry pytest step with --no-sync"
+        for s in later:
+            if "pytest" in s.get("run", "") and "| tee" in s["run"]:
+                assert s.get("shell") == "bash", "pytest piped to tee needs shell: bash (pipefail)"
+            run = s.get("run", "")
+            assert "uv sync" not in run, "uv sync after the install reverts it"
+            for line in run.splitlines():
+                assert "uv run" not in line or "--no-sync" in line, f"uv run without --no-sync: {line.strip()}"

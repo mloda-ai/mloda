@@ -690,6 +690,11 @@ class TestRedact:
         assert self._REGISTERED_VALUE not in redacted
         assert "***" in redacted
 
+    def test_percent_encoded_registered_value_in_a_uri_path_is_masked(self) -> None:
+        dac = DataAccessCollection(credentials={"pg": {"password": "hunter2!xyz"}})  # nosec B105
+        redacted = dac.redact("https://host/t/hunter2%21xyz")
+        assert "hunter2" not in redacted
+
     def test_value_added_later_via_add_credentials_is_masked(self) -> None:
         dac = DataAccessCollection()
         dac.add_credentials("pg", {"password": self._REGISTERED_VALUE})

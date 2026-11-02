@@ -4,10 +4,9 @@ from typing import Any, Callable
 
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
 from mloda.core.abstract_plugins.components.credential_scrub import (
-    _PLACEHOLDER,
     _SECRET_KEY,
-    placeholder_mask,
     redact_mapping,
+    registered_secrets_scope,
     scrub_credentials,
 )
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
@@ -384,9 +383,8 @@ class DataAccessCollection:
 
     def redact(self, text: str) -> str:
         """Exact-match every registered credential string value of 8+ chars, then ``scrub_credentials``."""
-        text = placeholder_mask(text, self._credential_str_leaves())
-        text = scrub_credentials(text)
-        return text.replace(_PLACEHOLDER, "***")
+        with registered_secrets_scope(frozenset(self._credential_str_leaves())):
+            return scrub_credentials(text)
 
     def secret_literals(self) -> frozenset[str]:
         """The str leaves of 8+ chars that sit under a credential-shaped key."""

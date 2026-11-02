@@ -10,6 +10,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.credential_scrub import (
+    _SECRET_KEY,
     redact_mapping,
     redact_option_value,
     scrub_credentials,
@@ -437,6 +438,16 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
     ),
     ("truncated_text", "{'password': ('a', ('b', 'hunter2z9'", ["hunter2z9"], []),
     ("stray_foreign_closer", "{'password': [a)b, 'hunter2z9']}", ["hunter2z9"], []),
+    ("jsessionid_path_param", "https://host/x;jsessionid=SECRET", ["SECRET"], ["https://host/x;jsessionid=***"]),
+    ("phpsessid_keyword", "PHPSESSID=SECRET", ["SECRET"], ["PHPSESSID=***"]),
+    ("sessionid_quoted_dict", "{'sessionid': 'SECRET'}", ["SECRET"], ["'sessionid'"]),
+    ("aspnet_sessionid_keyword", "ASP.NET_SessionId=SECRET", ["SECRET"], ["ASP.NET_SessionId="]),
+    (
+        "percent_encoded_bearer_token",
+        "https://host/api/Bearer%20eyJhbGciOiJIUzI1NiJ9.abc",
+        ["eyJhbGciOiJIUzI1NiJ9"],
+        ["https://host/api/"],
+    ),
 ]
 
 
@@ -565,6 +576,8 @@ UNCHANGED_LOOKALIKE_CASES: list[str] = [
     "author: bob",
     'Authorization-Info: nextnonce="abc123def"',
     "x_authorization: denied for role x",
+    "session_id=abc",
+    "session-id=abc",
 ]
 
 
@@ -590,10 +603,28 @@ def test_azure_container_uri_kept_unchanged() -> None:
         ("s3://bucket:9000/x.csv", "s3://bucket:9000/x.csv"),
         ("abfss://cont@acct.dfs.core.windows.net/a%20b.csv", "abfss://cont@acct.dfs.core.windows.net/a%20b.csv"),
         ("s3://bucket]/x.csv", "s3://bucket]/x.csv"),
+        ("https://user:123/PW@host/x", "https://user:123/PW@host/x"),  # nosec B105
+        ("https://user:123/PW@host:8080/x", "https://user:123/PW@host:8080/x"),  # nosec B105
+        ("https://evil.example:8443/x@trusted.corp/data.csv", "https://evil.example:8443/x@trusted.corp/data.csv"),
+        ("https://host:8443/a@b.csv", "https://host:8443/a@b.csv"),
     ],
 )
 def test_strip_uri_userinfo(text: str, expected: str) -> None:
     assert strip_uri_userinfo(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("key", "masked"),
+    [
+        ("sessionid", True),
+        ("sessionId", True),
+        ("PHPSESSID", True),
+        ("session_id", False),
+        ("session-id", False),
+    ],
+)
+def test_secret_key_session_id_names(key: str, masked: bool) -> None:
+    assert (_SECRET_KEY.fullmatch(key) is not None) is masked
 
 
 def test_strip_uri_userinfo_never_raises_on_a_bad_bracket_host() -> None:
@@ -983,9 +1014,9 @@ def test_redact_option_value_shared_inner_dict_without_cycle_renders_both_masked
 
 class TestScrubUriProjection:
     """A fullmatching scheme://... drops user info, query and fragment. A jdbc: scheme drops the path entirely;
-    any other scheme cuts its path back to the last / before the first percent-escape, and fails closed when a
-    path segment has a : followed by =. An azure container userinfo is kept only when it fullmatches an azure
-    container name or a well-known $root/$web/$logs alias."""
+    any other scheme keeps a percent-escaped path unless its decoded form is malformed or still scrubs (then it
+    cuts back to the last / before the first %), and fails closed when a path segment has a : followed by =. An
+    azure container userinfo is kept only when it fullmatches an azure container name or a $root/$web/$logs alias."""
 
     @pytest.mark.parametrize(
         ("uri", "expected"),
@@ -1118,24 +1149,63 @@ class TestScrubUriProjection:
             ),
             pytest.param(
                 "s3://bucket/my%20file.csv",
-                "s3://bucket/",
-                id="path-cut-back-to-segment-before-percent-encoded-space",
+                "s3://bucket/my%20file.csv",
+                id="percent-encoded-space-kept",
             ),
             pytest.param(
                 "s3://bucket/2024%2F01/a.parquet",
-                "s3://bucket/",
-                id="path-cut-back-to-segment-before-percent-encoded-slash",
+                "s3://bucket/2024%2F01/a.parquet",
+                id="percent-encoded-slash-kept",
             ),
             pytest.param(
                 "s3://bucket/dir/my%20file.csv",
-                "s3://bucket/dir/",
-                id="path-cut-back-to-parent-dir-before-percent-escape",
+                "s3://bucket/dir/my%20file.csv",
+                id="percent-encoded-space-in-subdir-kept",
             ),
             pytest.param(
                 "https://host/a/b%20c/d.csv",
-                "https://host/a/",
-                id="path-cut-back-to-segment-before-mid-path-percent-escape",
+                "https://host/a/b%20c/d.csv",
+                id="mid-path-percent-encoded-space-kept",
             ),
+            pytest.param("https://host/a%20b.csv", "https://host/a%20b.csv", id="percent-encoded-space-root-kept"),
+            pytest.param("https://host/t%3A00.csv", "https://host/t%3A00.csv", id="percent-encoded-colon-kept"),
+            pytest.param(
+                "https://acct.blob.core.windows.net/c/year%3D2024/a.parquet",
+                "https://acct.blob.core.windows.net/c/year%3D2024/a.parquet",
+                id="percent-encoded-equals-hive-partition-kept",
+            ),
+            pytest.param("https://host/caf%C3%A9.csv", "https://host/caf%C3%A9.csv", id="utf8-escape-kept"),
+            pytest.param("https://host/a/b%3Fc/d.csv", "https://host/a/", id="encoded-question-mark-mid-path-cut"),
+            pytest.param("https://host/x;pass%77ord=hunter2", "https://host/", id="encoded-keyword-letter-cut"),
+            pytest.param(
+                "https://proxy/fetch/https%3A%2F%2Falice%3Ahunter2%40inner.host%2Fx",
+                "https://proxy/fetch/",
+                id="encoded-inner-uri-userinfo-cut",
+            ),
+            pytest.param("https://host/a/b%ZZc/d.csv", "https://host/a/", id="malformed-percent-escape-cut"),
+            pytest.param("https://user:123/PW@host/x", "https://host/x", id="digit-userinfo-slash-password"),
+            pytest.param(
+                "https://user:123/PW@host:8080/x", "https://host:8080/x", id="digit-userinfo-slash-password-port"
+            ),
+            pytest.param("https://host:8443/a@b.csv", "https://host:8443/a@b.csv", id="path-at-file-kept"),
+            pytest.param("https://host:8443/pkg@1.2.3", "https://host:8443/pkg@1.2.3", id="path-at-version-kept"),
+            pytest.param(
+                "https://host:8443/image@sha256:abc", "https://host:8443/image@sha256:abc", id="path-at-digest-kept"
+            ),
+            pytest.param(
+                "https://host:8443/image@sha256:abc/x",
+                "https://host:8443/image@sha256:abc/x",
+                id="path-at-digest-with-tail-kept",
+            ),
+            pytest.param("https://host:8443/a/b@c/d", "https://host:8443/a/b@c/d", id="path-at-mid-segment-kept"),
+            pytest.param("https://user:123/PW@host", "https://user:123/PW@host", id="digit-userinfo-no-path-kept"),
+            pytest.param("https://host:8443/a@b/c.csv", "https://b/c.csv", id="ambiguous-path-at-host-shape-dropped"),
+            pytest.param(
+                "https://host:8443/alice@corp.com/report.csv",
+                "https://corp.com/report.csv",
+                id="ambiguous-path-email-shape-dropped",
+            ),
+            pytest.param("https://host:80/pkg@1.2.3/", "https://1.2.3/", id="ambiguous-path-version-slash-dropped"),
             pytest.param("file:///C:/data/x.csv", "file:///C:/data/x.csv", id="windows-drive-colon-in-file-uri-kept"),
             pytest.param(
                 "s3://bucket/2024-01-01T00:00:00/part.parquet",
@@ -1200,6 +1270,23 @@ class TestScrubUriFailClosed:
             ),
             pytest.param("postgresql://u:12?ss@host/db", "ss", id="colon-digit-question-mark-in-userinfo"),
             pytest.param("DRIVER={x};Server=https://host;PWD=secret", "secret", id="keyword-string-with-scheme"),
+            pytest.param("https://host/x;api%5Fkey=SECRET", "SECRET", id="encoded-underscore-in-secret-key"),
+            pytest.param("https://host/db%3Ajob=SECRETVAL", "SECRETVAL", id="encoded-colon-then-equals-in-path"),
+            pytest.param(
+                "https://host/db%3Fpassword%3Dhunter2/x:y=z", "hunter2", id="encoded-secret-before-fallback-pair"
+            ),
+            pytest.param("https://host/r/s3%3A%2F%2Ftoken%40bucket/x", "token", id="encoded-userinfo-in-path"),
+            pytest.param(
+                "https://proxy/f/https%3A%2F%2Falice%3A123%2Fpw9secret%40inner",  # nosec B105
+                "pw9secret",
+                id="encoded-digit-userinfo-slash-password",
+            ),
+            pytest.param("https://host/x/scott%2Ftiger%40db%3A1521", "tiger", id="encoded-slash-password-at-host"),
+            pytest.param(
+                "https://host/a/user%2Fhunter2%40db.example.com:5432/x", "hunter2", id="encoded-slash-encoded-at"
+            ),
+            pytest.param("https://host/a/user%2Fhunter2@db.example.com:5432/x", "hunter2", id="encoded-slash-raw-at"),
+            pytest.param("https://h/x%22password%22%3A%22hunter2%22", "hunter2", id="encoded-json-pair-in-path"),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:
@@ -1278,6 +1365,25 @@ class TestRegisteredSecretsScope:
         dac = DataAccessCollection(credentials={"h1": {"token": _LITERAL}})
 
         assert dac.redact(f"MLODAREDACTED then {_LITERAL}") == "MLODAREDACTED then ***"
+
+    @pytest.mark.parametrize(
+        ("literal", "text"),
+        [
+            ("hunter2!xyz", "https://host/t/hunter2%21xyz"),  # nosec B105
+            ("abc/def+ghi=", "https://host/files/abc%2Fdef%2Bghi%3D.csv"),  # nosec B105
+            ("s3cret pass word", "https://host/f/s3cret%20pass%20word/x"),  # nosec B105
+        ],
+    )
+    def test_percent_encoded_literal_in_a_uri_path_is_masked(self, literal: str, text: str) -> None:
+        from urllib.parse import quote
+
+        from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+        with registered_secrets_scope(frozenset({literal})):
+            masked = scrub_credentials(text)
+
+        assert literal not in masked
+        assert quote(literal, safe="") not in masked
 
 
 def test_mask_literals_masks_every_occurrence_and_merges_overlaps() -> None:

@@ -877,24 +877,16 @@ DataFrames: pip install "mloda[pandas]"
 
 
 class TestDemo:
-    def test_demo_prints_result_plan_and_next_steps(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        _elsewhere(tmp_path, monkeypatch)
-
-        outcome = _cli(["demo"], env={})
-
-        assert outcome.code == 0, outcome.err
-        assert outcome.out == DEMO_STDOUT
-        assert outcome.err == ""
-
     @pytest.mark.parametrize(
         ("toml", "env"),
         [
+            (None, {}),
             ("[mcp]\nnot_a_key = 1\n", {}),
             (None, {"MLODA_MCP_MODE": "plan"}),
             ("[mcp]\nnot_a_key = 1\n", {"MLODA_MCP_MODE": "plan"}),
         ],
     )
-    def test_demo_ignores_config_file_and_mcp_env(
+    def test_demo_prints_the_pinned_output_whatever_the_config(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, toml: str | None, env: dict[str, str]
     ) -> None:
         cwd = _elsewhere(tmp_path, monkeypatch)

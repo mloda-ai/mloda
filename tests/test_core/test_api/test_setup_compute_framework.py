@@ -355,35 +355,26 @@ class TestSetupComputeFramework:
         with pytest.raises(SetupConfigurationError, match=r'pip install "mloda\[pandas\]"'):
             mloda.run_all(requested, compute_frameworks=compute_frameworks)
 
-    def test_feature_pinning_unavailable_framework_without_list_raises_with_hint(
-        self, monkeypatch: pytest.MonkeyPatch, features: Features
+    @pytest.mark.parametrize(
+        "requested",
+        [None, [PythonDictFramework, PandasDataFrame]],
+        ids=["no_list", "mixed"],
+    )
+    def test_feature_pinning_unavailable_framework_raises_with_hint(
+        self, monkeypatch: pytest.MonkeyPatch, features: Features, requested: list[Any] | None
     ) -> None:
         self._unavailable(monkeypatch, PandasDataFrame)
         features.collection.append(Feature("pinned_feature", compute_framework="PandasDataFrame"))
 
         with pytest.raises(ValueError) as exc_info:
-            SetupComputeFramework(None, features)
+            SetupComputeFramework(requested, features)
 
         message = str(exc_info.value)
         assert "Feature pinned_feature" in message
         assert "PandasDataFrame is not available" in message
         assert 'pip install "mloda[pandas]"' in message
 
-    def test_feature_pinning_unavailable_framework_in_mixed_request_raises_with_hint(
-        self, monkeypatch: pytest.MonkeyPatch, features: Features
-    ) -> None:
-        self._unavailable(monkeypatch, PandasDataFrame)
-        features.collection.append(Feature("pinned_feature", compute_framework="PandasDataFrame"))
-
-        with pytest.raises(ValueError) as exc_info:
-            SetupComputeFramework([PythonDictFramework, PandasDataFrame], features)
-
-        message = str(exc_info.value)
-        assert "Feature pinned_feature" in message
-        assert "PandasDataFrame is not available" in message
-        assert 'pip install "mloda[pandas]"' in message
-
-    def test_pin_outside_requested_list_keeps_not_in_set_message(
+    def test_unavailable_pin_outside_requested_list_names_both_problems(
         self, monkeypatch: pytest.MonkeyPatch, features: Features
     ) -> None:
         self._unavailable(monkeypatch, PandasDataFrame)
@@ -392,7 +383,7 @@ class TestSetupComputeFramework:
         with pytest.raises(ValueError, match="has compute frameworks") as exc_info:
             SetupComputeFramework(["PyArrowTable"], features)
 
-        assert "is not available" not in str(exc_info.value)
+        assert 'pip install "mloda[pandas]"' in str(exc_info.value)
 
     def test_unavailable_output_framework_appends_install_hint(self, features: Features) -> None:
         class ZzSetupHintedOutputFramework(ComputeFramework):

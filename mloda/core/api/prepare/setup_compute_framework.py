@@ -84,15 +84,15 @@ class SetupComputeFramework:
         self, features: Features, available_compute_frameworks: set[type[ComputeFramework]]
     ) -> None:
         for feature in features.collection:
-            if feature.compute_frameworks and not any(
-                cf in available_compute_frameworks for cf in feature.compute_frameworks
-            ):
-                raise ValueError(
-                    f"Feature {feature.name} has compute frameworks {feature.compute_frameworks} not in {available_compute_frameworks}."
-                )
-            if feature.compute_frameworks and not any(cf.is_available() for cf in feature.compute_frameworks):
-                messages = sorted({unavailable_framework_message(cf) for cf in feature.compute_frameworks})
-                raise ValueError(f"Feature {feature.name}: " + " ".join(messages))
+            if not feature.compute_frameworks:
+                continue
+            none_available = not any(cf.is_available() for cf in feature.compute_frameworks)
+            hint = " ".join(sorted({unavailable_framework_message(cf) for cf in feature.compute_frameworks}))
+            if not any(cf in available_compute_frameworks for cf in feature.compute_frameworks):
+                message = f"Feature {feature.name} has compute frameworks {feature.compute_frameworks} not in {available_compute_frameworks}."
+                raise ValueError(f"{message} {hint}" if none_available else message)
+            if none_available:
+                raise ValueError(f"Feature {feature.name}: {hint}")
 
     def _filter_by_parallelization_modes(
         self,

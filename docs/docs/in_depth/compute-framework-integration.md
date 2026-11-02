@@ -77,8 +77,8 @@ runnable:
   maps to an empty framework set and resolution fails closed with the ordinary
   `No feature groups found for feature name: '<name>'.` error. It does **not**
   read as runnable on a framework you cannot actually run.
-- **Install hint.** When a user names a framework in `compute_frameworks` or `output_framework`
-  and it is unavailable, the error shows its `INSTALL_HINT` (for example
+- **Install hint.** When a user names a framework in `compute_frameworks` or `output_framework`,
+  or pins it on a requested feature, and it is unavailable, the error shows its `INSTALL_HINT` (for example
   `pip install "my-plugin[backend]"`). Subclasses inherit it.
 
 ### Declaring capability per subtype

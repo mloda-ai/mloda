@@ -800,7 +800,7 @@ class TestCredentialHandleSpecBuilder:
         ],
     )
     def test_direct_construction_cannot_loosen_the_fixed_fields(self, overrides: dict[str, Any]) -> None:
-        fixed = {
+        fixed: dict[str, Any] = {
             "context": False,
             "strict_validation": True,
             "caller_settable": False,

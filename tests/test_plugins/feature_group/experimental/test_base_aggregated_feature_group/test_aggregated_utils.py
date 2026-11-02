@@ -54,10 +54,6 @@ class PyArrowAggregatedTestDataCreator(AggregatedTestDataCreator):
 class PythonDictAggregatedTestDataCreator(AggregatedTestDataCreator):
     compute_framework = PythonDictFramework
 
-    @classmethod
-    def transform_format_for_testing(cls, data: dict[str, Any]) -> dict[str, Any]:
-        return data
-
 
 def validate_aggregated_features(result: list[pd.DataFrame]) -> None:
     # Verify the results

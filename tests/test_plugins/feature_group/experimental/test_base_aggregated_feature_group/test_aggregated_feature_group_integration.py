@@ -48,7 +48,7 @@ class AggregatedParserTestDataCreator(ATestDataCreator):
 
 
 class AggregatedNanSourceCreator(ATestDataCreator):
-    """Serves a float column holding a NaN on both Pandas and PyArrow, so the aggregation framework is free."""
+    """Serves a float column holding a NaN on Pandas, PyArrow and PythonDict, so the aggregation framework is free."""
 
     @classmethod
     def get_raw_data(cls) -> dict[str, Any]:
@@ -208,7 +208,7 @@ class TestAggregationImplementationChoice:
 class TestAggregationOnApiData:
     """A default run over a dict-of-lists api_data set aggregates on the dict framework."""
 
-    def test_unpinned_api_data_aggregation_runs_on_the_dict_framework(self) -> None:
+    def test_unpinned_api_data_aggregation_runs_on_the_dict_framework_without_mutating_api_data(self) -> None:
         plugins = PluginCollector.enabled_feature_groups({ApiDataFG, AggregatedFeatureGroup})
         api_data = {"AggApi": {"aggr_api_x": [1.0, 2.0, 3.0]}}
         feature = "aggr_api_x__sum_aggr"
@@ -217,14 +217,6 @@ class TestAggregationOnApiData:
         step = next(s for s in steps if s.step_kind == "compute" and s.feature_group is AggregatedFeatureGroup)
         assert step.compute_framework is PythonDictFramework
         assert step.compute_framework_reason == "loads natively"
-
-        results = mloda.run_all([feature], api_data=api_data, plugin_collector=plugins)
-        assert column_values(results, feature) == [6.0] * 3
-
-    def test_repeated_run_does_not_mutate_api_data(self) -> None:
-        plugins = PluginCollector.enabled_feature_groups({ApiDataFG, AggregatedFeatureGroup})
-        api_data = {"AggApi": {"aggr_api_x": [1.0, 2.0, 3.0]}}
-        feature = "aggr_api_x__sum_aggr"
 
         for _ in range(2):
             results = mloda.run_all([feature], api_data=api_data, plugin_collector=plugins)

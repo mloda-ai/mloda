@@ -45,11 +45,6 @@ class PythonDictMissingValueTestDataCreator(ATestDataCreator):
             "group": ["X", "Y", "X", "Y", "X"],
         }
 
-    @classmethod
-    def transform_format_for_testing(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """PythonDict's native format is already columnar; return it unchanged."""
-        return data
-
 
 @pytest.fixture
 def sample_data_with_missing() -> dict[str, Any]:

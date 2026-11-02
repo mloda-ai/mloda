@@ -1,10 +1,59 @@
-"""Shared value comparison for the cross-framework reference contract tests."""
+"""Shared values and comparison for the cross-framework reference contract tests."""
 
 import math
 from numbers import Real
 from typing import Any
 
+import numpy as np
+import numpy.typing as npt
 import pandas as pd
+import pytest
+
+NAN_LIKE_VALUES = [
+    pytest.param(np.float32("nan"), id="np_float32_nan"),
+    pytest.param(pd.NA, id="pd_na"),
+    pytest.param(pd.NaT, id="pd_nat"),
+]
+
+
+class NAType:
+    """A user class that only shares its name with the pandas NA type."""
+
+
+class _ArrayNe:
+    def __eq__(self, other: object) -> npt.NDArray[np.bool_]:  # type: ignore[override]
+        return np.array([True, False])
+
+    def __ne__(self, other: object) -> npt.NDArray[np.bool_]:  # type: ignore[override]
+        return np.array([False, True])
+
+    def __hash__(self) -> int:
+        return 1
+
+
+class _RaisingNe:
+    def __ne__(self, other: object) -> bool:
+        raise RuntimeError("no comparison")
+
+    def __hash__(self) -> int:
+        return 2
+
+
+class NeverEqual:
+    def __eq__(self, other: object) -> bool:
+        return False
+
+    def __hash__(self) -> int:
+        return 3
+
+
+ODD_CELL_KINDS = [
+    pytest.param(lambda i: np.array([float(i), 2.0]), id="numpy_array"),
+    pytest.param(lambda i: _ArrayNe(), id="array_ne"),
+    pytest.param(lambda i: _RaisingNe(), id="raising_ne"),
+    pytest.param(lambda i: NeverEqual(), id="never_equal"),
+    pytest.param(lambda i: NAType(), id="user_class_named_natype"),
+]
 
 
 def _is_nan(value: Any) -> bool:

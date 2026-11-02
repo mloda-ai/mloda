@@ -79,11 +79,11 @@ class TestPythonDictAggregation:
     def test_calculate_leaves_the_input_dict_unchanged(self, sample_data: dict[str, list[Any]]) -> None:
         feature_set = FeatureSet()
         feature_set.add(Feature("sales__sum_aggr"))
-        keys_before = list(sample_data)
+        before = {k: list(v) for k, v in sample_data.items()}
 
         PythonDictAggregation.calculate(AggregatedFeatureGroup, sample_data, feature_set, None)
 
-        assert list(sample_data) == keys_before
+        assert sample_data == before
 
     def test_calculate_feature_missing_source(self, sample_data: dict[str, list[Any]]) -> None:
         error = assert_core_rejects_missing_input(PythonDictAggregation, sample_data, "missing__sum_aggr", ("missing",))

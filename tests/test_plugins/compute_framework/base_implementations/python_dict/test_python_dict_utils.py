@@ -1,15 +1,21 @@
 """Red-phase tests for the ``columnar_to_rows``, ``homogenize_rows`` (issue 648) and ``result_rows``
 (issue 717) python_dict_utils helpers."""
 
+from collections.abc import Callable
+from decimal import Decimal
 from typing import Any
 
+import numpy as np
+import pandas as pd
 import pytest
 
 from mloda.user import RunResult
+from tests.test_plugins.feature_group.experimental.reference_contract import NAN_LIKE_VALUES, ODD_CELL_KINDS
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import (
     columnar_to_rows,
     homogenize_rows,
     is_columnar,
+    is_missing,
     result_rows,
     rows_to_columnar,
     validate_columnar_dict,
@@ -296,3 +302,42 @@ class TestResultRows:
     def test_columnar_dict_inside_nested_list_is_a_row(self) -> None:
         """Nested lists are row partitions; their columnar-looking dicts are rows, never pivoted recursively."""
         assert result_rows([[{"a": [1]}]]) == [{"a": [1]}]
+
+
+class TestIsMissing:
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param(None, id="none"),
+            pytest.param(float("nan"), id="float_nan"),
+            pytest.param(Decimal("NaN"), id="decimal_nan"),
+            pytest.param(Decimal("sNaN"), id="decimal_snan"),
+            pytest.param(np.datetime64("NaT"), id="datetime64_nat"),
+            pytest.param(np.timedelta64("NaT"), id="timedelta64_nat"),
+            pytest.param(complex("nan"), id="complex_nan"),
+            *NAN_LIKE_VALUES,
+        ],
+    )
+    def test_missing_cells(self, value: Any) -> None:
+        assert is_missing(value) is True
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param(0, id="zero"),
+            pytest.param(1.5, id="float"),
+            pytest.param("", id="empty_str"),
+            pytest.param("nan", id="nan_str"),
+            pytest.param(False, id="false"),
+            pytest.param(b"", id="empty_bytes"),
+            pytest.param(Decimal("1"), id="decimal"),
+            pytest.param(np.datetime64("2024-01-01"), id="datetime64"),
+            pytest.param(pd.Timestamp("2024-01-01"), id="timestamp"),
+        ],
+    )
+    def test_present_cells(self, value: Any) -> None:
+        assert is_missing(value) is False
+
+    @pytest.mark.parametrize("make", ODD_CELL_KINDS)
+    def test_odd_cells_are_present_and_do_not_raise(self, make: Callable[[int], Any]) -> None:
+        assert is_missing(make(1)) is False

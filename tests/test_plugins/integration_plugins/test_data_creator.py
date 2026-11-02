@@ -10,6 +10,7 @@ from mloda.provider import ComputeFramework
 from mloda.provider import FeatureSet
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
 class ATestDataCreator(DataCreatorFeatureGroup):
@@ -29,6 +30,7 @@ class ATestDataCreator(DataCreatorFeatureGroup):
     conversion = {
         PandasDataFrame: pd.DataFrame,
         PyArrowTable: None,
+        PythonDictFramework: None,
     }
 
     @classmethod

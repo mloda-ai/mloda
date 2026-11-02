@@ -6,7 +6,6 @@ from typing import Any
 from unittest.mock import Mock
 
 import numpy as np
-import numpy.typing as npt
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -17,7 +16,13 @@ from tests.test_plugins.feature_group.experimental.core_input_check import (
 )
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import FeatureSet, SubtypeDeclaration
-from tests.test_plugins.feature_group.experimental.reference_contract import same, same_on_pandas
+from tests.test_plugins.feature_group.experimental.reference_contract import (
+    NAN_LIKE_VALUES,
+    ODD_CELL_KINDS,
+    NeverEqual,
+    same,
+    same_on_pandas,
+)
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -477,11 +482,6 @@ _NAN_LIKE_KEYS = [
     pytest.param(pd.NaT, _DAYS, id="pd_nat"),
     pytest.param(_NAT64, _DAYS64, id="np_datetime64_nat"),
 ]
-_NAN_LIKE_VALUES = [
-    pytest.param(np.float32("nan"), id="np_float32_nan"),
-    pytest.param(pd.NA, id="pd_na"),
-    pytest.param(pd.NaT, id="pd_nat"),
-]
 _ARRAY_CELLS: _Cells = [np.array([1.0, 2.0]), None, np.array([3.0, 4.0]), None]
 
 _MIXED_TIE = [2.0, 1, 2.0, 1, None]
@@ -580,52 +580,14 @@ class TestImplementationsConformToTheReferenceContract:
         assert not _differences(implementation, actual, baseline)
 
 
-class NAType:
-    """A user class that only shares its name with the pandas NA type."""
-
-
-class _ArrayNe:
-    def __eq__(self, other: object) -> npt.NDArray[np.bool_]:  # type: ignore[override]
-        return np.array([True, False])
-
-    def __ne__(self, other: object) -> npt.NDArray[np.bool_]:  # type: ignore[override]
-        return np.array([False, True])
-
-    def __hash__(self) -> int:
-        return 1
-
-
-class _RaisingNe:
-    def __ne__(self, other: object) -> bool:
-        raise RuntimeError("no comparison")
-
-    def __hash__(self) -> int:
-        return 2
-
-
-class _NeverEqual:
-    def __eq__(self, other: object) -> bool:
-        return False
-
-    def __hash__(self) -> int:
-        return 3
-
-
-_NEVER_EQUAL_KEY = _NeverEqual()
-_ODD_CELL_KINDS = [
-    pytest.param(lambda i: np.array([float(i), 2.0]), id="numpy_array"),
-    pytest.param(lambda i: _ArrayNe(), id="array_ne"),
-    pytest.param(lambda i: _RaisingNe(), id="raising_ne"),
-    pytest.param(lambda i: _NeverEqual(), id="never_equal"),
-    pytest.param(lambda i: NAType(), id="user_class_named_natype"),
-]
+_NEVER_EQUAL_KEY = NeverEqual()
 
 
 class TestNanNormalizationIsLimitedToFloatColumns:
     """NaN-like cells are missing; strings such as "nan", ints and other present values are untouched."""
 
     @pytest.mark.parametrize("method", ["mean", "ffill"])
-    @pytest.mark.parametrize("scalar", _NAN_LIKE_VALUES)
+    @pytest.mark.parametrize("scalar", NAN_LIKE_VALUES)
     def test_python_dict_nan_like_value_cells_are_missing(self, method: str, scalar: Any) -> None:
         cells: _Cells = [1.0, scalar, 3.0, scalar, 8.0, scalar]
         columns: _Columns = {"a": cells}
@@ -637,7 +599,7 @@ class TestNanNormalizationIsLimitedToFloatColumns:
         assert not _differences(PythonDictMissingValueImputation, actual, baseline)
 
     @pytest.mark.parametrize(("method", "constant"), [("ffill", None), ("constant", 0.0)])
-    @pytest.mark.parametrize("make", _ODD_CELL_KINDS)
+    @pytest.mark.parametrize("make", ODD_CELL_KINDS)
     def test_python_dict_odd_cells_are_left_alone(self, method: str, constant: Any, make: Callable[[int], Any]) -> None:
         first, second = make(1), make(3)
         actual = _impute(

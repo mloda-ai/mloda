@@ -28,7 +28,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_la
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.python_dict import PythonDictAggregation
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.test_plugins.feature_group.experimental.reference_contract import same, same_on_pandas
+from tests.test_plugins.feature_group.experimental.reference_contract import NAN_LIKE_VALUES, same, same_on_pandas
 
 
 AGGREGATION_UNIVERSE = frozenset(AggregatedFeatureGroup.AGGREGATION_TYPES)
@@ -267,3 +267,18 @@ class TestImplementationsConformToTheReferenceContract:
             if not all(compare(a, e) for a, e in zip(actual, expected)):
                 differing.append(f"{shape}: {actual} != reference {expected}")
         assert bool(differing) == (aggregation_type in implementation.divergent), differing
+
+    @pytest.mark.parametrize("aggregation_type", sorted(AGGREGATION_UNIVERSE))
+    @pytest.mark.parametrize("scalar", NAN_LIKE_VALUES)
+    @pytest.mark.parametrize("shape", [_SINGLE_COLUMN, _MULTI_COLUMNS], ids=["single", "multi"])
+    def test_python_dict_treats_nan_like_cells_as_missing(
+        self, shape: dict[str, list[float | None]], scalar: Any, aggregation_type: str
+    ) -> None:
+        columns: dict[str, list[Any]] = {
+            name: [scalar if cell is None or math.isnan(cell) else cell for cell in cells]
+            for name, cells in shape.items()
+        }
+        actual = _python_dict_result(aggregation_type, columns)
+        expected = _reference_result(aggregation_type, shape)
+        assert len(actual) == len(expected)
+        assert all(same(a, e) for a, e in zip(actual, expected))

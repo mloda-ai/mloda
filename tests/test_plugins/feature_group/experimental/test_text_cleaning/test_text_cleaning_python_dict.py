@@ -53,11 +53,6 @@ class PythonDictTextCleaningTestDataCreator(ATestDataCreator):
             ],
         }
 
-    @classmethod
-    def transform_format_for_testing(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """PythonDict's native format is already columnar; return it unchanged."""
-        return data
-
 
 def _feature_set(name: str, *operations: str) -> FeatureSet:
     feature_set = FeatureSet()

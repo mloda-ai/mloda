@@ -6,7 +6,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from mloda.user import FeatureName, ParallelizationMode
+from mloda.user import DataType, FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
     DataTypeValidatorFrameworkTestMixin,
@@ -195,9 +195,18 @@ class TestPandasDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     STRING; plain object dtype would be ambiguous and resolve to None.
     """
 
+    EXTENDED_SKIPS = {
+        "list_str_col": "to_pandas yields object columns for lists, which carry no element type",
+        "list_struct_col": "to_pandas yields object columns for lists, which carry no element type",
+    }
+
     @pytest.fixture
     def framework_instance(self) -> Any:
         return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    def test_arrow_dtype_list_column_resolves_to_list(self, framework_instance: Any) -> None:
+        df = pd.DataFrame({"c": pd.Series([["a"], ["b", "c"]], dtype=pd.ArrowDtype(pa.list_(pa.string())))})
+        assert framework_instance._extract_column_data_type(df, "c") == DataType.LIST
 
     def from_arrow(self, table: pa.Table) -> Any:
         # Option A: arrow -> pandas via to_pandas. types_mapper preserves pd.StringDtype()

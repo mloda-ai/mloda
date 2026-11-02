@@ -20,8 +20,17 @@ class DataTypeValidator:
     """Validates feature data matches declared DataType."""
 
     _COMPATIBLE_TYPES = {
-        DataType.INT64: {DataType.INT32, DataType.INT64},
-        DataType.DOUBLE: {DataType.FLOAT, DataType.DOUBLE, DataType.INT32, DataType.INT64},
+        DataType.INT32: {DataType.INT8, DataType.UINT8},
+        DataType.INT64: {DataType.INT8, DataType.INT32, DataType.UINT8},
+        DataType.UINT64: {DataType.UINT8},
+        DataType.DOUBLE: {
+            DataType.FLOAT,
+            DataType.INT8,
+            DataType.INT32,
+            DataType.INT64,
+            DataType.UINT8,
+            DataType.UINT64,
+        },
         DataType.TIMESTAMP_MICROS: {DataType.TIMESTAMP_MILLIS, DataType.TIMESTAMP_MICROS},
     }
 
@@ -46,11 +55,19 @@ class DataTypeValidator:
         if declared == actual:
             return True
 
-        numeric_types = {DataType.INT32, DataType.INT64, DataType.FLOAT, DataType.DOUBLE}
+        numeric_types = {
+            DataType.INT8,
+            DataType.UINT8,
+            DataType.INT32,
+            DataType.INT64,
+            DataType.UINT64,
+            DataType.FLOAT,
+            DataType.DOUBLE,
+        }
         if declared in numeric_types and actual in numeric_types:
             return True
 
-        timestamp_types = {DataType.TIMESTAMP_MILLIS, DataType.TIMESTAMP_MICROS}
+        timestamp_types = {DataType.TIMESTAMP_MILLIS, DataType.TIMESTAMP_MICROS, DataType.TIMESTAMP_MICROS_TZ}
         if declared in timestamp_types and actual in timestamp_types:
             return True
 

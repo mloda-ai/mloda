@@ -54,9 +54,58 @@ class TestFromArrowType:
     def test_to_arrow_type_decimal_is_decimal128_38_18(self) -> None:
         assert DataType.to_arrow_type(DataType.DECIMAL) == pa.decimal128(38, 18)
 
+    def test_from_arrow_type_new_integer_members(self) -> None:
+        assert DataType.from_arrow_type(pa.int8()) == DataType.INT8
+        assert DataType.from_arrow_type(pa.uint8()) == DataType.UINT8
+        assert DataType.from_arrow_type(pa.uint64()) == DataType.UINT64
+
+    def test_from_arrow_type_widths_without_member_resolve_to_next_lossless(self) -> None:
+        assert DataType.from_arrow_type(pa.int16()) == DataType.INT32
+        assert DataType.from_arrow_type(pa.uint16()) == DataType.INT32
+        assert DataType.from_arrow_type(pa.uint32()) == DataType.INT64
+
+    def test_new_member_values_equal_names(self) -> None:
+        for name in ("INT8", "UINT8", "UINT64", "TIMESTAMP_MICROS_TZ", "LIST"):
+            assert DataType[name].value == name
+
+    @pytest.mark.parametrize("unit", ["ms", "us"])
+    @pytest.mark.parametrize("tz", ["UTC", "Europe/Berlin"])
+    def test_from_arrow_type_tz_aware_ms_us(self, unit: str, tz: str) -> None:
+        assert DataType.from_arrow_type(pa.timestamp(unit, tz=tz)) == DataType.TIMESTAMP_MICROS_TZ
+
+    @pytest.mark.parametrize("unit", ["s", "ns"])
+    def test_from_arrow_type_tz_aware_s_ns_unresolved(self, unit: str) -> None:
+        assert DataType.from_arrow_type_safe(pa.timestamp(unit, tz="UTC")) is None
+
+    @pytest.mark.parametrize(
+        "arrow_type",
+        [
+            pa.list_(pa.int32()),
+            pa.list_(pa.string()),
+            pa.large_list(pa.int64()),
+            pa.list_(pa.int32(), 3),
+            pa.list_(pa.struct([("x", pa.int32())])),
+        ],
+    )
+    def test_from_arrow_type_list_family(self, arrow_type: pa.DataType) -> None:
+        assert DataType.from_arrow_type(arrow_type) == DataType.LIST
+
+    @pytest.mark.parametrize("data_type", [DataType.TIMESTAMP_MICROS_TZ, DataType.LIST])
+    def test_to_arrow_type_raises_without_data(self, data_type: DataType) -> None:
+        with pytest.raises(ValueError):
+            DataType.to_arrow_type(data_type)
+
+    def test_to_arrow_type_new_integers(self) -> None:
+        assert DataType.to_arrow_type(DataType.INT8) == pa.int8()
+        assert DataType.to_arrow_type(DataType.UINT8) == pa.uint8()
+        assert DataType.to_arrow_type(DataType.UINT64) == pa.uint64()
+
     def test_from_arrow_type_round_trip(self) -> None:
         """Test that converting to arrow and back preserves the DataType."""
         all_data_types = [
+            DataType.INT8,
+            DataType.UINT8,
+            DataType.UINT64,
             DataType.INT32,
             DataType.INT64,
             DataType.FLOAT,
@@ -80,7 +129,7 @@ class TestFromArrowType:
         """Test that unsupported PyArrow types raise ValueError."""
         # Test with a type that shouldn't be supported
         with pytest.raises(ValueError, match="Unsupported.*"):
-            DataType.from_arrow_type(pa.list_(pa.int32()))
+            DataType.from_arrow_type(pa.map_(pa.string(), pa.int32()))
 
         with pytest.raises(ValueError, match="Unsupported.*"):
             DataType.from_arrow_type(pa.struct([("field1", pa.int32())]))

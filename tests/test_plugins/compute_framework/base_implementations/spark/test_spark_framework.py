@@ -25,6 +25,7 @@ from decimal import Decimal
 from typing import Any
 from mloda.user import DataType
 from mloda.user import JoinType
+import pyarrow as pa
 import pytest
 from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
 from mloda.user import FeatureName
@@ -70,6 +71,8 @@ if PYSPARK_AVAILABLE:
         DoubleType,
         DecimalType,
         TimestampType,
+        ByteType,
+        ArrayType,
     )
     import pyspark
 else:
@@ -392,6 +395,17 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
+    EXTENDED_SKIPS = {
+        "uint8_col": "Spark has no unsigned integer types",
+        "uint64_col": "Spark has no unsigned integer types",
+        "timestamp_us_tz_col": "Spark TimestampType is session-zone, not tz-aware",
+    }
+
+    @pytest.fixture
+    def extended_sample_data(self, spec: ColumnSpec, spark_session: Any) -> Any:
+        self._skip_if_unsupported(spec)
+        return self._build_spark((spec,), spark_session)
+
     @pytest.fixture
     def validator_sample_data(self, spark_session: Any) -> Any:
         return self._build_spark(self.VALIDATOR_COLUMNS, spark_session)
@@ -400,11 +414,23 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def precision_sample_data(self, spark_session: Any) -> Any:
         return self._build_spark(self.PRECISION_COLUMNS, spark_session)
 
+    @staticmethod
+    def _spark_type(spec: ColumnSpec) -> Any:
+        # Extended columns derive their Spark type from the explicit Arrow type (ArrayType needs an element type).
+        if spec.data_type == DataType.INT8:
+            return ByteType()
+        if spec.data_type == DataType.LIST:
+            element = spec.arrow_type.value_type  # type: ignore[union-attr]
+            if element == pa.string():
+                return ArrayType(StringType())
+            return ArrayType(StructType([StructField("x", LongType())]))
+        return _SPARK_TYPE_MAP[spec.data_type]
+
     def _build_spark(self, columns: tuple[ColumnSpec, ...], spark_session: Any) -> Any:
         # Spark needs an explicit StructType, so the schema is built per-column from
         # _SPARK_TYPE_MAP. Values flow via the mixin's arrow table -> pylist.
-        usable = tuple(c for c in columns if c.data_type in _SPARK_TYPE_MAP)
-        schema = StructType([StructField(c.name, _SPARK_TYPE_MAP[c.data_type]) for c in usable])
+        usable = tuple(c for c in columns if c.arrow_type is not None or c.data_type in _SPARK_TYPE_MAP)
+        schema = StructType([StructField(c.name, self._spark_type(c)) for c in usable])
         return spark_session.createDataFrame(self._arrow_table(usable).to_pylist(), schema=schema)
 
     def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:

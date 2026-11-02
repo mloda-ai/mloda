@@ -12,6 +12,7 @@ from tests.test_plugins.compute_framework.test_tooling.availability_test_helper 
     assert_unavailable_when_import_blocked,
 )
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dict_interchange_output_schema_test_mixin import (
@@ -322,6 +323,11 @@ class TestDuckDBDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     @pytest.fixture
     def framework_instance(self) -> Any:
         return DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def extended_sample_data(self, spec: ColumnSpec, connection: Any) -> Any:
+        self._skip_if_unsupported(spec)
+        return DuckdbRelation.from_arrow(connection, self._arrow_table((spec,)))
 
     @pytest.fixture
     def validator_sample_data(self, connection: Any) -> Any:

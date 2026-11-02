@@ -35,7 +35,11 @@ _DUCKDB_TYPE_MAP: dict[str, DataType] = {
     "INTEGER": DataType.INT32,
     "BIGINT": DataType.INT64,
     "SMALLINT": DataType.INT32,
-    "TINYINT": DataType.INT32,
+    "TINYINT": DataType.INT8,
+    "UTINYINT": DataType.UINT8,
+    "USMALLINT": DataType.INT32,
+    "UINTEGER": DataType.INT64,
+    "UBIGINT": DataType.UINT64,
     "HUGEINT": DataType.INT64,
     "FLOAT": DataType.FLOAT,
     "DOUBLE": DataType.DOUBLE,
@@ -48,8 +52,8 @@ _DUCKDB_TYPE_MAP: dict[str, DataType] = {
     "TIMESTAMP_MS": DataType.TIMESTAMP_MILLIS,
     "TIMESTAMP_S": DataType.TIMESTAMP_MICROS,
     "TIMESTAMP_NS": DataType.TIMESTAMP_MICROS,
-    "TIMESTAMP WITH TIME ZONE": DataType.TIMESTAMP_MICROS,
-    "TIMESTAMPTZ": DataType.TIMESTAMP_MICROS,
+    "TIMESTAMP WITH TIME ZONE": DataType.TIMESTAMP_MICROS_TZ,
+    "TIMESTAMPTZ": DataType.TIMESTAMP_MICROS_TZ,
 }
 
 
@@ -203,6 +207,8 @@ class DuckDBFramework(ComputeFramework):
             return _DUCKDB_TYPE_MAP[type_str]
         if type_str.startswith("DECIMAL"):
             return DataType.DECIMAL
+        if getattr(duckdb_type, "id", None) in ("list", "array"):
+            return DataType.LIST
         return None
 
     def _output_schema(self, data: Any) -> OutputSchema | None:

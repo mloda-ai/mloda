@@ -69,13 +69,7 @@ fail to determine a type, return `None` for that case rather than letting it rai
 
 ### Default (Lenient) Mode
 
-By default, validation allows compatible type conversions within categories:
-
-| Declared Type | Compatible Actual Types |
-|---------------|------------------------|
-| INT64 | INT32, INT64 |
-| DOUBLE | INT32, INT64, FLOAT, DOUBLE |
-| TIMESTAMP_MICROS | TIMESTAMP_MILLIS, TIMESTAMP_MICROS |
+By default, validation applies a family rule: any declared numeric type accepts any numeric type, and any declared timestamp type accepts any timestamp type, naive or tz-aware. Everything else must match exactly.
 
 Cross-category mismatches (e.g., STRING declared but INT64 returned) raise `DataTypeMismatchError`.
 
@@ -90,7 +84,17 @@ feature = Feature.int32_of(
 )
 ```
 
-In strict mode, only exact type matches or standard widening conversions are allowed.
+In strict mode, only exact type matches or lossless widening conversions are allowed:
+
+| Declared Type | Compatible Actual Types |
+|---------------|------------------------|
+| INT32 | INT8, UINT8 |
+| INT64 | INT8, INT32, UINT8 |
+| UINT64 | UINT8 |
+| DOUBLE | FLOAT, INT8, INT32, INT64, UINT8, UINT64 |
+| TIMESTAMP_MICROS | TIMESTAMP_MILLIS |
+
+Naive and tz-aware timestamps never widen into each other.
 
 ## Implementing the Hook in a Custom Compute Framework
 
@@ -143,16 +147,26 @@ validation still applies).
 
 Not every backend's native type system can distinguish every precision mloda declares. The table below shows which precisions each bundled framework can extract from data. For the rest, the framework's `_extract_column_data_type` returns the widest type in the family (still correct under lenient mode), and strict-mode tests for the affected precision are skipped with a clear reason.
 
-| Framework | INT32 / INT64 | FLOAT / DOUBLE | TIMESTAMP_MILLIS / MICROS |
-|---|---|---|---|
-| Pandas | yes | yes | yes |
-| Polars (eager / lazy) | yes | yes | yes |
-| PyArrow | yes | yes | yes |
-| DuckDB | yes | yes | yes |
-| Spark | yes | yes | no (only `TimestampType` exists) |
-| Iceberg | yes | yes | no (only `TimestampType` exists) |
-| SQLite | no (INTEGER affinity) | no (REAL affinity) | no (stored as TEXT) |
-| PythonDict | no (`type.__name__` is "int") | no (Python float is 64-bit) | no (`datetime.datetime` is microsecond) |
+Integer widths without a member resolve to the next lossless one: int16 and uint16 to INT32, uint32 to INT64.
+
+| Framework | INT32 / INT64 | INT8 / UINT8 / UINT64 | FLOAT / DOUBLE | TIMESTAMP_MILLIS / MICROS | TIMESTAMP_MICROS_TZ | LIST |
+|---|---|---|---|---|---|---|
+| Pandas | yes | yes | yes | yes | yes | only Arrow-backed columns |
+| Polars (eager / lazy) | yes | yes | yes | yes | yes | yes |
+| PyArrow | yes | yes | yes | yes | yes | yes |
+| DuckDB | yes | yes | yes | yes | yes | yes |
+| Spark | yes | INT8 only (no unsigned) | yes | no (`TimestampType` resolves to TIMESTAMP_MICROS) | no | yes |
+| Iceberg | yes | no (no narrow or unsigned ints) | yes | no (only `TimestampType` exists) | yes | yes |
+| SQLite | no (INTEGER affinity) | yes (through Arrow type hints) | no (REAL affinity) | no (stored as TEXT) | yes (through Arrow type hints) | no |
+| PythonDict | no (`type.__name__` is "int") | no | no (Python float is 64-bit) | no (`datetime.datetime` is microsecond) | yes (aware `datetime`) | yes |
+
+Members without a typed constructor are declared with `Feature(name, data_type=DataType.UINT8)`.
+
+A custom ComputeFramework should map tz-aware timestamp columns to `TIMESTAMP_MICROS_TZ`.
+
+## List Columns
+
+`DataType.LIST` means a list of any element type: validation checks only the family, elements are not checked, and `to_arrow_type` raises for it because the element type is unknown without data.
 
 ## Decimal Columns
 

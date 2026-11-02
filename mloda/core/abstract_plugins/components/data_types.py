@@ -27,6 +27,11 @@ class DataType(Enum):
         ...
     """
 
+    INT8 = "INT8"  # pa.int8()
+    UINT8 = "UINT8"  # pa.uint8()
+    UINT64 = "UINT64"  # pa.uint64()
+    TIMESTAMP_MICROS_TZ = "TIMESTAMP_MICROS_TZ"  # tz-aware pa.timestamp("us", tz), any zone
+    LIST = "LIST"  # any pa.list_(...), element type unchecked
     INT32 = "INT32"  # pa.int32()
     INT64 = "INT64"  # pa.int64()
     FLOAT = "FLOAT"  # pa.float32()
@@ -97,6 +102,9 @@ class DataType(Enum):
         """
         pa = require("pyarrow", _PYARROW_REASON)
         mapping = {
+            cls.INT8: pa.int8(),
+            cls.UINT8: pa.uint8(),
+            cls.UINT64: pa.uint64(),
             cls.INT32: pa.int32(),
             cls.INT64: pa.int64(),
             cls.FLOAT: pa.float32(),
@@ -112,15 +120,25 @@ class DataType(Enum):
 
         if data_type in mapping:
             return mapping[data_type]
+        elif data_type == cls.TIMESTAMP_MICROS_TZ:
+            raise ValueError(f"{data_type} has no single Arrow type: the time zone is unknown without data")
+        elif data_type == cls.LIST:
+            raise ValueError(f"{data_type} has no single Arrow type: the element type is unknown without data")
         else:
             raise ValueError(f"Unsupported DataType: {data_type}")
 
     @classmethod
     def _arrow_type_to_dtype_or_none(cls, arrow_type: pa.DataType) -> DataType | None:
         pa = require("pyarrow", _PYARROW_REASON)
-        if pa.types.is_int32(arrow_type):
+        if pa.types.is_int8(arrow_type):
+            return cls.INT8
+        elif pa.types.is_uint8(arrow_type):
+            return cls.UINT8
+        elif pa.types.is_uint64(arrow_type):
+            return cls.UINT64
+        elif pa.types.is_int16(arrow_type) or pa.types.is_uint16(arrow_type) or pa.types.is_int32(arrow_type):
             return cls.INT32
-        elif pa.types.is_int64(arrow_type):
+        elif pa.types.is_int64(arrow_type) or pa.types.is_uint32(arrow_type):
             return cls.INT64
         elif pa.types.is_float32(arrow_type):
             return cls.FLOAT
@@ -134,8 +152,17 @@ class DataType(Enum):
             return cls.BINARY
         elif pa.types.is_date32(arrow_type):
             return cls.DATE
+        elif (
+            pa.types.is_list(arrow_type)
+            or pa.types.is_large_list(arrow_type)
+            or pa.types.is_fixed_size_list(arrow_type)
+        ):
+            return cls.LIST
         elif pa.types.is_timestamp(arrow_type):
-            if arrow_type.unit == "ms":
+            if arrow_type.tz is not None:
+                if arrow_type.unit in ("ms", "us"):
+                    return cls.TIMESTAMP_MICROS_TZ
+            elif arrow_type.unit == "ms":
                 return cls.TIMESTAMP_MILLIS
             elif arrow_type.unit == "us":
                 return cls.TIMESTAMP_MICROS

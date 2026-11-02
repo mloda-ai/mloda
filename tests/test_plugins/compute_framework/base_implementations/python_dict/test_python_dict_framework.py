@@ -206,6 +206,12 @@ class TestPythonDictDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     statically un-enforceable from Python runtime types.
     """
 
+    EXTENDED_SKIPS = {
+        "int8_col": "Python int has no width",
+        "uint8_col": "Python int has no width",
+        "uint64_col": "Python int has no width",
+    }
+
     @pytest.fixture
     def framework_instance(self) -> Any:
         return PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())

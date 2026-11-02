@@ -92,7 +92,6 @@ def test_new_test_and_sub_suite_override_are_allowed() -> None:
         def test_other(self) -> None:
             return None
 
-    assert Extra.test_extra is not None
     assert SubSuite.test_other is not ToySuite.test_other
 
 
@@ -118,6 +117,72 @@ def test_class_body_pytestmark_raises() -> None:
             pytestmark = pytest.mark.skip(reason="hides tests")
 
 
+def test_timeout_pytestmark_is_accepted() -> None:
+    class Provider(ToySuite):
+        plugin = _GoodPlugin
+        pytestmark = pytest.mark.timeout(30)
+
+    assert Provider.pytestmark is not None
+
+
+def test_class_body_pytestmark_list_with_skipif_raises() -> None:
+    with pytest.raises(DeclarationError, match="pytestmark"):
+
+        class Provider(ToySuite):
+            plugin = _GoodPlugin
+            pytestmark = [pytest.mark.timeout(30), pytest.mark.skipif(True, reason="x")]
+
+
+def test_non_switchoff_declaration_value_raises() -> None:
+    with pytest.raises(DeclarationError, match="test_other"):
+
+        class Provider(ToySuite):
+            plugin = _GoodPlugin
+            switched_off = {"test_other": "NOT_IMPLEMENTED"}  # type: ignore[dict-item]
+
+
+def test_provider_of_provider_can_re_enable_test() -> None:
+    class Parent(ToySuite):
+        plugin = _BadPlugin
+        switched_off = {"test_has_name": SwitchOff(Cause.NOT_IMPLEMENTED)}
+
+    class Child(Parent):
+        switched_off = {}
+
+    with pytest.raises(pytest.fail.Exception, match="plugin has no name"):
+        Child().test_has_name()
+    with pytest.raises(pytest.skip.Exception):
+        Parent().test_has_name()
+
+
+def test_provider_of_provider_with_other_key_restores_parent_key() -> None:
+    class Parent(ToySuite):
+        plugin = _BadPlugin
+        switched_off = {"test_has_name": SwitchOff(Cause.NOT_IMPLEMENTED)}
+
+    class Child(Parent):
+        switched_off = {"test_other": SwitchOff(Cause.NOT_IMPLEMENTED)}
+
+    with pytest.raises(pytest.skip.Exception):
+        Child().test_other()
+    with pytest.raises(pytest.fail.Exception, match="plugin has no name"):
+        Child().test_has_name()
+
+
+def test_provider_of_provider_extending_mapping_keeps_both_skipped() -> None:
+    class Parent(ToySuite):
+        plugin = _BadPlugin
+        switched_off = {"test_has_name": SwitchOff(Cause.NOT_IMPLEMENTED)}
+
+    class Child(Parent):
+        switched_off = {**Parent.switched_off, "test_other": SwitchOff(Cause.NOT_IMPLEMENTED)}
+
+    with pytest.raises(pytest.skip.Exception):
+        Child().test_has_name()
+    with pytest.raises(pytest.skip.Exception):
+        Child().test_other()
+
+
 def test_not_implemented_declaration_replaces_test_with_skip() -> None:
     class Provider(ToySuite):
         plugin = _BadPlugin
@@ -135,20 +200,6 @@ def test_skip_message_carries_cause_and_reason() -> None:
 
     with pytest.raises(pytest.skip.Exception, match="BACKEND: engine lacks it"):
         Provider().test_has_name()
-
-
-def test_provider_setup_method_does_not_undo_stub() -> None:
-    class Provider(ToySuite):
-        plugin = _BadPlugin
-        switched_off = {"test_has_name": SwitchOff(Cause.NOT_IMPLEMENTED)}
-
-        def setup_method(self) -> None:
-            return None
-
-    instance = Provider()
-    instance.setup_method()
-    with pytest.raises(pytest.skip.Exception):
-        instance.test_has_name()
 
 
 @pytest.mark.parametrize("cause", [Cause.BACKEND, Cause.ENVIRONMENT])

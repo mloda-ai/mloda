@@ -1,6 +1,7 @@
 """Tests for the DataType value-fit rules and check_values_fit."""
 
 import datetime
+import decimal
 from decimal import Decimal
 from typing import Any
 
@@ -31,6 +32,9 @@ FITS: list[tuple[DataType, Any]] = [
     (DataType.DECIMAL, Decimal("1.5")),
     (DataType.DECIMAL, Decimal("1.000000000000000000000")),
     (DataType.DECIMAL, Decimal("0.000000000000000001")),
+    (DataType.DECIMAL, Decimal("99999999999999999999.999999999999999999")),
+    (DataType.DECIMAL, Decimal("-99999999999999999999.999999999999999999")),
+    (DataType.FLOAT, 3.4028235e38),
 ]
 
 MISFITS: list[tuple[DataType, Any]] = [
@@ -43,6 +47,7 @@ MISFITS: list[tuple[DataType, Any]] = [
     (DataType.INT64, -(2**63) - 1),
     (DataType.FLOAT, 1),
     (DataType.FLOAT, 1e39),
+    (DataType.FLOAT, float(2**128 - 2**103)),
     (DataType.DOUBLE, 1),
     (DataType.BOOLEAN, 1),
     (DataType.STRING, b"a"),
@@ -97,9 +102,9 @@ def test_check_values_fit_reports_each_misfit() -> None:
     result = check_values_fit({"a": [7, "x", 8, "y"]}, {"a": DataType.INT64})
     assert result.passed is False
     assert len(result.failures) == 2
-    for part in ("a", "1", "str", "INT64"):
+    for part in ("a", "row 1", "str", "INT64"):
         assert part in result.failures[0]
-    assert "3" in result.failures[1]
+    assert "row 3" in result.failures[1]
 
 
 @pytest.mark.parametrize(
@@ -114,3 +119,11 @@ def test_check_values_fit_column_mismatch(columns: dict[str, list[Any]], types: 
     assert result.passed is False
     assert len(result.failures) == 1
     assert name in result.failures[0]
+
+
+def test_decimal_fit_ignores_caller_context_traps() -> None:
+    with decimal.localcontext() as ctx:
+        ctx.traps[decimal.Inexact] = True
+        ctx.traps[decimal.Rounded] = True
+        assert value_fits(DataType.DECIMAL, Decimal("99999999999999999999.999999999999999999")) is True
+        assert value_fits(DataType.DECIMAL, Decimal("1e-19")) is False

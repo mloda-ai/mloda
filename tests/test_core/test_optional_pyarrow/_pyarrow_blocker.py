@@ -39,13 +39,16 @@ def blocker_preamble(module: str = "pyarrow") -> str:
     return _PREAMBLE_TEMPLATE.format(module=module)
 
 
-def run_blocked(body: str, module: str = "pyarrow", timeout: int = 30) -> "subprocess.CompletedProcess[str]":
-    """Run *body* in a subprocess where *module* is blocked by a sys.meta_path finder.
+def run_blocked(
+    body: str, module: str = "pyarrow", timeout: int = 30, *, also_block: tuple[str, ...] = ()
+) -> "subprocess.CompletedProcess[str]":
+    """Run *body* in a subprocess where *module* (and each of *also_block*) is blocked by a sys.meta_path finder.
 
     The returned CompletedProcess always has text-mode stdout/stderr.
     """
+    preamble = "".join(blocker_preamble(name) for name in (module, *also_block))
     return subprocess.run(  # nosec
-        [sys.executable, "-c", blocker_preamble(module) + body],
+        [sys.executable, "-c", preamble + body],
         capture_output=True,
         text=True,
         timeout=timeout,

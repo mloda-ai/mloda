@@ -9,7 +9,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda._testing.result import CheckResult
 
-_FLOAT32_MAX = 3.4028234663852886e38
+_FLOAT32_OVERFLOW = float(2**128 - 2**103)
 _DECIMAL_SCALE = 18
 _DECIMAL_INTEGER_DIGITS = 20
 
@@ -19,9 +19,10 @@ def _int_in(bits: int) -> Callable[[Any], bool]:
 
 
 def _is_float32(v: Any) -> bool:
-    return isinstance(v, float) and (not math.isfinite(v) or abs(v) <= _FLOAT32_MAX)
+    return isinstance(v, float) and (not math.isfinite(v) or abs(v) < _FLOAT32_OVERFLOW)
 
 
+# Declared timestamp types carry no time zone, so only naive datetimes fit.
 def _is_naive_datetime(v: Any) -> bool:
     return isinstance(v, datetime.datetime) and v.tzinfo is None
 
@@ -37,10 +38,12 @@ def _is_date(v: Any) -> bool:
 def _is_decimal(v: Any) -> bool:
     if not isinstance(v, decimal.Decimal) or not v.is_finite():
         return False
-    if abs(v) >= decimal.Decimal(10) ** _DECIMAL_INTEGER_DIGITS:
+    if v.adjusted() >= _DECIMAL_INTEGER_DIGITS:
         return False
     with decimal.localcontext() as ctx:
         ctx.prec = _DECIMAL_INTEGER_DIGITS + _DECIMAL_SCALE + 10
+        ctx.traps[decimal.Inexact] = False
+        ctx.traps[decimal.Rounded] = False
         return v == v.quantize(decimal.Decimal(1).scaleb(-_DECIMAL_SCALE))
 
 

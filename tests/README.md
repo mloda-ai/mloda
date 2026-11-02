@@ -63,7 +63,7 @@ tests/
 │   ├── cli/                        # Tests for the `mloda` command
 │   ├── mcp/                        # Tests for the MCP adapter; stdio smoke tests run via `tox -e mcp`
 │   └── service/                    # Tests for settings, requests, catalog, planner and runner
-├── test_testing_kit/               # Tests for the non-public mloda._testing kit
+├── test_testing_kit/               # Tests for the non-public testing kit
 └── test_plugins/                   # Tests for plugin implementations
     ├── api/                        # Tests for plugin-facing API
     ├── compute_framework/          # Tests for compute framework plugins

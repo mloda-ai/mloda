@@ -1,5 +1,6 @@
 """Tests for TypedTestData construction and accessors."""
 
+import contextlib
 from typing import Any
 
 import pytest
@@ -45,3 +46,16 @@ def test_to_python_dict_returns_copy() -> None:
     first["new"] = []
     assert data.to_python_dict() == {"a": [1, 2, None], "b": ["x", "y", "z"]}
     assert data.row_count == 3
+
+
+def test_types_is_a_fresh_read_only_view() -> None:
+    data = _data()
+    with contextlib.suppress(TypeError):
+        data.types["a"] = DataType.STRING
+    assert data.types["a"] is DataType.INT64
+
+
+def test_refuses_non_datatype_column_type() -> None:
+    bad: Any = ("INT64", [1])
+    with pytest.raises(ValueError, match="'a'"):
+        TypedTestData({"a": bad})

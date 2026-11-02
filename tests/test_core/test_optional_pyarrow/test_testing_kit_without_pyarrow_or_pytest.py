@@ -1,11 +1,8 @@
 """Verify mloda._testing imports and runs with pyarrow and pytest both blocked."""
 
-import subprocess  # nosec
-import sys
-
 import pytest
 
-from tests.test_core.test_optional_pyarrow._pyarrow_blocker import blocker_preamble
+from tests.test_core.test_optional_pyarrow._pyarrow_blocker import run_blocked
 
 _BODY = """
 import importlib
@@ -47,13 +44,7 @@ print("OK")
 
 @pytest.mark.timeout(30)
 def test_testing_kit_imports_without_pyarrow_or_pytest() -> None:
-    script = blocker_preamble("pyarrow") + blocker_preamble("pytest") + _BODY
-    result = subprocess.run(  # nosec
-        [sys.executable, "-c", script],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    result = run_blocked(_BODY, also_block=("pytest",))
 
     assert result.returncode == 0, (
         "Subprocess failed: mloda._testing needs pyarrow or pytest at import time.\n"

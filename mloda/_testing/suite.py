@@ -30,11 +30,21 @@ def check_switched_off(cls: type) -> CheckResult:
             continue
         failures.extend(
             f"{klass.__qualname__} redefines contract test '{name}' without declaring it in switched_off"
-            for name in klass.__dict__
-            if name in contract and name not in switched_off
+            for name, attr in klass.__dict__.items()
+            if name in contract and name not in switched_off and not getattr(attr, "_is_skip_stub", False)
         )
         if "pytestmark" in klass.__dict__:
-            failures.append(f"{klass.__qualname__} sets pytestmark in its class body, which hides inherited tests")
+            marks = klass.__dict__["pytestmark"]
+            for mark in marks if isinstance(marks, (list, tuple)) else [marks]:
+                if getattr(getattr(mark, "mark", mark), "name", None) in ("skip", "skipif"):
+                    failures.append(
+                        f"{klass.__qualname__} sets a skip pytestmark in its class body, which hides inherited tests"
+                    )
+    failures.extend(
+        f"{cls.__qualname__}: switched_off['{key}'] must be a SwitchOff, got {type(value).__name__}"
+        for key, value in switched_off.items()
+        if not isinstance(value, SwitchOff)
+    )
     failures.extend(unknown_key_failures(switched_off, contract, cls.__qualname__))
     return CheckResult("switched_off", cls.__qualname__, tuple(failures))
 
@@ -48,6 +58,7 @@ def _skip_stub(name: str, declaration: SwitchOff) -> Callable[[Any], None]:
         pytest.skip(message)
 
     stub.__name__ = name
+    stub._is_skip_stub = True  # type: ignore[attr-defined]
     return stub
 
 
@@ -67,6 +78,10 @@ class ConformanceSuite:
         result = check_switched_off(cls)
         if not result.passed:
             raise DeclarationError(f"{cls.__qualname__}: " + "; ".join(result.failures))
+        for name in _contract_tests(cls) - set(cls.switched_off):
+            if getattr(getattr(cls, name, None), "_is_skip_stub", False):
+                original = next(k.__dict__[name] for k in cls.__mro__ if _is_suite(k) and name in k.__dict__)
+                setattr(cls, name, original)
         for name, declaration in cls.switched_off.items():
             setattr(cls, name, _skip_stub(name, declaration))
 

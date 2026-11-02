@@ -174,6 +174,7 @@ _PATH_PARAMETER_KEY = re.compile(
 
 _MAX_DECODE_ROUNDS = 4
 _PART_SPLIT = re.compile(r"(/|::)")
+_PART_HEAD_END = re.compile(r"[;%]")
 
 
 def _mask_raw_path_parameters(text: str) -> str:
@@ -182,10 +183,11 @@ def _mask_raw_path_parameters(text: str) -> str:
 
 def _hides_credential(part: str) -> bool:
     decoded = part
-    for _ in range(_MAX_DECODE_ROUNDS):
+    for _ in range(_MAX_DECODE_ROUNDS + 1):
         nxt = unquote(decoded)
         if nxt == decoded:
-            return _mask_raw_path_parameters(decoded) != decoded
+            probe = decoded.replace("::", "__").replace("/", "_")
+            return _mask_raw_path_parameters(probe) != probe
         decoded = nxt
     return True
 
@@ -199,7 +201,7 @@ def _mask_path_parameters(uri: str) -> str:
     for i in range(0, len(parts), 2):
         part = parts[i]
         if "%" in part and _hides_credential(part):
-            parts[i] = re.split(r"[;%]", part, maxsplit=1)[0] + "***"
+            parts[i] = _PART_HEAD_END.split(part, maxsplit=1)[0] + "***"
     return "".join(parts)
 
 

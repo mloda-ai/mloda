@@ -421,6 +421,12 @@ class TestFileSourceUriProjection:
             ("s3://b/d%3Bv=1/x{s}", "s3://b/d%3Bv=1/x{s}"),
             ("s3://b/token%3Dabc;v=1/x{s}", "s3://b/token%3Dabc;v=1/x{s}"),  # nosec B105
             ("s3://b/d;v=1%3Btoken=SECRET/x{s}", "s3://b/d;v=1%3Btoken=***/x{s}"),  # nosec B105
+            ("s3://b/d;%2F%74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/d;%252F%74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/d;v%3A%3A%74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/my%25252520file{s}", "s3://b/my%25252520file{s}"),
+            ("s3://b/a%2Ftoken=abc/x{s}", "s3://b/a%2Ftoken=abc/x{s}"),  # nosec B105
+            ("s3://b/d;v=1%2Fx/y{s}", "s3://b/d;v=1%2Fx/y{s}"),
         ],
         ids=[
             "slash-in-password",
@@ -474,6 +480,12 @@ class TestFileSourceUriProjection:
             "kept-encoded-semicolon-param",
             "kept-encoded-equals-before-param",
             "raw-masked-then-decoded",
+            "encoded-slash-before-key",
+            "double-encoded-slash-before-key",
+            "encoded-chain-before-key",
+            "kept-four-level-encoded-clean",
+            "kept-encoded-slash-no-param",
+            "kept-encoded-slash-clean-param",
         ],
     )
     def test_uri_projection(self, template: str, expected: str) -> None:

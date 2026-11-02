@@ -46,7 +46,7 @@ class DataTypeValidator:
         """Check if types are loosely compatible (allows any numeric/timestamp pairing).
 
         Lenient mode allows data type mismatches within the same category:
-        - All numeric types (INT32, INT64, FLOAT, DOUBLE) are interchangeable
+        - All numeric types (integer and float, not DECIMAL) are interchangeable
         - All timestamp types are interchangeable
         - Other types must match exactly
 

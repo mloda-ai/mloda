@@ -59,14 +59,33 @@ class TestFromArrowType:
         assert DataType.from_arrow_type(pa.uint16()) == DataType.INT32
         assert DataType.from_arrow_type(pa.uint32()) == DataType.INT64
 
-    @pytest.mark.parametrize("unit", ["ms", "us"])
+    @pytest.mark.parametrize("unit", ["s", "ms", "us", "ns"])
     @pytest.mark.parametrize("tz", ["UTC", "Europe/Berlin"])
-    def test_from_arrow_type_tz_aware_ms_us(self, unit: str, tz: str) -> None:
+    def test_from_arrow_type_tz_aware_any_unit(self, unit: str, tz: str) -> None:
         assert DataType.from_arrow_type(pa.timestamp(unit, tz=tz)) == DataType.TIMESTAMP_MICROS_TZ
 
     @pytest.mark.parametrize("unit", ["s", "ns"])
-    def test_from_arrow_type_tz_aware_s_ns_unresolved(self, unit: str) -> None:
-        assert DataType.from_arrow_type_safe(pa.timestamp(unit, tz="UTC")) is None
+    def test_from_arrow_type_naive_s_ns_unresolved(self, unit: str) -> None:
+        assert DataType.from_arrow_type_safe(pa.timestamp(unit)) is None
+
+    def test_enum_order_original_members_first_new_after_decimal(self) -> None:
+        original = [
+            "INT32",
+            "INT64",
+            "FLOAT",
+            "DOUBLE",
+            "BOOLEAN",
+            "STRING",
+            "BINARY",
+            "DATE",
+            "TIMESTAMP_MILLIS",
+            "TIMESTAMP_MICROS",
+            "DECIMAL",
+        ]
+        new = ["INT8", "UINT8", "UINT64", "TIMESTAMP_MICROS_TZ", "LIST"]
+        names = [m.name for m in DataType]
+        assert names[:11] == original
+        assert sorted(names[11:]) == sorted(new)
 
     @pytest.mark.parametrize(
         "arrow_type",

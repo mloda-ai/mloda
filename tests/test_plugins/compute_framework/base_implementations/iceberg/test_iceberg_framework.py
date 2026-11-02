@@ -303,6 +303,9 @@ class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
         "int8_col": "Iceberg has no 8-bit integer type",
         "uint8_col": "Iceberg has no unsigned integer types",
         "uint64_col": "Iceberg has no unsigned integer types",
+        "int16_col": "Iceberg has no 16-bit integer type",
+        "uint16_col": "Iceberg has no unsigned integer types",
+        "uint32_col": "Iceberg has no unsigned integer types",
     }
 
     @pytest.fixture

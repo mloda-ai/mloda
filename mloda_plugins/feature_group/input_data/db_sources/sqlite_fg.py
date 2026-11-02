@@ -179,7 +179,7 @@ class SqliteFG(ReadDBFG):
         fields = []
         for index, name in enumerate(column_names):
             data_type = data_types.get(name)
-            if data_type:
+            if data_type and data_type not in (DataType.TIMESTAMP_MICROS_TZ, DataType.LIST):
                 arrow_type = DataType.to_arrow_type(data_type)
             elif name in arrow_types:
                 arrow_type = getattr(pa, arrow_types[name])()

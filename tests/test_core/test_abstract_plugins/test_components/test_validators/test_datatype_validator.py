@@ -34,6 +34,21 @@ class TestDataTypeMismatchError:
         assert "STRING" in msg
 
 
+_D = DataType
+
+_STRICT_WIDENINGS: list[tuple[DataType, DataType]] = [
+    (_D.INT32, _D.INT8),
+    (_D.INT32, _D.UINT8),
+    (_D.INT64, _D.INT8),
+    (_D.INT64, _D.UINT8),
+    (_D.UINT64, _D.UINT8),
+    (_D.DOUBLE, _D.INT8),
+    (_D.DOUBLE, _D.INT64),
+    (_D.DOUBLE, _D.UINT8),
+    (_D.DOUBLE, _D.UINT64),
+]
+
+
 class TestTypesCompatible:
     """Test the _types_compatible static method."""
 
@@ -79,28 +94,6 @@ class TestTypesCompatible:
         assert DataTypeValidator._types_loosely_compatible(DataType.INT64, DataType.DECIMAL) is False
         assert DataTypeValidator._types_loosely_compatible(DataType.DECIMAL, DataType.DECIMAL) is True
 
-
-_D = DataType
-
-_STRICT_WIDENINGS: list[tuple[DataType, DataType]] = [
-    (_D.INT32, _D.INT8),
-    (_D.INT32, _D.UINT8),
-    (_D.INT64, _D.INT8),
-    (_D.INT64, _D.INT32),
-    (_D.INT64, _D.UINT8),
-    (_D.UINT64, _D.UINT8),
-    (_D.DOUBLE, _D.FLOAT),
-    (_D.DOUBLE, _D.INT8),
-    (_D.DOUBLE, _D.INT32),
-    (_D.DOUBLE, _D.INT64),
-    (_D.DOUBLE, _D.UINT8),
-    (_D.DOUBLE, _D.UINT64),
-]
-
-
-class TestNewMemberCompatibility:
-    """Strict widenings and lenient family rules for the extended members."""
-
     @pytest.mark.parametrize("declared,actual", _STRICT_WIDENINGS)
     def test_strict_widening_accepted(self, declared: DataType, actual: DataType) -> None:
         assert DataTypeValidator._types_compatible(declared, actual) is True
@@ -129,8 +122,19 @@ class TestNewMemberCompatibility:
             assert DataTypeValidator._types_compatible(tz, naive) is False
         assert DataTypeValidator._types_compatible(tz, tz) is True
 
-    @pytest.mark.parametrize("declared", [_D.INT8, _D.UINT8, _D.UINT64, _D.INT32, _D.INT64, _D.FLOAT, _D.DOUBLE])
-    @pytest.mark.parametrize("actual", [_D.INT8, _D.UINT8, _D.UINT64, _D.INT32, _D.INT64, _D.FLOAT, _D.DOUBLE])
+    @pytest.mark.parametrize(
+        "declared,actual",
+        [
+            (_D.INT8, _D.FLOAT),
+            (_D.FLOAT, _D.INT8),
+            (_D.UINT8, _D.DOUBLE),
+            (_D.DOUBLE, _D.UINT8),
+            (_D.UINT64, _D.FLOAT),
+            (_D.INT8, _D.UINT64),
+            (_D.FLOAT, _D.UINT64),
+            (_D.DOUBLE, _D.UINT64),
+        ],
+    )
     def test_lenient_numeric_family(self, declared: DataType, actual: DataType) -> None:
         assert DataTypeValidator._types_loosely_compatible(declared, actual) is True
 

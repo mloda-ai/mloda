@@ -72,6 +72,7 @@ if PYSPARK_AVAILABLE:
         DecimalType,
         TimestampType,
         ByteType,
+        ShortType,
         ArrayType,
     )
     import pyspark
@@ -398,7 +399,16 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     EXTENDED_SKIPS = {
         "uint8_col": "Spark has no unsigned integer types",
         "uint64_col": "Spark has no unsigned integer types",
-        "timestamp_us_tz_col": "Spark TimestampType is session-zone, not tz-aware",
+        "uint16_col": "Spark has no unsigned integer types",
+        "uint32_col": "Spark has no unsigned integer types",
+        "timestamp_us_tz_col": (
+            "Spark TimestampType is kept as TIMESTAMP_MICROS for compatibility "
+            "(it is the instant type; TimestampNTZType is the naive one)"
+        ),
+        "timestamp_ns_tz_col": (
+            "Spark TimestampType is kept as TIMESTAMP_MICROS for compatibility "
+            "(it is the instant type; TimestampNTZType is the naive one)"
+        ),
     }
 
     @pytest.fixture
@@ -419,6 +429,8 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
         # Extended columns derive their Spark type from the explicit Arrow type (ArrayType needs an element type).
         if spec.data_type == DataType.INT8:
             return ByteType()
+        if spec.arrow_type == pa.int16():
+            return ShortType()
         if spec.data_type == DataType.LIST:
             element = spec.arrow_type.value_type  # type: ignore[union-attr]
             if element == pa.string():

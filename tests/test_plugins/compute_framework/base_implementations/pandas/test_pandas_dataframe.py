@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -204,9 +205,20 @@ class TestPandasDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    def test_arrow_dtype_list_column_resolves_to_list(self, framework_instance: Any) -> None:
-        df = pd.DataFrame({"c": pd.Series([["a"], ["b", "c"]], dtype=pd.ArrowDtype(pa.list_(pa.string())))})
-        assert framework_instance._extract_column_data_type(df, "c") == DataType.LIST
+    @pytest.mark.parametrize(
+        "values,arrow_type,expected",
+        [
+            ([["a"], ["b", "c"]], pa.list_(pa.string()), DataType.LIST),
+            ([datetime(2024, 1, 1, tzinfo=UTC)], pa.timestamp("us", tz="UTC"), DataType.TIMESTAMP_MICROS_TZ),
+            ([date(2024, 1, 1)], pa.date32(), DataType.DATE),
+        ],
+        ids=["list", "timestamp_tz", "date32"],
+    )
+    def test_arrow_dtype_column_resolves_through_arrow_mapping(
+        self, framework_instance: Any, values: list[Any], arrow_type: pa.DataType, expected: DataType
+    ) -> None:
+        df = pd.DataFrame({"c": pd.Series(values, dtype=pd.ArrowDtype(arrow_type))})
+        assert framework_instance._extract_column_data_type(df, "c") == expected
 
     def from_arrow(self, table: pa.Table) -> Any:
         # Option A: arrow -> pandas via to_pandas. types_mapper preserves pd.StringDtype()

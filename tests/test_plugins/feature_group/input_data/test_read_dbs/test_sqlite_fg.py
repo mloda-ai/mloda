@@ -319,6 +319,14 @@ class TestSqliteProduceRows:
         assert pa.types.is_integer(table.schema.field("age").type)
         assert pa.types.is_string(table.schema.field("name").type)
 
+    @pytest.mark.parametrize("data_type", [DataType.TIMESTAMP_MICROS_TZ, DataType.LIST])
+    def test_declared_type_without_single_arrow_type_falls_back_to_inference(
+        self, people_db: str, data_type: DataType
+    ) -> None:
+        table = self._produce(people_db, "test_table", Feature("name", data_type=data_type))
+        assert pa.types.is_string(table.schema.field("name").type)
+        assert table.column("name").to_pylist() == ["Alice", "Bob", "Charlie"]
+
 
 class TestSqliteProduceRowsInference:
     def _produce(self, tmp_path: Path, values: list[Any], feature: Feature) -> pa.Table:

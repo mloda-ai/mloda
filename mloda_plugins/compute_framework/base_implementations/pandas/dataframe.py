@@ -91,9 +91,7 @@ class PandasDataFrame(ComputeFramework):
             return None
 
         if isinstance(dtype, pd.ArrowDtype):
-            arrow_resolved = DataType.from_arrow_type_safe(dtype.pyarrow_dtype)
-            if arrow_resolved in (DataType.DECIMAL, DataType.LIST):
-                return arrow_resolved
+            return DataType.from_arrow_type_safe(dtype.pyarrow_dtype)
         if isinstance(dtype, pd.StringDtype):
             return DataType.STRING
         if isinstance(dtype, pd.BooleanDtype):

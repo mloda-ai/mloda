@@ -27,11 +27,6 @@ class DataType(Enum):
         ...
     """
 
-    INT8 = "INT8"  # pa.int8()
-    UINT8 = "UINT8"  # pa.uint8()
-    UINT64 = "UINT64"  # pa.uint64()
-    TIMESTAMP_MICROS_TZ = "TIMESTAMP_MICROS_TZ"  # tz-aware pa.timestamp("us", tz), any zone
-    LIST = "LIST"  # any pa.list_(...), element type unchecked
     INT32 = "INT32"  # pa.int32()
     INT64 = "INT64"  # pa.int64()
     FLOAT = "FLOAT"  # pa.float32()
@@ -43,6 +38,11 @@ class DataType(Enum):
     TIMESTAMP_MILLIS = "TIMESTAMP_MILLIS"  # pa.timestamp("ms")
     TIMESTAMP_MICROS = "TIMESTAMP_MICROS"  # pa.timestamp("us")
     DECIMAL = "DECIMAL"  # pa.decimal128(38, 18)
+    INT8 = "INT8"  # pa.int8()
+    UINT8 = "UINT8"  # pa.uint8()
+    UINT64 = "UINT64"  # pa.uint64()
+    TIMESTAMP_MICROS_TZ = "TIMESTAMP_MICROS_TZ"  # tz-aware pa.timestamp(unit, tz), any unit and zone
+    LIST = "LIST"  # any pa.list_(...), element type unchecked
 
     def __hash__(self) -> int:
         return hash(self.value)
@@ -160,8 +160,7 @@ class DataType(Enum):
             return cls.LIST
         elif pa.types.is_timestamp(arrow_type):
             if arrow_type.tz is not None:
-                if arrow_type.unit in ("ms", "us"):
-                    return cls.TIMESTAMP_MICROS_TZ
+                return cls.TIMESTAMP_MICROS_TZ
             elif arrow_type.unit == "ms":
                 return cls.TIMESTAMP_MILLIS
             elif arrow_type.unit == "us":

@@ -69,7 +69,7 @@ fail to determine a type, return `None` for that case rather than letting it rai
 
 ### Default (Lenient) Mode
 
-By default, validation applies a family rule: any declared numeric type accepts any numeric type, and any declared timestamp type accepts any timestamp type, naive or tz-aware. Everything else must match exactly.
+By default, validation applies a family rule: any declared integer or float type accepts any integer or float type (DECIMAL is excluded), and any declared timestamp type accepts any timestamp type, naive or tz-aware. Everything else must match exactly.
 
 Cross-category mismatches (e.g., STRING declared but INT64 returned) raise `DataTypeMismatchError`.
 
@@ -84,7 +84,7 @@ feature = Feature.int32_of(
 )
 ```
 
-In strict mode, only exact type matches or lossless widening conversions are allowed:
+In strict mode, only exact type matches or widening conversions are allowed:
 
 | Declared Type | Compatible Actual Types |
 |---------------|------------------------|
@@ -151,13 +151,13 @@ Integer widths without a member resolve to the next lossless one: int16 and uint
 
 | Framework | INT32 / INT64 | INT8 / UINT8 / UINT64 | FLOAT / DOUBLE | TIMESTAMP_MILLIS / MICROS | TIMESTAMP_MICROS_TZ | LIST |
 |---|---|---|---|---|---|---|
-| Pandas | yes | yes | yes | yes | yes | only Arrow-backed columns |
+| Pandas | yes | yes | yes | yes | yes (numpy tz and Arrow-backed) | only Arrow-backed columns |
 | Polars (eager / lazy) | yes | yes | yes | yes | yes | yes |
 | PyArrow | yes | yes | yes | yes | yes | yes |
 | DuckDB | yes | yes | yes | yes | yes | yes |
-| Spark | yes | INT8 only (no unsigned) | yes | no (`TimestampType` resolves to TIMESTAMP_MICROS) | no | yes |
+| Spark | yes | INT8 only (no unsigned) | yes | no (`TimestampType` resolves to TIMESTAMP_MICROS for compatibility) | no | yes |
 | Iceberg | yes | no (no narrow or unsigned ints) | yes | no (only `TimestampType` exists) | yes | yes |
-| SQLite | no (INTEGER affinity) | yes (through Arrow type hints) | no (REAL affinity) | no (stored as TEXT) | yes (through Arrow type hints) | no |
+| SQLite | no (INTEGER affinity) | yes (through Arrow type hints) | no (REAL affinity) | no (stored as TEXT) | yes (through Arrow type hints, for relations built from Arrow) | no |
 | PythonDict | no (`type.__name__` is "int") | no | no (Python float is 64-bit) | no (`datetime.datetime` is microsecond) | yes (aware `datetime`) | yes |
 
 Members without a typed constructor are declared with `Feature(name, data_type=DataType.UINT8)`.

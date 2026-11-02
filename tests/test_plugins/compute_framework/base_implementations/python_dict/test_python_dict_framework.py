@@ -210,6 +210,9 @@ class TestPythonDictDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
         "int8_col": "Python int has no width",
         "uint8_col": "Python int has no width",
         "uint64_col": "Python int has no width",
+        "int16_col": "Python int has no width",
+        "uint16_col": "Python int has no width",
+        "uint32_col": "Python int has no width",
     }
 
     @pytest.fixture

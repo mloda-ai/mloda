@@ -221,6 +221,17 @@ class TestAggregationOnApiData:
         results = mloda.run_all([feature], api_data=api_data, plugin_collector=plugins)
         assert column_values(results, feature) == [6.0] * 3
 
+    def test_repeated_run_does_not_mutate_api_data(self) -> None:
+        plugins = PluginCollector.enabled_feature_groups({ApiDataFG, AggregatedFeatureGroup})
+        api_data = {"AggApi": {"aggr_api_x": [1.0, 2.0, 3.0]}}
+        feature = "aggr_api_x__sum_aggr"
+
+        for _ in range(2):
+            results = mloda.run_all([feature], api_data=api_data, plugin_collector=plugins)
+            assert column_values(results, feature) == [6.0] * 3
+
+        assert api_data == {"AggApi": {"aggr_api_x": [1.0, 2.0, 3.0]}}
+
 
 class TestAggregatedFeatureGroupIntegration:
     def test_integration_with_feature_parser(self) -> None:

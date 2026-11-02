@@ -22,7 +22,7 @@ class PythonDictAggregation(Implementation[AggregatedFeatureGroup]):
         cls, group: type[AggregatedFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
     ) -> Any:
         return group.aggregate(
-            data,
+            dict(data),
             features,
             perform=cls._perform_aggregation,
             add_column=cls._add_result_to_data,
@@ -41,7 +41,7 @@ class PythonDictAggregation(Implementation[AggregatedFeatureGroup]):
         if len(in_features) == 1:
             return cls._reduce(aggregation_type, data[in_features[0]])
         columns = [data[name] for name in in_features]
-        return [cls._reduce(aggregation_type, list(cells)) for cells in zip(*columns)]
+        return [cls._reduce(aggregation_type, list(cells)) for cells in zip(*columns, strict=True)]
 
     @staticmethod
     def _reduce(aggregation_type: str, cells: list[Any]) -> Any:

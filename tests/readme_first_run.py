@@ -98,7 +98,7 @@ def main(readme: Path, dist: Path) -> int:
         if demo.returncode != 0 or demo.stderr.strip():
             print(f"mloda demo failed, exit code {demo.returncode}\nstdout:\n{demo.stdout}\nstderr:\n{demo.stderr}")
             return 1
-        missing = [s for s in ("ApiDataFG", "AggregatedFeatureGroup", "37.5", _PANDAS_HINT) if s not in demo.stdout]
+        missing = [s for s in ("ApiDataFG", "AggregatedFeatureGroup", "270000", _PANDAS_HINT) if s not in demo.stdout]
         if missing:
             print(f"mloda demo output lacks {missing}\nstdout:\n{demo.stdout}\nstderr:\n{demo.stderr}")
             return 1

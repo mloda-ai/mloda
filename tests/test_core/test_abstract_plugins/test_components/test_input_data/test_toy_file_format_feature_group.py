@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import inspect
+import itertools
 import os
+import time
 from collections.abc import Collection
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import quote, unquote
 
 import pytest
 
@@ -308,12 +311,12 @@ class TestUserinfoUriPlanIdentity:
             ("s3://alice:hunter2@bucket/plan{s}", "s3://bucket/plan{s}", "hunter2"),  # nosec B105
             (
                 "s3://bucket/dir;jsessionid=SECRETSESSION/plan{s}",  # nosec B105
-                "s3://bucket/dir;jsessionid=***/plan{s}",
+                "s3://bucket/dir;***/plan{s}",
                 "SECRETSESSION",
             ),
             (
                 "s3://bucket/dir;%74oken=SECRETENCODED/plan{s}",  # nosec B105
-                "s3://bucket/dir***/plan{s}",
+                "s3://bucket/dir;***/plan{s}",
                 "SECRETENCODED",
             ),
         ],
@@ -367,6 +370,14 @@ class TestFileSourceUriProjection:
         second = source(f"s3://u:hunter2@bucket/a%2Fc{TOY_SUFFIX}").source  # nosec B105
         assert first != second
 
+    def test_long_encoded_head_cuts_quickly(self) -> None:
+        uri = "s3://b/" + "%25" * 8000 + ";x/x" + TOY_SUFFIX
+        started = time.monotonic()
+        match = ToyFileFormatFG._source(uri)
+        assert time.monotonic() - started < 5
+        assert match.source == "s3://b/" + "%25" * 8000 + ";***/x" + TOY_SUFFIX
+        assert match.access == uri
+
     @pytest.mark.parametrize(
         "template,expected",
         [
@@ -380,53 +391,72 @@ class TestFileSourceUriProjection:
             ("simplecache::s3://tok@bucket/x{s}", "simplecache::s3://bucket/x{s}"),
             ("s3://bucket]/x{s}", "s3://bucket]/x{s}"),
             ("s3://[bad/x{s}", "s3://[bad/x{s}"),
-            ("https://host/x{s};jsessionid=SECRET", "https://host/x{s};jsessionid=***"),  # nosec B105
-            ("s3://bucket/dir;jsessionid=SECRET/x{s}", "s3://bucket/dir;jsessionid=***/x{s}"),  # nosec B105
-            ("https://host/x{s};PHPSESSID=abc", "https://host/x{s};PHPSESSID=***"),  # nosec B105
-            ("https://host/x{s};token=abc", "https://host/x{s};token=***"),  # nosec B105
-            ("https://host/x{s};API-KEY=abc", "https://host/x{s};API-KEY=***"),  # nosec B105
-            ("https://host/x{s};x-amz-signature=abc", "https://host/x{s};x-amz-signature=***"),  # nosec B105
-            ("https://host/x{s};sessid=abc", "https://host/x{s};sessid=***"),  # nosec B105
-            ("https://host/d;v=1;token=abc;lang=en/x{s}", "https://host/d;v=1;token=***;lang=en/x{s}"),  # nosec B105
-            ("https://host/d;token=a;v=1/x{s}", "https://host/d;token=***;v=1/x{s}"),  # nosec B105
-            ("https://host/x{s};token=", "https://host/x{s};token=***"),
-            ("s3://u:pw@bucket/d;token=abc/x{s}?q=1#f", "s3://bucket/d;token=***/x{s}"),  # nosec B105
-            ("https://host/x{s};v=1", "https://host/x{s};v=1"),
-            ("https://host/x{s};type=a", "https://host/x{s};type=a"),
-            ("https://host/d;tokens=3/x{s}", "https://host/d;tokens=3/x{s}"),
-            ("https://host/d;session_id=1/x{s}", "https://host/d;session_id=1/x{s}"),
+            ("https://host/x{s};jsessionid=SECRET", "https://host/x{s};***"),  # nosec B105
+            ("s3://bucket/dir;jsessionid=SECRET/x{s}", "s3://bucket/dir;***/x{s}"),  # nosec B105
+            ("https://host/x{s};PHPSESSID=abc", "https://host/x{s};***"),  # nosec B105
+            ("https://host/x{s};token=abc", "https://host/x{s};***"),  # nosec B105
+            ("https://host/x{s};API-KEY=abc", "https://host/x{s};***"),  # nosec B105
+            ("https://host/x{s};x-amz-signature=abc", "https://host/x{s};***"),  # nosec B105
+            ("https://host/x{s};sessid=abc", "https://host/x{s};***"),  # nosec B105
+            ("https://host/d;v=1;token=abc;lang=en/x{s}", "https://host/d;***/x{s}"),  # nosec B105
+            ("https://host/d;token=a;v=1/x{s}", "https://host/d;***/x{s}"),  # nosec B105
+            ("https://host/x{s};token=", "https://host/x{s};***"),
+            ("s3://u:pw@bucket/d;token=abc/x{s}?q=1#f", "s3://bucket/d;***/x{s}"),  # nosec B105
+            ("https://host/x{s};v=1", "https://host/x{s};***"),
+            ("https://host/x{s};type=a", "https://host/x{s};***"),
+            ("https://host/d;tokens=3/x{s}", "https://host/d;***/x{s}"),
+            ("https://host/d;session_id=1/x{s}", "https://host/d;***/x{s}"),
             ("https://host/clean/x{s}", "https://host/clean/x{s}"),
             ("d;token=abc/x{s}", os.path.abspath("d;token=abc/x{s}")),
-            ("s3://b/d;aws.token=SECRET/x{s}", "s3://b/d;aws.token=***/x{s}"),  # nosec B105
-            ("s3://b/d;x~token=SECRET/x{s}", "s3://b/d;x~token=***/x{s}"),  # nosec B105
-            ("s3://b/d;v=1,token=SECRET/x{s}", "s3://b/d;v=1,token=***/x{s}"),  # nosec B105
-            ("s3://b/d;v=1&token=SECRET/x{s}", "s3://b/d;v=1&token=***/x{s}"),  # nosec B105
-            ("s3://b/d;token = SECRET/x{s}", "s3://b/d;token = ***/x{s}"),  # nosec B105
-            ("s3://b/d;token=a,b/x{s}", "s3://b/d;token=***/x{s}"),  # nosec B105
-            ("zip://d;token=SECRET::s3://bucket/x{s}", "zip://d;token=***::s3://bucket/x{s}"),  # nosec B105
-            ("s3://b/token=abc;v=1/x{s}", "s3://b/token=abc;v=1/x{s}"),  # nosec B105
-            ("s3://b/my.token.dir;v=1/x{s}", "s3://b/my.token.dir;v=1/x{s}"),
-            ("s3://b/d;%74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("s3://b/d;token%3DSECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("s3://b/d%3Btoken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("s3://b/d;%2574oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("s3://b/d;token%3DSE%2FCRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("s3://b/d;%252525252525" + "74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("zip://d;%74oken=SECRET::s3://bucket/x{s}", "zip://d***::s3://bucket/x{s}"),  # nosec B105
-            ("s3://u:pw@b/d;%74oken=SECRET/x{s}?q=1", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/d;aws.token=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;x~token=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;v=1,token=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;v=1&token=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;token = SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;token=a,b/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("zip://d;token=SECRET::s3://bucket/x{s}", "zip://d;***::s3://bucket/x{s}"),  # nosec B105
+            ("s3://b/token=abc;v=1/x{s}", "s3://b/token=abc;***/x{s}"),  # nosec B105
+            ("s3://b/my.token.dir;v=1/x{s}", "s3://b/my.token.dir;***/x{s}"),
+            ("s3://b/d;%74oken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;token%3DSECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d%3Btoken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;%2574oken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;token%3DSE%2FCRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;%252525252525" + "74oken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("zip://d;%74oken=SECRET::s3://bucket/x{s}", "zip://d;***::s3://bucket/x{s}"),  # nosec B105
+            ("s3://u:pw@b/d;%74oken=SECRET/x{s}?q=1", "s3://b/d;***/x{s}"),  # nosec B105
             ("s3://b/100%25{s}", "s3://b/100%25{s}"),
             ("s3://b/100%2541{s}", "s3://b/100%2541{s}"),
             ("s3://b/my%2520file{s}", "s3://b/my%2520file{s}"),
-            ("s3://b/d;v%3D1/x{s}", "s3://b/d;v%3D1/x{s}"),
-            ("s3://b/d%3Bv=1/x{s}", "s3://b/d%3Bv=1/x{s}"),
-            ("s3://b/token%3Dabc;v=1/x{s}", "s3://b/token%3Dabc;v=1/x{s}"),  # nosec B105
-            ("s3://b/d;v=1%3Btoken=SECRET/x{s}", "s3://b/d;v=1%3Btoken=***/x{s}"),  # nosec B105
-            ("s3://b/d;%2F%74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("s3://b/d;%252F%74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("s3://b/d;v%3A%3A%74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/d;v%3D1/x{s}", "s3://b/d;***/x{s}"),
+            ("s3://b/d%3Bv=1/x{s}", "s3://b/d;***/x{s}"),
+            ("s3://b/token%3Dabc;v=1/x{s}", "s3://b/token%3Dabc;***/x{s}"),  # nosec B105
+            ("s3://b/d;v=1%3Btoken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;%2F%74oken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;%252F%74oken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;v%3A%3A%74oken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
             ("s3://b/my%25252520file{s}", "s3://b/my%25252520file{s}"),
             ("s3://b/a%2Ftoken=abc/x{s}", "s3://b/a%2Ftoken=abc/x{s}"),  # nosec B105
-            ("s3://b/d;v=1%2Fx/y{s}", "s3://b/d;v=1%2Fx/y{s}"),
+            ("s3://b/d;v=1%2Fx/y{s}", "s3://b/d;***/y{s}"),
+            ("https://host/x{s};auth=SECRET", "https://host/x{s};***"),  # nosec B105
+            ("s3://b/d;key=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;session=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;token:SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/x%3Fauth=SECRET/x{s}", "s3://b/x;***/x{s}"),  # nosec B105
+            ("s3://b/x%23auth=SECRET/x{s}", "s3://b/x;***/x{s}"),  # nosec B105
+            ("s3://b/my%20dir;v=1/x{s}", "s3://b/my%20dir;***/x{s}"),
+            ("s3://b/%3Bx/y{s}", "s3://b/;***/y{s}"),
+            ("s3://b/d;;SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d%3B%53ECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("https://host/x{s};", "https://host/x{s};"),
+            ("s3://b/d%3F/x{s}", "s3://b/d%3F/x{s}"),
+            ("s3://b/d%23/x{s}", "s3://b/d%23/x{s}"),
+            ("s3://b/year=2024/token=the/x{s}", "s3://b/year=2024/token=the/x{s}"),  # nosec B105
+            ("s3://b/my%2525252520file{s}", "s3://b/my;***"),
+            ("ftp://h/x{s};type=i", "ftp://h/x{s};***"),
+            ("http://[::1]/d;v=1/x{s}", "http://[::1]/d;***/x{s}"),
+            ("s3://bucket;x/y{s}", "s3://bucket;***/y{s}"),
         ],
         ids=[
             "slash-in-password",
@@ -486,6 +516,25 @@ class TestFileSourceUriProjection:
             "kept-four-level-encoded-clean",
             "kept-encoded-slash-no-param",
             "kept-encoded-slash-clean-param",
+            "unnamed-auth-key",
+            "unnamed-key",
+            "unnamed-session",
+            "colon-assignment",
+            "bare-region",
+            "encoded-question-mark",
+            "encoded-hash",
+            "encoded-head-kept",
+            "encoded-marker-first",
+            "double-semicolon-head",
+            "encoded-semicolon-encoded-tail",
+            "kept-lone-trailing-semicolon",
+            "kept-lone-trailing-encoded-question",
+            "kept-lone-trailing-encoded-hash",
+            "kept-hive-segments",
+            "unmarked-over-decode-cap",
+            "ftp-type",
+            "ipv6-host",
+            "host-part",
         ],
     )
     def test_uri_projection(self, template: str, expected: str) -> None:
@@ -493,6 +542,63 @@ class TestFileSourceUriProjection:
         match = ToyFileFormatFG._source(path)
         assert match.source == expected.format(s=TOY_SUFFIX)
         assert match.access == path
+
+    def test_generated_matrix(self) -> None:
+        secret = "S3CR3TVAL"  # nosec B105
+        plain = {
+            "mid": "s3://bucket/year=2024/dirA{r}/my%20dir/data" + TOY_SUFFIX,
+            "file": "s3://bucket/year=2024/my%20dir/data" + TOY_SUFFIX + "{r}",
+            "first": "s3://bucket/dirA{r}/year=2024/my%20dir/data" + TOY_SUFFIX,
+        }
+        zipped = {
+            "mid": "zip://year=2024/dirA{r}/my%20dir/a.zip::s3://bucket/inner" + TOY_SUFFIX,
+            "file": "zip://year=2024/my%20dir/a.zip{r}::s3://bucket/inner" + TOY_SUFFIX,
+            "first": "zip://dirA{r}/year=2024/my%20dir/a.zip::s3://bucket/inner" + TOY_SUFFIX,
+        }
+        chains = {"plain": plain, "zip": zipped}
+
+        def encode(sep: str, depth: int) -> str:
+            for _ in range(depth):
+                sep = quote(sep, safe="")
+            return sep
+
+        def fixpoint(text: str) -> str:
+            for _ in range(20):
+                nxt = unquote(text)
+                if nxt == text:
+                    break
+                text = nxt
+            return text
+
+        failures: list[str] = []
+        cases = 0
+        for key, sep, assign, depth, position, chain in itertools.product(
+            ["token", "auth", "key", "session", "jsessionid", ""],
+            [";", "?", "#"],
+            ["=", ":", ""],
+            range(6),
+            ["mid", "file", "first"],
+            ["plain", "zip"],
+        ):
+            cases += 1
+            template = chains[chain][position]
+            region = encode(sep, depth) + key + assign + secret
+            uri = template.format(r=region)
+            if depth == 0 and sep in "?#":
+                expected = uri[: uri.index(sep)]
+            else:
+                expected = template.format(r=";***")
+            label = f"key={key!r} sep={sep!r} assign={assign!r} depth={depth} position={position} chain={chain}"
+            match = ToyFileFormatFG._source(uri)
+            if match.source != expected:
+                failures.append(f"{label}: source {match.source!r} != {expected!r}")
+            if secret in match.source or secret in fixpoint(match.source):
+                failures.append(f"{label}: secret leaked in {match.source!r}")
+            if match.access != uri:
+                failures.append(f"{label}: access {match.access!r} != raw {uri!r}")
+
+        assert cases == 1944
+        assert not failures, f"{len(failures)} failures, first 20:\n" + "\n".join(failures[:20])
 
 
 class TestUriSourceCollision:
@@ -545,8 +651,8 @@ class TestUriSourceCollision:
         )
         matches = group.find_sources(group.CLAIM_ROUTES[0], self.COLUMN, Options(), dac)
         assert sorted(match.source for match in matches) == [
-            f"s3://b/d;jsessionid=***/x{TOY_SUFFIX}@a",
-            f"s3://b/d;jsessionid=***/x{TOY_SUFFIX}@b",
+            f"s3://b/d;***/x{TOY_SUFFIX}@a",
+            f"s3://b/d;***/x{TOY_SUFFIX}@b",
         ]
         del matches, group
 

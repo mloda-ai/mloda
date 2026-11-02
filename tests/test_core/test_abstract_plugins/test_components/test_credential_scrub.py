@@ -1342,6 +1342,19 @@ class TestScrubUriFailClosed:
             pytest.param(
                 'jdbc:postgresql://h/scott/tiger"@host:1521/svc', "tiger", id="jdbc-double-quote-before-at-after-path"
             ),
+            pytest.param("https://host/x.csv;PHPSESSID=abc123secret", "abc123secret", id="path-param-phpsessid"),
+            pytest.param("https://host/x.csv;token=abc123secret", "abc123secret", id="path-param-token"),
+            pytest.param("https://host/x.csv;API-KEY=abc123secret", "abc123secret", id="path-param-api-key"),
+            pytest.param(
+                "https://host/x.csv;x-amz-signature=abc123secret", "abc123secret", id="path-param-amz-signature"
+            ),
+            pytest.param("https://host/x.csv;sessid=abc123secret", "abc123secret", id="path-param-sessid"),
+            pytest.param("s3://b/d;aws.token=SECRET/x.csv", "SECRET", id="path-param-dotted-key"),
+            pytest.param("s3://b/d;x~token=SECRET/x.csv", "SECRET", id="path-param-tilde-key"),
+            pytest.param("s3://b/d;v=1,token=SECRETCOMMA/x.csv", "SECRETCOMMA", id="path-param-comma-separated"),
+            pytest.param("s3://b/d;v=1&token=SECRETAMP/x.csv", "SECRETAMP", id="path-param-ampersand"),
+            pytest.param("s3://b/d;token = SECRETSPACE/x.csv", "SECRETSPACE", id="path-param-spaces-around-equals"),
+            pytest.param("s3://b/d;token=SECRETVAL,b/x.csv", "SECRETVAL", id="path-param-comma-in-value"),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:

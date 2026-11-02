@@ -166,42 +166,41 @@ def strip_uri_userinfo(text: str) -> str:
     return _USER_ONLY_PATTERN.sub(_drop_user_only, _drop_free_text_userinfo(text, _USERINFO_FALLBACK_PATTERN))
 
 
-_PATH_PARAMETER_SPAN = re.compile(r";(?:(?!::)[^/])*")
-_PATH_PARAMETER_KEY = re.compile(
-    rf"(?<![\w-])(?P<key>[\w-]*{_SECRET_NAME})(?P<sep>[ \t]*=[ \t]*)(?:(?!::)[^;/&])*", re.IGNORECASE
-)
-
-
 _MAX_DECODE_ROUNDS = 4
 _PART_SPLIT = re.compile(r"(/|::)")
-_PART_HEAD_END = re.compile(r"[;%]")
+_PARAMETER_REGION = re.compile(r"[;?#].", re.DOTALL)
 
 
-def _mask_raw_path_parameters(text: str) -> str:
-    return _PATH_PARAMETER_SPAN.sub(lambda m: _PATH_PARAMETER_KEY.sub(r"\g<key>\g<sep>***", m.group(0)), text)
-
-
-def _hides_credential(part: str) -> bool:
+def _decode_to_fixpoint(part: str) -> str | None:
     decoded = part
     for _ in range(_MAX_DECODE_ROUNDS + 1):
         nxt = unquote(decoded)
         if nxt == decoded:
-            probe = decoded.replace("::", "__").replace("/", "_")
-            return _mask_raw_path_parameters(probe) != probe
+            return decoded
         decoded = nxt
-    return True
+    return None
 
 
-def _mask_path_parameters(uri: str) -> str:
-    """Mask credential-named `;key=value` path parameter values, including percent-encoded ones."""
-    masked = _mask_raw_path_parameters(uri)
-    if "%" not in masked:
-        return masked
-    parts = _PART_SPLIT.split(masked)
+def _clean_head(part: str) -> str:
+    candidates = [i for i, char in enumerate(part) if char in ";%"]
+    low, high = 0, len(candidates)
+    while low < high:  # cleanliness is monotone: a dirty prefix keeps every longer one dirty
+        mid = (low + high) // 2
+        decoded = _decode_to_fixpoint(part[: candidates[mid]])
+        if decoded is None or any(mark in decoded for mark in ";?#"):
+            high = mid
+        else:
+            low = mid + 1
+    return part[: candidates[low - 1]] if low else ""
+
+
+def _cut_path_parameter_regions(uri: str) -> str:
+    """Cut every `/`- or `::`-separated part whose decoded form holds `;`, `?` or `#` plus text to head + `;***`."""
+    parts = _PART_SPLIT.split(uri)
     for i in range(0, len(parts), 2):
-        part = parts[i]
-        if "%" in part and _hides_credential(part):
-            parts[i] = _PART_HEAD_END.split(part, maxsplit=1)[0] + "***"
+        decoded = _decode_to_fixpoint(parts[i])
+        if decoded is None or _PARAMETER_REGION.search(decoded):
+            parts[i] = _clean_head(parts[i]) + ";***"
     return "".join(parts)
 
 

@@ -375,29 +375,6 @@ class TestFileSourceUriProjection:
             ("simplecache::s3://tok@bucket/x{s}", "simplecache::s3://bucket/x{s}"),
             ("s3://bucket]/x{s}", "s3://bucket]/x{s}"),
             ("s3://[bad/x{s}", "s3://[bad/x{s}"),
-        ],
-        ids=[
-            "slash-in-password",
-            "hash-in-password",
-            "question-in-password",
-            "user-only",
-            "at-in-path",
-            "port",
-            "azure",
-            "chained",
-            "bad-bracket-host",
-            "open-bracket-host",
-        ],
-    )
-    def test_userinfo_with_url_delimiters(self, template: str, expected: str) -> None:
-        path = template.format(s=TOY_SUFFIX)
-        match = ToyFileFormatFG._source(path)
-        assert match.source == expected.format(s=TOY_SUFFIX)
-        assert match.access == path
-
-    @pytest.mark.parametrize(
-        "template,expected",
-        [
             ("https://host/x{s};jsessionid=SECRET", "https://host/x{s};jsessionid=***"),  # nosec B105
             ("s3://bucket/dir;jsessionid=SECRET/x{s}", "s3://bucket/dir;jsessionid=***/x{s}"),  # nosec B105
             ("https://host/x{s};PHPSESSID=abc", "https://host/x{s};PHPSESSID=***"),  # nosec B105
@@ -415,8 +392,27 @@ class TestFileSourceUriProjection:
             ("https://host/d;session_id=1/x{s}", "https://host/d;session_id=1/x{s}"),
             ("https://host/clean/x{s}", "https://host/clean/x{s}"),
             ("d;token=abc/x{s}", os.path.abspath("d;token=abc/x{s}")),
+            ("s3://b/d;aws.token=SECRET/x{s}", "s3://b/d;aws.token=***/x{s}"),  # nosec B105
+            ("s3://b/d;x~token=SECRET/x{s}", "s3://b/d;x~token=***/x{s}"),  # nosec B105
+            ("s3://b/d;v=1,token=SECRET/x{s}", "s3://b/d;v=1,token=***/x{s}"),  # nosec B105
+            ("s3://b/d;v=1&token=SECRET/x{s}", "s3://b/d;v=1&token=***/x{s}"),  # nosec B105
+            ("s3://b/d;token = SECRET/x{s}", "s3://b/d;token = ***/x{s}"),  # nosec B105
+            ("s3://b/d;token=a,b/x{s}", "s3://b/d;token=***/x{s}"),  # nosec B105
+            ("zip://d;token=SECRET::s3://bucket/x{s}", "zip://d;token=***::s3://bucket/x{s}"),  # nosec B105
+            ("s3://b/token=abc;v=1/x{s}", "s3://b/token=abc;v=1/x{s}"),  # nosec B105
+            ("s3://b/my.token.dir;v=1/x{s}", "s3://b/my.token.dir;v=1/x{s}"),
         ],
         ids=[
+            "slash-in-password",
+            "hash-in-password",
+            "question-in-password",
+            "user-only",
+            "at-in-path",
+            "port",
+            "azure",
+            "chained",
+            "bad-bracket-host",
+            "open-bracket-host",
             "jsessionid-trailing",
             "jsessionid-stops-at-slash",
             "phpsessid-uppercase",
@@ -434,9 +430,18 @@ class TestFileSourceUriProjection:
             "kept-session-underscore-id",
             "kept-clean-uri",
             "kept-local-path",
+            "dotted-key",
+            "tilde-key",
+            "comma-separated-param",
+            "ampersand-in-param",
+            "whitespace-around-equals",
+            "comma-in-value",
+            "chain-separator-kept",
+            "kept-secret-text-before-semicolon",
+            "kept-dot-in-filename",
         ],
     )
-    def test_credential_path_parameters_are_masked(self, template: str, expected: str) -> None:
+    def test_uri_projection(self, template: str, expected: str) -> None:
         path = template.format(s=TOY_SUFFIX)
         match = ToyFileFormatFG._source(path)
         assert match.source == expected.format(s=TOY_SUFFIX)

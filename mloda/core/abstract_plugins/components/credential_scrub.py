@@ -160,6 +160,17 @@ def strip_uri_userinfo(text: str) -> str:
     return _USER_ONLY_PATTERN.sub(_drop_user_only, _drop_free_text_userinfo(text, _USERINFO_FALLBACK_PATTERN))
 
 
+_PATH_PARAMETER_SPAN = re.compile(r";(?:(?!::)[^/])*")
+_PATH_PARAMETER_KEY = re.compile(
+    rf"(?<![\w-])(?P<key>[\w-]*{_SECRET_NAME})(?P<sep>[ \t]*=[ \t]*)(?:(?!::)[^;/&])*", re.IGNORECASE
+)
+
+
+def _mask_path_parameters(uri: str) -> str:
+    """Mask credential-named `key=value` values inside the `;` parameter region of each path segment."""
+    return _PATH_PARAMETER_SPAN.sub(lambda m: _PATH_PARAMETER_KEY.sub(r"\g<key>\g<sep>***", m.group(0)), uri)
+
+
 _PLACEHOLDER = "\ue000"
 _REGISTERED_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_registered_secrets", default=frozenset())
 

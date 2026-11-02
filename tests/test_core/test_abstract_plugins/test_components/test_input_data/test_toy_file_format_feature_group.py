@@ -302,9 +302,21 @@ class TestPinnedFileOwnedBySomeFileGroup:
 class TestUserinfoUriPlanIdentity:
     """A userinfo URI handle never shows its password in the plan step identity or the rendered plan."""
 
-    def test_plan_step_identity_and_render_hide_the_password(self) -> None:
+    @pytest.mark.parametrize(
+        "template,expected,secret",
+        [
+            ("s3://alice:hunter2@bucket/plan{s}", "s3://bucket/plan{s}", "hunter2"),  # nosec B105
+            (
+                "s3://bucket/dir;jsessionid=SECRETSESSION/plan{s}",  # nosec B105
+                "s3://bucket/dir;jsessionid=***/plan{s}",
+                "SECRETSESSION",
+            ),
+        ],
+        ids=["userinfo-password", "session-id-path-param"],
+    )
+    def test_plan_step_identity_and_render_hide_the_password(self, template: str, expected: str, secret: str) -> None:
         column = "toyfmt_uri_plan_col"
-        uri = f"s3://alice:hunter2@bucket/plan{TOY_SUFFIX}"  # nosec B105
+        uri = template.format(s=TOY_SUFFIX)
 
         class ToyfmtUriPlanFG(ToyFileFormatFG):
             @classmethod
@@ -331,9 +343,9 @@ class TestUserinfoUriPlanIdentity:
         )
         steps = [step for step in explained if step.step_kind == "compute"]
         assert len(steps) == 1
-        assert steps[0].data_access_identity == f"s3://bucket/plan{TOY_SUFFIX}"
-        assert "hunter2" not in repr(explained)
-        assert "hunter2" not in str(explained)
+        assert steps[0].data_access_identity == expected.format(s=TOY_SUFFIX)
+        assert secret not in repr(explained)
+        assert secret not in str(explained)
         del explained, steps, ToyfmtUriPlanFG
 
 
@@ -363,6 +375,32 @@ class TestFileSourceUriProjection:
             ("simplecache::s3://tok@bucket/x{s}", "simplecache::s3://bucket/x{s}"),
             ("s3://bucket]/x{s}", "s3://bucket]/x{s}"),
             ("s3://[bad/x{s}", "s3://[bad/x{s}"),
+            ("https://host/x{s};jsessionid=SECRET", "https://host/x{s};jsessionid=***"),  # nosec B105
+            ("s3://bucket/dir;jsessionid=SECRET/x{s}", "s3://bucket/dir;jsessionid=***/x{s}"),  # nosec B105
+            ("https://host/x{s};PHPSESSID=abc", "https://host/x{s};PHPSESSID=***"),  # nosec B105
+            ("https://host/x{s};token=abc", "https://host/x{s};token=***"),  # nosec B105
+            ("https://host/x{s};API-KEY=abc", "https://host/x{s};API-KEY=***"),  # nosec B105
+            ("https://host/x{s};x-amz-signature=abc", "https://host/x{s};x-amz-signature=***"),  # nosec B105
+            ("https://host/x{s};sessid=abc", "https://host/x{s};sessid=***"),  # nosec B105
+            ("https://host/d;v=1;token=abc;lang=en/x{s}", "https://host/d;v=1;token=***;lang=en/x{s}"),  # nosec B105
+            ("https://host/d;token=a;v=1/x{s}", "https://host/d;token=***;v=1/x{s}"),  # nosec B105
+            ("https://host/x{s};token=", "https://host/x{s};token=***"),
+            ("s3://u:pw@bucket/d;token=abc/x{s}?q=1#f", "s3://bucket/d;token=***/x{s}"),  # nosec B105
+            ("https://host/x{s};v=1", "https://host/x{s};v=1"),
+            ("https://host/x{s};type=a", "https://host/x{s};type=a"),
+            ("https://host/d;tokens=3/x{s}", "https://host/d;tokens=3/x{s}"),
+            ("https://host/d;session_id=1/x{s}", "https://host/d;session_id=1/x{s}"),
+            ("https://host/clean/x{s}", "https://host/clean/x{s}"),
+            ("d;token=abc/x{s}", os.path.abspath("d;token=abc/x{s}")),
+            ("s3://b/d;aws.token=SECRET/x{s}", "s3://b/d;aws.token=***/x{s}"),  # nosec B105
+            ("s3://b/d;x~token=SECRET/x{s}", "s3://b/d;x~token=***/x{s}"),  # nosec B105
+            ("s3://b/d;v=1,token=SECRET/x{s}", "s3://b/d;v=1,token=***/x{s}"),  # nosec B105
+            ("s3://b/d;v=1&token=SECRET/x{s}", "s3://b/d;v=1&token=***/x{s}"),  # nosec B105
+            ("s3://b/d;token = SECRET/x{s}", "s3://b/d;token = ***/x{s}"),  # nosec B105
+            ("s3://b/d;token=a,b/x{s}", "s3://b/d;token=***/x{s}"),  # nosec B105
+            ("zip://d;token=SECRET::s3://bucket/x{s}", "zip://d;token=***::s3://bucket/x{s}"),  # nosec B105
+            ("s3://b/token=abc;v=1/x{s}", "s3://b/token=abc;v=1/x{s}"),  # nosec B105
+            ("s3://b/my.token.dir;v=1/x{s}", "s3://b/my.token.dir;v=1/x{s}"),
         ],
         ids=[
             "slash-in-password",
@@ -375,9 +413,35 @@ class TestFileSourceUriProjection:
             "chained",
             "bad-bracket-host",
             "open-bracket-host",
+            "jsessionid-trailing",
+            "jsessionid-stops-at-slash",
+            "phpsessid-uppercase",
+            "token",
+            "api-key-uppercase",
+            "prefixed-signature",
+            "sessid",
+            "secret-among-others",
+            "secret-first",
+            "empty-value",
+            "with-userinfo-query-fragment",
+            "kept-v",
+            "kept-type",
+            "kept-tokens",
+            "kept-session-underscore-id",
+            "kept-clean-uri",
+            "kept-local-path",
+            "dotted-key",
+            "tilde-key",
+            "comma-separated-param",
+            "ampersand-in-param",
+            "whitespace-around-equals",
+            "comma-in-value",
+            "chain-separator-kept",
+            "kept-secret-text-before-semicolon",
+            "kept-dot-in-filename",
         ],
     )
-    def test_userinfo_with_url_delimiters(self, template: str, expected: str) -> None:
+    def test_uri_projection(self, template: str, expected: str) -> None:
         path = template.format(s=TOY_SUFFIX)
         match = ToyFileFormatFG._source(path)
         assert match.source == expected.format(s=TOY_SUFFIX)
@@ -422,6 +486,21 @@ class TestUriSourceCollision:
             f"s3://alice:pw1@b/x{TOY_SUFFIX}",  # nosec B105
             f"s3://bob:pw2@b/x{TOY_SUFFIX}",  # nosec B105
         }
+        del matches, group
+
+    def test_handles_differing_only_by_a_session_id_param_get_suffixed_masked_sources(self) -> None:
+        group = self._group()
+        dac = DataAccessCollection(
+            files={
+                "a": f"s3://b/d;jsessionid=AAA/x{TOY_SUFFIX}",  # nosec B105
+                "b": f"s3://b/d;jsessionid=BBB/x{TOY_SUFFIX}",  # nosec B105
+            }
+        )
+        matches = group.find_sources(group.CLAIM_ROUTES[0], self.COLUMN, Options(), dac)
+        assert sorted(match.source for match in matches) == [
+            f"s3://b/d;jsessionid=***/x{TOY_SUFFIX}@a",
+            f"s3://b/d;jsessionid=***/x{TOY_SUFFIX}@b",
+        ]
         del matches, group
 
     def test_a_single_handle_keeps_the_unsuffixed_source(self) -> None:

@@ -121,8 +121,10 @@ def _with_unavailable_pin(reason: str, feature: Feature) -> str:
     if feature.compute_frameworks is None:
         return reason
     pin = feature.get_compute_framework()
+    if pin.is_available():
+        return reason
     message = unavailable_framework_message(pin).rstrip(".")
-    if pin.is_available() or message in reason:
+    if message in reason.split("; "):
         return reason
     return f"{reason}; {message}"
 

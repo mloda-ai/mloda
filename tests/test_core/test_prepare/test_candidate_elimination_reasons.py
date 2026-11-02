@@ -945,14 +945,19 @@ class TestEmptySupportedPrecedence:
         assert f"  - ElimPrecedenceCapFG011 (compute framework): {reason}" in str(err)
 
     @pytest.mark.parametrize(
-        ("available", "hint"),
-        [(True, None), (False, None), (False, "pip install elim-backend")],
-        ids=["available", "no_hint", "hinted"],
+        ("available", "hint", "suffixed_declared"),
+        [(True, None, False), (False, None, False), (False, "pip install elim-backend", False), (False, None, True)],
+        ids=["available", "no_hint", "hinted", "declared_name_ends_with_pin_name"],
     )
     def test_pin_over_empty_supported_none_enabled_reports_frameworks_not_enabled(
-        self, monkeypatch: pytest.MonkeyPatch, available: bool, hint: str | None
+        self, monkeypatch: pytest.MonkeyPatch, available: bool, hint: str | None, suffixed_declared: bool
     ) -> None:
         reason = "none of its compute frameworks are enabled for this run"
+        if suffixed_declared:
+            monkeypatch.setattr(ElimFwOne011, "is_available", staticmethod(lambda: False))
+            monkeypatch.setattr(ElimFwOne011, "INSTALL_HINT", None)
+            monkeypatch.setattr(ElimFwOne011, "get_class_name", classmethod(lambda cls: "My" + ElimFwThree011.__name__))
+            reason += "; " + f"My{ElimFwThree011.__name__} is not available in this environment"
         if not available:
             monkeypatch.setattr(ElimFwThree011, "is_available", staticmethod(lambda: False))
             monkeypatch.setattr(ElimFwThree011, "INSTALL_HINT", hint)

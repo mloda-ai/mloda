@@ -155,7 +155,7 @@ Why it works this way:
 
 For example, without `polars` installed, `from mloda.user.polars import PolarsDataFrame` still works, `PolarsDataFrame.is_available()` returns `False`, and mloda plans with the remaining frameworks.
 
-If `compute_frameworks` names only unavailable frameworks, a requested feature or a FeatureGroup's input feature pins an unavailable framework, or a group's frameworks are all unavailable, mloda raises an error. When the framework declares an install command (`INSTALL_HINT`), the error (for a group, its candidate reason) names it.
+If `compute_frameworks` names only unavailable frameworks, a requested feature or an input feature pins an unavailable framework, or a group's frameworks are all unavailable, mloda raises an error. When the framework declares an install command (`INSTALL_HINT`), the error names it.
 
 ##### Framework Examples
 

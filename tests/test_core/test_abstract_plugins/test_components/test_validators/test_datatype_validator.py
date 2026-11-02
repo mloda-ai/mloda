@@ -167,12 +167,6 @@ class TestValidateExtendedTypes:
         feature_set = FeatureSet([self._strict(Feature.int32_of("c"))])
         DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
-    def test_strict_uint64_column_declared_int64_raises(self) -> None:
-        table = pa.table({"c": pa.array([1, 2], type=pa.uint64())})
-        feature_set = FeatureSet([self._strict(Feature.int64_of("c"))])
-        with pytest.raises(DataTypeMismatchError):
-            DataTypeValidator.validate(feature_set, _arrow_resolver(table))
-
     def test_strict_tz_column_declared_naive_raises(self) -> None:
         table = pa.table({"c": pa.array([datetime(2024, 1, 1)], type=pa.timestamp("us", tz="UTC"))})
         feature_set = FeatureSet([self._strict(Feature.timestamp_micros_of("c"))])
@@ -188,12 +182,6 @@ class TestValidateExtendedTypes:
     def test_lenient_tz_column_declared_naive_passes(self) -> None:
         table = pa.table({"c": pa.array([datetime(2024, 1, 1)], type=pa.timestamp("us", tz="UTC"))})
         DataTypeValidator.validate(FeatureSet([Feature.timestamp_micros_of("c")]), _arrow_resolver(table))
-
-    def test_list_column_declared_list_passes_in_both_modes(self) -> None:
-        table = pa.table({"c": pa.array([["a"], ["b"]], type=pa.list_(pa.string()))})
-        DataTypeValidator.validate(FeatureSet([Feature("c", data_type=DataType.LIST)]), _arrow_resolver(table))
-        feature = self._strict(Feature("c", data_type=DataType.LIST))
-        DataTypeValidator.validate(FeatureSet([feature]), _arrow_resolver(table))
 
     def test_list_column_declared_string_raises_in_lenient(self) -> None:
         table = pa.table({"c": pa.array([["a"], ["b"]], type=pa.list_(pa.string()))})

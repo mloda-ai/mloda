@@ -166,7 +166,7 @@ A custom ComputeFramework should map tz-aware timestamp columns to `TIMESTAMP_MI
 
 ## List Columns
 
-`DataType.LIST` means a list of any element type: validation checks only the family, elements are not checked, and `to_arrow_type` raises for it because the element type is unknown without data.
+`DataType.LIST` matches a list of any element type; elements are not checked, and `to_arrow_type` raises for it.
 
 ## Decimal Columns
 

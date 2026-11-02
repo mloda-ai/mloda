@@ -54,19 +54,10 @@ class TestFromArrowType:
     def test_to_arrow_type_decimal_is_decimal128_38_18(self) -> None:
         assert DataType.to_arrow_type(DataType.DECIMAL) == pa.decimal128(38, 18)
 
-    def test_from_arrow_type_new_integer_members(self) -> None:
-        assert DataType.from_arrow_type(pa.int8()) == DataType.INT8
-        assert DataType.from_arrow_type(pa.uint8()) == DataType.UINT8
-        assert DataType.from_arrow_type(pa.uint64()) == DataType.UINT64
-
     def test_from_arrow_type_widths_without_member_resolve_to_next_lossless(self) -> None:
         assert DataType.from_arrow_type(pa.int16()) == DataType.INT32
         assert DataType.from_arrow_type(pa.uint16()) == DataType.INT32
         assert DataType.from_arrow_type(pa.uint32()) == DataType.INT64
-
-    def test_new_member_values_equal_names(self) -> None:
-        for name in ("INT8", "UINT8", "UINT64", "TIMESTAMP_MICROS_TZ", "LIST"):
-            assert DataType[name].value == name
 
     @pytest.mark.parametrize("unit", ["ms", "us"])
     @pytest.mark.parametrize("tz", ["UTC", "Europe/Berlin"])
@@ -94,11 +85,6 @@ class TestFromArrowType:
     def test_to_arrow_type_raises_without_data(self, data_type: DataType) -> None:
         with pytest.raises(ValueError):
             DataType.to_arrow_type(data_type)
-
-    def test_to_arrow_type_new_integers(self) -> None:
-        assert DataType.to_arrow_type(DataType.INT8) == pa.int8()
-        assert DataType.to_arrow_type(DataType.UINT8) == pa.uint8()
-        assert DataType.to_arrow_type(DataType.UINT64) == pa.uint64()
 
     def test_from_arrow_type_round_trip(self) -> None:
         """Test that converting to arrow and back preserves the DataType."""

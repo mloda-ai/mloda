@@ -45,9 +45,10 @@ class ZeroRowResultTypeTestMixin:
     def column_type(self, result: Any, column: str) -> Any:
         raise NotImplementedError
 
-    def calculate(self, table: pa.Table, feature: Feature) -> Any:
+    def calculate(self, table: pa.Table, *features: Feature) -> Any:
         feature_set = FeatureSet()
-        feature_set.add(feature)
+        for feature in features:
+            feature_set.add(feature)
         data = self.from_arrow(table)
         if issubclass(self.feature_group_class, Implementation):
             return self.feature_group_class.calculate(self.feature_group_class.feature_group, data, feature_set, None)

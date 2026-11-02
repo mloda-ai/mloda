@@ -11,9 +11,8 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.python_dict import PythonDictAggregation
 
-from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
-from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_add_result_test_mixin import (
-    AggregatedAddResultTestMixin,
+from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_calculate_test_mixin import (
+    AggregatedCalculateTestMixin,
 )
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
     AggregatedZeroRowTestMixin,
@@ -44,17 +43,6 @@ class TestPythonDictAggregation:
         with pytest.raises(ValueError):
             PythonDictAggregation._perform_aggregation({"m~0": [1, 2, 3], "m~1": [1]}, "sum", ["m~0", "m~1"])
 
-    def test_calculate_feature_multiple(self, sample_data: dict[str, list[Any]]) -> None:
-        feature_set = FeatureSet()
-        feature_set.add(Feature("sales__sum_aggr"))
-        feature_set.add(Feature("price__avg_aggr"))
-
-        result = PythonDictAggregation.calculate(AggregatedFeatureGroup, sample_data, feature_set, None)
-
-        assert result["sales__sum_aggr"] == [1500] * 5
-        assert result["price__avg_aggr"] == [pytest.approx(9.0)] * 5
-        assert result["sales"] == [100, 200, 300, 400, 500]
-
     def test_calculate_leaves_the_input_dict_unchanged(self, sample_data: dict[str, list[Any]]) -> None:
         feature_set = FeatureSet()
         feature_set.add(Feature("sales__sum_aggr"))
@@ -64,16 +52,12 @@ class TestPythonDictAggregation:
 
         assert sample_data == before
 
-    def test_calculate_feature_missing_source(self, sample_data: dict[str, list[Any]]) -> None:
-        error = assert_core_rejects_missing_input(PythonDictAggregation, sample_data, "missing__sum_aggr", ("missing",))
-        assert "sales" in error.available_columns
-
 
 class TestPythonDictAggregatedZeroRow(PythonDictZeroRowAdapter, AggregatedZeroRowTestMixin):
     feature_group_class = PythonDictAggregation
 
 
-class TestPythonDictAggregationAddResult(PythonDictZeroRowAdapter, AggregatedAddResultTestMixin):
+class TestPythonDictAggregationCalculate(PythonDictZeroRowAdapter, AggregatedCalculateTestMixin):
     feature_group_class = PythonDictAggregation
 
 

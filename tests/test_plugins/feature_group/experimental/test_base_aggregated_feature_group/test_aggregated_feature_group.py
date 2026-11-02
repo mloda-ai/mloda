@@ -1,7 +1,6 @@
 import pandas as pd
 import pytest
 
-from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 
 from mloda.user import mloda
@@ -14,8 +13,8 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 
-from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_add_result_test_mixin import (
-    AggregatedAddResultTestMixin,
+from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_calculate_test_mixin import (
+    AggregatedCalculateTestMixin,
 )
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
     AggregatedZeroRowTestMixin,
@@ -46,19 +45,6 @@ def feature_set_sum() -> FeatureSet:
     """Create a feature set with a sum aggregation feature."""
     feature_set = FeatureSet()
     feature_set.add(Feature("sales__sum_aggr"))
-    return feature_set
-
-
-@pytest.fixture
-def feature_set_multiple() -> FeatureSet:
-    """Create a feature set with multiple aggregation features."""
-    feature_set = FeatureSet()
-    feature_set.add(Feature("sales__sum_aggr"))
-    feature_set.add(Feature("price__avg_aggr"))
-    feature_set.add(Feature("discount__min_aggr"))
-    feature_set.add(Feature("customer_rating__max_aggr"))
-    feature_set.add(Feature("quantity__count_aggr"))
-    feature_set.add(Feature("discount__median_aggr"))
     return feature_set
 
 
@@ -209,21 +195,6 @@ class TestPandasAggregation:
         with pytest.raises(ValueError):
             PandasAggregation._perform_aggregation(sample_dataframe, "invalid", ["sales"])
 
-    def test_calculate_feature_single(self, sample_dataframe: pd.DataFrame, feature_set_sum: FeatureSet) -> None:
-        """Test calculate_feature method with a single aggregation."""
-        result = PandasAggregation.calculate(AggregatedFeatureGroup, sample_dataframe, feature_set_sum, None)
-
-        # Check that the result contains the original data plus the aggregated feature
-        assert "sales__sum_aggr" in result.columns
-        assert result["sales__sum_aggr"].iloc[0] == 1500  # Sum of [100, 200, 300, 400, 500]
-
-        # Check that the original data is preserved
-        assert "sales" in result.columns
-        assert "quantity" in result.columns
-        assert "price" in result.columns
-        assert "discount" in result.columns
-        assert "customer_rating" in result.columns
-
     def test_group_calculate_feature_runs_the_feature_set_implementation(
         self, sample_dataframe: pd.DataFrame, feature_set_sum: FeatureSet
     ) -> None:
@@ -231,65 +202,12 @@ class TestPandasAggregation:
         result = AggregatedFeatureGroup.calculate_feature(sample_dataframe, feature_set_sum)
         assert result["sales__sum_aggr"].iloc[0] == 1500
 
-    def test_calculate_feature_multiple(self, sample_dataframe: pd.DataFrame, feature_set_multiple: FeatureSet) -> None:
-        """Test calculate_feature method with multiple aggregations."""
-        result = PandasAggregation.calculate(AggregatedFeatureGroup, sample_dataframe, feature_set_multiple, None)
-
-        # Check that the result contains all aggregated features
-        assert "sales__sum_aggr" in result.columns
-        assert result["sales__sum_aggr"].iloc[0] == 1500  # Sum of [100, 200, 300, 400, 500]
-
-        assert "price__avg_aggr" in result.columns
-        assert result["price__avg_aggr"].iloc[0] == 9.0  # Avg of [10.0, 9.5, 9.0, 8.5, 8.0]
-
-        assert "discount__min_aggr" in result.columns
-        assert result["discount__min_aggr"].iloc[0] == 0.1  # Min of [0.1, 0.2, 0.15, 0.25, 0.1]
-
-        assert "customer_rating__max_aggr" in result.columns
-        assert result["customer_rating__max_aggr"].iloc[0] == 5  # Max of [4, 5, 3, 4, 5]
-
-        assert "quantity__count_aggr" in result.columns
-        assert result["quantity__count_aggr"].iloc[0] == 5  # Count of [10, 20, 30, 40, 50]
-
-        assert "discount__median_aggr" in result.columns
-        assert result["discount__median_aggr"].iloc[0] == 0.15  # Median of [0.1, 0.2, 0.15, 0.25, 0.1]
-
-        # Check that the original data is preserved
-        assert "sales" in result.columns
-        assert "quantity" in result.columns
-        assert "price" in result.columns
-        assert "discount" in result.columns
-        assert "customer_rating" in result.columns
-
-    def test_calculate_feature_missing_source(self, sample_dataframe: pd.DataFrame) -> None:
-        """Test calculate_feature method with missing source feature."""
-        error = assert_core_rejects_missing_input(
-            PandasAggregation, sample_dataframe, "missing__sum_aggr", ("missing",)
-        )
-        assert "sales" in error.available_columns
-
-    def test_calculate_feature_invalid_aggregation(self, sample_dataframe: pd.DataFrame) -> None:
-        """Test calculate_feature method with invalid aggregation type."""
-        # Temporarily modify the AGGREGATION_TYPES to simulate an invalid aggregation type
-        original_types = AggregatedFeatureGroup.AGGREGATION_TYPES.copy()
-        try:
-            AggregatedFeatureGroup.AGGREGATION_TYPES = {"sum": "Sum of values"}
-
-            feature_set = FeatureSet()
-            feature_set.add(Feature("sales__min_aggr"))
-
-            with pytest.raises(ValueError, match="Unsupported aggregation type: min"):
-                PandasAggregation.calculate(AggregatedFeatureGroup, sample_dataframe, feature_set, None)
-        finally:
-            # Restore the original AGGREGATION_TYPES
-            AggregatedFeatureGroup.AGGREGATION_TYPES = original_types
-
 
 class TestPandasAggregatedZeroRow(PandasZeroRowAdapter, AggregatedZeroRowTestMixin):
     feature_group_class = PandasAggregation
 
 
-class TestPandasAggregationAddResult(PandasZeroRowAdapter, AggregatedAddResultTestMixin):
+class TestPandasAggregationCalculate(PandasZeroRowAdapter, AggregatedCalculateTestMixin):
     feature_group_class = PandasAggregation
 
 

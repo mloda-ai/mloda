@@ -114,7 +114,7 @@ _REGISTERED = "Zq81Lm5Vx0Rb7Ye3Hw29"  # nosec B105
 class _ContainerLeakError(Exception):
     """Module-level so it pickles."""
 
-    def __init__(self, message: str = "failed") -> None:
+    def __init__(self, message: str = f"failed {_REGISTERED}") -> None:
         super().__init__(message)
         self.as_dict = {"k": _REGISTERED}
         self.as_list = [_REGISTERED]
@@ -502,6 +502,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
 
         cfw_register.set_error.assert_called_once()
         exc = cfw_register.set_error.call_args.kwargs["exception"]
+        assert _REGISTERED not in str(exc)
         assert _REGISTERED not in repr(exc.as_dict)
         assert _REGISTERED not in repr(exc.as_list)
         restored = pickle.loads(pickle.dumps(exc))  # nosec B301

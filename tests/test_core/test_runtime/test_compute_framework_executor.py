@@ -36,7 +36,7 @@ _REGISTERED = "Zq81Lm5Vx0Rb7Ye3Hw29"  # nosec B105
 
 
 class _ContainerLeakError(Exception):
-    def __init__(self, message: str = "failed") -> None:
+    def __init__(self, message: str = f"failed {_REGISTERED}") -> None:
         super().__init__(message)
         self.as_dict = {"k": _REGISTERED}
         self.as_list = [_REGISTERED]
@@ -1146,6 +1146,7 @@ class TestSyncExecuteStep:
 
         cfw_register.set_error.assert_called_once()
         assert cfw_register.set_error.call_args.kwargs["exception"] is boom
+        assert _REGISTERED not in str(boom)
         assert _REGISTERED not in repr(boom.as_dict)
         assert _REGISTERED not in repr(boom.as_list)
 
@@ -1285,6 +1286,7 @@ class TestThreadExecuteStep:
 
         cfw_register.set_error.assert_called_once()
         assert cfw_register.set_error.call_args.kwargs["exception"] is boom
+        assert _REGISTERED not in str(boom)
         assert _REGISTERED not in repr(boom.as_dict)
         assert _REGISTERED not in repr(boom.as_list)
 

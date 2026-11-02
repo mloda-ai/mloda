@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import time
+from collections import OrderedDict, defaultdict
+from collections.abc import Callable
 from enum import Enum
 from typing import Any, NamedTuple
 
@@ -1452,6 +1455,10 @@ class _Pair(NamedTuple):
     second: str
 
 
+class _KeepList(list[Any]):
+    pass
+
+
 class TestRedactException:
     """redact_exception rewrites registered literals in place, across the chain, keeping identity."""
 
@@ -1615,7 +1622,7 @@ class TestRedactException:
             pytest.param(_Pair(_LITERAL, "keep"), _Pair("***", "keep"), id="namedtuple"),
         ],
     )
-    def test_a_str_instance_attribute_is_masked(self, payload: Any, expected: Any) -> None:
+    def test_an_instance_attribute_is_masked(self, payload: Any, expected: Any) -> None:
         from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
 
         class TokenHolderError(Exception):
@@ -1633,22 +1640,6 @@ class TestRedactException:
         assert _LITERAL not in str(exc)
         assert exc.token == expected
         assert type(exc.token) is type(expected)
-
-    def test_a_frozen_dataclass_exception_dict_field_is_masked(self) -> None:
-        from dataclasses import dataclass
-
-        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
-
-        @dataclass(frozen=True)
-        class FrozenPayloadError(Exception):
-            payload: dict[str, str]
-
-        exc = FrozenPayloadError({"k": _LITERAL})
-
-        redact_exception(exc, frozenset({_LITERAL}))
-
-        assert _LITERAL not in repr(exc)
-        assert exc.payload == {"k": "***"}
 
     def test_set_and_non_dict_mapping_attributes_are_left_as_is(self) -> None:
         from types import MappingProxyType
@@ -1681,18 +1672,89 @@ class TestRedactException:
 
         assert _LITERAL not in repr(getattr(exc, "deep"))
 
-    def test_a_frozen_dataclass_exception_repr_is_masked(self) -> None:
+    @pytest.mark.parametrize(
+        ("payload", "expected"),
+        [
+            pytest.param(f"d {_LITERAL}", "d ***", id="str-field"),
+            pytest.param({"k": _LITERAL}, {"k": "***"}, id="dict-field"),
+        ],
+    )
+    def test_a_frozen_dataclass_exception_repr_is_masked(self, payload: Any, expected: Any) -> None:
         from dataclasses import dataclass
 
         from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
 
         @dataclass(frozen=True)
         class FrozenDetailError(Exception):
-            detail: str
+            detail: Any
 
-        exc = FrozenDetailError(f"d {_LITERAL}")
+        exc = FrozenDetailError(payload)
 
         redact_exception(exc, frozenset({_LITERAL}))
 
         assert _LITERAL not in repr(exc)
         assert _LITERAL not in str(exc)
+        assert exc.detail == expected
+
+    @pytest.mark.parametrize(
+        "factory",
+        [
+            pytest.param(lambda: OrderedDict(a="keep"), id="ordereddict"),
+            pytest.param(lambda: defaultdict(list, {"a": ["keep"]}), id="defaultdict"),
+            pytest.param(lambda: _KeepList(["keep"]), id="list-subclass"),
+            pytest.param(lambda: os.stat("."), id="stat-result"),
+            pytest.param(lambda: time.gmtime(0), id="struct-time"),
+            pytest.param(lambda: ["keep", 1], id="plain-list"),
+        ],
+    )
+    def test_a_container_without_a_literal_keeps_identity_and_type(self, factory: Callable[[], Any]) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        value = factory()
+        exc = ValueError("failed")
+        setattr(exc, "held", value)
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert getattr(exc, "held") is value
+
+    @pytest.mark.parametrize("payload", [f"x {_LITERAL}", [f"x {_LITERAL}"]], ids=["str", "list"])
+    def test_a_property_shadowing_an_instance_attribute_does_not_raise(self, payload: Any) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        class PropertyError(Exception):
+            @property
+            def info(self) -> Any:
+                return self.__dict__["info"]
+
+        exc = PropertyError("failed")
+        exc.__dict__["info"] = payload
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert _LITERAL not in repr(exc.__dict__["info"])
+
+    def test_a_tuple_first_cycle_in_a_tuple_attribute_is_masked(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        lst: list[Any] = [_LITERAL]
+        cyc = (lst,)
+        lst.append(cyc)
+        exc = ValueError("failed")
+        setattr(exc, "held", cyc)
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert _LITERAL not in repr(getattr(exc, "held"))
+
+    def test_a_tuple_first_cycle_in_an_arg_is_masked(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        lst: list[Any] = [_LITERAL]
+        cyc = (lst,)
+        lst.append(cyc)
+        exc = ValueError(cyc)
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert _LITERAL not in repr(exc.args)

@@ -39,6 +39,10 @@ from mloda_plugins.feature_group.experimental.data_quality.missing_value.base im
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.python_dict import (  # noqa: F401
     PythonDictMissingValueImputation,
 )
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.python_dict import (  # noqa: F401
+    PythonDictAggregation,
+)
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 from mloda_plugins.feature_group.experimental.text_cleaning.python_dict import (  # noqa: F401
     PythonDictTextCleaning,
@@ -745,7 +749,16 @@ class TestApiDataNeutralType:
                 ["Hello", "WORLD"],
                 ["hello", "world"],
             ),
+            (
+                AggregatedFeatureGroup,
+                "aggr_api_x__sum_aggr",
+                Options(),
+                "aggr_api_x",
+                [1.0, 2.0, 3.0],
+                [6.0, 6.0, 6.0],
+            ),
         ],
+        ids=["imputation", "text_cleaning", "aggregation"],
     )
     def test_unpinned_run_does_not_mutate_api_data_and_runs_twice(
         self, group: Any, feature: str, options: Options, column: str, data: list[Any], expected: list[Any]

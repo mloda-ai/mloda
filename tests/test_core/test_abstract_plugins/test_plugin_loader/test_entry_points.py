@@ -129,8 +129,7 @@ def _own_package_broken_manifest_source(pkg_name: str, class_name: str) -> str:
 
 
 def _transitive_optional_dependency_manifest_source(optional_root_pkg: str, class_name: str) -> str:
-    """A manifest importing an installed optional root whose own __init__.py fails on a missing
-    transitive dependency."""
+    """A manifest that imports `optional_root_pkg` and defines one feature group."""
     return f"""
     import {optional_root_pkg}
 
@@ -371,6 +370,30 @@ def _build_declared_optional_extender_distribution(base_dir: Path, pkg_name: str
         "optional_deps",
         _DECLARED_OPTIONAL_DEPS_MODULE_SOURCE.replace("eptest_declopt_missing_root", missing_root),
     )
+
+
+def _build_declared_root_distribution(
+    base_dir: Path, pkg: str, import_target: str, declared_root: str, existing_pkgs: tuple[str, ...]
+) -> None:
+    """A distribution whose manifest imports import_target and declares declared_root optional."""
+    _build_distribution(
+        base_dir,
+        pkg,
+        _transitive_optional_dependency_manifest_source(import_target, "EpDottedFG"),
+        f"""
+        [mloda.feature_groups]
+        demo = {pkg}.manifest:FEATURE_GROUPS
+
+        [mloda.optional_dependencies]
+        demo = {pkg}.optional_deps:OPTIONAL_DEPENDENCIES
+        """,
+    )
+    _write_module(base_dir, pkg, "optional_deps", f"OPTIONAL_DEPENDENCIES = frozenset({{{declared_root!r}}})")
+    for existing in existing_pkgs:
+        init = base_dir / Path(*existing.split(".")) / "__init__.py"
+        init.parent.mkdir(parents=True, exist_ok=True)
+        init.write_text("")
+    importlib.invalidate_caches()
 
 
 def _count_skip_warnings(caplog: pytest.LogCaptureFixture, pkg_name: str) -> int:
@@ -1040,6 +1063,83 @@ class TestLoadEntryPointsOptionalDependenciesDeclaration:
             f"expected the skip to be logged at WARNING naming the entry point, got: {warning_messages}"
         )
 
+    @pytest.mark.parametrize(
+        ("case", "missing_suffix", "existing_suffixes", "foreign"),
+        [
+            pytest.param("same_eq", "enterprise", (), False, id="same_namespace_whole_subpackage_missing"),
+            pytest.param(
+                "same_deep", "enterprise.feature_groups", ("enterprise",), False, id="same_namespace_deeper_missing"
+            ),
+            pytest.param("foreign", "enterprise", (), True, id="foreign_namespace"),
+        ],
+    )
+    def test_declared_dotted_root_skips_entry_point(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        case: str,
+        missing_suffix: str,
+        existing_suffixes: tuple[str, ...],
+        foreign: bool,
+    ) -> None:
+        pkg = f"eptest_dotroot_{case}"
+        ns = f"eptest_dotroot_{case}_other" if foreign else pkg
+        missing = f"{ns}.{missing_suffix}"
+        existing = tuple(f"{ns}.{s}" for s in existing_suffixes) + ((ns,) if foreign else ())
+        _build_declared_root_distribution(
+            tmp_path, pkg, f"{ns}.enterprise.feature_groups.x", f"{ns}.enterprise", existing
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        keys = PluginLoader().load_entry_points()
+
+        assert not any(key.startswith(f"{pkg}.") for key in keys)
+        assert PluginRegistry.default().get(f"{pkg}.manifest:EpDottedFG") is None
+        assert PluginLoader.skipped_plugins() == {f"demo ({pkg}.manifest:FEATURE_GROUPS)": missing}
+
+    @pytest.mark.parametrize(
+        ("pkg", "import_target", "declared_root", "missing"),
+        [
+            pytest.param(
+                "eptest_dotneg_sibling",
+                "eptest_dotneg_sibling.other.x",
+                "eptest_dotneg_sibling.enterprise",
+                "eptest_dotneg_sibling.other",
+                id="undeclared_sibling",
+            ),
+            pytest.param(
+                "eptest_dotneg_noboundary",
+                "eptest_dotneg_noboundary.enterprisex.x",
+                "eptest_dotneg_noboundary.enterprise",
+                "eptest_dotneg_noboundary.enterprisex",
+                id="no_dot_boundary",
+            ),
+            pytest.param(
+                "eptest_dotneg_parent",
+                "eptest_dotneg_parent_other.enterprise.feature_groups.x",
+                "eptest_dotneg_parent_other.enterprise",
+                "eptest_dotneg_parent_other",
+                id="missing_parent_of_declared_root",
+            ),
+        ],
+    )
+    def test_declared_dotted_root_does_not_cover_unrelated_module(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pkg: str,
+        import_target: str,
+        declared_root: str,
+        missing: str,
+    ) -> None:
+        _build_declared_root_distribution(tmp_path, pkg, import_target, declared_root, ())
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with pytest.raises(ModuleNotFoundError) as exc_info:
+            PluginLoader().load_entry_points()
+
+        assert exc_info.value.name == missing
+
 
 def _build_malformed_marker_distribution(base_dir: Path, pkg_name: str, marker_source: str) -> None:
     """A distribution whose only entry point is a `mloda.optional_dependencies` marker labelled `pkg_name`."""
@@ -1527,14 +1627,21 @@ class TestLoadEntryPointsTransitiveOptionalDependency:
             PluginLoader().load_entry_points()
         assert exc_info.value.name == unrelated_missing_dep
 
+    @pytest.mark.parametrize(
+        ("pkg", "dotted"),
+        [
+            pytest.param("eptest_nsroot", False, id="top_level_root"),
+            pytest.param("eptest_nsroot_dotted", True, id="dotted_root_containing_own_module"),
+        ],
+    )
     def test_own_namespace_matching_declared_root_still_raises_for_own_bug(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pkg: str, dotted: bool
     ) -> None:
-        """A manifest whose own top-level namespace IS the declared optional root (e.g. a plugin
+        """A manifest whose own namespace IS (or contains) the declared optional root (e.g. a plugin
         author declaring their own namespace optional because it coincides with an upstream
         dependency name) must still propagate a genuine hard-dependency failure in its own code."""
-        pkg = "eptest_nsroot"
-        missing_dep = "eptest_nsroot_genuinely_missing_hard_dep"
+        declared_root = f"{pkg}.manifest" if dotted else pkg
+        missing_dep = f"{pkg}_genuinely_missing_hard_dep"
         _build_distribution(
             tmp_path,
             pkg,
@@ -1547,7 +1654,7 @@ class TestLoadEntryPointsTransitiveOptionalDependency:
             demo = {pkg}.optional_deps:OPTIONAL_DEPENDENCIES
             """,
         )
-        _write_module(tmp_path, pkg, "optional_deps", f'OPTIONAL_DEPENDENCIES = frozenset({{"{pkg}"}})\n')
+        _write_module(tmp_path, pkg, "optional_deps", f'OPTIONAL_DEPENDENCIES = frozenset({{"{declared_root}"}})\n')
         monkeypatch.syspath_prepend(str(tmp_path))
 
         with pytest.raises(ModuleNotFoundError) as exc_info:

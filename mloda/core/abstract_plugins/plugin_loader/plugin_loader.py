@@ -71,6 +71,10 @@ CORE_PLUGIN_MODULES: tuple[str, ...] = (
 )
 
 
+def _module_under(name: str | None, root: str) -> bool:
+    return name is not None and (name == root or name.startswith(f"{root}."))
+
+
 def traceback_blames_root(exc: ImportError, root: str) -> bool:
     """True if the innermost (deepest) frame of exc's traceback, i.e. where the failure actually
     occurred, belongs to root or a submodule of it."""
@@ -80,7 +84,7 @@ def traceback_blames_root(exc: ImportError, root: str) -> bool:
     while tb.tb_next is not None:
         tb = tb.tb_next
     module_name = tb.tb_frame.f_globals.get("__name__")
-    return isinstance(module_name, str) and (module_name == root or module_name.startswith(f"{root}."))
+    return isinstance(module_name, str) and _module_under(module_name, root)
 
 
 class PluginLoader:
@@ -230,11 +234,17 @@ class PluginLoader:
                     manifest = entry_point.load()
                 except ImportError as e:
                     root = e.name.split(".")[0] if e.name else None
-                    own_root = entry_point.module.split(".")[0]
+                    own_module = entry_point.module
+                    own_root = own_module.split(".")[0]
                     dist_name = entry_point.dist.name if entry_point.dist is not None else None
-                    if root == own_root:
+                    optional_roots = declared_optional.get((dist_name, entry_point.name), OPTIONAL_PLUGIN_DEPENDENCIES)
+                    # Roots the entry point's own module is at or under are never eligible, so a namespace collision
+                    # can't misattribute the plugin's own bug; the rest gate both the name and the traceback match.
+                    eligible_roots = [r for r in optional_roots if not _module_under(own_module, r)]
+                    name_match = any(_module_under(e.name, r) for r in eligible_roots)
+                    if root == own_root and not name_match:
                         if isinstance(e, ModuleNotFoundError) and (
-                            e.name == entry_point.module or entry_point.module.startswith(f"{e.name}.")
+                            e.name == own_module or own_module.startswith(f"{e.name}.")
                         ):
                             dist_label = f"distribution '{dist_name}'" if dist_name else "an unidentified distribution"
                             raise ModuleNotFoundError(
@@ -246,13 +256,8 @@ class PluginLoader:
                                 name=e.name,
                             ) from e
                         raise
-                    optional_roots = declared_optional.get((dist_name, entry_point.name), OPTIONAL_PLUGIN_DEPENDENCIES)
-                    # Exclude any root the entry point's own module is at or under, so a namespace
-                    # collision can't misattribute the plugin's own bug to that root's traceback frame.
-                    own_module = entry_point.module
-                    tb_roots = [r for r in optional_roots if own_module != r and not own_module.startswith(f"{r}.")]
-                    blamed_root = next((r for r in tb_roots if traceback_blames_root(e, r)), None)
-                    if root in optional_roots or blamed_root is not None:
+                    blamed_root = next((r for r in eligible_roots if traceback_blames_root(e, r)), None)
+                    if name_match or blamed_root is not None:
                         dependency = e.name or blamed_root
                         assert dependency is not None
                         already_recorded = self._skipped.get(skipped_key) == dependency

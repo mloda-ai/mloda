@@ -191,7 +191,7 @@ def _hides_credential(part: str) -> bool:
 
 
 def _mask_path_parameters(uri: str) -> str:
-    """Mask credential-named `;key=value` values in each path segment, also when only its percent-decoded form has one."""
+    """Mask credential-named `;key=value` path parameter values, including percent-encoded ones."""
     masked = _mask_raw_path_parameters(uri)
     if "%" not in masked:
         return masked

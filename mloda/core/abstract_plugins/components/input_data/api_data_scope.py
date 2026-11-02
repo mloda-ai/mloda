@@ -29,7 +29,7 @@ def api_data_scope(lookup: Callable[[], Any], key: str) -> Iterator[None]:
 
 
 def read_api_data(key: str) -> Any:
-    """The values of the set bound by the active scope."""
+    """The values of the set bound by the active scope; a dict set comes back as a shallow copy."""
     lookup = _API_DATA_LOOKUP.get()
     if lookup is None:
         raise ValueError(
@@ -38,4 +38,5 @@ def read_api_data(key: str) -> Any:
     bound_key, reader = lookup
     if key != bound_key:
         raise ValueError(f"api_data set '{key}' cannot be read here; this scope is bound to set {bound_key!r}.")
-    return reader()
+    values = reader()
+    return dict(values) if isinstance(values, dict) else values

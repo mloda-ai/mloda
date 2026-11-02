@@ -61,7 +61,7 @@ class ApiDataFG(SourceFeatureGroup):
 
     @classmethod
     def api_values(cls, match: SourceMatch) -> Any:
-        """The run's raw values for the matched api_data set; for load_neutral overrides."""
+        """The run's values for the matched api_data set, a shallow copy for a dict; for load_neutral overrides."""
         if not isinstance(match.access, ApiDataRef):
             raise ValueError(f"{cls.get_class_name()}.api_values needs an api_data match, got {match.source!r}.")
         return read_api_data(match.access.key)

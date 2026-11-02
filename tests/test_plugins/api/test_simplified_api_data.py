@@ -35,6 +35,19 @@ from mloda.user import ParallelizationMode
 from mloda.core.abstract_plugins.feature_group import format_feature_group_class
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG  # noqa: F401
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.python_dict import (  # noqa: F401
+    PythonDictMissingValueImputation,
+)
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.python_dict import (  # noqa: F401
+    PythonDictAggregation,
+)
+from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
+from mloda_plugins.feature_group.experimental.text_cleaning.python_dict import (  # noqa: F401
+    PythonDictTextCleaning,
+)
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import column_values
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef, api_data_scope, read_api_data
 
 
@@ -717,6 +730,55 @@ class TestApiDataNeutralType:
 
         assert group.neutral_type(match) is None
 
+    @pytest.mark.parametrize(
+        "group, feature, options, column, data, expected",
+        [
+            (
+                MissingValueFeatureGroup,
+                "api_mut_income__mean_imputed",
+                Options(),
+                "api_mut_income",
+                [10.0, None, 30.0],
+                [10.0, 20.0, 30.0],
+            ),
+            (
+                TextCleaningFeatureGroup,
+                "api_mut_text__cleaned_text",
+                Options(context={TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize",)}),
+                "api_mut_text",
+                ["Hello", "WORLD"],
+                ["hello", "world"],
+            ),
+            (
+                AggregatedFeatureGroup,
+                "aggr_api_x__sum_aggr",
+                Options(),
+                "aggr_api_x",
+                [1.0, 2.0, 3.0],
+                [6.0, 6.0, 6.0],
+            ),
+        ],
+        ids=["imputation", "text_cleaning", "aggregation"],
+    )
+    def test_unpinned_run_does_not_mutate_api_data_and_runs_twice(
+        self, group: Any, feature: str, options: Options, column: str, data: list[Any], expected: list[Any]
+    ) -> None:
+        plugins = PluginCollector.enabled_feature_groups({ApiDataFG, group})
+        api_data = {"ApiMut": {column: data}}
+        original = {"ApiMut": {column: list(data)}}
+        feat = Feature(feature, options)
+
+        steps = mloda.explain([feat], api_data=api_data, plugin_collector=plugins)
+        step = next(s for s in steps if s.step_kind == "compute" and s.feature_group is group)
+        assert step.compute_framework is PythonDictFramework
+        assert step.compute_framework_reason == "loads natively"
+
+        for _ in range(2):
+            results = mloda.run_all([feat], api_data=api_data, plugin_collector=plugins)
+            assert column_values(results, feature) == expected
+
+        assert api_data == original
+
 
 class TestApiDataScopeAndShapes:
     """Scope binding, subclass transport, THREADING, non-mapping values and foreign-pointer claims."""
@@ -726,8 +788,11 @@ class TestApiDataScopeAndShapes:
             read_api_data("Cols")
 
     def test_read_with_a_different_key_than_the_bound_one_raises(self) -> None:
-        with api_data_scope(lambda: {"x": [1]}, "bound_key"):
-            assert read_api_data("bound_key") == {"x": [1]}
+        values = {"x": [1]}
+        with api_data_scope(lambda: values, "bound_key"):
+            read = read_api_data("bound_key")
+            assert read == values
+            assert read is not values
             with pytest.raises(ValueError, match=r"(?s)(?=.*other_key)"):
                 read_api_data("other_key")
 

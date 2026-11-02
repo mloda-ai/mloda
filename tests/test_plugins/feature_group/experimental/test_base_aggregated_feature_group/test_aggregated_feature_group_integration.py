@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import ApiDataFG, ComputeFramework, FeatureSet
+from mloda.provider import ComputeFramework, FeatureSet
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.user import Options
@@ -203,26 +203,6 @@ class TestAggregationImplementationChoice:
         step = next(s for s in steps if s.feature_group is AggregatedFeatureGroup)
 
         assert step.implementation is PandasAggregation
-
-
-class TestAggregationOnApiData:
-    """A default run over a dict-of-lists api_data set aggregates on the dict framework."""
-
-    def test_unpinned_api_data_aggregation_runs_on_the_dict_framework_without_mutating_api_data(self) -> None:
-        plugins = PluginCollector.enabled_feature_groups({ApiDataFG, AggregatedFeatureGroup})
-        api_data = {"AggApi": {"aggr_api_x": [1.0, 2.0, 3.0]}}
-        feature = "aggr_api_x__sum_aggr"
-
-        steps = mloda.explain([feature], api_data=api_data, plugin_collector=plugins)
-        step = next(s for s in steps if s.step_kind == "compute" and s.feature_group is AggregatedFeatureGroup)
-        assert step.compute_framework is PythonDictFramework
-        assert step.compute_framework_reason == "loads natively"
-
-        for _ in range(2):
-            results = mloda.run_all([feature], api_data=api_data, plugin_collector=plugins)
-            assert column_values(results, feature) == [6.0] * 3
-
-        assert api_data == {"AggApi": {"aggr_api_x": [1.0, 2.0, 3.0]}}
 
 
 class TestAggregatedFeatureGroupIntegration:

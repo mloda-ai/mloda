@@ -33,6 +33,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import PolarsLazyAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.python_dict import PythonDictAggregation
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClustering
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecasting
@@ -158,10 +159,10 @@ _ABSENT_OLD_HOOKS = ("_get_available_columns", "_check_source_features_exist")
 OPERATION_FAMILIES: dict[str, tuple[type[Any], list[type[Any]], str, str, list[dict[str, Any]]]] = {
     "aggregation": (
         AggregatedFeatureGroup,
-        [PandasAggregation, PyArrowAggregation, PolarsLazyAggregation],
+        [PandasAggregation, PyArrowAggregation, PolarsLazyAggregation, PythonDictAggregation],
         "aggregate",
         "sales__sum_aggr",
-        [_kwargs(columns=_columns, perform=_perform("_perform_aggregation"))] * 3,
+        [_kwargs(columns=_columns, perform=_perform("_perform_aggregation"))] * 4,
     ),
     "time_window": (
         TimeWindowFeatureGroup,

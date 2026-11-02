@@ -56,6 +56,7 @@ CONTRACTS: tuple[MixinContract, ...] = (
             f"{_EXPERIMENTAL}.test_base_aggregated_feature_group.test_aggregated_feature_group",
             f"{_EXPERIMENTAL}.test_base_aggregated_feature_group.test_polars_lazy_aggregated_feature_group",
             f"{_EXPERIMENTAL}.test_base_aggregated_feature_group.test_pyarrow_aggregated_feature_group",
+            f"{_EXPERIMENTAL}.test_base_aggregated_feature_group.test_python_dict_aggregated_feature_group",
         ),
     ),
     MixinContract(

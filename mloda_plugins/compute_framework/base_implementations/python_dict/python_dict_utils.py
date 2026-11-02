@@ -1,6 +1,30 @@
 """Shared helpers for the PythonDict framework's columnar ``dict[str, list[Any]]`` data."""
 
+import numbers
+from decimal import Decimal
 from typing import Any
+
+_PLAIN_TYPES = frozenset({str, int, bool, bytes})
+_NAT_TYPES = frozenset({("pandas", "NaTType"), ("numpy", "datetime64"), ("numpy", "timedelta64")})
+
+
+def is_missing(v: Any) -> bool:
+    """Type-based check that never calls a user-defined comparison."""
+    t = type(v)
+    if v is None:
+        return True
+    if t in _PLAIN_TYPES:
+        return False
+    if t is float:
+        return bool(v != v)
+    module = t.__module__.split(".")[0]
+    if module == "pandas" and t.__name__ == "NAType":
+        return True
+    if (module, t.__name__) in _NAT_TYPES:
+        return bool(v != v)
+    if isinstance(v, Decimal):
+        return v.is_nan()
+    return module in ("builtins", "numpy") and isinstance(v, numbers.Complex) and bool(v != v)
 
 
 def row_count(data: dict[str, list[Any]]) -> int:

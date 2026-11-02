@@ -26,8 +26,9 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import PolarsLazyAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.python_dict import PythonDictAggregation
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.test_plugins.feature_group.experimental.reference_contract import same, same_on_pandas
+from tests.test_plugins.feature_group.experimental.reference_contract import NAN_LIKE_VALUES, same, same_on_pandas
 
 
 AGGREGATION_UNIVERSE = frozenset(AggregatedFeatureGroup.AGGREGATION_TYPES)
@@ -112,7 +113,8 @@ class TestAggregatedSubtypeSupportMatrix:
         declared = {cfw.get_class_name() for cfw in AggregatedFeatureGroup.compute_framework_definition()}
         assert set(matrix) == declared
         assert {PandasDataFrame.get_class_name(), PyArrowTable.get_class_name()} <= set(matrix)
-        unserved = {f.get_class_name() for f in (PythonDictFramework, DuckDBFramework, SqliteFramework)}
+        assert PythonDictFramework.get_class_name() in matrix
+        unserved = {f.get_class_name() for f in (DuckDBFramework, SqliteFramework)}
         assert not unserved & set(matrix)
         assert all(subtypes == AGGREGATION_UNIVERSE for subtypes in matrix.values())
 
@@ -133,6 +135,7 @@ _DIVERGENT_DECLARATIONS: dict[type[Implementation[Any]], dict[str, str]] = {
     PandasAggregation: {},
     PolarsLazyAggregation: {},
     PyArrowAggregation: {},
+    PythonDictAggregation: {},
 }
 
 
@@ -205,11 +208,18 @@ def _polars_result(aggregation_type: str, columns: dict[str, list[float | None]]
     return list(frame.select(expression.alias("result")).collect()["result"].to_list())
 
 
+def _python_dict_result(aggregation_type: str, columns: dict[str, list[float | None]]) -> list[Any]:
+    data = {k: list(vs) for k, vs in columns.items()}
+    result = PythonDictAggregation._perform_aggregation(data, aggregation_type, list(columns))
+    return list(result) if isinstance(result, list) else [result]
+
+
 _RUNNERS: list[tuple[type[Implementation[Any]], Callable[[str, dict[str, list[float | None]]], list[Any]]]] = [
     (PandasAggregation, _pandas_result),
     (PyArrowAggregation, _pyarrow_result),
     (PolarsLazyAggregation, _polars_result),
     (PandasAggregation, _pandas_arrow_result),
+    (PythonDictAggregation, _python_dict_result),
 ]
 _RUNNER_IDS = [f"{impl.__name__}-{runner.__name__.strip('_')}" for impl, runner in _RUNNERS]
 
@@ -257,3 +267,23 @@ class TestImplementationsConformToTheReferenceContract:
             if not all(compare(a, e) for a, e in zip(actual, expected)):
                 differing.append(f"{shape}: {actual} != reference {expected}")
         assert bool(differing) == (aggregation_type in implementation.divergent), differing
+
+    @pytest.mark.parametrize("aggregation_type", sorted(AGGREGATION_UNIVERSE))
+    @pytest.mark.parametrize("scalar", NAN_LIKE_VALUES)
+    @pytest.mark.parametrize(
+        "shape",
+        [_SINGLE_COLUMN, _MULTI_COLUMNS, _ALL_MISSING_SINGLE, _MULTI_WITH_MISSING_ROW],
+        ids=["single", "multi", "all_missing", "multi_missing_row"],
+    )
+    def test_python_dict_treats_nan_like_cells_as_missing(
+        self, shape: dict[str, list[float | None]], scalar: Any, aggregation_type: str
+    ) -> None:
+        columns: dict[str, list[Any]] = {
+            name: [scalar if cell is None or math.isnan(cell) else cell for cell in cells]
+            for name, cells in shape.items()
+        }
+        actual = _python_dict_result(aggregation_type, columns)
+        expected = _reference_result(aggregation_type, shape)
+        assert len(actual) == len(expected), f"{actual} vs {expected}"
+        differing = [f"{a} != reference {e}" for a, e in zip(actual, expected) if not same(a, e)]
+        assert not differing, differing

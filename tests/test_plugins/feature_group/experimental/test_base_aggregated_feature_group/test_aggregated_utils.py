@@ -9,6 +9,9 @@ import pandas as pd
 from mloda.user import Feature
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+    PythonDictFramework,
+)
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
@@ -46,6 +49,10 @@ class PandasAggregatedTestDataCreator(AggregatedTestDataCreator):
 
 class PyArrowAggregatedTestDataCreator(AggregatedTestDataCreator):
     compute_framework = PyArrowTable
+
+
+class PythonDictAggregatedTestDataCreator(AggregatedTestDataCreator):
+    compute_framework = PythonDictFramework
 
 
 def validate_aggregated_features(result: list[pd.DataFrame]) -> None:

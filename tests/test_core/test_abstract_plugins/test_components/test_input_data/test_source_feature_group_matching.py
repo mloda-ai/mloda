@@ -1108,11 +1108,14 @@ class TestAbstractGroupsNeverClaim:
     def test_matcher_does_not_call_the_abstract_hooks(self) -> None:
         assert _AbstractRouted._matches_by_default_rules(COL, Options(), toy_dac(h1={COL: [1]})) is False
 
-    def test_scope_root_abstract_group_records_nothing(self, rejection_window: dict[str, MatchRejection]) -> None:
+    def test_scoped_abstract_group_records_its_missing_abstract_methods(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
         with feature_group_scope(_AbstractRoutedChild):
             assert _AbstractRoutedChild._matches_by_default_rules(COL, Options(), toy_dac(h1={COL: [1]})) is False
 
-        assert "_AbstractRoutedChild" not in rejection_window
+        reason = rejection_window["_AbstractRoutedChild"].reason
+        assert str(sorted(_AbstractRoutedChild.__abstractmethods__)) in reason
 
     def test_pointed_abstract_group_records_its_missing_abstract_methods(
         self, rejection_window: dict[str, MatchRejection]

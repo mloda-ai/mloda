@@ -215,6 +215,13 @@ def test_import_provider_base_classes() -> None:
 
     assert HANDLE_SPEC is CoreHandleSpec
     assert "HANDLE_SPEC" in provider_module.__all__
+    from mloda.core.abstract_plugins.components.credential_handle import (
+        credential_handle_spec as core_credential_handle_spec,
+    )
+
+    assert provider_module.credential_handle_spec is core_credential_handle_spec
+    assert "credential_handle_spec" in provider_module.__all__
+    assert "CredentialHandleSpec" not in provider_module.__all__
 
 
 # =============================================================================

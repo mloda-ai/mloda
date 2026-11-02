@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from mloda.core.abstract_plugins.components.credential_handle import credential_handle_keys
 from mloda.core.abstract_plugins.components.credential_scrub import _mask_secret_keys
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.prepare.stable_text import stable_text
@@ -25,6 +26,13 @@ def _class_path(cls: Any) -> str | None:
 
 def _sorted_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(records, key=lambda record: json.dumps(record, sort_keys=True))
+
+
+def _masked_group(group: dict[str, Any], step: PlanStep) -> dict[str, Any]:
+    handle_keys = credential_handle_keys(step.feature_group) if step.feature_group is not None else {}
+    kept = {k: v for k, v in group.items() if k in handle_keys and isinstance(v, str)}
+    masked: dict[str, Any] = _mask_secret_keys({k: v for k, v in group.items() if k not in kept})
+    return {**masked, **kept}
 
 
 def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -59,7 +67,7 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                 if key not in ("compute_framework_reason", "leaves_connection")
             }
             options = step.content_options
-            wide_record["options"] = None if options is None else stable_text(_mask_secret_keys(options.group))
+            wide_record["options"] = None if options is None else stable_text(_masked_group(options.group, step))
             wide["compute"].append(wide_record)
         elif step.step_kind == "join":
             record = {

@@ -221,6 +221,47 @@ Before #443, every DAC field was an unkeyed set. When two resources of the same 
 
 Named handles collapse that bug class to one invariant: *if the registry has more than one entry of the requested kind and the consumer did not pass a handle, raise and list the candidates*. Same rule, same error shape, regardless of field.
 
+## Declaring a credential handle
+
+A feature group declares an option whose value names a credential registered in the `DataAccessCollection`:
+
+```python
+from mloda.provider import credential_handle_spec
+
+PROPERTY_MAPPING = {
+    "hmac_key_handle": credential_handle_spec(
+        "Credential handle for the HMAC key.",
+        required_fields=("key",),
+        public_fields=("key_id",),
+    ),
+}
+```
+
+A handle value is a public name, never a secret: it appears in errors, the plan and the content hash.
+
+The option is a group option (never context), strictly validated, and never settable by an MCP caller. Planning
+fails, in `prepare()`, `explain()` and `run_all()` alike, with an error naming the option, group and handle (never a
+credential value) when:
+
+- the key is set in `Options.context` instead of the group options;
+- the value is not a non-empty `str`;
+- the handle is not registered, or is registered under another kind (the message lists the named credential handles);
+- the handle is an unnamed credential (a declared handle must be named);
+- a field in `required_fields` is missing from the credential;
+- the credential holds a `bytes` or `bytearray` value at any depth. This is refused for now; store a hex or base64
+  `str` and decode it in the plugin.
+
+`public_fields` is stored for later use and has no effect yet. A `str` default is a handle declared when the option
+is unset; `default=None` declares nothing when unset. Nothing reads the credential at run time yet.
+
+The handle name is not masked in `explain()`, `str(Options)` or the plan content hash, even under a credential-shaped
+key; other values under such a key stay masked. Name a handle by role (`pii-hmac-key`), never by environment or
+content. Renaming a handle changes the content hash and may split a step.
+
+In CI, `explain()` validates like `prepare()`, so a plan-lock check registers a placeholder credential under each
+declared handle with the required fields, for example `Credential(key="ci-placeholder")` under `pii-hmac-key`.
+Use placeholders of 8 characters or longer.
+
 ## Common errors
 
 - **"Handle 'X' is already registered under kind 'K'"**: you called `add_*` (or constructed the DAC) with a handle already used by another resource. Pick a different name.

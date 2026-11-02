@@ -44,6 +44,8 @@ PROPERTY_MAPPING = {
 | `name_converter` | `Callable[[str], Any] \| None` | `None` | Converts the captured text of a named capture bound to this key (e.g. `int`), before validation. Never applied to explicit options or the legacy positional fallback. |
 | `caller_settable` | `bool` | `True` | `False`: an MCP caller may never set the key, even when `[mcp] allow_options` lists it. See [MCP Server and CLI](mcp-server.md#what-stays-on-the-server). |
 
+A key declared with `credential_handle_spec(...)` names a credential handle and may not be moved to context. See [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle).
+
 **`property_spec(...)` is the authoring path to reach for.** It is a thin builder over the
 same fields, its keyword is `strict=` (which sets `strict_validation`), and it keeps the
 declaration readable. `PropertySpec` is the lower-level form: it is the type the builder

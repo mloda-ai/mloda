@@ -21,6 +21,7 @@
 # This module is core-only. Concrete compute frameworks come from mloda.user.<backend>.
 #
 from mloda.core.abstract_plugins.feature_group import FeatureGroup as FeatureGroup
+from mloda.core.abstract_plugins.components.credential_handle import credential_handle_spec as credential_handle_spec
 
 # Versioning
 from mloda.core.abstract_plugins.components.base_feature_group_version import (
@@ -217,6 +218,7 @@ __all__ = [
     "is_no_default",
     "is_positive_int",
     "property_spec",
+    "credential_handle_spec",
     "NO_DEFAULT",
     "PropertyValidationError",
     "validate_property_values",

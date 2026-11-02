@@ -27,6 +27,7 @@ from mloda.core.prepare.resolution_failure_renderer import (
     _prefix_name,
     _supported_feature_names,
 )
+from mloda.core.abstract_plugins.components.credential_handle import validate_credential_handles
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.declared_attributes import DeclarationRequirement
@@ -815,6 +816,8 @@ class IdentifyFeatureGroupClass:
             if inspect.isabstract(feature_group):
                 self._abstract_matched_feature_groups.add(feature_group)
                 continue
+
+            validate_credential_handles(feature_group, self._matched_options[feature_group], data_access_collection)
 
             self._criteria_matched_feature_groups.add(feature_group)
             options = self._matched_options[feature_group]

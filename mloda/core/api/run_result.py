@@ -8,6 +8,7 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
+from mloda.core.abstract_plugins.components.credential_handle import credential_handle_keys
 from mloda.core.api.plan_info import PlanStep, _key_id, match_digests, snapshot_group
 
 if TYPE_CHECKING:
@@ -69,10 +70,21 @@ class RunResult(list[Any]):
     def frame_for(self, feature: "Feature | str") -> Any:
         """Return the frame whose step requested ``feature`` (a Feature also matches group options); else ValueError."""
         name = feature if isinstance(feature, str) else str(feature.name)
-        group = None if isinstance(feature, str) else snapshot_group(feature.options.group)
-        if not isinstance(feature, str) and feature.connection is not None:
-            handle = self._connection_handles.get(id(feature.connection))
-            group = {**(group or {}), "connection_handle": handle}
+
+        def wanted(step: PlanStep) -> dict[Any, Any] | None:
+            if isinstance(feature, str):
+                return None
+            keys = frozenset() if step.feature_group is None else frozenset(credential_handle_keys(step.feature_group))
+            snapshot = snapshot_group(feature.options.group, keys)
+            if feature.connection is not None:
+                snapshot = {**snapshot, "connection_handle": self._connection_handles.get(id(feature.connection))}
+            return snapshot
+
+        group: dict[Any, Any] | None = None
+        if not isinstance(feature, str):
+            group = snapshot_group(feature.options.group)
+            if feature.connection is not None:
+                group["connection_handle"] = self._connection_handles.get(id(feature.connection))
         digests = {} if isinstance(feature, str) else match_digests(feature.options.group)
         pinned = None if isinstance(feature, str) else feature.compute_frameworks
         frames = self.frames()
@@ -81,7 +93,9 @@ class RunResult(list[Any]):
             pairs = [
                 (step, frame)
                 for step, frame in pairs
-                if all(k in _group_of(step) and _deep_equal(_group_of(step)[k], v) for k, v in group.items())
+                if all(
+                    k in _group_of(step) and _deep_equal(_group_of(step)[k], v) for k, v in (wanted(step) or {}).items()
+                )
                 and (not pinned or step.compute_framework in pinned)
             ]
             if len(pairs) > 1:

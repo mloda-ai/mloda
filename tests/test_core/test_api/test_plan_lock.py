@@ -760,6 +760,41 @@ def test_plan_content_hash_scrubs_credential_option_values_only() -> None:
     assert hashed(conns=[{"host": "a"}]) != hashed(conns=[{"host": "b"}])
 
 
+def test_plan_content_hash_keeps_a_declared_handle_name_and_masks_a_raw_secret_under_the_same_key() -> None:
+    from tests.helpers.credential_handle_stubs import (
+        ChsRawSecretFG,
+        ChsVaultFG,
+    )
+
+    def hashed(group: type[FeatureGroup], value: str) -> str:
+        step = _compute_step(feature_group=group, feature_set_options=Options(group={"chs_vault_token": value}))
+        return plan_content_hash([step])
+
+    assert hashed(ChsVaultFG, "chs-vault-a") != hashed(ChsVaultFG, "chs-vault-b")
+    assert hashed(ChsRawSecretFG, "chs-raw-secret-1") == hashed(ChsRawSecretFG, "chs-raw-secret-2")
+
+
+def test_plan_content_hash_masks_a_non_str_value_under_a_declared_handle_key() -> None:
+    from tests.helpers.credential_handle_stubs import ChsVaultFG
+
+    def hashed(value: dict[str, str]) -> str:
+        step = _compute_step(feature_group=ChsVaultFG, feature_set_options=Options(group={"chs_vault_token": value}))
+        return plan_content_hash([step])
+
+    assert hashed({"password": "chs-nested-1"}) == hashed({"password": "chs-nested-2"})  # nosec B105
+
+
+def test_the_lock_text_ignores_a_declared_handle_value() -> None:
+    from tests.helpers.credential_handle_stubs import ChsVaultFG
+
+    def text(value: str) -> str:
+        step = _compute_step(feature_group=ChsVaultFG, feature_set_options=Options(group={"chs_vault_token": value}))
+        return _lock_text([step])
+
+    assert text("chs-vault-a") == text("chs-vault-b")
+    assert "chs-vault-a" not in text("chs-vault-a")
+
+
 @pytest.mark.parametrize(
     ("left", "right"),
     [

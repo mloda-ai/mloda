@@ -1239,6 +1239,19 @@ class TestPlanStepFeatureSetOptions:
         assert step.feature_set_options.group["api_key"] == "***"
         assert "plan-top-key" not in str(step.feature_set_options)
 
+    def test_snapshot_group_keeps_a_declared_handle_str_and_masks_everything_else(self) -> None:
+        from mloda.core.api.plan_info import snapshot_group
+
+        group = {"chs_vault_token": "chs-vault-main", "chs_signing_secret": "chs-raw-secret-1"}
+
+        assert snapshot_group(group)["chs_vault_token"] == "***"
+        shown = snapshot_group(group, handle_keys=frozenset({"chs_vault_token"}))
+        assert shown == {"chs_vault_token": "chs-vault-main", "chs_signing_secret": "***"}
+        nested = snapshot_group(
+            {"chs_vault_token": {"password": "chs-nested-secret-1"}}, handle_keys=frozenset({"chs_vault_token"})
+        )
+        assert "chs-nested-secret-1" not in str(nested)
+
     @pytest.mark.parametrize("container", [list, tuple])
     def test_the_snapshot_masks_a_credential_key_inside_a_sequence_of_mappings(self, container: type) -> None:
         sources = container([{"password": "plan-seq-secret", "host": "h"}])  # nosec B105

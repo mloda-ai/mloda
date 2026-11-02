@@ -117,6 +117,19 @@ def _no_framework_enabled_reason(declared: frozenset[type[ComputeFramework]]) ->
     return reason
 
 
+def _with_unavailable_pin(reason: str, feature: Feature) -> str:
+    """Append the install message for a pin to an unavailable framework, once."""
+    if feature.compute_frameworks is None:
+        return reason
+    pin = feature.get_compute_framework()
+    if pin.is_available():
+        return reason
+    message = unavailable_framework_message(pin).rstrip(".")
+    if message in reason.split("; "):
+        return reason
+    return f"{reason}; {message}"
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -845,8 +858,9 @@ class IdentifyFeatureGroupClass:
             if not supported_frameworks:
                 if compute_frameworks:
                     rejected_names = sorted(cfw.get_class_name() for cfw in compute_frameworks)
+                    capability_reason = f"supports_compute_framework rejected {rejected_names}"
                     self._record_elimination(
-                        feature_group, "capability", f"supports_compute_framework rejected {rejected_names}"
+                        feature_group, "capability", _with_unavailable_pin(capability_reason, feature)
                     )
                 else:
                     if compute_framework_subclasses():
@@ -859,7 +873,9 @@ class IdentifyFeatureGroupClass:
                         not_enabled_reason = (
                             "no compute framework plugin is loaded; import one or call PluginLoader.all()"
                         )
-                    self._record_elimination(feature_group, "frameworks_not_enabled", not_enabled_reason)
+                    self._record_elimination(
+                        feature_group, "frameworks_not_enabled", _with_unavailable_pin(not_enabled_reason, feature)
+                    )
                 continue
 
             if not self._filter_feature_group_by_framework(supported_frameworks, feature):
@@ -868,9 +884,7 @@ class IdentifyFeatureGroupClass:
                 pin_reason = (
                     f"pinned compute framework '{pin.get_class_name()}' is not among its supported {supported_names}"
                 )
-                if not pin.is_available():
-                    pin_reason += f"; {unavailable_framework_message(pin).rstrip('.')}"
-                self._record_elimination(feature_group, "framework_pin", pin_reason)
+                self._record_elimination(feature_group, "framework_pin", _with_unavailable_pin(pin_reason, feature))
                 continue
 
             if not self._filter_feature_group_by_links(feature_group, links):

@@ -657,14 +657,16 @@ class TestEliminationStages:
             ),
         ],
     )
+    @pytest.mark.parametrize("pinned", [False, True], ids=["unpinned", "pinned"])
     def test_frameworks_not_enabled_stage_names_an_unavailable_framework(
-        self, monkeypatch: pytest.MonkeyPatch, hint: str | None, suffix: str
+        self, monkeypatch: pytest.MonkeyPatch, hint: str | None, suffix: str, pinned: bool
     ) -> None:
         monkeypatch.setattr(ElimFwOne011, "is_available", staticmethod(lambda: False))
         monkeypatch.setattr(ElimFwOne011, "INSTALL_HINT", hint)
         plugins: FeatureGroupEnvironmentMapping = {ElimNotEnabledFG011: set()}
+        feature = Feature(NOT_ENABLED_FEATURE, compute_framework="ElimFwOne011" if pinned else None)
 
-        err = _fail(Feature(NOT_ENABLED_FEATURE), plugins)
+        err = _fail(feature, plugins)
 
         reason = f"none of its compute frameworks are enabled for this run; {suffix}"
         assert err.result.eliminations[ElimNotEnabledFG011] == Elimination(
@@ -921,25 +923,54 @@ class TestNearMissMessageBlock:
 class TestEmptySupportedPrecedence:
     """An empty supported set is decided before the pin filter: capability / not-enabled win over pin."""
 
-    def test_pin_over_empty_supported_reports_capability_not_pin(self) -> None:
+    @pytest.mark.parametrize(
+        ("available", "hint"),
+        [(True, None), (False, None), (False, "pip install elim-backend")],
+        ids=["available", "no_hint", "hinted"],
+    )
+    def test_pin_over_empty_supported_reports_capability_not_pin(
+        self, monkeypatch: pytest.MonkeyPatch, available: bool, hint: str | None
+    ) -> None:
+        reason = "supports_compute_framework rejected ['ElimFwOne011']"
+        if not available:
+            monkeypatch.setattr(ElimFwThree011, "is_available", staticmethod(lambda: False))
+            monkeypatch.setattr(ElimFwThree011, "INSTALL_HINT", hint)
+            reason += "; " + unavailable_framework_message(ElimFwThree011).rstrip(".")
         feature = Feature(PRECEDENCE_CAP_FEATURE, compute_framework="ElimFwThree011")
         plugins: FeatureGroupEnvironmentMapping = {ElimPrecedenceCapFG011: {ElimFwOne011}}
 
         err = _fail(feature, plugins)
 
-        elimination = err.result.eliminations[ElimPrecedenceCapFG011]
-        assert elimination.stage == "capability"
-        assert elimination.reason == "supports_compute_framework rejected ['ElimFwOne011']"
+        assert err.result.eliminations[ElimPrecedenceCapFG011] == Elimination(stage="capability", reason=reason)
+        assert f"  - ElimPrecedenceCapFG011 (compute framework): {reason}" in str(err)
 
-    def test_pin_over_empty_supported_none_enabled_reports_frameworks_not_enabled(self) -> None:
+    @pytest.mark.parametrize(
+        ("available", "hint", "suffixed_declared"),
+        [(True, None, False), (False, None, False), (False, "pip install elim-backend", False), (False, None, True)],
+        ids=["available", "no_hint", "hinted", "declared_name_ends_with_pin_name"],
+    )
+    def test_pin_over_empty_supported_none_enabled_reports_frameworks_not_enabled(
+        self, monkeypatch: pytest.MonkeyPatch, available: bool, hint: str | None, suffixed_declared: bool
+    ) -> None:
+        reason = "none of its compute frameworks are enabled for this run"
+        if suffixed_declared:
+            monkeypatch.setattr(ElimFwOne011, "is_available", staticmethod(lambda: False))
+            monkeypatch.setattr(ElimFwOne011, "INSTALL_HINT", None)
+            monkeypatch.setattr(ElimFwOne011, "get_class_name", classmethod(lambda cls: "My" + ElimFwThree011.__name__))
+            reason += "; " + f"My{ElimFwThree011.__name__} is not available in this environment"
+        if not available:
+            monkeypatch.setattr(ElimFwThree011, "is_available", staticmethod(lambda: False))
+            monkeypatch.setattr(ElimFwThree011, "INSTALL_HINT", hint)
+            reason += "; " + unavailable_framework_message(ElimFwThree011).rstrip(".")
         feature = Feature(PRECEDENCE_NE_FEATURE, compute_framework="ElimFwThree011")
         plugins: FeatureGroupEnvironmentMapping = {ElimPrecedenceNotEnabledFG011: set()}
 
         err = _fail(feature, plugins)
 
-        elimination = err.result.eliminations[ElimPrecedenceNotEnabledFG011]
-        assert elimination.stage == "frameworks_not_enabled"
-        assert elimination.reason == "none of its compute frameworks are enabled for this run"
+        assert err.result.eliminations[ElimPrecedenceNotEnabledFG011] == Elimination(
+            stage="frameworks_not_enabled", reason=reason
+        )
+        assert f"  - ElimPrecedenceNotEnabledFG011 (compute framework): {reason}" in str(err)
 
 
 class TestNoEliminationRecorded:

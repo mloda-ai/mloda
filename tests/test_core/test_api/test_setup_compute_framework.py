@@ -8,6 +8,9 @@ from mloda.user import Feature
 from mloda.user import Features, ParallelizationMode, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+    PythonDictFramework,
+)
 from mloda.provider import ComputeFramework
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field_with_error
 from mloda.core.abstract_plugins.compute_framework import compute_framework_subclasses
@@ -61,7 +64,7 @@ class TestSetupComputeFramework:
     def test_validate_if_at_least_one_feature_compute_framework_is_in_available_compute_framework(
         self, features: Features
     ) -> None:
-        feature = Feature("some_feature2", compute_framework=self.get_list_compute_frameworks_as_class_name()[0])
+        feature = Feature("some_feature2", compute_framework="PythonDictFramework")
         features.collection.append(feature)
 
         available_compute_frameworks = {ComputeFramework}
@@ -335,13 +338,61 @@ class TestSetupComputeFramework:
 
         assert setup_compute_framework.framework_preference == {PandasDataFrame: 0, PyArrowTable: 1}
 
+    @pytest.mark.parametrize(
+        ("requested", "compute_frameworks"),
+        [
+            (["some_feature"], ["PandasDataFrame"]),
+            ([Feature("some_feature", compute_framework="PandasDataFrame")], None),
+            ([Feature("some_feature", options={"compute_framework": "PandasDataFrame"})], None),
+        ],
+        ids=["requested_list", "feature_pin", "feature_option_pin"],
+    )
     def test_unavailable_request_through_run_all_raises_setup_configuration_error_with_hint(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, requested: list[Any], compute_frameworks: list[str] | None
     ) -> None:
         self._unavailable(monkeypatch, PandasDataFrame)
 
         with pytest.raises(SetupConfigurationError, match=r'pip install "mloda\[pandas\]"'):
-            mloda.run_all(["some_feature"], compute_frameworks=["PandasDataFrame"])
+            mloda.run_all(requested, compute_frameworks=compute_frameworks)
+
+    def test_feature_pinning_unavailable_framework_without_list_raises_with_hint(
+        self, monkeypatch: pytest.MonkeyPatch, features: Features
+    ) -> None:
+        self._unavailable(monkeypatch, PandasDataFrame)
+        features.collection.append(Feature("pinned_feature", compute_framework="PandasDataFrame"))
+
+        with pytest.raises(ValueError) as exc_info:
+            SetupComputeFramework(None, features)
+
+        message = str(exc_info.value)
+        assert "Feature pinned_feature" in message
+        assert "PandasDataFrame is not available" in message
+        assert 'pip install "mloda[pandas]"' in message
+
+    def test_feature_pinning_unavailable_framework_in_mixed_request_raises_with_hint(
+        self, monkeypatch: pytest.MonkeyPatch, features: Features
+    ) -> None:
+        self._unavailable(monkeypatch, PandasDataFrame)
+        features.collection.append(Feature("pinned_feature", compute_framework="PandasDataFrame"))
+
+        with pytest.raises(ValueError) as exc_info:
+            SetupComputeFramework([PythonDictFramework, PandasDataFrame], features)
+
+        message = str(exc_info.value)
+        assert "Feature pinned_feature" in message
+        assert "PandasDataFrame is not available" in message
+        assert 'pip install "mloda[pandas]"' in message
+
+    def test_pin_outside_requested_list_keeps_not_in_set_message(
+        self, monkeypatch: pytest.MonkeyPatch, features: Features
+    ) -> None:
+        self._unavailable(monkeypatch, PandasDataFrame)
+        features.collection.append(Feature("pinned_feature", compute_framework="PandasDataFrame"))
+
+        with pytest.raises(ValueError, match="has compute frameworks") as exc_info:
+            SetupComputeFramework(["PyArrowTable"], features)
+
+        assert "is not available" not in str(exc_info.value)
 
     def test_unavailable_output_framework_appends_install_hint(self, features: Features) -> None:
         class ZzSetupHintedOutputFramework(ComputeFramework):

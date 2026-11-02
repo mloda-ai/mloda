@@ -270,9 +270,7 @@ class TestPolarsLazyAggregationIntegration:
 
         result = PolarsLazyAggregation.calculate(AggregatedFeatureGroup, lazy_frame, feature_set, None)
 
-        # The result should still be a LazyFrame (not collected)
-        assert hasattr(result, "collect_schema")
-        assert hasattr(result, "collect")
+        assert isinstance(result, pl.LazyFrame)
 
         # Only when we collect should we get the actual values
         collected = result.collect()

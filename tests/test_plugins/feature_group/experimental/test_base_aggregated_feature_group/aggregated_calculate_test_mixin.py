@@ -5,7 +5,6 @@ The missing-source check runs the core input check."""
 
 from __future__ import annotations
 
-from abc import abstractmethod
 from typing import Any
 
 import pyarrow as pa
@@ -38,14 +37,6 @@ EXPECTED = {
 
 class AggregatedCalculateTestMixin(ZeroRowResultTypeTestMixin):
     """Calculate, unsupported-type and missing-source checks shared by every aggregation implementation."""
-
-    @abstractmethod
-    def column_names(self, result: Any) -> list[str]:
-        raise NotImplementedError
-
-    @abstractmethod
-    def column_values(self, result: Any, column: str) -> list[Any]:
-        raise NotImplementedError
 
     def test_scalar_result_is_broadcast_to_every_row(self) -> None:
         result = self.calculate(SAMPLE, Feature("sales__sum_aggr"))

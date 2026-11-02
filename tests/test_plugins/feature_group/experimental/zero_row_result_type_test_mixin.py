@@ -45,6 +45,14 @@ class ZeroRowResultTypeTestMixin:
     def column_type(self, result: Any, column: str) -> Any:
         raise NotImplementedError
 
+    @abstractmethod
+    def column_names(self, result: Any) -> list[str]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def column_values(self, result: Any, column: str) -> list[Any]:
+        raise NotImplementedError
+
     def calculate(self, table: pa.Table, *features: Feature) -> Any:
         feature_set = FeatureSet()
         for feature in features:

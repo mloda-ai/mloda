@@ -14,6 +14,9 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 
+from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_add_result_test_mixin import (
+    AggregatedAddResultTestMixin,
+)
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
     AggregatedZeroRowTestMixin,
 )
@@ -263,47 +266,8 @@ class TestPyArrowAggregatedZeroRow(PyArrowZeroRowAdapter, AggregatedZeroRowTestM
     feature_group_class = PyArrowAggregation
 
 
-class TestPyArrowAggregationMultiColumn:
-    """Pins down bugs in _add_result_to_data for multi-column (row-wise) aggregation results."""
-
-    def test_add_result_to_data_multi_column_result_is_flat_not_nested(self, multi_source_table: pa.Table) -> None:
-        """A row-wise numpy result must become a flat length-n column, not an n-by-n nested ListArray."""
-        result = PyArrowAggregation._perform_aggregation(multi_source_table, "sum", ["metrics~0", "metrics~1"])
-
-        updated = PyArrowAggregation._add_result_to_data(multi_source_table, "metrics__sum_aggr", result)
-
-        result_col = updated.column("metrics__sum_aggr")
-        assert not pa.types.is_list(result_col.type), (
-            f"expected a flat scalar column, got nested list type {result_col.type}"
-        )
-        assert len(result_col) == multi_source_table.num_rows
-        assert result_col.to_pylist() == [11, 22, 33, 44]
-
-    def test_add_result_to_data_recompute_does_not_duplicate_column(self, multi_source_table: pa.Table) -> None:
-        """Calling _add_result_to_data twice for the same feature_name must not duplicate the column."""
-        result = PyArrowAggregation._perform_aggregation(multi_source_table, "sum", ["metrics~0", "metrics~1"])
-
-        once = PyArrowAggregation._add_result_to_data(multi_source_table, "metrics__sum_aggr", result)
-        twice = PyArrowAggregation._add_result_to_data(once, "metrics__sum_aggr", result)
-
-        assert twice.schema.names.count("metrics__sum_aggr") == 1
-
-    def test_calculate_feature_multi_column_row_wise_sum(self, multi_source_table: pa.Table) -> None:
-        """End-to-end: calculate_feature must produce a flat per-row column and not duplicate on recompute."""
-        feature_set = FeatureSet()
-        feature_set.add(Feature("metrics__sum_aggr"))
-
-        result = PyArrowAggregation.calculate(AggregatedFeatureGroup, multi_source_table, feature_set, None)
-
-        result_col = result.column("metrics__sum_aggr")
-        assert not pa.types.is_list(result_col.type), (
-            f"expected a flat scalar column, got nested list type {result_col.type}"
-        )
-        assert len(result_col) == multi_source_table.num_rows
-        assert result_col.to_pylist() == [11, 22, 33, 44]
-
-        recomputed = PyArrowAggregation.calculate(AggregatedFeatureGroup, result, feature_set, None)
-        assert recomputed.schema.names.count("metrics__sum_aggr") == 1
+class TestPyArrowAggregationAddResult(PyArrowZeroRowAdapter, AggregatedAddResultTestMixin):
+    feature_group_class = PyArrowAggregation
 
 
 class TestPyArrowAggregationDdofAndNullSkip:

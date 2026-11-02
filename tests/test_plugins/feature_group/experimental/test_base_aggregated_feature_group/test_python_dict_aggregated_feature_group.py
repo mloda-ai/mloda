@@ -12,6 +12,9 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.python_dict import PythonDictAggregation
 
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
+from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_add_result_test_mixin import (
+    AggregatedAddResultTestMixin,
+)
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
     AggregatedZeroRowTestMixin,
 )
@@ -27,11 +30,6 @@ def sample_data() -> dict[str, list[Any]]:
     return {"sales": [100, 200, 300, 400, 500], "price": [10.0, 9.5, 9.0, 8.5, 8.0]}
 
 
-@pytest.fixture
-def multi_source_data() -> dict[str, list[Any]]:
-    return {"metrics~0": [1, 2, 3, 4], "metrics~1": [10, 20, 30, 40]}
-
-
 class TestPythonDictAggregation:
     def test_compute_framework_rule(self) -> None:
         assert PythonDictAggregation.compute_framework is PythonDictFramework
@@ -42,28 +40,9 @@ class TestPythonDictAggregation:
         with pytest.raises(ValueError, match="Unsupported aggregation type: invalid"):
             PythonDictAggregation._perform_aggregation(sample_data, "invalid", ["sales"])
 
-    def test_perform_aggregation_multi_column_is_row_wise(self, multi_source_data: dict[str, list[Any]]) -> None:
-        result = PythonDictAggregation._perform_aggregation(multi_source_data, "sum", ["metrics~0", "metrics~1"])
-        assert list(result) == [11, 22, 33, 44]
-
     def test_perform_aggregation_multi_column_unequal_lengths_raises(self) -> None:
         with pytest.raises(ValueError):
             PythonDictAggregation._perform_aggregation({"m~0": [1, 2, 3], "m~1": [1]}, "sum", ["m~0", "m~1"])
-
-    def test_add_result_to_data_broadcasts_a_scalar(self, sample_data: dict[str, list[Any]]) -> None:
-        updated = PythonDictAggregation._add_result_to_data(sample_data, "sales__sum_aggr", 1500)
-        assert updated["sales__sum_aggr"] == [1500] * 5
-        assert updated["sales"] == [100, 200, 300, 400, 500]
-
-    def test_add_result_to_data_sets_a_list_as_the_column(self, multi_source_data: dict[str, list[Any]]) -> None:
-        updated = PythonDictAggregation._add_result_to_data(multi_source_data, "m__sum_aggr", [11, 22, 33, 44])
-        assert updated["m__sum_aggr"] == [11, 22, 33, 44]
-
-    def test_add_result_to_data_replaces_an_existing_column(self, sample_data: dict[str, list[Any]]) -> None:
-        once = PythonDictAggregation._add_result_to_data(sample_data, "x__sum_aggr", 1)
-        twice = PythonDictAggregation._add_result_to_data(once, "x__sum_aggr", 2)
-        assert twice["x__sum_aggr"] == [2] * 5
-        assert list(twice).count("x__sum_aggr") == 1
 
     def test_calculate_feature_multiple(self, sample_data: dict[str, list[Any]]) -> None:
         feature_set = FeatureSet()
@@ -91,6 +70,10 @@ class TestPythonDictAggregation:
 
 
 class TestPythonDictAggregatedZeroRow(PythonDictZeroRowAdapter, AggregatedZeroRowTestMixin):
+    feature_group_class = PythonDictAggregation
+
+
+class TestPythonDictAggregationAddResult(PythonDictZeroRowAdapter, AggregatedAddResultTestMixin):
     feature_group_class = PythonDictAggregation
 
 

@@ -12,6 +12,9 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_la
     PolarsLazyAggregation,
 )
 
+from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_add_result_test_mixin import (
+    AggregatedAddResultTestMixin,
+)
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
     AggregatedZeroRowTestMixin,
 )
@@ -295,6 +298,11 @@ class TestPolarsLazyAggregationMultiColumnDdofAndNullSkip:
 class TestPolarsLazyAggregatedZeroRow(PolarsLazyZeroRowAdapter, AggregatedZeroRowTestMixin):
     feature_group_class = PolarsLazyAggregation
     unsupported_multi_column_aggregations = {"median": "Median aggregation across multiple columns is not supported"}
+
+
+@pytest.mark.skipif(pl is None, reason="Polars not available")
+class TestPolarsLazyAggregationAddResult(PolarsLazyZeroRowAdapter, AggregatedAddResultTestMixin):
+    feature_group_class = PolarsLazyAggregation
 
 
 @pytest.mark.skipif(pl is None, reason="Polars not available")

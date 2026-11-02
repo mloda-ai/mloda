@@ -109,9 +109,10 @@ def _no_framework_enabled_reason(declared: frozenset[type[ComputeFramework]]) ->
     reason = "none of its compute frameworks are enabled for this run"
     if hint:
         reason += f"; {hint}"
-    for cf in sorted(declared, key=lambda c: c.get_class_name()):
-        if not cf.is_available():
-            reason += f"; {unavailable_framework_message(cf)}"
+    frameworks = [c for c in declared if is_nominal_subclass(c, ComputeFramework)]
+    if not any(c.is_available() for c in frameworks):
+        for cf in sorted(frameworks, key=lambda c: c.get_class_name()):
+            reason += f"; {unavailable_framework_message(cf).rstrip('.')}"
     return reason
 
 
@@ -865,7 +866,7 @@ class IdentifyFeatureGroupClass:
                     f"pinned compute framework '{pin.get_class_name()}' is not among its supported {supported_names}"
                 )
                 if not pin.is_available():
-                    pin_reason += f"; {unavailable_framework_message(pin)}"
+                    pin_reason += f"; {unavailable_framework_message(pin).rstrip('.')}"
                 self._record_elimination(feature_group, "framework_pin", pin_reason)
                 continue
 

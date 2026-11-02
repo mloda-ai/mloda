@@ -1,13 +1,13 @@
 import weakref
 from typing import Any
 
+import pytest
+
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.data_creator_feature_group import DataCreatorFeatureGroup
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-
-import pytest
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda.core.api.request import SetupConfigurationError
@@ -434,6 +434,10 @@ class TestSetupComputeFramework:
         message = str(exc_info.value)
         assert 'pip install "mloda[pandas]"' in message
         assert "needed by" in message
+        assert any(
+            "SetupCfwPinHintSourceFG (compute framework pin)" in line and 'pip install "mloda[pandas]"' in line
+            for line in message.splitlines()
+        )
 
     def test_unavailable_pin_outside_requested_list_names_both_problems(
         self, monkeypatch: pytest.MonkeyPatch, features: Features

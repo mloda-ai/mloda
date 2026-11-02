@@ -576,7 +576,7 @@ class GlobalFilter:
         pin = filter.filter_feature.get_compute_framework()
         allowed = sorted(cfw.get_class_name() for cfw in feat.compute_frameworks or ())
         reason = f"pinned compute framework '{pin.get_class_name()}' is not in the feature's allowed set {allowed}"
-        return reason if pin.is_available() else f"{reason}; {unavailable_framework_message(pin)}"
+        return reason if pin.is_available() else f"{reason}; {unavailable_framework_message(pin).rstrip('.')}"
 
     def add_time_and_time_travel_filters(
         self,

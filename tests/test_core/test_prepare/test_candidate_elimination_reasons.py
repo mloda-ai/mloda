@@ -649,7 +649,7 @@ class TestEliminationStages:
     @pytest.mark.parametrize(
         ("hint", "suffix"),
         [
-            pytest.param(None, "ElimFwOne011 is not available in this environment.", id="no_hint"),
+            pytest.param(None, unavailable_framework_message(ElimFwOne011).rstrip("."), id="no_hint"),
             pytest.param(
                 "pip install elim-backend",
                 "ElimFwOne011 is not available: its library is not installed. Install it with: pip install elim-backend",
@@ -671,6 +671,52 @@ class TestEliminationStages:
             stage="frameworks_not_enabled", reason=reason
         )
         assert f"  - ElimNotEnabledFG011 (compute framework): {reason}" in str(err)
+
+    def test_frameworks_not_enabled_stage_omits_install_message_when_a_declared_framework_is_available(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(ElimFwOne011, "is_available", staticmethod(lambda: False))
+        monkeypatch.setattr(ElimFwTwo011, "is_available", staticmethod(lambda: True))
+        monkeypatch.setattr(ElimNotEnabledFG011, "FRAMEWORK_RULE", {ElimFwOne011, ElimFwTwo011})
+        plugins: FeatureGroupEnvironmentMapping = {ElimNotEnabledFG011: set()}
+
+        err = _fail(Feature(NOT_ENABLED_FEATURE), plugins)
+
+        reason = "none of its compute frameworks are enabled for this run"
+        assert err.result.eliminations[ElimNotEnabledFG011] == Elimination(
+            stage="frameworks_not_enabled", reason=reason
+        )
+
+    def test_frameworks_not_enabled_stage_survives_a_malformed_framework_rule(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(ElimNotEnabledFG011, "FRAMEWORK_RULE", {"PandasDataFrame"})
+        plugins: FeatureGroupEnvironmentMapping = {ElimNotEnabledFG011: set()}
+
+        err = _fail(Feature(NOT_ENABLED_FEATURE), plugins)
+
+        reason = err.result.eliminations[ElimNotEnabledFG011].reason
+        assert err.result.eliminations[ElimNotEnabledFG011].stage == "frameworks_not_enabled"
+        assert reason.startswith("none of its compute frameworks are enabled for this run")
+
+    def test_frameworks_not_enabled_stage_survives_a_malformed_entry_beside_an_unavailable_framework(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(ElimFwOne011, "is_available", staticmethod(lambda: False))
+        monkeypatch.setattr(ElimFwOne011, "INSTALL_HINT", None)
+        monkeypatch.setattr(
+            ElimNotEnabledFG011,
+            "FRAMEWORK_RULE",
+            {"PandasDataFrame", ElimFwOne011},
+        )
+        plugins: FeatureGroupEnvironmentMapping = {ElimNotEnabledFG011: set()}
+
+        err = _fail(Feature(NOT_ENABLED_FEATURE), plugins)
+
+        elimination = err.result.eliminations[ElimNotEnabledFG011]
+        assert elimination.stage == "frameworks_not_enabled"
+        assert elimination.reason.startswith("none of its compute frameworks are enabled for this run")
+        assert elimination.reason.endswith(unavailable_framework_message(ElimFwOne011).rstrip("."))
 
     def test_frameworks_not_enabled_stage_names_an_unregistered_framework(
         self, monkeypatch: pytest.MonkeyPatch
@@ -799,7 +845,7 @@ class TestEliminationStages:
 
         reason = (
             "pinned compute framework 'ElimFwThree011' is not among its supported ['ElimFwOne011']; "
-            + unavailable_framework_message(ElimFwThree011)
+            + unavailable_framework_message(ElimFwThree011).rstrip(".")
         )
         assert err.result.eliminations[ElimPinFG011] == Elimination(stage="framework_pin", reason=reason)
         assert f"  - ElimPinFG011 (compute framework pin): {reason}" in str(err)

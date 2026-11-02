@@ -1072,7 +1072,7 @@ class TestEachGateRecordsItsOwnFact:
         assert len(snapshot.rows) == 1, f"exactly one fact, got: {snapshot.rows}"
         _, _, stage, reason = snapshot.rows[0]
         assert stage == FRAMEWORK_PIN_STAGE
-        assert reason == PIN_REASON + "; " + unavailable_framework_message(PandasDataFrame)
+        assert reason == PIN_REASON + "; " + unavailable_framework_message(PandasDataFrame).rstrip(".")
 
 
 class TestAPlainNonMatchIsNotAFact:

@@ -223,7 +223,7 @@ class TestExplainParity:
 
         outcome = _cli(["explain", str(_request_file(tmp_path)), "--format", "text", "--config", str(config)])
 
-        assert outcome.code == 0
+        assert outcome.code == 0, outcome.err
         assert outcome.err == ""
         assert outcome.out == EXPLAIN_TEXT
         _assert_no_paths(outcome.out, tmp_path)

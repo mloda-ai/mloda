@@ -173,7 +173,7 @@ Not yet: approvals, cancellation, and remote HTTP with OAuth.
 ```bash
 mloda demo                                # a bundled example, its result and plan
 mloda explain request.json                # the same JSON as mloda_explain_request
-mloda explain request.json --format text  # one line per step
+mloda explain request.json --format text  # one line per step; errors stay JSON
 mloda run request.json --max-rows 100000 --format jsonl
 cat request.json | mloda explain -
 mloda run request.json --full --format csv

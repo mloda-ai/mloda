@@ -43,7 +43,6 @@ def _write_fake_base_package_bad_from_import(
 
 
 def _assert_skip_logged_at_debug_only(caplog: pytest.LogCaptureFixture, missing: str) -> None:
-    """The in-tree skip names the missing module in a DEBUG record and emits no WARNING."""
     debug_messages = [
         record.getMessage()
         for record in caplog.records
@@ -315,7 +314,7 @@ class TestLoadPluginTransitiveOptionalDependency:
         _assert_skip_logged_at_debug_only(caplog, missing_subdep)
         assert PluginLoader.skipped_plugins() == {f"{base_pkg}.{submodule}": missing_subdep}
 
-    def test_second_load_of_same_skipped_module_warns_only_once(
+    def test_second_load_of_same_skipped_module_logs_skip_only_once(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         optional_root_pkg = "pltest_repeat_optional_dep"

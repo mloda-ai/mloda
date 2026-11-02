@@ -75,21 +75,20 @@ _BUILTIN_FRAMEWORKS = [
     IcebergFramework,
     SparkFramework,
     SqliteFramework,
-    PythonDictFramework,
 ]
 
 
 @pytest.mark.parametrize("framework", _BUILTIN_FRAMEWORKS, ids=lambda fw: fw.__name__)
 def test_builtin_framework_install_hint_names_an_existing_extra(framework: type[ComputeFramework]) -> None:
-    """Every built-in framework except PythonDictFramework has an INSTALL_HINT naming a real extra."""
     hint = framework.INSTALL_HINT
-    if framework is PythonDictFramework:
-        assert hint is None
-        return
     assert hint is not None, f"{framework.__name__} has no INSTALL_HINT"
     match = re.fullmatch(r'pip install "mloda\[(\w+)\]"', hint)
     assert match, f"Unexpected INSTALL_HINT shape: {hint}"
     assert match.group(1) in _load_optional_deps()
+
+
+def test_python_dict_framework_has_no_install_hint() -> None:
+    assert PythonDictFramework.INSTALL_HINT is None
 
 
 def test_core_dependencies_stay_empty() -> None:

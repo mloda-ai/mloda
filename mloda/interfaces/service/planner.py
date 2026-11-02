@@ -133,6 +133,8 @@ def _step_record(index: int, step: PlanStep, alias: str | None) -> dict[str, Any
         "kind": step.step_kind,
         "features": sorted(step.feature_names),
         "feature_group": step.feature_group_name,
+        "source_feature_group": step.source_feature_group_name,
+        "join_type": step.join_type,
         "compute_framework": step.compute_framework_name,
         "compute_framework_reason": None if reason is None else sanitize_text(reason, MAX_DESCRIPTION_LENGTH),
         "specialized_from": [fg.get_class_name() for fg in step.specialized_from],

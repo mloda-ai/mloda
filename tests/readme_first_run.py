@@ -87,6 +87,22 @@ def main(readme: Path, dist: Path) -> int:
             print(f"stdout differs from README\nexpected:\n{expected.strip()}\nactual:\n{run.stdout.strip()}")
             return 1
 
+        mloda_script = str(
+            venv / ("Scripts" if os.name == "nt" else "bin") / ("mloda.exe" if os.name == "nt" else "mloda")
+        )
+        # Not recorded in the time-to-first-success timings.
+        # Safe: argv is the temp venv's mloda console script and a fixed subcommand, no shell.
+        demo = subprocess.run(  # nosec B603
+            [mloda_script, "demo"], capture_output=True, text=True, env=_clean_env(), timeout=300
+        )
+        if demo.returncode != 0 or demo.stderr.strip():
+            print(f"mloda demo failed, exit code {demo.returncode}\nstdout:\n{demo.stdout}\nstderr:\n{demo.stderr}")
+            return 1
+        missing = [s for s in ("ApiDataFG", "MissingValueFeatureGroup", "37.5", _PANDAS_HINT) if s not in demo.stdout]
+        if missing:
+            print(f"mloda demo output lacks {missing}\nstdout:\n{demo.stdout}\nstderr:\n{demo.stderr}")
+            return 1
+
         pandas_code = code.replace('"PythonDictFramework"', '"PandasDataFrame"')
         assert pandas_code != code, 'README first example must name "PythonDictFramework"'
         pandas_script = Path(tmp) / "pandas_example.py"

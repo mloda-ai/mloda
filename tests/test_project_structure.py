@@ -1,3 +1,4 @@
+import ast
 import configparser
 import fnmatch
 import re
@@ -10,6 +11,7 @@ import yaml
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 
+from mloda.interfaces.cli.demo import REQUEST
 from tests.readme_first_run import first_example
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -415,8 +417,19 @@ class TestToxConfig:
         assert any(e.get("toxenv") == "-e bare" for e in matrix), f"ci.yaml build matrix needs '-e bare': {matrix}"
 
     def test_readme_first_example_is_a_python_block_with_output(self) -> None:
-        code, output = first_example(_read_text(PROJECT_ROOT / "README.md"))
+        readme = _read_text(PROJECT_ROOT / "README.md")
+        code, output = first_example(readme)
         assert "PythonDictFramework" in code, "the first README example must run on a bare install"
+        assert "## 30-Second Example" in readme, "`mloda demo` links the #30-second-example anchor"
+        (run_all,) = [
+            node
+            for node in ast.walk(ast.parse(code))
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "run_all"
+        ]
+        keywords = {kw.arg: ast.literal_eval(kw.value) for kw in run_all.keywords if kw.arg in ("features", "api_data")}
+        assert keywords == {"features": REQUEST["features"], "api_data": REQUEST["data"]}, (
+            "`mloda demo` must run the README first example"
+        )
         assert output and output.strip(), "the first README example must be followed by its ```text output"
         install_page = _read_text(PROJECT_ROOT / "docs/docs/chapter1/installation.md")
         assert code in install_page and output.strip() in install_page, (

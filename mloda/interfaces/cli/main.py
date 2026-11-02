@@ -1,4 +1,4 @@
-"""The ``mloda`` command line: explain and run feature requests through the service layer, or serve them over MCP.
+"""The ``mloda`` command line: try a demo, explain and run feature requests, or serve them over MCP.
 
 Results are printed as the services return them; exit code 2 means an error result or nothing could run,
 exit code 3 a completed run that reported failed rows.
@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from mloda.core.version import get_mloda_version
+from mloda.interfaces.cli import demo
 from mloda.interfaces.service.catalog import Catalog
 from mloda.interfaces.service.config import ConfigError, Settings, load_settings
 from mloda.interfaces.service.errors import is_error
@@ -107,9 +108,10 @@ def _add_config_options(command: argparse.ArgumentParser) -> None:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="mloda", description="Explain, run or serve mloda feature requests.")
+    parser = argparse.ArgumentParser(prog="mloda", description="Try, explain, run or serve mloda feature requests.")
     parser.add_argument("--version", action="version", version=f"mloda {get_mloda_version()}")
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("demo", help="Run a bundled example and show how mloda resolved it.")
     for name, help_text, arguments in COMMANDS:
         command = commands.add_parser(name, help=help_text)
         for flags, options in arguments:
@@ -310,26 +312,34 @@ def main(
         return args
     if args.command == "mcp":
         return _serve_mcp(args, env, err)
-    settings = _settings(args, env)
-    if isinstance(settings, str):
-        err.write(f"mloda: error: {settings}\n")
-        return FAILED
-    settings = replace(settings, trusted_caller=True)
-    request, problem = _load_request(args, sys.stdin if stdin is None else stdin)
-    if problem is not None:
-        err.write(f"mloda: error: {problem}\n")
-        return FAILED
-    _, planner, runner = build_services(settings, env=env, plugin_collector=plugin_collector, clock=clock)
-    result = planner.explain(request)
+    is_demo = args.command == "demo"
+    collector: PluginCollector | None
+    if is_demo:
+        settings, request, collector = demo.SETTINGS, demo.REQUEST, demo.COLLECTOR
+    else:
+        loaded = _settings(args, env)
+        if isinstance(loaded, str):
+            err.write(f"mloda: error: {loaded}\n")
+            return FAILED
+        settings, collector = replace(loaded, trusted_caller=True), plugin_collector
+        request, problem = _load_request(args, sys.stdin if stdin is None else stdin)
+        if problem is not None:
+            err.write(f"mloda: error: {problem}\n")
+            return FAILED
+    _, planner, runner = build_services(settings, env=env, plugin_collector=collector, clock=clock)
+    explained = result = planner.explain(request)
     output_format = "json"
-    if args.command == "run" and not is_error(result):
-        result = runner.run(result["plan_id"], full=args.full)
-        output_format = args.format
+    if (is_demo or args.command == "run") and not is_error(result):
+        result = runner.run(result["plan_id"], full=is_demo or args.full)
+        output_format = "json" if is_demo else args.format
     tables = result.get("tables", [])
     if output_format == "csv" and len(tables) > 1:
         err.write(f"mloda: error: csv output needs a single table, got {len(tables)}; use json or jsonl\n")
         return FAILED
-    _write_result(result, output_format, out, full=args.command == "run" and args.full, stderr=err)
+    if is_demo and not is_error(result):
+        demo.write_demo(explained, result, out)
+    else:
+        _write_result(result, output_format, out, full=args.command == "run" and args.full, stderr=err)
     if is_error(result):
         return FAILED
     return FAILED_ROWS if result.get("failed_rows") else 0

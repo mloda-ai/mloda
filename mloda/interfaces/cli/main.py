@@ -1,7 +1,8 @@
 """The ``mloda`` command line: try a demo, explain and run feature requests, or serve them over MCP.
 
 Results are printed as the services return them; exit code 2 means an error result or nothing could run,
-exit code 3 a completed run that reported failed rows.
+exit code 3 a completed run that reported failed rows. ``explain --format text`` prints the plan steps one per
+line instead of the service JSON.
 """
 
 import argparse
@@ -82,7 +83,23 @@ CONTEXT_OPTION = (
     },
 )
 COMMANDS: tuple[tuple[str, str, tuple[tuple[tuple[str, ...], dict[str, Any]], ...]], ...] = (
-    ("explain", "Plan a feature request and print the plan.", (TARGETS, OPTION, CONTEXT_OPTION)),
+    (
+        "explain",
+        "Plan a feature request and print the plan.",
+        (
+            TARGETS,
+            (
+                ("--format",),
+                {
+                    "choices": ("json", "text"),
+                    "default": "json",
+                    "help": "Output format of the plan; text shows only the steps.",
+                },
+            ),
+            OPTION,
+            CONTEXT_OPTION,
+        ),
+    ),
     (
         "run",
         "Plan and execute a feature request and print its preview.",
@@ -276,6 +293,8 @@ def _write_result(
     tables: list[dict[str, Any]] = result.get("tables", [])
     if is_error(result) or output_format == "json":
         stdout.write(json.dumps(result, indent=2) + "\n")
+    elif output_format == "text":
+        stdout.write("\n".join(demo.plan_lines(result["steps"])) + "\n")
     elif output_format == "jsonl":
         if stderr is not None:
             _write_failed_rows_summary(result, stderr)
@@ -328,10 +347,9 @@ def main(
             return FAILED
     _, planner, runner = build_services(settings, env=env, plugin_collector=collector, clock=clock)
     explained = result = planner.explain(request)
-    output_format = "json"
+    output_format = "json" if is_demo else args.format
     if (is_demo or args.command == "run") and not is_error(result):
         result = runner.run(result["plan_id"], full=is_demo or args.full)
-        output_format = "json" if is_demo else args.format
     tables = result.get("tables", [])
     if output_format == "csv" and len(tables) > 1:
         err.write(f"mloda: error: csv output needs a single table, got {len(tables)}; use json or jsonl\n")

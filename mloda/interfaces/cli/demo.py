@@ -37,6 +37,12 @@ def _plan_detail(step: Mapping[str, Any]) -> str:
     return detail
 
 
+def plan_lines(steps: Sequence[Mapping[str, Any]]) -> list[str]:
+    """One aligned line per plan step."""
+    labels = [step["feature_group"] if step["kind"] == "compute" else step["kind"] for step in steps]
+    return _aligned([[f"step {step['step']}", label, _plan_detail(step)] for step, label in zip(steps, labels)])
+
+
 def write_demo(explained: Mapping[str, Any], ran: Mapping[str, Any], out: TextIO) -> None:
     """Print the run result tables, the resolved plan and the onward lines."""
     out.write("Result\n")
@@ -46,9 +52,6 @@ def write_demo(explained: Mapping[str, Any], ran: Mapping[str, Any], out: TextIO
         rows = [names] + [[str(row.get(name)) for name in names] for row in table["rows"]]
         blocks.append("\n".join(_aligned(rows)))
     out.write("\n\n".join(blocks) + "\n\nPlan\n")
-    steps = explained["steps"]
-    labels = [step["feature_group"] if step["kind"] == "compute" else step["kind"] for step in steps]
-    lines = _aligned([[f"step {step['step']}", label, _plan_detail(step)] for step, label in zip(steps, labels)])
-    out.write("\n".join(lines) + "\n\nNext\n")
+    out.write("\n".join(plan_lines(explained["steps"])) + "\n\nNext\n")
     out.write(f"Edit the README example: {README_URL}\n")
     out.write('DataFrames: pip install "mloda[pandas]"\n')

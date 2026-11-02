@@ -31,8 +31,16 @@ options:
   --version             show program's version number and exit
 """
 
-EXPLAIN_USAGE = """\
-usage: mloda explain [-h] [-o KEY=VALUE] [-c KEY=VALUE] [--config CONFIG | --no-config]
+if sys.version_info >= (3, 13):
+    EXPLAIN_USAGE = """\
+usage: mloda explain [-h] [--format {json,text}] [-o KEY=VALUE] [-c KEY=VALUE] [--config CONFIG |
+                     --no-config]
+                     TARGET [TARGET ...]
+"""
+else:
+    EXPLAIN_USAGE = """\
+usage: mloda explain [-h] [--format {json,text}] [-o KEY=VALUE] [-c KEY=VALUE]
+                     [--config CONFIG | --no-config]
                      TARGET [TARGET ...]
 """
 
@@ -44,6 +52,7 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
+  --format {json,text}  Output format of the plan; text shows only the steps.
   -o, --option KEY=VALUE
                         Group option for every feature; KEY:=JSON parses JSON, KEY=@FILE reads a
                         file.
@@ -184,6 +193,7 @@ def test_version_flag_prints_the_installed_version() -> None:
             {
                 "command": "explain",
                 "targets": ["req.json"],
+                "format": "json",
                 "option": None,
                 "context_option": None,
                 "config": None,
@@ -195,6 +205,7 @@ def test_version_flag_prints_the_installed_version() -> None:
             {
                 "command": "explain",
                 "targets": ["-"],
+                "format": "json",
                 "option": None,
                 "context_option": None,
                 "config": "c.toml",
@@ -244,10 +255,23 @@ def test_version_flag_prints_the_installed_version() -> None:
             },
         ),
         (
+            ["explain", "req.json", "--format", "text"],
+            {
+                "command": "explain",
+                "targets": ["req.json"],
+                "format": "text",
+                "option": None,
+                "context_option": None,
+                "config": None,
+                "no_config": False,
+            },
+        ),
+        (
             ["explain", "income", "segment", "-o", "a=1", "--option", "b:=2", "-c", "c=@f.txt"],
             {
                 "command": "explain",
                 "targets": ["income", "segment"],
+                "format": "json",
                 "option": ["a=1", "b:=2"],
                 "context_option": ["c=@f.txt"],
                 "config": None,
@@ -294,6 +318,10 @@ def test_parsed_namespace_is_pinned(argv: list[str], expected: dict[str, Any]) -
             RUN_USAGE + "mloda run: error: argument --format: invalid choice: xml (choose from json, jsonl, csv)\n",
         ),
         (["run"], RUN_USAGE + "mloda run: error: the following arguments are required: TARGET\n"),
+        (
+            ["explain", "a", "--format", "xml"],
+            EXPLAIN_USAGE + "mloda explain: error: argument --format: invalid choice: xml (choose from json, text)\n",
+        ),
         (
             ["explain", "a", "--config", "x", "--no-config"],
             EXPLAIN_USAGE + "mloda explain: error: argument --no-config: not allowed with argument --config\n",

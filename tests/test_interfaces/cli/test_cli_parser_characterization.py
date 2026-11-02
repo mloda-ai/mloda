@@ -17,7 +17,7 @@ from mloda.interfaces.cli.main import _parser, main
 ROOT_HELP = """\
 usage: mloda [-h] [--version] {demo,explain,run,mcp} ...
 
-Explain, run or serve mloda feature requests.
+Try, explain, run or serve mloda feature requests.
 
 positional arguments:
   {demo,explain,run,mcp}

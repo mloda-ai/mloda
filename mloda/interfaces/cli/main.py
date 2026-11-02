@@ -1,4 +1,4 @@
-"""The ``mloda`` command line: explain and run feature requests through the service layer, or serve them over MCP.
+"""The ``mloda`` command line: try a demo, explain and run feature requests, or serve them over MCP.
 
 Results are printed as the services return them; exit code 2 means an error result or nothing could run,
 exit code 3 a completed run that reported failed rows.
@@ -108,7 +108,7 @@ def _add_config_options(command: argparse.ArgumentParser) -> None:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="mloda", description="Explain, run or serve mloda feature requests.")
+    parser = argparse.ArgumentParser(prog="mloda", description="Try, explain, run or serve mloda feature requests.")
     parser.add_argument("--version", action="version", version=f"mloda {get_mloda_version()}")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("demo", help="Run a bundled example and show how mloda resolved it.")
@@ -313,19 +313,20 @@ def main(
     if args.command == "mcp":
         return _serve_mcp(args, env, err)
     is_demo = args.command == "demo"
+    collector: PluginCollector | None
     if is_demo:
-        settings, request, plugin_collector = demo.SETTINGS, demo.REQUEST, demo.COLLECTOR
+        settings, request, collector = demo.SETTINGS, demo.REQUEST, demo.COLLECTOR
     else:
         loaded = _settings(args, env)
         if isinstance(loaded, str):
             err.write(f"mloda: error: {loaded}\n")
             return FAILED
-        settings = replace(loaded, trusted_caller=True)
+        settings, collector = replace(loaded, trusted_caller=True), plugin_collector
         request, problem = _load_request(args, sys.stdin if stdin is None else stdin)
         if problem is not None:
             err.write(f"mloda: error: {problem}\n")
             return FAILED
-    _, planner, runner = build_services(settings, env=env, plugin_collector=plugin_collector, clock=clock)
+    _, planner, runner = build_services(settings, env=env, plugin_collector=collector, clock=clock)
     explained = result = planner.explain(request)
     output_format = "json"
     if (is_demo or args.command == "run") and not is_error(result):

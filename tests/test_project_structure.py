@@ -8,11 +8,10 @@ from typing import Any
 
 import pytest
 import yaml
-
-from mloda.interfaces.cli.demo import REQUEST
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 
+from mloda.interfaces.cli.demo import REQUEST
 from tests.readme_first_run import first_example
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent

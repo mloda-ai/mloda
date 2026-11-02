@@ -19,6 +19,7 @@ from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTIO
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.api.plan_info import PlanStep
 from mloda.interfaces.service.catalog import Catalog
 from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import ERROR_CODES, is_error
@@ -29,6 +30,7 @@ from mloda.interfaces.service.planner import (
     PlannedRequest,
     Planner,
     _inline_alias,
+    _step_record,
 )
 from mloda.provider import (
     ApiDataFG,
@@ -75,6 +77,8 @@ STEP_KEYS = {
     "specialized_from",
     "source",
     "inputs",
+    "source_feature_group",
+    "join_type",
 }
 SUCCESS_KEYS = {"plan_id", "expires_at", "normalized_request", "steps", "lineage", "estimate", "egress", "policy"}
 DENIED_CALLS: list[str] = []
@@ -892,6 +896,25 @@ class TestSuccess:
         assert step["specialized_from"] == []
         assert step["source"] == "sales"
         assert step["inputs"] == []
+        assert step["source_feature_group"] is None
+        assert step["join_type"] is None
+
+    def test_join_step_record_names_both_sides_and_join_type(self) -> None:
+        step = PlanStep(
+            step_kind="join",
+            feature_names=(),
+            feature_group=CsvFG,
+            compute_framework=None,
+            source_feature_group=JsonFG,
+            source_compute_framework=None,
+            join_type="inner",
+        )
+
+        record = _step_record(1, step, None)
+
+        assert record["feature_group"] == "CsvFG"
+        assert record["source_feature_group"] == "JsonFG"
+        assert record["join_type"] == "inner"
 
     def test_lineage_of_source_columns(self, tmp_path: Path) -> None:
         result = _success(_explain(tmp_path, {"features": ["customer_id", "income"]}))

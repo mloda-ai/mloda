@@ -29,6 +29,10 @@ def _aligned(rows: Sequence[Sequence[str]]) -> list[str]:
 
 
 def _plan_detail(step: Mapping[str, Any]) -> str:
+    if step["kind"] == "transform":
+        return f"{step['source_feature_group']} -> {step['feature_group']}"
+    if step["kind"] == "join":
+        return f"{step['feature_group']} + {step['source_feature_group']}  ({step['join_type']})"
     detail = ", ".join(step["features"])
     if step["source"]:
         return f"{detail}  (source {step['source']})"

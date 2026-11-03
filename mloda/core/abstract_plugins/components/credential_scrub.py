@@ -240,7 +240,10 @@ def strip_uri_userinfo(text: str) -> str:
 
 
 _MAX_DECODE_ROUNDS = 4
-_PART_SPLIT = re.compile(r"(/|::)")
+# `::` separates parts only where an fsspec chain continues: before a new `<scheme>://`
+# element or a further lowercase `<protocol>::` element. Any other `::` (for example inside
+# a path parameter value) stays inside its part, so the region cut below removes it too.
+_PART_SPLIT = re.compile(r"(/|::(?=[A-Za-z][A-Za-z0-9+.-]*://|[a-z][a-z0-9+.-]*::))")
 _PARAMETER_REGION = re.compile(r"[;?#].", re.DOTALL)
 
 
@@ -268,7 +271,7 @@ def _clean_head(part: str) -> str:
 
 
 def _cut_path_parameter_regions(uri: str) -> str:
-    """Cut every `/`- or `::`-separated part whose decoded form holds `;`, `?` or `#` plus text to head + `;***`."""
+    """Cut every `/`- or chain-`::`-separated part whose decoded form holds `;`, `?` or `#` plus text to head + `;***`."""
     parts = _PART_SPLIT.split(uri)
     for i in range(0, len(parts), 2):
         decoded = _decode_to_fixpoint(parts[i])

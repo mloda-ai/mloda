@@ -27,16 +27,8 @@ from mloda.steward import (
 )
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.provider import (
-    BaseFeatureGroupVersion,
-    ComputeFramework,
-    DataCreatorFeatureGroup,
-    FeatureGroup,
-    FeatureSet,
-    Implementation,
-    credential_handle_spec,
-)
-import pandas as pd
+from mloda.provider import BaseFeatureGroupVersion, ComputeFramework, FeatureGroup, Implementation
+from tests.helpers.credential_handle_stubs import ChsTwoHandleFG
 import importlib.metadata
 from collections.abc import Iterator
 
@@ -847,35 +839,19 @@ _NO_HANDLE_STRUCTURE_HASH = "4596f5bde15568ac6ca82f2c379bde0522f073de137cee0e4e1
 _HANDLES = ("vault-a", "vault-b")
 
 
-class _LockTwoHandleFG(DataCreatorFeatureGroup):
-    PROPERTY_MAPPING = {
-        "lock_two_z_handle": credential_handle_spec("Second handle."),
-        "lock_two_a_handle": credential_handle_spec("First handle."),
+def _two_handle_inputs() -> dict[str, Any]:
+    return {
+        "features": [
+            Feature("chs_two_handle_col", options={"chs_two_z_handle": "vault-b", "chs_two_a_handle": "vault-a"})
+        ],
+        "compute_frameworks": [PandasDataFrame],
+        "data_access_collection": DataAccessCollection(credentials={"vault-a": {"k": "1"}, "vault-b": {"k": "2"}}),
+        "plugin_collector": PluginCollector.enabled_feature_groups({ChsTwoHandleFG}),
     }
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"lock_two_handle_col"}
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pd.DataFrame({"lock_two_handle_col": [1, 2, 3]})
 
 
 def _explain_two_handles() -> list[PlanStep]:
-    feature = Feature("lock_two_handle_col", options={"lock_two_z_handle": "vault-b", "lock_two_a_handle": "vault-a"})
-    return list(
-        mloda.explain(
-            [feature],
-            compute_frameworks=[PandasDataFrame],
-            data_access_collection=DataAccessCollection(credentials={"vault-a": {"k": "1"}, "vault-b": {"k": "2"}}),
-            plugin_collector=PluginCollector.enabled_feature_groups({_LockTwoHandleFG}),
-        )
-    )
+    return list(mloda.explain(**_two_handle_inputs()))
 
 
 def test_explain_shows_the_declared_handles_sorted_and_the_lock_records_them() -> None:
@@ -887,13 +863,7 @@ def test_explain_shows_the_declared_handles_sorted_and_the_lock_records_them() -
 
 
 def test_a_session_resolved_plan_shows_the_declared_handles_sorted() -> None:
-    feature = Feature("lock_two_handle_col", options={"lock_two_z_handle": "vault-b", "lock_two_a_handle": "vault-a"})
-    session = mloda.prepare(
-        [feature],
-        compute_frameworks=[PandasDataFrame],
-        data_access_collection=DataAccessCollection(credentials={"vault-a": {"k": "1"}, "vault-b": {"k": "2"}}),
-        plugin_collector=PluginCollector.enabled_feature_groups({_LockTwoHandleFG}),
-    )
+    session = mloda.prepare(**_two_handle_inputs())
 
     assert [s.credential_handles for s in session.resolved_plan() if s.step_kind == "compute"] == [_HANDLES]
 

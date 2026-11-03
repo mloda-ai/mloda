@@ -12,7 +12,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -20,16 +19,12 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.provider import (
-    ComputeFramework,
-    DataCreatorFeatureGroup,
-    FeatureGroup,
-    credential_handle_spec,
-)
-from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
+from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureGroup
+from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsConsumerFG, ChsRawSecretFG
 from tests.mixins.neutral_csv_source import neutral_csv_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     toy_dac,
@@ -995,42 +990,6 @@ class TestImplementationIdentityOnCalculateFeature:
         assert validate_output.captured.implementation_version == extender.captured.implementation_version
 
 
-class _HandleRootFG(DataCreatorFeatureGroup):
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"hcw_root"}
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pd.DataFrame({"hcw_root": [1, 2, 3]})
-
-
-class _HandleConsumerFG(FeatureGroup):
-    """Declares a credential handle and has an input feature, so every hook fires on its step."""
-
-    PROPERTY_MAPPING = {"hcw_vault_handle": credential_handle_spec("Vault handle.")}
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("hcw_root")}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"hcw_consumer"}
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        data["hcw_consumer"] = data["hcw_root"]
-        return data
-
-
 class TestHookContextCredentialHandles:
     """Every compute-step hook context carries the step's declared credential handles."""
 
@@ -1046,10 +1005,10 @@ class TestHookContextCredentialHandles:
         extender = _ContextCapturingExtender(hook)
 
         mloda.run_all(
-            [Feature("hcw_consumer", options={"hcw_vault_handle": "vault-main"})],
+            [Feature("chs_consumer", options={HANDLE_KEY: "vault-main"})],
             compute_frameworks=[PandasDataFrame],
             data_access_collection=DataAccessCollection(credentials={"vault-main": {"key": "chs-wiring-1"}}),
-            plugin_collector=PluginCollector.enabled_feature_groups({_HandleRootFG, _HandleConsumerFG}),
+            plugin_collector=PluginCollector.enabled_feature_groups({ChsRawSecretFG, ChsConsumerFG}),
             parallelization_modes={ParallelizationMode.SYNC},
             function_extender={extender},
         )

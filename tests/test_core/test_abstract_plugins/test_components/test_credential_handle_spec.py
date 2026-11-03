@@ -604,7 +604,7 @@ class TestDisplay:
         for text in (str(step.feature_set_options), repr(step), str(plan)):
             assert SECRET not in text
 
-    def test_the_content_hash_changes_with_the_handle_name_and_the_lock_text_does_not(self) -> None:
+    def test_the_content_hash_and_the_lock_text_change_with_the_handle_name(self) -> None:
         def explain(handle: str) -> Any:
             return mloda.explain(
                 [_vault(handle)],
@@ -616,7 +616,9 @@ class TestDisplay:
         plan_a, plan_b = explain("vault-a"), explain("vault-b")
 
         assert plan_content_hash(plan_a) != plan_content_hash(plan_b)
-        assert _lock_text(plan_a) == _lock_text(plan_b)
+        assert _lock_text(plan_a) != _lock_text(plan_b)
+        assert "vault-a" in _lock_text(plan_a)
+        assert _lock_text(plan_a).replace("vault-a", "vault-b") == _lock_text(plan_b)
         assert SECRET not in _lock_text(plan_a)
 
     def test_a_raw_secret_under_the_same_key_in_another_group_stays_masked(self) -> None:

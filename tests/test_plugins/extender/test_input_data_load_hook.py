@@ -1435,8 +1435,8 @@ class TestInputDataLoadAuditForSourceGroups:
         assert context.reader_class is ApiDataFG
 
 
-class _HandleThreadedLoadFG(DataCreatorFeatureGroup):
-    """Declares a credential handle and loads its reader from a hopped thread with the received FeatureSet."""
+class _HandleThreadedLoadFG(_threaded_load_feature_group("received"), DataCreatorFeatureGroup):  # type: ignore[misc]
+    """The threaded received-FeatureSet loader group, made a named data creator declaring a credential handle."""
 
     PROPERTY_MAPPING = {"idl_vault_handle": credential_handle_spec("Vault handle.")}
 
@@ -1450,9 +1450,7 @@ class _HandleThreadedLoadFG(DataCreatorFeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            loaded = pool.submit(lambda: _load(_CountingReader, "access", features)).result()
-        return {"idl_handle_col": loaded}
+        return {"idl_handle_col": super().calculate_feature(data, features)}
 
 
 class TestInputDataLoadHookCarriesCredentialHandles:

@@ -280,5 +280,9 @@ class TestPolarsLazyDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
+    EXTENDED_SKIPS = {
+        "timestamp_s_col": "Polars has no second-precision datetime; it widens to ms (TIMESTAMP_MILLIS)",
+    }
+
     def from_arrow(self, table: pa.Table) -> Any:
         return pl.from_arrow(table).lazy()  # type: ignore[union-attr]

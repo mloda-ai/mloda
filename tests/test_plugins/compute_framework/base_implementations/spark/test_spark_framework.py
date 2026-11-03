@@ -71,6 +71,7 @@ if PYSPARK_AVAILABLE:
         DoubleType,
         DecimalType,
         TimestampType,
+        TimestampNTZType,
         ByteType,
         ShortType,
         ArrayType,
@@ -87,6 +88,7 @@ else:
     DoubleType = None
     DecimalType = None
     TimestampType = None
+    TimestampNTZType = None
     pyspark = None
 
 
@@ -431,6 +433,8 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
             return ByteType()
         if spec.arrow_type == pa.int16():
             return ShortType()
+        if spec.arrow_type in (pa.timestamp("s"), pa.timestamp("ns")):
+            return TimestampNTZType()
         if spec.data_type == DataType.LIST:
             element = spec.arrow_type.value_type  # type: ignore[union-attr]
             if element == pa.string():

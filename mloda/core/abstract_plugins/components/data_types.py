@@ -36,7 +36,7 @@ class DataType(Enum):
     BINARY = "BINARY"  # pa.binary()
     DATE = "DATE"  # pa.date32()
     TIMESTAMP_MILLIS = "TIMESTAMP_MILLIS"  # pa.timestamp("ms")
-    TIMESTAMP_MICROS = "TIMESTAMP_MICROS"  # pa.timestamp("us")
+    TIMESTAMP_MICROS = "TIMESTAMP_MICROS"  # naive pa.timestamp("us"), also "s" and "ns"
     DECIMAL = "DECIMAL"  # pa.decimal128(38, 18)
     INT8 = "INT8"  # pa.int8()
     UINT8 = "UINT8"  # pa.uint8()
@@ -167,8 +167,7 @@ class DataType(Enum):
                 return cls.TIMESTAMP_MICROS_TZ
             elif arrow_type.unit == "ms":
                 return cls.TIMESTAMP_MILLIS
-            elif arrow_type.unit == "us":
-                return cls.TIMESTAMP_MICROS
+            return cls.TIMESTAMP_MICROS
         elif pa.types.is_decimal(arrow_type):
             return cls.DECIMAL
         return None

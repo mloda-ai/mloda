@@ -47,10 +47,11 @@ class ReadFileFG(_FileSourceFG):
         cls, feature_name: str, matches: list[SourceMatch], data_access_collection: DataAccessCollection | None
     ) -> str:
         sources = {match.source for match in matches}
+        accesses = {match.access for match in matches}
         handles = sorted(
             handle
             for handle, path in (data_access_collection.files.items() if data_access_collection else ())
-            if cls._source(path).source in sources
+            if path in accesses or cls._source(path).source in sources
         )
         name = cls.get_class_name()
         if handles:

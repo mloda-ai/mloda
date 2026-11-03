@@ -761,6 +761,7 @@ class TestSqliteFGRunAll:
         assert "SumFeature_idid" in result[0].to_pydict()
 
 
+RECORDER_MARKER = "toyfmt_secrets_recorder"
 SECRETS_LOG_NAME = "secrets.jsonl"
 _PASSWORD_A = "sqlite-pw-a-Qw3Er5Ty"  # nosec B105
 _PASSWORD_B = "sqlite-pw-b-Zx9Cv8Bn"  # nosec B105
@@ -768,6 +769,10 @@ _PASSWORD_B = "sqlite-pw-b-Zx9Cv8Bn"  # nosec B105
 
 class SecretsRecordingSqliteFG(SqliteFG):
     """Test-local SqliteFG that appends the registered secrets visible during each read to a file."""
+
+    @classmethod
+    def is_valid_credentials(cls, credentials: Any) -> bool:
+        return super().is_valid_credentials(credentials) and RECORDER_MARKER in credentials
 
     @classmethod
     def produce_rows(cls, connection: Any, table: str, features: Any) -> Any:
@@ -816,8 +821,8 @@ class TestSqliteFGMultiprocessing:
             flight_server=flight_server,
             data_access_collection=DataAccessCollection(
                 credentials={
-                    "first": {KEY: people_db, "password": _PASSWORD_A},
-                    "second": {KEY: str(other_db), "password": _PASSWORD_B},
+                    "first": {KEY: people_db, RECORDER_MARKER: "1", "password": _PASSWORD_A},
+                    "second": {KEY: str(other_db), RECORDER_MARKER: "1", "password": _PASSWORD_B},
                 }
             ),
             plugin_collector=PluginCollector.enabled_feature_groups({SecretsRecordingSqliteFG}),

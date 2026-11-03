@@ -15,6 +15,7 @@ import pytest
 
 from mloda._testing.framework_adapter import FrameworkAdapter
 from mloda._testing.framework_adapter import PandasAdapter, PolarsLazyAdapter, PyArrowAdapter, PythonDictAdapter
+from mloda._testing.operation_group_shape import check_operation_group_shape
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.code_closure import closure_parts
@@ -286,6 +287,11 @@ def test_operation_group_is_concrete(group: type[Any]) -> None:
 def test_operation_family_bases_under_the_scan_root_are_exactly_the_table_groups() -> None:
     discovered = {family for family in _family_declarations().values() if issubclass(family, OperationFeatureGroup)}
     assert discovered == set(OPERATION_GROUPS)
+
+
+@pytest.mark.parametrize("group", OPERATION_GROUPS, ids=GROUP_IDS)
+def test_operation_group_shape_check_passes(group: type[Any]) -> None:
+    assert check_operation_group_shape(group).failures == ()
 
 
 @pytest.mark.parametrize(("name", "impl"), IMPLEMENTATION_CASES)

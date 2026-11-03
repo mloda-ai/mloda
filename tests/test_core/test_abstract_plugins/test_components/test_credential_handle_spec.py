@@ -10,10 +10,10 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsRawSecretFG, ChsSource, ChsVaultFG
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.provider import (
     ComputeFramework,
     FeatureGroup,
@@ -664,7 +664,10 @@ class TestHandleStaysOnTheConsumer:
     def test_a_required_upstream_declaring_the_same_key_does_not_receive_it(self) -> None:
         dac = _dac(**{"vault-a": {"key": SECRET}})
 
-        with pytest.raises(ValueError):
+        with pytest.raises(
+            ValueError,
+            match=r"(?s)No feature groups found for feature name: 'chs_up_req'.*required option\(s\) chs_vault_token are absent",
+        ):
             _prepare([_consumer("chs_consumer_req")], dac, _plugins(ChsConsumerReqUpFG, ChsRequiredUpstreamFG))
 
     def test_an_explicit_allowlist_on_the_input_feature_forwards_it(self) -> None:

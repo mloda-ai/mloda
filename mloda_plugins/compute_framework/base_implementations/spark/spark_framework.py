@@ -41,6 +41,15 @@ _SPARK_MISSING_COLUMN_CONDITION = "UNRESOLVED_COLUMN"
 _SPARK_ATTRIBUTE_CONDITION = "ATTRIBUTE_NOT_SUPPORTED"
 
 
+def _timestamp_ntz_type() -> Any:
+    """Return Spark's TimestampNTZType class, or None on PySpark versions without NTZ support."""
+    try:
+        from pyspark.sql.types import TimestampNTZType
+    except ImportError:  # pragma: no cover - older PySpark without NTZ support
+        return None
+    return TimestampNTZType
+
+
 class SparkFramework(ComputeFramework):
     """Spark framework implementation for ComputeFramework.
 
@@ -176,6 +185,9 @@ class SparkFramework(ComputeFramework):
         if isinstance(spark_type, DateType):
             return DataType.DATE
         if isinstance(spark_type, TimestampType):
+            return DataType.TIMESTAMP_MICROS
+        timestamp_ntz_type = _timestamp_ntz_type()
+        if timestamp_ntz_type is not None and isinstance(spark_type, timestamp_ntz_type):
             return DataType.TIMESTAMP_MICROS
         if isinstance(spark_type, DecimalType):
             return DataType.DECIMAL

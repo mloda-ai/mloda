@@ -1,47 +1,64 @@
-"""Subclass-form conformance suite with class-creation-time declaration checks."""
+"""Subclass-form conformance suite whose hook names are checked at class creation."""
 
 from __future__ import annotations
 
 import difflib
-from collections.abc import Mapping
+import inspect
+import sys
 from typing import Any, ClassVar
 
 from mloda._testing.result import CheckResult
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.user.python_dict import PythonDictFramework
 
+if sys.version_info >= (3, 14):
+    import annotationlib
 
-class DeclarationError(Exception):
-    """A suite declares a key its base does not know."""
+
+class HookError(Exception):
+    """A suite names something that looks like a misspelled hook."""
 
 
 class ConformanceSuite:
-    """Base for suites; each suite base sets its own declaration_keys."""
+    """Base for suites; hooks are declared on suite bases (`suite_base=True`)."""
 
     plugin: ClassVar[type[Any]]
     compute_framework: ClassVar[type[ComputeFramework]] = PythonDictFramework
-    declaration_keys: ClassVar[frozenset[str]] = frozenset()
-    declarations: ClassVar[Mapping[str, Any]] = {}
+    _suite_base: ClassVar[bool] = True
 
-    def __init_subclass__(cls, **kwargs: Any) -> None:
+    def __init_subclass__(cls, suite_base: bool = False, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        result = check_declarations(cls)
+        cls._suite_base = suite_base
+        if suite_base:
+            return
+        result = check_hooks(cls)
         if not result.passed:
-            raise DeclarationError(f"{cls.__name__}: " + "; ".join(result.failures))
+            raise HookError(f"{cls.__name__}: " + "; ".join(result.failures))
 
 
-def check_declarations(suite_cls: type[ConformanceSuite]) -> CheckResult:
-    """Fail each declared key outside declaration_keys, naming the closest known key."""
+def _is_public(name: str) -> bool:
+    return not name.startswith("_") and not name.startswith("test_")
+
+
+def _annotation_names(cls: type) -> list[str]:
+    if sys.version_info >= (3, 14):
+        return list(annotationlib.get_annotations(cls, format=annotationlib.Format.FORWARDREF))
+    return list(inspect.get_annotations(cls))
+
+
+def check_hooks(suite_cls: type[ConformanceSuite]) -> CheckResult:
+    """Fail each public name on the suite that nearly matches a hook but is not one."""
+    hooks: set[str] = set()
+    for base in suite_cls.__mro__:
+        if base.__dict__.get("_suite_base", False):
+            hooks.update(name for name in (*base.__dict__, *_annotation_names(base)) if _is_public(name))
+    checked = {name for name in (*suite_cls.__dict__, *_annotation_names(suite_cls)) if _is_public(name)}
     failures: list[str] = []
-    for key in suite_cls.declarations:
-        if key in suite_cls.declaration_keys:
-            continue
-        message = f"unknown declaration key '{key}'"
-        close = difflib.get_close_matches(key, sorted(suite_cls.declaration_keys), n=1)
+    for name in sorted(checked - hooks):
+        close = difflib.get_close_matches(name, sorted(hooks), n=1, cutoff=0.8)
         if close:
-            message += f", did you mean '{close[0]}'?"
-        failures.append(message)
-    return CheckResult(check="declarations", subject=suite_cls.__name__, failures=tuple(failures))
+            failures.append(f"'{name}' is not a hook; did you mean '{close[0]}'? Rename it if it is not meant as one.")
+    return CheckResult(check="hooks", subject=suite_cls.__name__, failures=tuple(failures))
 
 
 def assert_passed(result: CheckResult) -> None:

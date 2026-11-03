@@ -65,7 +65,6 @@ def _has_skip_mark(marks: Any) -> bool:
 
 
 def has_skip_mark_names(names: Iterable[str]) -> bool:
-    """True when any mark name is skip, skipif or xfail."""
     return any(name in _SKIP_MARKS for name in names)
 
 
@@ -99,7 +98,6 @@ def undeclared_contract_tests(suite_cls: type[ConformanceSuite], marked: bool) -
 
 
 def check_switched_off(suite_cls: type[ConformanceSuite]) -> CheckResult:
-    """Fail unknown keys, non-Cause values and undeclared switched-off contract tests."""
     tests = _contract_tests(suite_cls)
     failures: list[str] = []
     for name, cause in suite_cls.switched_off.items():

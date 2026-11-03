@@ -7,7 +7,8 @@ from typing import Any, ClassVar
 import pytest
 
 from mloda._testing.result import CheckResult
-from mloda._testing.suite import ConformanceSuite, HookError, assert_passed, check_hooks
+from mloda._testing.declarations import Cause
+from mloda._testing.suite import ConformanceSuite, HookError, SwitchedOffError, assert_passed, check_hooks
 from mloda.user.python_dict import PythonDictFramework
 
 
@@ -180,6 +181,182 @@ def test_unresolvable_annotation_behaves_like_a_plain_class() -> None:
 
 def test_default_compute_framework_is_python_dict() -> None:
     assert ConformanceSuite.compute_framework is PythonDictFramework
+
+
+def _contract_base() -> type[ConformanceSuite]:
+    class _Contract(ConformanceSuite, suite_base=True):
+        def test_alpha(self) -> None:
+            pass
+
+        def test_beta(self) -> None:
+            pass
+
+    return _Contract
+
+
+def _host_with(kind: str, declared: dict[str, Cause] | None) -> type[ConformanceSuite]:
+    base = _contract_base()
+    declared = declared or {}
+    if kind == "redefined":
+
+        class _Redefined(base):  # type: ignore[valid-type, misc]
+            plugin = _Plugin
+            switched_off = declared
+
+            def test_alpha(self) -> None:
+                pass
+
+        return _Redefined
+    if kind == "blanked":
+
+        class _Blanked(base):  # type: ignore[valid-type, misc]
+            plugin = _Plugin
+            switched_off = declared
+            test_alpha = None
+
+        return _Blanked
+
+    class _Mixin:
+        def test_alpha(self) -> None:
+            pass
+
+    class _Mixed(_Mixin, base):  # type: ignore[valid-type, misc]
+        plugin = _Plugin
+        switched_off = declared
+
+    return _Mixed
+
+
+@pytest.mark.parametrize("kind", ["redefined", "blanked", "mixin"])
+def test_undeclared_override_of_contract_test_raises(kind: str) -> None:
+    with pytest.raises(SwitchedOffError) as excinfo:
+        _host_with(kind, None)
+
+    assert "test_alpha" in str(excinfo.value)
+    assert "test_beta" not in str(excinfo.value)
+
+
+@pytest.mark.parametrize("kind", ["redefined", "blanked", "mixin"])
+def test_declared_override_of_contract_test_passes(kind: str) -> None:
+    host = _host_with(kind, {"test_alpha": Cause.NOT_IMPLEMENTED})
+
+    assert host.switched_off == {"test_alpha": Cause.NOT_IMPLEMENTED}
+
+
+MARKS = [pytest.mark.skip(reason="x"), pytest.mark.skipif(True, reason="x"), pytest.mark.xfail(reason="x")]
+
+
+@pytest.mark.parametrize("declare_all", [False, True])
+@pytest.mark.parametrize("mark", MARKS)
+def test_class_body_mark_requires_every_contract_test_declared(mark: Any, declare_all: bool) -> None:
+    base = _contract_base()
+    declared = {"test_alpha": Cause.BACKEND}
+    if declare_all:
+        declared["test_beta"] = Cause.BACKEND
+
+    def build() -> type[ConformanceSuite]:
+        class _Marked(base):  # type: ignore[valid-type, misc]
+            plugin = _Plugin
+            pytestmark = [mark]
+            switched_off = declared
+
+        return _Marked
+
+    if declare_all:
+        assert build().switched_off == declared
+        return
+    with pytest.raises(SwitchedOffError) as excinfo:
+        build()
+
+    message = str(excinfo.value)
+    assert "test_beta" in message
+    assert "test_alpha" not in message
+
+
+@pytest.mark.parametrize(
+    ("declared", "mentioned"),
+    [({"test_alpa": Cause.OTHER}, ["test_alpa", "test_alpha"]), ({"test_alpha": "backend"}, ["test_alpha"])],
+)
+def test_invalid_switched_off_entry_raises(declared: Any, mentioned: list[str]) -> None:
+    base = _contract_base()
+
+    with pytest.raises(SwitchedOffError) as excinfo:
+
+        class _Bad(base):  # type: ignore[valid-type, misc]
+            plugin = _Plugin
+            switched_off = declared
+
+    assert all(name in str(excinfo.value) for name in mentioned)
+
+
+def test_switched_off_set_raises_switched_off_error() -> None:
+    base = _contract_base()
+
+    with pytest.raises(SwitchedOffError):
+
+        class _Bad(base):  # type: ignore[valid-type, misc]
+            plugin = _Plugin
+            switched_off = {"test_alpha"}
+
+
+def test_child_host_replacing_switched_off_must_merge_parent_mapping() -> None:
+    base = _contract_base()
+
+    class _A(base):  # type: ignore[valid-type, misc]
+        plugin = _Plugin
+        switched_off = {"test_alpha": Cause.OTHER}
+
+        def test_alpha(self) -> None:
+            pass
+
+    with pytest.raises(SwitchedOffError) as excinfo:
+
+        class _B(_A):
+            switched_off = {"test_beta": Cause.OTHER}
+
+    message = str(excinfo.value)
+    assert "test_alpha" in message
+    assert "merg" in message
+
+
+def test_switched_off_typo_is_a_hook_error() -> None:
+    base = _contract_base()
+
+    with pytest.raises(HookError) as excinfo:
+
+        class _Bad(base):  # type: ignore[valid-type, misc]
+            plugin = _Plugin
+            switched_of = {"test_alpha": Cause.OTHER}
+
+    assert _hint("switched_of", "switched_off") in str(excinfo.value)
+
+
+def test_switched_off_defaults_to_empty() -> None:
+    assert dict(ConformanceSuite.switched_off) == {}
+
+
+def test_suite_base_may_redefine_parent_tests() -> None:
+    base = _contract_base()
+
+    class _Second(base, suite_base=True):  # type: ignore[valid-type, misc, call-arg]
+        def test_alpha(self) -> None:
+            pass
+
+    class _Host(_Second):
+        plugin = _Plugin
+
+    assert _Host.plugin is _Plugin
+
+
+@pytest.mark.parametrize("mark", MARKS)
+def test_suite_base_with_skip_mark_is_rejected(mark: Any) -> None:
+    with pytest.raises(SwitchedOffError):
+
+        class _Bad(ConformanceSuite, suite_base=True):
+            pytestmark = [mark]
+
+            def test_alpha(self) -> None:
+                pass
 
 
 def test_assert_passed_accepts_passing_result() -> None:

@@ -15,6 +15,7 @@ import functools
 import inspect
 import logging
 import re
+from collections.abc import Mapping
 from typing import Any
 
 from mloda.core.abstract_plugins.components.credential_handle import CredentialHandleSpec
@@ -143,7 +144,7 @@ def validate_name_binding(owner: type[Any]) -> None:
     FeatureChainParserMixin at class definition.
     """
     property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
-    if not isinstance(property_mapping, dict):
+    if not isinstance(property_mapping, Mapping):
         return
 
     patterns = _effective_prefix_patterns(owner)

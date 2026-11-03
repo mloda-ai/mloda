@@ -12,6 +12,8 @@ from __future__ import annotations
 import dataclasses
 import logging
 import re
+from collections.abc import Callable, Mapping
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -617,16 +619,25 @@ class TestDefinitionTimeAmbiguity:
         resolution = _ReplacedPositionalR2353.resolve_feature_name("src__shared_r2353_auto_replacement_r2353")
         assert resolution.bindings == {ALGORITHM_KEY: "shared_r2353", SOLVER_KEY: "auto"}
 
-    def test_positional_capture_with_overlapping_value_spaces_raises(self) -> None:
+    @pytest.mark.parametrize(
+        "wrap",
+        [pytest.param(dict, id="dict"), pytest.param(MappingProxyType, id="mapping_proxy")],
+    )
+    def test_positional_capture_with_overlapping_value_spaces_raises(
+        self, wrap: Callable[[dict[str, PropertySpec]], Mapping[str, PropertySpec]]
+    ) -> None:
         """Two keys reachable by the same captured string make the binding a guess."""
+        mapping = wrap(
+            {
+                ALGORITHM_KEY: PropertySpec("a", allowed_values=("pca", "shared_pnb770")),
+                SOLVER_KEY: PropertySpec("b", allowed_values=("shared_pnb770", "auto")),
+            }
+        )
         with pytest.raises(ValueError) as exc_info:
 
             class _OverlappingPositionalPnb770(FeatureChainParserMixin):
                 PREFIX_PATTERN = r".*__(\w+)_overlap_pnb770$"
-                PROPERTY_MAPPING = {
-                    ALGORITHM_KEY: PropertySpec("a", allowed_values=("pca", "shared_pnb770")),
-                    SOLVER_KEY: PropertySpec("b", allowed_values=("shared_pnb770", "auto")),
-                }
+                PROPERTY_MAPPING = mapping
 
         message = str(exc_info.value)
         assert "_OverlappingPositionalPnb770" in message

@@ -76,6 +76,7 @@ from mloda.core.abstract_plugins.components.input_data.source_feature_group impo
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.credential_handle import (
     credential_handle_keys,
+    refuse_credential_option_values,
     validate_credential_handles,
 )
 from mloda.core.abstract_plugins.components.link import JoinType, Link
@@ -994,6 +995,7 @@ class Engine:
             )
             handle_keys = frozenset(credential_handle_keys(feature_group_class))
             resolved = entry[1]
+            refuse_credential_option_values(resolved)
             if handle_keys:
                 validate_credential_handles(feature_group_class, resolved, self.data_access_collection)
             if resolved.credential_handle_keys != handle_keys:

@@ -8,6 +8,8 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
+from mloda.core.abstract_plugins.components.credential_handle import refuse_credential_option_values
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
@@ -22,7 +24,16 @@ from mloda.provider import (
     property_spec,
 )
 from mloda.steward import plan_content_hash
-from mloda.user import Credential, Feature, FeatureName, FilterType, GlobalFilter, PluginCollector, mloda
+from mloda.user import (
+    Credential,
+    Feature,
+    FeatureName,
+    FilterType,
+    GlobalFilter,
+    PluginCollector,
+    mloda,
+)
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 SECRET = "chs-secret-value-1234"  # nosec B105
@@ -502,6 +513,88 @@ class TestMissingHandleKeyAborts:
         assert _steps(session, ChsFallbackFG)
 
 
+class ChsCredDefaultFG(ChsSource):
+    PROPERTY_MAPPING = {"chs_default_auth": property_spec("Credential default.", default=Credential(token=SECRET))}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_creddef_a"}
+
+
+_CRED_OPTION_KEY = "chs_api_auth"
+_VALUE_SHAPES = [
+    pytest.param(lambda: Credential(token=SECRET), id="direct"),
+    pytest.param(lambda: RegisteredCredential({"token": SECRET}), id="registered"),
+    pytest.param(lambda: [Credential(token=SECRET)], id="list"),
+    pytest.param(lambda: (RegisteredCredential({"token": SECRET}),), id="tuple"),
+    pytest.param(lambda: {"inner": RegisteredCredential({"token": SECRET})}, id="dict-value"),
+    pytest.param(lambda: {Credential(token=SECRET): 1}, id="dict-key"),
+    pytest.param(lambda: {Credential(token=SECRET)}, id="set"),
+    pytest.param(lambda: frozenset({Credential(token=SECRET)}), id="frozenset"),
+]
+
+
+def _assert_credential_refusal(message: str, key: str) -> None:
+    assert key in message
+    assert "credential_handle_spec" in message
+    assert "DataAccessCollection" in message
+    assert SECRET not in message
+
+
+class TestCredentialValuesInOptionsAreRefused:
+    """A Credential value under a non-source-pointer option key is refused at plan time."""
+
+    @pytest.mark.parametrize("make_value", _VALUE_SHAPES)
+    @pytest.mark.parametrize("placement", ["group", "context"])
+    def test_a_credential_shape_is_refused_naming_the_key(self, make_value: Callable[[], Any], placement: str) -> None:
+        options = Options(group={}, context={_CRED_OPTION_KEY: make_value()})
+        if placement == "group":
+            options = Options(group={_CRED_OPTION_KEY: make_value()})
+
+        message = _refusal(_prepare, [Feature("chs_vault_a", options=options)], None, ChsFallbackFG)
+
+        _assert_credential_refusal(message, _CRED_OPTION_KEY)
+
+    @pytest.mark.parametrize("entry", ENTRY_POINTS)
+    def test_a_credential_is_refused_at_every_entry_point(self, entry: Entry) -> None:
+        feature = Feature("chs_vault_a", options={_CRED_OPTION_KEY: Credential(token=SECRET)})
+
+        _assert_credential_refusal(_refusal(entry, [feature], None, ChsFallbackFG), _CRED_OPTION_KEY)
+
+    def test_a_cyclic_list_holding_a_credential_is_refused(self) -> None:
+        cyclic: list[Any] = []
+        cyclic.append(cyclic)
+        cyclic.append(Credential(token=SECRET))
+
+        with pytest.raises(ValueError) as exc:
+            refuse_credential_option_values(Options({_CRED_OPTION_KEY: cyclic}))
+
+        _assert_credential_refusal(str(exc.value), _CRED_OPTION_KEY)
+
+    def test_a_cyclic_list_without_a_credential_returns(self) -> None:
+        cyclic: list[Any] = []
+        cyclic.append(cyclic)
+
+        refuse_credential_option_values(Options({_CRED_OPTION_KEY: cyclic}))
+
+    def test_a_source_pointer_key_accepts_a_credential(self) -> None:
+        assert SqliteFG.__name__ == "SqliteFG"
+        refuse_credential_option_values(Options({"SqliteFG": Credential(sqlite="/x.db")}))
+
+    def test_a_case_typo_pointer_key_gets_the_pointer_hint(self) -> None:
+        feature = Feature("chs_vault_a", options={"sqlitefg": Credential(sqlite="/x.db")})
+
+        message = _refusal(_prepare, [feature], None, ChsFallbackFG, SqliteFG)
+
+        assert "did you mean" in message
+        assert "DataAccessCollection" not in message
+
+    def test_a_credential_property_default_is_refused(self) -> None:
+        message = _refusal(_prepare, [Feature("chs_creddef_a")], None, ChsCredDefaultFG)
+
+        _assert_credential_refusal(message, "chs_default_auth")
+
+
 class TestGlobalFilterFeatures:
     """A feature added only through a global filter is validated like any requested feature."""
 
@@ -531,6 +624,14 @@ class TestGlobalFilterFeatures:
             self._prepare_with_filter(feature)
 
         assert OTHER_SECRET not in str(exc.value)
+
+    def test_a_credential_value_is_refused_naming_the_key(self) -> None:
+        feature = Feature("chs_vault_b", options={_CRED_OPTION_KEY: Credential(token=SECRET)})
+
+        with pytest.raises(ValueError) as exc:
+            self._prepare_with_filter(feature)
+
+        _assert_credential_refusal(str(exc.value), _CRED_OPTION_KEY)
 
     def test_a_handle_in_context_is_refused_naming_the_key(self) -> None:
         feature = Feature("chs_vault_b", options=Options(group={}, context={HANDLE_KEY: "vault-main"}))

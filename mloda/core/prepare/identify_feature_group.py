@@ -30,6 +30,7 @@ from mloda.core.prepare.resolution_failure_renderer import (
 from mloda.core.abstract_plugins.components.credential_handle import (
     credential_handle_keys,
     missing_credential_handle_abort,
+    refuse_credential_option_values,
     validate_credential_handles,
 )
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
@@ -433,6 +434,7 @@ class IdentifyFeatureGroupClass:
         # sat inside the filter loop, so it never ran when the name matched nothing).
         validate_single_framework_pin(feature)
         validate_source_pointers(feature, accessible_plugins, excluded, data_access_collection)
+        refuse_credential_option_values(feature.options)
         self = cls(data_access_collection)
         self._partial_records = partial_records
         self._excluded = excluded or {}

@@ -2,6 +2,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.credential_grant import CredentialGrant, grant_scope
 from mloda.core.abstract_plugins.components.utils import failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.credential_scrub import (
@@ -21,8 +22,9 @@ def thread_worker(
     from_cfw: ComputeFramework | UUID | None,
     registered_secrets: frozenset[str] = frozenset(),
     identity_secrets: frozenset[str] | None = None,
+    grant: CredentialGrant | None = None,
 ) -> None:
-    with registered_secrets_scope(registered_secrets, identity_secrets):
+    with registered_secrets_scope(registered_secrets, identity_secrets), grant_scope(grant):
         try:
             command.execute(cfw_register, cfw, from_cfw=from_cfw)
             command.step_is_done = True

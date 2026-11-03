@@ -1102,3 +1102,60 @@ class TestApiDataColumnsAccessor:
 
         with pytest.raises(AttributeError):
             setattr(dac, accessor, {})
+
+
+_PER_CREDENTIAL_CASES: list[dict[str, Any]] = [
+    {"db": {"host": "db.internal.example", "password": "pw-value-123456"}, "api": {"token": TOY_TOKEN}},  # nosec B105
+    {"db": {"host": ["shared-value-12345"], "other": ["shared-value-12345"]}},
+    {"c": Credential({"token": "wrapped-token-abcdef"}), "d": {"password": {"host": "shaped-host-12345"}}},  # nosec B105
+    {"a": {"token": "short", "password": 123456789012, "secret": "   "}},  # nosec B105
+    {"same": {"key": "dup-value-123456"}, "also": {"key": "dup-value-123456"}},
+    {},
+]
+
+
+class TestCredentialSecretLiteralsPerCredential:
+    """credential_secret_literals() over each credential unions to secret_literals()."""
+
+    @pytest.mark.parametrize("credentials", _PER_CREDENTIAL_CASES)
+    def test_per_credential_union_equals_secret_literals(self, credentials: dict[str, Any]) -> None:
+        from mloda.core.abstract_plugins.components.credential_leaves import credential_secret_literals
+
+        dac = DataAccessCollection(credentials=credentials)
+
+        union: frozenset[str] = frozenset().union(*(credential_secret_literals(v) for v in dac.credentials.values()))
+        assert union == dac.secret_literals()
+
+    @pytest.mark.parametrize("credentials", _PER_CREDENTIAL_CASES)
+    def test_per_credential_union_equals_identity_literals(self, credentials: dict[str, Any]) -> None:
+        from mloda.core.abstract_plugins.components.credential_leaves import credential_identity_literals
+
+        dac = DataAccessCollection(credentials=credentials)
+
+        union: frozenset[str] = frozenset().union(*(credential_identity_literals(v) for v in dac.credentials.values()))
+        assert union == dac.identity_literals()
+
+    @pytest.mark.parametrize(
+        "value, expected",
+        [
+            pytest.param("bare-secret-value-77", frozenset({"bare-secret-value-77"}), id="bare_str_is_a_leaf"),
+            pytest.param("short", frozenset(), id="short_bare_str"),
+            pytest.param("        ", frozenset(), id="blank_bare_str"),
+            pytest.param({"token": "x" * 7}, frozenset(), id="below_the_floor"),
+            pytest.param({"token": "x" * 8}, frozenset({"x" * 8}), id="at_the_floor"),
+            pytest.param(
+                {"host": "db.internal.example", "password": "pw-value-123456"},  # nosec B105
+                frozenset({"pw-value-123456"}),
+                id="safe_key_leaf_is_not_a_secret",
+            ),
+        ],
+    )
+    def test_credential_secret_literals_of_a_value(self, value: Any, expected: frozenset[str]) -> None:
+        from mloda.core.abstract_plugins.components.credential_leaves import credential_secret_literals
+
+        assert credential_secret_literals(value) == expected
+
+    def test_the_floor_constant_is_eight(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_leaves import MIN_REDACT_LENGTH
+
+        assert MIN_REDACT_LENGTH == 8

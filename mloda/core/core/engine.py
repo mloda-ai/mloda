@@ -256,6 +256,7 @@ class Engine:
             run_context=self.run_context,
             output_framework=self.output_framework,
             output_connection=self.output_connection,
+            data_access_collection=self.data_access_collection,
         )
         if isinstance(orchestrator, ExecutionOrchestrator):
             return orchestrator

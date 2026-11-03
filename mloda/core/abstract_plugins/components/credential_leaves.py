@@ -1,6 +1,6 @@
 """Walk a registered credential and classify each str/bytes leaf as secret or known-safe."""
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from typing import Any, NamedTuple
 
 from mloda.core.abstract_plugins.components.credential import Credential
@@ -53,6 +53,9 @@ _SAFE_CREDENTIAL_KEYS = frozenset(
 )
 
 
+MIN_REDACT_LENGTH = 8
+
+
 class CredentialLeaf(NamedTuple):
     path: str
     leaf: Any
@@ -98,3 +101,21 @@ def iter_credential_leaves(value: Any) -> Iterator[CredentialLeaf]:
         else:
             children = [(v, f"{path}[{i}]", key, shaped) for i, v in enumerate(node)]
         stack.extend(reversed(children))
+
+
+def _literals_where(value: Any, predicate: Callable[[CredentialLeaf], bool]) -> frozenset[str]:
+    return frozenset(
+        item.leaf
+        for item in iter_credential_leaves(value)
+        if predicate(item) and isinstance(item.leaf, str) and len(item.leaf) >= MIN_REDACT_LENGTH and item.leaf.strip()
+    )
+
+
+def credential_secret_literals(value: Any) -> frozenset[str]:
+    """The secret str leaves of one credential value that are long enough and not blank to mask by exact match."""
+    return _literals_where(value, lambda item: item.secret)
+
+
+def credential_identity_literals(value: Any) -> frozenset[str]:
+    """The credential-shaped str leaves of one credential value that are long enough and not blank."""
+    return _literals_where(value, lambda item: item.shaped)

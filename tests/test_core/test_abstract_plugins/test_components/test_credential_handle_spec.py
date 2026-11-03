@@ -1,8 +1,9 @@
 """credential_handle_spec: plan-time handle validation, plan records and display."""
 
 import re
+import types
 from abc import abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import pytest
@@ -848,14 +849,23 @@ class TestHandleIsNeverBoundFromTheName:
     """A named capture over a handle key is refused at class definition."""
 
     @pytest.mark.parametrize("make_pattern", _PATTERN_FORMS)
-    def test_a_mixin_group_capturing_the_handle_key_is_refused(self, make_pattern: Callable[[], Any]) -> None:
+    @pytest.mark.parametrize(
+        "wrap",
+        [pytest.param(dict, id="dict"), pytest.param(types.MappingProxyType, id="mapping_proxy")],
+    )
+    def test_a_mixin_group_capturing_the_handle_key_is_refused(
+        self,
+        make_pattern: Callable[[], Any],
+        wrap: Callable[[dict[str, PropertySpec]], Mapping[str, PropertySpec]],
+    ) -> None:
         pattern = make_pattern()
+        mapping = wrap(_HANDLE_MAPPING)
 
         with pytest.raises(ValueError) as exc:
 
             class ChsBoundMixinGroupB1(FeatureChainParserMixin):
                 PREFIX_PATTERN = pattern
-                PROPERTY_MAPPING = _HANDLE_MAPPING
+                PROPERTY_MAPPING = mapping
 
         assert "ChsBoundMixinGroupB1" in str(exc.value)
         assert HANDLE_KEY in str(exc.value)

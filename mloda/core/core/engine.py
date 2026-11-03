@@ -283,6 +283,7 @@ class Engine:
         with reader_probe_scope(probe_scope):
             self.setup_features_recursion(features)
         self._fold_into_narrower_twins()
+        self._reject_twins_sharing_a_frame()
         with reader_probe_scope(probe_scope):
             self._load_result_index_columns()
 
@@ -785,6 +786,45 @@ class Engine:
         self._merge_host_into(existing, host)
         existing.framework_pinned = True
         return existing
+
+    def _reject_twins_sharing_a_frame(self) -> None:
+        """Rejects same-named copies split only by a pushed-down context key while reading the same inputs."""
+        for group_class, collection in sorted(
+            self.feature_group_collection.items(), key=lambda item: format_feature_group_class(item[0])
+        ):
+            split_keys = frozenset(k for f in collection for k in f.options.inherited_context_keys)
+            if not split_keys:
+                continue
+            buckets: dict[str, list[Feature]] = defaultdict(list)
+            for member in sorted(collection, key=lambda f: str(f.uuid)):
+                buckets[str(member.name)].append(member)
+            for name, members in sorted(buckets.items()):
+                for i, a in enumerate(members):
+                    for b in members[i + 1 :]:
+                        parents = self.feature_link_parents.get(a.uuid)
+                        if (
+                            a.options == b.options
+                            and a.compute_frameworks == b.compute_frameworks
+                            and parents
+                            and parents == self.feature_link_parents.get(b.uuid)
+                            and a._split_context_hashable(split_keys) != b._split_context_hashable(split_keys)
+                        ):
+                            keys = sorted(
+                                k
+                                for k in split_keys
+                                if (k in a.options.context) != (k in b.options.context)
+                                or (
+                                    k in a.options.context
+                                    and not _deep_equal(a.options.context[k], b.options.context[k])
+                                )
+                            )
+                            raise ValueError(
+                                f"Feature '{name}' of {format_feature_group_class(group_class)} is reached twice with "
+                                f"differing values for context key(s) {keys} pushed down from a consumer, but both "
+                                "copies read the same inputs, so they would write the same column into one frame. "
+                                "Give every request the same value, push the key with cascade_context_keys so the "
+                                "inputs split too, or make it a group option."
+                            )
 
     def _fold_into_narrower_twins(self) -> None:
         """Folds each feature into its unique minimal narrower-framework twin; decided from a snapshot, order-free."""

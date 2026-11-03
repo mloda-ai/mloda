@@ -20,6 +20,7 @@ an idempotent safety net and its collapse ValueError is unreachable from engine-
 
 from __future__ import annotations
 
+import re
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -207,6 +208,9 @@ def _run_direct_and_chained(
     include_direct: bool = True,
     filter_on: str | None = None,
     direct_data_type: DataType | None = None,
+    chained_options: Options | None = None,
+    direct_options: Options | None = None,
+    extra_requests: list[Feature] | None = None,
 ) -> list[Any]:
     fg = make_name_bound_fg(
         "Mdb",
@@ -219,10 +223,14 @@ def _run_direct_and_chained(
         append_columns=append_columns,
     )
     source = make_root_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
-    direct = Feature(MDB_DIRECT, data_type=direct_data_type)
-    requests = [direct, Feature(MDB_CHAINED)] if direct_first else [Feature(MDB_CHAINED), direct]
+    direct = Feature(
+        MDB_DIRECT, direct_options if direct_options is not None else Options(), data_type=direct_data_type
+    )
+    chained = Feature(MDB_CHAINED, chained_options if chained_options is not None else Options())
+    requests = [direct, chained] if direct_first else [chained, direct]
     if not include_direct:
-        requests = [Feature(MDB_CHAINED)]
+        requests = [chained]
+    requests = requests + (extra_requests or [])
     global_filter = None
     if filter_on is not None:
         global_filter = GlobalFilter()
@@ -395,6 +403,53 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         (frame,) = [r for r in results if MDB_CHAINED in (r if isinstance(r, dict) else r[0])]
         values = list(frame[MDB_CHAINED]) if isinstance(frame, dict) else [row[MDB_CHAINED] for row in frame]
         assert values == [2]
+
+    @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
+    @pytest.mark.parametrize(
+        ("framework", "append_columns"),
+        [(PyArrowTable, True), (PythonDictFramework, False)],
+        ids=["pyarrow_append", "python_dict"],
+    )
+    def test_direct_and_propagating_consumer_with_differing_context_raises(
+        self, framework: type[Any], append_columns: bool, direct_first: bool
+    ) -> None:
+        calls: list[list[str]] = []
+        propagate = Options(context={"x": 1}, propagate_context_keys=frozenset({"x"}))
+        with pytest.raises(ValueError, match=rf"{re.escape(MDB_DIRECT)}.*\bx\b"):
+            _run_direct_and_chained(
+                calls,
+                framework=framework,
+                append_columns=append_columns,
+                direct_first=direct_first,
+                chained_options=propagate,
+            )
+        assert calls == []
+
+    def test_two_consumers_propagating_different_values_into_shared_input_raise(self) -> None:
+        calls: list[list[str]] = []
+        propagate = Options(context={"x": 1}, propagate_context_keys=frozenset({"x"}))
+        other = Feature(
+            "mdb_src__mdbop_q_b__mdbop_s_d",
+            Options(context={"x": 2}, propagate_context_keys=frozenset({"x"})),
+        )
+        with pytest.raises(ValueError, match=rf"{re.escape(MDB_DIRECT)}.*\bx\b"):
+            _run_direct_and_chained(calls, include_direct=False, chained_options=propagate, extra_requests=[other])
+        assert calls == []
+
+    @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
+    def test_cascaded_context_matching_direct_request_context_succeeds(self, direct_first: bool) -> None:
+        cascade = Options(context={"x": 1}, cascade_context_keys=frozenset({"x"}))
+        results = _run_direct_and_chained(
+            [],
+            framework=PyArrowTable,
+            append_columns=True,
+            direct_first=direct_first,
+            chained_options=cascade,
+            direct_options=Options(context={"x": 1}),
+        )
+        names = [name for table in results for name in table.column_names]
+        assert names.count(MDB_DIRECT) <= 1
+        assert names.count(MDB_CHAINED) == 1
 
     def test_explicit_option_agreeing_with_name_is_observed(self) -> None:
         name = "mdb_src__mdbop_q_b"

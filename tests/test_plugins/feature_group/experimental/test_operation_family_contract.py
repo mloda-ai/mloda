@@ -11,9 +11,12 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 
-import pyarrow as pa
 import pytest
 
+from mloda._testing.framework_adapter import FrameworkAdapter
+from mloda._testing.framework_adapter import PandasAdapter, PolarsLazyAdapter, PyArrowAdapter, PythonDictAdapter
+from mloda._testing.typed_data import TypedTestData
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.code_closure import closure_parts
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
@@ -64,13 +67,7 @@ from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTi
 from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
 
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
-from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import (
-    PandasZeroRowAdapter,
-    PolarsLazyZeroRowAdapter,
-    PyArrowZeroRowAdapter,
-    PythonDictZeroRowAdapter,
-    ZeroRowResultTypeTestMixin,
-)
+from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import edit_columns
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 SCAN_ROOT = _REPO_ROOT / "mloda_plugins" / "feature_group" / "experimental"
@@ -329,7 +326,7 @@ def test_calculate_delegates_to_the_group_it_is_handed(name: str, impl: type[Any
 _ROWS = 12
 _DAYS = [datetime(2024, 1, 1) + timedelta(days=i) for i in range(_ROWS)]
 _NUMBERS = [float(i + 1) for i in range(_ROWS)]
-_GEO_POINTS = [(50.0 + i * 0.1, 8.0 + i * 0.1) for i in range(_ROWS)]
+_GEO_POINTS = [[50.0 + i * 0.1, 8.0 + i * 0.1] for i in range(_ROWS)]
 _NUMERIC_COLUMNS: dict[str, list[Any]] = {
     "a": _NUMBERS,
     "b": [float((i * 7) % 5) for i in range(_ROWS)],
@@ -337,28 +334,47 @@ _NUMERIC_COLUMNS: dict[str, list[Any]] = {
 }
 
 
-def _numeric_table() -> pa.Table:
-    return pa.table(_NUMERIC_COLUMNS)
+def _numeric_table() -> TypedTestData:
+    return TypedTestData({name: (DataType.DOUBLE, values) for name, values in _NUMERIC_COLUMNS.items()})
 
 
-def _time_table() -> pa.Table:
-    return pa.table({"temperature": _NUMBERS, "sales": _NUMBERS, "reference_time": _DAYS, "ts": _DAYS})
+def _time_table() -> TypedTestData:
+    return TypedTestData(
+        {
+            "temperature": (DataType.DOUBLE, _NUMBERS),
+            "sales": (DataType.DOUBLE, _NUMBERS),
+            "reference_time": (DataType.TIMESTAMP_MICROS, _DAYS),
+            "ts": (DataType.TIMESTAMP_MICROS, _DAYS),
+        }
+    )
 
 
-def _node_table() -> pa.Table:
+def _node_table() -> TypedTestData:
     users = [f"u{i % 4}" for i in range(_ROWS)]
     targets = [f"u{(i + 1) % 4}" for i in range(_ROWS)]
-    return pa.table({"user": users, "source": users, "target": targets, "w": _NUMBERS})
+    return TypedTestData(
+        {
+            "user": (DataType.STRING, users),
+            "source": (DataType.STRING, users),
+            "target": (DataType.STRING, targets),
+            "w": (DataType.DOUBLE, _NUMBERS),
+        }
+    )
 
 
-def _missing_value_table() -> pa.Table:
+def _missing_value_table() -> TypedTestData:
     income: list[Any] = [None if i % 4 == 0 else v for i, v in enumerate(_NUMBERS)]
-    return pa.table({"income": income, "region": ["n" if i % 2 else "s" for i in range(_ROWS)]})
+    return TypedTestData(
+        {
+            "income": (DataType.DOUBLE, income),
+            "region": (DataType.STRING, ["n" if i % 2 else "s" for i in range(_ROWS)]),
+        }
+    )
 
 
 # One frame builder per family (a superset of columns) and the option variants that change the declared inputs.
-LOOP_INPUT_CASES: dict[str, tuple[Callable[[], pa.Table], list[Options]]] = {
-    "aggregation": (lambda: pa.table({"sales": _NUMBERS}), [Options()]),
+LOOP_INPUT_CASES: dict[str, tuple[Callable[[], TypedTestData], list[Options]]] = {
+    "aggregation": (lambda: TypedTestData({"sales": (DataType.DOUBLE, _NUMBERS)}), [Options()]),
     "time_window": (
         _time_table,
         [Options(), Options({DefaultOptionKeys.reference_time: "ts"})],
@@ -376,20 +392,26 @@ LOOP_INPUT_CASES: dict[str, tuple[Callable[[], pa.Table], list[Options]]] = {
     "node_centrality": (_node_table, [Options(), Options({"weight_column": "w"})]),
     "missing_value": (_missing_value_table, [Options(), Options({"group_by_features": ["region"]})]),
     "text_cleaning": (
-        lambda: pa.table({"text": ["Hello, The World!"] * _ROWS}),
+        lambda: TypedTestData({"text": (DataType.STRING, ["Hello, The World!"] * _ROWS)}),
         [Options({"cleaning_operations": ("normalize",)})],
     ),
-    "geo_distance": (lambda: pa.table({"a": _GEO_POINTS, "b": list(reversed(_GEO_POINTS))}), [Options()]),
-    "scaling": (lambda: pa.table({"income": _NUMBERS}), [Options()]),
-    "encoding": (lambda: pa.table({"category": ["x", "y", "z"] * (_ROWS // 3)}), [Options()]),
+    "geo_distance": (
+        lambda: TypedTestData({"a": (DataType.LIST, _GEO_POINTS), "b": (DataType.LIST, list(reversed(_GEO_POINTS)))}),
+        [Options()],
+    ),
+    "scaling": (lambda: TypedTestData({"income": (DataType.DOUBLE, _NUMBERS)}), [Options()]),
+    "encoding": (
+        lambda: TypedTestData({"category": (DataType.STRING, ["x", "y", "z"] * (_ROWS // 3))}),
+        [Options()],
+    ),
     "sklearn_pipeline": (_numeric_table, [Options()]),
 }
 
-_ADAPTERS: dict[type[ComputeFramework], ZeroRowResultTypeTestMixin] = {
-    PandasDataFrame: PandasZeroRowAdapter(),
-    PyArrowTable: PyArrowZeroRowAdapter(),
-    PolarsLazyDataFrame: PolarsLazyZeroRowAdapter(),
-    PythonDictFramework: PythonDictZeroRowAdapter(),
+_ADAPTERS: dict[type[ComputeFramework], FrameworkAdapter] = {
+    PandasDataFrame: PandasAdapter(),
+    PyArrowTable: PyArrowAdapter(),
+    PolarsLazyDataFrame: PolarsLazyAdapter(),
+    PythonDictFramework: PythonDictAdapter(),
 }
 
 
@@ -427,8 +449,11 @@ def test_loop_runs_on_declared_inputs_only(name: str, impl: type[Any], options: 
     feature = Feature(OPERATION_FAMILIES[name][3], options)
     declared = group.declared_input_features(feature.options, feature.name)
     assert declared is not None
-    table = LOOP_INPUT_CASES[name][0]().select(sorted(str(f.name) for f in declared))
-    data = _ADAPTERS[impl.compute_framework].from_arrow(table)
+    inputs = LOOP_INPUT_CASES[name][0]()
+    declared_names = {str(f.name) for f in declared}
+    assert declared_names <= set(inputs.types)
+    table = edit_columns(inputs, drop=[column for column in inputs.types if column not in declared_names])
+    data = _ADAPTERS[impl.compute_framework].from_typed(table)
     feature_set = FeatureSet()
     feature_set.add(feature)
     feature_set.materialize_option_defaults(group)
@@ -458,7 +483,8 @@ def _dropped_input_cases() -> list[Any]:
 def test_core_rejects_each_dropped_declared_input(name: str, impl: type[Any], options: Options, dropped: str) -> None:
     feature = Feature(OPERATION_FAMILIES[name][3], options)
     table = LOOP_INPUT_CASES[name][0]()
-    table = table.append_column("spare", pa.array([0] * table.num_rows)).drop_columns([dropped])
-    data = _ADAPTERS[impl.compute_framework].from_arrow(table)
+    assert dropped in table.types
+    table = edit_columns(table, add={"spare": (DataType.INT64, [0] * table.row_count)}, drop=[dropped])
+    data = _ADAPTERS[impl.compute_framework].from_typed(table)
 
     assert_core_rejects_missing_input(impl, data, feature, (dropped,))

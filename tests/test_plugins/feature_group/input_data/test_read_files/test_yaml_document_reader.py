@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -40,18 +39,12 @@ class TestYamlLoadsIntoPythonDict(PythonDictAdapter, DocumentLoadsIntoFrameworkM
     text = FLOW_STYLE
     expected_text = CANONICAL
 
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column])
-
 
 class TestYamlLoadsIntoPyArrowTable(PyArrowTableAdapter, DocumentLoadsIntoFrameworkMixin):
     document_group = lazy_document_group("yaml_fg", "YamlFG")
     suffix = ".yaml"
     text = FLOW_STYLE
     expected_text = CANONICAL
-
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result.column(column).to_pylist())
 
 
 class TestYamlLoadsIntoPandas(PandasDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
@@ -60,18 +53,12 @@ class TestYamlLoadsIntoPandas(PandasDataFrameAdapter, DocumentLoadsIntoFramework
     text = FLOW_STYLE
     expected_text = CANONICAL
 
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column].tolist())
-
 
 class TestYamlLoadsIntoPolars(PolarsDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
     document_group = lazy_document_group("yaml_fg", "YamlFG")
     suffix = ".yaml"
     text = FLOW_STYLE
     expected_text = CANONICAL
-
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column].to_list())
 
 
 class TestYamlContent:

@@ -31,6 +31,15 @@ assert isinstance(hooks, CheckResult), hooks
 assert "pyarrow" not in sys.modules, "testing kit must not import pyarrow"
 assert "pytest" not in sys.modules, "testing kit must not import pytest"
 
+from mloda._testing.framework_adapter import PythonDictAdapter
+
+adapter = PythonDictAdapter()
+frame = adapter.from_typed(data)
+assert adapter.column_names(frame) == ["a"], adapter.column_names(frame)
+assert adapter.row_count(frame) == 2
+assert adapter.column_values(frame, "a") == [1, None]
+assert "pyarrow" not in sys.modules, "PythonDictAdapter must not import pyarrow"
+
 print("OK")
 """
 

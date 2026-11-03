@@ -54,48 +54,30 @@ class TestTextLoadsIntoPythonDict(PythonDictAdapter, DocumentLoadsIntoFrameworkM
     document_group = lazy_document_group("text_fg", "TextFG")
     suffix = ".TXT"
 
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column])
-
 
 class TestTextLoadsIntoPyArrowTable(PyArrowTableAdapter, DocumentLoadsIntoFrameworkMixin):
     document_group = lazy_document_group("text_fg", "TextFG")
     suffix = ".txt"
-
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result.column(column).to_pylist())
 
 
 class TestTextLoadsIntoPandas(PandasDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
     document_group = lazy_document_group("text_fg", "TextFG")
     suffix = ".txt"
 
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column].tolist())
-
 
 class TestTextLoadsIntoPolars(PolarsDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
     document_group = lazy_document_group("text_fg", "TextFG")
     suffix = ".txt"
-
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column].to_list())
 
 
 class TestPyLoadsIntoPythonDict(PythonDictAdapter, DocumentLoadsIntoFrameworkMixin):
     document_group = lazy_document_group("text_fg", "PyFG")
     suffix = ".py"
 
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column])
-
 
 class TestPyLoadsIntoPyArrowTable(PyArrowTableAdapter, DocumentLoadsIntoFrameworkMixin):
     document_group = lazy_document_group("text_fg", "PyFG")
     suffix = ".py"
-
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result.column(column).to_pylist())
 
 
 class TestTextContent:

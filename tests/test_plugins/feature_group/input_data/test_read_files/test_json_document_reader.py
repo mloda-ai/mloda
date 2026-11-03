@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -43,9 +42,6 @@ class TestJsonDocumentLoadsIntoPythonDict(PythonDictAdapter, DocumentLoadsIntoFr
     text = PRETTY
     expected_text = CANONICAL
 
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column])
-
 
 class TestJsonDocumentLoadsIntoPyArrowTable(PyArrowTableAdapter, DocumentLoadsIntoFrameworkMixin):
     document_group = lazy_document_group("json_document_fg", "JsonDocumentFG")
@@ -53,9 +49,6 @@ class TestJsonDocumentLoadsIntoPyArrowTable(PyArrowTableAdapter, DocumentLoadsIn
     context = HANDOVER
     text = PRETTY
     expected_text = CANONICAL
-
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result.column(column).to_pylist())
 
 
 class TestJsonDocumentLoadsIntoPandas(PandasDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
@@ -65,9 +58,6 @@ class TestJsonDocumentLoadsIntoPandas(PandasDataFrameAdapter, DocumentLoadsIntoF
     text = PRETTY
     expected_text = CANONICAL
 
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column].tolist())
-
 
 class TestJsonDocumentLoadsIntoPolars(PolarsDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
     document_group = lazy_document_group("json_document_fg", "JsonDocumentFG")
@@ -75,9 +65,6 @@ class TestJsonDocumentLoadsIntoPolars(PolarsDataFrameAdapter, DocumentLoadsIntoF
     context = HANDOVER
     text = PRETTY
     expected_text = CANONICAL
-
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column].to_list())
 
 
 class TestJsonDocumentContent:

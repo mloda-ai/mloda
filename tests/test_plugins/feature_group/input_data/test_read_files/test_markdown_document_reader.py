@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
 
 from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     DocumentLoadsIntoFrameworkMixin,
@@ -49,17 +48,11 @@ class TestMarkdownLoadsIntoPythonDict(PythonDictAdapter, DocumentLoadsIntoFramew
     suffix = ".md"
     text = SAMPLE_MARKDOWN
 
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column])
-
 
 class TestMarkdownLoadsIntoPyArrowTable(PyArrowTableAdapter, DocumentLoadsIntoFrameworkMixin):
     document_group = lazy_document_group("markdown_fg", "MarkdownFG")
     suffix = ".md"
     text = SAMPLE_MARKDOWN
-
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result.column(column).to_pylist())
 
 
 class TestMarkdownLoadsIntoPandas(PandasDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
@@ -67,14 +60,8 @@ class TestMarkdownLoadsIntoPandas(PandasDataFrameAdapter, DocumentLoadsIntoFrame
     suffix = ".md"
     text = SAMPLE_MARKDOWN
 
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column].tolist())
-
 
 class TestMarkdownLoadsIntoPolars(PolarsDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
     document_group = lazy_document_group("markdown_fg", "MarkdownFG")
     suffix = ".md"
     text = SAMPLE_MARKDOWN
-
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column].to_list())

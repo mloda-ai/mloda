@@ -8,19 +8,22 @@ on framework-native data (not just PyArrow).
 
 The canonical test data lives here as class-level ``VALIDATOR_COLUMNS`` / ``PRECISION_COLUMNS``
 ``ColumnSpec`` tuples. The mixin materialises that spec into a canonical, typed ``pa.Table``
-via ``_arrow_table`` (the only place ``c.values`` is read). Framework subclasses implement
+via ``_arrow_table`` (the only place ``c.values`` is read, validated through ``TypedTestData``).
+Framework subclasses implement
 ``from_arrow(table)`` to convert that table into the framework-native container, and only
 override the data fixtures when they need an additional fixture such as ``connection`` or
 ``spark_session``.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Callable
 
 import pyarrow as pa
 import pytest
 
+from mloda._testing.framework_adapter import to_arrow_table
+from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.validators.datatype_validator import (
     DataTypeMismatchError,
     DataTypeValidator,
@@ -44,18 +47,7 @@ _TS_VALUES: tuple[datetime, ...] = (
     datetime(2024, 1, 2),
     datetime(2024, 1, 3),
 )
-
-
-_PYARROW_TYPE_MAP: dict[DataType, pa.DataType] = {
-    DataType.INT32: pa.int32(),
-    DataType.INT64: pa.int64(),
-    DataType.FLOAT: pa.float32(),
-    DataType.DOUBLE: pa.float64(),
-    DataType.STRING: pa.string(),
-    DataType.BOOLEAN: pa.bool_(),
-    DataType.TIMESTAMP_MILLIS: pa.timestamp("ms"),
-    DataType.TIMESTAMP_MICROS: pa.timestamp("us"),
-}
+_TS_VALUES_UTC: tuple[datetime, ...] = tuple(v.replace(tzinfo=UTC) for v in _TS_VALUES)
 
 
 EXTENDED_COLUMNS: tuple[ColumnSpec, ...] = (
@@ -65,10 +57,10 @@ EXTENDED_COLUMNS: tuple[ColumnSpec, ...] = (
     ColumnSpec("int16_col", DataType.INT32, (1, 2, 3), pa.int16()),
     ColumnSpec("uint16_col", DataType.INT32, (1, 2, 3), pa.uint16()),
     ColumnSpec("uint32_col", DataType.INT64, (1, 2, 3), pa.uint32()),
-    ColumnSpec("timestamp_us_tz_col", DataType.TIMESTAMP_MICROS_TZ, _TS_VALUES, pa.timestamp("us", tz="UTC")),
+    ColumnSpec("timestamp_us_tz_col", DataType.TIMESTAMP_MICROS_TZ, _TS_VALUES_UTC, pa.timestamp("us", tz="UTC")),
     ColumnSpec("timestamp_s_col", DataType.TIMESTAMP_MICROS, _TS_VALUES, pa.timestamp("s")),
     ColumnSpec("timestamp_ns_col", DataType.TIMESTAMP_MICROS, _TS_VALUES, pa.timestamp("ns")),
-    ColumnSpec("timestamp_ns_tz_col", DataType.TIMESTAMP_MICROS_TZ, _TS_VALUES, pa.timestamp("ns", tz="UTC")),
+    ColumnSpec("timestamp_ns_tz_col", DataType.TIMESTAMP_MICROS_TZ, _TS_VALUES_UTC, pa.timestamp("ns", tz="UTC")),
     ColumnSpec("list_str_col", DataType.LIST, (["a"], ["b", "c"], []), pa.list_(pa.string())),
     ColumnSpec(
         "list_struct_col",
@@ -119,9 +111,8 @@ class DataTypeValidatorFrameworkTestMixin:
         Reads ``c.values`` exactly once, here. Subclasses convert the resulting
         table into their framework-native container via ``from_arrow(...)``.
         """
-        return pa.table(
-            {c.name: pa.array(list(c.values), type=c.arrow_type or _PYARROW_TYPE_MAP[c.data_type]) for c in columns}
-        )
+        typed = TypedTestData({c.name: (c.data_type, c.values) for c in columns})
+        return to_arrow_table(typed, {c.name: c.arrow_type for c in columns if c.arrow_type is not None})
 
     def _skip_if_unsupported(self, spec: ColumnSpec) -> None:
         """Skip the extended case before any data is built when the framework cannot hold the column."""

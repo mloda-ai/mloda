@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import Any, TypeGuard, TypeVar
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+from mloda.core.abstract_plugins.components.match_rejection import DeclineCode
 
 logger = logging.getLogger(__name__)
 
@@ -66,15 +67,16 @@ def is_deferred_match_abort(exc: BaseException) -> bool:
     return exc.__dict__.get(DEFERRED_MATCH_ABORT_FLAG, False) is True
 
 
-def stamp_decline_code(exc: E, code: Any) -> E:
+def stamp_decline_code(exc: E, code: DeclineCode) -> E:
     """Carry a decline code on a raised match abort so the resolver can record it."""
     exc.__dict__[DECLINE_CODE_FLAG] = code
     return exc
 
 
-def decline_code_of(exc: BaseException) -> Any:
+def decline_code_of(exc: BaseException) -> DeclineCode | None:
     """The decline code stamped on a raise, else None."""
-    return exc.__dict__.get(DECLINE_CODE_FLAG)
+    code = exc.__dict__.get(DECLINE_CODE_FLAG)
+    return code if isinstance(code, DeclineCode) else None
 
 
 def safe_exc_str(exc: BaseException) -> str:

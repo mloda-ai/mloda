@@ -29,6 +29,9 @@ class CredentialLookup:
             raise KeyError(f"Credential '{handle}' was not declared by this step.")
         return self._data[handle]
 
+    def declared(self) -> tuple[str, ...]:
+        return tuple(sorted(self._data))
+
     def close(self) -> None:
         self._data = {}
         self._closed = True

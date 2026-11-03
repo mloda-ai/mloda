@@ -40,6 +40,9 @@ class TestStaticGrant:
 
 
 class TestCredentialLookup:
+    def test_declared_is_the_sorted_handles(self) -> None:
+        assert CredentialLookup({"b": {}, "a": {}}).declared() == ("a", "b")
+
     def test_ungranted_handle_raises_naming_the_handle_and_never_a_value(self) -> None:
         lookup = CredentialLookup({"granted": _credential()})
 

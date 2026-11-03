@@ -222,6 +222,15 @@ def test_import_provider_base_classes() -> None:
     assert provider_module.credential_handle_spec is core_credential_handle_spec
     assert "credential_handle_spec" in provider_module.__all__
     assert "CredentialHandleSpec" not in provider_module.__all__
+    for access_name in (
+        "read_credential",
+        "credentials_scope",
+        "ResolvedCredential",
+        "CredentialReadRefused",
+        "CredentialFieldMissing",
+    ):
+        assert access_name in provider_module.__all__
+    assert "readable_credentials" not in provider_module.__all__
 
 
 # =============================================================================

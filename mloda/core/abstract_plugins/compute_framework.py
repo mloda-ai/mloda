@@ -7,6 +7,11 @@ from contextvars import ContextVar
 from typing import Any, ClassVar, NoReturn, final, get_origin
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
+from mloda.core.abstract_plugins.components.credential_access import (
+    CredentialFieldMissing,
+    CredentialReadRefused,
+    readable,
+)
 from mloda.core.abstract_plugins.components.credential_scrub import (
     current_identity_secrets,
     current_registered_secrets,
@@ -1216,8 +1221,13 @@ class ComputeFramework(ABC):
 
         try:
             return self._run_hook(
-                ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE, feature_group, feature_group.calculate_feature, features
+                ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+                feature_group,
+                readable(feature_group.calculate_feature),
+                features,
             )
+        except (CredentialReadRefused, CredentialFieldMissing):
+            raise
         except KeyError as e:
             # Provide helpful error message for missing columns
             self._raise_helpful_missing_column_error(feature_group, e)

@@ -156,6 +156,8 @@ Since group options forward to input features, a pointer on a derived feature bi
 
 ## Connections
 
+A group that is not a source reads a declared credential at run time with `read_credential` (see [Runtime access versus match-time binding](named-data-access-handles.md#runtime-access-versus-match-time-binding)).
+
 Credential values are masked in errors and logs except under known connection fields (see [named data access handles](named-data-access-handles.md)).
 
 A connection lives in the DataAccessCollection, and the framework binds the single one it accepts. Pin one with `connection_handle` or `Feature(name, connection=conn)` (see [Selecting a connection](named-data-access-handles.md#selecting-a-connection-connection_handle) and [Framework Connection Object](framework-connection-object.md)). A source group that reads a connection declares `ClaimRoute("connection", ...)` and `match_connection` (see `DuckdbFG`); choosing a connection by its content happens in the source group's `find_sources` (see `DuckdbFG.find_sources`), while `match_connection` reports which connection a match reads.

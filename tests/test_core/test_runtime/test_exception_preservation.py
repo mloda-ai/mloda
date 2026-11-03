@@ -20,6 +20,8 @@ and because ``MlodaRunError`` does not yet exist.
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import errno
 import logging
 import threading
@@ -32,7 +34,17 @@ import pytest
 
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
-from mloda.provider import BaseArtifact, FeatureSet, DataCreatorFeatureGroup, SourceMatch, credential_handle_spec
+from mloda.core.abstract_plugins.hook_context import HookContext
+from mloda.provider import (
+    BaseArtifact,
+    CredentialFieldMissing,
+    CredentialReadRefused,
+    DataCreatorFeatureGroup,
+    FeatureSet,
+    SourceMatch,
+    credential_handle_spec,
+    read_credential,
+)
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsSource
@@ -866,10 +878,12 @@ _E2E_KEY = "e2e-key-Mq3Wc7Vh2"  # nosec B105
 _GRANT_MODES = [ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING]
 
 
-def _vault_dac() -> Any:
+def _vault_dac(credentials: dict[str, dict[str, Any]] | None = None) -> Any:
     from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 
-    return DataAccessCollection(credentials={_E2E_HANDLE: {"host": _E2E_HOST, "hmac": _E2E_HMAC, "key": _E2E_KEY}})
+    if credentials is None:
+        credentials = {_E2E_HANDLE: {"host": _E2E_HOST, "hmac": _E2E_HMAC, "key": _E2E_KEY}}
+    return DataAccessCollection(credentials=credentials)
 
 
 def _grant_run(
@@ -1105,3 +1119,450 @@ def test_the_grant_spans_save_artifact_in_every_mode(mode: ParallelizationMode, 
     api.run(parallelization_modes={mode}, flight_server=flight_server)
 
     assert api.get_artifacts() == {"chs_artifact_a": {"saved_host": _E2E_HOST}}
+
+
+# --------------------------------------------------------------------------- #
+# Runtime credential accessor: read_credential
+# --------------------------------------------------------------------------- #
+
+_VAULT_A = "vault-a"
+_VAULT_B = "vault-b"
+_HOST_A = "vault-a.internal.example"
+_HOST_B = "vault-b.internal.example"
+_WINDOW_EVENTS: list[tuple[str, str]] = []
+_SAVER_CONTEXTS: list[contextvars.Context] = []
+
+
+def _read_host(handle: str) -> str:
+    return str(read_credential(handle)["host"])
+
+
+def _read_secret_length_via_helper(handle: str) -> int:
+    return len(str(read_credential(handle)["hmac"]))
+
+
+class ChsRcReadingFG(ChsSource):
+    """Reads its declared handle with read_credential in calculate_feature and in a helper."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_a", "chs_rc_b"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        handle = features.get_options_key(HANDLE_KEY)
+        row = f"{_read_host(handle)}|{_read_secret_length_via_helper(handle)}"
+        return pd.DataFrame({name: [row] for name in features.get_all_names()})
+
+
+class ChsRcFailingFG(ChsSource):
+    """Reads via read_credential, then fails with an error echoing host, hmac and key."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_failing_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        value = read_credential(features.get_options_key(HANDLE_KEY))
+        raise ValueError(f"read failed host={value['host']} hmac={value['hmac']} key={value['key']}")
+
+
+class ChsRcMissingFieldFG(ChsSource):
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_missing_field_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return read_credential(features.get_options_key(HANDLE_KEY))["no_such_field"]
+
+
+class ChsRcUndeclaredFG(ChsSource):
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_undeclared_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        read_credential("not-declared")
+        return pd.DataFrame({name: [1] for name in features.get_all_names()})
+
+
+class ChsRcReadingArtifact(BaseArtifact):
+    @classmethod
+    def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
+        _SAVER_CONTEXTS.append(contextvars.copy_context())
+        return {"saved_host": _read_host(features.get_options_key(HANDLE_KEY))}
+
+
+class ChsRcArtifactFG(ChsSource):
+    """Its artifact saver reads the declared handle with read_credential."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_artifact_a"}
+
+    @staticmethod
+    def artifact() -> type[BaseArtifact] | None:
+        return ChsRcReadingArtifact
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        if features.artifact_to_save:
+            features.save_artifact = "chs-rc-artifact"
+        return pd.DataFrame({name: [1] for name in features.get_all_names()})
+
+
+def _window_load(data_access: Any, features: FeatureSet) -> str:
+    host = _read_host(features.get_options_key(HANDLE_KEY))
+    _WINDOW_EVENTS.append(("load", host))
+    return host
+
+
+async def _async_host(handle: str) -> str:
+    return _read_host(handle)
+
+
+async def _awaited_async_host(handle: str) -> str:
+    return await asyncio.create_task(_async_host(handle))
+
+
+class ChsWindowFG(ChsSource):
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_win_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        from mloda.core.abstract_plugins.components.input_data.input_data_load import dispatch_input_data_load
+
+        handle = features.get_options_key(HANDLE_KEY)
+        _WINDOW_EVENTS.append(("calculate", _read_host(handle)))
+        _WINDOW_EVENTS.append(("async", asyncio.run(_awaited_async_host(handle))))
+        dispatch_input_data_load(
+            cls,
+            cls,
+            _window_load,
+            "access",
+            features,
+            identity=lambda: "chs-window-source",
+            data_access_format=lambda: "chs",
+        )
+        return pd.DataFrame({name: [1] for name in features.get_all_names()})
+
+
+class ChsWinConsumerFG(ChsWindowFG):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_win_consumer_a"}
+
+    def input_features(self, options: Any, feature_name: Any) -> set[Feature] | None:
+        return {Feature("chs_read_src_a")}
+
+
+class _ReadProbeExtender(Extender):
+    """Tries read_credential around each wrapped call and records the outcome and the HookContext."""
+
+    def __init__(self, hooks: set[ExtenderHook]) -> None:
+        self.hooks = hooks
+        self.contexts: list[tuple[str, str | None, str]] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return set(self.hooks)
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        context = HookContext.current()
+        assert context is not None
+        key = f"ext:{context.hook.value}"
+        self.contexts.append((context.hook.value, context.feature_group_class, repr(context)))
+        try:
+            read_credential(_E2E_HANDLE)
+            _WINDOW_EVENTS.append((key, "readable"))
+        except CredentialReadRefused as refused:
+            assert _E2E_HANDLE in str(refused)
+            _WINDOW_EVENTS.append((key, "refused"))
+        try:
+            return func(*args, **kwargs)
+        except Exception as exc:
+            _WINDOW_EVENTS.append((key, f"raised:{type(exc).__name__}"))
+            raise
+
+
+def _events(key: str) -> list[str]:
+    return [outcome for name, outcome in _WINDOW_EVENTS if name == key]
+
+
+_TWO_VAULTS = {
+    _VAULT_A: {"host": _HOST_A, "hmac": "a-hmac-Gp8Tn5Rz4", "key": "a-key-Mq3Wc7Vh2"},
+    _VAULT_B: {"host": _HOST_B, "hmac": "b-hmac-Xs2Kd9Lf6x", "key": "b-key-Pt7Nb4Yc1"},
+}
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_read_credential_works_in_calculate_feature_and_a_helper_in_every_mode(
+    mode: ParallelizationMode, flight_server: Any
+) -> None:
+    result = _grant_run(ChsRcReadingFG, "chs_rc_a", mode, flight_server)
+
+    assert list(result[0]["chs_rc_a"]) == [f"{_E2E_HOST}|{len(_E2E_HMAC)}"]
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_two_features_with_different_handles_each_read_their_own_credential(
+    mode: ParallelizationMode, flight_server: Any
+) -> None:
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    result = mloda.run_all(
+        [
+            Feature("chs_rc_a", options={HANDLE_KEY: _VAULT_A}),
+            Feature("chs_rc_b", options={HANDLE_KEY: _VAULT_B}),
+        ],
+        compute_frameworks=[PandasDataFrame],
+        parallelization_modes={mode},
+        flight_server=flight_server,
+        data_access_collection=_vault_dac(_TWO_VAULTS),
+        plugin_collector=PluginCollector.enabled_feature_groups({ChsRcReadingFG}),
+    )
+
+    rows = {column: list(frame[column]) for frame in result for column in frame.columns}
+    assert rows["chs_rc_a"] == [f"{_HOST_A}|{len('a-hmac-Gp8Tn5Rz4')}"]
+    assert rows["chs_rc_b"] == [f"{_HOST_B}|{len('b-hmac-Xs2Kd9Lf6x')}"]
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_error_echoing_values_read_with_read_credential_is_masked_in_every_mode(
+    mode: ParallelizationMode,
+    flight_server: Any,
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: Any,
+) -> None:
+    seen = tmp_path / "seen.txt"
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(ValueError) as excinfo:
+            _grant_run(ChsRcFailingFG, "chs_rc_failing_a", mode, flight_server, {_FileRecordingExtender(str(seen))})
+
+    exc = excinfo.value
+    assert _E2E_HOST in str(exc)
+    _assert_token_gone(exc, ChsRcFailingFG, caplog, (_E2E_HMAC, _E2E_KEY))
+    for secret in (_E2E_HMAC, _E2E_KEY):
+        assert secret not in seen.read_text()
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_read_credential_works_in_custom_saver_in_every_mode(mode: ParallelizationMode, flight_server: Any) -> None:
+    from mloda.user import mloda as mloda_api
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    api = mloda_api(
+        [Feature("chs_rc_artifact_a", options={HANDLE_KEY: _E2E_HANDLE})],
+        [PandasDataFrame],
+        data_access_collection=_vault_dac(),
+        plugin_collector=PluginCollector.enabled_feature_groups({ChsRcArtifactFG}),
+    )
+    api.run(parallelization_modes={mode}, flight_server=flight_server)
+
+    assert api.get_artifacts() == {"chs_rc_artifact_a": {"saved_host": _E2E_HOST}}
+
+
+@pytest.mark.timeout(15)
+def test_read_credential_raises_after_save_artifact_returns(flight_server: Any) -> None:
+    from mloda.user import mloda as mloda_api
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    _SAVER_CONTEXTS.clear()
+    api = mloda_api(
+        [Feature("chs_rc_artifact_a", options={HANDLE_KEY: _E2E_HANDLE})],
+        [PandasDataFrame],
+        data_access_collection=_vault_dac(),
+        plugin_collector=PluginCollector.enabled_feature_groups({ChsRcArtifactFG}),
+    )
+    api.run(parallelization_modes={ParallelizationMode.SYNC}, flight_server=flight_server)
+
+    assert len(_SAVER_CONTEXTS) == 1
+    with pytest.raises(CredentialReadRefused, match=_E2E_HANDLE):
+        read_credential(_E2E_HANDLE)
+    with pytest.raises(CredentialReadRefused, match=_E2E_HANDLE):
+        _SAVER_CONTEXTS[0].run(read_credential, _E2E_HANDLE)
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_a_missing_field_raises_the_typed_error_not_the_missing_column_message(
+    mode: ParallelizationMode, flight_server: Any
+) -> None:
+    with pytest.raises(CredentialFieldMissing) as excinfo:
+        _grant_run(ChsRcMissingFieldFG, "chs_rc_missing_field_a", mode, flight_server)
+
+    text = str(excinfo.value)
+    assert _E2E_HANDLE in text
+    assert "no_such_field" in text
+    assert "input_features" not in text
+    assert _E2E_HMAC not in text
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_an_undeclared_handle_is_refused_naming_the_declared_ones_in_every_mode(
+    mode: ParallelizationMode, flight_server: Any
+) -> None:
+    with pytest.raises(CredentialReadRefused) as excinfo:
+        _grant_run(ChsRcUndeclaredFG, "chs_rc_undeclared_a", mode, flight_server)
+
+    assert "not-declared" in str(excinfo.value)
+    assert _E2E_HANDLE in str(excinfo.value)
+    assert _E2E_HMAC not in str(excinfo.value)
+
+
+@pytest.mark.timeout(15)
+def test_an_extender_wrapping_the_step_sees_the_refusal_as_the_error(flight_server: Any) -> None:
+    _WINDOW_EVENTS.clear()
+    probe = _ReadProbeExtender({ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE})
+
+    with pytest.raises(CredentialReadRefused):
+        _grant_run(ChsRcUndeclaredFG, "chs_rc_undeclared_a", ParallelizationMode.SYNC, flight_server, {probe})
+
+    assert _events("ext:feature_group_calculate_feature") == ["refused", "raised:CredentialReadRefused"]
+
+
+_WINDOW_SHAPES = [
+    pytest.param(set(), id="no_extender"),
+    pytest.param({ExtenderHook.INPUT_DATA_LOAD}, id="fetch_extender_only"),
+    pytest.param({ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}, id="calculate_extender"),
+    pytest.param(
+        {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE, ExtenderHook.INPUT_DATA_LOAD}, id="calculate_and_fetch_extender"
+    ),
+]
+
+
+def _closed_window_load(data_access: Any, features: FeatureSet) -> str:
+    try:
+        _read_host(features.get_options_key(HANDLE_KEY))
+        _WINDOW_EVENTS.append(("closed_load", "readable"))
+    except CredentialReadRefused:
+        _WINDOW_EVENTS.append(("closed_load", "refused"))
+    return "loaded"
+
+
+class ChsClosedWindowFG(ChsSource):
+    """Dispatches a load while the readable window is closed (grant held, no readable scope)."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_closed_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        from mloda.core.abstract_plugins.components.credential_access import hidden_credentials
+        from mloda.core.abstract_plugins.components.input_data.input_data_load import dispatch_input_data_load
+
+        with hidden_credentials():
+            dispatch_input_data_load(
+                cls,
+                cls,
+                _closed_window_load,
+                "access",
+                features,
+                identity=lambda: "chs-closed-source",
+                data_access_format=lambda: "chs",
+            )
+        return pd.DataFrame({name: [1] for name in features.get_all_names()})
+
+
+@pytest.mark.timeout(15)
+def test_a_load_dispatched_while_the_window_is_closed_keeps_its_reads_refused(flight_server: Any) -> None:
+    _WINDOW_EVENTS.clear()
+    probe = _ReadProbeExtender({ExtenderHook.INPUT_DATA_LOAD})
+
+    _grant_run(ChsClosedWindowFG, "chs_closed_a", ParallelizationMode.SYNC, flight_server, {probe})
+
+    assert _events("closed_load") == ["refused"]
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("hooks", _WINDOW_SHAPES)
+def test_read_credential_is_open_in_calculate_an_awaited_task_and_the_load_but_not_in_extenders(
+    hooks: set[ExtenderHook], flight_server: Any
+) -> None:
+    _WINDOW_EVENTS.clear()
+    probe = _ReadProbeExtender(hooks)
+
+    _grant_run(ChsWindowFG, "chs_win_a", ParallelizationMode.SYNC, flight_server, {probe} if hooks else None)
+
+    assert _events("calculate") == [_E2E_HOST]
+    assert _events("async") == [_E2E_HOST]
+    assert _events("load") == [_E2E_HOST]
+    for hook in hooks:
+        assert _events(f"ext:{hook.value}") == ["refused"]
+    assert {name for name, _ in _WINDOW_EVENTS if name.startswith("ext:")} == {f"ext:{h.value}" for h in hooks}
+
+
+@pytest.mark.timeout(15)
+def test_validate_hooks_cannot_read_while_the_grant_is_held(flight_server: Any) -> None:
+    _WINDOW_EVENTS.clear()
+    probe = _ReadProbeExtender({ExtenderHook.VALIDATE_INPUT_FEATURE, ExtenderHook.VALIDATE_OUTPUT_FEATURE})
+
+    _grant_run(
+        (ChsWinConsumerFG, ChsReadSourceFG), "chs_win_consumer_a", ParallelizationMode.SYNC, flight_server, {probe}
+    )
+
+    assert "refused" in _events("ext:validate_input_feature")
+    assert "refused" in _events("ext:validate_output_feature")
+    assert "readable" not in _events("ext:validate_input_feature") + _events("ext:validate_output_feature")
+
+
+@pytest.mark.timeout(15)
+def test_no_hook_context_carries_a_credential_value(flight_server: Any) -> None:
+    _WINDOW_EVENTS.clear()
+    probe = _ReadProbeExtender(
+        {
+            ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+            ExtenderHook.VALIDATE_INPUT_FEATURE,
+            ExtenderHook.VALIDATE_OUTPUT_FEATURE,
+            ExtenderHook.INPUT_DATA_LOAD,
+        }
+    )
+
+    _grant_run(
+        (ChsWinConsumerFG, ChsReadSourceFG), "chs_win_consumer_a", ParallelizationMode.SYNC, flight_server, {probe}
+    )
+
+    assert {hook for hook, _, _ in probe.contexts} >= {"feature_group_calculate_feature", "input_data_load"}
+    for _, _, rendered in probe.contexts:
+        assert _E2E_HMAC not in rendered
+        assert _E2E_KEY not in rendered
+
+
+@pytest.mark.timeout(15)
+def test_the_hook_context_feature_group_is_the_same_with_and_without_a_calculate_extender(flight_server: Any) -> None:
+    def calculate_groups(hooks: set[ExtenderHook]) -> set[str | None]:
+        _WINDOW_EVENTS.clear()
+        probe = _ReadProbeExtender(hooks)
+        _grant_run(ChsWindowFG, "chs_win_a", ParallelizationMode.SYNC, flight_server, {probe})
+        return {group for hook, group, _ in probe.contexts if hook in {"feature_group_calculate_feature"}}
+
+    with_calculate = calculate_groups({ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE})
+    with_both = calculate_groups({ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE, ExtenderHook.INPUT_DATA_LOAD})
+
+    assert with_calculate == with_both
+    assert len(with_calculate) == 1
+    assert "ChsWindowFG" in str(next(iter(with_calculate)))

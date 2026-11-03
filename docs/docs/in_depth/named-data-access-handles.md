@@ -252,7 +252,7 @@ credential value) when:
   (see `dac.redact` above). This is refused for now; store a hex or base64 `str` and decode it in the plugin.
 
 `public_fields` is stored for later use and has no effect yet. A `str` default is a handle declared when the option
-is unset; `default=None` declares nothing when unset. Nothing reads the credential at run time yet.
+is unset; `default=None` declares nothing when unset. To read it at run time see [Runtime access versus match-time binding](#runtime-access-versus-match-time-binding).
 
 The handle name is not masked in `explain()`, `str(Options)` or the plan content hash, even under a credential-shaped
 key; other values under such a key stay masked. Name a handle by role (`pii-hmac-key`), never by environment or
@@ -265,6 +265,70 @@ Use placeholders of 8 characters or longer.
 A handle stays on the feature that declares it: input features inherit it only when their explicit `forward_group`
 allowlist names the key. A handle is never part of a feature name: a pattern that captures a handle key raises at class
 definition.
+
+## Runtime access versus match-time binding
+
+A source group binds a credential at match time. Any other group reads a declared handle at run time with
+`read_credential(handle)` from `mloda.provider`. The value never enters options, hashing, the plan or `explain()`.
+
+```py
+import pandas as pd
+from mloda.provider import FeatureGroup, credential_handle_spec, read_credential
+from mloda.user import Credential, DataAccessCollection, Feature, mloda
+
+# 1. Steward: register the credential under a role name.
+dac = DataAccessCollection(credentials={"pii-hmac-key": Credential(key="s3cr3t-hmac-key")})
+
+
+# 2. Provider: declare the handle option, read it in calculate_feature (or a helper it calls).
+class SignedIdFG(FeatureGroup):
+    PROPERTY_MAPPING = {"hmac_key_handle": credential_handle_spec("Credential handle for the HMAC key.")}
+
+    @classmethod
+    def calculate_feature(cls, data, features):
+        key = read_credential(features.get_options_key("hmac_key_handle"))["key"]
+        return pd.DataFrame({name: [f"signed-with-{len(key)}"] for name in features.get_all_names()})
+
+
+# 3. User: select the handle by name.
+feature = Feature("signed_id", options={"hmac_key_handle": "pii-hmac-key"})
+mloda.run_all([feature], data_access_collection=dac)
+```
+
+`read_credential` returns a `ResolvedCredential`: a mapping with item access, `get`, iteration and `**` unpacking, a
+fresh copy per read, and the attributes `handle`, `version`, `expires_at` and `store` (the last three are `None` for
+now). A missing field raises `CredentialFieldMissing` (a `KeyError`) naming handle and field. A read outside the window,
+or of a handle the step did not declare, raises `CredentialReadRefused` (not a `LookupError`).
+
+The window is open only inside `calculate_feature` (and what it awaits) and inside an artifact saver. It is closed in
+validate hooks, in extenders, between the two, and after the step. The stewards see the handle name in `explain()` and
+the plan lock, never a value; a refused read shows as the error of the step in any extender that wraps it.
+
+Test a group directly with `credentials_scope`:
+
+```py
+from mloda.provider import credentials_scope
+
+with credentials_scope({"pii-hmac-key": {"key": "test-hmac-key"}}):
+    SignedIdFG.calculate_feature(None, features)
+```
+
+Limits:
+
+- A plugin-started thread has no scope; run its work with `contextvars.copy_context().run` and join inside the step. A copied context used after the step fails closed.
+- An awaited asyncio task and `asyncio.to_thread` carry the scope; `run_in_executor` does not.
+- A value captured in a serialized UDF closure is outside every mask; read on the driver, never capture.
+- Cached or transformed values are outside the masks.
+- A lazy result (generator, lazy frame) that reads a credential after `calculate_feature` returns is refused; read before returning.
+- A saver's return value must never carry a credential.
+- `repr` redacts; `json.dumps`, pickle and deepcopy raise; `dict(cred)` copies the values, so never serialize it.
+- Trust boundary: code that declares a handle can read it; only the process worker is an OS boundary.
+- Verbose tracebacks show frame locals, and a reused worker may linger on a value.
+- Values under 8 characters are not masked.
+- `host` is over-masked for now.
+- A prepared session holds the registered value.
+- Plugin log lines are the provider's duty (`scrub_credentials`).
+- In a notebook the caller reads any environment variable on its own side.
 
 ## Common errors
 

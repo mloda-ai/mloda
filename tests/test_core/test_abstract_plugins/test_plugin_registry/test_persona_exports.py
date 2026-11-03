@@ -35,6 +35,7 @@ _SOURCE_MODULES: dict[str, str] = {
     "plan_lock": "mloda.core.api.plan_lock",
     "verified_context": "mloda.core.abstract_plugins.verified_context",
     "link": "mloda.core.abstract_plugins.components.link",
+    "credential_access": "mloda.core.abstract_plugins.components.credential_access",
 }
 
 
@@ -65,6 +66,13 @@ EXPORT_MATRIX: list[tuple[str, str, str]] = [
     ("steward", "PlanLockMismatchError", "plan_lock"),
     # Verified context seam: steward-only, platform-integrator surface.
     ("steward", "verified_context", "verified_context"),
+    # Runtime credential accessor: providers read, stewards see the refusal.
+    ("provider", "read_credential", "credential_access"),
+    ("provider", "credentials_scope", "credential_access"),
+    ("provider", "ResolvedCredential", "credential_access"),
+    ("provider", "CredentialReadRefused", "credential_access"),
+    ("provider", "CredentialFieldMissing", "credential_access"),
+    ("steward", "CredentialReadRefused", "credential_access"),
 ]
 
 _MATRIX_IDS = [f"{namespace}-{symbol}" for namespace, symbol, _source in EXPORT_MATRIX]

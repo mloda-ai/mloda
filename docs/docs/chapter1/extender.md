@@ -171,6 +171,8 @@ with context.activate():
     FactsExtender()(lambda: "result")
 ```
 
+Extenders cannot read credentials: `read_credential` raises inside a hook (see [Runtime access versus match-time binding](../in_depth/named-data-access-handles.md#runtime-access-versus-match-time-binding)).
+
 #### 6. Discovering Extenders
 
 To list all available extenders and their documentation, use the `get_extender_docs()` function from `mloda.steward`.

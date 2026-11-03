@@ -10,7 +10,8 @@ from mloda.core.abstract_plugins.components.options import Options
 class Features:
     """A class to create the features collection and do basic validation.
 
-    Input features inherit ALL consumer group options by default. Feature.forward_group=False
+    Input features inherit all consumer group options by default, except keys whose spec sets
+    forward_to_inputs=False (consumer_local_keys). Feature.forward_group=False
     isolates the input feature, a frozenset allowlist restricts the copy to the listed keys,
     and Feature.forward_group_exclude carves out single keys. Context flows only via the
     consumer-side Options.propagate_context_keys or cascade_context_keys push or the
@@ -25,6 +26,7 @@ class Features:
         child_options: Options | None = None,
         child_uuid: UUID | None = None,
         parent_domain: str | None = None,
+        consumer_local_keys: frozenset[str] = frozenset(),
     ) -> None:
         if isinstance(features, str):
             raise ValueError(
@@ -34,6 +36,7 @@ class Features:
         self.collection: list[Feature] = []
         self.child_uuid: UUID | None = child_uuid
         self.parent_domain: str | None = parent_domain
+        self.consumer_local_keys: frozenset[str] = consumer_local_keys
 
         self.parent_uuids: set[UUID] = set()
 
@@ -88,6 +91,7 @@ class Features:
             forward_group_exclude=feature.forward_group_exclude,
             inherit_context_keys=feature.inherit_context_keys,
             owner=str(feature.name),
+            consumer_local_keys=self.consumer_local_keys,
         )
 
     def check_duplicate_feature(self, feature: Feature) -> None:

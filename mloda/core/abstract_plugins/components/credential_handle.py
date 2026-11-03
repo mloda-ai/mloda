@@ -46,12 +46,21 @@ class CredentialHandleSpec(PropertySpec):
 
     required_fields: tuple[str, ...] = ()
     public_fields: tuple[str, ...] = ()
+    forward_to_inputs: bool = False
 
     def __post_init__(self) -> None:
         super().__post_init__()
         prefix = f"CredentialHandleSpec({self.explanation!r})"
-        if self.context is not False or self.strict_validation is not True or self.caller_settable is not False:
-            raise ValueError(f"{prefix}: context=False, strict_validation=True and caller_settable=False are fixed.")
+        if (
+            self.context is not False
+            or self.strict_validation is not True
+            or self.caller_settable is not False
+            or self.forward_to_inputs is not False
+        ):
+            raise ValueError(
+                f"{prefix}: context=False, strict_validation=True, caller_settable=False and "
+                f"forward_to_inputs=False are fixed."
+            )
         if self.element_validator is not _handle_element_validator:
             raise ValueError(f"{prefix}: the handle element validator is fixed.")
         for name in ("match_guard", "allowed_values", "required_when", "name_converter"):
@@ -76,6 +85,7 @@ def credential_handle_spec(
         strict_validation=True,
         element_validator=_handle_element_validator,
         caller_settable=False,
+        forward_to_inputs=False,
         required_fields=required_fields,
         public_fields=public_fields,
     )

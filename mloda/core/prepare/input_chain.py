@@ -18,6 +18,7 @@ from mloda.core.abstract_plugins.components.input_data.match_cache import run_ca
 from mloda.core.abstract_plugins.components.input_data.reader_probe import current_reader_probe_scope
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.property_spec import unforwarded_keys
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import current_implementations
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -267,6 +268,7 @@ def input_features_collection(
         child_options=parent.options,
         child_uuid=parent.uuid,
         parent_domain=parent.domain.name if parent.domain is not None else None,
+        consumer_local_keys=unforwarded_keys(feature_group.PROPERTY_MAPPING),
     )
 
 

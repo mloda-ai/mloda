@@ -557,6 +557,64 @@ class TestInheritFromForwardGroupExclude:
         assert child.group["kg_backend"] == "neo4j"
 
 
+class TestInheritFromConsumerLocalKeys:
+    """consumer_local_keys stay on the consumer under None/True and flow only when an allowlist names them."""
+
+    _LOCAL = frozenset({"vault"})
+
+    @pytest.mark.parametrize("forward_group", [None, True])
+    def test_local_key_is_not_forwarded_nor_returned(self, forward_group: bool | None) -> None:
+        consumer = Options(group={"vault": "v1", "top_k": 5})
+        child = Options()
+
+        returned = child.inherit_from(consumer, forward_group=forward_group, consumer_local_keys=self._LOCAL)
+
+        assert child.group == {"top_k": 5}
+        assert returned == frozenset({"top_k"})
+        assert child.inherited_group_keys == frozenset({"top_k"})
+
+    def test_allowlist_naming_a_local_key_forwards_it(self) -> None:
+        consumer = Options(group={"vault": "v1", "top_k": 5})
+        child = Options()
+
+        returned = child.inherit_from(consumer, forward_group=frozenset({"vault"}), consumer_local_keys=self._LOCAL)
+
+        assert child.group == {"vault": "v1"}
+        assert returned == frozenset({"vault"})
+
+    def test_local_key_does_not_conflict_with_a_differing_child_value(self) -> None:
+        consumer = Options(group={"vault": "v1"})
+        child = Options(group={"vault": "v2"})
+
+        child.inherit_from(consumer, consumer_local_keys=self._LOCAL)
+
+        assert child.group == {"vault": "v2"}
+
+    def test_exclude_and_false_behave_as_before(self) -> None:
+        consumer = Options(group={"vault": "v1", "top_k": 5, "region": "eu"})
+        excluded = Options()
+        isolated = Options()
+
+        excluded.inherit_from(consumer, forward_group_exclude=frozenset({"top_k"}), consumer_local_keys=self._LOCAL)
+        isolated.inherit_from(consumer, forward_group=False, consumer_local_keys=self._LOCAL)
+
+        assert excluded.group == {"region": "eu"}
+        assert isolated.group == {}
+
+    def test_context_flows_are_unaffected(self) -> None:
+        consumer = Options(
+            group={"vault": "v1"},
+            context={"tenant": "acme", "env": "prod"},
+            propagate_context_keys=frozenset({"env"}),
+        )
+        child = Options()
+
+        child.inherit_from(consumer, inherit_context_keys=frozenset({"tenant"}), consumer_local_keys=self._LOCAL)
+
+        assert child.context == {"tenant": "acme", "env": "prod"}
+        assert "vault" not in child.group
+
+
 class TestInheritedGroupKeys:
     """
     Test suite for Options.inherited_group_keys.

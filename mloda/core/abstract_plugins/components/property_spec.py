@@ -96,6 +96,9 @@ class PropertySpec:
     name_converter: Callable[[str], Any] | None = None
     # Refused for untrusted service callers even when allow-listed.
     caller_settable: bool = True
+    # False keeps a group option on the feature that declares it; input features never inherit it
+    # unless an explicit forward_group allowlist names it.
+    forward_to_inputs: bool = True
 
     def __post_init__(self) -> None:
         prefix = f"PropertySpec({self.explanation!r})"
@@ -135,6 +138,11 @@ class PropertySpec:
 
         if not isinstance(self.caller_settable, bool):
             raise ValueError(f"{prefix}: caller_settable must be a bool, got {type(self.caller_settable).__name__}.")
+
+        if not isinstance(self.forward_to_inputs, bool):
+            raise ValueError(
+                f"{prefix}: forward_to_inputs must be a bool, got {type(self.forward_to_inputs).__name__}."
+            )
 
         if self.element_validator is not None and not callable(self.element_validator):
             raise ValueError(f"{prefix}: element_validator must be callable.")
@@ -252,6 +260,7 @@ def property_spec(
     deferred_binding: bool = False,
     name_converter: Callable[[str], Any] | None = None,
     caller_settable: bool = True,
+    forward_to_inputs: bool = True,
 ) -> PropertySpec:
     """Build a ``PropertySpec``; the ``strict=`` keyword sets the ``strict_validation`` field."""
     return PropertySpec(
@@ -268,4 +277,14 @@ def property_spec(
         deferred_binding=deferred_binding,
         name_converter=name_converter,
         caller_settable=caller_settable,
+        forward_to_inputs=forward_to_inputs,
+    )
+
+
+def unforwarded_keys(mapping: Any) -> frozenset[str]:
+    """PROPERTY_MAPPING keys whose spec keeps the option off input features."""
+    if not isinstance(mapping, Mapping):
+        return frozenset()
+    return frozenset(
+        key for key, spec in mapping.items() if isinstance(spec, PropertySpec) and not spec.forward_to_inputs
     )

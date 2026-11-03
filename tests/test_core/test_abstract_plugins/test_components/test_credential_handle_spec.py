@@ -1,5 +1,6 @@
 """credential_handle_spec: plan-time handle validation, plan records and display."""
 
+import re
 from abc import abstractmethod
 from collections.abc import Callable
 from typing import Any
@@ -9,13 +10,16 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsRawSecretFG, ChsSource, ChsVaultFG
 from mloda.provider import (
     ComputeFramework,
     FeatureGroup,
+    PropertySpec,
     credential_handle_spec,
+    property_spec,
 )
 from mloda.steward import plan_content_hash
 from mloda.user import Credential, Feature, FeatureName, FilterType, GlobalFilter, PluginCollector, mloda
@@ -525,3 +529,253 @@ class TestDisplay:
         stored = next(iter(session.engine.feature_group_collection[ChsRawSecretFG])).options
         assert SECRET not in str(stored)
         assert stored.credential_handle_keys == frozenset()
+
+
+class ChsConsumerFG(FeatureGroup):
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Consumer handle.")}
+    INPUT_NAME = "chs_src_a"
+    FORWARD: frozenset[str] | None = None
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_consumer_a"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(self.INPUT_NAME, forward_group=self.FORWARD)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: Any) -> Any:
+        return data
+
+
+class ChsConsumerTwoFG(ChsConsumerFG):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_consumer_b"}
+
+
+class ChsConsumerOptUpFG(ChsConsumerFG):
+    INPUT_NAME = "chs_up_opt"
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_consumer_opt"}
+
+
+class ChsConsumerAllowFG(ChsConsumerFG):
+    INPUT_NAME = "chs_up_opt"
+    FORWARD = frozenset({HANDLE_KEY})
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_consumer_allow"}
+
+
+class ChsConsumerReqUpFG(ChsConsumerFG):
+    INPUT_NAME = "chs_up_req"
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_consumer_req"}
+
+
+class ChsConsumerStrDefaultFG(ChsConsumerFG):
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Defaulted consumer handle.", default="vault-default")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_consumer_strdef"}
+
+
+class ChsPlainSourceFG(ChsSource):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_src_a"}
+
+
+class ChsOptionalUpstreamFG(ChsSource):
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Optional upstream handle.", default=None)}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_up_opt"}
+
+
+class ChsRequiredUpstreamFG(ChsSource):
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Required upstream handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_up_req"}
+
+
+def _consumer(name: str, handle: str | None = "vault-a") -> Feature:
+    return Feature(name, options={} if handle is None else {HANDLE_KEY: handle})
+
+
+def _reader_group_keys(session: Any, group: type[FeatureGroup]) -> set[str]:
+    return {key for feature in session.engine.feature_group_collection[group] for key in feature.options.group}
+
+
+class TestHandleStaysOnTheConsumer:
+    """A handle option is never forwarded to input features."""
+
+    def test_the_reader_step_carries_no_handle_and_the_consumer_records_it(self) -> None:
+        dac = _dac(**{"vault-a": {"key": SECRET}})
+        plugins = _plugins(ChsConsumerFG, ChsPlainSourceFG)
+
+        session = _prepare([_consumer("chs_consumer_a")], dac, plugins)
+        plan = _explain([_consumer("chs_consumer_a")], dac, plugins)
+
+        assert [s.credential_handles for s in _steps(session, ChsConsumerFG)] == [("vault-a",)]
+        assert [s.credential_handles for s in _steps(session, ChsPlainSourceFG)] == [()]
+        assert HANDLE_KEY not in _reader_group_keys(session, ChsPlainSourceFG)
+        reader = next(s for s in plan if s.feature_group is ChsPlainSourceFG)
+        assert reader.feature_set_options is not None
+        assert HANDLE_KEY not in reader.feature_set_options.group
+        assert "vault-a" not in repr(reader)
+
+    def test_two_consumers_with_different_handles_share_one_reader_step(self) -> None:
+        dac = _dac(**{"vault-a": {"key": SECRET}, "vault-b": {"key": OTHER_SECRET}})
+
+        session = _prepare(
+            [_consumer("chs_consumer_a", "vault-a"), _consumer("chs_consumer_b", "vault-b")],
+            dac,
+            _plugins(ChsConsumerFG, ChsConsumerTwoFG, ChsPlainSourceFG),
+        )
+
+        assert len(_steps(session, ChsPlainSourceFG)) == 1
+        assert sorted(s.credential_handles for g in (ChsConsumerFG, ChsConsumerTwoFG) for s in _steps(session, g)) == [
+            ("vault-a",),
+            ("vault-b",),
+        ]
+
+    def test_an_optional_upstream_declaring_the_same_key_records_nothing(self) -> None:
+        dac = _dac(**{"vault-a": {"key": SECRET}})
+
+        session = _prepare([_consumer("chs_consumer_opt")], dac, _plugins(ChsConsumerOptUpFG, ChsOptionalUpstreamFG))
+
+        assert [s.credential_handles for s in _steps(session, ChsOptionalUpstreamFG)] == [()]
+
+    def test_a_required_upstream_declaring_the_same_key_does_not_receive_it(self) -> None:
+        dac = _dac(**{"vault-a": {"key": SECRET}})
+
+        with pytest.raises(
+            ValueError,
+            match=r"(?s)No feature groups found for feature name: 'chs_up_req'.*required option\(s\) chs_vault_token are absent",
+        ):
+            _prepare([_consumer("chs_consumer_req")], dac, _plugins(ChsConsumerReqUpFG, ChsRequiredUpstreamFG))
+
+    def test_an_explicit_allowlist_on_the_input_feature_forwards_it(self) -> None:
+        dac = _dac(**{"vault-a": {"key": SECRET}})
+
+        session = _prepare([_consumer("chs_consumer_allow")], dac, _plugins(ChsConsumerAllowFG, ChsOptionalUpstreamFG))
+
+        assert [s.credential_handles for s in _steps(session, ChsOptionalUpstreamFG)] == [("vault-a",)]
+
+    def test_a_plain_option_with_forward_to_inputs_false_is_not_forwarded(self) -> None:
+        class ChsConsumerPlainFG(ChsConsumerFG):
+            PROPERTY_MAPPING = {
+                "chs_local_opt": property_spec("Local option.", default=None, context=False, forward_to_inputs=False)
+            }
+
+            @classmethod
+            def feature_names_supported(cls) -> set[str]:
+                return {"chs_consumer_plain"}
+
+        feature = Feature("chs_consumer_plain", options={"chs_local_opt": "local"})
+
+        session = _prepare([feature], None, _plugins(ChsConsumerPlainFG, ChsPlainSourceFG))
+
+        assert "chs_local_opt" not in _reader_group_keys(session, ChsPlainSourceFG)
+
+    def test_a_str_default_on_the_consumer_handle_is_not_forwarded(self) -> None:
+        dac = _dac(**{"vault-default": {"key": SECRET}})
+
+        session = _prepare(
+            [_consumer("chs_consumer_strdef", None)], dac, _plugins(ChsConsumerStrDefaultFG, ChsPlainSourceFG)
+        )
+
+        assert [s.credential_handles for s in _steps(session, ChsConsumerStrDefaultFG)] == [("vault-default",)]
+        assert HANDLE_KEY not in _reader_group_keys(session, ChsPlainSourceFG)
+
+
+_CAPTURE = f"(?P<{HANDLE_KEY}>\\w+)"
+_PATTERN_FORMS = [
+    pytest.param(lambda: f".*__{_CAPTURE}_chsb$", id="str"),
+    pytest.param(lambda: re.compile(f".*__{_CAPTURE}_chsb$"), id="compiled"),
+    pytest.param(lambda: [r"^chsb_(\d+)$", f".*__{_CAPTURE}_chsb$"], id="list"),
+]
+_HANDLE_MAPPING: dict[str, PropertySpec] = {HANDLE_KEY: credential_handle_spec("Handle.", default=None)}
+
+
+class TestHandleIsNeverBoundFromTheName:
+    """A named capture over a handle key is refused at class definition."""
+
+    @pytest.mark.parametrize("make_pattern", _PATTERN_FORMS)
+    def test_a_mixin_group_capturing_the_handle_key_is_refused(self, make_pattern: Callable[[], Any]) -> None:
+        pattern = make_pattern()
+
+        with pytest.raises(ValueError) as exc:
+
+            class ChsBoundMixinGroupB1(FeatureChainParserMixin):
+                PREFIX_PATTERN = pattern
+                PROPERTY_MAPPING = _HANDLE_MAPPING
+
+        assert "ChsBoundMixinGroupB1" in str(exc.value)
+        assert HANDLE_KEY in str(exc.value)
+        assert "feature name" in str(exc.value)
+
+    @pytest.mark.parametrize("make_pattern", _PATTERN_FORMS)
+    def test_a_plain_group_capturing_the_handle_key_in_a_suffix_pattern_is_refused(
+        self, make_pattern: Callable[[], Any]
+    ) -> None:
+        pattern = make_pattern()
+
+        with pytest.raises(ValueError) as exc:
+
+            class ChsBoundPlainGroupB2(FeatureGroup):
+                SUFFIX_PATTERN = pattern
+                PROPERTY_MAPPING = _HANDLE_MAPPING
+
+        assert "ChsBoundPlainGroupB2" in str(exc.value)
+        assert HANDLE_KEY in str(exc.value)
+        assert "feature name" in str(exc.value)
+
+    def test_a_plain_group_capturing_the_handle_key_in_a_prefix_pattern_is_refused(self) -> None:
+        with pytest.raises(ValueError) as exc:
+
+            class ChsBoundPlainGroupB3(FeatureGroup):
+                PREFIX_PATTERN = f".*__{_CAPTURE}_chsb$"
+                PROPERTY_MAPPING = _HANDLE_MAPPING
+
+        assert "ChsBoundPlainGroupB3" in str(exc.value)
+        assert HANDLE_KEY in str(exc.value)
+
+    def test_the_same_group_without_the_capture_defines_fine(self) -> None:
+        class ChsUnboundMixinGroupB4(FeatureChainParserMixin):
+            PREFIX_PATTERN = r".*__\w+_chsb4$"
+            PROPERTY_MAPPING = _HANDLE_MAPPING
+
+        assert ChsUnboundMixinGroupB4.PROPERTY_MAPPING is _HANDLE_MAPPING
+
+    def test_a_positional_pattern_never_binds_the_handle(self) -> None:
+        class ChsPositionalGroupB5(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = r".*__(\w+)_chsb5$"
+            PROPERTY_MAPPING = _HANDLE_MAPPING
+
+        assert HANDLE_KEY not in ChsPositionalGroupB5.name_bindings("col__abc_chsb5")
+
+    def test_an_unrelated_named_capture_beside_a_handle_key_defines_fine(self) -> None:
+        class ChsOtherCaptureGroupB6(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = r".*__(?P<chs_other_key>\w+)_chsb6$"
+            PROPERTY_MAPPING = {
+                **_HANDLE_MAPPING,
+                "chs_other_key": PropertySpec("Bound from the name.", context=True),
+            }
+
+        assert ChsOtherCaptureGroupB6.name_bindings("col__abc_chsb6") == {"chs_other_key": "abc"}

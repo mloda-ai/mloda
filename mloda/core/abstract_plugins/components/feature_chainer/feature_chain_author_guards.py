@@ -17,6 +17,7 @@ import logging
 import re
 from typing import Any
 
+from mloda.core.abstract_plugins.components.credential_handle import CredentialHandleSpec
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
@@ -144,6 +145,16 @@ def validate_name_binding(owner: type[Any]) -> None:
     patterns = _effective_prefix_patterns(owner)
     if not patterns:
         return
+
+    for pattern in _flatten_patterns(patterns):
+        named, _total = _pattern_named_and_total_groups(pattern)
+        for key in sorted(named):
+            if isinstance(property_mapping.get(key), CredentialHandleSpec):
+                raise ValueError(
+                    f"{owner.__name__}: PREFIX_PATTERN/SUFFIX_PATTERN captures '{key}', a credential handle. "
+                    f"A credential handle is set by the operator in options or by the plugin's default, "
+                    f"never by the feature name."
+                )
 
     needs_overlap_check = False
     for pattern in _flatten_patterns(patterns):

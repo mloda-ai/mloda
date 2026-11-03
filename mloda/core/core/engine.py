@@ -796,7 +796,9 @@ class Engine:
             if not split_keys:
                 continue
             buckets: dict[str, list[Feature]] = defaultdict(list)
-            for member in sorted(collection, key=lambda f: str(f.uuid)):
+            for member in sorted(
+                collection, key=lambda f: (str(f._split_context_hashable(split_keys)), str(f.data_type), str(f.uuid))
+            ):
                 buckets[str(member.name)].append(member)
             for name, members in sorted(buckets.items()):
                 for i, a in enumerate(members):
@@ -805,6 +807,8 @@ class Engine:
                         if (
                             a.options == b.options
                             and a.compute_frameworks == b.compute_frameworks
+                            and a.data_type == b.data_type
+                            and a._input_data_match_key() == b._input_data_match_key()
                             and parents
                             and parents == self.feature_link_parents.get(b.uuid)
                             and a._split_context_hashable(split_keys) != b._split_context_hashable(split_keys)

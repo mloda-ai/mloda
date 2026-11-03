@@ -456,6 +456,29 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         assert names.count(MDB_DIRECT) == 1
         assert names.count(MDB_CHAINED) == 1
 
+    @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
+    @pytest.mark.parametrize(
+        "direct_data_type, direct_options",
+        [(DataType.INT64, None), (None, Options(context={"x": 1}))],
+        ids=["typed_direct", "direct_with_same_value"],
+    )
+    def test_propagated_context_with_direct_succeeds(
+        self, direct_first: bool, direct_data_type: DataType | None, direct_options: Options | None
+    ) -> None:
+        propagate = Options(context={"x": 1}, propagate_context_keys=frozenset({"x"}))
+        results = _run_direct_and_chained(
+            [],
+            framework=PyArrowTable,
+            append_columns=True,
+            direct_first=direct_first,
+            direct_data_type=direct_data_type,
+            chained_options=propagate,
+            direct_options=direct_options,
+        )
+        names = [name for table in results for name in table.column_names]
+        assert names.count(MDB_DIRECT) == 1
+        assert names.count(MDB_CHAINED) == 1
+
     def test_explicit_option_agreeing_with_name_is_observed(self) -> None:
         name = "mdb_src__mdbop_q_b"
         seen = _run_two_keys(True, name, Options(context={MDB_FIRST: "q"}))

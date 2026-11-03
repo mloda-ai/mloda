@@ -573,7 +573,7 @@ class SourceFeatureGroup(FeatureGroup):
                 if declared is None:
                     declared = cls._declared_name(base_name)
                 if not declared:
-                    undeclared = undeclared or pointed
+                    undeclared = pointed
                     continue
             if not all(key in options for key in route.required_options):
                 if foreign is None:
@@ -730,7 +730,7 @@ class SourceFeatureGroup(FeatureGroup):
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.POINTED_ELSEWHERE
             )
-        elif pointed and undeclared:
+        elif undeclared and not selected:
             reason = f"'{base_name}' is not a name {cls.get_class_name()} declares"
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.NAME_NOT_DECLARED

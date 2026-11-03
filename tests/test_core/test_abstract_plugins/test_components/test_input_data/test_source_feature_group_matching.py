@@ -1091,6 +1091,15 @@ class _TableAndOptionRouteFG(ToySourceBase):
     )
 
 
+class _DeclaredAndCheckedRouteFG(ToyDeclaredFG):
+    """A DECLARED route plus a CHECKED route that still searches for an undeclared name."""
+
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
+        *ToyDeclaredFG.CLAIM_ROUTES,
+        ClaimRoute("toy", NamePolicy.CHECKED, True),
+    )
+
+
 class TestPointedRoutesDeclineWithReason:
     @pytest.mark.parametrize("group", [ToySourceFG, _TableAndOptionRouteFG])
     def test_pointed_route_without_a_source_records_an_input_data_rejection(self, group: type) -> None:
@@ -1111,6 +1120,17 @@ class TestPointedRoutesDeclineWithReason:
         assert elimination.stage == "input_data"
         assert "toyfmt_undeclared" in elimination.reason
         assert elimination.code is CoreDeclineCode.NAME_NOT_DECLARED
+
+    def test_pointed_declared_and_checked_routes_with_no_source_record_source_not_found(self) -> None:
+        group = _DeclaredAndCheckedRouteFG
+        feature = Feature("toyfmt_undeclared", feature_group=group)
+        result = _identify(feature, None, group)
+
+        assert result.identified == {}
+        elimination = result.eliminations[group]
+        assert elimination.stage == "input_data"
+        assert "was pointed at but found no source" in elimination.reason
+        assert elimination.code is CoreDeclineCode.SOURCE_NOT_FOUND
 
 
 class _AbstractRouted(SourceFeatureGroup):

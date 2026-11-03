@@ -20,6 +20,9 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.implementation import (
     Implementation,
+    _is_concrete,
+    _is_pair,
+    current_implementations,
     loaded_implementations,
 )
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -31,7 +34,9 @@ from mloda.provider import SourceFeatureGroup
 from mloda.user import DataAccessCollection, Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.helpers.subclass_walks import collect_until_dead
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.user import PluginLoader
+from tests.helpers.subclass_walks import collect_until_dead, count_root_walks
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group import (
     OpToyBareFG,
     OpToyFG,
@@ -771,9 +776,12 @@ class TestImplementationDefinition:
         loaded_implementations()
         calls.clear()
         pair_calls.clear()
+        implementation_walks = count_root_walks(monkeypatch, Implementation)
         loaded_implementations()
+        list(current_implementations())
         assert calls == []
         assert pair_calls == []
+        assert implementation_walks == []
 
         new_impl = make_implementation(ToySourceFG, PythonDictFramework, _sentinel)
         calls.clear()
@@ -785,6 +793,20 @@ class TestImplementationDefinition:
         assert pair_calls == []
         calls.clear()
         del new_impl
+
+    def test_loaded_implementations_equals_the_walk(self) -> None:
+        PluginLoader.all()
+
+        def walked() -> set[type]:
+            return {i for i in get_all_subclasses(Implementation) if _is_concrete(i) and _is_pair(i)}
+
+        loaded = set(loaded_implementations())
+        if loaded != walked():
+            gc.collect()
+            loaded = set(loaded_implementations())
+
+        assert loaded == walked()
+        assert len(loaded) > 0
 
     def test_class_made_concrete_by_a_decorator_is_loaded(self) -> None:
         def add_calculate(cls: Any) -> Any:

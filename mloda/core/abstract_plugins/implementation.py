@@ -14,7 +14,8 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import (
     BaseFeatureGroupVersion,
     ThirdPartyVersionMode,
 )
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses, is_nominal_subclass
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
+from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
@@ -23,6 +24,8 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 
 G = TypeVar("G", bound=FeatureGroup)
+
+_registry: SubclassRegistry[type["Implementation[Any]"]] = SubclassRegistry()
 
 
 _CONCRETE_VERDICTS: weakref.WeakKeyDictionary[type, bool] = weakref.WeakKeyDictionary()
@@ -88,7 +91,11 @@ def _is_pair(cls: Any) -> bool:
 
 
 class Implementation(ABC, Generic[G]):
-    """Names its pair with feature_group and compute_framework and computes it in calculate."""
+    """Names its pair with feature_group and compute_framework and computes it in calculate.
+
+    A subclass that defines `__init_subclass__` must call `super().__init_subclass__()`, since that call is what
+    registers it as a loaded implementation.
+    """
 
     feature_group: ClassVar[type[FeatureGroup]]
     compute_framework: ClassVar[type[ComputeFramework]]
@@ -102,6 +109,7 @@ class Implementation(ABC, Generic[G]):
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         if _has_abstract_member(cls):
+            _registry.add(cls)  # a decorator may still make it concrete
             return
         group: Any = getattr(cls, "feature_group", None)
         framework = getattr(cls, "compute_framework", None)
@@ -117,6 +125,7 @@ class Implementation(ABC, Generic[G]):
             )
         if not is_nominal_subclass(framework, ComputeFramework):
             raise TypeError(f"{cls.__name__} must set compute_framework to a ComputeFramework subclass.")
+        _registry.add(cls)
 
     @classmethod
     def version(cls) -> str:
@@ -179,8 +188,8 @@ def serving_implementation(
 
 
 def loaded_implementations() -> list[type[Implementation[Any]]]:
-    """Concrete loaded Implementation classes naming a valid pair (a rejected subclass lingers until collected)."""
-    return [impl for impl in get_all_subclasses(Implementation) if _is_concrete(impl) and _is_pair(impl)]
+    """Concrete loaded Implementation classes naming a valid pair."""
+    return [impl for impl in _registry.members() if _is_concrete(impl) and _is_pair(impl)]
 
 
 _ACCESSIBLE: ContextVar[frozenset[type[Implementation[Any]]] | None] = ContextVar(

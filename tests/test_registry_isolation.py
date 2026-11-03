@@ -596,6 +596,7 @@ class TestReclaimReleasedImplementations:
         assert leaked == []
         assert 2 not in collections, f"a released implementation must not need generation 2, got {collections}"
         assert name not in {c.__name__ for c in IMPLEMENTATIONS.live_since(mark)}
+        assert name not in {c.__name__ for c in loaded_implementations()}
 
     def test_a_retained_loaded_implementation_is_reported(self) -> None:
         mark = IMPLEMENTATIONS.mark()

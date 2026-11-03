@@ -28,7 +28,8 @@ def source_applicability(group: type[SourceFeatureGroup], has_pointer: bool) -> 
     routes = group.CLAIM_ROUTES
     return SourceApplicability(
         pointer=has_pointer,
-        data_access_handle=not any(CONNECTION_HANDLE_OPTION in route.required_options for route in routes),
+        data_access_handle=any(route.searched for route in routes)
+        and not any(CONNECTION_HANDLE_OPTION in route.required_options for route in routes),
         query_route=group.serves_query_text(),
         checked_route=any(route.names is NamePolicy.CHECKED for route in routes),
     )

@@ -6,8 +6,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components import utils
-from mloda._testing.source.source_suite import _open_rejection_window
-from mloda.provider import MatchRejection
+from mloda.provider import MatchRejection, collect_match_rejections
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
@@ -128,7 +127,8 @@ def set_acero_alignment_handling() -> Any:
 @pytest.fixture
 def rejection_window() -> Iterator[dict[str, MatchRejection]]:
     """Open a MATCH_REJECTION_REASONS window around one matcher call, mirroring the engine's per-candidate window."""
-    yield from _open_rejection_window()
+    with collect_match_rejections() as window:
+        yield window
 
 
 @pytest.fixture(scope="session")

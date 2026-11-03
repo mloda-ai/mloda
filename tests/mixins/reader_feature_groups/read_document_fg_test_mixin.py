@@ -25,7 +25,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
 from mloda._testing.source.source_suite import (
     SourceFeatureGroupTestMixin,
-    _LoadCapture,
+    LoadCapture,
 )
 
 if TYPE_CHECKING:
@@ -395,7 +395,7 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin):
         monkeypatch.chdir(self.tmp_path)
         relative = os.path.relpath(self.own_path, self.tmp_path)
         assert not os.path.isabs(relative)
-        capture = _LoadCapture()
+        capture = LoadCapture()
         dac = DataAccessCollection(files={"rel_handle": relative})
         result = self._run([f"{self._group_name()}{SOURCE}"], dac, extender=capture)
         assert result == [{f"{self._group_name()}{SOURCE}": [relative]}]

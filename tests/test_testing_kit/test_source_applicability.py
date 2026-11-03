@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from mloda._testing.source_applicability import NO_POINTER, SourceApplicability, source_applicability
+from mloda._testing.source_applicability import SourceApplicability, source_applicability
 from mloda.core.abstract_plugins.components.data_access_collection import CONNECTION_HANDLE_OPTION
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy
 from mloda.provider import SourceFeatureGroup
@@ -34,9 +34,9 @@ def _pointed_only() -> ClaimRoute:
     return ClaimRoute("probe", NamePolicy.OPEN, False)
 
 
-def test_no_pointer_sentinel_is_a_distinct_object() -> None:
-    assert NO_POINTER is not None
-    assert NO_POINTER is NO_POINTER
+def test_a_group_with_no_searched_route_has_no_data_access_handle() -> None:
+    result = source_applicability(_make_group(_pointed_only()), True)
+    assert result.data_access_handle is False
 
 
 def test_a_plain_searched_group_with_a_pointer() -> None:

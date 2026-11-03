@@ -2,7 +2,7 @@
 
 Without its pyarrow submodule a group raises ImportError naming mloda[pyarrow] from column_names,
 describe_columns, load_neutral and count_rows, and declines at match time with a rejection naming it.
-Unprefixed so pytest skips it standalone. Imports pytest and pyarrow on purpose (the pytest-dependent subpackage).
+Unprefixed so pytest skips it standalone. Imports pytest at top on purpose (the pytest-dependent subpackage).
 """
 
 import os

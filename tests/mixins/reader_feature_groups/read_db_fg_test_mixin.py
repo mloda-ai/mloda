@@ -31,7 +31,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow i
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
 from mloda._testing.source.source_suite import (
     SourceFeatureGroupTestMixin,
-    _LoadCapture,
+    LoadCapture,
 )
 
 if TYPE_CHECKING:
@@ -668,7 +668,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
 
     def test_db_input_data_load_identity_ignores_credential_values(self) -> None:
         path = self._make("identity_db", {"identity_table": {"toyfmt_identity": [1]}})
-        capture = _LoadCapture()
+        capture = LoadCapture()
 
         mloda.run_all(
             ["toyfmt_identity"],
@@ -726,7 +726,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
 
         expected = {"toyfmt_qa": [0, 10], "toyfmt_qc": [2, 12]}
         for framework in (PyArrowTable, PythonDictFramework):
-            capture = _LoadCapture()
+            capture = LoadCapture()
             result = mloda.run_all(
                 [self._query_feature(name, query, credential) for name in ("toyfmt_qa", "toyfmt_qc")],
                 compute_frameworks=[framework],

@@ -1,10 +1,11 @@
 """Contract tests every SourceFeatureGroup implementation can inherit; a host sets the attributes and builders.
 
-Imports pytest and pyarrow at top on purpose: this subpackage is the pytest-dependent part of mloda._testing.
+Imports pytest at top on purpose (pyarrow only through a guarded plugin import): the pytest-dependent part of mloda._testing.
 Not collected on its own (no Test prefix).
 """
 
 import copy
+import dataclasses
 import gc
 import importlib
 from collections.abc import Callable, Iterator
@@ -40,7 +41,7 @@ from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
-class _LoadCapture(Extender):
+class LoadCapture(Extender):
     def __init__(self) -> None:
         self.priority = 100
         self.contexts: list[HookContext] = []
@@ -56,7 +57,7 @@ class _LoadCapture(Extender):
         return result
 
 
-class _MatchCapture(Extender):
+class MatchCapture(Extender):
     def __init__(self) -> None:
         self.priority = 100
         self.contexts: list[HookContext] = []
@@ -71,10 +72,10 @@ class _MatchCapture(Extender):
         return func(*args, **kwargs)
 
 
-class _MatchRefuseAll(Extender):
+class MatchRefuseAll(Extender):
     def __init__(self) -> None:
         self.priority = 100
-        self.name = "mixin_match_gate"
+        self.name = "suite_match_gate"
         self.never_fall_back = True
 
     def wraps(self) -> set[ExtenderHook]:
@@ -143,7 +144,14 @@ def _implementation_scope() -> Iterator[Callable[..., type[Implementation[Any]]]
 
 
 class SourceFeatureGroupTestMixin:
-    """Contract of every source group; the concrete class supplies the hooks below."""
+    """Contract tests of a source group.
+
+    Required: feature_group_class, present_column, missing_column, expected_source, own_dac, foreign_dac,
+    other_pointer, foreign_handle_dac, known_handles_dac, and own_pointer (return NO_POINTER for a group that
+    takes no pointer). Optional: data_access_handle (None derives it from the routes), pointed_source (None
+    claims with own_pointer), load_framework, context_options. rejection_window and make_implementation are
+    fixture methods so a host in any package gets them without this repo's conftest.
+    """
 
     feature_group_class: type[SourceFeatureGroup]
     present_column: str
@@ -151,6 +159,8 @@ class SourceFeatureGroupTestMixin:
     expected_source: str
     load_framework: type[ComputeFramework] = PyArrowTable
     context_options: ClassVar[dict[str, Any]] = {}
+    data_access_handle: ClassVar[bool | None] = None
+    pointed_source: ClassVar[str | None] = None
 
     @pytest.fixture
     def rejection_window(self) -> Iterator[dict[str, MatchRejection]]:
@@ -161,7 +171,10 @@ class SourceFeatureGroupTestMixin:
         yield from _implementation_scope()
 
     def _applicability(self) -> SourceApplicability:
-        return source_applicability(self.feature_group_class, self.own_pointer() is not NO_POINTER)
+        derived = source_applicability(self.feature_group_class, self.own_pointer() is not NO_POINTER)
+        if self.data_access_handle is None:
+            return derived
+        return dataclasses.replace(derived, data_access_handle=self.data_access_handle)
 
     @staticmethod
     def _require(applies: bool, fact: str) -> None:
@@ -229,7 +242,7 @@ class SourceFeatureGroupTestMixin:
         return cast(SourceMatch, pair[1])
 
     def _plugins(self) -> FeatureGroupEnvironmentMapping:
-        return {self.feature_group_class: {PyArrowTable}}
+        return {self.feature_group_class: {self.load_framework}}
 
     def _pointed_source(self) -> str:
         """The source the group claims when pointed at its own pointer."""
@@ -252,7 +265,7 @@ class SourceFeatureGroupTestMixin:
                 getattr(super(cls, cls), "match_feature_group_criteria")(feature_name, options, data_access_collection)
             )
 
-        return type(f"{parent.__name__}ToyfmtTakeover", (parent,), {"match_feature_group_criteria": classmethod(gated)})
+        return type(f"{parent.__name__}SuiteTakeover", (parent,), {"match_feature_group_criteria": classmethod(gated)})
 
     def test_claims_its_own_source(self) -> None:
         assert self._claims(Feature(self.present_column), self.own_dac())
@@ -301,7 +314,7 @@ class SourceFeatureGroupTestMixin:
         return f"{impl.__module__}:{impl.__qualname__}"
 
     def test_fires_input_data_load_naming_group_source_format_and_loader(self) -> None:
-        capture = _LoadCapture()
+        capture = LoadCapture()
 
         mloda.run_all(
             [self._feature(self.present_column)],
@@ -330,7 +343,7 @@ class SourceFeatureGroupTestMixin:
                 self.feature_group_class, name, _spy(name, getattr(self.feature_group_class, name), touched)
             )
 
-        with reader_probe_scope(ReaderProbeScope(_MatchRefuseAll(), None, None, None, None)):
+        with reader_probe_scope(ReaderProbeScope(MatchRefuseAll(), None, None, None, None)):
             result = self._evaluate(Feature(self.present_column), self.own_dac())
 
         assert touched == []
@@ -341,7 +354,7 @@ class SourceFeatureGroupTestMixin:
         assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.EXTENDER_REFUSED
 
     def test_fires_input_data_match_naming_the_group_class_and_format(self) -> None:
-        capture = _MatchCapture()
+        capture = MatchCapture()
 
         with reader_probe_scope(ReaderProbeScope(capture, None, None, None, None)):
             assert self._claims(Feature(self.present_column), self.own_dac())
@@ -379,12 +392,12 @@ class SourceFeatureGroupTestMixin:
     def test_an_unknown_handle_records_a_rejection_listing_the_known_handles(self) -> None:
         self._require(self._applicability().data_access_handle, "the group selects by connection_handle")
         dac, known = self.known_handles_dac()
-        options = self._options(context={HANDLE_OPTION: "toyfmt_missing_handle"})
+        options = self._options(context={HANDLE_OPTION: "unknown_handle_for_suite"})
         outcome = probe_match_criteria(self.feature_group_class, self.present_column, options, dac)
         assert not outcome.matched
         assert outcome.rejection is not None
         assert outcome.rejection.code is CoreDeclineCode.HANDLE_UNKNOWN
-        assert "toyfmt_missing_handle" in outcome.rejection.reason
+        assert "unknown_handle_for_suite" in outcome.rejection.reason
         for handle in known:
             assert handle in outcome.rejection.reason
 
@@ -399,7 +412,7 @@ class SourceFeatureGroupTestMixin:
         with pytest.raises(FeatureResolutionError) as exc_info:
             self._resolve(feature, None)
         message = str(exc_info.value)
-        assert self._pointed_source() in message
+        assert (self.pointed_source or self._pointed_source()) in message
         assert self.present_column in message
         assert exc_info.value.result.eliminations[self.feature_group_class].code is CoreDeclineCode.COLUMN_NOT_FOUND
 
@@ -464,7 +477,7 @@ class SourceFeatureGroupTestMixin:
             assert suggestion in self._evaluate(narrowed, dac).eliminations[self.feature_group_class].reason
 
     def test_chain_and_column_separated_names_that_are_not_columns_decline(self) -> None:
-        chained = f"{self.present_column}{CHAIN_SEPARATOR}toyfmt_rebased"
+        chained = f"{self.present_column}{CHAIN_SEPARATOR}suite_rebased"
         separated = f"{self.missing_column}{COLUMN_SEPARATOR}0"
         assert not self._claims(Feature(chained), self.own_dac())
         outcome = probe_match_criteria(self.feature_group_class, chained, self._options(), self.own_dac())
@@ -478,20 +491,20 @@ class SourceFeatureGroupTestMixin:
     def test_a_subclass_takes_over_a_pointer_keyed_on_its_parent(self) -> None:
         self._require(self._applicability().pointer, "the group takes no pointer")
         sub = self._gated_subclass()
-        mapping: FeatureGroupEnvironmentMapping = {cast(type[SourceFeatureGroup], sub): {PyArrowTable}}
+        mapping: FeatureGroupEnvironmentMapping = {cast(type[SourceFeatureGroup], sub): {self.load_framework}}
         feature = self._feature(self.present_column, {self.feature_group_class.__name__: self.own_pointer()})
         result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, None)
         assert sub in result.identified
         del sub, mapping, result, feature
 
     def test_a_pointer_key_of_another_concrete_group_makes_the_searched_routes_decline_with_a_reason(self) -> None:
-        self._require(self._applicability().pointer, "the group takes no pointer")
         sub = self._gated_subclass()
         mapping: FeatureGroupEnvironmentMapping = {
-            self.feature_group_class: {PyArrowTable},
-            cast(type[SourceFeatureGroup], sub): {PyArrowTable},
+            self.feature_group_class: {self.load_framework},
+            cast(type[SourceFeatureGroup], sub): {self.load_framework},
         }
-        feature = self._feature(self.present_column, {sub.__name__: self.own_pointer()})
+        pointer = self.own_pointer()
+        feature = self._feature(self.present_column, {sub.__name__: "unused" if pointer is NO_POINTER else pointer})
         result = IdentifyFeatureGroupClass.evaluate(self._with_context(feature), mapping, None, self.own_dac())
         assert self.feature_group_class not in result.identified
         reason = result.eliminations[self.feature_group_class].reason

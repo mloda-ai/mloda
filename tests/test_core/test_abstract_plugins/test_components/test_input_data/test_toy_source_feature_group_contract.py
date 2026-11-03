@@ -14,6 +14,7 @@ class TestToySourceFeatureGroupContract(SourceFeatureGroupTestMixin):
     present_column = "toyfmt_col"
     missing_column = "toyfmt_missing"
     expected_source = "h1:toy"
+    pointed_source = "scoped:toy"
 
     def own_dac(self) -> DataAccessCollection:
         return toy_source_group.toy_dac(h1={"toyfmt_col": [1, 2]})

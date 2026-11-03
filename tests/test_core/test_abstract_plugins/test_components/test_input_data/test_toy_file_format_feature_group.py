@@ -17,9 +17,9 @@ import mloda.provider as provider
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
-from mloda.core.api.plan_info import source_of
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
+from mloda.core.api.plan_info import source_of
 from mloda.provider import ReadFileFG, SourceFeatureGroup
 from mloda.steward import ReaderProbeScope, reader_probe_scope
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -371,29 +371,60 @@ class TestUserinfoUriPlanIdentity:
                 return DataAccessCollection(files={uri})
             return DataAccessCollection(files={uri}, credentials=credentials)
 
-        explained = mloda.explain(
+        session = mloda.prepare(
             [Feature(column)],
             compute_frameworks=[PyArrowTable],
             data_access_collection=collection(),
             plugin_collector=PluginCollector.enabled_feature_groups({ToyfmtUriPlanFG}),
         )
+        explained = session.resolved_plan()
         steps = [step for step in explained if step.step_kind == "compute"]
         assert len(steps) == 1
         assert steps[0].data_access_identity == expected.format(s=TOY_SUFFIX)
         assert secret not in repr(explained)
         assert secret not in str(explained)
         if credentials is not None:
-            session = mloda.prepare(
-                [Feature(column)],
-                compute_frameworks=[PyArrowTable],
-                data_access_collection=collection(),
-                plugin_collector=PluginCollector.enabled_feature_groups({ToyfmtUriPlanFG}),
-            )
-            compute = [step for step in session.resolved_plan() if step.step_kind == "compute"]
-            assert len(compute) == 1
-            assert secret in source_of(session._execution_plan(), compute[0])[1].source
-            del session, compute
-        del explained, steps, ToyfmtUriPlanFG
+            assert secret in source_of(session._execution_plan(), steps[0])[1].source
+        del session, explained, steps, ToyfmtUriPlanFG
+
+    def test_a_provider_identity_override_holding_a_registered_token_is_masked(self) -> None:
+        column = "toyfmt_uri_override_col"
+        token = "OVERRIDETOKEN9"  # nosec B105
+
+        class ToyfmtUriOverrideFG(ToyFileFormatFG):
+            @classmethod
+            def match_feature_group_criteria(
+                cls, feature_name: Any, options: Options, data_access_collection: Any = None
+            ) -> bool:
+                if str(feature_name) != column:
+                    return False
+                return bool(super().match_feature_group_criteria(feature_name, options, data_access_collection))
+
+            @classmethod
+            def columns(cls, match: Any) -> Collection[str] | None:
+                return [column]
+
+            @classmethod
+            def has_column(cls, match: Any, column_name: str) -> bool | None:
+                return column_name == column
+
+            @classmethod
+            def data_access_identity(cls, match: Any) -> str:
+                return f"api://example/bot{token}/x.json"
+
+        plan = mloda.explain(
+            [Feature(column)],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=DataAccessCollection(
+                files={f"s3://bucket/override{TOY_SUFFIX}"}, credentials={"h": {"token": token}}
+            ),
+            plugin_collector=PluginCollector.enabled_feature_groups({ToyfmtUriOverrideFG}),
+        )
+        steps = [step for step in plan if step.step_kind == "compute"]
+        assert len(steps) == 1
+        assert steps[0].data_access_identity == "api://example/bot***/x.json"
+        assert token not in repr(plan)
+        del plan, steps, ToyfmtUriOverrideFG
 
 
 class TestFileSourceUriProjection:

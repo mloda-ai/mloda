@@ -887,7 +887,6 @@ class ComputeFramework(ABC):
         finally:
             marker.active = None
             marker.framework = None
-            marker.secrets = frozenset()
             current_input_data_load_marker.reset(token)
             if stamped and prior_marker is not None and prior_marker.active is not None:
                 features._load_marker = prior_marker

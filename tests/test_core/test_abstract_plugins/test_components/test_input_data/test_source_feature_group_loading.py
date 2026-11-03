@@ -15,6 +15,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -34,7 +35,6 @@ from mloda.provider import SourceFeatureGroup
 from mloda.user import DataAccessCollection, Feature, ParallelizationMode, PluginCollector, PluginLoader, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from tests.helpers.subclass_walks import collect_until_dead, count_root_walks
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group import (
     OpToyBareFG,
@@ -806,6 +806,35 @@ class TestImplementationDefinition:
 
         assert loaded == walked()
         assert len(loaded) > 0
+
+    def test_implementation_skipping_registration_is_invisible_to_loaded_implementations(self) -> None:
+        class _SkipsRegistration:
+            def __init_subclass__(cls, **kwargs: Any) -> None:
+                pass
+
+        def make() -> type[Implementation[Any]]:
+            class ZzUnregisteredImpl(_SkipsRegistration, Implementation[Any]):
+                feature_group = ToySourceFG
+                compute_framework = PythonDictFramework
+
+                @classmethod
+                def calculate(cls, *args: Any) -> Any:
+                    return None
+
+            return ZzUnregisteredImpl
+
+        held = [make()]
+        ref = weakref.ref(held[0])
+        walk_sees = held[0] in get_all_subclasses(Implementation)
+        loaded_sees = held[0] in loaded_implementations()
+
+        del held[:]
+        collected = collect_until_dead(ref)
+        _release_subscripted_generics()
+
+        assert walk_sees
+        assert not loaded_sees
+        assert collected
 
     def test_class_made_concrete_by_a_decorator_is_loaded(self) -> None:
         def add_calculate(cls: Any) -> Any:

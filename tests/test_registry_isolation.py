@@ -26,7 +26,7 @@ from mloda.core.abstract_plugins.components.input_data.read_db_fg import ReadDBF
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
+from mloda.core.abstract_plugins.implementation import Implementation, _registry, loaded_implementations
 from mloda.provider import SubtypeDeclaration
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -241,6 +241,8 @@ class TestReclaimLeakedFeatureGroups:
         assert name in _registered_names_of_root(root), (
             "the rejected class never lingered; the reclaim assertion proves nothing"
         )
+        if root is Implementation:
+            assert name not in {c.__name__ for c in _registry.members()}, "a rejected Implementation was registered"
         assert reclaim_leaked_subclasses(log, mark, __name__) == []
         assert name not in _registered_names_of_root(root), f"{name} survived the reclaim"
 

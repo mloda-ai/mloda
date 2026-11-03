@@ -523,14 +523,14 @@ class ChsCredDefaultFG(ChsSource):
 
 _CRED_OPTION_KEY = "chs_api_auth"
 _VALUE_SHAPES = [
-    pytest.param(lambda: Credential(token=SECRET), id="direct"),
-    pytest.param(lambda: RegisteredCredential({"token": SECRET}), id="registered"),
-    pytest.param(lambda: [Credential(token=SECRET)], id="list"),
-    pytest.param(lambda: (RegisteredCredential({"token": SECRET}),), id="tuple"),
-    pytest.param(lambda: {"inner": RegisteredCredential({"token": SECRET})}, id="dict-value"),
-    pytest.param(lambda: {Credential(token=SECRET): 1}, id="dict-key"),
-    pytest.param(lambda: {Credential(token=SECRET)}, id="set"),
-    pytest.param(lambda: frozenset({Credential(token=SECRET)}), id="frozenset"),
+    pytest.param(lambda: Credential(token=SECRET), False, id="direct"),
+    pytest.param(lambda: RegisteredCredential({"token": SECRET}), False, id="registered"),
+    pytest.param(lambda: [Credential(token=SECRET)], True, id="list"),
+    pytest.param(lambda: (RegisteredCredential({"token": SECRET}),), True, id="tuple"),
+    pytest.param(lambda: {"inner": RegisteredCredential({"token": SECRET})}, True, id="dict-value"),
+    pytest.param(lambda: {Credential(token=SECRET): 1}, True, id="dict-key"),
+    pytest.param(lambda: {Credential(token=SECRET)}, True, id="set"),
+    pytest.param(lambda: frozenset({Credential(token=SECRET)}), True, id="frozenset"),
 ]
 
 
@@ -542,15 +542,18 @@ def _assert_credential_refusal(message: str, key: str) -> None:
 
 
 class TestCredentialValuesInOptionsAreRefused:
-    @pytest.mark.parametrize("make_value", _VALUE_SHAPES)
+    @pytest.mark.parametrize(("make_value", "nested"), _VALUE_SHAPES)
     @pytest.mark.parametrize("placement", ["group", "context"])
-    def test_a_credential_shape_is_refused_naming_the_key(self, make_value: Callable[[], Any], placement: str) -> None:
+    def test_a_credential_shape_is_refused_naming_the_key(
+        self, make_value: Callable[[], Any], nested: bool, placement: str
+    ) -> None:
         value = {_CRED_OPTION_KEY: make_value()}
         options = Options(group=value) if placement == "group" else Options(group={}, context=value)
 
         message = _refusal(_prepare, [Feature("chs_vault_a", options=options)], None, ChsFallbackFG)
 
         _assert_credential_refusal(message, _CRED_OPTION_KEY)
+        assert ("nested in its value" in message) == nested
 
     @pytest.mark.parametrize("entry", ENTRY_POINTS)
     def test_a_credential_is_refused_at_every_entry_point(self, entry: Entry) -> None:

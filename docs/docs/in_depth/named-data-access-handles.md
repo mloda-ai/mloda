@@ -274,7 +274,7 @@ allowlist names the key. A handle is never part of a feature name: a pattern tha
 definition.
 
 A credential is never an option value. A `Credential` or `RegisteredCredential` anywhere in a non-pointer option,
-nested values included, is refused at plan time. The source pointer form (`{"SqliteFG": Credential(...)}`) still works.
+nested in lists, tuples, dicts or sets, is refused at plan time. The source pointer form (`{"SqliteFG": Credential(...)}`) still works.
 A bare `str` secret under an ordinary key cannot be detected, so do not do it.
 
 ## Runtime access versus match-time binding

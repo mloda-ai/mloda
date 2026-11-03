@@ -151,13 +151,15 @@ Not every backend's native type system can distinguish every precision mloda dec
 
 Integer widths without a member resolve to the next lossless one: int16 and uint16 to INT32, uint32 to INT64.
 
+Naive Arrow `s` and `ns` timestamps resolve to TIMESTAMP_MICROS. Polars has no second precision, so a naive `s` column reads back as TIMESTAMP_MILLIS.
+
 | Framework | INT32 / INT64 | INT8 / UINT8 / UINT64 | FLOAT / DOUBLE | TIMESTAMP_MILLIS / MICROS | TIMESTAMP_MICROS_TZ | LIST |
 |---|---|---|---|---|---|---|
 | Pandas | yes | yes | yes | yes | yes (numpy tz and Arrow-backed) | only Arrow-backed columns |
 | Polars (eager / lazy) | yes | yes | yes | yes | yes | yes |
 | PyArrow | yes | yes | yes | yes | yes | yes |
 | DuckDB | yes | yes | yes | yes | yes | yes |
-| Spark | yes | INT8 only (no unsigned) | yes | no (`TimestampType` resolves to TIMESTAMP_MICROS) | no (strict mode cannot pass it on Spark data; lenient mode passes) | yes |
+| Spark | yes | INT8 only (no unsigned) | yes | no (`TimestampType` and `TimestampNTZType` resolve to TIMESTAMP_MICROS) | no (strict mode cannot pass it on Spark data; lenient mode passes) | yes |
 | Iceberg | yes | no (no narrow or unsigned ints) | yes | no (only `TimestampType` exists) | yes | yes |
 | SQLite | no (INTEGER affinity) | yes (through Arrow type hints) | no (REAL affinity) | no (stored as TEXT) | yes (through Arrow type hints, for relations built from Arrow) | no (no list storage) |
 | PythonDict | no (`type.__name__` is "int") | no | no (Python float is 64-bit) | no (`datetime.datetime` is microsecond) | yes (aware `datetime`) | yes |

@@ -66,6 +66,8 @@ EXTENDED_COLUMNS: tuple[ColumnSpec, ...] = (
     ColumnSpec("uint16_col", DataType.INT32, (1, 2, 3), pa.uint16()),
     ColumnSpec("uint32_col", DataType.INT64, (1, 2, 3), pa.uint32()),
     ColumnSpec("timestamp_us_tz_col", DataType.TIMESTAMP_MICROS_TZ, _TS_VALUES, pa.timestamp("us", tz="UTC")),
+    ColumnSpec("timestamp_s_col", DataType.TIMESTAMP_MICROS, _TS_VALUES, pa.timestamp("s")),
+    ColumnSpec("timestamp_ns_col", DataType.TIMESTAMP_MICROS, _TS_VALUES, pa.timestamp("ns")),
     ColumnSpec("timestamp_ns_tz_col", DataType.TIMESTAMP_MICROS_TZ, _TS_VALUES, pa.timestamp("ns", tz="UTC")),
     ColumnSpec("list_str_col", DataType.LIST, (["a"], ["b", "c"], []), pa.list_(pa.string())),
     ColumnSpec(

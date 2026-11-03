@@ -42,6 +42,11 @@ class TestFromArrowType:
         # Microsecond precision
         assert DataType.from_arrow_type(pa.timestamp("us")) == DataType.TIMESTAMP_MICROS
 
+        # Naive second and nanosecond precision resolve to microseconds
+        for unit in ("s", "ns"):
+            assert DataType.from_arrow_type(pa.timestamp(unit)) == DataType.TIMESTAMP_MICROS
+            assert DataType.from_arrow_type_safe(pa.timestamp(unit)) == DataType.TIMESTAMP_MICROS
+
     def test_from_arrow_type_decimal(self) -> None:
         """Test conversion from PyArrow decimal types to DataType enum."""
         # Standard decimal with 38 precision and 18 scale

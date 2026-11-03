@@ -71,6 +71,7 @@ if PYSPARK_AVAILABLE:
         DoubleType,
         DecimalType,
         TimestampType,
+        TimestampNTZType,
         ByteType,
         ShortType,
         ArrayType,
@@ -87,6 +88,7 @@ else:
     DoubleType = None
     DecimalType = None
     TimestampType = None
+    TimestampNTZType = None
     pyspark = None
 
 
@@ -431,6 +433,8 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
             return ByteType()
         if spec.arrow_type == pa.int16():
             return ShortType()
+        if spec.arrow_type in (pa.timestamp("s"), pa.timestamp("ns")):
+            return TimestampNTZType()
         if spec.data_type == DataType.LIST:
             element = spec.arrow_type.value_type  # type: ignore[union-attr]
             if element == pa.string():
@@ -445,7 +449,12 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
         # _SPARK_TYPE_MAP. Values flow via the mixin's arrow table -> pylist.
         usable = tuple(c for c in columns if c.arrow_type is not None or c.data_type in _SPARK_TYPE_MAP)
         schema = StructType([StructField(c.name, self._spark_type(c)) for c in usable])
-        return spark_session.createDataFrame(self._arrow_table(usable).to_pylist(), schema=schema)
+        table = self._arrow_table(usable)
+        # ns timestamps come back as pandas.Timestamp, which Spark rejects; values are whole days, so us is lossless.
+        for i, f in enumerate(table.schema):
+            if pa.types.is_timestamp(f.type) and f.type.unit == "ns" and f.type.tz is None:
+                table = table.set_column(i, f.name, table.column(i).cast(pa.timestamp("us")))
+        return spark_session.createDataFrame(table.to_pylist(), schema=schema)
 
     def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
         pytest.skip("Spark has only one TimestampType (microseconds); millisecond cannot be expressed")

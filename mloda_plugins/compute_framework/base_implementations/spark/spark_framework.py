@@ -152,6 +152,7 @@ class SparkFramework(ComputeFramework):
             LongType,
             ShortType,
             StringType,
+            TimestampNTZType,
             TimestampType,
         )
 
@@ -175,7 +176,7 @@ class SparkFramework(ComputeFramework):
             return DataType.BINARY
         if isinstance(spark_type, DateType):
             return DataType.DATE
-        if isinstance(spark_type, TimestampType):
+        if isinstance(spark_type, (TimestampType, TimestampNTZType)):
             return DataType.TIMESTAMP_MICROS
         if isinstance(spark_type, DecimalType):
             return DataType.DECIMAL

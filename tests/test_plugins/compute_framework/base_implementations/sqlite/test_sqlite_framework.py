@@ -306,6 +306,7 @@ class TestSqliteDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
         "list_str_col": "SQLite has no list storage",
         "list_struct_col": "SQLite has no list storage",
         "list_fixed_col": "SQLite has no list storage",
+        "timestamp_ns_col": "nanosecond timestamps convert to pandas Timestamp, which sqlite3 cannot bind",
         "timestamp_ns_tz_col": "nanosecond timestamps convert to pandas Timestamp, which sqlite3 cannot bind",
     }
 

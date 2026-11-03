@@ -167,7 +167,7 @@ class DataType(Enum):
                 return cls.TIMESTAMP_MICROS_TZ
             elif arrow_type.unit == "ms":
                 return cls.TIMESTAMP_MILLIS
-            elif arrow_type.unit == "us":
+            elif arrow_type.unit in ("us", "s", "ns"):
                 return cls.TIMESTAMP_MICROS
         elif pa.types.is_decimal(arrow_type):
             return cls.DECIMAL

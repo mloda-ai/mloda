@@ -90,17 +90,23 @@ class PandasDataFrame(ComputeFramework):
         if dtype is None:
             return None
 
-        if isinstance(dtype, pd.ArrowDtype) and DataType.from_arrow_type_safe(dtype.pyarrow_dtype) == DataType.DECIMAL:
-            return DataType.DECIMAL
+        if isinstance(dtype, pd.ArrowDtype):
+            return DataType.from_arrow_type_safe(dtype.pyarrow_dtype)
         if isinstance(dtype, pd.StringDtype):
             return DataType.STRING
         if isinstance(dtype, pd.BooleanDtype):
             return DataType.BOOLEAN
         if isinstance(dtype, pd.api.types.DatetimeTZDtype):
-            return DataType.TIMESTAMP_MICROS
+            return DataType.TIMESTAMP_MICROS_TZ
         if pd.api.types.is_bool_dtype(dtype):
             return DataType.BOOLEAN
         if pd.api.types.is_integer_dtype(dtype):
+            if dtype.itemsize == 1:
+                return DataType.INT8 if dtype.kind == "i" else DataType.UINT8
+            if dtype.kind == "u" and dtype.itemsize == 8:
+                return DataType.UINT64
+            if dtype.kind == "u":
+                return DataType.INT32 if dtype.itemsize == 2 else DataType.INT64
             return DataType.INT32 if dtype.itemsize <= 4 else DataType.INT64
         if pd.api.types.is_float_dtype(dtype):
             return DataType.FLOAT if dtype.itemsize <= 4 else DataType.DOUBLE

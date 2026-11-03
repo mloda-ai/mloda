@@ -140,6 +140,7 @@ class SparkFramework(ComputeFramework):
             return None
         spark_type = data.schema[column_name].dataType
         from pyspark.sql.types import (
+            ArrayType,
             BinaryType,
             BooleanType,
             ByteType,
@@ -151,10 +152,15 @@ class SparkFramework(ComputeFramework):
             LongType,
             ShortType,
             StringType,
+            TimestampNTZType,
             TimestampType,
         )
 
-        if isinstance(spark_type, (IntegerType, ShortType, ByteType)):
+        if isinstance(spark_type, ByteType):
+            return DataType.INT8
+        if isinstance(spark_type, ArrayType):
+            return DataType.LIST
+        if isinstance(spark_type, (IntegerType, ShortType)):
             return DataType.INT32
         if isinstance(spark_type, LongType):
             return DataType.INT64
@@ -170,7 +176,7 @@ class SparkFramework(ComputeFramework):
             return DataType.BINARY
         if isinstance(spark_type, DateType):
             return DataType.DATE
-        if isinstance(spark_type, TimestampType):
+        if isinstance(spark_type, (TimestampType, TimestampNTZType)):
             return DataType.TIMESTAMP_MICROS
         if isinstance(spark_type, DecimalType):
             return DataType.DECIMAL

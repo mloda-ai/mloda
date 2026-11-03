@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import inspect
+import itertools
 import os
+import time
 from collections.abc import Collection
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import quote, unquote
 
 import pytest
 
@@ -16,6 +19,7 @@ from mloda.core.abstract_plugins.components.input_data.file_source import FileSo
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
+from mloda.core.api.plan_info import source_of
 from mloda.provider import ReadFileFG, SourceFeatureGroup
 from mloda.steward import ReaderProbeScope, reader_probe_scope
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -303,23 +307,45 @@ class TestUserinfoUriPlanIdentity:
     """A userinfo URI handle never shows its password in the plan step identity or the rendered plan."""
 
     @pytest.mark.parametrize(
-        "template,expected,secret",
+        "template,expected,secret,credentials",
         [
-            ("s3://alice:hunter2@bucket/plan{s}", "s3://bucket/plan{s}", "hunter2"),  # nosec B105
+            ("s3://alice:hunter2@bucket/plan{s}", "s3://bucket/plan{s}", "hunter2", None),  # nosec B105
             (
                 "s3://bucket/dir;jsessionid=SECRETSESSION/plan{s}",  # nosec B105
-                "s3://bucket/dir;jsessionid=***/plan{s}",
+                "s3://bucket/dir;***/plan{s}",
                 "SECRETSESSION",
+                None,
             ),
             (
                 "s3://bucket/dir;%74oken=SECRETENCODED/plan{s}",  # nosec B105
-                "s3://bucket/dir***/plan{s}",
+                "s3://bucket/dir;***/plan{s}",
                 "SECRETENCODED",
+                None,
+            ),
+            (
+                "s3://bucket/botLITERALTOKEN1/plan{s}",
+                "s3://bucket/bot***/plan{s}",
+                "LITERALTOKEN1",  # nosec B105
+                {"h": {"token": "LITERALTOKEN1"}},  # nosec B105
+            ),
+            (
+                "s3://bucket/auth=LITERALTOKEN2/plan{s}",
+                "s3://bucket/auth=***/plan{s}",
+                "LITERALTOKEN2",  # nosec B105
+                {"h": {"token": "LITERALTOKEN2"}},  # nosec B105
             ),
         ],
-        ids=["userinfo-password", "session-id-path-param", "encoded-path-param"],
+        ids=[
+            "userinfo-password",
+            "session-id-path-param",
+            "encoded-path-param",
+            "literal-path-segment",
+            "literal-hive-segment",
+        ],
     )
-    def test_plan_step_identity_and_render_hide_the_password(self, template: str, expected: str, secret: str) -> None:
+    def test_plan_step_identity_and_render_hide_the_password(
+        self, template: str, expected: str, secret: str, credentials: dict[str, Any] | None
+    ) -> None:
         column = "toyfmt_uri_plan_col"
         uri = template.format(s=TOY_SUFFIX)
 
@@ -340,18 +366,73 @@ class TestUserinfoUriPlanIdentity:
             def has_column(cls, match: Any, column_name: str) -> bool | None:
                 return column_name == column
 
-        explained = mloda.explain(
+        def collection() -> DataAccessCollection:
+            if credentials is None:
+                return DataAccessCollection(files={uri})
+            return DataAccessCollection(files={uri}, credentials=credentials)
+
+        session = mloda.prepare(
             [Feature(column)],
             compute_frameworks=[PyArrowTable],
-            data_access_collection=DataAccessCollection(files={uri}),
+            data_access_collection=collection(),
             plugin_collector=PluginCollector.enabled_feature_groups({ToyfmtUriPlanFG}),
         )
+        explained = session.resolved_plan()
         steps = [step for step in explained if step.step_kind == "compute"]
         assert len(steps) == 1
         assert steps[0].data_access_identity == expected.format(s=TOY_SUFFIX)
         assert secret not in repr(explained)
         assert secret not in str(explained)
-        del explained, steps, ToyfmtUriPlanFG
+        if credentials is not None:
+            assert secret in source_of(session._execution_plan(), steps[0])[1].source
+        del session, explained, steps, ToyfmtUriPlanFG
+
+    @pytest.mark.parametrize(
+        ("key", "masked"),
+        [("token", True), ("botref", False)],
+        ids=["credential_shaped_key_masked", "non_shaped_key_kept"],
+    )
+    def test_a_provider_identity_override_masks_a_registered_token_only_under_a_credential_shaped_key(
+        self, key: str, masked: bool
+    ) -> None:
+        column = "toyfmt_uri_override_col"
+        token = "OVERRIDETOKEN9"  # nosec B105
+        expected = "api://example/bot***/x.json" if masked else f"api://example/bot{token}/x.json"
+
+        class ToyfmtUriOverrideFG(ToyFileFormatFG):
+            @classmethod
+            def match_feature_group_criteria(
+                cls, feature_name: Any, options: Options, data_access_collection: Any = None
+            ) -> bool:
+                if str(feature_name) != column:
+                    return False
+                return bool(super().match_feature_group_criteria(feature_name, options, data_access_collection))
+
+            @classmethod
+            def columns(cls, match: Any) -> Collection[str] | None:
+                return [column]
+
+            @classmethod
+            def has_column(cls, match: Any, column_name: str) -> bool | None:
+                return column_name == column
+
+            @classmethod
+            def data_access_identity(cls, match: Any) -> str:
+                return f"api://example/bot{token}/x.json"
+
+        plan = mloda.explain(
+            [Feature(column)],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=DataAccessCollection(
+                files={f"s3://bucket/override{TOY_SUFFIX}"}, credentials={"h": {key: token}}
+            ),
+            plugin_collector=PluginCollector.enabled_feature_groups({ToyfmtUriOverrideFG}),
+        )
+        steps = [step for step in plan if step.step_kind == "compute"]
+        assert len(steps) == 1
+        assert steps[0].data_access_identity == expected
+        assert (token in repr(plan)) is (not masked)
+        del plan, steps, ToyfmtUriOverrideFG
 
 
 class TestFileSourceUriProjection:
@@ -367,6 +448,14 @@ class TestFileSourceUriProjection:
         second = source(f"s3://u:hunter2@bucket/a%2Fc{TOY_SUFFIX}").source  # nosec B105
         assert first != second
 
+    def test_long_encoded_head_cuts_quickly(self) -> None:
+        uri = "s3://b/" + "%25" * 8000 + ";x/x" + TOY_SUFFIX
+        started = time.monotonic()
+        match = ToyFileFormatFG._source(uri)
+        assert time.monotonic() - started < 5
+        assert match.source == "s3://b/" + "%25" * 8000 + ";***/x" + TOY_SUFFIX
+        assert match.access == uri
+
     @pytest.mark.parametrize(
         "template,expected",
         [
@@ -380,53 +469,72 @@ class TestFileSourceUriProjection:
             ("simplecache::s3://tok@bucket/x{s}", "simplecache::s3://bucket/x{s}"),
             ("s3://bucket]/x{s}", "s3://bucket]/x{s}"),
             ("s3://[bad/x{s}", "s3://[bad/x{s}"),
-            ("https://host/x{s};jsessionid=SECRET", "https://host/x{s};jsessionid=***"),  # nosec B105
-            ("s3://bucket/dir;jsessionid=SECRET/x{s}", "s3://bucket/dir;jsessionid=***/x{s}"),  # nosec B105
-            ("https://host/x{s};PHPSESSID=abc", "https://host/x{s};PHPSESSID=***"),  # nosec B105
-            ("https://host/x{s};token=abc", "https://host/x{s};token=***"),  # nosec B105
-            ("https://host/x{s};API-KEY=abc", "https://host/x{s};API-KEY=***"),  # nosec B105
-            ("https://host/x{s};x-amz-signature=abc", "https://host/x{s};x-amz-signature=***"),  # nosec B105
-            ("https://host/x{s};sessid=abc", "https://host/x{s};sessid=***"),  # nosec B105
-            ("https://host/d;v=1;token=abc;lang=en/x{s}", "https://host/d;v=1;token=***;lang=en/x{s}"),  # nosec B105
-            ("https://host/d;token=a;v=1/x{s}", "https://host/d;token=***;v=1/x{s}"),  # nosec B105
-            ("https://host/x{s};token=", "https://host/x{s};token=***"),
-            ("s3://u:pw@bucket/d;token=abc/x{s}?q=1#f", "s3://bucket/d;token=***/x{s}"),  # nosec B105
-            ("https://host/x{s};v=1", "https://host/x{s};v=1"),
-            ("https://host/x{s};type=a", "https://host/x{s};type=a"),
-            ("https://host/d;tokens=3/x{s}", "https://host/d;tokens=3/x{s}"),
-            ("https://host/d;session_id=1/x{s}", "https://host/d;session_id=1/x{s}"),
+            ("https://host/x{s};jsessionid=SECRET", "https://host/x{s};***"),  # nosec B105
+            ("s3://bucket/dir;jsessionid=SECRET/x{s}", "s3://bucket/dir;***/x{s}"),  # nosec B105
+            ("https://host/x{s};PHPSESSID=abc", "https://host/x{s};***"),  # nosec B105
+            ("https://host/x{s};token=abc", "https://host/x{s};***"),  # nosec B105
+            ("https://host/x{s};API-KEY=abc", "https://host/x{s};***"),  # nosec B105
+            ("https://host/x{s};x-amz-signature=abc", "https://host/x{s};***"),  # nosec B105
+            ("https://host/x{s};sessid=abc", "https://host/x{s};***"),  # nosec B105
+            ("https://host/d;v=1;token=abc;lang=en/x{s}", "https://host/d;***/x{s}"),  # nosec B105
+            ("https://host/d;token=a;v=1/x{s}", "https://host/d;***/x{s}"),  # nosec B105
+            ("https://host/x{s};token=", "https://host/x{s};***"),
+            ("s3://u:pw@bucket/d;token=abc/x{s}?q=1#f", "s3://bucket/d;***/x{s}"),  # nosec B105
+            ("https://host/x{s};v=1", "https://host/x{s};***"),
+            ("https://host/x{s};type=a", "https://host/x{s};***"),
+            ("https://host/d;tokens=3/x{s}", "https://host/d;***/x{s}"),
+            ("https://host/d;session_id=1/x{s}", "https://host/d;***/x{s}"),
             ("https://host/clean/x{s}", "https://host/clean/x{s}"),
             ("d;token=abc/x{s}", os.path.abspath("d;token=abc/x{s}")),
-            ("s3://b/d;aws.token=SECRET/x{s}", "s3://b/d;aws.token=***/x{s}"),  # nosec B105
-            ("s3://b/d;x~token=SECRET/x{s}", "s3://b/d;x~token=***/x{s}"),  # nosec B105
-            ("s3://b/d;v=1,token=SECRET/x{s}", "s3://b/d;v=1,token=***/x{s}"),  # nosec B105
-            ("s3://b/d;v=1&token=SECRET/x{s}", "s3://b/d;v=1&token=***/x{s}"),  # nosec B105
-            ("s3://b/d;token = SECRET/x{s}", "s3://b/d;token = ***/x{s}"),  # nosec B105
-            ("s3://b/d;token=a,b/x{s}", "s3://b/d;token=***/x{s}"),  # nosec B105
-            ("zip://d;token=SECRET::s3://bucket/x{s}", "zip://d;token=***::s3://bucket/x{s}"),  # nosec B105
-            ("s3://b/token=abc;v=1/x{s}", "s3://b/token=abc;v=1/x{s}"),  # nosec B105
-            ("s3://b/my.token.dir;v=1/x{s}", "s3://b/my.token.dir;v=1/x{s}"),
-            ("s3://b/d;%74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("s3://b/d;token%3DSECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("s3://b/d%3Btoken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("s3://b/d;%2574oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("s3://b/d;token%3DSE%2FCRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("s3://b/d;%252525252525" + "74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("zip://d;%74oken=SECRET::s3://bucket/x{s}", "zip://d***::s3://bucket/x{s}"),  # nosec B105
-            ("s3://u:pw@b/d;%74oken=SECRET/x{s}?q=1", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/d;aws.token=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;x~token=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;v=1,token=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;v=1&token=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;token = SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;token=a,b/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("zip://d;token=SECRET::s3://bucket/x{s}", "zip://d;***::s3://bucket/x{s}"),  # nosec B105
+            ("s3://b/token=abc;v=1/x{s}", "s3://b/token=abc;***/x{s}"),  # nosec B105
+            ("s3://b/my.token.dir;v=1/x{s}", "s3://b/my.token.dir;***/x{s}"),
+            ("s3://b/d;%74oken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;token%3DSECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d%3Btoken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;%2574oken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;token%3DSE%2FCRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;%252525252525" + "74oken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("zip://d;%74oken=SECRET::s3://bucket/x{s}", "zip://d;***::s3://bucket/x{s}"),  # nosec B105
+            ("s3://u:pw@b/d;%74oken=SECRET/x{s}?q=1", "s3://b/d;***/x{s}"),  # nosec B105
             ("s3://b/100%25{s}", "s3://b/100%25{s}"),
             ("s3://b/100%2541{s}", "s3://b/100%2541{s}"),
             ("s3://b/my%2520file{s}", "s3://b/my%2520file{s}"),
-            ("s3://b/d;v%3D1/x{s}", "s3://b/d;v%3D1/x{s}"),
-            ("s3://b/d%3Bv=1/x{s}", "s3://b/d%3Bv=1/x{s}"),
-            ("s3://b/token%3Dabc;v=1/x{s}", "s3://b/token%3Dabc;v=1/x{s}"),  # nosec B105
-            ("s3://b/d;v=1%3Btoken=SECRET/x{s}", "s3://b/d;v=1%3Btoken=***/x{s}"),  # nosec B105
-            ("s3://b/d;%2F%74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("s3://b/d;%252F%74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
-            ("s3://b/d;v%3A%3A%74oken=SECRET/x{s}", "s3://b/d***/x{s}"),  # nosec B105
+            ("s3://b/d;v%3D1/x{s}", "s3://b/d;***/x{s}"),
+            ("s3://b/d%3Bv=1/x{s}", "s3://b/d;***/x{s}"),
+            ("s3://b/token%3Dabc;v=1/x{s}", "s3://b/token%3Dabc;***/x{s}"),  # nosec B105
+            ("s3://b/d;v=1%3Btoken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;%2F%74oken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;%252F%74oken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;v%3A%3A%74oken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
             ("s3://b/my%25252520file{s}", "s3://b/my%25252520file{s}"),
             ("s3://b/a%2Ftoken=abc/x{s}", "s3://b/a%2Ftoken=abc/x{s}"),  # nosec B105
-            ("s3://b/d;v=1%2Fx/y{s}", "s3://b/d;v=1%2Fx/y{s}"),
+            ("s3://b/d;v=1%2Fx/y{s}", "s3://b/d;***/y{s}"),
+            ("https://host/x{s};auth=SECRET", "https://host/x{s};***"),  # nosec B105
+            ("s3://b/d;key=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;session=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;token:SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/x%3Fauth=SECRET/x{s}", "s3://b/x;***/x{s}"),  # nosec B105
+            ("s3://b/x%23auth=SECRET/x{s}", "s3://b/x;***/x{s}"),  # nosec B105
+            ("s3://b/my%20dir;v=1/x{s}", "s3://b/my%20dir;***/x{s}"),
+            ("s3://b/%3Bx/y{s}", "s3://b/;***/y{s}"),
+            ("s3://b/d;;SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d%3B%53ECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("https://host/x{s};", "https://host/x{s};"),
+            ("s3://b/d%3F/x{s}", "s3://b/d%3F/x{s}"),
+            ("s3://b/d%23/x{s}", "s3://b/d%23/x{s}"),
+            ("s3://b/year=2024/token=the/x{s}", "s3://b/year=2024/token=the/x{s}"),  # nosec B105
+            ("s3://b/my%2525252520file{s}", "s3://b/my;***"),
+            ("ftp://h/x{s};type=i", "ftp://h/x{s};***"),
+            ("http://[::1]/d;v=1/x{s}", "http://[::1]/d;***/x{s}"),
+            ("s3://bucket;x/y{s}", "s3://bucket;***/y{s}"),
         ],
         ids=[
             "slash-in-password",
@@ -486,6 +594,25 @@ class TestFileSourceUriProjection:
             "kept-four-level-encoded-clean",
             "kept-encoded-slash-no-param",
             "kept-encoded-slash-clean-param",
+            "unnamed-auth-key",
+            "unnamed-key",
+            "unnamed-session",
+            "colon-assignment",
+            "bare-region",
+            "encoded-question-mark",
+            "encoded-hash",
+            "encoded-head-kept",
+            "encoded-marker-first",
+            "double-semicolon-head",
+            "encoded-semicolon-encoded-tail",
+            "kept-lone-trailing-semicolon",
+            "kept-lone-trailing-encoded-question",
+            "kept-lone-trailing-encoded-hash",
+            "kept-hive-segments",
+            "unmarked-over-decode-cap",
+            "ftp-type",
+            "ipv6-host",
+            "host-part",
         ],
     )
     def test_uri_projection(self, template: str, expected: str) -> None:
@@ -493,6 +620,63 @@ class TestFileSourceUriProjection:
         match = ToyFileFormatFG._source(path)
         assert match.source == expected.format(s=TOY_SUFFIX)
         assert match.access == path
+
+    def test_generated_matrix(self) -> None:
+        secret = "S3CR3TVAL"  # nosec B105
+        plain = {
+            "mid": "s3://bucket/year=2024/dirA{r}/my%20dir/data" + TOY_SUFFIX,
+            "file": "s3://bucket/year=2024/my%20dir/data" + TOY_SUFFIX + "{r}",
+            "first": "s3://bucket/dirA{r}/year=2024/my%20dir/data" + TOY_SUFFIX,
+        }
+        zipped = {
+            "mid": "zip://year=2024/dirA{r}/my%20dir/a.zip::s3://bucket/inner" + TOY_SUFFIX,
+            "file": "zip://year=2024/my%20dir/a.zip{r}::s3://bucket/inner" + TOY_SUFFIX,
+            "first": "zip://dirA{r}/year=2024/my%20dir/a.zip::s3://bucket/inner" + TOY_SUFFIX,
+        }
+        chains = {"plain": plain, "zip": zipped}
+
+        def encode(sep: str, depth: int) -> str:
+            for _ in range(depth):
+                sep = quote(sep, safe="")
+            return sep
+
+        def fixpoint(text: str) -> str:
+            for _ in range(20):
+                nxt = unquote(text)
+                if nxt == text:
+                    break
+                text = nxt
+            return text
+
+        failures: list[str] = []
+        cases = 0
+        for key, sep, assign, depth, position, chain in itertools.product(
+            ["token", "auth", "key", "session", "jsessionid", ""],
+            [";", "?", "#"],
+            ["=", ":", ""],
+            range(6),
+            ["mid", "file", "first"],
+            ["plain", "zip"],
+        ):
+            cases += 1
+            template = chains[chain][position]
+            region = encode(sep, depth) + key + assign + secret
+            uri = template.format(r=region)
+            if depth == 0 and sep in "?#":
+                expected = uri[: uri.index(sep)]
+            else:
+                expected = template.format(r=";***")
+            label = f"key={key!r} sep={sep!r} assign={assign!r} depth={depth} position={position} chain={chain}"
+            match = ToyFileFormatFG._source(uri)
+            if match.source != expected:
+                failures.append(f"{label}: source {match.source!r} != {expected!r}")
+            if secret in match.source or secret in fixpoint(match.source):
+                failures.append(f"{label}: secret leaked in {match.source!r}")
+            if match.access != uri:
+                failures.append(f"{label}: access {match.access!r} != raw {uri!r}")
+
+        assert cases == 1944
+        assert not failures, f"{len(failures)} failures, first 20:\n" + "\n".join(failures[:20])
 
 
 class TestUriSourceCollision:
@@ -545,8 +729,8 @@ class TestUriSourceCollision:
         )
         matches = group.find_sources(group.CLAIM_ROUTES[0], self.COLUMN, Options(), dac)
         assert sorted(match.source for match in matches) == [
-            f"s3://b/d;jsessionid=***/x{TOY_SUFFIX}@a",
-            f"s3://b/d;jsessionid=***/x{TOY_SUFFIX}@b",
+            f"s3://b/d;***/x{TOY_SUFFIX}@a",
+            f"s3://b/d;***/x{TOY_SUFFIX}@b",
         ]
         del matches, group
 

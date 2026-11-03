@@ -12,6 +12,7 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
+from mloda.core.prepare.resolution_failure_renderer import TROUBLESHOOTING_URL
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.core.abstract_plugins.components.input_data.claim_route import feature_group_scope
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import (
@@ -32,6 +33,7 @@ from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
+from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG
 from tests.mixins.reader_feature_groups.format_file_writers import write_csv, write_parquet
 from tests.mixins.reader_feature_groups.lazy_source_group import load_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
@@ -811,6 +813,18 @@ class TestScopePointingRefinement:
 
         assert set(result.identified) == {_MidHasColumn}
 
+    @pytest.mark.parametrize("scope", [_AbstractToyMid, "_AbstractToyMid"])
+    def test_abstract_base_scope_with_no_source_lists_no_abstract_near_miss(self, scope: object) -> None:
+        feature = Feature(COL, feature_group=scope)  # type: ignore[arg-type]
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            evaluate_or_raise(feature, _plugins(_AbstractToyMid, _MidHasColumn), None, None)
+
+        assert str(exc_info.value) == (
+            "No feature groups found for feature name: 'toyfmt_col'. Scoped to feature group: '_AbstractToyMid'."
+            "\nUse resolve_feature(name, options=..., feature_group=...) to debug feature resolution."
+            f"\nFor troubleshooting guide, see: {TROUBLESHOOTING_URL}"
+        )
+
     def test_concrete_ancestor_scope_still_points_and_aborts_on_missing_column(self) -> None:
         feature = Feature(COL, feature_group=ToySourceFG)
         with pytest.raises(FeatureResolutionError, match="h1:toy"):
@@ -1207,6 +1221,24 @@ class TestAmbiguityFixHook:
         assert "h1:toy" in message
         assert "h2:toy" in message
         assert "column_to_file" not in message
+
+    @pytest.mark.parametrize("suffixed", [True, False])
+    def test_file_handles_named_with_or_without_handle_suffix(self, suffixed: bool) -> None:
+        p1, p2 = ("s3://alice@b/x.json", "s3://bob@b/x.json") if suffixed else ("s3://b/x.json", "s3://b/x.json")
+        dac = DataAccessCollection(files={"h1": p1, "h2": p2, "h3": "s3://b/other.json"})
+        paths = [p1, p2]
+        matches = JsonFG._disambiguate(paths, dac) if suffixed else [JsonFG._source(p) for p in paths]
+
+        text = JsonFG.ambiguity_fix("f", matches, dac)
+
+        assert "file handles: 'h1', 'h2'" in text
+        assert "'h3'" not in text
+        assert "alice" not in text
+
+    def test_file_source_without_handle_falls_back_to_generic_text(self) -> None:
+        text = JsonFG.ambiguity_fix("f", [JsonFG._source("s3://b/x.json")], None)
+
+        assert "file handles" not in text
 
 
 class _PointedParent(ToySourceBase):

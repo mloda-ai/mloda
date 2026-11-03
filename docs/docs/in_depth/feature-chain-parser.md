@@ -435,6 +435,7 @@ class GraphAnswer(FeatureGroup):
 Rules:
 
 - `in_features` is never forwarded.
+- A key whose spec sets `forward_to_inputs=False` (every credential handle) is not forwarded unless an explicit allowlist names it.
 - If the child already carries a forwarded key with an equal value, the merge is a
   no-op for that key.
 - If the child already carries a forwarded key with a **different** value, a

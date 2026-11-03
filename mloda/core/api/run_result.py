@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import redact_optio
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
 from mloda.core.abstract_plugins.components.credential_handle import credential_handle_keys
 from mloda.core.api.plan_info import PlanStep, _key_id, match_digests, snapshot_group
-from mloda.core.api.text_summary import plan_detail, plan_lines, result_and_plan, table_lines
+from mloda.core.api.text_summary import plan_detail, result_and_plan, step_lines, table_lines
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature import Feature
@@ -139,7 +139,7 @@ class RunResult(list[Any]):
         if max_rows < 1:
             raise ValueError(f"max_rows must be at least 1, got {max_rows}")
         tables = [_frame_text(frame, max_rows) for frame in self]
-        steps = plan_lines((n, _step_label(step), _step_detail(step)) for n, step in enumerate(self._plan, 1))
+        steps = step_lines((n, _step_label(step), _step_detail(step)) for n, step in enumerate(self._plan, 1))
         return result_and_plan(tables, steps)
 
 
@@ -159,7 +159,15 @@ def _step_label(step: PlanStep) -> str:
 def _step_detail(step: PlanStep) -> str:
     identity = step.data_access_identity or ""
     source = identity.removeprefix("api_data:") if identity.startswith("api_data:") else None
-    return plan_detail(sorted(step.feature_names), source, sorted(step.input_feature_names))
+    return plan_detail(
+        step.step_kind,
+        step.feature_group_name,
+        step.source_feature_group_name,
+        step.join_type,
+        sorted(step.feature_names),
+        source,
+        sorted(step.input_feature_names),
+    )
 
 
 def _group_of(step: PlanStep) -> Any:

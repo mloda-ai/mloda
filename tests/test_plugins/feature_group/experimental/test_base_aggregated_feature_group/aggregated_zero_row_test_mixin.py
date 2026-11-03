@@ -7,25 +7,26 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-import pyarrow as pa
 import pytest
 
+from mloda._testing.typed_data import TypedTestData
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.user import Feature
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import ZeroRowResultTypeTestMixin
 
 AGGREGATION_TYPES = sorted(AggregatedFeatureGroup.AGGREGATION_TYPES)
 
-ZERO_ROWS = pa.table(
+ZERO_ROWS = TypedTestData(
     {
-        "sales": pa.array([], type=pa.int64()),
-        "price": pa.array([], type=pa.float64()),
-        "metrics~0": pa.array([], type=pa.int64()),
-        "metrics~1": pa.array([], type=pa.int64()),
+        "sales": (DataType.INT64, []),
+        "price": (DataType.DOUBLE, []),
+        "metrics~0": (DataType.INT64, []),
+        "metrics~1": (DataType.INT64, []),
     }
 )
-ALL_NULL_PRICE = pa.table({"price": pa.array([None, None, None], type=pa.float64())})
-INT32_SALES = pa.table({"sales": pa.array([100, 200, 300], type=pa.int32())})
+ALL_NULL_PRICE = TypedTestData({"price": (DataType.DOUBLE, [None, None, None])})
+INT32_SALES = TypedTestData({"sales": (DataType.INT32, [100, 200, 300])})
 
 
 class AggregatedZeroRowTestMixin(ZeroRowResultTypeTestMixin):
@@ -57,4 +58,5 @@ class AggregatedZeroRowTestMixin(ZeroRowResultTypeTestMixin):
     def test_min_max_preserve_int32_source_width(self, aggregation: str) -> None:
         feature_name = f"sales__{aggregation}_aggr"
         result = self.calculate(INT32_SALES, Feature(feature_name))
-        assert self.column_type(result, feature_name) == self.column_type(self.from_arrow(INT32_SALES), "sales")
+        source = self.adapter.from_typed(INT32_SALES)
+        assert self.adapter.column_type(result, feature_name) == self.adapter.column_type(source, "sales")

@@ -25,6 +25,7 @@ from decimal import Decimal
 from typing import Any
 from mloda.user import DataType
 from mloda.user import JoinType
+import pyarrow as pa
 import pytest
 from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
 from mloda.user import FeatureName
@@ -70,6 +71,10 @@ if PYSPARK_AVAILABLE:
         DoubleType,
         DecimalType,
         TimestampType,
+        TimestampNTZType,
+        ByteType,
+        ShortType,
+        ArrayType,
     )
     import pyspark
 else:
@@ -83,6 +88,7 @@ else:
     DoubleType = None
     DecimalType = None
     TimestampType = None
+    TimestampNTZType = None
     pyspark = None
 
 
@@ -392,6 +398,26 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
+    EXTENDED_SKIPS = {
+        "uint8_col": "Spark has no unsigned integer types",
+        "uint64_col": "Spark has no unsigned integer types",
+        "uint16_col": "Spark has no unsigned integer types",
+        "uint32_col": "Spark has no unsigned integer types",
+        "timestamp_us_tz_col": (
+            "Spark TimestampType is kept as TIMESTAMP_MICROS for compatibility "
+            "(it is the instant type; TimestampNTZType is the naive one)"
+        ),
+        "timestamp_ns_tz_col": (
+            "Spark TimestampType is kept as TIMESTAMP_MICROS for compatibility "
+            "(it is the instant type; TimestampNTZType is the naive one)"
+        ),
+    }
+
+    @pytest.fixture
+    def extended_sample_data(self, spec: ColumnSpec, spark_session: Any) -> Any:
+        self._skip_if_unsupported(spec)
+        return self._build_spark((spec,), spark_session)
+
     @pytest.fixture
     def validator_sample_data(self, spark_session: Any) -> Any:
         return self._build_spark(self.VALIDATOR_COLUMNS, spark_session)
@@ -400,12 +426,35 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def precision_sample_data(self, spark_session: Any) -> Any:
         return self._build_spark(self.PRECISION_COLUMNS, spark_session)
 
+    @staticmethod
+    def _spark_type(spec: ColumnSpec) -> Any:
+        # Extended columns derive their Spark type from the explicit Arrow type (ArrayType needs an element type).
+        if spec.data_type == DataType.INT8:
+            return ByteType()
+        if spec.arrow_type == pa.int16():
+            return ShortType()
+        if spec.arrow_type in (pa.timestamp("s"), pa.timestamp("ns")):
+            return TimestampNTZType()
+        if spec.data_type == DataType.LIST:
+            element = spec.arrow_type.value_type  # type: ignore[union-attr]
+            if element == pa.string():
+                return ArrayType(StringType())
+            if element == pa.int64():
+                return ArrayType(LongType())
+            return ArrayType(StructType([StructField("x", LongType())]))
+        return _SPARK_TYPE_MAP[spec.data_type]
+
     def _build_spark(self, columns: tuple[ColumnSpec, ...], spark_session: Any) -> Any:
         # Spark needs an explicit StructType, so the schema is built per-column from
         # _SPARK_TYPE_MAP. Values flow via the mixin's arrow table -> pylist.
-        usable = tuple(c for c in columns if c.data_type in _SPARK_TYPE_MAP)
-        schema = StructType([StructField(c.name, _SPARK_TYPE_MAP[c.data_type]) for c in usable])
-        return spark_session.createDataFrame(self._arrow_table(usable).to_pylist(), schema=schema)
+        usable = tuple(c for c in columns if c.arrow_type is not None or c.data_type in _SPARK_TYPE_MAP)
+        schema = StructType([StructField(c.name, self._spark_type(c)) for c in usable])
+        table = self._arrow_table(usable)
+        # ns timestamps come back as pandas.Timestamp, which Spark rejects; values are whole days, so us is lossless.
+        for i, f in enumerate(table.schema):
+            if pa.types.is_timestamp(f.type) and f.type.unit == "ns" and f.type.tz is None:
+                table = table.set_column(i, f.name, table.column(i).cast(pa.timestamp("us")))
+        return spark_session.createDataFrame(table.to_pylist(), schema=schema)
 
     def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
         pytest.skip("Spark has only one TimestampType (microseconds); millisecond cannot be expressed")

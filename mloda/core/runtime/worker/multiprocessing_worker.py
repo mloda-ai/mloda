@@ -11,7 +11,12 @@ from uuid import UUID
 from queue import Empty
 
 from mloda.core.abstract_plugins.close_context import CloseContext, CloseReason
-from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+from mloda.core.abstract_plugins.components.credential_grant import grant_scope
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    current_registered_secrets,
+    redact_exception,
+    registered_secrets_scope,
+)
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -151,6 +156,7 @@ def _handle_command_result(
 
 def _report_failure(cfw_register: CfwManager, command_queue: multiprocessing.Queue[Any], e: BaseException) -> None:
     try:
+        redact_exception(e, current_registered_secrets())
         msg, exc_info = failure_report(e)
         if cfw_register:
             try:
@@ -169,9 +175,10 @@ def worker(
     cfw: ComputeFramework,
     from_cfw: UUID | None,
     registered_secrets: frozenset[str] = frozenset(),
+    identity_secrets: frozenset[str] | None = None,
     worker_index: int = 0,
 ) -> None:
-    with registered_secrets_scope(registered_secrets):
+    with registered_secrets_scope(registered_secrets, identity_secrets):
         _run_worker(command_queue, result_queue, cfw_register, cfw, from_cfw, worker_index)
 
 
@@ -193,6 +200,7 @@ def _run_worker(
     object.__setattr__(cfw, "worker_index", worker_index)
     run_context = RunContext()
     reason: CloseReason = "error"
+    reported = False
 
     try:
         run_context = cfw_register.get_run_context()
@@ -223,11 +231,20 @@ def _run_worker(
                     break
                 continue
 
-            data = _execute_command(command, cfw_register, cfw, data, from_cfw)
-            _handle_command_result(command, cfw, location, data, result_queue)
+            step, grant = command
+            with grant_scope(grant):
+                try:
+                    data = _execute_command(step, cfw_register, cfw, data, from_cfw)
+                except BaseException as e:
+                    reported = True
+                    _report_failure(cfw_register, command_queue, e)
+                    break
+            _handle_command_result(step, cfw, location, data, result_queue)
 
             time.sleep(0.0001)
     except BaseException as e:
+        if reported:
+            raise
         _report_failure(cfw_register, command_queue, e)
     finally:
         context = CloseContext(

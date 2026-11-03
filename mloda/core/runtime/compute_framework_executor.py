@@ -3,10 +3,18 @@ from __future__ import annotations
 import multiprocessing  # noqa: F401
 import threading
 import logging
+from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any, Callable
 from uuid import UUID, uuid4
 
+from mloda.core.abstract_plugins.components.credential_grant import CredentialGrant, StaticGrant, grant_scope
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    current_identity_secrets,
+    current_registered_secrets,
+    redact_exception,
+)
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -16,7 +24,6 @@ from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep, resolve_join_source_cfw
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
 from mloda.core.runtime.worker_manager import WorkerManager
 from mloda.core.runtime.worker.thread_worker import thread_worker
 from mloda.core.runtime.worker.multiprocessing_worker import worker
@@ -31,6 +38,8 @@ class ComputeFrameworkExecutor:
     Extracted from Runner class to handle CFW lifecycle and step execution logic.
     """
 
+    _grant_kind: Callable[[Mapping[str, Any]], CredentialGrant] = StaticGrant
+
     def __init__(
         self,
         cfw_register: CfwManager,
@@ -39,6 +48,7 @@ class ComputeFrameworkExecutor:
         function_extender: set[Extender] | None = None,
         worker_extender_payload: bytes | None = None,
         hook_extenders: dict[ExtenderHook, Extender] | None = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> None:
         """
         Initialize the executor with dependencies.
@@ -55,6 +65,7 @@ class ComputeFrameworkExecutor:
                 `_pending_extender_payload` and materialized by `ComputeFramework.__setstate__`
                 only once the instance is actually unpickled in the worker.
             hook_extenders: The run's hook table; a resident framework gets a read-only copy at attach time.
+            data_access_collection: Source of the credentials a step declared, granted to it at dispatch.
         """
         self.cfw_collection: dict[UUID, ComputeFramework] = {}
         self.cfw_register = cfw_register
@@ -63,6 +74,7 @@ class ComputeFrameworkExecutor:
         self.function_extender = function_extender
         self.worker_extender_payload = worker_extender_payload
         self.hook_extenders = hook_extenders
+        self.data_access_collection = data_access_collection
         self._cfw_lock = threading.Lock()
         self.own_frame_sources: dict[UUID, UUID] = {}
 
@@ -341,6 +353,13 @@ class ComputeFrameworkExecutor:
         else:
             cfw.fallback_connection_object = conn
 
+    def _credential_grant(self, step: Any) -> CredentialGrant | None:
+        """A fresh grant of the credentials the step declared, or None when it declared none."""
+        collection = self.data_access_collection
+        if collection is None or not isinstance(step, FeatureGroupStep) or not step.credential_handles:
+            return None
+        return self._grant_kind({h: collection.credentials[h] for h in step.credential_handles})
+
     def sync_execute_step(self, step: Any) -> None:
         """
         Executes a step synchronously.
@@ -349,15 +368,17 @@ class ComputeFrameworkExecutor:
 
         self._bind_connection(step, cfw_uuid)
 
-        try:
-            from_cfw = self.prepare_tfs_and_joinstep(step) or None
-            cfw = self.cfw_collection[cfw_uuid]
-            step.execute(self.cfw_register, cfw, from_cfw=from_cfw)
-            step.step_is_done = True
+        with grant_scope(self._credential_grant(step)):
+            try:
+                from_cfw = self.prepare_tfs_and_joinstep(step) or None
+                cfw = self.cfw_collection[cfw_uuid]
+                step.execute(self.cfw_register, cfw, from_cfw=from_cfw)
+                step.step_is_done = True
 
-        except Exception as e:
-            msg, exc_info = failure_report(e)
-            self.cfw_register.set_error(msg, exc_info, exception=e)
+            except Exception as e:
+                redact_exception(e, current_registered_secrets())
+                msg, exc_info = failure_report(e)
+                self.cfw_register.set_error(msg, exc_info, exception=e)
 
     def thread_execute_step(self, step: Any) -> None:
         """
@@ -371,7 +392,15 @@ class ComputeFrameworkExecutor:
 
         task = threading.Thread(
             target=thread_worker,
-            args=(step, self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw, current_registered_secrets()),
+            args=(
+                step,
+                self.cfw_register,
+                self.cfw_collection[cfw_uuid],
+                from_cfw,
+                current_registered_secrets(),
+                current_identity_secrets(),
+                self._credential_grant(step),
+            ),
             daemon=True,  # an abandoned step thread must not block interpreter exit
         )
 
@@ -395,12 +424,18 @@ class ComputeFrameworkExecutor:
             process, command_queue, result_queue = self.worker_manager.create_worker_process(
                 cfw_uuid,
                 worker,
-                (self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw, current_registered_secrets()),
+                (
+                    self.cfw_register,
+                    self.cfw_collection[cfw_uuid],
+                    from_cfw,
+                    current_registered_secrets(),
+                    current_identity_secrets(),
+                ),
             )
         else:
             process, command_queue, result_queue = existing
 
-        self.worker_manager.send_command(cfw_uuid, step)
+        self.worker_manager.send_command(cfw_uuid, (step, self._credential_grant(step)))
         # Track by step.get_result_uuid() (== step.uuid), the id a worker reports back via
         # result_queue. get_uuids() returns feature uuids instead, a different namespace that
         # made find_orphaned_steps flag every finished worker as still owing a result.

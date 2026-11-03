@@ -20,6 +20,7 @@ import pytest
 from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.interfaces.cli import demo
 from mloda.interfaces.cli.main import build_services, main
 from mloda.interfaces.service.catalog import Catalog
 from mloda.interfaces.service.config import Settings, load_settings
@@ -200,18 +201,33 @@ def _assert_no_withheld_values(outcome: _Outcome) -> None:
         assert customer_id not in outcome.err
 
 
+EXPLAIN_TEXT = "step 1  CsvFG  customer_id, income, segment  (source sales)\n"
+
+
 class TestExplainParity:
+    @pytest.mark.parametrize("extra", [[], ["--format", "json"]])
     def test_explain_file_prints_exactly_the_service_result(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, extra: list[str]
     ) -> None:
         config = _config(tmp_path)
         _elsewhere(tmp_path, monkeypatch)
 
-        outcome = _cli(["explain", str(_request_file(tmp_path)), "--config", str(config)])
+        outcome = _cli(["explain", str(_request_file(tmp_path)), "--config", str(config), *extra])
 
         assert outcome.code == 0, outcome.err
         assert outcome.json() == _expected_explain(config)
         assert "plan_id" in outcome.json()
+
+    def test_text_format_prints_one_line_per_step(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli(["explain", str(_request_file(tmp_path)), "--format", "text", "--config", str(config)])
+
+        assert outcome.code == 0, outcome.err
+        assert outcome.err == ""
+        assert outcome.out == EXPLAIN_TEXT
+        _assert_no_paths(outcome.out, tmp_path)
 
     def test_explain_stdin_prints_exactly_the_service_result(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -256,13 +272,14 @@ class TestExplainErrors:
             ({"features": [{"name": "income", "options": {RESERVED_READER_OPTION_KEY: SECRET}}]}, "policy_denied"),
         ],
     )
+    @pytest.mark.parametrize("extra", [[], ["--format", "text"]])
     def test_error_result_goes_to_stdout_with_exit_2(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request_value: Any, code: str
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request_value: Any, code: str, extra: list[str]
     ) -> None:
         config = _config(tmp_path)
         _elsewhere(tmp_path, monkeypatch)
 
-        outcome = _cli(["explain", str(_request_file(tmp_path, request_value)), "--config", str(config)])
+        outcome = _cli(["explain", str(_request_file(tmp_path, request_value)), "--config", str(config), *extra])
 
         assert outcome.code == 2
         assert _error_code(outcome) == code
@@ -877,6 +894,40 @@ DataFrames: pip install "mloda[pandas]"
 
 
 class TestDemo:
+    def test_plan_lines_name_the_groups_of_transform_and_join_steps(self) -> None:
+        idle: dict[str, Any] = {
+            "features": [],
+            "source": None,
+            "inputs": [],
+            "source_feature_group": None,
+            "join_type": None,
+        }
+        steps = [
+            {
+                **idle,
+                "step": 1,
+                "kind": "compute",
+                "feature_group": "CsvFG",
+                "features": ["customer_id", "income"],
+                "source": "sales",
+            },
+            {**idle, "step": 2, "kind": "transform", "feature_group": "JsonFG", "source_feature_group": "CsvFG"},
+            {
+                **idle,
+                "step": 3,
+                "kind": "join",
+                "feature_group": "CsvFG",
+                "source_feature_group": "JsonFG",
+                "join_type": "inner",
+            },
+        ]
+
+        assert demo.plan_lines(steps) == [
+            "step 1  CsvFG      customer_id, income  (source sales)",
+            "step 2  transform  CsvFG -> JsonFG",
+            "step 3  join       CsvFG + JsonFG  (inner)",
+        ]
+
     @pytest.mark.parametrize(
         ("toml", "env"),
         [

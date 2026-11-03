@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import pyarrow as pa
 import pytest
 
+from mloda._testing.typed_data import TypedTestData
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import DefaultOptionKeys
 from mloda.user import Feature
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
@@ -12,11 +13,11 @@ from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mix
 
 WINDOW_FUNCTIONS = sorted(TimeWindowFeatureGroup.WINDOW_FUNCTIONS)
 
-ZERO_ROWS = pa.table(
+ZERO_ROWS = TypedTestData(
     {
-        "temperature": pa.array([], type=pa.int64()),
-        "humidity": pa.array([], type=pa.float64()),
-        DefaultOptionKeys.reference_time.value: pa.array([], type=pa.timestamp("ns")),
+        "temperature": (DataType.INT64, []),
+        "humidity": (DataType.DOUBLE, []),
+        DefaultOptionKeys.reference_time.value: (DataType.TIMESTAMP_MICROS, []),
     }
 )
 
@@ -28,4 +29,7 @@ class TimeWindowZeroRowTestMixin(ZeroRowResultTypeTestMixin):
     @pytest.mark.parametrize("window_function", WINDOW_FUNCTIONS)
     def test_zero_rows_result_is_typed(self, window_function: str, source: str) -> None:
         feature_name = f"{source}__{window_function}_3_day_window"
-        self.assert_typed(self.calculate(ZERO_ROWS, Feature(feature_name)), feature_name, 0)
+        pa = pytest.importorskip("pyarrow")
+        arrow_types = {DefaultOptionKeys.reference_time.value: pa.timestamp("ns")}
+        result = self.calculate(ZERO_ROWS, Feature(feature_name), arrow_types=arrow_types)
+        self.assert_typed(result, feature_name, 0)

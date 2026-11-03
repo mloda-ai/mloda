@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -6,7 +7,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from mloda.user import FeatureName, ParallelizationMode
+from mloda.user import DataType, FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
     DataTypeValidatorFrameworkTestMixin,
@@ -195,9 +196,30 @@ class TestPandasDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     STRING; plain object dtype would be ambiguous and resolve to None.
     """
 
+    EXTENDED_SKIPS = {
+        "list_str_col": "to_pandas yields object columns for lists, which carry no element type",
+        "list_struct_col": "to_pandas yields object columns for lists, which carry no element type",
+        "list_fixed_col": "to_pandas yields object columns for lists, which carry no element type",
+    }
+
     @pytest.fixture
     def framework_instance(self) -> Any:
         return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.mark.parametrize(
+        "values,arrow_type,expected",
+        [
+            ([["a"], ["b", "c"]], pa.list_(pa.string()), DataType.LIST),
+            ([datetime(2024, 1, 1, tzinfo=UTC)], pa.timestamp("us", tz="UTC"), DataType.TIMESTAMP_MICROS_TZ),
+            ([date(2024, 1, 1)], pa.date32(), DataType.DATE),
+        ],
+        ids=["list", "timestamp_tz", "date32"],
+    )
+    def test_arrow_dtype_column_resolves_through_arrow_mapping(
+        self, framework_instance: Any, values: list[Any], arrow_type: pa.DataType, expected: DataType
+    ) -> None:
+        df = pd.DataFrame({"c": pd.Series(values, dtype=pd.ArrowDtype(arrow_type))})
+        assert framework_instance._extract_column_data_type(df, "c") == expected
 
     def from_arrow(self, table: pa.Table) -> Any:
         # Option A: arrow -> pandas via to_pandas. types_mapper preserves pd.StringDtype()

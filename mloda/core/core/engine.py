@@ -71,6 +71,7 @@ from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.property_spec import unforwarded_keys
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.credential_handle import (
@@ -256,6 +257,7 @@ class Engine:
             run_context=self.run_context,
             output_framework=self.output_framework,
             output_connection=self.output_connection,
+            data_access_collection=self.data_access_collection,
         )
         if isinstance(orchestrator, ExecutionOrchestrator):
             return orchestrator
@@ -1161,7 +1163,13 @@ class Engine:
         # Captured before recursion renames digit-only ~N part requests to their base (issue #2031).
         declared_names = {str(entry) if isinstance(entry, str) else str(entry.name) for entry in ordered}
         declared_order = [str(entry) if isinstance(entry, str) else str(entry.name) for entry in ordered]
-        features = Features(ordered, child_options=options, child_uuid=uuid, parent_domain=parent_domain)
+        features = Features(
+            ordered,
+            child_options=options,
+            child_uuid=uuid,
+            parent_domain=parent_domain,
+            consumer_local_keys=unforwarded_keys(feature_group_class.PROPERTY_MAPPING),
+        )
         consumer_name = feature_group_class.get_class_name()
         consumer_property_keys = self._property_mapping_keys(feature_group_class)
         for input_feature in features.collection:

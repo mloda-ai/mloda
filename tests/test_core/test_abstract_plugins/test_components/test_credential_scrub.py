@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import time
+from collections import OrderedDict, defaultdict
+from collections.abc import Callable
 from enum import Enum
-from typing import Any
+from typing import Any, NamedTuple
 
 import pytest
 
@@ -1339,6 +1342,19 @@ class TestScrubUriFailClosed:
             pytest.param(
                 'jdbc:postgresql://h/scott/tiger"@host:1521/svc', "tiger", id="jdbc-double-quote-before-at-after-path"
             ),
+            pytest.param("https://host/x.csv;PHPSESSID=abc123secret", "abc123secret", id="path-param-phpsessid"),
+            pytest.param("https://host/x.csv;token=abc123secret", "abc123secret", id="path-param-token"),
+            pytest.param("https://host/x.csv;API-KEY=abc123secret", "abc123secret", id="path-param-api-key"),
+            pytest.param(
+                "https://host/x.csv;x-amz-signature=abc123secret", "abc123secret", id="path-param-amz-signature"
+            ),
+            pytest.param("https://host/x.csv;sessid=abc123secret", "abc123secret", id="path-param-sessid"),
+            pytest.param("s3://b/d;aws.token=SECRET/x.csv", "SECRET", id="path-param-dotted-key"),
+            pytest.param("s3://b/d;x~token=SECRET/x.csv", "SECRET", id="path-param-tilde-key"),
+            pytest.param("s3://b/d;v=1,token=SECRETCOMMA/x.csv", "SECRETCOMMA", id="path-param-comma-separated"),
+            pytest.param("s3://b/d;v=1&token=SECRETAMP/x.csv", "SECRETAMP", id="path-param-ampersand"),
+            pytest.param("s3://b/d;token = SECRETSPACE/x.csv", "SECRETSPACE", id="path-param-spaces-around-equals"),
+            pytest.param("s3://b/d;token=SECRETVAL,b/x.csv", "SECRETVAL", id="path-param-comma-in-value"),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:
@@ -1445,6 +1461,15 @@ def test_mask_literals_masks_every_occurrence_and_merges_overlaps() -> None:
     assert _LITERAL not in masked
     assert masked.startswith("a ")
     assert mask_literals("nothing here", {_LITERAL}) == "nothing here"
+
+
+class _Pair(NamedTuple):
+    first: str
+    second: str
+
+
+class _KeepList(list[Any]):
+    pass
 
 
 class TestRedactException:
@@ -1599,36 +1624,150 @@ class TestRedactException:
 
         assert _LITERAL not in repr(exc.args)
 
-    def test_a_str_instance_attribute_is_masked(self) -> None:
+    @pytest.mark.parametrize(
+        ("payload", "expected"),
+        [
+            pytest.param(_LITERAL, "***", id="str"),
+            pytest.param({"k": _LITERAL}, {"k": "***"}, id="dict-value"),
+            pytest.param({_LITERAL: "v"}, {"***": "v"}, id="dict-key"),
+            pytest.param([_LITERAL, "keep"], ["***", "keep"], id="list"),
+            pytest.param((_LITERAL, "keep"), ("***", "keep"), id="tuple"),
+            pytest.param(_Pair(_LITERAL, "keep"), _Pair("***", "keep"), id="namedtuple"),
+        ],
+    )
+    def test_an_instance_attribute_is_masked(self, payload: Any, expected: Any) -> None:
         from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
 
         class TokenHolderError(Exception):
-            def __init__(self, token: str) -> None:
+            def __init__(self, token: Any) -> None:
                 super().__init__("failed")
                 self.token = token
 
             def __str__(self) -> str:
-                return self.token
+                return repr(self.token)
 
-        exc = TokenHolderError(_LITERAL)
+        exc = TokenHolderError(payload)
 
         redact_exception(exc, frozenset({_LITERAL}))
 
         assert _LITERAL not in str(exc)
-        assert exc.token == "***"  # nosec B105
+        assert exc.token == expected
+        assert type(exc.token) is type(expected)
 
-    def test_a_frozen_dataclass_exception_repr_is_masked(self) -> None:
+    def test_set_and_non_dict_mapping_attributes_are_left_as_is(self) -> None:
+        from types import MappingProxyType
+
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        exc = ValueError("failed")
+        as_set = {_LITERAL}
+        as_proxy = MappingProxyType({"k": _LITERAL})
+        setattr(exc, "as_set", as_set)
+        setattr(exc, "as_proxy", as_proxy)
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert getattr(exc, "as_set") is as_set
+        assert getattr(exc, "as_proxy") is as_proxy
+        assert _LITERAL in as_set
+        assert as_proxy["k"] == _LITERAL
+
+    def test_a_deeply_nested_list_attribute_is_masked_without_recursion_error(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        nested: list[Any] = [_LITERAL]
+        for _ in range(5000):
+            nested = [nested]
+        exc = ValueError("failed")
+        setattr(exc, "deep", nested)
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert _LITERAL not in repr(getattr(exc, "deep"))
+
+    @pytest.mark.parametrize(
+        ("payload", "expected"),
+        [
+            pytest.param(f"d {_LITERAL}", "d ***", id="str-field"),
+            pytest.param({"k": _LITERAL}, {"k": "***"}, id="dict-field"),
+        ],
+    )
+    def test_a_frozen_dataclass_exception_repr_is_masked(self, payload: Any, expected: Any) -> None:
         from dataclasses import dataclass
 
         from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
 
         @dataclass(frozen=True)
         class FrozenDetailError(Exception):
-            detail: str
+            detail: Any
 
-        exc = FrozenDetailError(f"d {_LITERAL}")
+        exc = FrozenDetailError(payload)
 
         redact_exception(exc, frozenset({_LITERAL}))
 
         assert _LITERAL not in repr(exc)
         assert _LITERAL not in str(exc)
+        assert exc.detail == expected
+
+    @pytest.mark.parametrize(
+        "factory",
+        [
+            pytest.param(lambda: OrderedDict(a="keep"), id="ordereddict"),
+            pytest.param(lambda: defaultdict(list, {"a": ["keep"]}), id="defaultdict"),
+            pytest.param(lambda: _KeepList(["keep"]), id="list-subclass"),
+            pytest.param(lambda: os.stat("."), id="stat-result"),
+            pytest.param(lambda: time.gmtime(0), id="struct-time"),
+            pytest.param(lambda: ["keep", 1], id="plain-list"),
+        ],
+    )
+    def test_a_container_without_a_literal_keeps_identity_and_type(self, factory: Callable[[], Any]) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        value = factory()
+        exc = ValueError("failed")
+        setattr(exc, "held", value)
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert getattr(exc, "held") is value
+
+    @pytest.mark.parametrize("payload", [f"x {_LITERAL}", [f"x {_LITERAL}"]], ids=["str", "list"])
+    def test_a_property_shadowing_an_instance_attribute_does_not_raise(self, payload: Any) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        class PropertyError(Exception):
+            @property
+            def info(self) -> Any:
+                return self.__dict__["info"]
+
+        exc = PropertyError("failed")
+        exc.__dict__["info"] = payload
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert _LITERAL not in repr(exc.__dict__["info"])
+
+    def test_a_tuple_first_cycle_in_a_tuple_attribute_is_masked(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        lst: list[Any] = [_LITERAL]
+        cyc = (lst,)
+        lst.append(cyc)
+        exc = ValueError("failed")
+        setattr(exc, "held", cyc)
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert _LITERAL not in repr(getattr(exc, "held"))
+
+    def test_a_tuple_first_cycle_in_an_arg_is_masked(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        lst: list[Any] = [_LITERAL]
+        cyc = (lst,)
+        lst.append(cyc)
+        exc = ValueError(cyc)
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert _LITERAL not in repr(exc.args)

@@ -23,6 +23,8 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 )
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.python_dict import PythonDictAggregation
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG
 
 # Imported for their registration side effect: the README request names the framework by string.
 _REGISTERED = (PythonDictFramework, PythonDictAggregation)
@@ -158,12 +160,26 @@ class TestNonMappingFrames:
 class TestPlanLines:
     """Plan steps render numbered from 1, labelled and detailed per step kind."""
 
-    def test_non_compute_steps_are_labelled_by_kind_and_a_root_step_has_no_detail_suffix(self) -> None:
+    def test_a_root_compute_step_renders_its_sorted_names_without_a_detail_suffix(self) -> None:
         compute = PlanStep("compute", ("b", "a"), ApiDataFG, None, None, None)
-        join = PlanStep("join", (), None, None, None, None)
-        results = _hand_built([{"a": [1]}], [compute, join])
+        results = _hand_built([{"a": [1]}], [compute])
 
-        assert results.summary() == "Result\na\n1\n\nPlan\nstep 1  ApiDataFG  a, b\nstep 2  join"
+        assert results.summary() == "Result\na\n1\n\nPlan\nstep 1  ApiDataFG  a, b"
+
+    def test_transform_and_join_steps_are_labelled_by_kind_and_name_their_groups(self) -> None:
+        compute = PlanStep(
+            "compute", ("income", "customer_id"), CsvFG, None, None, None, _data_access_identity="api_data:sales"
+        )
+        transform = PlanStep("transform", (), JsonFG, None, CsvFG, None)
+        join = PlanStep("join", (), CsvFG, None, JsonFG, None, join_type="inner")
+        results = _hand_built([{"a": [1]}], [compute, transform, join])
+
+        assert results.summary() == (
+            "Result\na\n1\n\nPlan\n"
+            "step 1  CsvFG      customer_id, income  (source sales)\n"
+            "step 2  transform  CsvFG -> JsonFG\n"
+            "step 3  join       CsvFG + JsonFG  (inner)"
+        )
 
     def test_plan_detail_names_the_api_data_source_or_the_inputs(self) -> None:
         source = PlanStep("compute", ("x",), ApiDataFG, None, None, None, _data_access_identity="api_data:Orders")

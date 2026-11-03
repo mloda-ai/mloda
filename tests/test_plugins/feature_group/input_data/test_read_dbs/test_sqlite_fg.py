@@ -111,9 +111,6 @@ class TestSqliteLoadsIntoPyArrowTable(PyArrowTableAdapter, DatabaseLoadsIntoFram
     def write_database(self, path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
         write_sqlite(path, tables)
 
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result.column(column).to_pylist())
-
 
 class TestSqliteLoadsIntoPythonDict(PythonDictAdapter, DatabaseLoadsIntoFrameworkMixin):
     db_group = SqliteFG
@@ -122,9 +119,6 @@ class TestSqliteLoadsIntoPythonDict(PythonDictAdapter, DatabaseLoadsIntoFramewor
 
     def write_database(self, path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
         write_sqlite(path, tables)
-
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column])
 
 
 class TestSqliteLoadsIntoPandas(PandasDataFrameAdapter, DatabaseLoadsIntoFrameworkMixin):
@@ -135,9 +129,6 @@ class TestSqliteLoadsIntoPandas(PandasDataFrameAdapter, DatabaseLoadsIntoFramewo
     def write_database(self, path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
         write_sqlite(path, tables)
 
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column].tolist())
-
 
 class TestSqliteLoadsIntoPolars(PolarsDataFrameAdapter, DatabaseLoadsIntoFrameworkMixin):
     db_group = SqliteFG
@@ -146,9 +137,6 @@ class TestSqliteLoadsIntoPolars(PolarsDataFrameAdapter, DatabaseLoadsIntoFramewo
 
     def write_database(self, path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
         write_sqlite(path, tables)
-
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        return list(result[column].to_list())
 
 
 @pytest.fixture()

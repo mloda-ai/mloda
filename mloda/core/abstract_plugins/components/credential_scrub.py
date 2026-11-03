@@ -166,47 +166,47 @@ def strip_uri_userinfo(text: str) -> str:
     return _USER_ONLY_PATTERN.sub(_drop_user_only, _drop_free_text_userinfo(text, _USERINFO_FALLBACK_PATTERN))
 
 
-_PATH_PARAMETER_SPAN = re.compile(r";(?:(?!::)[^/])*")
-_PATH_PARAMETER_KEY = re.compile(
-    rf"(?<![\w-])(?P<key>[\w-]*{_SECRET_NAME})(?P<sep>[ \t]*=[ \t]*)(?:(?!::)[^;/&])*", re.IGNORECASE
-)
-
-
 _MAX_DECODE_ROUNDS = 4
 _PART_SPLIT = re.compile(r"(/|::)")
-_PART_HEAD_END = re.compile(r"[;%]")
+_PARAMETER_REGION = re.compile(r"[;?#].", re.DOTALL)
 
 
-def _mask_raw_path_parameters(text: str) -> str:
-    return _PATH_PARAMETER_SPAN.sub(lambda m: _PATH_PARAMETER_KEY.sub(r"\g<key>\g<sep>***", m.group(0)), text)
-
-
-def _hides_credential(part: str) -> bool:
+def _decode_to_fixpoint(part: str) -> str | None:
     decoded = part
     for _ in range(_MAX_DECODE_ROUNDS + 1):
         nxt = unquote(decoded)
         if nxt == decoded:
-            probe = decoded.replace("::", "__").replace("/", "_")
-            return _mask_raw_path_parameters(probe) != probe
+            return decoded
         decoded = nxt
-    return True
+    return None
 
 
-def _mask_path_parameters(uri: str) -> str:
-    """Mask credential-named `;key=value` path parameter values, including percent-encoded ones."""
-    masked = _mask_raw_path_parameters(uri)
-    if "%" not in masked:
-        return masked
-    parts = _PART_SPLIT.split(masked)
+def _clean_head(part: str) -> str:
+    candidates = [i for i, char in enumerate(part) if char in ";%"]
+    low, high = 0, len(candidates)
+    while low < high:  # cleanliness is monotone: a dirty prefix keeps every longer one dirty
+        mid = (low + high) // 2
+        decoded = _decode_to_fixpoint(part[: candidates[mid]])
+        if decoded is None or any(mark in decoded for mark in ";?#"):
+            high = mid
+        else:
+            low = mid + 1
+    return part[: candidates[low - 1]] if low else ""
+
+
+def _cut_path_parameter_regions(uri: str) -> str:
+    """Cut every `/`- or `::`-separated part whose decoded form holds `;`, `?` or `#` plus text to head + `;***`."""
+    parts = _PART_SPLIT.split(uri)
     for i in range(0, len(parts), 2):
-        part = parts[i]
-        if "%" in part and _hides_credential(part):
-            parts[i] = _PART_HEAD_END.split(part, maxsplit=1)[0] + "***"
+        decoded = _decode_to_fixpoint(parts[i])
+        if decoded is None or _PARAMETER_REGION.search(decoded):
+            parts[i] = _clean_head(parts[i]) + ";***"
     return "".join(parts)
 
 
 _PLACEHOLDER = "\ue000"
 _REGISTERED_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_registered_secrets", default=frozenset())
+_IDENTITY_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_identity_secrets", default=frozenset())
 
 
 def _literal_spans(text: str, literals: Iterable[str]) -> list[tuple[int, int]]:
@@ -250,22 +250,35 @@ def mask_literals(text: str, literals: Iterable[str]) -> str:
 class registered_secrets_scope:  # noqa: N801
     """Add literals to the set ``scrub_credentials`` masks exactly, for this context only.
 
+    ``identity`` is the set that masks a published data_access_identity; None means the same as ``literals``.
     A class, not @contextmanager: that helper assigns ``__traceback__``, which a frozen-dataclass exception rejects.
     """
 
-    def __init__(self, literals: frozenset[str]) -> None:
+    def __init__(self, literals: frozenset[str], identity: frozenset[str] | None = None) -> None:
         self._literals = literals
-        self._tokens: list[Token[frozenset[str]]] = []
+        self._identity = literals if identity is None else identity
+        self._tokens: list[tuple[Token[frozenset[str]], Token[frozenset[str]]]] = []
 
     def __enter__(self) -> None:
-        self._tokens.append(_REGISTERED_SECRETS.set(_REGISTERED_SECRETS.get() | self._literals))
+        self._tokens.append(
+            (
+                _REGISTERED_SECRETS.set(_REGISTERED_SECRETS.get() | self._literals),
+                _IDENTITY_SECRETS.set(_IDENTITY_SECRETS.get() | self._identity),
+            )
+        )
 
     def __exit__(self, *exc_info: object) -> None:
-        _REGISTERED_SECRETS.reset(self._tokens.pop())
+        secrets_token, identity_token = self._tokens.pop()
+        _IDENTITY_SECRETS.reset(identity_token)
+        _REGISTERED_SECRETS.reset(secrets_token)
 
 
 def current_registered_secrets() -> frozenset[str]:
     return _REGISTERED_SECRETS.get()
+
+
+def current_identity_secrets() -> frozenset[str]:
+    return _IDENTITY_SECRETS.get()
 
 
 def scrub_credentials(text: str) -> str:
@@ -294,28 +307,48 @@ def _scrub_passes(text: str) -> str:
     return _SLASH_DSN_PATTERN.sub(r"\g<user>/***@", text)
 
 
-def _mask_item(item: Any, literals: frozenset[str], memo: dict[int, Any] | None = None) -> Any:
-    """Mask str leaves, recursing into tuples, lists and dicts (types kept, cycles terminate via ``memo``)."""
+# Bounds recursion so a deeply nested attribute cannot hit RecursionError on the failure path.
+_MAX_MASK_DEPTH = 32
+
+
+def _mask_item(item: Any, literals: frozenset[str], memo: dict[int, Any] | None = None, depth: int = 0) -> Any:
+    """Mask str leaves in tuples, lists and dicts; return ``item`` itself when nothing inside changed."""
     if isinstance(item, str):
-        return mask_literals(item, literals)
+        masked_str = mask_literals(item, literals)
+        return item if masked_str == item else masked_str
     if not isinstance(item, (tuple, list, dict)):
         return item
+    if depth > _MAX_MASK_DEPTH:
+        return "***"
     memo = {} if memo is None else memo
     if id(item) in memo:
         return memo[id(item)]
     if isinstance(item, list):
         masked_list: list[Any] = []
         memo[id(item)] = masked_list
-        masked_list.extend(_mask_item(element, literals, memo) for element in item)
+        masked_list.extend(_mask_item(element, literals, memo, depth + 1) for element in item)
+        if all(new is old for new, old in zip(masked_list, item)):
+            memo[id(item)] = item
+            return item
         return masked_list
     if isinstance(item, dict):
         masked_dict: dict[Any, Any] = {}
         memo[id(item)] = masked_dict
+        unchanged = True
         for key, element in item.items():
-            masked_dict[_mask_item(key, literals, memo)] = _mask_item(element, literals, memo)
+            new_key = _mask_item(key, literals, memo, depth + 1)
+            new_element = _mask_item(element, literals, memo, depth + 1)
+            masked_dict[new_key] = new_element
+            unchanged = unchanged and new_key is key and new_element is element
+        if unchanged:
+            memo[id(item)] = item
+            return item
         return masked_dict
-    memo[id(item)] = item
-    elements = [_mask_item(element, literals, memo) for element in item]
+    memo[id(item)] = "***"
+    elements = [_mask_item(element, literals, memo, depth + 1) for element in item]
+    if all(new is old for new, old in zip(elements, item)):
+        memo[id(item)] = item
+        return item
     result = item._make(elements) if hasattr(item, "_make") else tuple(elements)
     memo[id(item)] = result
     return result
@@ -332,10 +365,15 @@ def redact_exception(exc: BaseException, literals: frozenset[str]) -> BaseExcept
         if id(current) in seen:
             continue
         seen.add(id(current))
-        object.__setattr__(current, "args", _mask_item(tuple(current.args), literals))
-        for name, value in list(vars(current).items()):
-            if isinstance(value, str) and not name.startswith("__"):
-                object.__setattr__(current, name, mask_literals(value, literals))
+        masked_args = _mask_item(current.args, literals)
+        if masked_args is not current.args:
+            object.__setattr__(current, "args", masked_args)
+        attributes = vars(current)
+        for name, value in list(attributes.items()):
+            if isinstance(value, (str, dict, list, tuple)) and not name.startswith("__"):
+                masked = _mask_item(value, literals)
+                if masked is not value:
+                    attributes[name] = masked
         if isinstance(current, OSError):
             for name in ("strerror", "filename", "filename2"):
                 object.__setattr__(current, name, _mask_item(getattr(current, name), literals))

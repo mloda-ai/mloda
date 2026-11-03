@@ -1,152 +1,78 @@
-"""Shared framework adapters and hooks for family contract mixins (zero-row result typing, reading results back).
+"""Shared framework adapters and helpers for family contract mixins (zero-row result typing).
 
-Family mixins describe inputs as pyarrow Tables; a framework adapter converts them and reads row counts and
-column types and values back, so each framework's hooks are written once, not once per family.
+Family mixins describe inputs as TypedTestData; the framework adapter converts them and reads results back.
 feature_group_class is a feature group, or an Implementation for operation families."""
 
 from __future__ import annotations
 
-from abc import abstractmethod
-from typing import Any, ClassVar
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, Any, ClassVar
 
-import numpy as np
-import pyarrow as pa
-
+from mloda._testing.framework_adapter import FrameworkAdapter
+from mloda._testing.framework_adapter import PandasAdapter as _PandasAdapter
+from mloda._testing.framework_adapter import PolarsLazyAdapter as _PolarsLazyAdapter
+from mloda._testing.framework_adapter import PyArrowAdapter as _PyArrowAdapter
+from mloda._testing.framework_adapter import PythonDictAdapter as _PythonDictAdapter
+from mloda._testing.typed_data import TypedTestData
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Feature
-from mloda.user.python_dict import row_count as python_dict_row_count
 
-try:
-    import polars as pl
+if TYPE_CHECKING:
+    import pyarrow as pa
 
-    POLARS_AVAILABLE = True
-except ImportError:
-    pl = None  # type: ignore[assignment]
-    POLARS_AVAILABLE = False
+
+def edit_columns(
+    data: TypedTestData,
+    add: Mapping[str, tuple[DataType, Sequence[Any]]] | None = None,
+    drop: Sequence[str] = (),
+) -> TypedTestData:
+    """A copy of data without the dropped columns and with the added ones (an added name replaces its column)."""
+    values = data.to_python_dict()
+    columns: dict[str, tuple[DataType, Sequence[Any]]] = {
+        name: (data_type, values[name]) for name, data_type in data.types.items() if name not in drop
+    }
+    columns.update(add or {})
+    return TypedTestData(columns)
 
 
 class ZeroRowResultTypeTestMixin:
-    """Family-agnostic hooks, a calculate helper and the typed-result assertion."""
+    """A calculate helper and the typed-result assertion over the class's framework adapter."""
 
     # Read by the family tests and by tests/test_plugins/test_mixin_consumer_coverage.py.
     feature_group_class: ClassVar[type[FeatureGroup] | type[Implementation[Any]]]
-    untyped_column_types: ClassVar[tuple[Any, ...]]
+    adapter: ClassVar[FrameworkAdapter]
 
-    @abstractmethod
-    def from_arrow(self, table: pa.Table) -> Any:
-        raise NotImplementedError
-
-    @abstractmethod
-    def row_count(self, result: Any) -> int:
-        raise NotImplementedError
-
-    @abstractmethod
-    def column_type(self, result: Any, column: str) -> Any:
-        raise NotImplementedError
-
-    @abstractmethod
-    def column_names(self, result: Any) -> list[str]:
-        raise NotImplementedError
-
-    @abstractmethod
-    def column_values(self, result: Any, column: str) -> list[Any]:
-        raise NotImplementedError
-
-    def calculate(self, table: pa.Table, *features: Feature) -> Any:
+    def calculate(
+        self, data: TypedTestData, *features: Feature, arrow_types: Mapping[str, pa.DataType] | None = None
+    ) -> Any:
         feature_set = FeatureSet()
         for feature in features:
             feature_set.add(feature)
-        data = self.from_arrow(table)
+        frame = self.adapter.from_typed(data, arrow_types)
         if issubclass(self.feature_group_class, Implementation):
-            return self.feature_group_class.calculate(self.feature_group_class.feature_group, data, feature_set, None)
-        return self.feature_group_class.calculate_feature(data, feature_set)
+            return self.feature_group_class.calculate(self.feature_group_class.feature_group, frame, feature_set, None)
+        return self.feature_group_class.calculate_feature(frame, feature_set)
 
     def assert_typed(self, result: Any, column: str, expected_rows: int) -> None:
-        assert self.row_count(result) == expected_rows
-        column_type = self.column_type(result, column)
-        assert column_type not in self.untyped_column_types, f"{column} lost its type: {column_type}"
+        assert self.adapter.row_count(result) == expected_rows
+        assert not self.adapter.lost_type(result, column), (
+            f"{column} lost its type: {self.adapter.column_type(result, column)}"
+        )
 
 
 class PandasZeroRowAdapter(ZeroRowResultTypeTestMixin):
-    """pandas DataFrame containers; object dtype means the column lost its type."""
-
-    untyped_column_types = (np.dtype(object),)
-
-    def from_arrow(self, table: pa.Table) -> Any:
-        return table.to_pandas()
-
-    def row_count(self, result: Any) -> int:
-        return len(result)
-
-    def column_type(self, result: Any, column: str) -> Any:
-        return result[column].dtype
-
-    def column_names(self, result: Any) -> list[str]:
-        return list(result.columns)
-
-    def column_values(self, result: Any, column: str) -> list[Any]:
-        return list(result[column].tolist())
+    adapter = _PandasAdapter()
 
 
 class PyArrowZeroRowAdapter(ZeroRowResultTypeTestMixin):
-    """pyarrow Table containers; the null type means the column lost its type."""
-
-    untyped_column_types = (pa.null(),)
-
-    def from_arrow(self, table: pa.Table) -> Any:
-        return table
-
-    def row_count(self, result: Any) -> int:
-        return int(result.num_rows)
-
-    def column_type(self, result: Any, column: str) -> Any:
-        return result.column(column).type
-
-    def column_names(self, result: Any) -> list[str]:
-        return list(result.schema.names)
-
-    def column_values(self, result: Any, column: str) -> list[Any]:
-        return list(result.column(column).to_pylist())
+    adapter = _PyArrowAdapter()
 
 
 class PolarsLazyZeroRowAdapter(ZeroRowResultTypeTestMixin):
-    """polars LazyFrame containers, read after collect; Null and Object mean the column lost its type."""
-
-    untyped_column_types = (pl.Null, pl.Object) if POLARS_AVAILABLE else ()
-
-    def from_arrow(self, table: pa.Table) -> Any:
-        return pl.LazyFrame(table)
-
-    def row_count(self, result: Any) -> int:
-        return int(result.collect().height)
-
-    def column_type(self, result: Any, column: str) -> Any:
-        return result.collect()[column].dtype
-
-    def column_names(self, result: Any) -> list[str]:
-        return list(result.collect_schema().names())
-
-    def column_values(self, result: Any, column: str) -> list[Any]:
-        return list(result.collect()[column].to_list())
+    adapter = _PolarsLazyAdapter()
 
 
 class PythonDictZeroRowAdapter(ZeroRowResultTypeTestMixin):
-    """Columnar dicts hold dtype-less lists, so the check reduces to: the result column exists with zero rows."""
-
-    untyped_column_types = ()
-
-    def from_arrow(self, table: pa.Table) -> Any:
-        return table.to_pydict()
-
-    def row_count(self, result: Any) -> int:
-        return python_dict_row_count(result)
-
-    def column_type(self, result: Any, column: str) -> Any:
-        return type(result[column])
-
-    def column_names(self, result: Any) -> list[str]:
-        return list(result)
-
-    def column_values(self, result: Any, column: str) -> list[Any]:
-        return list(result[column])
+    adapter = _PythonDictAdapter()

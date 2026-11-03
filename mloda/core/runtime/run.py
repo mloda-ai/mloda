@@ -10,6 +10,7 @@ from uuid import UUID
 import logging
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, build_hook_extenders
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -141,6 +142,7 @@ class ExecutionOrchestrator:
         run_context: RunContext | None = None,
         output_framework: type[ComputeFramework] | None = None,
         output_connection: Any = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> None:
         """
         Initializes the ExecutionOrchestrator with an execution plan and optional flight server.
@@ -151,6 +153,7 @@ class ExecutionOrchestrator:
             run_context: The default run context used when __enter__ is called without one.
         """
         self.execution_planner = execution_planner
+        self.data_access_collection = data_access_collection
 
         self.cfw_register: CfwManager
         self.manager: Any = None
@@ -223,6 +226,7 @@ class ExecutionOrchestrator:
             function_extender=self.function_extender,
             worker_extender_payload=self.worker_extender_payload,
             hook_extenders=self._hook_extenders,
+            data_access_collection=self.data_access_collection,
         )
         self._register_modes = self.cfw_register.get_parallelization_modes()
 

@@ -18,8 +18,20 @@ def table_lines(names: Sequence[str], rows: Iterable[Sequence[Any]], hidden_rows
     return lines
 
 
-def plan_detail(features: Sequence[str], source: str | None, inputs: Sequence[str]) -> str:
-    """The step's feature names, then its api_data source alias or, failing that, its input feature names."""
+def plan_detail(
+    kind: str,
+    feature_group: str | None,
+    source_feature_group: str | None,
+    join_type: str | None,
+    features: Sequence[str],
+    source: str | None,
+    inputs: Sequence[str],
+) -> str:
+    """Transform: ``Source -> Dest``; join: ``Left + Right  (type)``; compute: names, then source alias or inputs."""
+    if kind == "transform":
+        return f"{source_feature_group} -> {feature_group}"
+    if kind == "join":
+        return f"{feature_group} + {source_feature_group}  ({join_type})"
     detail = ", ".join(features)
     if source:
         return f"{detail}  (source {source})"
@@ -28,7 +40,7 @@ def plan_detail(features: Sequence[str], source: str | None, inputs: Sequence[st
     return detail
 
 
-def plan_lines(steps: Iterable[tuple[int, str, str]]) -> list[str]:
+def step_lines(steps: Iterable[tuple[int, str, str]]) -> list[str]:
     """One aligned ``step N  label  detail`` line per (number, label, detail)."""
     return aligned([[f"step {number}", label, detail] for number, label, detail in steps])
 

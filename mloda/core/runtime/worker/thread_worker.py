@@ -2,9 +2,14 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.credential_grant import CredentialGrant, grant_scope
 from mloda.core.abstract_plugins.components.utils import failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    current_registered_secrets,
+    redact_exception,
+    registered_secrets_scope,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -16,11 +21,14 @@ def thread_worker(
     cfw: ComputeFramework,
     from_cfw: ComputeFramework | UUID | None,
     registered_secrets: frozenset[str] = frozenset(),
+    identity_secrets: frozenset[str] | None = None,
+    grant: CredentialGrant | None = None,
 ) -> None:
-    with registered_secrets_scope(registered_secrets):
+    with registered_secrets_scope(registered_secrets, identity_secrets), grant_scope(grant):
         try:
             command.execute(cfw_register, cfw, from_cfw=from_cfw)
             command.step_is_done = True
         except BaseException as e:  # not only Exception: anything escaping a thread is lost and the run hangs
+            redact_exception(e, current_registered_secrets())
             msg, exc_info = failure_report(e)
             cfw_register.set_error(msg, exc_info, exception=e)

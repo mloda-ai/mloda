@@ -3,6 +3,7 @@
 See ``docs/docs/in_depth/named-data-access-handles.md`` for the user-facing guide.
 """
 
+import logging
 import time
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.credential import Credential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.input_data.read_db_fg import ReadDBFG
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
 from mloda.user import Feature
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -884,9 +886,9 @@ class TestCopy:
 
 
 class TestSecretLiterals:
-    """secret_literals() yields only 8+ char str leaves under credential-shaped keys."""
+    """secret_literals() yields every 8+ char str leaf except under known-safe connection keys."""
 
-    def test_only_credential_keyed_leaves_are_registered(self, tmp_path: Path) -> None:
+    def test_every_leaf_except_safe_keys_is_registered(self, tmp_path: Path) -> None:
         dac = DataAccessCollection(
             credentials={
                 "db": {
@@ -894,11 +896,92 @@ class TestSecretLiterals:
                     "host": "db.internal.example",
                     "user": "administrator",
                 },
-                "api": {"token": TOY_TOKEN, "password": "correct-horse-battery"},  # nosec B105
+                "api": {
+                    "token": TOY_TOKEN,
+                    "password": "correct-horse-battery",  # nosec B105
+                    "key": "key-value-abcdef",
+                    "hmac": "hmac-value-abcdef",
+                    "toyfmt_custom_field": "custom-value-abcdef",
+                    "unknown_thing": "unknown-value-abcdef",
+                },
             }
         )
 
-        assert dac.secret_literals() == frozenset({TOY_TOKEN, "correct-horse-battery"})
+        assert dac.secret_literals() == frozenset(
+            {
+                TOY_TOKEN,
+                "correct-horse-battery",
+                "key-value-abcdef",
+                "hmac-value-abcdef",
+                "custom-value-abcdef",
+                "unknown-value-abcdef",
+            }
+        )
+        assert dac.identity_literals() == frozenset({TOY_TOKEN, "correct-horse-battery"})
+
+    @pytest.mark.parametrize(
+        "key",
+        ["server", "account", "role", "authenticator", "db_name", "DB-Name", "dbname", "HOST", ReadDBFG.TABLE_KEY],
+    )
+    def test_safe_connection_keys_stay_out(self, key: str) -> None:
+        dac = DataAccessCollection(credentials={"db": {key: "safe-value-12345", "password": "pw-value-123456"}})  # nosec B105
+
+        assert dac.secret_literals() == frozenset({"pw-value-123456"})
+
+    @pytest.mark.parametrize(
+        ("key", "expected_identity"),
+        [
+            ("db_password", frozenset({"masked-value-12345"})),
+            ("db-password", frozenset({"masked-value-12345"})),
+            ("client_secret", frozenset({"masked-value-12345"})),
+            ("dsn", frozenset()),
+            ("url", frozenset()),
+            ("conn", frozenset()),
+            ("uri", frozenset()),
+            ("connection_string", frozenset()),
+        ],
+    )
+    def test_masked_keys_are_registered(self, key: str, expected_identity: frozenset[str]) -> None:
+        dac = DataAccessCollection(credentials={"db": {key: "masked-value-12345", "client_id": "client-id-12345"}})
+
+        assert dac.secret_literals() == frozenset({"masked-value-12345"})
+        assert dac.identity_literals() == expected_identity
+
+    def test_nested_mapping_under_a_safe_key_masks_its_shaped_child_only(self) -> None:
+        dac = DataAccessCollection(
+            credentials={"db": {"host": {"password": "nested-pw-123456", "dbname": "nested-db-12345"}}}
+        )
+
+        assert dac.secret_literals() == frozenset({"nested-pw-123456"})
+
+    def test_shaped_ancestor_above_a_safe_child_is_masked(self) -> None:
+        dac = DataAccessCollection(credentials={"db": {"password": {"host": "shaped-host-12345"}}})  # nosec B105
+
+        assert dac.secret_literals() == frozenset({"shaped-host-12345"})
+
+    def test_container_shared_under_a_safe_and_a_non_safe_key_is_masked(self) -> None:
+        shared = ["shared-value-12345"]
+        dac = DataAccessCollection(credentials={"db": {"host": shared, "other": shared}})
+
+        assert dac.secret_literals() == frozenset({"shared-value-12345"})
+
+    def test_cyclic_credential_does_not_hang(self) -> None:
+        cyclic: dict[str, Any] = {"token": "cyclic-token-12345"}
+        cyclic["self"] = cyclic
+
+        dac = DataAccessCollection(credentials={"db": cyclic})
+
+        assert dac.secret_literals() == frozenset({"cyclic-token-12345"})
+
+    def test_credential_nested_in_a_list_that_contains_itself_does_not_hang(self) -> None:
+        loop: list[Any] = []
+        loop.append(loop)
+        inner = Credential(items=loop, token="inner-token-12345")  # nosec B106
+        loop.append(inner)
+
+        dac = DataAccessCollection(credentials={"db": {"wrapped": loop}})
+
+        assert "inner-token-12345" in dac.secret_literals()
 
     def test_nested_and_credential_wrapped_secrets_are_found(self) -> None:
         dac = DataAccessCollection(
@@ -918,6 +1001,73 @@ class TestSecretLiterals:
 
     def test_no_credentials_gives_an_empty_set(self) -> None:
         assert DataAccessCollection().secret_literals() == frozenset()
+
+
+class TestShortSecretWarning:
+    """Short credential-shaped str values warn at registration, naming handle and key path."""
+
+    _LOGGER = "mloda.core.abstract_plugins.components.data_access_collection"
+
+    def test_short_password_warns_naming_handle_and_key_without_the_value(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            dac = DataAccessCollection(credentials={"pg": {"auth": {"password": "hunter"}}})  # nosec B105
+
+        assert "pg" in caplog.text
+        assert "auth.password" in caplog.text
+        assert "hunter" not in caplog.text
+        assert "hunter" not in dac.secret_literals()
+
+    def test_long_value_does_not_warn(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            DataAccessCollection(credentials={"pg": {"password": "hunter-long"}})  # nosec B105
+
+        assert caplog.records == []
+
+    def test_blank_value_does_not_warn(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            DataAccessCollection(credentials={"pg": {"password": "   "}})  # nosec B105
+
+        assert caplog.records == []
+
+    def test_add_credentials_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        dac = DataAccessCollection()
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            dac.add_credentials("late", {"password": "hunter"})  # nosec B105
+
+        assert "late" in caplog.text
+        assert "password" in caplog.text
+        assert "hunter" not in caplog.text
+
+    def test_auto_handle_shows_unnamed(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            DataAccessCollection(credentials=[{"password": "hunter"}])  # nosec B105
+
+        assert "<unnamed>" in caplog.text
+        assert "_auto_credentials_" not in caplog.text
+        assert "hunter" not in caplog.text
+
+    def test_single_credential_form_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            DataAccessCollection(credentials=Credential(password="hunter"))  # nosec B106
+
+        assert "password" in caplog.text
+        assert "hunter" not in caplog.text
+
+    def test_safe_key_short_value_does_not_warn(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            DataAccessCollection(credentials={"pg": {"host": "db1", "user": "bob"}})
+
+        assert caplog.records == []
+
+    def test_copy_does_not_warn_again(self, caplog: pytest.LogCaptureFixture) -> None:
+        dac = DataAccessCollection(credentials={"pg": {"password": "hunter"}})  # nosec B105
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            dac.copy()
+
+        assert caplog.records == []
 
 
 class TestApiDataColumnsAccessor:
@@ -952,3 +1102,60 @@ class TestApiDataColumnsAccessor:
 
         with pytest.raises(AttributeError):
             setattr(dac, accessor, {})
+
+
+_PER_CREDENTIAL_CASES: list[dict[str, Any]] = [
+    {"db": {"host": "db.internal.example", "password": "pw-value-123456"}, "api": {"token": TOY_TOKEN}},  # nosec B105
+    {"db": {"host": ["shared-value-12345"], "other": ["shared-value-12345"]}},
+    {"c": Credential({"token": "wrapped-token-abcdef"}), "d": {"password": {"host": "shaped-host-12345"}}},  # nosec B105
+    {"a": {"token": "short", "password": 123456789012, "secret": "   "}},  # nosec B105
+    {"same": {"key": "dup-value-123456"}, "also": {"key": "dup-value-123456"}},
+    {},
+]
+
+
+class TestCredentialSecretLiteralsPerCredential:
+    """credential_secret_literals() over each credential unions to secret_literals()."""
+
+    @pytest.mark.parametrize("credentials", _PER_CREDENTIAL_CASES)
+    def test_per_credential_union_equals_secret_literals(self, credentials: dict[str, Any]) -> None:
+        from mloda.core.abstract_plugins.components.credential_leaves import credential_secret_literals
+
+        dac = DataAccessCollection(credentials=credentials)
+
+        union: frozenset[str] = frozenset().union(*(credential_secret_literals(v) for v in dac.credentials.values()))
+        assert union == dac.secret_literals()
+
+    @pytest.mark.parametrize("credentials", _PER_CREDENTIAL_CASES)
+    def test_per_credential_union_equals_identity_literals(self, credentials: dict[str, Any]) -> None:
+        from mloda.core.abstract_plugins.components.credential_leaves import credential_identity_literals
+
+        dac = DataAccessCollection(credentials=credentials)
+
+        union: frozenset[str] = frozenset().union(*(credential_identity_literals(v) for v in dac.credentials.values()))
+        assert union == dac.identity_literals()
+
+    @pytest.mark.parametrize(
+        "value, expected",
+        [
+            pytest.param("bare-secret-value-77", frozenset({"bare-secret-value-77"}), id="bare_str_is_a_leaf"),
+            pytest.param("short", frozenset(), id="short_bare_str"),
+            pytest.param("        ", frozenset(), id="blank_bare_str"),
+            pytest.param({"token": "x" * 7}, frozenset(), id="below_the_floor"),
+            pytest.param({"token": "x" * 8}, frozenset({"x" * 8}), id="at_the_floor"),
+            pytest.param(
+                {"host": "db.internal.example", "password": "pw-value-123456"},  # nosec B105
+                frozenset({"pw-value-123456"}),
+                id="safe_key_leaf_is_not_a_secret",
+            ),
+        ],
+    )
+    def test_credential_secret_literals_of_a_value(self, value: Any, expected: frozenset[str]) -> None:
+        from mloda.core.abstract_plugins.components.credential_leaves import credential_secret_literals
+
+        assert credential_secret_literals(value) == expected
+
+    def test_the_floor_constant_is_eight(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_leaves import MIN_REDACT_LENGTH
+
+        assert MIN_REDACT_LENGTH == 8

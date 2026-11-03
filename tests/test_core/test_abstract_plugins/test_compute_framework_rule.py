@@ -17,6 +17,7 @@ from mloda.provider import ComputeFramework, FeatureGroup
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
@@ -69,7 +70,7 @@ class TestComputeFrameworkRuleBaseClassDefault:
         assert len(expected) > 0
         assert root_walks == []
 
-    def test_operation_group_definition_never_walks_the_compute_framework_tree(
+    def test_operation_group_definition_never_walks_the_compute_framework_or_implementation_tree(
         self, monkeypatch: pytest.MonkeyPatch, make_implementation: Any
     ) -> None:
         class _ServedGroup(OperationFeatureGroup):
@@ -78,11 +79,13 @@ class TestComputeFrameworkRuleBaseClassDefault:
 
         make_implementation(_ServedGroup, StubComputeFramework)
         root_walks = count_root_walks(monkeypatch, ComputeFramework)
+        implementation_walks = count_root_walks(monkeypatch, Implementation)
         results = [_ServedGroup.compute_framework_definition() for _ in range(3)]
         monkeypatch.undo()
 
         assert all(result == {StubComputeFramework} for result in results)
         assert root_walks == []
+        assert implementation_walks == []
 
     @pytest.mark.parametrize(
         "reader",

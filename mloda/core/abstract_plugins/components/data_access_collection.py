@@ -1,19 +1,25 @@
 import copy as _copy
+import logging
 from collections.abc import Iterable, Mapping
 from typing import Any, Callable
 
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
+from mloda.core.abstract_plugins.components.credential_leaves import (
+    MIN_REDACT_LENGTH,
+    credential_identity_literals,
+    credential_secret_literals,
+    iter_credential_leaves,
+)
 from mloda.core.abstract_plugins.components.credential_scrub import (
-    _SECRET_KEY,
     redact_mapping,
     registered_secrets_scope,
     scrub_credentials,
 )
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 
-CONNECTION_HANDLE_OPTION = "connection_handle"
+logger = logging.getLogger(__name__)
 
-_MIN_REDACT_LENGTH = 8
+CONNECTION_HANDLE_OPTION = "connection_handle"
 
 
 _KIND_TO_ATTR: dict[str, str] = {
@@ -87,6 +93,9 @@ class DataAccessCollection:
         self.column_to_file: dict[str, str] | None = self._normalize_column_to_file(column_to_file)
         self._api_data_columns: dict[str, tuple[str, ...]] = {}
         self._api_data_types: dict[str, type] = {}
+
+        for credential_handle in self.credentials:
+            self._warn_short_secrets(credential_handle)
 
     @property
     def api_data_columns(self) -> Mapping[str, tuple[str, ...]]:
@@ -282,6 +291,7 @@ class DataAccessCollection:
         handle, value = self._resolve_mutator_args("credentials", args)
         self._reject_duplicate(handle)
         self.credentials[handle] = self._validated_credential_value(handle, value)
+        self._warn_short_secrets(handle)
 
     def _resolve_mutator_args(self, kind: str, args: tuple[Any, ...]) -> tuple[str, Any]:
         if len(args) == 1:
@@ -387,29 +397,26 @@ class DataAccessCollection:
             return scrub_credentials(text)
 
     def secret_literals(self) -> frozenset[str]:
-        """The str leaves of 8+ chars that sit under a credential-shaped key."""
-        leaves: set[str] = set()
-        for value in self.credentials.values():
-            self._collect_secret_leaves(value, False, leaves, set())
-        return frozenset(leaves)
+        """The str leaves of 8+ chars of a registered credential, except known-safe connection fields."""
+        return frozenset().union(*(credential_secret_literals(value) for value in self.credentials.values()))
 
-    @classmethod
-    def _collect_secret_leaves(cls, value: Any, secret: bool, leaves: set[str], visited: set[int]) -> None:
-        if isinstance(value, Credential):
-            value = value.data
-        if isinstance(value, str):
-            if secret and len(value) >= _MIN_REDACT_LENGTH and value.strip():
-                leaves.add(value)
-            return
-        if isinstance(value, (Mapping, list, tuple, set, frozenset)) and id(value) not in visited:
-            visited.add(id(value))
-            if isinstance(value, Mapping):
-                for key, nested in value.items():
-                    keyed = isinstance(key, str) and _SECRET_KEY.fullmatch(key) is not None
-                    cls._collect_secret_leaves(nested, secret or keyed, leaves, visited)
-            else:
-                for nested in value:
-                    cls._collect_secret_leaves(nested, secret, leaves, visited)
+    def identity_literals(self) -> frozenset[str]:
+        """The str leaves of 8+ chars under a credential-shaped key, for masking a published identity."""
+        return frozenset().union(*(credential_identity_literals(value) for value in self.credentials.values()))
+
+    def _warn_short_secrets(self, handle: str) -> None:
+        shown = "<unnamed>" if handle in self._auto_handles else handle
+        for item in iter_credential_leaves(self.credentials[handle]):
+            text = item.leaf
+            if item.shaped and isinstance(text, str) and text.strip() and len(text) < MIN_REDACT_LENGTH:
+                logger.warning(
+                    "Credential '%s' value at '%s' is shorter than %d characters, so it is not masked by exact "
+                    "match in errors and logs. Use %d or more characters.",
+                    shown,
+                    item.path,
+                    MIN_REDACT_LENGTH,
+                    MIN_REDACT_LENGTH,
+                )
 
     def _credential_str_leaves(self) -> set[str]:
         leaves: set[str] = set()
@@ -423,7 +430,7 @@ class DataAccessCollection:
         if isinstance(value, Credential):
             value = value.data
         if isinstance(value, str):
-            if len(value) >= _MIN_REDACT_LENGTH and value.strip():
+            if len(value) >= MIN_REDACT_LENGTH and value.strip():
                 leaves.add(value)
             return
         if isinstance(value, (Mapping, list, tuple, set, frozenset)):

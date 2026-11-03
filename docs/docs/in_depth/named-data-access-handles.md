@@ -101,7 +101,7 @@ Two safety behaviors come with it:
 
 - **Early mis-wrap error.** Passing a bare dict whose values are not mappings (the mis-wrap shape above) now raises `ValueError` at construction time, naming the offending handle and showing the three correct alternatives, instead of failing silently later during matcher selection.
 - **Redacted error output.** `repr(Credential(password="hunter2"))` prints `Credential(password='***')`, and the resolver's ambiguity error renders credential candidates with keys visible and values replaced by `***`. Mapping credentials registered through the constructor or `add_credentials` print (print, f-strings, logging, pprint) with values `***`. Copies (`dict(cred)`, `{**cred}`, `.copy()`), `.items()`/`.values()` and `json.dumps` see raw values; `yaml.safe_dump` rejects the subclass, so convert with `dict(cred)` first. Direct assignment into `dac.credentials` stores the value as-is and prints raw; registration copies the caller's dict. A match keeps credentials out of its `repr`, and the caller's own dict stays untouched. Option conflict errors and filter divergence warnings mask mapping values and scrub credential-shaped strings (URI user info, query and fragment, `password=` values) inside nested lists, tuples and sets (mapping keys print as given). A database group's matched options hold a plain-dict pointer as a `RegisteredCredential`, so `str(features.options)` masks it. `str(Options)` masks the reserved reader tuple (a mapping masked, a DSN string scrubbed) and the value under any credential-shaped key (nested too); every other option prints as given, including the caller's own `Options` (mloda works on copies) and a pointer forwarded to a consumer, so `Credential(...)` (e.g. `options={"SqliteFG": Credential(sqlite="/x.db")}`) stays the recommended form.
-- **`dac.redact(text)`.** Exact-matches every registered credential string value of 8 or more characters (host, user, path, not just password; shorter values are left to the pattern rules), only from `credentials` (not connections, files, folders), then scrubs the result through `scrub_credentials`. During a run, credential-shaped values of 8 or more characters are already masked in raised errors (args including nested strings, instance attributes, `OSError` fields, notes, refusals, cause and context chain) and logs; an `ExceptionGroup`'s own message, bytes and C-level attributes are not masked. `redact` also covers host, user and path values.
+- **`dac.redact(text)`.** Exact-matches every registered credential string value of 8 or more characters (host, user, path, not just password; shorter values are left to the pattern rules), only from `credentials` (not connections, files, folders), then scrubs the result through `scrub_credentials`. During a run, every string value of 8 or more characters of a registered credential is already masked in raised errors (args including nested strings, instance attributes (str ones, and the strings and keys inside dict, list and tuple ones), `OSError` fields, notes, refusals, cause and context chain) and logs; a container attribute holding a registered value is rebuilt as a plain dict, list or tuple (others are left untouched), and containers nested deeper than 32 levels are masked whole; an `ExceptionGroup`'s own message, bytes, C-level attributes, objects held in attributes or nested in their containers (exceptions included), sets and non-dict mappings (such as HTTP header objects) are not masked. Values under these connection fields are not masked: `host`, `hostname`, `server`, `server_hostname`, `port`, `database`, `db`, `dbname`, `schema`, `catalog`, `warehouse`, `account`, `role`, `project`, `dataset`, `location`, `region`, `bucket`, `container`, `namespace`, `cluster`, `endpoint`, `endpoint_url`, `http_path`, `driver`, `dialect`, `scheme`, `protocol`, `sslmode`, `authenticator`, `application_name`, `client_id`, `tenant_id`, `user`, `username`, `sqlite`, `path`, `file`, `folder` and `table_name`. Keys are compared lowercased with `_` and `-` removed; a credential-shaped key or ancestor key always wins, and unknown keys (including `dsn`, `url`, `conn`) are masked. A plugin keeping a secret under a listed key is a bug. `redact` still masks every value. A credential-shaped value shorter than 8 characters logs a warning at registration naming the handle and key, since it cannot be masked by exact match.
 
 ### Why a typed class: four kinds of users
 
@@ -248,8 +248,8 @@ credential value) when:
 - the handle is not registered, or is registered under another kind (the message lists the named credential handles);
 - the handle is an unnamed credential (a declared handle must be named);
 - a field in `required_fields` is missing from the credential;
-- the credential holds a `bytes` or `bytearray` value at any depth. This is refused for now; store a hex or base64
-  `str` and decode it in the plugin.
+- the credential holds a `bytes` or `bytearray` value at any depth, unless it sits under a listed connection field
+  (see `dac.redact` above). This is refused for now; store a hex or base64 `str` and decode it in the plugin.
 
 `public_fields` is stored for later use and has no effect yet. A `str` default is a handle declared when the option
 is unset; `default=None` declares nothing when unset. Nothing reads the credential at run time yet.
@@ -261,6 +261,10 @@ content. Renaming a handle changes the content hash and may split a step.
 In CI, `explain()` validates like `prepare()`, so a plan-lock check registers a placeholder credential under each
 declared handle with the required fields, for example `Credential(key="ci-placeholder")` under `pii-hmac-key`.
 Use placeholders of 8 characters or longer.
+
+A handle stays on the feature that declares it: input features inherit it only when their explicit `forward_group`
+allowlist names the key. A handle is never part of a feature name: a pattern that captures a handle key raises at class
+definition.
 
 ## Common errors
 

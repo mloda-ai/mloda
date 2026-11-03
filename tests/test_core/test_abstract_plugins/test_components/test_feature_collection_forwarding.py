@@ -201,6 +201,20 @@ class TestCollectionLevelMerge:
         assert child.options.group["backend"] == "neo4j"
         assert child.options.group["feature_chainer_parser_key"] == shield
 
+    def test_consumer_local_keys_stay_off_the_input_feature(self) -> None:
+        consumer = Options(group={"vault": "v1", "top_k": 5})
+
+        features = Features(
+            [Feature("child")],
+            child_options=consumer,
+            child_uuid=uuid4(),
+            consumer_local_keys=frozenset({"vault"}),
+        )
+
+        child = features.collection[0]
+        assert child.options.group == {"top_k": 5}
+        assert child.forwarded_group_keys == frozenset({"top_k"})
+
     def test_child_options_still_set_to_consumer_options(self) -> None:
         """Pins engine wiring: merged features keep the consumer options as child_options."""
         consumer = Options(group={"backend": "neo4j"})

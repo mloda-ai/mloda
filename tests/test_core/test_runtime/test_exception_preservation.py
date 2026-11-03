@@ -1021,7 +1021,7 @@ GRANT_ONLY_SECRET = "grant-only-Zk3Fw8Qd2"  # nosec B105
 class GrantOnlyKind:
     """Test grant kind: every declared handle maps to a value only this class knows."""
 
-    def __init__(self, values: Mapping[str, Any]) -> None:
+    def __init__(self, values: Mapping[str, Any], policy: Any = None) -> None:
         self.handles = tuple(values)
 
     def open(self) -> "CredentialLookup":

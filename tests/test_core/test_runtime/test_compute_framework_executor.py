@@ -1886,7 +1886,7 @@ def _grant_executor(step: Mock, collection: Any = None) -> tuple[ComputeFramewor
 class _RecordingGrantKind:
     instances: list[_RecordingGrantKind] = []
 
-    def __init__(self, values: Any) -> None:
+    def __init__(self, values: Any, policy: Any = None) -> None:
         self.values = dict(values)
         _RecordingGrantKind.instances.append(self)
 
@@ -1921,6 +1921,43 @@ class TestCredentialGrantHelper:
         assert lookup.credential("declared")["host"] == _GRANT_HOST
         with pytest.raises(KeyError, match="undeclared"):
             lookup.credential("undeclared")
+
+    def test_the_default_kind_carries_the_collection_key_policy(self) -> None:
+        from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+
+        collection = DataAccessCollection(
+            credentials={"declared": {"zz_exec_policy_key": "exec-policy-value-1"}},
+            public_credential_keys={"zz_exec_policy_key"},
+            secret_credential_keys={"host"},
+        )
+        executor, *_ = _grant_executor(_grant_step(("declared",)), collection)
+
+        grant = executor._credential_grant(_grant_step(("declared",)))
+
+        assert grant is not None
+        assert grant.open().policy == collection.credential_key_policy()
+
+    def test_a_custom_grant_kind_receives_the_collection_policy(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from mloda.core.abstract_plugins.components.credential_grant import StaticGrant
+        from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+
+        seen: list[Any] = []
+
+        class _PolicyRecordingGrant(StaticGrant):
+            def __init__(self, values: Any, policy: Any = None) -> None:
+                seen.append(policy)
+                super().__init__(values, policy)
+
+        monkeypatch.setattr(ComputeFrameworkExecutor, "_grant_kind", _PolicyRecordingGrant)
+        collection = DataAccessCollection(
+            credentials={"declared": {"zz_custom_kind_key": "custom-kind-value-1"}},
+            public_credential_keys={"zz_custom_kind_key"},
+        )
+        executor, *_ = _grant_executor(_grant_step(("declared",)), collection)
+
+        executor._credential_grant(_grant_step(("declared",)))
+
+        assert seen == [collection.credential_key_policy()]
 
     def test_each_dispatch_gets_a_fresh_grant(self) -> None:
         executor, *_ = _grant_executor(_grant_step(("declared",)), _grant_collection())

@@ -10,6 +10,7 @@ from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
 
+from mloda.core.abstract_plugins.components.credential_leaves import public_key_names
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.base_feature_group_version import (
     BaseFeatureGroupVersion,
@@ -120,6 +121,9 @@ class FeatureGroup(ABC):
     ``docs/in_depth/property-mapping.md`` for the full specification.
     """
 
+    PUBLIC_CREDENTIAL_KEYS: ClassVar[tuple[str, ...]] = ()
+    """Credential keys whose values this group declares non-secret, so they print unmasked."""
+
     SUBTYPES: ClassVar[SubtypeDeclaration | None] = None
     """Declarative subtype dimension of the family; ``None`` means no subtype dimension.
     The derived accessors below are ``@final`` (type-checker enforced) and derived from SUBTYPES."""
@@ -127,6 +131,7 @@ class FeatureGroup(ABC):
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         FeatureChainParser.validate_property_mapping_defaults(cls.__name__, cls.PROPERTY_MAPPING)
+        public_key_names(cls.__name__, cls.PUBLIC_CREDENTIAL_KEYS)
         validate_name_binding(cls)
         warn_captureless_without_binding(cls)
         install_name_path_presence_guard(cls)

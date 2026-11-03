@@ -11,7 +11,12 @@ from dataclasses import dataclass
 from difflib import get_close_matches
 from typing import TYPE_CHECKING, Any
 
-from mloda.core.abstract_plugins.components.credential_leaves import iter_credential_leaves
+from mloda.core.abstract_plugins.components.credential_leaves import (
+    credential_key_names,
+    iter_credential_leaves,
+    normalize_credential_key,
+    public_key_names,
+)
 from mloda.core.abstract_plugins.components.property_spec import NO_DEFAULT, PropertySpec
 from mloda.core.abstract_plugins.components.utils import PREFIX_OPTION_KEY_FLAG, escalate_match_abort
 
@@ -34,11 +39,9 @@ def _handle_element_validator(value: Any) -> bool:
 
 def _field_names(spec: CredentialHandleSpec, name: str, value: Any) -> tuple[str, ...]:
     prefix = f"CredentialHandleSpec({spec.explanation!r})"
-    if isinstance(value, (str, bytes)) or not isinstance(value, (tuple, list)):
-        raise ValueError(f"{prefix}: {name} must be a tuple of field names, got {type(value).__name__}.")
-    if not all(isinstance(item, str) and item for item in value):
-        raise ValueError(f"{prefix}: {name} must hold non-empty str field names.")
-    return tuple(value)
+    if name == "public_fields":
+        return public_key_names(f"{prefix}: {name}", value)
+    return credential_key_names(f"{prefix}: {name}", value)
 
 
 @dataclass(frozen=True)
@@ -96,6 +99,21 @@ def credential_handle_keys(feature_group: type[FeatureGroup]) -> dict[str, Crede
     """The group's declared credential handle option keys."""
     mapping = getattr(feature_group, "PROPERTY_MAPPING", None) or {}
     return {key: spec for key, spec in mapping.items() if isinstance(spec, CredentialHandleSpec)}
+
+
+def public_credential_keys() -> frozenset[str]:
+    """Normalized keys every loaded feature group declares as public, by PUBLIC_CREDENTIAL_KEYS or public_fields."""
+    # Function-local: avoids an import cycle through the feature group module.
+    from mloda.core.abstract_plugins.feature_group import feature_group_subclasses
+
+    keys: set[str] = set()
+    for group in feature_group_subclasses():
+        keys.update(
+            normalize_credential_key(key) for key in credential_key_names(group.__name__, group.PUBLIC_CREDENTIAL_KEYS)
+        )
+        for spec in credential_handle_keys(group).values():
+            keys.update(normalize_credential_key(key) for key in spec.public_fields)
+    return frozenset(keys)
 
 
 def _declared(feature_group: type[FeatureGroup], options: Options) -> dict[str, Any]:

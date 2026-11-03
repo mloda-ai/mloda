@@ -5,6 +5,7 @@ from contextvars import ContextVar, Token
 from typing import Any, Protocol
 
 from mloda.core.abstract_plugins.components.credential_leaves import (
+    CredentialKeyPolicy,
     credential_identity_literals,
     credential_secret_literals,
 )
@@ -14,8 +15,9 @@ from mloda.core.abstract_plugins.components.credential_scrub import redact_escap
 class CredentialLookup:
     """The opened credentials of one step; refuses every read once closed."""
 
-    def __init__(self, values: Mapping[str, Any]) -> None:
+    def __init__(self, values: Mapping[str, Any], policy: CredentialKeyPolicy | None = None) -> None:
         self._data: dict[str, Any] = dict(values)
+        self.policy = policy
         self._closed = False
 
     @property
@@ -47,12 +49,13 @@ class CredentialGrant(Protocol):
 class StaticGrant:
     """A grant over already resolved values; open() hands them over once."""
 
-    def __init__(self, values: Mapping[str, Any]) -> None:
+    def __init__(self, values: Mapping[str, Any], policy: CredentialKeyPolicy | None = None) -> None:
         self._values: dict[str, Any] = dict(values)
+        self._policy = policy
 
     def open(self) -> CredentialLookup:
         values, self._values = self._values, {}
-        return CredentialLookup(values)
+        return CredentialLookup(values, self._policy)
 
 
 _GRANT_HOLDER: ContextVar[CredentialLookup | None] = ContextVar("mloda_credential_grant", default=None)
@@ -72,7 +75,7 @@ class grant_scope:  # noqa: N801
         leaves: set[str] = set()
         identity: set[str] = set()
         for value in lookup._values():
-            leaves |= credential_secret_literals(value)
+            leaves |= credential_secret_literals(value, lookup.policy)
             identity |= credential_identity_literals(value)
         secrets = registered_secrets_scope(frozenset(leaves), frozenset(identity))
         secrets.__enter__()

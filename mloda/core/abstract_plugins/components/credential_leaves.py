@@ -49,11 +49,50 @@ _SAFE_CREDENTIAL_KEYS = frozenset(
         "file",
         "folder",
         "tablename",
+        "table",
+        "databasename",
+        "schemaname",
+        "bucketname",
+        "projectid",
+        "datasetid",
+        "filepath",
     }
 )
 
 
+NEVER_PUBLIC_CREDENTIAL_KEYS = frozenset({"dsn", "url", "uri", "conn", "connectionstring", "engine"})
+
 MIN_REDACT_LENGTH = 8
+
+
+def normalize_credential_key(key: str) -> str:
+    return key.lower().replace("_", "").replace("-", "")
+
+
+class CredentialKeyPolicy(NamedTuple):
+    """Normalized keys a plugin or steward declared public or secret; secret wins over public and base."""
+
+    public: frozenset[str]
+    secret: frozenset[str]
+
+
+def credential_key_names(label: str, value: Any) -> tuple[str, ...]:
+    """The items of a tuple, list, set or frozenset of non-empty str; anything else is a ValueError."""
+    if not isinstance(value, (tuple, list, set, frozenset)):
+        raise ValueError(f"{label} must be a tuple, list, set or frozenset of key names, got {type(value).__name__}.")
+    items = tuple(value)
+    if not all(isinstance(item, str) and item for item in items):
+        raise ValueError(f"{label} must hold non-empty str key names.")
+    return items
+
+
+def public_key_names(label: str, value: Any) -> tuple[str, ...]:
+    """credential_key_names, refusing connection-string keys that can never be declared public."""
+    items = credential_key_names(label, value)
+    refused = sorted(item for item in items if normalize_credential_key(item) in NEVER_PUBLIC_CREDENTIAL_KEYS)
+    if refused:
+        raise ValueError(f"{label} cannot declare connection keys public: {refused}.")
+    return items
 
 
 class CredentialLeaf(NamedTuple):
@@ -67,18 +106,23 @@ def _is_shaped(key: Any) -> bool:
     return isinstance(key, str) and _SECRET_KEY.fullmatch(key) is not None
 
 
-def _is_safe(key: Any) -> bool:
-    return isinstance(key, str) and key.lower().replace("_", "").replace("-", "") in _SAFE_CREDENTIAL_KEYS
+def _is_safe(key: Any, policy: CredentialKeyPolicy | None) -> bool:
+    if not isinstance(key, str):
+        return False
+    normalized = normalize_credential_key(key)
+    if policy is None:
+        return normalized in _SAFE_CREDENTIAL_KEYS
+    return normalized not in policy.secret and (normalized in _SAFE_CREDENTIAL_KEYS or normalized in policy.public)
 
 
-def iter_credential_leaves(value: Any) -> Iterator[CredentialLeaf]:
+def iter_credential_leaves(value: Any, policy: CredentialKeyPolicy | None = None) -> Iterator[CredentialLeaf]:
     """Yield every str/bytes leaf; secret unless its nearest key is safe and no key on the way is credential-shaped."""
     visited: set[tuple[int, bool, bool]] = set()
     stack: list[tuple[Any, str, Any, bool]] = [(value, "", None, False)]
     while stack:
         node, path, key, ancestor_shaped = stack.pop()
         shaped = ancestor_shaped or _is_shaped(key)
-        key_secret = not _is_safe(key)
+        key_secret = not _is_safe(key, policy)
         if isinstance(node, (str, bytes, bytearray)):
             yield CredentialLeaf(path, node, shaped or key_secret, shaped)
             continue
@@ -103,17 +147,19 @@ def iter_credential_leaves(value: Any) -> Iterator[CredentialLeaf]:
         stack.extend(reversed(children))
 
 
-def _literals_where(value: Any, predicate: Callable[[CredentialLeaf], bool]) -> frozenset[str]:
+def _literals_where(
+    value: Any, predicate: Callable[[CredentialLeaf], bool], policy: CredentialKeyPolicy | None = None
+) -> frozenset[str]:
     return frozenset(
         item.leaf
-        for item in iter_credential_leaves(value)
+        for item in iter_credential_leaves(value, policy)
         if predicate(item) and isinstance(item.leaf, str) and len(item.leaf) >= MIN_REDACT_LENGTH and item.leaf.strip()
     )
 
 
-def credential_secret_literals(value: Any) -> frozenset[str]:
+def credential_secret_literals(value: Any, policy: CredentialKeyPolicy | None = None) -> frozenset[str]:
     """The secret str leaves of one credential value that are long enough and not blank to mask by exact match."""
-    return _literals_where(value, lambda item: item.secret)
+    return _literals_where(value, lambda item: item.secret, policy)
 
 
 def credential_identity_literals(value: Any) -> frozenset[str]:

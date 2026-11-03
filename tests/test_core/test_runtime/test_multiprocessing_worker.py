@@ -1011,6 +1011,21 @@ class _SetStateRaisingCommand:
         raise _SetStateError(_read_granted("first")["token"])
 
 
+_PUBLIC_KEY_VALUE = "worker-public-Tg6Hn1Wd8"  # nosec B105
+
+
+class _GrantPolicyObservingCommand:
+    """Reports through its error text whether a declared public key's value is registered as secret."""
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
+
+        raise RuntimeError(
+            f"public_registered={_PUBLIC_KEY_VALUE in current_registered_secrets()} "
+            f"token_registered={_FIRST_SECRET in current_registered_secrets()}"
+        )
+
+
 class TestWorkerCredentialGrant:
     """The worker opens each command's own grant and drops it when the command ends."""
 
@@ -1073,3 +1088,19 @@ class TestWorkerCredentialGrant:
         msg, exc_info = cfw_register.set_error.call_args.args
         assert _FIRST_SECRET not in msg
         assert _FIRST_SECRET not in exc_info
+
+    def test_a_declared_public_key_is_not_masked_in_the_worker_and_the_secret_is(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_grant import StaticGrant
+        from mloda.core.abstract_plugins.components.credential_leaves import CredentialKeyPolicy
+
+        policy = CredentialKeyPolicy(public=frozenset({"zzworkerpublickey"}), secret=frozenset())
+        value = {"zz_worker_public_key": _PUBLIC_KEY_VALUE, "token": _FIRST_SECRET}
+        command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
+        command_queue.put((_GrantPolicyObservingCommand(), StaticGrant({"first": value}, policy=policy)))
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        message = cfw_register.set_error.call_args.args[0]
+        assert "public_registered=False" in message
+        assert "token_registered=True" in message

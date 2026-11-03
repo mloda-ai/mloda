@@ -164,10 +164,32 @@ class TestWorkerHasNoConnectionBindPrologue:
         assert "needs_tfs_connection" not in signature.parameters
 
 
-class TestWorkerRegisteredSecrets:
-    """The worker enters registered_secrets_scope with the secrets it is handed, and leaves it afterwards."""
+_STEP_A_SECRET = "step-a-secret-Qw3Er5Ty7"  # nosec B105
+_STEP_A_IDENTITY = "step-a-identity-Ui9Op1As2"
+_STEP_B_SECRET = "step-b-secret-Df4Gh6Jk8"  # nosec B105
+_SEEN_BY_STEPS: list[tuple[frozenset[str], frozenset[str]]] = []
 
-    def test_the_secrets_are_registered_while_the_worker_runs_and_reset_after(self) -> None:
+
+class _SecretsRecordingCommand:
+    """Module-level so it pickles; records the secrets visible while the step runs."""
+
+    def __init__(self) -> None:
+        self.uuid = uuid4()
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        from mloda.core.abstract_plugins.components.credential_scrub import (
+            current_identity_secrets,
+            current_registered_secrets,
+        )
+
+        _SEEN_BY_STEPS.append((current_registered_secrets(), current_identity_secrets()))
+        return "done"
+
+
+class TestWorkerRegisteredSecrets:
+    """The worker starts with no secrets; each step command carries only its own, scoped to that step."""
+
+    def test_the_worker_bootstrap_sees_no_secrets(self) -> None:
         from mloda.core.abstract_plugins.components.credential_scrub import (
             current_identity_secrets,
             current_registered_secrets,
@@ -185,20 +207,63 @@ class TestWorkerRegisteredSecrets:
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
         command_queue.put("STOP")
 
-        worker(
-            command_queue,
-            result_queue,
-            cfw_register,
-            cfw,
-            uuid4(),
-            registered_secrets=frozenset({"a-registered-secret-value"}),
-            identity_secrets=frozenset({"an-identity-value"}),
-            worker_index=0,
-        )
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
-        assert seen == [(frozenset({"a-registered-secret-value"}), frozenset({"an-identity-value"}))]
+        assert seen == [(frozenset(), frozenset())]
         assert current_registered_secrets() == frozenset()
         assert current_identity_secrets() == frozenset()
+
+    def test_a_step_commands_secrets_are_visible_in_the_step_and_reset_after(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import (
+            current_identity_secrets,
+            current_registered_secrets,
+        )
+
+        _SEEN_BY_STEPS.clear()
+        command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
+        secrets, identity = frozenset({_STEP_A_SECRET}), frozenset({_STEP_A_IDENTITY})
+        command_queue.put((_SecretsRecordingCommand(), None, secrets, identity))
+        command_queue.put("STOP")
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        assert _SEEN_BY_STEPS == [(secrets, identity)]
+        assert current_registered_secrets() == frozenset()
+        assert current_identity_secrets() == frozenset()
+
+    def test_a_second_command_does_not_see_the_first_commands_secrets(self) -> None:
+        _SEEN_BY_STEPS.clear()
+        command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
+        command_queue.put((_SecretsRecordingCommand(), None, frozenset({_STEP_A_SECRET}), frozenset()))
+        command_queue.put((_SecretsRecordingCommand(), None, frozenset({_STEP_B_SECRET}), frozenset()))
+        command_queue.put((_SecretsRecordingCommand(), None, frozenset(), frozenset()))
+        command_queue.put("STOP")
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        assert _SEEN_BY_STEPS == [
+            (frozenset({_STEP_A_SECRET}), frozenset()),
+            (frozenset({_STEP_B_SECRET}), frozenset()),
+            (frozenset(), frozenset()),
+        ]
+
+    def test_a_failure_in_result_handling_is_masked_with_the_step_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            worker_module, "_handle_command_result", Mock(side_effect=RuntimeError(f"upload failed {_REGISTERED}"))
+        )
+        command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
+        command_queue.put((_SecretsRecordingCommand(), None, frozenset({_REGISTERED}), frozenset()))
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        msg, exc_info = cfw_register.set_error.call_args.args
+        exc = cfw_register.set_error.call_args.kwargs["exception"]
+        assert "upload failed" in msg
+        assert _REGISTERED not in msg
+        assert _REGISTERED not in exc_info
+        assert _REGISTERED not in str(exc)
+        assert command_queue.get(timeout=2) == "STOP"
 
 
 class TestWorkerRunsChildBootstrapBeforeTheCommandLoop:
@@ -338,7 +403,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         contexts: list[CloseContext | None] = []
         extender = _CloseRecordingExtender(contexts=contexts)
         cfw.function_extender = {extender}
-        command_queue.put((_RaisingCommand(error), None))
+        command_queue.put((_RaisingCommand(error), None, frozenset(), frozenset()))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -420,7 +485,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
         extender = _CloseRecordingExtender()
         cfw.function_extender = {extender}
-        command_queue.put((_RaisingCommand(RuntimeError), None))
+        command_queue.put((_RaisingCommand(RuntimeError), None, frozenset(), frozenset()))
 
         with pytest.raises(KeyboardInterrupt):
             worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
@@ -438,7 +503,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_run_context.return_value = RunContext()
         cfw_register.set_error.side_effect = [TypeError("cannot pickle"), None]
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        command_queue.put((_RaisingCommand(SystemExit), None))
+        command_queue.put((_RaisingCommand(SystemExit), None, frozenset(), frozenset()))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -456,7 +521,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        command_queue.put((_UnprintableRaisingCommand(), None))
+        command_queue.put((_UnprintableRaisingCommand(), None, frozenset(), frozenset()))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -474,7 +539,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        command_queue.put((_LeakRaisingCommand(), None))
+        command_queue.put((_LeakRaisingCommand(), None, frozenset(), frozenset()))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -493,17 +558,9 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        command_queue.put((_ContainerLeakRaisingCommand(), None))
+        command_queue.put((_ContainerLeakRaisingCommand(), None, frozenset({_REGISTERED}), frozenset()))
 
-        worker(
-            command_queue,
-            result_queue,
-            cfw_register,
-            cfw,
-            uuid4(),
-            registered_secrets=frozenset({_REGISTERED}),
-            worker_index=0,
-        )
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
         cfw_register.set_error.assert_called_once()
         exc = cfw_register.set_error.call_args.kwargs["exception"]
@@ -522,7 +579,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        command_queue.put((_ChainedLeakRaisingCommand(), None))
+        command_queue.put((_ChainedLeakRaisingCommand(), None, frozenset(), frozenset()))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -1033,8 +1090,12 @@ class TestWorkerCredentialGrant:
         from mloda.core.abstract_plugins.components.credential_grant import StaticGrant
 
         command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
-        command_queue.put((_GrantReadingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}})))
-        command_queue.put((_GrantObservingCommand(), StaticGrant({"second": {"token": _SECOND_SECRET}})))
+        command_queue.put(
+            (_GrantReadingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}}), frozenset(), frozenset())
+        )
+        command_queue.put(
+            (_GrantObservingCommand(), StaticGrant({"second": {"token": _SECOND_SECRET}}), frozenset(), frozenset())
+        )
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -1050,7 +1111,9 @@ class TestWorkerCredentialGrant:
         from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
 
         command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
-        command_queue.put((_GrantReadingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}})))
+        command_queue.put(
+            (_GrantReadingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}}), frozenset(), frozenset())
+        )
         command_queue.put("STOP")
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
@@ -1063,7 +1126,9 @@ class TestWorkerCredentialGrant:
         from mloda.core.abstract_plugins.components.credential_grant import StaticGrant
 
         command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
-        command_queue.put((_GrantEchoingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}})))
+        command_queue.put(
+            (_GrantEchoingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}}), frozenset(), frozenset())
+        )
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -1080,7 +1145,9 @@ class TestWorkerCredentialGrant:
         from mloda.core.abstract_plugins.components.credential_grant import StaticGrant
 
         command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
-        command_queue.put((_SetStateRaisingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}})))
+        command_queue.put(
+            (_SetStateRaisingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}}), frozenset(), frozenset())
+        )
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -1096,7 +1163,9 @@ class TestWorkerCredentialGrant:
         policy = CredentialKeyPolicy(public=frozenset({"zzworkerpublickey"}), secret=frozenset())
         value = {"zz_worker_public_key": _PUBLIC_KEY_VALUE, "token": _FIRST_SECRET}
         command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
-        command_queue.put((_GrantPolicyObservingCommand(), StaticGrant({"first": value}, policy=policy)))
+        command_queue.put(
+            (_GrantPolicyObservingCommand(), StaticGrant({"first": value}, policy=policy), frozenset(), frozenset())
+        )
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 

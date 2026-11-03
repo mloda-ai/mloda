@@ -4,7 +4,12 @@ from collections.abc import Iterable, Mapping
 from typing import Any, Callable
 
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
-from mloda.core.abstract_plugins.components.credential_leaves import CredentialLeaf, iter_credential_leaves
+from mloda.core.abstract_plugins.components.credential_leaves import (
+    MIN_REDACT_LENGTH,
+    CredentialLeaf,
+    credential_secret_literals,
+    iter_credential_leaves,
+)
 from mloda.core.abstract_plugins.components.credential_scrub import (
     redact_mapping,
     registered_secrets_scope,
@@ -15,8 +20,6 @@ from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 logger = logging.getLogger(__name__)
 
 CONNECTION_HANDLE_OPTION = "connection_handle"
-
-_MIN_REDACT_LENGTH = 8
 
 
 _KIND_TO_ATTR: dict[str, str] = {
@@ -395,7 +398,7 @@ class DataAccessCollection:
 
     def secret_literals(self) -> frozenset[str]:
         """The str leaves of 8+ chars of a registered credential, except known-safe connection fields."""
-        return self._literals_where(lambda item: item.secret)
+        return frozenset().union(*(credential_secret_literals(value) for value in self.credentials.values()))
 
     def identity_literals(self) -> frozenset[str]:
         """The str leaves of 8+ chars under a credential-shaped key, for masking a published identity."""
@@ -406,7 +409,7 @@ class DataAccessCollection:
         for value in self.credentials.values():
             for item in iter_credential_leaves(value):
                 text = item.leaf
-                if predicate(item) and isinstance(text, str) and len(text) >= _MIN_REDACT_LENGTH and text.strip():
+                if predicate(item) and isinstance(text, str) and len(text) >= MIN_REDACT_LENGTH and text.strip():
                     leaves.add(text)
         return frozenset(leaves)
 
@@ -414,14 +417,14 @@ class DataAccessCollection:
         shown = "<unnamed>" if handle in self._auto_handles else handle
         for item in iter_credential_leaves(self.credentials[handle]):
             text = item.leaf
-            if item.shaped and isinstance(text, str) and text.strip() and len(text) < _MIN_REDACT_LENGTH:
+            if item.shaped and isinstance(text, str) and text.strip() and len(text) < MIN_REDACT_LENGTH:
                 logger.warning(
                     "Credential '%s' value at '%s' is shorter than %d characters, so it is not masked by exact "
                     "match in errors and logs. Use %d or more characters.",
                     shown,
                     item.path,
-                    _MIN_REDACT_LENGTH,
-                    _MIN_REDACT_LENGTH,
+                    MIN_REDACT_LENGTH,
+                    MIN_REDACT_LENGTH,
                 )
 
     def _credential_str_leaves(self) -> set[str]:
@@ -436,7 +439,7 @@ class DataAccessCollection:
         if isinstance(value, Credential):
             value = value.data
         if isinstance(value, str):
-            if len(value) >= _MIN_REDACT_LENGTH and value.strip():
+            if len(value) >= MIN_REDACT_LENGTH and value.strip():
                 leaves.add(value)
             return
         if isinstance(value, (Mapping, list, tuple, set, frozenset)):

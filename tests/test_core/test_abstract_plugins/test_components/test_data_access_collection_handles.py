@@ -1102,3 +1102,49 @@ class TestApiDataColumnsAccessor:
 
         with pytest.raises(AttributeError):
             setattr(dac, accessor, {})
+
+
+_PER_CREDENTIAL_CASES: list[dict[str, Any]] = [
+    {"db": {"host": "db.internal.example", "password": "pw-value-123456"}, "api": {"token": TOY_TOKEN}},  # nosec B105
+    {"db": {"host": ["shared-value-12345"], "other": ["shared-value-12345"]}},
+    {"c": Credential({"token": "wrapped-token-abcdef"}), "d": {"password": {"host": "shaped-host-12345"}}},  # nosec B105
+    {"a": {"token": "short", "password": 123456789012, "secret": "   "}},  # nosec B105
+    {"same": {"key": "dup-value-123456"}, "also": {"key": "dup-value-123456"}},
+    {},
+]
+
+
+class TestCredentialSecretLiteralsPerCredential:
+    """credential_secret_literals() over each credential unions to secret_literals()."""
+
+    @pytest.mark.parametrize("credentials", _PER_CREDENTIAL_CASES)
+    def test_per_credential_union_equals_secret_literals(self, credentials: dict[str, Any]) -> None:
+        from mloda.core.abstract_plugins.components.credential_leaves import credential_secret_literals
+
+        dac = DataAccessCollection(credentials=credentials)
+
+        union: frozenset[str] = frozenset().union(*(credential_secret_literals(v) for v in dac.credentials.values()))
+        assert union == dac.secret_literals()
+
+    def test_a_bare_str_credential_value_is_a_secret_leaf(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_leaves import credential_secret_literals
+
+        assert credential_secret_literals("bare-secret-value-77") == frozenset({"bare-secret-value-77"})
+        assert credential_secret_literals("short") == frozenset()
+        assert credential_secret_literals("        ") == frozenset()
+
+    def test_the_floor_constant_is_eight_and_is_the_cutoff(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_leaves import (
+            MIN_REDACT_LENGTH,
+            credential_secret_literals,
+        )
+
+        assert MIN_REDACT_LENGTH == 8
+        assert credential_secret_literals({"token": "x" * 7}) == frozenset()
+        assert credential_secret_literals({"token": "x" * 8}) == frozenset({"x" * 8})
+
+    def test_a_safe_key_leaf_is_not_a_secret(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_leaves import credential_secret_literals
+
+        value = {"host": "db.internal.example", "password": "pw-value-123456"}  # nosec B105
+        assert credential_secret_literals(value) == frozenset({"pw-value-123456"})

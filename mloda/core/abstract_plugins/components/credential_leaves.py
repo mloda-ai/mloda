@@ -53,6 +53,9 @@ _SAFE_CREDENTIAL_KEYS = frozenset(
 )
 
 
+MIN_REDACT_LENGTH = 8
+
+
 class CredentialLeaf(NamedTuple):
     path: str
     leaf: Any
@@ -98,3 +101,12 @@ def iter_credential_leaves(value: Any) -> Iterator[CredentialLeaf]:
         else:
             children = [(v, f"{path}[{i}]", key, shaped) for i, v in enumerate(node)]
         stack.extend(reversed(children))
+
+
+def credential_secret_literals(value: Any) -> frozenset[str]:
+    """The secret str leaves of one credential value that are long enough and not blank to mask by exact match."""
+    return frozenset(
+        item.leaf
+        for item in iter_credential_leaves(value)
+        if item.secret and isinstance(item.leaf, str) and len(item.leaf) >= MIN_REDACT_LENGTH and item.leaf.strip()
+    )

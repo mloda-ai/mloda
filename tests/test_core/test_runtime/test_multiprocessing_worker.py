@@ -338,7 +338,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         contexts: list[CloseContext | None] = []
         extender = _CloseRecordingExtender(contexts=contexts)
         cfw.function_extender = {extender}
-        command_queue.put(_RaisingCommand(error))
+        command_queue.put((_RaisingCommand(error), None))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -420,7 +420,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
         extender = _CloseRecordingExtender()
         cfw.function_extender = {extender}
-        command_queue.put(_RaisingCommand(RuntimeError))
+        command_queue.put((_RaisingCommand(RuntimeError), None))
 
         with pytest.raises(KeyboardInterrupt):
             worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
@@ -438,7 +438,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_run_context.return_value = RunContext()
         cfw_register.set_error.side_effect = [TypeError("cannot pickle"), None]
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        command_queue.put(_RaisingCommand(SystemExit))
+        command_queue.put((_RaisingCommand(SystemExit), None))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -456,7 +456,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        command_queue.put(_UnprintableRaisingCommand())
+        command_queue.put((_UnprintableRaisingCommand(), None))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -474,7 +474,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        command_queue.put(_LeakRaisingCommand())
+        command_queue.put((_LeakRaisingCommand(), None))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -493,7 +493,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        command_queue.put(_ContainerLeakRaisingCommand())
+        command_queue.put((_ContainerLeakRaisingCommand(), None))
 
         worker(
             command_queue,
@@ -522,7 +522,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        command_queue.put(_ChainedLeakRaisingCommand())
+        command_queue.put((_ChainedLeakRaisingCommand(), None))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -924,3 +924,120 @@ class TestExecuteCommandJoinStepWithoutSource:
 
         with pytest.raises(ValueError, match="no single frame lists the join token"):
             _execute_command(step, cfw_register, Mock(spec=ComputeFramework), None, None)
+
+
+_FIRST_SECRET = "first-grant-Xc4Vb7Nm2"  # nosec B105
+_SECOND_SECRET = "second-grant-Jd9Lp3Qs5"  # nosec B105
+
+
+class _GrantReadingCommand:
+    """Module-level so it pickles through the spawn-context queue."""
+
+    def __init__(self) -> None:
+        self.uuid = uuid4()
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        from mloda.core.abstract_plugins.components.credential_grant import _read_granted
+
+        return _read_granted("first")["token"] and "done"
+
+
+class _GrantObservingCommand:
+    """Reports what a reused worker still holds from the previous command, through its error text."""
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        from mloda.core.abstract_plugins.components.credential_grant import _read_granted
+        from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
+
+        try:
+            _read_granted("first")
+            first_refused = False
+        except Exception:
+            first_refused = True
+        second_readable = _read_granted("second")["token"] == _SECOND_SECRET
+        first_leaf_registered = _FIRST_SECRET in current_registered_secrets()
+        second_leaf_registered = _SECOND_SECRET in current_registered_secrets()
+        raise RuntimeError(
+            f"first_refused={first_refused} second_readable={second_readable} "
+            f"first_leaf={first_leaf_registered} second_leaf={second_leaf_registered}"
+        )
+
+
+class _GrantEchoingCommand:
+    """Reads its granted value and fails with an error that echoes it."""
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        from mloda.core.abstract_plugins.components.credential_grant import _read_granted
+
+        raise RuntimeError(f"failed with {_read_granted('first')['token']}")
+
+
+def _grant_worker_setup() -> tuple[Any, Any, Mock, ComputeFramework]:
+    ctx = mp_start_context()
+    command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+    result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+    cfw_register = Mock(spec=CfwManager)
+    cfw_register.get_location.return_value = "grpc://localhost:9999"
+    cfw_register.get_run_context.return_value = RunContext()
+    cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+    return command_queue, result_queue, cfw_register, cfw
+
+
+class TestWorkerCredentialGrant:
+    """The worker opens each command's own grant and drops it when the command ends."""
+
+    def test_a_reused_worker_sees_only_the_current_commands_grant(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_grant import StaticGrant
+
+        command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
+        command_queue.put((_GrantReadingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}})))
+        command_queue.put((_GrantObservingCommand(), StaticGrant({"second": {"token": _SECOND_SECRET}})))
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        message = cfw_register.set_error.call_args.args[0]
+        assert "first_refused=True" in message
+        assert "second_readable=True" in message
+        assert "first_leaf=False" in message
+        assert "second_leaf=True" in message
+
+    def test_the_holder_and_secrets_are_gone_after_the_worker_returns(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_grant import StaticGrant, _read_granted
+        from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
+
+        command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
+        command_queue.put((_GrantReadingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}})))
+        command_queue.put("STOP")
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        assert _FIRST_SECRET not in current_registered_secrets()
+        with pytest.raises(Exception, match="first"):
+            _read_granted("first")
+
+    def test_a_grant_only_value_echoed_by_a_failing_command_is_masked(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_grant import StaticGrant
+
+        command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
+        command_queue.put((_GrantEchoingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}})))
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        call_args = cfw_register.set_error.call_args
+        msg, exc_info = call_args.args
+        exc = call_args.kwargs["exception"]
+        assert _FIRST_SECRET not in str(exc)
+        assert _FIRST_SECRET not in repr(exc.args)
+        assert _FIRST_SECRET not in msg
+        assert _FIRST_SECRET not in exc_info
+
+    def test_a_none_grant_command_runs_without_a_holder(self) -> None:
+        command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
+        command_queue.put((_GrantReadingCommand(), None))
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        assert "first" in cfw_register.set_error.call_args.args[0]

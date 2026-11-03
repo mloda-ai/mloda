@@ -395,11 +395,18 @@ class DataAccessCollection:
 
     def secret_literals(self) -> frozenset[str]:
         """The str leaves of 8+ chars of a registered credential, except known-safe connection fields."""
+        return self._literals_where(lambda item: item.secret)
+
+    def identity_literals(self) -> frozenset[str]:
+        """The str leaves of 8+ chars under a credential-shaped key, for masking a published identity."""
+        return self._literals_where(lambda item: item.shaped)
+
+    def _literals_where(self, predicate: Callable[[Any], bool]) -> frozenset[str]:
         leaves: set[str] = set()
         for value in self.credentials.values():
             for item in iter_credential_leaves(value):
                 text = item.leaf
-                if item.secret and isinstance(text, str) and len(text) >= _MIN_REDACT_LENGTH and text.strip():
+                if predicate(item) and isinstance(text, str) and len(text) >= _MIN_REDACT_LENGTH and text.strip():
                     leaves.add(text)
         return frozenset(leaves)
 

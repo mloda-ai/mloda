@@ -206,6 +206,7 @@ def _cut_path_parameter_regions(uri: str) -> str:
 
 _PLACEHOLDER = "\ue000"
 _REGISTERED_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_registered_secrets", default=frozenset())
+_IDENTITY_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_identity_secrets", default=frozenset())
 
 
 def _literal_spans(text: str, literals: Iterable[str]) -> list[tuple[int, int]]:
@@ -252,19 +253,31 @@ class registered_secrets_scope:  # noqa: N801
     A class, not @contextmanager: that helper assigns ``__traceback__``, which a frozen-dataclass exception rejects.
     """
 
-    def __init__(self, literals: frozenset[str]) -> None:
+    def __init__(self, literals: frozenset[str], identity: frozenset[str] | None = None) -> None:
         self._literals = literals
-        self._tokens: list[Token[frozenset[str]]] = []
+        self._identity = literals if identity is None else identity
+        self._tokens: list[tuple[Token[frozenset[str]], Token[frozenset[str]]]] = []
 
     def __enter__(self) -> None:
-        self._tokens.append(_REGISTERED_SECRETS.set(_REGISTERED_SECRETS.get() | self._literals))
+        self._tokens.append(
+            (
+                _REGISTERED_SECRETS.set(_REGISTERED_SECRETS.get() | self._literals),
+                _IDENTITY_SECRETS.set(_IDENTITY_SECRETS.get() | self._identity),
+            )
+        )
 
     def __exit__(self, *exc_info: object) -> None:
-        _REGISTERED_SECRETS.reset(self._tokens.pop())
+        secrets_token, identity_token = self._tokens.pop()
+        _IDENTITY_SECRETS.reset(identity_token)
+        _REGISTERED_SECRETS.reset(secrets_token)
 
 
 def current_registered_secrets() -> frozenset[str]:
     return _REGISTERED_SECRETS.get()
+
+
+def current_identity_secrets() -> frozenset[str]:
+    return _IDENTITY_SECRETS.get()
 
 
 def scrub_credentials(text: str) -> str:

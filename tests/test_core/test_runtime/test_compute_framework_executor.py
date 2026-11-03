@@ -1211,7 +1211,7 @@ class TestThreadExecuteStep:
 
         # Verify thread was created with correct parameters
         mock_thread_class.assert_called_once_with(
-            target=mock_worker, args=(step, cfw_register, mock_cfw, None, frozenset()), daemon=True
+            target=mock_worker, args=(step, cfw_register, mock_cfw, None, frozenset(), frozenset()), daemon=True
         )
 
     @patch("mloda.core.runtime.compute_framework_executor.threading.Thread")
@@ -1281,7 +1281,12 @@ class TestThreadExecuteStep:
         step.execute.side_effect = boom
 
         thread_worker(
-            step, cfw_register, Mock(spec=ComputeFramework), None, registered_secrets=frozenset({_REGISTERED})
+            step,
+            cfw_register,
+            Mock(spec=ComputeFramework),
+            None,
+            registered_secrets=frozenset({_REGISTERED}),
+            identity_secrets=frozenset({"an-identity-value"}),
         )
 
         cfw_register.set_error.assert_called_once()
@@ -1289,6 +1294,26 @@ class TestThreadExecuteStep:
         assert _REGISTERED not in str(boom)
         assert _REGISTERED not in repr(boom.as_dict)
         assert _REGISTERED not in repr(boom.as_list)
+
+    def test_thread_worker_scopes_the_identity_secrets(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import current_identity_secrets
+
+        seen: list[frozenset[str]] = []
+        step = Mock(spec=FeatureGroupStep)
+        step.own_frame = False
+        step.execute.side_effect = lambda *a, **k: seen.append(current_identity_secrets())
+
+        thread_worker(
+            step,
+            Mock(spec=CfwManager),
+            Mock(spec=ComputeFramework),
+            None,
+            registered_secrets=frozenset({"a-registered-secret-value"}),
+            identity_secrets=frozenset({"an-identity-value"}),
+        )
+
+        assert seen == [frozenset({"an-identity-value"})]
+        assert current_identity_secrets() == frozenset()
 
     def test_thread_worker_scrubs_secret_in_chained_cause(self) -> None:
         """A secret in the exception's __cause__ must not reach set_error's msg/exc_info either."""
@@ -1378,7 +1403,7 @@ class TestMultiExecuteStep:
         executor.multi_execute_step(step)
 
         worker_manager.create_worker_process.assert_called_once_with(
-            cfw_uuid, mock_worker, (cfw_register, mock_cfw, None, frozenset())
+            cfw_uuid, mock_worker, (cfw_register, mock_cfw, None, frozenset(), frozenset())
         )
 
     @patch("mloda.core.runtime.compute_framework_executor.worker")
@@ -1404,11 +1429,15 @@ class TestMultiExecuteStep:
         worker_manager.get_process_queues.return_value = None
         worker_manager.create_worker_process.return_value = (Mock(), Mock(), Mock())
 
-        with registered_secrets_scope(frozenset({"a-registered-secret-value"})):
+        with registered_secrets_scope(
+            frozenset({"a-registered-secret-value"}), identity=frozenset({"an-identity-value"})
+        ):
             executor.multi_execute_step(step)
 
         worker_manager.create_worker_process.assert_called_once_with(
-            cfw_uuid, mock_worker, (cfw_register, mock_cfw, None, frozenset({"a-registered-secret-value"}))
+            cfw_uuid,
+            mock_worker,
+            (cfw_register, mock_cfw, None, frozenset({"a-registered-secret-value"}), frozenset({"an-identity-value"})),
         )
 
     def test_uses_existing_worker_process_if_exists(self) -> None:
@@ -1638,8 +1667,8 @@ class TestMultiExecuteStep:
         worker_manager.create_worker_process.assert_called_once()
         call_args = worker_manager.create_worker_process.call_args
         args_tuple = call_args.args[2]
-        assert len(args_tuple) == 4
-        assert args_tuple == (cfw_register, mock_to_cfw_instance, from_cfw_uuid, frozenset())
+        assert len(args_tuple) == 5
+        assert args_tuple == (cfw_register, mock_to_cfw_instance, from_cfw_uuid, frozenset(), frozenset())
 
 
 class _DropsFunctionExtenderFramework(PythonDictFramework):

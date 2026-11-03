@@ -7,7 +7,11 @@ from dataclasses import replace
 from typing import Any, Callable
 from uuid import UUID, uuid4
 
-from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets, redact_exception
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    current_identity_secrets,
+    current_registered_secrets,
+    redact_exception,
+)
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -372,7 +376,14 @@ class ComputeFrameworkExecutor:
 
         task = threading.Thread(
             target=thread_worker,
-            args=(step, self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw, current_registered_secrets()),
+            args=(
+                step,
+                self.cfw_register,
+                self.cfw_collection[cfw_uuid],
+                from_cfw,
+                current_registered_secrets(),
+                current_identity_secrets(),
+            ),
             daemon=True,  # an abandoned step thread must not block interpreter exit
         )
 
@@ -396,7 +407,13 @@ class ComputeFrameworkExecutor:
             process, command_queue, result_queue = self.worker_manager.create_worker_process(
                 cfw_uuid,
                 worker,
-                (self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw, current_registered_secrets()),
+                (
+                    self.cfw_register,
+                    self.cfw_collection[cfw_uuid],
+                    from_cfw,
+                    current_registered_secrets(),
+                    current_identity_secrets(),
+                ),
             )
         else:
             process, command_queue, result_queue = existing

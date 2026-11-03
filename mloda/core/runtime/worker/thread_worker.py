@@ -20,8 +20,9 @@ def thread_worker(
     cfw: ComputeFramework,
     from_cfw: ComputeFramework | UUID | None,
     registered_secrets: frozenset[str] = frozenset(),
+    identity_secrets: frozenset[str] = frozenset(),
 ) -> None:
-    with registered_secrets_scope(registered_secrets):
+    with registered_secrets_scope(registered_secrets, identity_secrets):
         try:
             command.execute(cfw_register, cfw, from_cfw=from_cfw)
             command.step_is_done = True

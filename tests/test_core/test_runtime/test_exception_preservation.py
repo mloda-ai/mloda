@@ -23,16 +23,19 @@ from __future__ import annotations
 import errno
 import logging
 import threading
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+import pandas as pd
 import pytest
 
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
-from mloda.provider import FeatureSet, DataCreatorFeatureGroup, SourceMatch
+from mloda.provider import BaseArtifact, FeatureSet, DataCreatorFeatureGroup, SourceMatch, credential_handle_spec
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 
+from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsSource
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     TOY_TOKEN,
     ToySourceFG,
@@ -44,6 +47,9 @@ from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test
     SiblingDictLostInputConsumer,
     SiblingDictRoot,
 )
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.components.credential_grant import CredentialLookup
 
 # Importing the framework registers it as a ComputeFramework subclass so
 # ``compute_frameworks=["PythonDictFramework"]`` resolves during ``run_all``.
@@ -616,10 +622,16 @@ class TokenFrozenFG(ToySourceFG):
 _TOKEN_GROUPS = [TokenValueErrorFG, TokenOSErrorFG, TokenFrozenFG]
 
 
-def _assert_token_gone(exc: BaseException, group: type[ToySourceFG], caplog: pytest.LogCaptureFixture) -> None:
-    assert TOY_TOKEN not in str(exc)
-    assert TOY_TOKEN not in repr(exc.args)
-    assert TOY_TOKEN not in caplog.text
+def _assert_token_gone(
+    exc: BaseException,
+    group: type[Any],
+    caplog: pytest.LogCaptureFixture,
+    secrets: tuple[str, ...] = (TOY_TOKEN,),
+) -> None:
+    for secret in secrets:
+        assert secret not in str(exc)
+        assert secret not in repr(exc.args)
+        assert secret not in caplog.text
     if group is TokenValueErrorFG:
         assert type(exc) is ValueError
         assert type(exc.__cause__) is KeyError
@@ -899,79 +911,161 @@ class _FileRecordingExtender(Extender):
             raise
 
 
+def _granted(handle: str) -> Any:
+    from mloda.core.abstract_plugins.components.credential_grant import _read_granted
+
+    return _read_granted(handle)
+
+
+def _secret_field(value: Mapping[str, Any]) -> str:
+    return str(value["hmac"] if "hmac" in value else value["token"])
+
+
+def _secret_length_via_helper(handle: str) -> int:
+    return len(_secret_field(_granted(handle)))
+
+
+class ChsReadingFG(ChsSource):
+    """Reads its declared handle through the private reader, in calculate_feature and in a helper."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_read_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        handle = features.get_options_key(HANDLE_KEY)
+        host = _granted(handle)["host"]
+        row = f"{host}|{_secret_length_via_helper(handle)}"
+        return pd.DataFrame({name: [row] for name in features.get_all_names()})
+
+
+class ChsFailingReadFG(ChsSource):
+    """Reads its declared handle, then fails with an error that echoes the host and the secret."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_failing_read_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        value = _granted(features.get_options_key(HANDLE_KEY))
+        raise ValueError(f"read failed host={value['host']} value={dict(value)}")
+
+
+class ChsReadingArtifact(BaseArtifact):
+    @classmethod
+    def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
+        return {"saved_host": _granted(features.get_options_key(HANDLE_KEY))["host"]}
+
+
+class ChsArtifactFG(ChsSource):
+    """Its artifact saver reads the declared handle, so the grant must span save_artifact."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_artifact_a"}
+
+    @staticmethod
+    def artifact() -> type[BaseArtifact] | None:
+        return ChsReadingArtifact
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        if features.artifact_to_save:
+            features.save_artifact = "chs-artifact"
+        return pd.DataFrame({name: [1] for name in features.get_all_names()})
+
+
+GRANT_ONLY_SECRET = "grant-only-Zk3Fw8Qd2"  # nosec B105
+
+
+class GrantOnlyKind:
+    """Test grant kind: every declared handle maps to a value only this class knows."""
+
+    def __init__(self, values: Mapping[str, Any]) -> None:
+        self.handles = tuple(values)
+
+    def open(self) -> "CredentialLookup":
+        from mloda.core.abstract_plugins.components.credential_grant import CredentialLookup
+
+        return CredentialLookup({h: {"host": "grant-only.example", "token": GRANT_ONLY_SECRET} for h in self.handles})
+
+
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("mode", _GRANT_MODES)
+@pytest.mark.parametrize(
+    "grant_only, expected",
+    [
+        pytest.param(False, f"{_E2E_HOST}|{len(_E2E_HMAC)}", id="declared_value"),
+        pytest.param(True, f"grant-only.example|{len(GRANT_ONLY_SECRET)}", id="grant_only_value"),
+    ],
+)
 def test_declared_credential_is_readable_in_calculate_feature_and_a_helper_in_every_mode(
-    mode: ParallelizationMode, flight_server: Any
+    mode: ParallelizationMode,
+    grant_only: bool,
+    expected: str,
+    flight_server: Any,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from tests.helpers.credential_handle_stubs import ChsReadingFG
+    from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
+
+    if grant_only:
+        monkeypatch.setattr(ComputeFrameworkExecutor, "_grant_kind", GrantOnlyKind)
 
     result = _grant_run(ChsReadingFG, "chs_read_a", mode, flight_server)
 
-    assert list(result[0]["chs_read_a"]) == [f"{_E2E_HOST}|{len(_E2E_HMAC)}"]
+    assert list(result[0]["chs_read_a"]) == [expected]
 
 
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("mode", _GRANT_MODES)
-def test_error_echoing_declared_secrets_is_masked_in_error_logs_and_extender_but_host_stays(
-    mode: ParallelizationMode, flight_server: Any, caplog: pytest.LogCaptureFixture, tmp_path: Any
+@pytest.mark.parametrize(
+    "grant_only, host, secrets, with_extender",
+    [
+        pytest.param(False, _E2E_HOST, (_E2E_HMAC, _E2E_KEY), True, id="declared_values"),
+        pytest.param(True, "grant-only.example", (GRANT_ONLY_SECRET,), False, id="grant_only_value"),
+    ],
+)
+def test_error_echoing_credential_secrets_is_masked_in_every_mode_but_host_stays(
+    mode: ParallelizationMode,
+    grant_only: bool,
+    host: str,
+    secrets: tuple[str, ...],
+    with_extender: bool,
+    flight_server: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: Any,
 ) -> None:
-    from tests.helpers.credential_handle_stubs import ChsFailingReadFG
+    from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
 
+    if grant_only:
+        monkeypatch.setattr(ComputeFrameworkExecutor, "_grant_kind", GrantOnlyKind)
     seen = tmp_path / "seen.txt"
-    extender = _FileRecordingExtender(str(seen))
+    extenders: set[Extender] | None = {_FileRecordingExtender(str(seen))} if with_extender else None
     with caplog.at_level(logging.DEBUG):
         with pytest.raises(ValueError) as excinfo:
-            _grant_run(ChsFailingReadFG, "chs_failing_read_a", mode, flight_server, {extender})
+            _grant_run(ChsFailingReadFG, "chs_failing_read_a", mode, flight_server, extenders)
 
     exc = excinfo.value
-    assert _E2E_HOST in str(exc)
-    for secret in (_E2E_HMAC, _E2E_KEY):
-        assert secret not in str(exc)
-        assert secret not in repr(exc.args)
-        assert secret not in caplog.text
-        assert secret not in seen.read_text()
-
-
-@pytest.mark.timeout(15)
-@pytest.mark.parametrize("mode", _GRANT_MODES)
-def test_a_value_only_the_grant_knows_is_read_in_every_mode(
-    mode: ParallelizationMode, flight_server: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
-    from tests.helpers.credential_handle_stubs import GRANT_ONLY_SECRET, ChsReadingFG, GrantOnlyKind
-
-    monkeypatch.setattr(ComputeFrameworkExecutor, "_grant_kind", GrantOnlyKind)
-
-    result = _grant_run(ChsReadingFG, "chs_read_a", mode, flight_server)
-
-    assert list(result[0]["chs_read_a"]) == [f"grant-only.example|{len(GRANT_ONLY_SECRET)}"]
-
-
-@pytest.mark.timeout(15)
-@pytest.mark.parametrize("mode", _GRANT_MODES)
-def test_a_failing_read_echoing_a_grant_only_value_is_masked_in_every_mode(
-    mode: ParallelizationMode, flight_server: Any, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
-    from tests.helpers.credential_handle_stubs import GRANT_ONLY_SECRET, ChsFailingReadFG, GrantOnlyKind
-
-    monkeypatch.setattr(ComputeFrameworkExecutor, "_grant_kind", GrantOnlyKind)
-
-    with caplog.at_level(logging.DEBUG):
-        with pytest.raises(ValueError) as excinfo:
-            _grant_run(ChsFailingReadFG, "chs_failing_read_a", mode, flight_server)
-
-    assert "grant-only.example" in str(excinfo.value)
-    assert GRANT_ONLY_SECRET not in str(excinfo.value)
-    assert GRANT_ONLY_SECRET not in repr(excinfo.value.args)
-    assert GRANT_ONLY_SECRET not in caplog.text
+    assert host in str(exc)
+    _assert_token_gone(exc, ChsFailingReadFG, caplog, secrets)
+    if with_extender:
+        for secret in secrets:
+            assert secret not in seen.read_text()
 
 
 def test_the_grant_spans_save_artifact_in_sync_mode() -> None:
     from mloda.user import mloda as mloda_api
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-    from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsArtifactFG
+    from tests.helpers.credential_handle_stubs import HANDLE_KEY
 
     api = mloda_api(
         [Feature("chs_artifact_a", options={HANDLE_KEY: _E2E_HANDLE})],

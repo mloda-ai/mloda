@@ -9,6 +9,8 @@ and CFW initialization logic from the Runner class.
 from __future__ import annotations
 
 import pickle  # nosec B403
+from collections.abc import Callable
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 from uuid import UUID, uuid4
@@ -1926,28 +1928,22 @@ class TestCredentialGrantHelper:
 
         assert executor._credential_grant(step) is not executor._credential_grant(step)
 
-    def test_none_without_a_collection(self) -> None:
-        executor, *_ = _grant_executor(_grant_step(("declared",)), None)
+    @pytest.mark.parametrize(
+        "with_collection, make_step",
+        [
+            pytest.param(False, lambda: _grant_step(("declared",)), id="no_collection"),
+            pytest.param(True, lambda: _grant_step(()), id="no_declared_handles"),
+            pytest.param(
+                True, lambda: SimpleNamespace(credential_handles=("declared",)), id="namespace_not_feature_group_step"
+            ),
+            pytest.param(True, lambda: Mock(spec=JoinStep), id="join_step"),
+            pytest.param(False, lambda: Mock(spec=FeatureGroupStep), id="mock_step_without_collection"),
+        ],
+    )
+    def test_none_grant(self, with_collection: bool, make_step: Callable[[], Any]) -> None:
+        executor, *_ = _grant_executor(_grant_step(()), _grant_collection() if with_collection else None)
 
-        assert executor._credential_grant(_grant_step(("declared",))) is None
-
-    def test_none_without_declared_handles(self) -> None:
-        executor, *_ = _grant_executor(_grant_step(()), _grant_collection())
-
-        assert executor._credential_grant(_grant_step(())) is None
-
-    def test_none_for_a_step_that_is_not_a_feature_group_step(self) -> None:
-        from types import SimpleNamespace
-
-        executor, *_ = _grant_executor(_grant_step(()), _grant_collection())
-
-        assert executor._credential_grant(SimpleNamespace(credential_handles=("declared",))) is None
-        assert executor._credential_grant(Mock(spec=JoinStep)) is None
-
-    def test_a_mock_step_without_a_collection_is_unaffected(self) -> None:
-        executor, *_ = _grant_executor(_grant_step(()), None)
-
-        assert executor._credential_grant(Mock(spec=FeatureGroupStep)) is None
+        assert executor._credential_grant(make_step()) is None
 
 
 class TestGrantDispatch:
@@ -1963,14 +1959,6 @@ class TestGrantDispatch:
 
         assert len(_RecordingGrantKind.instances) == 1
         worker_manager.send_command.assert_called_once_with(cfw_uuid, (step, _RecordingGrantKind.instances[0]))
-
-    def test_multi_execute_step_sends_none_without_declared_handles(self) -> None:
-        step = _grant_step(())
-        executor, _, worker_manager, cfw_uuid = _grant_executor(step, _grant_collection())
-
-        executor.multi_execute_step(step)
-
-        worker_manager.send_command.assert_called_once_with(cfw_uuid, (step, None))
 
     @patch("mloda.core.runtime.compute_framework_executor.threading.Thread")
     def test_thread_execute_step_passes_the_grant_to_the_worker(
@@ -2006,62 +1994,56 @@ def _reading_execute(handle: str) -> Any:
     return execute
 
 
+def _capturing_execute(handle: str) -> tuple[Callable[..., None], list[BaseException]]:
+    """Return an execute callable and the list it appends the raised exception to."""
+    inner = _reading_execute(handle)
+    raised: list[BaseException] = []
+
+    def execute(*args: Any, **kwargs: Any) -> None:
+        try:
+            inner()
+        except RuntimeError as e:
+            raised.append(e)
+            raise
+
+    return execute, raised
+
+
+def _run_sync(step: Mock, cfw_register: Mock) -> None:
+    executor, original_register, _, _ = _grant_executor(step, _grant_collection())
+    cfw_register.resolve_cfw_uuid_by_tfs_ids.return_value = original_register.resolve_cfw_uuid_by_tfs_ids.return_value
+    executor.cfw_register = cfw_register
+    executor.sync_execute_step(step)
+
+
+def _run_thread(step: Mock, cfw_register: Mock) -> None:
+    from mloda.core.abstract_plugins.components.credential_grant import StaticGrant
+
+    grant = StaticGrant({"declared": {"host": _GRANT_HOST, "hmac": _GRANT_HMAC}})
+    thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None, grant=grant)
+
+
 class TestGrantOnlyValueIsMaskedInEveryFailureReport:
     """A grant-only value echoed by a failing step is absent from the exception, msg and exc_info."""
 
-    def _assert_masked(self, cfw_register: Mock, boom: BaseException) -> None:
+    @pytest.mark.parametrize("run", [_run_sync, _run_thread], ids=["sync", "thread"])
+    def test_masked(self, run: Callable[[Mock, Mock], None]) -> None:
+        cfw_register = Mock(spec=CfwManager)
+        step = _grant_step(("declared",))
+        step.execute.side_effect, raised = _capturing_execute("declared")
+
+        run(step, cfw_register)
+
         cfw_register.set_error.assert_called_once()
         call_args = cfw_register.set_error.call_args
         msg, exc_info = call_args.args
+        boom = raised[0]
         assert call_args.kwargs["exception"] is boom
         assert _GRANT_HMAC not in str(boom)
         assert _GRANT_HMAC not in repr(boom.args)
         assert _GRANT_HMAC not in msg
         assert _GRANT_HMAC not in exc_info
         assert _GRANT_HOST in str(boom)
-
-    def test_sync(self) -> None:
-        step = _grant_step(("declared",))
-        boom = RuntimeError("placeholder")
-        executor, cfw_register, _, _ = _grant_executor(step, _grant_collection())
-        inner = _reading_execute("declared")
-
-        def execute(*args: Any, **kwargs: Any) -> None:
-            try:
-                inner()
-            except RuntimeError as e:
-                nonlocal boom
-                boom = e
-                raise
-
-        step.execute.side_effect = execute
-
-        executor.sync_execute_step(step)
-
-        self._assert_masked(cfw_register, boom)
-
-    def test_thread(self) -> None:
-        from mloda.core.abstract_plugins.components.credential_grant import StaticGrant
-
-        cfw_register = Mock(spec=CfwManager)
-        step = _grant_step(("declared",))
-        boom = RuntimeError("placeholder")
-        inner = _reading_execute("declared")
-
-        def execute(*args: Any, **kwargs: Any) -> None:
-            try:
-                inner()
-            except RuntimeError as e:
-                nonlocal boom
-                boom = e
-                raise
-
-        step.execute.side_effect = execute
-        grant = StaticGrant({"declared": {"host": _GRANT_HOST, "hmac": _GRANT_HMAC}})
-
-        thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None, grant=grant)
-
-        self._assert_masked(cfw_register, boom)
 
     def test_thread_worker_without_a_grant_still_works(self) -> None:
         cfw_register = Mock(spec=CfwManager)

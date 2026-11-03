@@ -1032,12 +1032,3 @@ class TestWorkerCredentialGrant:
         assert _FIRST_SECRET not in repr(exc.args)
         assert _FIRST_SECRET not in msg
         assert _FIRST_SECRET not in exc_info
-
-    def test_a_none_grant_command_runs_without_a_holder(self) -> None:
-        command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
-        command_queue.put((_GrantReadingCommand(), None))
-
-        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
-
-        cfw_register.set_error.assert_called_once()
-        assert "first" in cfw_register.set_error.call_args.args[0]

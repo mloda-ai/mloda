@@ -57,13 +57,19 @@ class TestCredentialLookup:
             lookup.credential("granted")
         assert _HMAC not in str(info.value)
 
-    def test_close_does_not_mutate_the_nested_values(self) -> None:
+    def test_close_and_leaving_the_scope_do_not_mutate_the_nested_values(self) -> None:
         value = _credential()
         lookup = CredentialLookup({"granted": value})
 
         lookup.close()
 
         assert value == _credential()
+
+        scoped = _credential()
+        with grant_scope(StaticGrant({"h": scoped})):
+            pass
+
+        assert scoped == _credential()
 
 
 class TestGrantScope:
@@ -109,14 +115,6 @@ class TestGrantScope:
         with grant_scope(StaticGrant({"host": {"token": _KEY}})):
             assert _KEY in current_registered_secrets()
 
-    def test_a_bare_str_credential_value_is_registered_and_masked(self) -> None:
-        with pytest.raises(RuntimeError) as info:
-            with grant_scope(StaticGrant({"h": _BARE})):
-                assert _BARE in current_registered_secrets()
-                raise RuntimeError(f"failed with {_BARE}")
-
-        assert _BARE not in str(info.value)
-
     def test_an_exception_echoing_a_grant_only_value_is_redacted_on_exit(self) -> None:
         boom = RuntimeError(f"bad {_HMAC} and {_HOST}")
 
@@ -128,12 +126,20 @@ class TestGrantScope:
         assert _HMAC not in str(boom)
         assert _HOST in str(boom)
 
-    def test_credential_wrapped_value_is_masked(self) -> None:
+    @pytest.mark.parametrize(
+        "grant_value, secret",
+        [
+            pytest.param(_BARE, _BARE, id="bare_str"),
+            pytest.param(Credential({"token": _KEY}), _KEY, id="credential_wrapped"),  # nosec B106
+        ],
+    )
+    def test_a_secret_grant_value_is_registered_and_masked(self, grant_value: Any, secret: str) -> None:
         with pytest.raises(RuntimeError) as info:
-            with grant_scope(StaticGrant({"h": Credential({"token": _KEY})})):  # nosec B106
-                raise RuntimeError(f"bad {_KEY}")
+            with grant_scope(StaticGrant({"h": grant_value})):
+                assert secret in current_registered_secrets()
+                raise RuntimeError(f"failed with {secret}")
 
-        assert _KEY not in str(info.value)
+        assert secret not in str(info.value)
 
     def test_none_grant_works_and_registers_nothing(self) -> None:
         before = current_registered_secrets()
@@ -145,14 +151,6 @@ class TestGrantScope:
 
         with pytest.raises(Exception, match="h"):
             _read_granted("h")
-
-    def test_nested_values_are_not_mutated_by_leaving_the_scope(self) -> None:
-        value = _credential()
-
-        with grant_scope(StaticGrant({"h": value})):
-            pass
-
-        assert value == _credential()
 
     def test_a_second_scope_does_not_see_the_first_scopes_handle(self) -> None:
         with grant_scope(StaticGrant({"first": _credential()})):

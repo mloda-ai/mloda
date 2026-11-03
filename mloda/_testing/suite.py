@@ -97,9 +97,22 @@ def undeclared_contract_tests(suite_cls: type[ConformanceSuite], marked: bool) -
     )
 
 
+def marked_contract_tests(suite_cls: type[ConformanceSuite]) -> list[str]:
+    """Undeclared contract tests whose shared function carries a skip, skipif or xfail mark."""
+    return sorted(
+        name
+        for name, reference in _contract_tests(suite_cls).items()
+        if name not in suite_cls.switched_off and _has_skip_mark(getattr(reference, "pytestmark", None))
+    )
+
+
 def check_switched_off(suite_cls: type[ConformanceSuite]) -> CheckResult:
+    """Fail unknown keys, non-Cause values and undeclared switched-off contract tests."""
     tests = _contract_tests(suite_cls)
     failures: list[str] = []
+    if not isinstance(suite_cls.switched_off, Mapping):
+        failures.append(f"switched_off must be a mapping of test name to Cause, got {suite_cls.switched_off!r}")
+        return CheckResult(check="switched_off", subject=suite_cls.__name__, failures=tuple(failures))
     for name, cause in suite_cls.switched_off.items():
         if name not in tests:
             close = difflib.get_close_matches(name, sorted(tests), n=1, cutoff=0.6)
@@ -110,7 +123,17 @@ def check_switched_off(suite_cls: type[ConformanceSuite]) -> CheckResult:
     undeclared = undeclared_contract_tests(suite_cls, host_has_skip_mark(suite_cls))
     if undeclared:
         allowed = ", ".join(c.name for c in Cause)
-        failures.append(f"switched off without a declared cause: {', '.join(undeclared)} (causes: {allowed})")
+        merge = ""
+        for base in suite_cls.__mro__[1:]:
+            parent = base.__dict__.get("switched_off")
+            if (
+                not base.__dict__.get("_suite_base", False)
+                and isinstance(parent, Mapping)
+                and set(parent) & set(undeclared)
+            ):
+                merge = "; merge with the parent's mapping, e.g. {**Parent.switched_off, ...}"
+                break
+        failures.append(f"switched off without a declared cause: {', '.join(undeclared)} (causes: {allowed}){merge}")
     return CheckResult(check="switched_off", subject=suite_cls.__name__, failures=tuple(failures))
 
 

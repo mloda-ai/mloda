@@ -417,10 +417,18 @@ class TestDataAccessIdentityHidesDictCredentialValues:
         assert identity == f"{db_path}::creds_table"
         assert fetch_context.data_access_identity_is_fallback is False
 
-    @pytest.mark.parametrize("stream", [False, True])
-    @pytest.mark.parametrize("key, masked", [("token", True), ("botref", False)])
+    @pytest.mark.parametrize(
+        "key, masked, stream, mode",
+        [
+            pytest.param("token", True, False, ParallelizationMode.SYNC, id="token-run_all-sync"),
+            pytest.param("token", True, True, ParallelizationMode.SYNC, id="token-stream_all-sync"),
+            pytest.param("botref", False, False, ParallelizationMode.SYNC, id="botref-run_all-sync"),
+            pytest.param("botref", False, True, ParallelizationMode.SYNC, id="botref-stream_all-sync"),
+            pytest.param("botref", False, False, ParallelizationMode.THREADING, id="botref-run_all-threading"),
+        ],
+    )
     def test_registered_literal_in_a_file_path_is_masked_end_to_end(
-        self, tmp_path: Path, key: str, masked: bool, stream: bool
+        self, tmp_path: Path, key: str, masked: bool, stream: bool, mode: ParallelizationMode
     ) -> None:
         folder = tmp_path / f"bot{_TOKEN}"
         folder.mkdir()
@@ -435,6 +443,7 @@ class TestDataAccessIdentityHidesDictCredentialValues:
             data_access_collection=DataAccessCollection(files={str(csv_path)}, credentials={"h": {key: _TOKEN}}),
             plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
             function_extender={extender},
+            parallelization_modes={mode},
         )
         list(result)
 
@@ -442,26 +451,6 @@ class TestDataAccessIdentityHidesDictCredentialValues:
         assert identity is not None
         assert ("***" in identity) is masked
         assert (_TOKEN not in identity) is masked
-
-    def test_non_shaped_literal_stays_in_the_identity_when_threading(self, tmp_path: Path) -> None:
-        folder = tmp_path / f"bot{_TOKEN}"
-        folder.mkdir()
-        csv_path = folder / "data.csv"
-        csv_path.write_text("literal_col\n1\n2\n")
-        extender = _InputDataLoadCapturingExtender()
-
-        mloda.run_all(
-            ["literal_col"],
-            compute_frameworks=[PyArrowTable],
-            data_access_collection=DataAccessCollection(files={str(csv_path)}, credentials={"h": {"botref": _TOKEN}}),
-            plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
-            function_extender={extender},
-            parallelization_modes={ParallelizationMode.THREADING},
-        )
-
-        identity = extender.captured.data_access_identity if extender.captured else None
-        assert identity is not None
-        assert _TOKEN in identity
 
     def test_features_from_different_tables_of_one_file_get_distinct_identities(self, tmp_path: Path) -> None:
         db_path = tmp_path / "two_tables.db"
@@ -794,7 +783,17 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
         assert load_context.principal == calc.captured.principal == "principal-hop"
         assert load_context.feature_group_class == calc.captured.feature_group_class
 
-    def test_hopped_load_masks_the_registered_literals_in_the_identity(self) -> None:
+    @pytest.mark.parametrize(
+        "identity_set, expected_identity",
+        [
+            pytest.param(None, "s3://bucket/bot***/a.csv", id="default-identity-masked"),
+            pytest.param(frozenset({_TOKEN}), "s3://bucket/bot***/a.csv", id="token-identity-masked"),
+            pytest.param(frozenset(), f"s3://bucket/bot{_TOKEN}/a.csv", id="empty-identity-kept"),
+        ],
+    )
+    def test_hopped_load_masks_the_registered_literals_in_the_identity(
+        self, identity_set: frozenset[str] | None, expected_identity: str
+    ) -> None:
         class _TokenReader(_CountingReader):
             @classmethod
             def data_access_identity(cls, data_access: Any) -> str:
@@ -803,26 +802,12 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
         extender = _InputDataLoadCapturingExtender()
         cfw = PythonDictFramework(function_extender={extender})
 
-        with registered_secrets_scope(frozenset({_TOKEN})):
+        with registered_secrets_scope(frozenset({_TOKEN}), identity=identity_set):
             result = _run_calculate(cfw, _threaded_load_feature_group("received", reader=_TokenReader))
 
         assert result == [1, 2, 3]
         assert len(extender.all_captured) == 1
-        assert extender.all_captured[0].data_access_identity == "s3://bucket/bot***/a.csv"
-
-    def test_hopped_load_keeps_a_literal_that_is_not_an_identity_secret(self) -> None:
-        class _TokenReader(_CountingReader):
-            @classmethod
-            def data_access_identity(cls, data_access: Any) -> str:
-                return f"s3://bucket/bot{_TOKEN}/a.csv"
-
-        extender = _InputDataLoadCapturingExtender()
-        cfw = PythonDictFramework(function_extender={extender})
-
-        with registered_secrets_scope(frozenset({_TOKEN}), identity=frozenset()):
-            _run_calculate(cfw, _threaded_load_feature_group("received", reader=_TokenReader))
-
-        assert extender.all_captured[0].data_access_identity == f"s3://bucket/bot{_TOKEN}/a.csv"
+        assert extender.all_captured[0].data_access_identity == expected_identity
 
     def test_non_gate_extender_observes_the_hopped_load(self) -> None:
         extender = _InputDataLoadCapturingExtender()
@@ -1102,22 +1087,24 @@ class TestFallbackDataAccessIdentityIsFlagged:
             r for r in caplog.records if r.name == _INPUT_DATA_LOAD_LOGGER and "data_access_identity" in r.getMessage()
         ]
 
-    def test_registered_literal_is_masked_and_the_identity_stays_unflagged(self) -> None:
+    @pytest.mark.parametrize(
+        "identity_set, expected_identity",
+        [
+            pytest.param(None, "s3://bucket/bot***/a.csv", id="default-identity-masked"),
+            pytest.param(frozenset({_TOKEN}), "s3://bucket/bot***/a.csv", id="token-identity-masked"),
+            pytest.param(frozenset(), f"s3://bucket/bot{_TOKEN}/a.csv", id="empty-identity-kept"),
+        ],
+    )
+    def test_registered_literal_is_masked_and_the_identity_stays_unflagged(
+        self, identity_set: frozenset[str] | None, expected_identity: str
+    ) -> None:
         reader_cls = type("_FreshLiteral", (_AccessIdentityLoader,), {})
 
-        with registered_secrets_scope(frozenset({_TOKEN})):
+        with registered_secrets_scope(frozenset({_TOKEN}), identity=identity_set):
             context = _direct_load_context(reader_cls, f"s3://bucket/bot{_TOKEN}/a.csv")
 
-        assert context.data_access_identity == "s3://bucket/bot***/a.csv"
+        assert context.data_access_identity == expected_identity
         assert context.data_access_identity_is_fallback is False
-
-    def test_a_literal_outside_the_identity_set_is_kept(self) -> None:
-        reader_cls = type("_FreshKept", (_AccessIdentityLoader,), {})
-
-        with registered_secrets_scope(frozenset({_TOKEN}), identity=frozenset()):
-            context = _direct_load_context(reader_cls, f"s3://bucket/bot{_TOKEN}/a.csv")
-
-        assert context.data_access_identity == f"s3://bucket/bot{_TOKEN}/a.csv"
 
     def test_warns_once_per_reader_class(self, caplog: pytest.LogCaptureFixture) -> None:
         class _FreshA(_DirectLoader):

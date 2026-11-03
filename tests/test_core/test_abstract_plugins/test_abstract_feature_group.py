@@ -13,6 +13,7 @@ from mloda.provider import FeatureGroup
 from mloda.user import PluginLoader
 from mloda.user import Feature
 from mloda.user import Options
+from mloda.core.abstract_plugins.components.credential_handle import public_credential_keys
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.property_spec import property_spec
 from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
@@ -495,9 +496,7 @@ class TestFeatureGroupSubclassRegistry:
             lambda: plugin_collector_for(Settings()),
             lambda: caller_refused_option_keys(),
             lambda: get_feature_group_docs(name="zz_no_such_feature_group"),
-            lambda: __import__(
-                "mloda.core.abstract_plugins.components.credential_handle", fromlist=["public_credential_keys"]
-            ).public_credential_keys(),
+            lambda: public_credential_keys(),
         ],
         ids=[
             "prefilter_featuregroup_subclasses",

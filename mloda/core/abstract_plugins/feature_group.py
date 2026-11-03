@@ -112,7 +112,6 @@ class FeatureGroup(ABC):
     """Parts of `<feature>~<part>` this group returns; ANY_OUTPUT_PART names them at run time. None declares none."""
 
     PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec] | None] = None
-    PUBLIC_CREDENTIAL_KEYS: ClassVar[tuple[str, ...]] = ()
     """Override in subclasses to declare configurable parameters.
 
     Each key is a parameter name. Each value is a ``PropertySpec`` carrying the
@@ -120,6 +119,9 @@ class FeatureGroup(ABC):
     ``strict_validation``), and optional validators. See
     ``docs/in_depth/property-mapping.md`` for the full specification.
     """
+
+    PUBLIC_CREDENTIAL_KEYS: ClassVar[tuple[str, ...]] = ()
+    """Credential keys whose values this group declares non-secret, so they print unmasked."""
 
     SUBTYPES: ClassVar[SubtypeDeclaration | None] = None
     """Declarative subtype dimension of the family; ``None`` means no subtype dimension.

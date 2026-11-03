@@ -77,8 +77,7 @@ class DataAccessCollection:
         ``column_to_file`` maps a column to either a file handle or a file path
         (paths are normalized to their handle).
 
-        ``public_credential_keys`` / ``secret_credential_keys`` name credential keys to leave unmasked
-        or to mask in ``secret_literals()``; secret wins, credential-shaped keys always stay secret.
+        ``public_credential_keys`` / ``secret_credential_keys`` leave keys unmasked or mask them; secret wins.
         """
         self._public_credential_keys = self._key_set("public_credential_keys", public_credential_keys)
         self._secret_credential_keys = self._key_set("secret_credential_keys", secret_credential_keys)

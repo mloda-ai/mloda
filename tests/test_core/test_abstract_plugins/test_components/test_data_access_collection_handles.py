@@ -1177,7 +1177,6 @@ class TestCredentialKeyPolicy:
         dac = DataAccessCollection(credentials={"a": {"zz_pubkey_alpha": _VAL, "password": _PW}})
 
         assert dac.secret_literals() == frozenset({_PW})
-        assert _PublicKeyFG.PUBLIC_CREDENTIAL_KEYS == ("zz_pubkey_alpha",)
 
     def test_a_group_declared_key_is_masked_without_the_group_declaring_it(self) -> None:
         dac = DataAccessCollection(credentials={"a": {"zz_pubkey_unseen": _VAL, "password": _PW}})
@@ -1193,7 +1192,6 @@ class TestCredentialKeyPolicy:
         dac = DataAccessCollection(credentials={"a": {"zz_pubfield_beta": _VAL, "password": _PW}})
 
         assert dac.secret_literals() == frozenset({_PW})
-        assert "zz_pubfield_handle" in _PublicFieldFG.PROPERTY_MAPPING
 
     def test_the_declared_public_keys_are_the_union_over_loaded_groups_normalized(self) -> None:
         from mloda.core.abstract_plugins.components.credential_handle import public_credential_keys
@@ -1208,7 +1206,6 @@ class TestCredentialKeyPolicy:
         keys = public_credential_keys()
 
         assert {"zzpubgamma", "zzpubdelta"} <= keys
-        assert _OneFG.__name__ != _TwoFG.__name__
 
     def test_secret_credential_keys_mask_a_base_safe_key(self) -> None:
         dac = DataAccessCollection(
@@ -1252,7 +1249,6 @@ class TestCredentialKeyPolicy:
 
         assert dac.secret_literals() == frozenset({_VAL})
         assert shaped not in dac.credential_key_policy().secret
-        assert _ShapedPublicFG.PUBLIC_CREDENTIAL_KEYS == (shaped,)
 
     @pytest.mark.parametrize("spelling", ["Key_File", "keyfile", "KEY-FILE", "key_file"])
     def test_keys_are_normalized_when_matching(self, spelling: str) -> None:

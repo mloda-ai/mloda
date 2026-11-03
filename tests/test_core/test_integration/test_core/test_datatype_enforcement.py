@@ -1453,3 +1453,43 @@ class TestStrictTypeEnforcementPropagation:
         assert "INT32" in str(exc_info.value)
         assert "INT64" in str(exc_info.value)
         assert isinstance(exc_info.value, DataTypeMismatchError)
+
+
+class DroppedInputConsumer(FeatureGroup):
+    """Reads red_sum and raw_val, the latter dropped by NonReducingReducer."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"dropped_input_consumer"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PyArrowTable}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("red_sum"), Feature("raw_val")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"dropped_input_consumer": [1]}
+
+
+class TestMissingInputNamesDroppingGroup:
+    def test_error_names_dropping_group_and_suggests_replaces_rows(self) -> None:
+        from mloda.user import MissingInputFeatureError
+
+        with pytest.raises(MissingInputFeatureError) as exc_info:
+            mloda.run_all(
+                [Feature("dropped_input_consumer")],
+                compute_frameworks=[PyArrowTable],
+                parallelization_modes={ParallelizationMode.SYNC},
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {ReducerRawSource, NonReducingReducer, DroppedInputConsumer}
+                ),
+            )
+
+        message = str(exc_info.value)
+        assert "raw_val" in exc_info.value.missing_inputs
+        assert "NonReducingReducer" in message
+        assert "replaces_rows()" in message
+        assert "Link" in message

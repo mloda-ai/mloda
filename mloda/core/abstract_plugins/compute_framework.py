@@ -159,6 +159,7 @@ class ComputeFramework(ABC):
         self.already_calculated_children_tracker: set[UUID] = set()
         self.keep_alive: set[UUID] = set()
         self.column_names: set[str] = set()
+        self._dropped_by: dict[str, str] = {}
         self.function_extender: AbstractSet[Extender] = function_extender if function_extender is not None else set()
         # Raw pickled payload attached by the worker dispatch path; materialized into
         # function_extender only by __setstate__, i.e. only on the actual unpickle in the worker.
@@ -445,6 +446,7 @@ class ComputeFramework(ABC):
     def run_calculation(
         self, feature_group: Any, features: Any, location: str | None, data: Any | None = None
     ) -> Any | None:
+        incoming_columns = set(self.column_names) if data is None else set()
         # case multiprocessing or case base api input feature
         if data is not None:
             self.data = data
@@ -481,6 +483,12 @@ class ComputeFramework(ABC):
             self.data = data
 
             self.set_column_names()
+            for col in incoming_columns - self.column_names:
+                # such groups get their own frame
+                if not feature_group.replaces_rows():
+                    self._dropped_by[col] = feature_group.get_class_name()
+            for col in self.column_names:
+                self._dropped_by.pop(col, None)
         except Exception as e:
             if not self.is_missing_column_error(e):
                 raise
@@ -948,6 +956,7 @@ class ComputeFramework(ABC):
                     feature=name,
                     missing_inputs=missing,
                     available_columns=tuple(sorted(columns)),
+                    dropped_by=tuple((c, self._dropped_by[c]) for c in missing if c in self._dropped_by),
                 )
 
     def _validate_requested_parts(self, features: Any) -> None:

@@ -45,6 +45,37 @@ class TestMissingInputFeatureError:
     def test_no_join_hint_without_suffixed_columns(self) -> None:
         assert "join" not in str(_error(missing=("x",), available=("a", "b")))
 
+    def test_dropped_by_hint_names_group_and_suggests_replaces_rows_and_link(self) -> None:
+        error = MissingInputFeatureError(
+            feature_group="MyGroup",
+            feature="my_feature",
+            missing_inputs=("raw_val",),
+            available_columns=("a",),
+            dropped_by=(("raw_val", "NonReducingReducer"),),
+        )
+        message = str(error)
+
+        assert "NonReducingReducer" in message
+        assert "replaces_rows()" in message
+        assert "Link" in message
+        assert "raw_val" in message
+
+    def test_no_replaces_rows_hint_without_dropped_by(self) -> None:
+        assert "replaces_rows" not in str(_error())
+
+    def test_pickle_round_trip_keeps_dropped_by(self) -> None:
+        error = MissingInputFeatureError(
+            feature_group="MyGroup",
+            feature="my_feature",
+            missing_inputs=("raw_val",),
+            available_columns=("a",),
+            dropped_by=(("raw_val", "NonReducingReducer"),),
+        )
+        restored = pickle.loads(pickle.dumps(error))  # nosec B301
+
+        assert restored.dropped_by == (("raw_val", "NonReducingReducer"),)
+        assert str(restored) == str(error)
+
     @pytest.mark.parametrize("module", ["mloda.user", "mloda.provider", "mloda.steward"])
     def test_exported_from_the_public_facades(self, module: str) -> None:
         facade = importlib.import_module(module)

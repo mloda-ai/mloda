@@ -21,7 +21,13 @@ from mloda.user import ParallelizationMode
 from mloda.provider import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, build_hook_extenders
 from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+from mloda.core.abstract_plugins.components.credential_leaves import (
+    credential_identity_literals,
+    credential_secret_literals,
+)
+from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery, DBTable, ReadDBFG
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -30,6 +36,8 @@ from mloda.core.core.step.transform_frame_work_step import TransformFrameworkSte
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
 from mloda.core.runtime.worker.thread_worker import thread_worker
 from mloda.core.runtime.worker_manager import WorkerManager
+from tests.helpers.credential_handle_stubs import ChsConsumerFG
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -1860,6 +1868,18 @@ class _RecordingGrantKind:
         _RecordingGrantKind.instances.append(self)
 
 
+_STEP_PASSWORD = "step-match-password-Hj2Kl4Zx"  # nosec B105
+_RUN_SECRET = "run-wide-secret-Zx9Cv8Bn"  # nosec B105
+_RUN_IDENTITY = "run-wide-identity-Lk7Jh6Gf"
+
+
+def _match_step(access: Any, group: Any = ReadDBFG) -> Mock:
+    step = _grant_step(())
+    step.feature_group = group
+    step.features.input_data_match = (Mock(), SourceMatch("src", access))
+    return step
+
+
 def _no_match_step() -> Mock:
     step = _grant_step(())
     step.features.input_data_match = None
@@ -1959,17 +1979,10 @@ class TestCredentialGrantHelper:
 
     @pytest.mark.parametrize("access_kind", ["table", "query"])
     def test_step_secrets_are_the_match_credentials_literals(self, access_kind: str) -> None:
-        from mloda.core.abstract_plugins.components.credential_leaves import (
-            credential_identity_literals,
-            credential_secret_literals,
-        )
-        from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery, DBTable
-
         creds = {"host": "db.step.internal", "password": _STEP_PASSWORD}
         collection = _grant_collection()
         access = DBTable(creds, "t") if access_kind == "table" else DBQuery(creds, "select 1")
-        step = _grant_step(())
-        step.features.input_data_match = (Mock(), SourceMatch("src", access))
+        step = _match_step(access)
         executor, *_ = _grant_executor(step, collection)
 
         secrets, identity = executor._step_secrets(step)
@@ -1980,12 +1993,8 @@ class TestCredentialGrantHelper:
         assert _STEP_PASSWORD in identity
 
     def test_step_secrets_use_no_policy_without_a_collection(self) -> None:
-        from mloda.core.abstract_plugins.components.credential_leaves import credential_secret_literals
-        from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
-
         creds = {"password": _STEP_PASSWORD}
-        step = _grant_step(())
-        step.features.input_data_match = (Mock(), SourceMatch("src", DBTable(creds, "t")))
+        step = _match_step(DBTable(creds, "t"))
         executor, *_ = _grant_executor(step, None)
 
         secrets, _ = executor._step_secrets(step)
@@ -1999,38 +2008,52 @@ class TestCredentialGrantHelper:
             pytest.param(lambda: _no_match_step(), id="no_match_on_a_mock_step"),
             pytest.param(lambda: SimpleNamespace(features=SimpleNamespace(input_data_match=None)), id="not_a_fg_step"),
             pytest.param(lambda: Mock(spec=JoinStep), id="join_step"),
+            pytest.param(lambda: _match_step(ApiDataRef("key", ("col",))), id="api_data_ref"),
+            pytest.param(lambda: _match_step("s3://bucket/other.csv", ChsConsumerFG), id="str_on_a_non_source_group"),
+            pytest.param(lambda: _match_step(object(), ChsConsumerFG), id="unknown_on_a_non_source_group"),
         ],
     )
-    def test_step_secrets_are_empty_without_a_match(self, make_step: Callable[[], Any]) -> None:
+    def test_step_secrets_are_empty_without_a_credential(self, make_step: Callable[[], Any]) -> None:
         executor, *_ = _grant_executor(_grant_step(()), _grant_collection())
 
-        assert executor._step_secrets(make_step()) == (frozenset(), frozenset())
+        with registered_secrets_scope(frozenset({_RUN_SECRET}), identity=frozenset({_RUN_IDENTITY})):
+            assert executor._step_secrets(make_step()) == (frozenset(), frozenset())
 
-    def test_a_non_db_access_on_a_non_db_group_adds_no_secrets(self) -> None:
-        step = _grant_step(())
-        step.feature_group = PythonDictFramework
-        step.features.input_data_match = (Mock(), SourceMatch("src", "some-file.csv"))
+    @pytest.mark.parametrize(
+        "access, expected_secrets, expected_identity",
+        [
+            pytest.param(
+                f"s3://bucket/{_RUN_SECRET}/data.csv?id={_RUN_IDENTITY}",
+                frozenset({_RUN_SECRET}),
+                frozenset({_RUN_IDENTITY}),
+                id="both_contained",
+            ),
+            pytest.param(f"/data/{_RUN_SECRET}.csv", frozenset({_RUN_SECRET}), frozenset(), id="secret_only"),
+            pytest.param("/data/plain.csv", frozenset(), frozenset(), id="none_contained"),
+        ],
+    )
+    def test_a_str_access_gets_only_the_run_literals_it_contains(
+        self, access: str, expected_secrets: frozenset[str], expected_identity: frozenset[str]
+    ) -> None:
+        step = _match_step(access, ToySourceFG)
         executor, *_ = _grant_executor(step, _grant_collection())
 
-        with registered_secrets_scope(frozenset({"run-wide-secret-value"}), identity=frozenset({"run-wide-id"})):
-            assert executor._step_secrets(step) == (frozenset(), frozenset())
+        with registered_secrets_scope(
+            frozenset({_RUN_SECRET, "other-run-secret-Qa1Ws2Ed"}),
+            identity=frozenset({_RUN_IDENTITY, "other-run-identity-Rf3Tg4Yh"}),
+        ):
+            assert executor._step_secrets(step) == (expected_secrets, expected_identity)
 
-    def test_a_read_db_group_with_unknown_access_gets_the_full_run_set(self) -> None:
-        from mloda.core.abstract_plugins.components.input_data.read_db_fg import ReadDBFG
-
-        step = _grant_step(())
-        step.feature_group = ReadDBFG
-        step.features.input_data_match = (Mock(), SourceMatch("src", object()))
+    @pytest.mark.parametrize("group", [ReadDBFG, ToySourceFG])
+    def test_a_source_group_with_unknown_access_gets_the_full_run_set(self, group: Any) -> None:
+        step = _match_step(object(), group)
         executor, *_ = _grant_executor(step, _grant_collection())
 
-        with registered_secrets_scope(frozenset({"run-wide-secret-value"}), identity=frozenset({"run-wide-id"})):
+        with registered_secrets_scope(frozenset({_RUN_SECRET}), identity=frozenset({_RUN_IDENTITY})):
             secrets, identity = executor._step_secrets(step)
 
-        assert secrets == frozenset({"run-wide-secret-value"})
-        assert identity == frozenset({"run-wide-id"})
-
-
-_STEP_PASSWORD = "step-match-password-Hj2Kl4Zx"  # nosec B105
+        assert secrets == frozenset({_RUN_SECRET})
+        assert identity == frozenset({_RUN_IDENTITY})
 
 
 class TestGrantDispatch:
@@ -2053,11 +2076,8 @@ class TestGrantDispatch:
     def test_multi_execute_step_sends_only_the_steps_secrets_and_none_in_the_worker_args(
         self, mock_worker: Any
     ) -> None:
-        from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
-
         creds = {"password": _STEP_PASSWORD}
-        step = _grant_step(())
-        step.features.input_data_match = (Mock(), SourceMatch("src", DBTable(creds, "t")))
+        step = _match_step(DBTable(creds, "t"))
         executor, cfw_register, worker_manager, cfw_uuid = _grant_executor(step, _grant_collection())
         worker_manager.get_process_queues.return_value = None
         worker_manager.create_worker_process.return_value = (Mock(), Mock(), Mock())

@@ -329,7 +329,7 @@ Limits:
 - A lazy result (generator, lazy frame) that reads a credential after `calculate_feature` returns is refused; read before returning.
 - A saver's return value must never carry a credential.
 - `repr` redacts; `json.dumps`, pickle and deepcopy raise; `dict(cred)` copies the values, so never serialize it.
-- Trust boundary: code that declares a handle can read it; only the process worker is an OS boundary. A process worker holds only the secrets of the step it is running (none during bootstrap and extender close); the parent still masks with every registered secret.
+- Trust boundary: code that declares a handle can read it; only the process worker is an OS boundary. A process worker holds only the secrets of the step it is running (all of them for a source whose credential cannot be derived; none during bootstrap and extender close); the parent still masks with every registered secret.
 - Verbose tracebacks show frame locals, and a reused worker may linger on a value.
 - Values under 8 characters are not masked.
 - A key outside the listed connection fields is masked unless declared public (see declared credential keys).

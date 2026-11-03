@@ -22,7 +22,9 @@ from mloda.core.abstract_plugins.components.credential_leaves import (
 )
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery, DBTable, ReadDBFG
+from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery, DBTable
+from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.utils import failure_report, is_nominal_subclass
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
@@ -369,7 +371,7 @@ class ComputeFrameworkExecutor:
         return self._grant_kind(values, collection.credential_key_policy())
 
     def _step_secrets(self, step: Any) -> tuple[frozenset[str], frozenset[str]]:
-        """The secret and identity literals of the step's match credential; the full run set if it is unknown."""
+        """The run literals the step's source access needs: its credential's, those in a str access, else all."""
         empty: tuple[frozenset[str], frozenset[str]] = (frozenset(), frozenset())
         if not isinstance(step, FeatureGroupStep):
             return empty
@@ -383,7 +385,14 @@ class ComputeFrameworkExecutor:
             return credential_secret_literals(access.credentials, policy), credential_identity_literals(
                 access.credentials
             )
-        if is_nominal_subclass(step.feature_group, ReadDBFG):
+        if isinstance(access, str):
+            return (
+                frozenset(s for s in current_registered_secrets() if s in access),
+                frozenset(s for s in current_identity_secrets() if s in access),
+            )
+        if isinstance(access, ApiDataRef):
+            return empty
+        if is_nominal_subclass(step.feature_group, SourceFeatureGroup):
             return current_registered_secrets(), current_identity_secrets()
         return empty
 

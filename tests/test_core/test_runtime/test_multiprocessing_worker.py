@@ -221,9 +221,9 @@ class TestWorkerRegisteredSecrets:
 
         _SEEN_BY_STEPS.clear()
         command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
-        first = (frozenset({_STEP_A_SECRET}), frozenset({_STEP_A_IDENTITY}))
-        second = (frozenset({_STEP_B_SECRET}), frozenset())
-        empty = (frozenset(), frozenset())
+        first: tuple[frozenset[str], frozenset[str]] = (frozenset({_STEP_A_SECRET}), frozenset({_STEP_A_IDENTITY}))
+        second: tuple[frozenset[str], frozenset[str]] = (frozenset({_STEP_B_SECRET}), frozenset())
+        empty: tuple[frozenset[str], frozenset[str]] = (frozenset(), frozenset())
         for secrets, identity in (first, second, empty):
             command_queue.put((_SecretsRecordingCommand(), None, secrets, identity))
         command_queue.put("STOP")

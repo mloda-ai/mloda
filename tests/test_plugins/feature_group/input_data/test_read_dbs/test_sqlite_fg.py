@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Any
 import pyarrow as pa
 import pytest
 
+from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
 from mloda.core.filter.filter_engine import BaseFilterEngine
@@ -759,6 +761,23 @@ class TestSqliteFGRunAll:
         assert "SumFeature_idid" in result[0].to_pydict()
 
 
+SECRETS_LOG_NAME = "secrets.jsonl"
+_PASSWORD_A = "sqlite-pw-a-Qw3Er5Ty"  # nosec B105
+_PASSWORD_B = "sqlite-pw-b-Zx9Cv8Bn"  # nosec B105
+
+
+class SecretsRecordingSqliteFG(SqliteFG):
+    """Test-local SqliteFG that appends the registered secrets visible during each read to a file."""
+
+    @classmethod
+    def produce_rows(cls, connection: Any, table: str, features: Any) -> Any:
+        database = connection.execute("PRAGMA database_list").fetchone()[2]
+        with open(os.path.join(os.path.dirname(database), SECRETS_LOG_NAME), "a") as log:
+            line = {"columns": sorted(features.get_all_names()), "secrets": sorted(current_registered_secrets())}
+            log.write(json.dumps(line) + "\n")
+        return super().produce_rows(connection, table, features)
+
+
 class TestSqliteFGMultiprocessing:
     PluginLoader().all()
 
@@ -778,3 +797,32 @@ class TestSqliteFGMultiprocessing:
         )
 
         assert result[0].to_pydict() == {"name": ["Alice", "Bob", "Charlie"], "id": [1, 2, 3]}
+
+    def test_a_worker_step_registers_only_its_own_credentials_secrets(
+        self, people_db: str, tmp_path: Path, flight_server: Any
+    ) -> None:
+        other_db = tmp_path / "other.sqlite"
+        connection = sqlite3.connect(other_db)
+        connection.execute("CREATE TABLE other_table (other_col INTEGER)")
+        connection.execute("INSERT INTO other_table VALUES (7)")
+        connection.commit()
+        connection.close()
+        log = tmp_path / SECRETS_LOG_NAME
+
+        mloda.run_all(
+            ["name", "other_col"],
+            compute_frameworks=["PyArrowTable"],
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+            data_access_collection=DataAccessCollection(
+                credentials={
+                    "first": {KEY: people_db, "password": _PASSWORD_A},
+                    "second": {KEY: str(other_db), "password": _PASSWORD_B},
+                }
+            ),
+            plugin_collector=PluginCollector.enabled_feature_groups({SecretsRecordingSqliteFG}),
+        )
+
+        seen = {tuple(line["columns"]): line["secrets"] for line in map(json.loads, log.read_text().splitlines())}
+        assert _PASSWORD_A in seen[("name",)] and _PASSWORD_B not in seen[("name",)]
+        assert _PASSWORD_B in seen[("other_col",)] and _PASSWORD_A not in seen[("other_col",)]

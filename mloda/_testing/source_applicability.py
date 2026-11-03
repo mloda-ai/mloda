@@ -9,6 +9,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import CONNEC
 from mloda.core.abstract_plugins.components.input_data.claim_route import NamePolicy
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 
+# Sentinel returned by a pointer hook when the group takes no pointer value.
 NO_POINTER: Final[Any] = object()
 
 

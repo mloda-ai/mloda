@@ -33,7 +33,7 @@ BYTES_SECRET = b"chs-bytes-secret-9012"
 class ChsFallbackFG(ChsSource):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
-        return {"chs_vault_a"}
+        return {"chs_vault_a", "chs_plain_a", "chs_both_a", "chs_custom_a", "chs_up_req"}
 
 
 class ChsDefaultFG(ChsSource):
@@ -147,6 +147,44 @@ class ChsLoserWinnerFG(ChsSource):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"chs_loser_a"}
+
+
+class ChsPlainRequiredFG(ChsSource):
+    PROPERTY_MAPPING = {"chs_plain_req": property_spec("Required plain option.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_plain_a"}
+
+
+class ChsBothMissingFG(ChsSource):
+    PROPERTY_MAPPING = {
+        "chs_both_plain": property_spec("Required plain option."),
+        "chs_both_handle": credential_handle_spec("Required handle."),
+    }
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_both_a"}
+
+
+class ChsNeverMatchFG(ChsCustomMatchFG):
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return False
+
+
+class ChsNoneDefaultFG(ChsSource):
+    PROPERTY_MAPPING = {"chs_none_handle": credential_handle_spec("Optional.", default=None)}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_none_a"}
 
 
 def _plugins(*groups: type[FeatureGroup]) -> PluginCollector:
@@ -378,6 +416,58 @@ class TestPlanTimeRefusals:
 
         assert "vault-default" in message
         assert SECRET not in message
+
+
+class TestMissingHandleKeyAborts:
+    """A required handle key that is absent aborts planning instead of falling back to another group."""
+
+    @pytest.mark.parametrize("entry", ENTRY_POINTS)
+    def test_a_missing_handle_key_aborts_despite_a_fallback_group(self, entry: Entry) -> None:
+        message = _refusal(entry, [Feature("chs_vault_a")], None, ChsVaultFG, ChsFallbackFG)
+
+        assert HANDLE_KEY in message
+        assert "ChsVaultFG" in message
+
+    @pytest.mark.parametrize("with_fallback", [True, False])
+    def test_a_misspelled_handle_key_names_the_close_match(self, with_fallback: bool) -> None:
+        typo = "chs_vault_tokne"
+        feature = Feature("chs_vault_a", options={typo: "vault-main"})
+        groups: tuple[type[FeatureGroup], ...] = (ChsVaultFG, ChsFallbackFG) if with_fallback else (ChsVaultFG,)
+
+        message = _refusal(_prepare, [feature], _dac(**{"vault-main": {"key": SECRET}}), *groups)
+
+        assert HANDLE_KEY in message
+        assert "ChsVaultFG" in message
+        assert f"did you mean '{typo}'" in message
+        assert SECRET not in message
+
+    def test_a_missing_handle_key_without_a_close_match_has_no_suggestion(self) -> None:
+        feature = Feature("chs_vault_a", options={"chs_unrelated": "x"})
+
+        message = _refusal(_prepare, [feature], None, ChsVaultFG, ChsFallbackFG)
+
+        assert HANDLE_KEY in message
+        assert "did you mean" not in message
+
+    def test_a_group_missing_a_handle_and_a_plain_key_names_the_handle_key(self) -> None:
+        message = _refusal(_prepare, [Feature("chs_both_a")], None, ChsBothMissingFG, ChsFallbackFG)
+
+        assert "chs_both_handle" in message
+
+    def test_a_missing_plain_required_key_keeps_the_fallback(self) -> None:
+        session = _prepare([Feature("chs_plain_a")], None, _plugins(ChsPlainRequiredFG, ChsFallbackFG))
+
+        assert _steps(session, ChsFallbackFG)
+
+    def test_a_none_default_handle_without_a_key_still_resolves_to_the_declaring_group(self) -> None:
+        session = _prepare([Feature("chs_none_a")], None, _plugins(ChsNoneDefaultFG))
+
+        assert _steps(session, ChsNoneDefaultFG)
+
+    def test_a_custom_matcher_that_returns_false_keeps_the_fallback(self) -> None:
+        session = _prepare([Feature("chs_custom_a")], None, _plugins(ChsNeverMatchFG, ChsFallbackFG))
+
+        assert _steps(session, ChsFallbackFG)
 
 
 class TestGlobalFilterFeatures:
@@ -661,12 +751,19 @@ class TestHandleStaysOnTheConsumer:
 
         assert [s.credential_handles for s in _steps(session, ChsOptionalUpstreamFG)] == [()]
 
+    def test_a_missing_handle_key_on_an_upstream_input_aborts_despite_a_fallback_group(self) -> None:
+        dac = _dac(**{"vault-a": {"key": SECRET}})
+        plugins = _plugins(ChsConsumerReqUpFG, ChsRequiredUpstreamFG, ChsFallbackFG)
+
+        with pytest.raises(ValueError, match=HANDLE_KEY):
+            _prepare([_consumer("chs_consumer_req")], dac, plugins)
+
     def test_a_required_upstream_declaring_the_same_key_does_not_receive_it(self) -> None:
         dac = _dac(**{"vault-a": {"key": SECRET}})
 
         with pytest.raises(
             ValueError,
-            match=r"(?s)No feature groups found for feature name: 'chs_up_req'.*required option\(s\) chs_vault_token are absent",
+            match=r"ChsRequiredUpstreamFG requires credential handle option 'chs_vault_token'",
         ):
             _prepare([_consumer("chs_consumer_req")], dac, _plugins(ChsConsumerReqUpFG, ChsRequiredUpstreamFG))
 

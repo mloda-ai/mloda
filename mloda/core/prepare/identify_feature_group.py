@@ -27,7 +27,10 @@ from mloda.core.prepare.resolution_failure_renderer import (
     _prefix_name,
     _supported_feature_names,
 )
-from mloda.core.abstract_plugins.components.credential_handle import validate_credential_handles
+from mloda.core.abstract_plugins.components.credential_handle import (
+    refuse_missing_credential_handles,
+    validate_credential_handles,
+)
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.declared_attributes import DeclarationRequirement
@@ -50,7 +53,12 @@ from mloda.core.abstract_plugins.components.input_data.source_feature_group impo
 )
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options, reject_reserved_reader_key
-from mloda.core.abstract_plugins.components.match_rejection import DeclineCode, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_STAGE,
+    CoreDeclineCode,
+    DeclineCode,
+    MatchRejection,
+)
 from mloda.core.abstract_plugins.components.match_hook import CriteriaProbeOutcome, probe_match_criteria
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
@@ -814,6 +822,16 @@ class IdentifyFeatureGroupClass:
                     self._record_elimination(feature_group, "matcher_error", matcher_error)
                     continue
                 rejection = self._value_rejection(feature_group)
+                if (
+                    rejection is not None
+                    and rejection.code == CoreDeclineCode.REQUIRED_OPTION_ABSENT
+                    and rejection.stage != INPUT_DATA_STAGE
+                    and self._filter_feature_group_by_domain(feature_group, feature)
+                    and not inspect.isabstract(feature_group)
+                ):
+                    refuse_missing_credential_handles(
+                        feature_group, self._matched_options.get(feature_group, feature.options)
+                    )
                 if rejection is not None:
                     # The shared mapper owns the projection, so both seams spell the taxonomy the same way.
                     self._record_elimination(

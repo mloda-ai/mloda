@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from difflib import get_close_matches
 from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.components.credential_leaves import iter_credential_leaves
@@ -170,6 +171,27 @@ def _check_one(
             f"Credential handle '{handle}' for option '{key}' of {group_name} holds bytes at '{path}'. "
             f"Store a hex or base64 str and decode it in the plugin."
         )
+
+
+def refuse_missing_credential_handles(feature_group: type[FeatureGroup], options: Options) -> None:
+    """Abort when a required handle key is absent, naming a close option key the group does not declare."""
+    from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+
+    keys = credential_handle_keys(feature_group)
+    if not keys:
+        return
+    mapping = feature_group.PROPERTY_MAPPING or {}
+    absent = FeatureChainParser._name_path_missing_required_keys(feature_group.options_with_defaults(options), mapping)
+    missing = [key for key in absent if key in keys]
+    if not missing:
+        return
+    candidates = [key for key in [*options.group, *options.context] if key not in mapping]
+    parts = []
+    for key in missing:
+        close = get_close_matches(key, candidates, n=1, cutoff=0.8)
+        hint = f" (did you mean '{close[0]}'?)" if close else ""
+        parts.append(f"'{key}'{hint}")
+    raise _refuse(f"{feature_group.__name__} requires credential handle option {', '.join(parts)}, which is not set.")
 
 
 def validate_credential_handles(

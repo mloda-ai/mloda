@@ -532,8 +532,6 @@ class TestDisplay:
 
 
 class ChsConsumerFG(FeatureGroup):
-    """Consumer with a handle option over one input feature."""
-
     PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Consumer handle.")}
     INPUT_NAME = "chs_src_a"
     FORWARD: frozenset[str] | None = None

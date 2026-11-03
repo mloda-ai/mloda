@@ -43,7 +43,7 @@ PROPERTY_MAPPING = {
 | `deferred_binding` | `bool` | `False` | Exempts a required key from the string-named path presence check only; its value is bound outside match-time name capture. Not optionality: the key stays required on the config path. See [Required presence on the string-named path](#required-presence-on-the-string-named-path). |
 | `name_converter` | `Callable[[str], Any] \| None` | `None` | Converts the captured text of a named capture bound to this key (e.g. `int`), before validation. Never applied to explicit options or the legacy positional fallback. |
 | `caller_settable` | `bool` | `True` | `False`: an MCP caller may never set the key, even when `[mcp] allow_options` lists it. See [MCP Server and CLI](mcp-server.md#what-stays-on-the-server). |
-| `forward_to_inputs` | `bool` | `True` | `False`: the key stays on the feature that declares it; input features do not inherit it unless an explicit `forward_group` allowlist names it. Group forwarding only: context pushes and pulls are unchanged. |
+| `forward_to_inputs` | `bool` | `True` | `False`: input features do not inherit the key unless an explicit `forward_group` allowlist names it. Context is unaffected. |
 
 A key declared with `credential_handle_spec(...)` names a credential handle and may not be moved to context. See [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle).
 

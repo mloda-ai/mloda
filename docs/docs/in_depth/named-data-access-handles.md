@@ -262,10 +262,9 @@ In CI, `explain()` validates like `prepare()`, so a plan-lock check registers a 
 declared handle with the required fields, for example `Credential(key="ci-placeholder")` under `pii-hmac-key`.
 Use placeholders of 8 characters or longer.
 
-A handle stays on the feature that declares it: input features never inherit it, so an upstream group that declares the
-same key gets nothing unless an input feature's explicit `forward_group` allowlist names the key (a group that chains
-onto itself needs that allowlist too). A handle is never part of a feature name: a pattern that captures a handle key
-raises at class definition.
+A handle stays on the feature that declares it: input features inherit it only when their explicit `forward_group`
+allowlist names the key. A handle is never part of a feature name: a pattern that captures a handle key raises at class
+definition.
 
 ## Common errors
 

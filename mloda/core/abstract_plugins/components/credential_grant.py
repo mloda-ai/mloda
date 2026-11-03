@@ -42,10 +42,10 @@ class StaticGrant:
     """A grant over already resolved values; open() hands them over once."""
 
     def __init__(self, values: Mapping[str, Any]) -> None:
-        self.values: dict[str, Any] = dict(values)
+        self._values: dict[str, Any] = dict(values)
 
     def open(self) -> CredentialLookup:
-        values, self.values = self.values, {}
+        values, self._values = self._values, {}
         return CredentialLookup(values)
 
 

@@ -983,6 +983,34 @@ def _grant_worker_setup() -> tuple[Any, Any, Mock, ComputeFramework]:
     return command_queue, result_queue, cfw_register, cfw
 
 
+class _Unwalked:
+    """Plain object whose attributes redaction does not walk."""
+
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+
+class _SetStateError(Exception):
+    """Module-level so it pickles; __str__ renders state held in a set and an object."""
+
+    def __init__(self, secret: str) -> None:
+        super().__init__("opaque failure")
+        self.in_set = {secret}
+        self.in_object = _Unwalked(secret)
+
+    def __str__(self) -> str:
+        return f"failed {sorted(self.in_set)} {self.in_object.value}"
+
+
+class _SetStateRaisingCommand:
+    """Raises an error whose __str__ renders the granted secret from unwalked state."""
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        from mloda.core.abstract_plugins.components.credential_grant import _read_granted
+
+        raise _SetStateError(_read_granted("first")["token"])
+
+
 class TestWorkerCredentialGrant:
     """The worker opens each command's own grant and drops it when the command ends."""
 
@@ -1013,7 +1041,7 @@ class TestWorkerCredentialGrant:
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
         assert _FIRST_SECRET not in current_registered_secrets()
-        with pytest.raises(Exception, match="first"):
+        with pytest.raises(RuntimeError, match="not available outside a step"):
             _read_granted("first")
 
     def test_a_grant_only_value_echoed_by_a_failing_command_is_masked(self) -> None:
@@ -1030,5 +1058,18 @@ class TestWorkerCredentialGrant:
         exc = call_args.kwargs["exception"]
         assert _FIRST_SECRET not in str(exc)
         assert _FIRST_SECRET not in repr(exc.args)
+        assert _FIRST_SECRET not in msg
+        assert _FIRST_SECRET not in exc_info
+
+    def test_a_grant_only_value_in_unwalked_exception_state_is_masked_in_the_report(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_grant import StaticGrant
+
+        command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
+        command_queue.put((_SetStateRaisingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}})))
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        msg, exc_info = cfw_register.set_error.call_args.args
         assert _FIRST_SECRET not in msg
         assert _FIRST_SECRET not in exc_info

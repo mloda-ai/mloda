@@ -200,6 +200,7 @@ def _run_worker(
     object.__setattr__(cfw, "worker_index", worker_index)
     run_context = RunContext()
     reason: CloseReason = "error"
+    reported = False
 
     try:
         run_context = cfw_register.get_run_context()
@@ -232,11 +233,18 @@ def _run_worker(
 
             step, grant = command
             with grant_scope(grant):
-                data = _execute_command(step, cfw_register, cfw, data, from_cfw)
+                try:
+                    data = _execute_command(step, cfw_register, cfw, data, from_cfw)
+                except BaseException as e:
+                    reported = True
+                    _report_failure(cfw_register, command_queue, e)
+                    break
             _handle_command_result(step, cfw, location, data, result_queue)
 
             time.sleep(0.0001)
     except BaseException as e:
+        if reported:
+            raise
         _report_failure(cfw_register, command_queue, e)
     finally:
         context = CloseContext(

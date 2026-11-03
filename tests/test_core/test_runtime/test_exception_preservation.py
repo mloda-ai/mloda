@@ -1030,7 +1030,7 @@ def test_declared_credential_is_readable_in_calculate_feature_and_a_helper_in_ev
     "grant_only, host, secrets, with_extender",
     [
         pytest.param(False, _E2E_HOST, (_E2E_HMAC, _E2E_KEY), True, id="declared_values"),
-        pytest.param(True, "grant-only.example", (GRANT_ONLY_SECRET,), False, id="grant_only_value"),
+        pytest.param(True, "grant-only.example", (GRANT_ONLY_SECRET,), True, id="grant_only_value"),
     ],
 )
 def test_error_echoing_credential_secrets_is_masked_in_every_mode_but_host_stays(
@@ -1062,7 +1062,9 @@ def test_error_echoing_credential_secrets_is_masked_in_every_mode_but_host_stays
             assert secret not in seen.read_text()
 
 
-def test_the_grant_spans_save_artifact_in_sync_mode() -> None:
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_the_grant_spans_save_artifact_in_every_mode(mode: ParallelizationMode, flight_server: Any) -> None:
     from mloda.user import mloda as mloda_api
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
     from tests.helpers.credential_handle_stubs import HANDLE_KEY
@@ -1073,6 +1075,6 @@ def test_the_grant_spans_save_artifact_in_sync_mode() -> None:
         data_access_collection=_vault_dac(),
         plugin_collector=PluginCollector.enabled_feature_groups({ChsArtifactFG}),
     )
-    api.run(parallelization_modes={ParallelizationMode.SYNC})
+    api.run(parallelization_modes={mode}, flight_server=flight_server)
 
     assert api.get_artifacts() == {"chs_artifact_a": {"saved_host": _E2E_HOST}}

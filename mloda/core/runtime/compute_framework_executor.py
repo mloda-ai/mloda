@@ -3,6 +3,7 @@ from __future__ import annotations
 import multiprocessing  # noqa: F401
 import threading
 import logging
+from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any, Callable
 from uuid import UUID, uuid4
@@ -37,7 +38,7 @@ class ComputeFrameworkExecutor:
     Extracted from Runner class to handle CFW lifecycle and step execution logic.
     """
 
-    _grant_kind: type = StaticGrant
+    _grant_kind: Callable[[Mapping[str, Any]], CredentialGrant] = StaticGrant
 
     def __init__(
         self,
@@ -357,8 +358,7 @@ class ComputeFrameworkExecutor:
         collection = self.data_access_collection
         if collection is None or not isinstance(step, FeatureGroupStep) or not step.credential_handles:
             return None
-        grant: CredentialGrant = self._grant_kind({h: collection.credentials[h] for h in step.credential_handles})
-        return grant
+        return self._grant_kind({h: collection.credentials[h] for h in step.credential_handles})
 
     def sync_execute_step(self, step: Any) -> None:
         """

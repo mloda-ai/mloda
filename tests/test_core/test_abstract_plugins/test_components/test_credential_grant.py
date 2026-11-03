@@ -81,14 +81,14 @@ class TestGrantScope:
         with grant_scope(StaticGrant({"h": _credential()})):
             assert _read_granted("h") == _credential()
 
-        with pytest.raises(Exception, match="h"):
+        with pytest.raises(RuntimeError, match="not available outside a step"):
             _read_granted("h")
 
     def test_lookup_is_closed_after_exit_even_through_a_context_captured_inside(self) -> None:
         with grant_scope(StaticGrant({"h": _credential()})):
             captured = contextvars.copy_context()
 
-        with pytest.raises(Exception, match="h") as info:
+        with pytest.raises(RuntimeError, match="no longer available") as info:
             captured.run(_read_granted, "h")
         assert _HMAC not in str(info.value)
 

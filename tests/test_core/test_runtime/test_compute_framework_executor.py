@@ -2023,6 +2023,34 @@ def _run_thread(step: Mock, cfw_register: Mock) -> None:
     thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None, grant=grant)
 
 
+class _UnwalkedHolder:
+    """Plain object whose attributes redaction does not walk."""
+
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+
+class _UnwalkedStateError(Exception):
+    """__str__ renders a value kept in a set and an object, not in args."""
+
+    def __init__(self, secret: str) -> None:
+        super().__init__("opaque failure")
+        self.in_set = {secret}
+        self.in_object = _UnwalkedHolder(secret)
+
+    def __str__(self) -> str:
+        return f"failed {sorted(self.in_set)} {self.in_object.value}"
+
+
+def _unwalked_state_execute(handle: str) -> Callable[..., None]:
+    from mloda.core.abstract_plugins.components.credential_grant import _read_granted
+
+    def execute(*args: Any, **kwargs: Any) -> None:
+        raise _UnwalkedStateError(_read_granted(handle)["hmac"])
+
+    return execute
+
+
 class TestGrantOnlyValueIsMaskedInEveryFailureReport:
     """A grant-only value echoed by a failing step is absent from the exception, msg and exc_info."""
 
@@ -2044,6 +2072,19 @@ class TestGrantOnlyValueIsMaskedInEveryFailureReport:
         assert _GRANT_HMAC not in msg
         assert _GRANT_HMAC not in exc_info
         assert _GRANT_HOST in str(boom)
+
+    @pytest.mark.parametrize("run", [_run_sync, _run_thread], ids=["sync", "thread"])
+    def test_masked_when_a_custom_str_renders_unwalked_state(self, run: Callable[[Mock, Mock], None]) -> None:
+        cfw_register = Mock(spec=CfwManager)
+        step = _grant_step(("declared",))
+        step.execute.side_effect = _unwalked_state_execute("declared")
+
+        run(step, cfw_register)
+
+        cfw_register.set_error.assert_called_once()
+        msg, exc_info = cfw_register.set_error.call_args.args
+        assert _GRANT_HMAC not in msg
+        assert _GRANT_HMAC not in exc_info
 
     def test_thread_worker_without_a_grant_still_works(self) -> None:
         cfw_register = Mock(spec=CfwManager)

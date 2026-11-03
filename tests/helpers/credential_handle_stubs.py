@@ -4,13 +4,7 @@ from typing import Any
 
 import pandas as pd
 
-from mloda.provider import (
-    ComputeFramework,
-    DataCreatorFeatureGroup,
-    FeatureSet,
-    credential_handle_spec,
-    property_spec,
-)
+from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureSet, credential_handle_spec, property_spec
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 HANDLE_KEY = "chs_vault_token"

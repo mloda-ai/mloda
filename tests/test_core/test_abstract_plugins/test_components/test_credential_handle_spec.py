@@ -542,14 +542,11 @@ def _assert_credential_refusal(message: str, key: str) -> None:
 
 
 class TestCredentialValuesInOptionsAreRefused:
-    """A Credential value under a non-source-pointer option key is refused at plan time."""
-
     @pytest.mark.parametrize("make_value", _VALUE_SHAPES)
     @pytest.mark.parametrize("placement", ["group", "context"])
     def test_a_credential_shape_is_refused_naming_the_key(self, make_value: Callable[[], Any], placement: str) -> None:
-        options = Options(group={}, context={_CRED_OPTION_KEY: make_value()})
-        if placement == "group":
-            options = Options(group={_CRED_OPTION_KEY: make_value()})
+        value = {_CRED_OPTION_KEY: make_value()}
+        options = Options(group=value) if placement == "group" else Options(group={}, context=value)
 
         message = _refusal(_prepare, [Feature("chs_vault_a", options=options)], None, ChsFallbackFG)
 
@@ -578,7 +575,6 @@ class TestCredentialValuesInOptionsAreRefused:
         refuse_credential_option_values(Options({_CRED_OPTION_KEY: cyclic}))
 
     def test_a_source_pointer_key_accepts_a_credential(self) -> None:
-        assert SqliteFG.__name__ == "SqliteFG"
         refuse_credential_option_values(Options({"SqliteFG": Credential(sqlite="/x.db")}))
 
     def test_a_case_typo_pointer_key_gets_the_pointer_hint(self) -> None:

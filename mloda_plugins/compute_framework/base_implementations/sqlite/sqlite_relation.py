@@ -306,12 +306,13 @@ class SqliteRelation(SqlBaseRelation):
         return [arrow_type for arrow_type in resolved_hints if arrow_type is not None]
 
     def _placeholder_rows(self) -> list[tuple[Any, ...]]:
-        """Two synthetic rows aligned with columns: the probe run over the source's rows, else built from types."""
+        """Synthetic rows aligned with columns (first repeats so partitions hold neighbours): the probe run over the source's rows, else built from types."""
         if self._probe is None:
             hints = self._type_hints_for_current_columns()
             column_types = hints if hints is not None else self.types
             pairs = [_placeholder_values(arrow_type) for arrow_type in column_types]
-            return [tuple(pair[0] for pair in pairs), tuple(pair[1] for pair in pairs)]
+            first_row = tuple(pair[0] for pair in pairs)
+            return [first_row, tuple(pair[1] for pair in pairs), first_row, first_row]
         projection, source = self._probe
         source_rows = source._placeholder_rows()
         if not source_rows:

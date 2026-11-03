@@ -12,7 +12,7 @@ Directories to three levels deep; regenerate with
 tests/
 ├── conftest.py                     # Common pytest fixtures and configuration
 ├── docs_corpus.py                  # Helper: shared markdown file list for the doc guard tests
-├── readme_first_run.py             # Helper: runs the README first example and `mloda demo` on a bare wheel install (tox -e bare)
+├── readme_first_run.py             # Helper: runs every README python block and `mloda demo` on a wheel install, bare or with the extras its section installs (tox -e bare)
 ├── registry_isolation.py           # Helper: run a body in an isolated plugin registry
 ├── registry_isolation_probe.py     # Helper: subprocess probe for registry isolation
 ├── test_agent_docs_sync.py         # Agent-facing docs stay in sync with the code

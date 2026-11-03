@@ -12,9 +12,16 @@ from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 
 from mloda.interfaces.cli.demo import REQUEST
-from tests.readme_first_run import first_example
+from tests.readme_first_run import first_example, python_blocks
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+README_SECTIONS = (
+    "## See it",
+    "## Run it",
+    "## Using an agent?",
+    "## Your own FeatureGroup",
+    "## Same request, other backend",
+)
 
 
 def _read_text(path: Path) -> str:
@@ -434,6 +441,37 @@ class TestToxConfig:
         install_page = _read_text(PROJECT_ROOT / "docs/docs/chapter1/installation.md")
         assert code in install_page and output.strip() in install_page, (
             "the install page Quick Start must mirror the README first example"
+        )
+
+    def test_readme_sections_follow_the_first_screen_in_order(self) -> None:
+        headings = [line for line in _read_text(PROJECT_ROOT / "README.md").splitlines() if line.startswith("## ")]
+        assert [h for h in headings if h in README_SECTIONS] == list(README_SECTIONS), (
+            f"README `## ` headings must include {README_SECTIONS} in this order, found {headings}"
+        )
+
+    @pytest.mark.parametrize(
+        ("heading", "needle", "extras"),
+        [
+            ("## Your own FeatureGroup", "FeatureGroup", ()),
+            ("## Same request, other backend", '"PandasDataFrame"', ("pandas",)),
+        ],
+    )
+    def test_readme_section_holds_one_runnable_example(
+        self, heading: str, needle: str, extras: tuple[str, ...]
+    ) -> None:
+        """One ```python block with its ```text output, running with exactly the extras the section installs."""
+        readme = _read_text(PROJECT_ROOT / "README.md")
+        headings = re.findall(r"^## .*$", readme, flags=re.MULTILINE)
+        sections = dict(zip(headings, re.split(r"^## .*$", readme, flags=re.MULTILINE)[1:], strict=True))
+        assert heading in sections, f"README lacks the `{heading}` section, found {headings}"
+        blocks = [block for block in python_blocks(readme) if block.code in sections[heading]]
+        assert len(blocks) == 1, f"`{heading}` must hold exactly one ```python block, found {len(blocks)}"
+        (block,) = blocks
+        assert block.expected is not None, f"the ```python block under `{heading}` needs its ```text output after it"
+        assert needle in block.code, f"the ```python block under `{heading}` must contain {needle}"
+        assert block.extras == extras, (
+            f"the ```python block under `{heading}` must need extras {extras} (from the ```bash block right before it, "
+            f"prose aside), found {block.extras}"
         )
 
     def test_ci_runs_lint_env(self) -> None:

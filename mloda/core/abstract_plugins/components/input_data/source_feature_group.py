@@ -72,7 +72,11 @@ HANDLE_SPEC = PropertySpec(
 
 def _prefix_claims(prefix: str, base_name: str) -> bool:
     # Checked from the prefix's last character on, so `p___op` is rejected too.
-    return base_name.startswith(prefix) and CHAIN_SEPARATOR not in base_name[max(len(prefix) - 1, 0) :]
+    return (
+        len(base_name) > len(prefix)
+        and base_name.startswith(prefix)
+        and CHAIN_SEPARATOR not in base_name[max(len(prefix) - 1, 0) :]
+    )
 
 
 def _clip(text: str, limit: int) -> str:
@@ -105,13 +109,12 @@ def implementation_path(feature_group: type, implementation: Any, match: Any) ->
 
 
 class _Claims:
-    """What a set of routes found: fitting and seen sources, whether a declared route went undeclared, open-only."""
+    """What a set of routes found: fitting and seen sources, open-only."""
 
     def __init__(self) -> None:
         self.fitting: dict[str, SourceMatch] = {}
         self.seen: dict[str, SourceMatch] = {}
         self.firm: set[str] = set()
-        self.undeclared = False
         self.open_only: frozenset[str] = frozenset()
 
     def add(self, group: type["SourceFeatureGroup"], route: ClaimRoute, match: SourceMatch, base_name: str) -> None:
@@ -124,11 +127,9 @@ class _Claims:
             self.fitting[match.source] = match
             if group._declared_name(base_name):
                 self.firm.add(match.source)
-        elif group._declared_name(base_name):
+        else:
             self.fitting[match.source] = match
             self.firm.add(match.source)
-        else:
-            self.undeclared = True
 
     def freeze(self) -> "_Claims":
         self.open_only = frozenset(self.fitting) - self.firm
@@ -526,7 +527,6 @@ class SourceFeatureGroup(FeatureGroup):
                 and not (
                     name
                     and route.names is NamePolicy.DECLARED
-                    and not pointed
                     and not cls._declared_name(cls.get_column_base_feature(name))
                 )
             ]
@@ -567,11 +567,13 @@ class SourceFeatureGroup(FeatureGroup):
         selected: list[ClaimRoute] = []
         searched_only: set[ClaimRoute] = set()
         declared: bool | None = None
+        undeclared = False
         for route in cls.CLAIM_ROUTES:
-            if route.names is NamePolicy.DECLARED and not pointed:
+            if route.names is NamePolicy.DECLARED:
                 if declared is None:
                     declared = cls._declared_name(base_name)
                 if not declared:
+                    undeclared = pointed
                     continue
             if not all(key in options for key in route.required_options):
                 if foreign is None:
@@ -588,7 +590,6 @@ class SourceFeatureGroup(FeatureGroup):
             selected.append(route)
         fitting: dict[str, SourceMatch] = {}
         seen: dict[str, SourceMatch] = {}
-        undeclared = False
         open_only: frozenset[str] = frozenset()
         known_owners = match_rejection_owners()
         if selected:
@@ -613,7 +614,7 @@ class SourceFeatureGroup(FeatureGroup):
             ) and computed_elsewhere(name):
                 claims = unlocked
                 selected = [route for route in selected if route not in searched_only]
-            fitting, seen, undeclared, open_only = claims.fitting, claims.seen, claims.undeclared, claims.open_only
+            fitting, seen, open_only = claims.fitting, claims.seen, claims.open_only
         if query_declined:
             if fitting or seen:
                 replace_probe_match_rejection(
@@ -729,7 +730,7 @@ class SourceFeatureGroup(FeatureGroup):
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.POINTED_ELSEWHERE
             )
-        elif pointed and undeclared:
+        elif undeclared and not selected:
             reason = f"'{base_name}' is not a name {cls.get_class_name()} declares"
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.NAME_NOT_DECLARED

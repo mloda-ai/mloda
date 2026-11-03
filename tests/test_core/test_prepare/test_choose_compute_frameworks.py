@@ -1722,7 +1722,7 @@ def _many_pair(net: _Net) -> _Expected:
     return [(roots, ONLY_ALLOWED, D), (leaves, CONVERTS_LATER, D)]
 
 
-# The bound is CPU time, so load cannot fail it, but load still stretches setup plus choose past the default timeout.
+# Timed on thread CPU time, so waiting for a CPU does not count; setup plus choose can still pass the default timeout.
 @pytest.mark.timeout(30)
 @pytest.mark.parametrize("build", [_many_chain, _many_single, _many_pair], ids=["chain", "single", "pair"])
 def test_many_blocks_or_components_are_chosen_quickly(build: Callable[[_Net], _Expected]) -> None:

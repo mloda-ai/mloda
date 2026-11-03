@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from itertools import product
 from typing import Any
 
 from mloda._testing.result import CheckResult
@@ -13,7 +14,7 @@ from mloda.core.abstract_plugins.components.match_hook import probe_match_criter
 from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
-from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.utils import safe_field_with_error
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 _FOREIGN_NAME = "conformance_foreign_feature"
@@ -98,15 +99,16 @@ def _check_foreign(cls: type[FeatureGroup], base: Options) -> list[str]:
     return failures
 
 
-def _declared_inputs(cls: type[FeatureGroup], base: Options, name: str) -> set[Feature] | None:
-    return safe_field(lambda: cls.declared_input_features(base, FeatureName(name)), None)
-
-
 def _check_inputs(cls: type[FeatureGroup], names: list[str], base: Options) -> list[str]:
-    failures = []
+    failures: list[str] = []
+    # A group keeping the default input_features is a root and declares no inputs.
+    if cls.input_features is FeatureGroup.input_features:
+        return failures
     for name in names:
-        # Groups that cannot declare inputs from the base options raise; skip them.
-        declared = _declared_inputs(cls, base, name)
+        declared, error = safe_field_with_error(lambda: cls.declared_input_features(base, FeatureName(name)), None)
+        if error is not None:
+            failures.append(f"inputs: '{name}' input_features raised: {error}")
+            continue
         if declared is None:
             continue
         if not isinstance(declared, set) or not all(isinstance(f, Feature) for f in declared):
@@ -121,10 +123,10 @@ def _check_inputs(cls: type[FeatureGroup], names: list[str], base: Options) -> l
     return failures
 
 
-def _check_required(cls: type[FeatureGroup], name: str, base: Options) -> list[str]:
+def _check_required(cls: type[FeatureGroup], names: list[str], base: Options) -> list[str]:
     """Dropping each required key must record REQUIRED_OPTION_ABSENT naming it."""
     failures = []
-    for key in _required_keys(cls):
+    for name, key in product(names, _required_keys(cls)):
         matched, rejection = _probe(cls, name, _without_key(base, key))
         if matched:
             failures.append(f"required: matches without required option '{key}'")
@@ -139,11 +141,10 @@ def _check_required(cls: type[FeatureGroup], name: str, base: Options) -> list[s
     return failures
 
 
-def _check_strict(cls: type[FeatureGroup], name: str, base: Options) -> list[str]:
+def _check_strict(cls: type[FeatureGroup], names: list[str], base: Options) -> list[str]:
     failures = []
-    for key, spec in _mapping(cls).items():
-        if not (spec.strict_validation and spec.allowed_values):
-            continue
+    strict = [(k, v) for k, v in _mapping(cls).items() if v.strict_validation and v.allowed_values]
+    for name, (key, _) in product(names, strict):
         matched, rejection = _probe(cls, name, _with_value(base, key, _UNKNOWN_VALUE))
         if matched:
             failures.append(f"strict: matches an unknown value for strict option '{key}'")
@@ -163,9 +164,8 @@ def check_feature_group_shape(cls: type[FeatureGroup], base_options: Options | N
     failures = _check_names(cls, names, base)
     failures += _check_foreign(cls, base)
     failures += _check_inputs(cls, names, base)
-    first = declared[0] if declared else cls.get_class_name()
-    failures += _check_required(cls, first, base)
-    failures += _check_strict(cls, first, base)
+    failures += _check_required(cls, names, base)
+    failures += _check_strict(cls, names, base)
     return CheckResult(check="feature_group_shape", subject=cls.__name__, failures=tuple(failures))
 
 

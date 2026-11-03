@@ -13,6 +13,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.environment.installed_packages_feature_group import (
     InstalledPackagesFeatureGroup,
 )
@@ -100,6 +101,69 @@ def make_ignores_strict_values() -> type[FeatureGroup]:
     return IgnoresStrictValues
 
 
+def make_matches_any_name_with_undeclared_option() -> type[FeatureGroup]:
+    class MatchesWithUndeclaredOption(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {"mu_a"}
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls, feature_name: Any, options: Options, data_access_collection: Any = None
+        ) -> bool:
+            if options.group or options.context:
+                return True
+            return str(feature_name) in {"mu_a", cls.get_class_name()}
+
+    return MatchesWithUndeclaredOption
+
+
+def make_raising_inputs() -> type[FeatureGroup]:
+    class RaisingInputs(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {"ri_a"}
+
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+            raise AttributeError("broken input_features")
+
+    return RaisingInputs
+
+
+def make_falsy_first_allowed_value(values: tuple[Any, ...]) -> type[FeatureGroup]:
+    class FalsyFirst(FeatureGroup):
+        PROPERTY_MAPPING = {
+            "mode": PropertySpec("Required mode.", allowed_values=values, strict_validation=True),
+        }
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {"ff_a"}
+
+    return FalsyFirst
+
+
+def make_ignores_strict_for_second_name() -> type[FeatureGroup]:
+    class IgnoresStrictForSecondName(FeatureGroup):
+        PROPERTY_MAPPING = {
+            "mode": PropertySpec("Mode.", allowed_values=("a", "b"), strict_validation=True, default="a"),
+        }
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {"is2_a", "is2_b"}
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls, feature_name: Any, options: Options, data_access_collection: Any = None
+        ) -> bool:
+            if str(feature_name) == "is2_b":
+                return True
+            return super().match_feature_group_criteria(feature_name, options, data_access_collection)
+
+    return IgnoresStrictForSecondName
+
+
 def test_toy_group_passes() -> None:
     result = check_feature_group_shape(make_toy_group())
     assert result.check == "feature_group_shape"
@@ -112,9 +176,28 @@ def test_toy_group_passes_with_explicit_base_options() -> None:
     assert result.passed
 
 
-@pytest.mark.parametrize("cls", [InstalledPackagesFeatureGroup, ListDirectoryFeatureGroup, SourceInputFeature])
-def test_builtin_groups_pass(cls: type[FeatureGroup]) -> None:
-    assert check_feature_group_shape(cls).failures == ()
+@pytest.mark.parametrize(
+    ("cls", "base"),
+    [
+        (InstalledPackagesFeatureGroup, None),
+        (ListDirectoryFeatureGroup, None),
+        (SourceInputFeature, Options(group={DefaultOptionKeys.in_features: frozenset(["src_feature"])})),
+    ],
+)
+def test_builtin_groups_pass(cls: type[FeatureGroup], base: Options | None) -> None:
+    assert check_feature_group_shape(cls, base_options=base).failures == ()
+
+
+@pytest.mark.parametrize("values", [("", "b"), (0, 1)])
+def test_falsy_first_allowed_value_is_buildable(values: tuple[Any, ...]) -> None:
+    result = check_feature_group_shape(make_falsy_first_allowed_value(values))
+    assert not any("cannot build" in f for f in result.failures), result.failures
+    assert result.passed, result.failures
+
+
+def test_undeclared_option_failure_is_named() -> None:
+    result = check_feature_group_shape(make_matches_any_name_with_undeclared_option())
+    assert any("undeclared option" in f for f in result.failures), result.failures
 
 
 @pytest.mark.parametrize(
@@ -124,6 +207,9 @@ def test_builtin_groups_pass(cls: type[FeatureGroup]) -> None:
         (make_rejects_declared_name, "names:"),
         (make_self_input, "inputs:"),
         (make_ignores_strict_values, "strict:"),
+        (make_matches_any_name_with_undeclared_option, "foreign:"),
+        (make_raising_inputs, "inputs:"),
+        (make_ignores_strict_for_second_name, "strict:"),
     ],
 )
 def test_broken_group_fails_only_its_sub_check(make: Callable[[], type[FeatureGroup]], prefix: str) -> None:

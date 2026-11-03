@@ -20,7 +20,7 @@ from collections.abc import Iterator
 import pytest
 
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS
+from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, CoreDeclineCode
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -91,6 +91,7 @@ class TestRequiredWhenRejectionRecording:
             f"eliminations={result.eliminations}"
         )
         assert elimination.stage == "value_rejection"
+        assert elimination.code is CoreDeclineCode.REQUIRED_OPTION_ABSENT
         assert RWREC_REQUIRED_KEY in elimination.reason, elimination.reason
         assert RwrecRequiredWhenFG.__name__ in elimination.reason, elimination.reason
         assert "propagate_context_keys" not in elimination.reason, (

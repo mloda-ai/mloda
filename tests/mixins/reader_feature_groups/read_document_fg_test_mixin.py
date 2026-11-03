@@ -15,7 +15,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
-from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, MatchRejection
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.provider import CHAIN_SEPARATOR, SourceFeatureGroup
@@ -189,10 +189,12 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin):
 
     def test_doc_a_pointer_to_a_foreign_suffix_records_the_suffix_reason(self) -> None:
         feature = self._feature(self._group_name(), {self._group_name(): str(self.foreign_path)})
-        reason = self._evaluate(feature, None).eliminations[self.feature_group_class].reason
+        elimination = self._evaluate(feature, None).eliminations[self.feature_group_class]
+        reason = elimination.reason
         assert str(self.foreign_path) in reason
         assert f"does not end in a {self._group_name()} suffix" in reason
         assert self._suffix() in reason
+        assert elimination.code is CoreDeclineCode.SUFFIX_NOT_OWNED
 
     def test_doc_foreign_suffix_files_in_a_folder_never_claim(self) -> None:
         folder = self.tmp_path / "foreign_folder"
@@ -214,6 +216,7 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin):
             assert self.feature_group_class not in result.identified
             if dac is not None:
                 assert "it does not exist" in result.eliminations[self.feature_group_class].reason
+                assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.SOURCE_UNREADABLE
         with pytest.raises(ValueError, match="it does not exist"):
             self._resolve(self._feature(name, {name: gone}), None)
 
@@ -249,6 +252,7 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin):
         assert sub not in result.identified
         assert DOCUMENT_SUFFIXES_OPTION in result.eliminations[sub].reason, result.eliminations[sub]
         assert "does not end in" not in result.eliminations[sub].reason
+        assert result.eliminations[sub].code is CoreDeclineCode.HANDED_OVER
         del sub, mapping, result, feature
 
     def test_doc_a_folder_with_one_fitting_and_one_other_file_resolves(self) -> None:
@@ -358,6 +362,7 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin):
             rejection_window.clear()
             assert not self.feature_group_class.match_feature_group_criteria(name, options, None), name
             assert name in rejection_window[self._group_name()].reason
+            assert rejection_window[self._group_name()].code is CoreDeclineCode.SOURCE_NOT_FOUND
 
     def test_doc_the_prefix_shortcut_is_gone_for_a_name_extending_the_group_name(self) -> None:
         name = f"{self._group_name()}_extra"

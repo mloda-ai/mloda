@@ -20,6 +20,7 @@ from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTIO
 from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,
     NAME_STAGE,
+    CoreDeclineCode,
     MatchRejection,
     record_match_rejection,
 )
@@ -122,7 +123,13 @@ def call_match_hook(
                 options._adopt(base_options)
             return MatchHookOutcome(True, True, None, split)
         reason = f"'{part}' is not an output part of '{base}'; declared parts: {list(declared)}"
-        priority.append({feature_group.get_class_name(): MatchRejection(reason, stage=NAME_STAGE)})
+        priority.append(
+            {
+                feature_group.get_class_name(): MatchRejection(
+                    reason, stage=NAME_STAGE, code=CoreDeclineCode.OUTPUT_PART_UNKNOWN
+                )
+            }
+        )
         return MatchHookOutcome(False, False, None)
     except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not poison the whole run)
         if is_match_abort(exc):
@@ -184,7 +191,7 @@ def probe_match_criteria(
             # the owner name is harvested by value, never by key, so a degraded name is harmless.
             owner = safe_field(lambda: feature_group.get_class_name(), "<unnamed feature group>")
             reason = safe_exc_str(value_rejection)
-            record_match_rejection(owner, reason)
+            record_match_rejection(owner, reason, code=CoreDeclineCode.OPTION_VALUE_REJECTED)
         recorded = MATCH_REJECTION_REASONS.get() or {}
         # Harvest only on a non-match; the first recorded reason wins (insertion order).
         rejection = next(iter(recorded.values())) if not outcome.matched and recorded else None

@@ -19,7 +19,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.input_data.claim_route import feature_group_scope
 from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
-from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import DeclineCode, MatchRejection
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.prepare.identify_feature_group import matches_feature_group_scope, validate_single_framework_pin
@@ -256,7 +256,7 @@ class GlobalFilter:
         if not captured:
             return None
         feature_group, elimination = min(captured, key=self._nearest_miss_key)
-        return near_miss_text(feature_group.__name__, elimination.stage, elimination.reason)
+        return near_miss_text(feature_group.__name__, elimination.stage, elimination.reason, elimination.code)
 
     @staticmethod
     def _nearest_miss_key(captured: tuple[type[FeatureGroup], Elimination]) -> tuple[int, str, str]:
@@ -401,7 +401,12 @@ class GlobalFilter:
         return feature_group, filter.name, filter.uuid
 
     def _record_near_miss(
-        self, feature_group: type[FeatureGroup], filter: SingleFilter, stage: EliminationStage, reason: str
+        self,
+        feature_group: type[FeatureGroup],
+        filter: SingleFilter,
+        stage: EliminationStage,
+        reason: str,
+        code: DeclineCode | None = None,
     ) -> None:
         """Record the gate one filter lost at against one feature group; the deepest gate reached keeps the key,
         matching how `_nearest_miss` reads the ledger back."""
@@ -411,13 +416,15 @@ class GlobalFilter:
         if stored is None or (
             stored.stage != "matcher_error" and _STAGE_DEPTH.get(stored.stage, 0) < _STAGE_DEPTH.get(stage, 0)
         ):
-            self.dropped_filters[key] = Elimination(stage=stage, reason=reason)
+            self.dropped_filters[key] = Elimination(stage=stage, reason=reason, code=code)
 
     def _record_rejected_filter(
         self, feature_group: type[FeatureGroup], filter: SingleFilter, rejection: MatchRejection
     ) -> None:
         """Record a typed decline in the same ledger at DEBUG: a deliberate rejection is a near-miss, not a defect."""
-        self._record_near_miss(feature_group, filter, rejection_elimination_stage(rejection.stage), rejection.reason)
+        self._record_near_miss(
+            feature_group, filter, rejection_elimination_stage(rejection.stage), rejection.reason, rejection.code
+        )
         logger.debug(
             "%s rejected filter feature '%s': %s; dropping that filter for this feature group.",
             # A plugin-owned read past the hook call's containment, so it degrades instead of escaping the seam.

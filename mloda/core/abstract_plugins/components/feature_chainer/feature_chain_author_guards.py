@@ -25,7 +25,11 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     FeatureChainParser,
     option_key_is_present,
 )
-from mloda.core.abstract_plugins.components.match_rejection import context_forwarding_remedy, record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import (
+    CoreDeclineCode,
+    context_forwarding_remedy,
+    record_match_rejection,
+)
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import NameResolution
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import (
@@ -418,6 +422,7 @@ def check_required_when(
                 owner_name,
                 f"required option '{key}' is absent, but {owner_name} declares it required "
                 f"(required_when predicate {predicate_name} is satisfied){remedy}",
+                code=CoreDeclineCode.REQUIRED_OPTION_ABSENT,
             )
             return False
     return True
@@ -556,7 +561,11 @@ def _plain_presence_holds(owner_name: str, options: Options, mapping: dict[str, 
     missing = FeatureChainParser._name_path_missing_required_keys(options, mapping)
     if not missing:
         return True
-    record_match_rejection(owner_name, FeatureChainParser._presence_rejection_reason(missing, mapping))
+    record_match_rejection(
+        owner_name,
+        FeatureChainParser._presence_rejection_reason(missing, mapping),
+        code=CoreDeclineCode.REQUIRED_OPTION_ABSENT,
+    )
     logger.debug("%s did not match: required option(s) %s are absent.", owner_name, ", ".join(sorted(missing)))
     return False
 

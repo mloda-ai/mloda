@@ -31,6 +31,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, unavailable_framework_message
 from mloda.core.abstract_plugins.implementation import accessible_implementations
@@ -598,9 +599,11 @@ class TestEliminationStages:
         err = _fail(feature, plugins)
 
         assert err.result.eliminations[ElimValueRejectFG011] == Elimination(
-            stage="value_rejection", reason=VALUE_REJECT_REASON
+            stage="value_rejection", reason=VALUE_REJECT_REASON, code=CoreDeclineCode.OPTION_VALUE_REJECTED
         )
-        assert f"  - ElimValueRejectFG011 (option value): {VALUE_REJECT_REASON}" in str(err)
+        assert f"  - ElimValueRejectFG011 (option value): {VALUE_REJECT_REASON} [code: option_value_rejected]" in str(
+            err
+        )
 
     def test_domain_stage(self) -> None:
         feature = Feature(DOMAIN_FEATURE, domain=REQUESTED_DOMAIN)
@@ -1032,7 +1035,7 @@ class TestValueRejectionCaptureCorrectness:
         assert winner_fg is ElimWinnerFG011
         # ... yet the losing value-rejecter is still recorded, which the old failure-only capture never did.
         assert result.eliminations[ElimLosingRejectorFG011] == Elimination(
-            stage="value_rejection", reason=WIN_REJECT_REASON
+            stage="value_rejection", reason=WIN_REJECT_REASON, code=CoreDeclineCode.OPTION_VALUE_REJECTED
         )
         assert ElimWinnerFG011 not in result.eliminations
 
@@ -1048,7 +1051,7 @@ class TestValueRejectionCaptureCorrectness:
         err = _fail(feature, plugins)
 
         assert err.result.eliminations[ElimDomainAndValueRejectFG011] == Elimination(
-            stage="value_rejection", reason=DOMAIN_VALUE_REASON
+            stage="value_rejection", reason=DOMAIN_VALUE_REASON, code=CoreDeclineCode.OPTION_VALUE_REJECTED
         )
 
     def test_criteria_matched_candidates_are_not_reprobed_as_value_rejections(self) -> None:

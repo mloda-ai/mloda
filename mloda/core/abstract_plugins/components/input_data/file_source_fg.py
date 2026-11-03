@@ -26,6 +26,7 @@ from mloda.core.abstract_plugins.components.input_data.source_feature_group impo
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
     MATCH_REJECTION_REASONS,
+    CoreDeclineCode,
     record_match_rejection,
 )
 from mloda.core.abstract_plugins.components.options import Options
@@ -117,7 +118,10 @@ class _FileSourceFG(SourceFeatureGroup):
             if is_file_route:
                 bad = type(options.get(cast(str, cls._pointer_key(options)))).__name__
                 record_match_rejection(
-                    cls.get_class_name(), f"the pointer value must be a path, got {bad}", stage=INPUT_DATA_STAGE
+                    cls.get_class_name(),
+                    f"the pointer value must be a path, got {bad}",
+                    stage=INPUT_DATA_STAGE,
+                    code=CoreDeclineCode.POINTER_INVALID,
                 )
             return []
         if pointer is not None:
@@ -130,6 +134,7 @@ class _FileSourceFG(SourceFeatureGroup):
                         f"{pointer} does not end in a {cls.get_class_name()} suffix ({', '.join(cls.suffixes())})"
                     ),
                     stage=INPUT_DATA_STAGE,
+                    code=CoreDeclineCode.SUFFIX_NOT_OWNED,
                 )
             return [cls._source(pointer)] if is_file_route and cls._owns(pointer, excluded) else []
         pinned = cls._pinned_path(feature_name, data_access_collection)
@@ -156,6 +161,7 @@ class _FileSourceFG(SourceFeatureGroup):
                         f"data_access_handle '{handle}' is unknown; file handles: {sorted(dac.files)}, "
                         f"folder handles: {sorted(dac.folders)}",
                         stage=INPUT_DATA_STAGE,
+                        code=CoreDeclineCode.HANDLE_UNKNOWN,
                     )
         if is_file_route:
             return cls._disambiguate([path for path in files if cls._owns(path, excluded)], dac)
@@ -222,6 +228,7 @@ class _FileSourceFG(SourceFeatureGroup):
             _UNOWNED_PIN_OWNER,
             scrub_credentials(f"pinned file {pinned_path} has a suffix no registered reader owns"),
             stage=INPUT_DATA_STAGE,
+            code=CoreDeclineCode.NO_READER_FOR_SUFFIX,
         )
         record = (MATCH_REJECTION_REASONS.get() or {}).get(_UNOWNED_PIN_OWNER)
         if created and record is not None:
@@ -255,6 +262,7 @@ class _FileSourceFG(SourceFeatureGroup):
                         "add it as a files handle or point at it"
                     ),
                     stage=INPUT_DATA_STAGE,
+                    code=CoreDeclineCode.FOLDER_ESCAPE,
                 )
                 continue
             kept.append(cls._source(path))

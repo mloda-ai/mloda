@@ -13,7 +13,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, MatchRejection
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.provider import ComputeFramework
 from mloda.user import DataAccessCollection, Feature, FilterType, GlobalFilter, Options, PluginCollector, mloda
@@ -278,6 +278,7 @@ class TestDuckdbFGOptIn:
 
         assert DuckdbFG not in result.identified
         assert "is not a duckdb connection" in result.eliminations[DuckdbFG].reason
+        assert result.eliminations[DuckdbFG].code is CoreDeclineCode.CREDENTIALS_INVALID
 
     def test_a_duckdb_connection_without_connection_handle_is_not_read(self, opened: list[Any]) -> None:
         connection = _database(opened, {"optin_col": [1]})
@@ -298,6 +299,7 @@ class TestDuckdbFGOptIn:
         reason = result.eliminations[DuckdbFG].reason
         assert repr(handle) in reason
         assert str(sorted(["other_handle", HANDLE])) in reason
+        assert result.eliminations[DuckdbFG].code is CoreDeclineCode.HANDLE_UNKNOWN
 
     def test_a_column_the_selected_table_lacks_declines_naming_the_column_and_source_only(
         self, opened: list[Any]
@@ -312,6 +314,7 @@ class TestDuckdbFGOptIn:
         assert "'lack_col'" in reason
         assert f"memory::{TABLE}" in reason
         assert "have_col" not in reason
+        assert result.eliminations[DuckdbFG].code is CoreDeclineCode.COLUMN_NOT_FOUND
 
     def test_a_non_duckdb_handle_declines_with_a_rejection(self, opened: list[Any]) -> None:
         foreign = sqlite3.connect(":memory:")
@@ -324,6 +327,7 @@ class TestDuckdbFGOptIn:
         reason = result.eliminations[DuckdbFG].reason
         assert "lite_handle" in reason
         assert "duckdb" in reason.lower()
+        assert result.eliminations[DuckdbFG].code is CoreDeclineCode.CREDENTIALS_INVALID
 
     @pytest.mark.parametrize("value", ["pointer", {"duckdb": "pointer"}], ids=["str", "mapping"])
     def test_any_value_under_the_group_key_declines_pointing_at_connection_handle(
@@ -337,6 +341,7 @@ class TestDuckdbFGOptIn:
 
         assert DuckdbFG not in result.identified
         assert "connection_handle" in result.eliminations[DuckdbFG].reason
+        assert result.eliminations[DuckdbFG].code is CoreDeclineCode.POINTER_INVALID
 
 
 class TestDuckdbFGIdentity:

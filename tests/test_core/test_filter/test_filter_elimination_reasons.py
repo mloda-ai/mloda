@@ -20,6 +20,8 @@ from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
     NAME_STAGE,
+    CoreDeclineCode,
+    DeclineCode,
     record_match_rejection,
 )
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, unavailable_framework_message
@@ -300,7 +302,7 @@ def _make_matcher_error_fg() -> type[FeatureGroup]:
     return FerMatcherErrorFG
 
 
-def _make_stage_decline_fg(stage: str) -> type[FeatureGroup]:
+def _make_stage_decline_fg(stage: str, code: DeclineCode | None = None) -> type[FeatureGroup]:
     """A throwaway group whose hook records under the caller's stage hint and declines the filter feature."""
 
     class FerStageDeclineFG(FeatureGroup):
@@ -316,7 +318,7 @@ def _make_stage_decline_fg(stage: str) -> type[FeatureGroup]:
             data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             if str(feature_name) == FILTER_FEATURE:
-                record_match_rejection(cls.__name__, _stage_reason(stage), stage=stage)
+                record_match_rejection(cls.__name__, _stage_reason(stage), stage=stage, code=code)
                 return False
             return str(feature_name) in cls.feature_names_supported()
 
@@ -1265,17 +1267,24 @@ class TestTheUnmatchedWarningNamesTheNearestMiss:
         from mloda.core.prepare.resolution_failure_renderer import near_miss_text
 
         snapshot = _drive_matching(
-            [_make_matcher_error_fg, partial(_make_stage_decline_fg, VALUE_REJECTION_STAGE)],
+            [
+                _make_matcher_error_fg,
+                partial(_make_stage_decline_fg, VALUE_REJECTION_STAGE, CoreDeclineCode.OPTION_VALUE_REJECTED),
+            ],
             caplog,
             warn_unmatched=True,
         )
 
         expected_bullet = near_miss_text(
-            STAGE_DECLINE_CLASS_NAME, VALUE_REJECTION_STAGE, _stage_reason(VALUE_REJECTION_STAGE)
+            STAGE_DECLINE_CLASS_NAME,
+            VALUE_REJECTION_STAGE,
+            _stage_reason(VALUE_REJECTION_STAGE),
+            CoreDeclineCode.OPTION_VALUE_REJECTED,
         )
         assert snapshot.unmatched == (f"{BARE_MESSAGE} {NEAREST_MISS_PHRASE}{expected_bullet}",), (
             f"the decline must outrank the defect, got: {snapshot.unmatched}"
         )
+        assert snapshot.unmatched[0].endswith(f"{_stage_reason(VALUE_REJECTION_STAGE)} [code: option_value_rejected]")
 
     def test_an_equal_stage_ties_break_by_class_name(self, caplog: pytest.LogCaptureFixture) -> None:
         """Two groups losing at the same gate: the pick is the renderer's own candidate order, not insertion order."""

@@ -6,7 +6,11 @@ from typing import Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
-from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_STAGE,
+    CoreDeclineCode,
+    record_match_rejection,
+)
 from mloda.core.optional_dependency import require
 from mloda.provider import ComputeFramework, FeatureSet, Implementation, PropertySpec, SourceFeatureGroup
 from mloda.user import DataAccessCollection, Options
@@ -80,13 +84,13 @@ class DuckdbFG(SourceFeatureGroup):
         name = cls.get_class_name()
         if set(cls.pointer_keys()) & set(options.keys()):
             reason = f"{name} has no pointer; select a connection with {HANDLE_KEY}"
-            record_match_rejection(name, reason, stage=INPUT_DATA_STAGE)
+            record_match_rejection(name, reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.POINTER_INVALID)
             return []
         handle = cls.read_option("connection_handle", options)
         connections = {} if data_access_collection is None else data_access_collection.connections
         if not isinstance(handle, str) or handle not in connections:
             reason = f"{HANDLE_KEY} {handle!r} is not a connection handle; known: {sorted(connections)}"
-            record_match_rejection(name, reason, stage=INPUT_DATA_STAGE)
+            record_match_rejection(name, reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.HANDLE_UNKNOWN)
             return []
         connection = connections[handle]
         # only a DuckDB connection object can need the import
@@ -95,7 +99,7 @@ class DuckdbFG(SourceFeatureGroup):
         )
         if duckdb is None or not isinstance(connection, duckdb.DuckDBPyConnection):
             reason = f"{HANDLE_KEY} '{handle}' is not a duckdb connection"
-            record_match_rejection(name, reason, stage=INPUT_DATA_STAGE)
+            record_match_rejection(name, reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.CREDENTIALS_INVALID)
             return []
         identity, tables, _ = _catalog(connection)
         return [SourceMatch(f"{identity}::{table}", DuckdbTable(connection, table)) for table in tables]

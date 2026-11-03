@@ -20,6 +20,7 @@ from mloda.core.abstract_plugins.components.input_data.source_feature_group impo
 )
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
+    CoreDeclineCode,
     MatchRejection,
     collect_match_rejections,
     record_match_rejection,
@@ -121,6 +122,7 @@ class TestCheckedNames:
         elimination = result.eliminations[ToySourceFG]
         assert elimination.stage == "input_data"
         assert "h1:toy" in elimination.reason
+        assert elimination.code is CoreDeclineCode.COLUMN_NOT_FOUND
 
     def test_no_collection_declines(self) -> None:
         assert not _claims(Feature(COL), None, ToySourceFG)
@@ -253,6 +255,7 @@ class TestDeclaredNamesProbeOnlyDeclaredNames:
         assert calls != []
         assert group not in result.identified
         assert "is not a name ToyfmtSpyDeclaredFG declares" in result.eliminations[group].reason
+        assert result.eliminations[group].code is CoreDeclineCode.NAME_NOT_DECLARED
         del group, result, feature
 
     def test_a_required_option_declared_route_skips_an_undeclared_name(self) -> None:
@@ -319,6 +322,7 @@ class TestRequiredOptionRoute:
         elimination = result.eliminations[group]
         assert elimination.stage == "input_data"
         assert "needs the option 'toyfmt_required'" in elimination.reason
+        assert elimination.code is CoreDeclineCode.REQUIRED_OPTION_ABSENT
 
     def test_required_option_presence_points_the_route(self) -> None:
         feature = Feature(COL, Options({"toyfmt_required": "yes"}))
@@ -363,6 +367,7 @@ class TestPointedButMissingAborts:
         elimination = error.result.eliminations[ToySourceFG]
         assert elimination.stage == "input_data"
         assert elimination.reason in message
+        assert elimination.code is CoreDeclineCode.COLUMN_NOT_FOUND
 
     def test_pointed_missing_column_through_run_all_raises_feature_resolution_error(self) -> None:
         feature = Feature(COL, Options({"ToySourceFG": {"other": [1]}}))
@@ -385,6 +390,8 @@ class TestPointedButMissingAborts:
         assert diagnosis.message is not None
         assert "ToySourceFG" in diagnosis.message
         assert "other" in diagnosis.message
+        assert diagnosis.failed_result is not None
+        assert diagnosis.failed_result.eliminations[ToySourceFG].code is CoreDeclineCode.COLUMN_NOT_FOUND
 
     def test_handle_alone_narrows_but_does_not_escalate_a_missing_column(self) -> None:
         feature = Feature(COL, Options({"data_access_handle": "h1"}))
@@ -392,6 +399,7 @@ class TestPointedButMissingAborts:
         result = _identify(feature, dac, ToySourceFG)
         assert result.identified == {}
         assert "h1:toy" in result.eliminations[ToySourceFG].reason
+        assert result.eliminations[ToySourceFG].code is CoreDeclineCode.COLUMN_NOT_FOUND
 
     def test_abort_does_not_fall_through_to_the_other_candidate(self) -> None:
         feature = Feature(COL, Options({"ToySourceFG": {"other": [1]}}))
@@ -664,6 +672,17 @@ class TestAmbiguousSources:
         assert "data_access_handle" in message
         assert "column_to_file" in message
 
+    def test_a_contained_ambiguity_records_its_candidates_and_code(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        dac = toy_dac(h1={COL: [1]}, h2={COL: [2]})
+        with feature_group_scope(ToySourceFG, contain_aborts=True):
+            assert ToySourceFG._matches_by_default_rules(COL, Options(), dac) is False
+
+        rejection = rejection_window["ToySourceFG"]
+        assert rejection.code is CoreDeclineCode.AMBIGUOUS_SOURCE
+        assert rejection.candidates == ("h1:toy", "h2:toy")
+
     def test_data_access_handle_resolves_the_ambiguity(self) -> None:
         feature = Feature(COL, Options({"data_access_handle": "h2"}))
         evaluate_or_raise(feature, _plugins(ToySourceFG), None, toy_dac(h1={COL: [1]}, h2={COL: [2]}))
@@ -889,6 +908,7 @@ class TestPointedGroupDefersToAComputingCandidate:
         elimination = result.eliminations[fg]
         assert elimination.stage == "input_data"
         assert "is in none of the sources" in elimination.reason
+        assert elimination.code is CoreDeclineCode.COLUMN_NOT_FOUND
 
     @pytest.mark.parametrize(
         ("name", "groups", "dac"),
@@ -1077,6 +1097,7 @@ class TestPointedRoutesDeclineWithReason:
         elimination = result.eliminations[group]
         assert elimination.stage == "input_data"
         assert f"{group.__name__} was pointed at but found no source for 'toyfmt_col'" in elimination.reason
+        assert elimination.code is CoreDeclineCode.SOURCE_NOT_FOUND
 
     def test_pointed_declared_route_with_an_undeclared_name_records_a_rejection(self) -> None:
         feature = Feature("toyfmt_undeclared", feature_group=ToyDeclaredFG)
@@ -1086,6 +1107,7 @@ class TestPointedRoutesDeclineWithReason:
         elimination = result.eliminations[ToyDeclaredFG]
         assert elimination.stage == "input_data"
         assert "toyfmt_undeclared" in elimination.reason
+        assert elimination.code is CoreDeclineCode.NAME_NOT_DECLARED
 
 
 class _AbstractRouted(SourceFeatureGroup):
@@ -1117,6 +1139,7 @@ class TestAbstractGroupsNeverClaim:
 
         reason = rejection_window["_AbstractRoutedChild"].reason
         assert str(sorted(_AbstractRoutedChild.__abstractmethods__)) in reason
+        assert rejection_window["_AbstractRoutedChild"].code is CoreDeclineCode.ABSTRACT_SOURCE
 
     def test_pointed_abstract_group_records_its_missing_abstract_methods(
         self, rejection_window: dict[str, MatchRejection]
@@ -1126,6 +1149,7 @@ class TestAbstractGroupsNeverClaim:
 
         reason = rejection_window["_AbstractRouted"].reason
         assert str(sorted(_AbstractRouted.__abstractmethods__)) in reason
+        assert rejection_window["_AbstractRouted"].code is CoreDeclineCode.ABSTRACT_SOURCE
 
 
 class _VirtualColumnFG(ToySourceFG):

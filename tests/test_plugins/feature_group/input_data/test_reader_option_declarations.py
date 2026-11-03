@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.provider import ReadDBFG, ReadDocumentFG, ReadFileFG
@@ -178,6 +179,7 @@ class TestJsonFGDocumentSuffixes:
         reason = result.eliminations[JsonFG].reason
         assert "document_suffixes" in reason
         assert "raised TypeError" not in reason
+        assert result.eliminations[JsonFG].code is CoreDeclineCode.OPTION_VALUE_REJECTED
 
 
 def _json_document_claims(json_path: str, options: Options) -> bool:

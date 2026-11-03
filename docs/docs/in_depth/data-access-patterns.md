@@ -132,7 +132,7 @@ class SensorCsvFG(ReadFileFG):
 The recorded decline renders as a near-miss line of the resolution failure:
 
 ```
-  - SensorCsvFG (input data): SensorCsvFG matched /data/run1.sensorcsv but could not read its columns: its header lacks the #sensor-schema marker
+  - SensorCsvFG (input data): SensorCsvFG matched /data/run1.sensorcsv but could not read its columns: its header lacks the #sensor-schema marker [code: source_unreadable]
 ```
 
 Rules for source group authors:

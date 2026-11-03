@@ -27,7 +27,7 @@ from mloda.core.prepare.identify_feature_group import (
     IdentifyFeatureGroupClass,
     resolve_or_raise,
 )
-from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, CoreDeclineCode, MatchRejection
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.provider import SourceFeatureGroup, ReadDBFG
 from mloda.user import Credential, DataAccessCollection, Feature, PluginCollector, mloda
@@ -713,6 +713,7 @@ class TestCatalogFailures:
         declined = IdentifyFeatureGroupClass.evaluate(Feature("toy_a"), {ToyBaseDB: {PythonDictFramework}}, None, dac)
         assert ToyBaseDB not in declined.identified
         assert "could not read its tables" in declined.eliminations[ToyBaseDB].reason
+        assert declined.eliminations[ToyBaseDB].code is CoreDeclineCode.COLUMNS_UNKNOWN
 
         result = mloda.run_all(
             ["toyfmt_csv_col"],
@@ -734,6 +735,7 @@ class TestCatalogFailures:
         reason = result.eliminations[ToyBaseDB].reason
         assert "could not read its tables" in reason
         assert secret not in reason
+        assert result.eliminations[ToyBaseDB].code is CoreDeclineCode.COLUMNS_UNKNOWN
 
         pointed = Feature("toy_a", options={"ToyBaseDB": {KEY: "a", "password": secret}})
         with pytest.raises(ValueError, match="could not read its tables") as excinfo:
@@ -802,6 +804,7 @@ class TestQueryRoute:
         rejection = rejection_window[ToyQueryDB.get_class_name()]
         assert rejection.stage == INPUT_DATA_STAGE
         assert "query_text" in rejection.reason
+        assert rejection.code is CoreDeclineCode.QUERY_ROUTE_TAKEN
 
     @pytest.mark.parametrize("query", [5, "", None, ["SELECT 1"]], ids=["int", "empty", "none", "list"])
     def test_a_non_str_or_empty_query_text_declines_with_a_rejection(self, query: Any) -> None:
@@ -809,6 +812,7 @@ class TestQueryRoute:
         result = IdentifyFeatureGroupClass.evaluate(feature, {ToyQueryDB: {PythonDictFramework}}, None, None)
         assert ToyQueryDB not in result.identified
         assert "query_text" in result.eliminations[ToyQueryDB].reason
+        assert result.eliminations[ToyQueryDB].code is CoreDeclineCode.QUERY_ROUTE_TAKEN
 
     def test_load_neutral_runs_produce_query_rows_for_a_query_match(self, monkeypatch: pytest.MonkeyPatch) -> None:
         calls: list[tuple[Any, str, Any]] = []

@@ -25,7 +25,11 @@ from mloda.core.abstract_plugins.components.input_data.source_feature_group impo
     SourceFeatureGroup,
 )
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
-from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_STAGE,
+    CoreDeclineCode,
+    record_match_rejection,
+)
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import is_match_abort
@@ -222,7 +226,10 @@ class ReadDBFG(SourceFeatureGroup):
             query_text = cls.read_option(QUERY_OPTION, options)
             if not isinstance(query_text, str) or not query_text:
                 record_match_rejection(
-                    cls.get_class_name(), f"{QUERY_OPTION} must be a non-empty string", stage=INPUT_DATA_STAGE
+                    cls.get_class_name(),
+                    f"{QUERY_OPTION} must be a non-empty string",
+                    stage=INPUT_DATA_STAGE,
+                    code=CoreDeclineCode.QUERY_INVALID,
                 )
                 return []
         elif cls.serves_query_text() and QUERY_OPTION in options:
@@ -231,6 +238,7 @@ class ReadDBFG(SourceFeatureGroup):
                     cls.get_class_name(),
                     f"{QUERY_OPTION} is set, so the table route is not used",
                     stage=INPUT_DATA_STAGE,
+                    code=CoreDeclineCode.QUERY_ROUTE_TAKEN,
                 )
             return []
         digest = sha256(query_text.encode()).hexdigest()[:16] if query else ""
@@ -287,11 +295,14 @@ class ReadDBFG(SourceFeatureGroup):
             wrapped = cls.wrap_feature_scoped_access(value)
             if wrapped is None:
                 reason = f"the pointer value must be a credential mapping, got {type(value).__name__}"
-                record_match_rejection(name, reason, stage=INPUT_DATA_STAGE)
+                record_match_rejection(name, reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.POINTER_INVALID)
                 return []
             if not cls.is_valid_credentials(wrapped):
                 record_match_rejection(
-                    name, "the pointed credentials are not valid for this group", stage=INPUT_DATA_STAGE
+                    name,
+                    "the pointed credentials are not valid for this group",
+                    stage=INPUT_DATA_STAGE,
+                    code=CoreDeclineCode.CREDENTIALS_INVALID,
                 )
                 return []
             return [wrapped]
@@ -311,6 +322,7 @@ class ReadDBFG(SourceFeatureGroup):
                 cls.get_class_name(),
                 f"data_access_handle '{handle}' is unknown; credential handles: {sorted(dac.credentials)}",
                 stage=INPUT_DATA_STAGE,
+                code=CoreDeclineCode.HANDLE_UNKNOWN,
             )
         return []
 

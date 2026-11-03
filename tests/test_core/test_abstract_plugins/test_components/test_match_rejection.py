@@ -13,8 +13,10 @@ neutral module does not validate the stage string.
 
 from __future__ import annotations
 
+import ast
 import contextvars
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -24,10 +26,13 @@ from mloda.core.abstract_plugins.components import match_hook, match_rejection
 from mloda.core.abstract_plugins.components.feature_chainer import feature_chain_parser
 from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,
+    CoreDeclineCode,
+    DeclineCode,
     MatchRejection,
     drop_match_rejections_since,
     match_rejection_owners,
     record_match_rejection,
+    replace_probe_match_rejection,
 )
 from mloda.provider import collect_match_rejections
 from tests.docs_corpus import REPO_ROOT
@@ -185,15 +190,18 @@ class TestMatchRejectionOwnersAndDrop:
         assert set(rejection_window) == {self.OWNER}
 
 
-class TestProviderExport:
-    """mloda.provider exposes the recording function, the collector and the value type for plugin authors."""
+_EXPORTS = ["record_match_rejection", "collect_match_rejections", "MatchRejection", "DeclineCode", "CoreDeclineCode"]
 
-    @pytest.mark.parametrize("name", ["record_match_rejection", "collect_match_rejections", "MatchRejection"])
+
+class TestProviderExport:
+    """mloda.provider exposes the recording function, the collector and the value types for plugin authors."""
+
+    @pytest.mark.parametrize("name", _EXPORTS)
     def test_provider_exports_the_same_object(self, name: str) -> None:
         """The provider export is the neutral module's object."""
         assert getattr(provider, name) is getattr(match_rejection, name)
 
-    @pytest.mark.parametrize("name", ["record_match_rejection", "collect_match_rejections", "MatchRejection"])
+    @pytest.mark.parametrize("name", _EXPORTS)
     def test_provider_all_lists_the_export(self, name: str) -> None:
         """The export is part of the provider's public surface."""
         assert name in provider.__all__
@@ -247,3 +255,105 @@ class TestCollectMatchRejections:
         page = REPO_ROOT / "docs" / "docs" / "in_depth" / "feature-group-matching.md"
 
         assert "collect_match_rejections" in page.read_text(encoding="utf-8")
+
+
+class _PluginCode(DeclineCode):
+    SAMPLE = "myplugin_sample"
+
+
+class TestDeclineCodeField:
+    """A rejection carries an optional stable code that takes part in equality."""
+
+    def test_code_defaults_to_none(self) -> None:
+        assert MatchRejection(reason="r").code is None
+
+    def test_code_is_stored_and_compared(self) -> None:
+        coded = MatchRejection(reason="r", code=CoreDeclineCode.COLUMN_NOT_FOUND)
+
+        assert coded.code is CoreDeclineCode.COLUMN_NOT_FOUND
+        assert coded != MatchRejection(reason="r")
+        assert coded == MatchRejection(reason="r", code=CoreDeclineCode.COLUMN_NOT_FOUND)
+
+    def test_core_codes_are_lowercase_snake_of_the_member_name(self) -> None:
+        assert all(code.value == code.name.lower() for code in CoreDeclineCode)
+        assert issubclass(CoreDeclineCode, DeclineCode)
+        assert CoreDeclineCode.COLUMN_NOT_FOUND.value == "column_not_found"
+
+    def test_plugin_subclass_codes_are_accepted(self, recording_window: dict[str, Any]) -> None:
+        record_match_rejection("PluginOwner", "r", code=_PluginCode.SAMPLE)
+
+        assert recording_window["PluginOwner"].code is _PluginCode.SAMPLE
+
+    def test_recording_stores_the_code(self, recording_window: dict[str, Any]) -> None:
+        record_match_rejection("CodeOwner", "r", stage="input_data", code=CoreDeclineCode.ABSTRACT_SOURCE)
+
+        assert recording_window["CodeOwner"] == MatchRejection(
+            reason="r", stage="input_data", code=CoreDeclineCode.ABSTRACT_SOURCE
+        )
+
+    def test_replace_probe_carries_the_code_on_both_branches(self, recording_window: dict[str, Any]) -> None:
+        replace_probe_match_rejection(
+            "Fresh", "r", frozenset(), stage="input_data", code=CoreDeclineCode.NO_QUERY_ROUTE
+        )
+        record_match_rejection("Known", "first")
+        replace_probe_match_rejection("Known", "r", frozenset({"Known"}), code=CoreDeclineCode.COLUMN_NOT_FOUND)
+        record_match_rejection("Other", "first", code=CoreDeclineCode.ABSTRACT_SOURCE)
+        replace_probe_match_rejection("Other", "r", frozenset(), code=CoreDeclineCode.COLUMNS_UNKNOWN)
+
+        assert recording_window["Fresh"].code is CoreDeclineCode.NO_QUERY_ROUTE
+        assert recording_window["Known"].code is None
+        assert recording_window["Known"].reason == "first"
+        assert recording_window["Other"].code is CoreDeclineCode.COLUMNS_UNKNOWN
+
+
+_RECORDING_CALLEES = {"record_match_rejection", "replace_probe_match_rejection", "MatchRejection"}
+
+
+def _source_files() -> list[Path]:
+    roots = [REPO_ROOT / "mloda", REPO_ROOT / "mloda_plugins"]
+    return [f for root in roots for f in sorted(root.rglob("*.py")) if f.name != "match_rejection.py"]
+
+
+def _calls(path: Path) -> list[ast.Call]:
+    return [n for n in ast.walk(ast.parse(path.read_text(encoding="utf-8"))) if isinstance(n, ast.Call)]
+
+
+def _callee_name(call: ast.Call) -> str | None:
+    if isinstance(call.func, ast.Name):
+        return call.func.id
+    if isinstance(call.func, ast.Attribute):
+        return call.func.attr
+    return None
+
+
+class TestEveryCoreSiteSetsACode:
+    """A core-owned decline path without a code is an error, and no core code is dead."""
+
+    def test_every_recording_call_passes_a_non_none_code(self) -> None:
+        missing = []
+        for path in _source_files():
+            for call in _calls(path):
+                if _callee_name(call) not in _RECORDING_CALLEES:
+                    continue
+                values = [kw.value for kw in call.keywords if kw.arg == "code"]
+                if not values or (isinstance(values[0], ast.Constant) and values[0].value is None):
+                    missing.append(f"{path.name}:{call.lineno}")
+
+        assert missing == []
+
+    def test_the_sweep_sees_the_recording_calls(self) -> None:
+        names = {_callee_name(c) for p in _source_files() for c in _calls(p)}
+
+        assert _RECORDING_CALLEES <= names
+
+    def test_every_core_code_is_referenced_by_a_site(self) -> None:
+        referenced = {
+            node.attr
+            for path in _source_files()
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+            if isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "CoreDeclineCode"
+        }
+
+        assert {code.name for code in CoreDeclineCode} - referenced == set()

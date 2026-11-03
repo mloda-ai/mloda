@@ -14,7 +14,7 @@ from typing import Any, cast
 import pytest
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, MatchRejection
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.provider import CHAIN_SEPARATOR, FeatureSet, ReadFileFG
 from mloda.user import DataAccessCollection, DataType, Feature, Options, PluginCollector, mloda
@@ -89,6 +89,7 @@ class ColumnDiscoveryContractTestMixin:
         stored = rejection_window[self.group_cls.get_class_name()]
         assert "mloda[pyarrow]" in stored.reason
         assert os.path.abspath(data_file) in stored.reason
+        assert stored.code is CoreDeclineCode.COLUMNS_UNKNOWN
 
     def test_declines_a_chain_separated_name_without_optional_dependency(
         self, monkeypatch: pytest.MonkeyPatch, data_file: str, rejection_window: dict[str, MatchRejection]
@@ -100,6 +101,7 @@ class ColumnDiscoveryContractTestMixin:
         assert not self.group_cls.match_feature_group_criteria(chained, Options(), dac)
 
         assert "mloda[pyarrow]" in rejection_window[self.group_cls.get_class_name()].reason
+        assert rejection_window[self.group_cls.get_class_name()].code is CoreDeclineCode.COLUMNS_UNKNOWN
 
     @pytest.mark.parametrize("compute_framework", [PythonDictFramework, PyArrowTable])
     def test_count_rows_matches_expected_row_count(

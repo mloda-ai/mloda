@@ -17,6 +17,7 @@ class TestToySourceFeatureGroupContract(SourceFeatureGroupTestMixin):
     present_column = "toyfmt_col"
     missing_column = "toyfmt_missing"
     expected_source = "h1:toy"
+    wrong_pointer_code = None  # the toy group reads any pointer value and records no pointer rejection
 
     def own_dac(self) -> DataAccessCollection:
         return toy_source_group.toy_dac(h1={"toyfmt_col": [1, 2]})

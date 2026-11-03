@@ -27,6 +27,8 @@ from mloda.core.abstract_plugins.components.input_data.reader_probe import Sourc
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
     MATCH_REJECTION_REASONS,
+    CoreDeclineCode,
+    DeclineCode,
     collect_match_rejections,
     drop_match_rejections_since,
     match_rejection_owners,
@@ -35,7 +37,12 @@ from mloda.core.abstract_plugins.components.match_rejection import (
 )
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY, Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
-from mloda.core.abstract_plugins.components.utils import defer_match_abort, escalate_match_abort, is_nominal_subclass
+from mloda.core.abstract_plugins.components.utils import (
+    defer_match_abort,
+    escalate_match_abort,
+    is_nominal_subclass,
+    stamp_decline_code,
+)
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -399,6 +406,8 @@ class SourceFeatureGroup(FeatureGroup):
     def _abort(
         cls,
         error: ValueError,
+        *,
+        code: DeclineCode,
         deferrable: bool = False,
         candidates: tuple[str, ...] = (),
         refusal: Exception | None = None,
@@ -406,11 +415,17 @@ class SourceFeatureGroup(FeatureGroup):
         """Raise the match abort, or decline with a rejection when the global filter probe contains it."""
         if aborts_are_contained():
             record_match_rejection(
-                cls.get_class_name(), str(error), stage=INPUT_DATA_STAGE, candidates=candidates, refusal=refusal
+                cls.get_class_name(),
+                str(error),
+                stage=INPUT_DATA_STAGE,
+                candidates=candidates,
+                refusal=refusal,
+                code=code,
             )
             return False
         if refusal is not None:
             error.__cause__ = refusal
+        stamp_decline_code(error, code)
         raise defer_match_abort(error) if deferrable else escalate_match_abort(error)
 
     @classmethod
@@ -438,8 +453,19 @@ class SourceFeatureGroup(FeatureGroup):
         drop_match_rejections_since(known_owners)
         message = f"refused at INPUT_DATA_MATCH: {outcome.refused}"
         if pointed:
-            return cls._abort(ValueError(f"{cls.get_class_name()} {message}"), deferrable=True, refusal=outcome.error)
-        record_match_rejection(cls.get_class_name(), message, stage=INPUT_DATA_STAGE, refusal=outcome.error)
+            return cls._abort(
+                ValueError(f"{cls.get_class_name()} {message}"),
+                code=CoreDeclineCode.EXTENDER_REFUSED,
+                deferrable=True,
+                refusal=outcome.error,
+            )
+        record_match_rejection(
+            cls.get_class_name(),
+            message,
+            stage=INPUT_DATA_STAGE,
+            refusal=outcome.error,
+            code=CoreDeclineCode.EXTENDER_REFUSED,
+        )
         return False
 
     @classmethod
@@ -450,7 +476,9 @@ class SourceFeatureGroup(FeatureGroup):
         if cls.is_pointed(name, options, data_access_collection) and (
             named or not any(is_nominal_subclass(group, cls) for group in concrete_source_groups().values())
         ):
-            record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
+            record_match_rejection(
+                cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.ABSTRACT_SOURCE
+            )
         return reason
 
     @classmethod
@@ -533,7 +561,7 @@ class SourceFeatureGroup(FeatureGroup):
             "(database groups opt in with ReadDBFG.QUERY_ROUTE)"
         )
         if pointed and query_declined:
-            return cls._abort(ValueError(query_reason), deferrable=True)
+            return cls._abort(ValueError(query_reason), code=CoreDeclineCode.NO_QUERY_ROUTE, deferrable=True)
         skipped = False
         missing: set[str] = set()
         selected: list[ClaimRoute] = []
@@ -588,7 +616,13 @@ class SourceFeatureGroup(FeatureGroup):
             fitting, seen, undeclared, open_only = claims.fitting, claims.seen, claims.undeclared, claims.open_only
         if query_declined:
             if fitting or seen:
-                replace_probe_match_rejection(cls.get_class_name(), query_reason, known_owners, stage=INPUT_DATA_STAGE)
+                replace_probe_match_rejection(
+                    cls.get_class_name(),
+                    query_reason,
+                    known_owners,
+                    stage=INPUT_DATA_STAGE,
+                    code=CoreDeclineCode.NO_QUERY_ROUTE,
+                )
             return False
         if (len(fitting) > 1 or (not fitting and seen and pointed)) and not cls.passes_option_declarations(options):
             return False
@@ -610,6 +644,7 @@ class SourceFeatureGroup(FeatureGroup):
                         f"{cls.ambiguity_fix(name, list(fitting.values()), data_access_collection)}"
                     )
                 ),
+                code=CoreDeclineCode.AMBIGUOUS_SOURCE,
                 candidates=tuple(sorted(fitting)),
             )
         if len(fitting) == 1:
@@ -655,9 +690,11 @@ class SourceFeatureGroup(FeatureGroup):
             if len(described) > _MAX_DESCRIBED:
                 parts.append(f"and {len(described) - _MAX_DESCRIBED} more")
             name = cls.get_class_name()
+            listed_any = any(columns is not None for columns in known.values())
+            code = CoreDeclineCode.COLUMN_NOT_FOUND if listed_any else CoreDeclineCode.COLUMNS_UNKNOWN
             head = (
                 f"column '{base_name}' is in none of the sources of {name}"
-                if any(columns is not None for columns in known.values())
+                if listed_any
                 else f"{name} could not list the columns of any of its sources for column '{base_name}'"
             )
             text = f"{head}: {'; '.join(parts)}"
@@ -665,28 +702,41 @@ class SourceFeatureGroup(FeatureGroup):
                 text += _suggestion(base_name, [c for columns in known.values() for c in columns or ()])
             reason = scrub_credentials(text)
             probed = (MATCH_REJECTION_REASONS.get() or {}).get(cls.get_class_name())
-            if probed is not None and FOLDER_ESCAPE_MARK in probed.reason and cls.get_class_name() not in known_owners:
+            if (
+                probed is not None
+                and probed.code is CoreDeclineCode.FOLDER_ESCAPE
+                and cls.get_class_name() not in known_owners
+            ):
                 reason += "; skipped folder entries that link outside their folder"
             if pointed:
                 return cls._abort(
                     ValueError(f"{reason}; request a column a source has or point at another source."),
+                    code=code,
                     deferrable=True,
                 )
-            replace_probe_match_rejection(cls.get_class_name(), reason, known_owners, stage=INPUT_DATA_STAGE)
+            replace_probe_match_rejection(cls.get_class_name(), reason, known_owners, stage=INPUT_DATA_STAGE, code=code)
         elif (
             missing and not selected and (pointed or (cls._declared_name(base_name) if declared is None else declared))
         ):
             plural = "s" if len(missing) > 1 else ""
             keys = ", ".join(repr(key) for key in sorted(missing))
             reason = f"{cls.get_class_name()} needs the option{plural} {keys} for '{name}'"
-            record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
+            record_match_rejection(
+                cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.REQUIRED_OPTION_ABSENT
+            )
         elif skipped:
             reason = f"options point at {foreign}, so {cls.get_class_name()} does not search the collection"
-            record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
+            record_match_rejection(
+                cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.POINTED_ELSEWHERE
+            )
         elif pointed and undeclared:
             reason = f"'{base_name}' is not a name {cls.get_class_name()} declares"
-            record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
+            record_match_rejection(
+                cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.NAME_NOT_DECLARED
+            )
         elif pointed:
             reason = f"{cls.get_class_name()} was pointed at but found no source for '{name}'"
-            record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
+            record_match_rejection(
+                cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND
+            )
         return False

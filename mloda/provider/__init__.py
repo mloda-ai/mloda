@@ -109,6 +109,8 @@ from mloda.core.abstract_plugins.components.property_values_validation import (
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
     NAME_STAGE,
+    CoreDeclineCode,
+    DeclineCode,
     MatchRejection,
     collect_match_rejections,
     record_match_rejection,
@@ -225,6 +227,8 @@ __all__ = [
     # Match rejection recording
     "INPUT_DATA_STAGE",
     "NAME_STAGE",
+    "CoreDeclineCode",
+    "DeclineCode",
     "MatchRejection",
     "collect_match_rejections",
     "record_match_rejection",

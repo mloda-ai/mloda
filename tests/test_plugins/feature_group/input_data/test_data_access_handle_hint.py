@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
 from mloda.user import Feature, Options
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -116,6 +117,7 @@ class TestDataAccessHandleRejectsCollectionsOutright:
         result = IdentifyFeatureGroupClass.evaluate(feature, _CSV_PLUGINS, None, dac)
         assert CsvFG not in result.identified
         assert "data_access_handle" in result.eliminations[CsvFG].reason
+        assert result.eliminations[CsvFG].code is CoreDeclineCode.MATCH_GUARD_REJECTED
 
     def test_a_pointed_file_missing_the_column_declines_with_the_option_rejection_not_an_abort(
         self, two_csv_files: tuple[str, str]
@@ -126,6 +128,7 @@ class TestDataAccessHandleRejectsCollectionsOutright:
         result = IdentifyFeatureGroupClass.evaluate(feature, _CSV_PLUGINS, None, None)
         assert CsvFG not in result.identified
         assert "data_access_handle" in result.eliminations[CsvFG].reason
+        assert result.eliminations[CsvFG].code is CoreDeclineCode.MATCH_GUARD_REJECTED
 
 
 # Sanity check that fixtures are isolated (parallel-safety smoke).

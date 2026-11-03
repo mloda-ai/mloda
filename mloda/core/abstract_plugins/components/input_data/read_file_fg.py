@@ -20,7 +20,11 @@ from mloda.core.abstract_plugins.components.input_data.file_source import FileSo
 from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG, not_a_file_reason
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import REASON_DETAIL
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
-from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_STAGE,
+    CoreDeclineCode,
+    record_match_rejection,
+)
 from mloda.core.abstract_plugins.components.utils import is_match_abort
 
 
@@ -131,4 +135,5 @@ class ReadFileFG(_FileSourceFG):
             cls.get_class_name(),
             scrub_credentials(f"{cls.get_class_name()} matched {path} but {reason.replace(REASON_DETAIL, ': ')}"),
             stage=INPUT_DATA_STAGE,
+            code=CoreDeclineCode.SOURCE_UNREADABLE,
         )

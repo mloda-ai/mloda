@@ -11,7 +11,11 @@ from typing import Any
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.match_rejection import context_forwarding_remedy, record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import (
+    CoreDeclineCode,
+    context_forwarding_remedy,
+    record_match_rejection,
+)
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import NameResolution, ParsedFeatureName
@@ -451,7 +455,7 @@ class FeatureChainParser:
         if property_mapping is not None:
             reason = cls._guard_rejection_reason(key, value, property_mapping[key])
             if reason is not None:
-                record_match_rejection(owner_name, reason)
+                record_match_rejection(owner_name, reason, code=CoreDeclineCode.MATCH_GUARD_REJECTED)
         return False
 
     @classmethod
@@ -504,7 +508,11 @@ class FeatureChainParser:
             return True
 
         if owner_name is not None:
-            record_match_rejection(owner_name, cls._presence_rejection_reason(missing, property_mapping))
+            record_match_rejection(
+                owner_name,
+                cls._presence_rejection_reason(missing, property_mapping),
+                code=CoreDeclineCode.REQUIRED_OPTION_ABSENT,
+            )
 
         owner = owner_name or "A feature group"
         keys = ", ".join(sorted(missing))

@@ -16,7 +16,11 @@ from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
 from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG, not_a_file_reason
-from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_STAGE,
+    CoreDeclineCode,
+    record_match_rejection,
+)
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 
@@ -84,7 +88,10 @@ class ReadDocumentFG(_FileSourceFG):
         if gone:
             reason = not_a_file_reason(os.path.abspath(gone[0].access))
             record_match_rejection(
-                name, scrub_credentials(f"{name} matched {gone[0].source} but {reason}"), stage=INPUT_DATA_STAGE
+                name,
+                scrub_credentials(f"{name} matched {gone[0].source} but {reason}"),
+                stage=INPUT_DATA_STAGE,
+                code=CoreDeclineCode.SOURCE_UNREADABLE,
             )
         kept = [match for match in found if match not in gone]
         if not kept and cls._pointer_key(options) is None:
@@ -134,6 +141,7 @@ class ReadDocumentFG(_FileSourceFG):
                     f"{path} is handed over to another reader; list its suffix in document_suffixes to read it here"
                 ),
                 stage=INPUT_DATA_STAGE,
+                code=CoreDeclineCode.HANDED_OVER,
             )
 
     @classmethod

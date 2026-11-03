@@ -174,21 +174,7 @@ def worker(
     cfw_register: CfwManager,
     cfw: ComputeFramework,
     from_cfw: UUID | None,
-    registered_secrets: frozenset[str] = frozenset(),
-    identity_secrets: frozenset[str] | None = None,
     worker_index: int = 0,
-) -> None:
-    with registered_secrets_scope(registered_secrets, identity_secrets):
-        _run_worker(command_queue, result_queue, cfw_register, cfw, from_cfw, worker_index)
-
-
-def _run_worker(
-    command_queue: multiprocessing.Queue[Any],
-    result_queue: multiprocessing.Queue[Any],
-    cfw_register: CfwManager,
-    cfw: ComputeFramework,
-    from_cfw: UUID | None,
-    worker_index: int,
 ) -> None:
     data = None
     location = cfw_register.get_location()
@@ -231,15 +217,15 @@ def _run_worker(
                     break
                 continue
 
-            step, grant = command
-            with grant_scope(grant):
+            step, grant, secrets, identity = command
+            with registered_secrets_scope(secrets, identity), grant_scope(grant):
                 try:
                     data = _execute_command(step, cfw_register, cfw, data, from_cfw)
                 except BaseException as e:
                     reported = True
                     _report_failure(cfw_register, command_queue, e)
                     break
-            _handle_command_result(step, cfw, location, data, result_queue)
+                _handle_command_result(step, cfw, location, data, result_queue)
 
             time.sleep(0.0001)
     except BaseException as e:

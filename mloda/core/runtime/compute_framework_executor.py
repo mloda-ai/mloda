@@ -16,8 +16,16 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
     redact_exception,
 )
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.credential_leaves import (
+    credential_identity_literals,
+    credential_secret_literals,
+)
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
-from mloda.core.abstract_plugins.components.utils import failure_report
+from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery, DBTable
+from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
+from mloda.core.abstract_plugins.components.utils import failure_report, is_nominal_subclass
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
@@ -362,6 +370,32 @@ class ComputeFrameworkExecutor:
         values = {h: collection.credentials[h] for h in step.credential_handles}
         return self._grant_kind(values, collection.credential_key_policy())
 
+    def _step_secrets(self, step: Any) -> tuple[frozenset[str], frozenset[str]]:
+        """The run literals the step's source access needs: its credential's, those in a str access, else all."""
+        empty: tuple[frozenset[str], frozenset[str]] = (frozenset(), frozenset())
+        if not isinstance(step, FeatureGroupStep):
+            return empty
+        match = step.features.input_data_match
+        if not isinstance(match, tuple) or not isinstance(match[1], SourceMatch):
+            return empty
+        access = match[1].access
+        if isinstance(access, (DBTable, DBQuery)):
+            collection = self.data_access_collection
+            policy = collection.credential_key_policy() if collection is not None else None
+            return credential_secret_literals(access.credentials, policy), credential_identity_literals(
+                access.credentials
+            )
+        if isinstance(access, str):
+            return (
+                frozenset(s for s in current_registered_secrets() if s in access),
+                frozenset(s for s in current_identity_secrets() if s in access),
+            )
+        if isinstance(access, ApiDataRef):
+            return empty
+        if is_nominal_subclass(step.feature_group, SourceFeatureGroup):
+            return current_registered_secrets(), current_identity_secrets()
+        return empty
+
     def sync_execute_step(self, step: Any) -> None:
         """
         Executes a step synchronously.
@@ -430,14 +464,13 @@ class ComputeFrameworkExecutor:
                     self.cfw_register,
                     self.cfw_collection[cfw_uuid],
                     from_cfw,
-                    current_registered_secrets(),
-                    current_identity_secrets(),
                 ),
             )
         else:
             process, command_queue, result_queue = existing
 
-        self.worker_manager.send_command(cfw_uuid, (step, self._credential_grant(step)))
+        secrets, identity = self._step_secrets(step)
+        self.worker_manager.send_command(cfw_uuid, (step, self._credential_grant(step), secrets, identity))
         # Track by step.get_result_uuid() (== step.uuid), the id a worker reports back via
         # result_queue. get_uuids() returns feature uuids instead, a different namespace that
         # made find_orphaned_steps flag every finished worker as still owing a result.

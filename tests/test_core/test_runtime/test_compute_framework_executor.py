@@ -20,6 +20,14 @@ import pytest
 from mloda.user import ParallelizationMode
 from mloda.provider import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, build_hook_extenders
+from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+from mloda.core.abstract_plugins.components.credential_leaves import (
+    credential_identity_literals,
+    credential_secret_literals,
+)
+from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef
+from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery, DBTable, ReadDBFG
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -28,6 +36,8 @@ from mloda.core.core.step.transform_frame_work_step import TransformFrameworkSte
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
 from mloda.core.runtime.worker.thread_worker import thread_worker
 from mloda.core.runtime.worker_manager import WorkerManager
+from tests.helpers.credential_handle_stubs import ChsConsumerFG
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -1406,41 +1416,7 @@ class TestMultiExecuteStep:
         executor.multi_execute_step(step)
 
         worker_manager.create_worker_process.assert_called_once_with(
-            cfw_uuid, mock_worker, (cfw_register, mock_cfw, None, frozenset(), frozenset())
-        )
-
-    @patch("mloda.core.runtime.compute_framework_executor.worker")
-    def test_passes_the_registered_secrets_to_the_worker_process(self, mock_worker: Any) -> None:
-        from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
-
-        cfw_register = Mock(spec=CfwManager)
-        worker_manager = Mock(spec=WorkerManager)
-        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
-        step = Mock(spec=FeatureGroupStep)
-        step.own_frame = False
-        step.tfs_ids = []
-        step.features = Mock()
-        step.features.any_uuid = uuid4()
-        step.children_if_root = []
-        step.compute_framework = Mock()
-        step.compute_framework.get_class_name.return_value = "TestCFW"
-        step.get_uuids.return_value = {uuid4()}
-        cfw_uuid = uuid4()
-        cfw_register.resolve_cfw_uuid_by_tfs_ids.return_value = cfw_uuid
-        mock_cfw = Mock(spec=ComputeFramework)
-        executor.cfw_collection[cfw_uuid] = mock_cfw
-        worker_manager.get_process_queues.return_value = None
-        worker_manager.create_worker_process.return_value = (Mock(), Mock(), Mock())
-
-        with registered_secrets_scope(
-            frozenset({"a-registered-secret-value"}), identity=frozenset({"an-identity-value"})
-        ):
-            executor.multi_execute_step(step)
-
-        worker_manager.create_worker_process.assert_called_once_with(
-            cfw_uuid,
-            mock_worker,
-            (cfw_register, mock_cfw, None, frozenset({"a-registered-secret-value"}), frozenset({"an-identity-value"})),
+            cfw_uuid, mock_worker, (cfw_register, mock_cfw, None)
         )
 
     def test_uses_existing_worker_process_if_exists(self) -> None:
@@ -1485,6 +1461,7 @@ class TestMultiExecuteStep:
         step.own_frame = False
         step.tfs_ids = []
         step.features = Mock()
+        step.features.input_data_match = None
         step.features.any_uuid = uuid4()
         step.children_if_root = []
         step.compute_framework = Mock()
@@ -1503,7 +1480,7 @@ class TestMultiExecuteStep:
 
         executor.multi_execute_step(step)
 
-        worker_manager.send_command.assert_called_once_with(cfw_uuid, (step, None))
+        worker_manager.send_command.assert_called_once_with(cfw_uuid, (step, None, frozenset(), frozenset()))
 
     def test_records_assignment_with_the_steps_own_result_uuid_not_get_uuids(self) -> None:
         """record_assignment must use step.get_result_uuid(), not the feature uuids from get_uuids()."""
@@ -1616,7 +1593,7 @@ class TestMultiExecuteStep:
 
     @patch("mloda.core.runtime.compute_framework_executor.worker")
     def test_passes_cfw_register_cfw_and_from_cfw_to_the_worker(self, mock_worker: Any) -> None:
-        """create_worker_process receives (cfw_register, cfw, from_cfw, registered secrets); no needs_tfs_connection."""
+        """create_worker_process receives (cfw_register, cfw, from_cfw), no secrets and no needs_tfs_connection."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
@@ -1670,8 +1647,8 @@ class TestMultiExecuteStep:
         worker_manager.create_worker_process.assert_called_once()
         call_args = worker_manager.create_worker_process.call_args
         args_tuple = call_args.args[2]
-        assert len(args_tuple) == 5
-        assert args_tuple == (cfw_register, mock_to_cfw_instance, from_cfw_uuid, frozenset(), frozenset())
+        assert len(args_tuple) == 3
+        assert args_tuple == (cfw_register, mock_to_cfw_instance, from_cfw_uuid)
 
 
 class _DropsFunctionExtenderFramework(PythonDictFramework):
@@ -1891,6 +1868,24 @@ class _RecordingGrantKind:
         _RecordingGrantKind.instances.append(self)
 
 
+_STEP_PASSWORD = "step-match-password-Hj2Kl4Zx"  # nosec B105
+_RUN_SECRET = "run-wide-secret-Zx9Cv8Bn"  # nosec B105
+_RUN_IDENTITY = "run-wide-identity-Lk7Jh6Gf"
+
+
+def _match_step(access: Any, group: Any = ReadDBFG) -> Mock:
+    step = _grant_step(())
+    step.feature_group = group
+    step.features.input_data_match = (Mock(), SourceMatch("src", access))
+    return step
+
+
+def _no_match_step() -> Mock:
+    step = _grant_step(())
+    step.features.input_data_match = None
+    return step
+
+
 class TestCredentialGrantHelper:
     """_credential_grant(step) builds a fresh grant of only the step's declared handles."""
 
@@ -1982,6 +1977,84 @@ class TestCredentialGrantHelper:
 
         assert executor._credential_grant(make_step()) is None
 
+    @pytest.mark.parametrize("access_kind", ["table", "query"])
+    def test_step_secrets_are_the_match_credentials_literals(self, access_kind: str) -> None:
+        creds = {"host": "db.step.internal", "password": _STEP_PASSWORD}
+        collection = _grant_collection()
+        access = DBTable(creds, "t") if access_kind == "table" else DBQuery(creds, "select 1")
+        step = _match_step(access)
+        executor, *_ = _grant_executor(step, collection)
+
+        secrets, identity = executor._step_secrets(step)
+
+        assert secrets == credential_secret_literals(creds, collection.credential_key_policy())
+        assert identity == credential_identity_literals(creds)
+        assert _STEP_PASSWORD in secrets
+        assert _STEP_PASSWORD in identity
+
+    def test_step_secrets_use_no_policy_without_a_collection(self) -> None:
+        creds = {"password": _STEP_PASSWORD}
+        step = _match_step(DBTable(creds, "t"))
+        executor, *_ = _grant_executor(step, None)
+
+        secrets, _ = executor._step_secrets(step)
+
+        assert secrets == credential_secret_literals(creds, None)
+        assert _STEP_PASSWORD in secrets
+
+    @pytest.mark.parametrize(
+        "make_step",
+        [
+            pytest.param(lambda: _no_match_step(), id="no_match_on_a_mock_step"),
+            pytest.param(lambda: SimpleNamespace(features=SimpleNamespace(input_data_match=None)), id="not_a_fg_step"),
+            pytest.param(lambda: Mock(spec=JoinStep), id="join_step"),
+            pytest.param(lambda: _match_step(ApiDataRef("key", ("col",))), id="api_data_ref"),
+            pytest.param(lambda: _match_step("s3://bucket/other.csv", ChsConsumerFG), id="str_on_a_non_source_group"),
+            pytest.param(lambda: _match_step(object(), ChsConsumerFG), id="unknown_on_a_non_source_group"),
+        ],
+    )
+    def test_step_secrets_are_empty_without_a_credential(self, make_step: Callable[[], Any]) -> None:
+        executor, *_ = _grant_executor(_grant_step(()), _grant_collection())
+
+        with registered_secrets_scope(frozenset({_RUN_SECRET}), identity=frozenset({_RUN_IDENTITY})):
+            assert executor._step_secrets(make_step()) == (frozenset(), frozenset())
+
+    @pytest.mark.parametrize(
+        "access, expected_secrets, expected_identity",
+        [
+            pytest.param(
+                f"s3://bucket/{_RUN_SECRET}/data.csv?id={_RUN_IDENTITY}",
+                frozenset({_RUN_SECRET}),
+                frozenset({_RUN_IDENTITY}),
+                id="both_contained",
+            ),
+            pytest.param(f"/data/{_RUN_SECRET}.csv", frozenset({_RUN_SECRET}), frozenset(), id="secret_only"),
+            pytest.param("/data/plain.csv", frozenset(), frozenset(), id="none_contained"),
+        ],
+    )
+    def test_a_str_access_gets_only_the_run_literals_it_contains(
+        self, access: str, expected_secrets: frozenset[str], expected_identity: frozenset[str]
+    ) -> None:
+        step = _match_step(access, ToySourceFG)
+        executor, *_ = _grant_executor(step, _grant_collection())
+
+        with registered_secrets_scope(
+            frozenset({_RUN_SECRET, "other-run-secret-Qa1Ws2Ed"}),
+            identity=frozenset({_RUN_IDENTITY, "other-run-identity-Rf3Tg4Yh"}),
+        ):
+            assert executor._step_secrets(step) == (expected_secrets, expected_identity)
+
+    @pytest.mark.parametrize("group", [ReadDBFG, ToySourceFG])
+    def test_a_source_group_with_unknown_access_gets_the_full_run_set(self, group: Any) -> None:
+        step = _match_step(object(), group)
+        executor, *_ = _grant_executor(step, _grant_collection())
+
+        with registered_secrets_scope(frozenset({_RUN_SECRET}), identity=frozenset({_RUN_IDENTITY})):
+            secrets, identity = executor._step_secrets(step)
+
+        assert secrets == frozenset({_RUN_SECRET})
+        assert identity == frozenset({_RUN_IDENTITY})
+
 
 class TestGrantDispatch:
     """Each mode hands the step's grant to its worker."""
@@ -1995,7 +2068,30 @@ class TestGrantDispatch:
         executor.multi_execute_step(step)
 
         assert len(_RecordingGrantKind.instances) == 1
-        worker_manager.send_command.assert_called_once_with(cfw_uuid, (step, _RecordingGrantKind.instances[0]))
+        worker_manager.send_command.assert_called_once_with(
+            cfw_uuid, (step, _RecordingGrantKind.instances[0], frozenset(), frozenset())
+        )
+
+    @patch("mloda.core.runtime.compute_framework_executor.worker")
+    def test_multi_execute_step_sends_only_the_steps_secrets_and_none_in_the_worker_args(
+        self, mock_worker: Any
+    ) -> None:
+        creds = {"password": _STEP_PASSWORD}
+        step = _match_step(DBTable(creds, "t"))
+        executor, cfw_register, worker_manager, cfw_uuid = _grant_executor(step, _grant_collection())
+        worker_manager.get_process_queues.return_value = None
+        worker_manager.create_worker_process.return_value = (Mock(), Mock(), Mock())
+
+        with registered_secrets_scope(frozenset({"run-wide-secret-value"}), identity=frozenset({"run-wide-id"})):
+            executor.multi_execute_step(step)
+
+        args = worker_manager.create_worker_process.call_args.args[2]
+        assert args == (cfw_register, executor.cfw_collection[cfw_uuid], None)
+        _, grant, secrets, identity = worker_manager.send_command.call_args.args[1]
+        assert grant is None
+        assert _STEP_PASSWORD in secrets and _STEP_PASSWORD in identity
+        assert "run-wide-secret-value" not in secrets
+        assert "run-wide-id" not in identity
 
     @patch("mloda.core.runtime.compute_framework_executor.threading.Thread")
     def test_thread_execute_step_passes_the_grant_to_the_worker(

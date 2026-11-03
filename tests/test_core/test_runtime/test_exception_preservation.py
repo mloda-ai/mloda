@@ -1345,6 +1345,48 @@ def test_two_features_with_different_handles_each_read_their_own_credential(
     assert rows["chs_rc_b"] == [f"{_HOST_B}|{len('b-hmac-Xs2Kd9Lf6x')}"]
 
 
+class ChsRcIsolationFG(ChsSource):
+    """Reports whether its own and the other credential's secret literals are registered in the worker."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_iso_a", "chs_rc_iso_b"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
+
+        handle = features.get_options_key(HANDLE_KEY)
+        other = _VAULT_B if handle == _VAULT_A else _VAULT_A
+        own_secret = str(read_credential(handle)["hmac"])
+        registered = current_registered_secrets()
+        row = f"own={own_secret in registered}|other={_TWO_VAULTS[other]['hmac'] in registered}"
+        return pd.DataFrame({name: [row] for name in features.get_all_names()})
+
+
+@pytest.mark.timeout(15)
+def test_a_multiprocessing_step_registers_only_its_own_credentials_secrets(flight_server: Any) -> None:
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    result = mloda.run_all(
+        [
+            Feature("chs_rc_iso_a", options={HANDLE_KEY: _VAULT_A}),
+            Feature("chs_rc_iso_b", options={HANDLE_KEY: _VAULT_B}),
+        ],
+        compute_frameworks=[PandasDataFrame],
+        parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+        flight_server=flight_server,
+        data_access_collection=_vault_dac(_TWO_VAULTS),
+        plugin_collector=PluginCollector.enabled_feature_groups({ChsRcIsolationFG}),
+    )
+
+    rows = {column: list(frame[column]) for frame in result for column in frame.columns}
+    assert rows["chs_rc_iso_a"] == ["own=True|other=False"]
+    assert rows["chs_rc_iso_b"] == ["own=True|other=False"]
+
+
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("mode", _GRANT_MODES)
 def test_error_echoing_values_read_with_read_credential_is_masked_in_every_mode(

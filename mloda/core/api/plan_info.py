@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import Ba
 from mloda.core.abstract_plugins.components.credential_scrub import (
     _SECRET_KEY,
     _mask_secret_keys,
-    current_registered_secrets,
+    current_identity_secrets,
     mask_literals,
     redact_option_value,
 )
@@ -350,7 +350,7 @@ def build_plan_steps(
             match = step.features.input_data_match
             identity = None if match is None else match[0].data_access_identity(match[1])
             is_fallback = None if match is None or identity is None else _is_fallback_identity(match[1], identity)
-            identity = None if identity is None else mask_literals(identity, current_registered_secrets())
+            identity = None if identity is None else mask_literals(identity, current_identity_secrets())
             named = None if step.features.options is None else step.features.options.get("connection_handle")
             declared_here = any(f.options.is_own("connection_handle") for f in step.features.features)
             leaves_handle = (

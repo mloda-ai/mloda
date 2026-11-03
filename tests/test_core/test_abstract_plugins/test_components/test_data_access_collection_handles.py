@@ -917,6 +917,7 @@ class TestSecretLiterals:
                 "unknown-value-abcdef",
             }
         )
+        assert dac.identity_literals() == frozenset({TOY_TOKEN, "correct-horse-battery"})
 
     @pytest.mark.parametrize(
         "key",
@@ -928,12 +929,23 @@ class TestSecretLiterals:
         assert dac.secret_literals() == frozenset({"pw-value-123456"})
 
     @pytest.mark.parametrize(
-        "key", ["db_password", "db-password", "client_secret", "dsn", "url", "conn", "uri", "connection_string"]
+        ("key", "expected_identity"),
+        [
+            ("db_password", frozenset({"masked-value-12345"})),
+            ("db-password", frozenset({"masked-value-12345"})),
+            ("client_secret", frozenset({"masked-value-12345"})),
+            ("dsn", frozenset()),
+            ("url", frozenset()),
+            ("conn", frozenset()),
+            ("uri", frozenset()),
+            ("connection_string", frozenset()),
+        ],
     )
-    def test_masked_keys_are_registered(self, key: str) -> None:
+    def test_masked_keys_are_registered(self, key: str, expected_identity: frozenset[str]) -> None:
         dac = DataAccessCollection(credentials={"db": {key: "masked-value-12345", "client_id": "client-id-12345"}})
 
         assert dac.secret_literals() == frozenset({"masked-value-12345"})
+        assert dac.identity_literals() == expected_identity
 
     def test_nested_mapping_under_a_safe_key_masks_its_shaped_child_only(self) -> None:
         dac = DataAccessCollection(

@@ -174,9 +174,10 @@ def worker(
     cfw: ComputeFramework,
     from_cfw: UUID | None,
     registered_secrets: frozenset[str] = frozenset(),
+    identity_secrets: frozenset[str] | None = None,
     worker_index: int = 0,
 ) -> None:
-    with registered_secrets_scope(registered_secrets):
+    with registered_secrets_scope(registered_secrets, identity_secrets):
         _run_worker(command_queue, result_queue, cfw_register, cfw, from_cfw, worker_index)
 
 

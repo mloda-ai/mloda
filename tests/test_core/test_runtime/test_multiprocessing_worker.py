@@ -168,16 +168,19 @@ class TestWorkerRegisteredSecrets:
     """The worker enters registered_secrets_scope with the secrets it is handed, and leaves it afterwards."""
 
     def test_the_secrets_are_registered_while_the_worker_runs_and_reset_after(self) -> None:
-        from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
+        from mloda.core.abstract_plugins.components.credential_scrub import (
+            current_identity_secrets,
+            current_registered_secrets,
+        )
 
-        seen: list[frozenset[str]] = []
+        seen: list[tuple[frozenset[str], frozenset[str]]] = []
         ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext(
-            child_bootstrap=lambda: seen.append(current_registered_secrets())
+            child_bootstrap=lambda: seen.append((current_registered_secrets(), current_identity_secrets()))
         )
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
         command_queue.put("STOP")
@@ -189,11 +192,13 @@ class TestWorkerRegisteredSecrets:
             cfw,
             uuid4(),
             registered_secrets=frozenset({"a-registered-secret-value"}),
+            identity_secrets=frozenset({"an-identity-value"}),
             worker_index=0,
         )
 
-        assert seen == [frozenset({"a-registered-secret-value"})]
+        assert seen == [(frozenset({"a-registered-secret-value"}), frozenset({"an-identity-value"}))]
         assert current_registered_secrets() == frozenset()
+        assert current_identity_secrets() == frozenset()
 
 
 class TestWorkerRunsChildBootstrapBeforeTheCommandLoop:

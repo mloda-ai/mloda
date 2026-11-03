@@ -77,9 +77,9 @@ def _plan_origin(origin: PlanOrigin | None) -> Generator[None, None, None]:
 class _CredentialRedaction:
     """Mask secret literals in logs and in any exception escaping the block (a class: see registered_secrets_scope)."""
 
-    def __init__(self, literals: frozenset[str]) -> None:
+    def __init__(self, literals: frozenset[str], identity: frozenset[str] | None = None) -> None:
         self._literals = literals
-        self._scope = registered_secrets_scope(literals)
+        self._scope = registered_secrets_scope(literals, identity)
 
     def __enter__(self) -> None:
         self._scope.__enter__()
@@ -325,8 +325,17 @@ class mlodaAPI:
         dac = getattr(self, "data_access_collection", None)
         return frozenset() if dac is None else dac.secret_literals()
 
-    def _credential_redaction(self, literals: frozenset[str] | None = None) -> "_CredentialRedaction":
-        return _CredentialRedaction(self._secret_literals() if literals is None else literals)
+    def _identity_literals(self) -> frozenset[str]:
+        dac = getattr(self, "data_access_collection", None)
+        return frozenset() if dac is None else dac.identity_literals()
+
+    def _credential_redaction(
+        self, literals: frozenset[str] | None = None, identity: frozenset[str] | None = None
+    ) -> "_CredentialRedaction":
+        return _CredentialRedaction(
+            self._secret_literals() if literals is None else literals,
+            self._identity_literals() if identity is None else identity,
+        )
 
     @staticmethod
     def _bind_feature_connections(
@@ -874,8 +883,9 @@ class mlodaAPI:
         """Deferred half of ``stream_run``: the priming yield separates run start from computation."""
         outcome = LifecycleOutcome("succeeded")
         literals = self._secret_literals()
+        identity = self._identity_literals()
         try:
-            with self._credential_redaction(literals):
+            with self._credential_redaction(literals, identity):
                 self.runner = None
                 self._start_run(run_context)
                 runner = self._setup_engine_runner(parallelization_modes, flight_server)
@@ -883,7 +893,7 @@ class mlodaAPI:
                 self.runner = runner
             yield None
             try:
-                with self._credential_redaction(literals):
+                with self._credential_redaction(literals, identity):
                     self._enter_runner_context(
                         runner,
                         parallelization_modes,
@@ -895,16 +905,16 @@ class mlodaAPI:
                 try:
                     while True:
                         # The scope never spans the yield, so it cannot leak into the caller between items.
-                        with self._credential_redaction(literals):
+                        with self._credential_redaction(literals, identity):
                             item = next(stream, None)
                         if item is None:
                             break
                         yield item
                 finally:
-                    with self._credential_redaction(literals):
+                    with self._credential_redaction(literals, identity):
                         stream.close()
             finally:
-                with self._credential_redaction(literals):
+                with self._credential_redaction(literals, identity):
                     self._exit_runner_context(runner)
         except GeneratorExit:
             outcome = LifecycleOutcome("cancelled")

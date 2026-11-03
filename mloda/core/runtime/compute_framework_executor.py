@@ -358,7 +358,10 @@ class ComputeFrameworkExecutor:
         collection = self.data_access_collection
         if collection is None or not isinstance(step, FeatureGroupStep) or not step.credential_handles:
             return None
-        return self._grant_kind({h: collection.credentials[h] for h in step.credential_handles})
+        values = {h: collection.credentials[h] for h in step.credential_handles}
+        if self._grant_kind is StaticGrant:
+            return StaticGrant(values, collection.credential_key_policy())
+        return self._grant_kind(values)
 
     def sync_execute_step(self, step: Any) -> None:
         """

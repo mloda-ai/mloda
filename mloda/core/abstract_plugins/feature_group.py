@@ -112,6 +112,7 @@ class FeatureGroup(ABC):
     """Parts of `<feature>~<part>` this group returns; ANY_OUTPUT_PART names them at run time. None declares none."""
 
     PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec] | None] = None
+    PUBLIC_CREDENTIAL_KEYS: ClassVar[tuple[str, ...]] = ()
     """Override in subclasses to declare configurable parameters.
 
     Each key is a parameter name. Each value is a ``PropertySpec`` carrying the

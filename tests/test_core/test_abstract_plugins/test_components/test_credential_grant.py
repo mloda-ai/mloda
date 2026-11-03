@@ -180,3 +180,59 @@ class TestGrantScope:
             with pytest.raises(KeyError, match="first"):
                 _read_granted("first")
             assert _HMAC not in current_registered_secrets()
+
+
+_PUBLIC_VALUE = "grant-public-Lm8Qa2Tr4"
+_PUBLIC_KEY = "zz_grant_public_key"
+
+
+class TestGrantKeyPolicy:
+    """A grant built with a CredentialKeyPolicy masks its leaves by that policy."""
+
+    def _policy(self, public: set[str], secret: set[str]) -> Any:
+        from mloda.core.abstract_plugins.components.credential_leaves import CredentialKeyPolicy
+
+        return CredentialKeyPolicy(public=frozenset(public), secret=frozenset(secret))
+
+    def test_a_declared_public_key_stays_out_of_the_masked_literals(self) -> None:
+        value = {_PUBLIC_KEY: _PUBLIC_VALUE, "hmac": _HMAC}
+        grant = StaticGrant({"h": value}, policy=self._policy({"zzgrantpublickey"}, set()))
+
+        with grant_scope(grant):
+            assert _HMAC in current_registered_secrets()
+            assert _PUBLIC_VALUE not in current_registered_secrets()
+
+    def test_the_default_policy_masks_an_undeclared_key(self) -> None:
+        with grant_scope(StaticGrant({"h": {_PUBLIC_KEY: _PUBLIC_VALUE}})):
+            assert _PUBLIC_VALUE in current_registered_secrets()
+
+    def test_a_secret_key_masks_a_base_safe_key(self) -> None:
+        grant = StaticGrant({"h": _credential()}, policy=self._policy(set(), {"host"}))
+
+        with grant_scope(grant):
+            assert _HOST in current_registered_secrets()
+
+    def test_a_public_shaped_key_stays_masked(self) -> None:
+        grant = StaticGrant({"h": {"password": _KEY}}, policy=self._policy({"password"}, set()))  # nosec B106
+
+        with grant_scope(grant):
+            assert _KEY in current_registered_secrets()
+            assert _KEY in current_identity_secrets()
+
+    def test_the_lookup_holds_the_policy_it_was_opened_with(self) -> None:
+        policy = self._policy({"zzgrantpublickey"}, set())
+
+        lookup = StaticGrant({"h": _credential()}, policy=policy).open()
+
+        assert lookup.policy == policy
+        assert CredentialLookup({}, policy=policy).policy == policy
+        assert CredentialLookup({}).policy is None
+
+    def test_a_grant_with_a_policy_pickles(self) -> None:
+        import pickle  # nosec B403
+
+        grant = StaticGrant({"h": _credential()}, policy=self._policy({"zzgrantpublickey"}, {"host"}))
+
+        restored = pickle.loads(pickle.dumps(grant))  # nosec B301
+
+        assert restored.open().policy == self._policy({"zzgrantpublickey"}, {"host"})

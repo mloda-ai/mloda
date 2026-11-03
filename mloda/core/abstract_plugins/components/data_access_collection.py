@@ -6,7 +6,10 @@ from typing import Any, Callable
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
 from mloda.core.abstract_plugins.components.credential_leaves import (
     MIN_REDACT_LENGTH,
+    CredentialKeyPolicy,
     credential_identity_literals,
+    credential_key_names,
+    normalize_credential_key,
     credential_secret_literals,
     iter_credential_leaves,
 )
@@ -46,6 +49,8 @@ class DataAccessCollection:
         folders: dict[str, str] | set[str] | list[str] | None = None,
         credentials: dict[str, Any] | list[Any] | Credential | None = None,
         column_to_file: dict[str, str] | None = None,
+        public_credential_keys: Iterable[str] | None = None,
+        secret_credential_keys: Iterable[str] | None = None,
     ) -> None:
         """Build the collection from named or auto-named resources.
 
@@ -71,7 +76,12 @@ class DataAccessCollection:
 
         ``column_to_file`` maps a column to either a file handle or a file path
         (paths are normalized to their handle).
+
+        ``public_credential_keys`` / ``secret_credential_keys`` name credential keys to leave unmasked
+        or to mask in ``secret_literals()``; secret wins, credential-shaped keys always stay secret.
         """
+        self._public_credential_keys = self._key_set("public_credential_keys", public_credential_keys)
+        self._secret_credential_keys = self._key_set("secret_credential_keys", secret_credential_keys)
         self._auto_handles: set[str] = set()
 
         credentials = self._normalize_credentials(credentials)
@@ -96,6 +106,21 @@ class DataAccessCollection:
 
         for credential_handle in self.credentials:
             self._warn_short_secrets(credential_handle)
+
+    @staticmethod
+    def _key_set(name: str, keys: Iterable[str] | None) -> frozenset[str]:
+        if keys is None:
+            return frozenset()
+        return frozenset(normalize_credential_key(k) for k in credential_key_names(name, keys))
+
+    def credential_key_policy(self) -> CredentialKeyPolicy:
+        """The declared key policy: plugin public keys plus this collection's own public and secret keys."""
+        # Function-local: avoids an import cycle through the feature group module.
+        from mloda.core.abstract_plugins.components.credential_handle import public_credential_keys
+
+        return CredentialKeyPolicy(
+            public_credential_keys() | self._public_credential_keys, self._secret_credential_keys
+        )
 
     @property
     def api_data_columns(self) -> Mapping[str, tuple[str, ...]]:
@@ -398,7 +423,8 @@ class DataAccessCollection:
 
     def secret_literals(self) -> frozenset[str]:
         """The str leaves of 8+ chars of a registered credential, except known-safe connection fields."""
-        return frozenset().union(*(credential_secret_literals(value) for value in self.credentials.values()))
+        policy = self.credential_key_policy()
+        return frozenset().union(*(credential_secret_literals(value, policy) for value in self.credentials.values()))
 
     def identity_literals(self) -> frozenset[str]:
         """The str leaves of 8+ chars under a credential-shaped key, for masking a published identity."""

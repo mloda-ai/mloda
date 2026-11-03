@@ -495,8 +495,17 @@ class TestFeatureGroupSubclassRegistry:
             lambda: plugin_collector_for(Settings()),
             lambda: caller_refused_option_keys(),
             lambda: get_feature_group_docs(name="zz_no_such_feature_group"),
+            lambda: __import__(
+                "mloda.core.abstract_plugins.components.credential_handle", fromlist=["public_credential_keys"]
+            ).public_credential_keys(),
         ],
-        ids=["prefilter_featuregroup_subclasses", "plugin_collector_for", "caller_refused_option_keys", "docs"],
+        ids=[
+            "prefilter_featuregroup_subclasses",
+            "plugin_collector_for",
+            "caller_refused_option_keys",
+            "docs",
+            "public_credential_keys",
+        ],
     )
     def test_readers_of_all_feature_groups_never_walk_the_tree(
         self, monkeypatch: pytest.MonkeyPatch, reader: Callable[[], Any]

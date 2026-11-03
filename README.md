@@ -66,9 +66,14 @@ step 1  ApiDataFG               age, customer_id, income  (source SampleData)
 step 2  AggregatedFeatureGroup  age__avg_aggr, income__sum_aggr  (from age, income)
 ```
 
-What happened: you asked for four features by name. `income__sum_aggr` and `age__avg_aggr` are not in your data, so mloda matched them to the plugin that computes aggregations (`AggregatedFeatureGroup`), saw that it needs `income` and `age`, and read those from your data first (`ApiDataFG`). Nothing in the request said how.
+Two of the four features do not exist in the data. The plan shows how mloda made them:
 
-Derived features follow one naming pattern, `column__operation_group`, for example `income__sum_aggr`. The plugin, called a FeatureGroup, declares the pattern. You only use it.
+- `income__sum_aggr` and `age__avg_aggr` name an aggregation, so step 2 is the aggregation plugin, `AggregatedFeatureGroup`.
+- That plugin needs `income` and `age`, so step 1 reads them from your data with `ApiDataFG`.
+
+You described what. mloda resolved how.
+
+Change a name and run again: `income__max_aggr` gives the maximum, `age__count_aggr` the count. Names follow one shape, `column__operation_suffix`. The suffix picks the plugin (here `_aggr`, a FeatureGroup), and the plugin declares which operations it accepts.
 
 To run the same request on a DataFrame, install a backend and change one line:
 

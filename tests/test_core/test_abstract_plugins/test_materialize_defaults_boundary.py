@@ -437,7 +437,12 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         assert calls == []
 
     @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
-    def test_cascaded_context_matching_direct_request_context_succeeds(self, direct_first: bool) -> None:
+    @pytest.mark.parametrize(
+        "direct_options",
+        [None, Options(context={"x": 1})],
+        ids=["no_direct_ctx", "matching_direct_ctx"],
+    )
+    def test_cascaded_context_succeeds(self, direct_first: bool, direct_options: Options | None) -> None:
         cascade = Options(context={"x": 1}, cascade_context_keys=frozenset({"x"}))
         results = _run_direct_and_chained(
             [],
@@ -445,10 +450,10 @@ class TestRuntimeDefaultMaterializationEndToEnd:
             append_columns=True,
             direct_first=direct_first,
             chained_options=cascade,
-            direct_options=Options(context={"x": 1}),
+            direct_options=direct_options,
         )
         names = [name for table in results for name in table.column_names]
-        assert names.count(MDB_DIRECT) <= 1
+        assert names.count(MDB_DIRECT) == 1
         assert names.count(MDB_CHAINED) == 1
 
     def test_explicit_option_agreeing_with_name_is_observed(self) -> None:

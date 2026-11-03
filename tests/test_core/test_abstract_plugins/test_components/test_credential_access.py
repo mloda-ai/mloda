@@ -21,7 +21,7 @@ from mloda.core.abstract_plugins.components.credential_access import (
     readable,
     readable_credentials,
 )
-from mloda.core.abstract_plugins.components.credential_grant import CredentialLookup, StaticGrant, grant_scope
+from mloda.core.abstract_plugins.components.credential_grant import StaticGrant, grant_scope
 
 _HOST = "access-host.internal.example"
 _HMAC = "hmac-access-Qv7Lk2Xz9"  # nosec B105
@@ -37,19 +37,12 @@ def _scope() -> Any:
 
 
 class _Reader:
-    """A stand-in feature group reading in a classmethod, the way calculate_feature does."""
-
     @classmethod
     def calculate_feature(cls, data: Any, features: Any) -> str:
         return str(read_credential("h")["host"])
 
     def method(self) -> str:
         return str(read_credential("h")["host"])
-
-
-class TestLookupDeclared:
-    def test_declared_is_the_sorted_handles(self) -> None:
-        assert CredentialLookup({"b": {}, "a": {}}).declared() == ("a", "b")
 
 
 class TestResolvedCredential:

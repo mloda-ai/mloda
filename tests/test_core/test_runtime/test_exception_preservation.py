@@ -878,10 +878,12 @@ _E2E_KEY = "e2e-key-Mq3Wc7Vh2"  # nosec B105
 _GRANT_MODES = [ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING]
 
 
-def _vault_dac() -> Any:
+def _vault_dac(credentials: dict[str, dict[str, Any]] | None = None) -> Any:
     from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 
-    return DataAccessCollection(credentials={_E2E_HANDLE: {"host": _E2E_HOST, "hmac": _E2E_HMAC, "key": _E2E_KEY}})
+    if credentials is None:
+        credentials = {_E2E_HANDLE: {"host": _E2E_HOST, "hmac": _E2E_HMAC, "key": _E2E_KEY}}
+    return DataAccessCollection(credentials=credentials)
 
 
 def _grant_run(
@@ -1237,8 +1239,6 @@ async def _awaited_async_host(handle: str) -> str:
 
 
 class ChsWindowFG(ChsSource):
-    """Reads in calculate_feature, in an awaited asyncio task and in a load dispatched through the INPUT_DATA_LOAD hook."""
-
     PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
 
     @classmethod
@@ -1265,8 +1265,6 @@ class ChsWindowFG(ChsSource):
 
 
 class ChsWinConsumerFG(ChsWindowFG):
-    """Consumes a plain input feature so VALIDATE_INPUT_FEATURE hooks fire."""
-
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"chs_win_consumer_a"}
@@ -1307,15 +1305,10 @@ def _events(key: str) -> list[str]:
     return [outcome for name, outcome in _WINDOW_EVENTS if name == key]
 
 
-def _two_vault_dac() -> Any:
-    from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-
-    return DataAccessCollection(
-        credentials={
-            _VAULT_A: {"host": _HOST_A, "hmac": "a-hmac-Gp8Tn5Rz4", "key": "a-key-Mq3Wc7Vh2"},
-            _VAULT_B: {"host": _HOST_B, "hmac": "b-hmac-Xs2Kd9Lf6x", "key": "b-key-Pt7Nb4Yc1"},
-        }
-    )
+_TWO_VAULTS = {
+    _VAULT_A: {"host": _HOST_A, "hmac": "a-hmac-Gp8Tn5Rz4", "key": "a-key-Mq3Wc7Vh2"},
+    _VAULT_B: {"host": _HOST_B, "hmac": "b-hmac-Xs2Kd9Lf6x", "key": "b-key-Pt7Nb4Yc1"},
+}
 
 
 @pytest.mark.timeout(15)
@@ -1343,7 +1336,7 @@ def test_two_features_with_different_handles_each_read_their_own_credential(
         compute_frameworks=[PandasDataFrame],
         parallelization_modes={mode},
         flight_server=flight_server,
-        data_access_collection=_two_vault_dac(),
+        data_access_collection=_vault_dac(_TWO_VAULTS),
         plugin_collector=PluginCollector.enabled_feature_groups({ChsRcReadingFG}),
     )
 

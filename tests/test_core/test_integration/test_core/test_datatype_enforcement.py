@@ -24,6 +24,7 @@ from mloda.core.abstract_plugins.components.validators.datatype_validator import
 from mloda.provider import DefaultOptionKeys
 from mloda.user import JoinSpec
 from mloda.user import Link
+from mloda.user import MissingInputFeatureError
 from tests.test_core.test_tooling import (
     MlodaTestRunner,
     PARALLELIZATION_MODES_ALL,
@@ -1453,3 +1454,69 @@ class TestStrictTypeEnforcementPropagation:
         assert "INT32" in str(exc_info.value)
         assert "INT64" in str(exc_info.value)
         assert isinstance(exc_info.value, DataTypeMismatchError)
+
+
+class DroppedInputConsumer(FeatureGroup):
+    """Reads red_sum and raw_val, the latter dropped by NonReducingReducer."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"dropped_input_consumer"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PyArrowTable}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("red_sum"), Feature("raw_val")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"dropped_input_consumer": [1]}
+
+
+class TestMissingInputNamesDroppingGroup:
+    def test_error_names_dropping_group_and_suggests_replaces_rows(self) -> None:
+        with pytest.raises(MissingInputFeatureError) as exc_info:
+            mloda.run_all(
+                [Feature("dropped_input_consumer")],
+                compute_frameworks=[PyArrowTable],
+                parallelization_modes={ParallelizationMode.SYNC},
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {ReducerRawSource, NonReducingReducer, DroppedInputConsumer}
+                ),
+            )
+
+        message = str(exc_info.value)
+        assert "raw_val" in exc_info.value.missing_inputs
+        assert "NonReducingReducer" in message
+        assert "replaces_rows()" in message
+        assert "Link" in message
+
+    @staticmethod
+    def _framework_with_missing_input() -> tuple[PyArrowTable, FeatureSet]:
+        cfw = PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        cfw.set_data(pa.table({"present": [1]}))
+        features = FeatureSet()
+        features.declared_input_features_resolved = True
+        features.declared_input_columns = {"consumer": ("raw_val",)}
+        return cfw, features
+
+    def test_missing_input_without_dropped_by_attribute_raises_missing_input_error(self) -> None:
+        """A worker-unpickled framework may lack _dropped_by; the check must not raise AttributeError."""
+        cfw, features = self._framework_with_missing_input()
+        del cfw._dropped_by
+
+        with pytest.raises(MissingInputFeatureError) as exc_info:
+            cfw.run_validate_input_features(DroppedInputConsumer, features)
+
+        assert exc_info.value.missing_inputs == ("raw_val",)
+
+    def test_missing_input_hint_only_for_recorded_drops(self) -> None:
+        cfw, features = self._framework_with_missing_input()
+        cfw._dropped_by["other"] = "SomeGroup"
+
+        with pytest.raises(MissingInputFeatureError) as exc_info:
+            cfw.run_validate_input_features(DroppedInputConsumer, features)
+
+        assert "SomeGroup" not in str(exc_info.value)

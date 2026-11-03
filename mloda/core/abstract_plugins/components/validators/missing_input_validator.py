@@ -22,7 +22,10 @@ class MissingInputFeatureError(ValueError):
         feature: str,
         missing_inputs: tuple[str, ...],
         available_columns: tuple[str, ...],
+        *,
+        dropped_by: tuple[tuple[str, str], ...] = (),
     ) -> None:
+        self.dropped_by = tuple(dropped_by)
         self.feature_group = feature_group
         self.feature = feature
         self.missing_inputs = tuple(missing_inputs)
@@ -38,16 +41,27 @@ class MissingInputFeatureError(ValueError):
                 message += (
                     f" Column(s) {renamed} suggest a join between two inputs that both carry '{name}' renamed it."
                 )
+        for group in dict.fromkeys(g for _, g in self.dropped_by):
+            cols = [c for c, g in self.dropped_by if g == group]
+            message += (
+                f" Input(s) {cols} were dropped by feature group '{group}', which returned a frame without them; "
+                "if it aggregates or filters rows, override replaces_rows() to return True and join its output "
+                "back with a Link."
+            )
         super().__init__(message)
 
     def __reduce__(self) -> tuple[Any, ...]:
         return (
             _rebuild,
-            (self.feature_group, self.feature, self.missing_inputs, self.available_columns),
+            (self.feature_group, self.feature, self.missing_inputs, self.available_columns, self.dropped_by),
         )
 
 
 def _rebuild(
-    feature_group: str, feature: str, missing_inputs: tuple[str, ...], available_columns: tuple[str, ...]
+    feature_group: str,
+    feature: str,
+    missing_inputs: tuple[str, ...],
+    available_columns: tuple[str, ...],
+    dropped_by: tuple[tuple[str, str], ...] = (),
 ) -> MissingInputFeatureError:
-    return MissingInputFeatureError(feature_group, feature, missing_inputs, available_columns)
+    return MissingInputFeatureError(feature_group, feature, missing_inputs, available_columns, dropped_by=dropped_by)

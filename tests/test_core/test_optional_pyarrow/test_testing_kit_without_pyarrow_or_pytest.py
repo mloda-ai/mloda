@@ -13,9 +13,14 @@ import sys
 
 import mloda._testing
 
-for info in pkgutil.iter_modules(mloda._testing.__path__, "mloda._testing."):
+# mloda._testing.source holds the pytest mixins and imports pytest and pyarrow on purpose, so it is skipped.
+_PYTEST_SUBTREE = "mloda._testing.source"
+for info in pkgutil.walk_packages(mloda._testing.__path__, "mloda._testing."):
+    if info.name == _PYTEST_SUBTREE or info.name.startswith(_PYTEST_SUBTREE + "."):
+        continue
     importlib.import_module(info.name)
 
+from mloda._testing.source_applicability import NO_POINTER, source_applicability
 from mloda._testing.result import CheckResult
 from mloda._testing.suite import ConformanceSuite, check_hooks
 from mloda._testing.typed_data import TypedTestData

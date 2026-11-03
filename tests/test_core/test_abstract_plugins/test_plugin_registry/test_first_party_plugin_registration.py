@@ -39,6 +39,8 @@ from typing import Any
 
 import pytest
 
+from mloda._testing.source.source_suite import _LoadCapture, _MatchCapture, _MatchRefuseAll
+
 from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
@@ -74,7 +76,8 @@ RESERVED_NAMESPACES: tuple[str, ...] = ("mloda.community", "mloda.enterprise", "
 
 # The one waiver: CompositeExtender is composed inside ComputeFramework.get_function_extender from an
 # already-filtered extender set, so it never passes through the strict-mode gate (pinned below).
-_NOT_REGISTRY_GATED: frozenset[type[Any]] = frozenset({CompositeExtender})
+# The source suite's capture and refuse extenders are test doubles attached per run, never discovered.
+_NOT_REGISTRY_GATED: frozenset[type[Any]] = frozenset({CompositeExtender, _LoadCapture, _MatchCapture, _MatchRefuseAll})
 
 CORE_DRIFT_MODULE = "mloda.core.first_party_guard_drift_probe"
 

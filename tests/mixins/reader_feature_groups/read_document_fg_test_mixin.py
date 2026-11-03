@@ -22,7 +22,8 @@ from mloda.provider import CHAIN_SEPARATOR, SourceFeatureGroup
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.mixins.reader_feature_groups.source_feature_group_test_mixin import (
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
+from mloda._testing.source.source_suite import (
     SourceFeatureGroupTestMixin,
     _LoadCapture,
 )
@@ -31,7 +32,6 @@ if TYPE_CHECKING:
     from mloda.provider import ReadDocumentFG
 
 FOREIGN_SUFFIX = ".notmyformat"
-HANDLE_OPTION = "data_access_handle"
 DOCUMENT_SUFFIXES_OPTION = "document_suffixes"
 SOURCE = "~source"
 FILE_TYPE = "~file_type"
@@ -438,9 +438,7 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin):
     def test_a_typo_of_a_known_column_suggests_it_only_where_the_columns_are_shown(self) -> None:
         pytest.skip("undeclared document names decline without a column listing")
 
-    def test_chain_and_column_separated_names_that_are_not_columns_decline(
-        self, rejection_window: dict[str, MatchRejection]
-    ) -> None:
+    def test_chain_and_column_separated_names_that_are_not_columns_decline(self) -> None:
         pytest.skip("undeclared document names decline without a column listing; the undeclared-name tests cover them")
 
     # subclass takeover

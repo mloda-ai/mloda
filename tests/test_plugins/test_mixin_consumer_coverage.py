@@ -15,8 +15,10 @@ import pytest
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
+from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin
 from mloda.provider import BaseFilterEngine
 from mloda.provider import BaseMaskEngine
+from mloda.provider import SourceFeatureGroup
 from mloda.user import PluginLoader
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
@@ -36,6 +38,7 @@ from tests.test_plugins.feature_group.experimental.test_time_window_feature_grou
     TimeWindowZeroRowTestMixin,
 )
 
+_INPUT_DATA = "tests.test_plugins.feature_group.input_data"
 _EXPERIMENTAL = "tests.test_plugins.feature_group.experimental"
 _FRAMEWORKS = "tests.test_plugins.compute_framework.base_implementations"
 
@@ -113,6 +116,23 @@ CONTRACTS: tuple[MixinContract, ...] = (
             f"{_FRAMEWORKS}.python_dict.test_python_dict_filter_engine",
             f"{_FRAMEWORKS}.spark.test_spark_filter_engine",
             f"{_FRAMEWORKS}.sqlite.test_sqlite_filter_engine",
+        ),
+    ),
+    MixinContract(
+        SourceFeatureGroup,
+        SourceFeatureGroupTestMixin,
+        "feature_group_class",
+        (
+            f"{_INPUT_DATA}.test_read_dbs.test_duckdb_fg",
+            f"{_INPUT_DATA}.test_read_dbs.test_sqlite_fg",
+            f"{_INPUT_DATA}.test_read_files.test_implementations",
+            f"{_INPUT_DATA}.test_read_files.test_json_document_reader",
+            f"{_INPUT_DATA}.test_read_files.test_markdown_document_reader",
+            f"{_INPUT_DATA}.test_read_files.test_text_document_reader",
+            f"{_INPUT_DATA}.test_read_files.test_yaml_document_reader",
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.test_toy_file_format_feature_group",
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data."
+            "test_toy_source_feature_group_contract",
         ),
     ),
 )

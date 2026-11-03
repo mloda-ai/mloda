@@ -19,7 +19,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.user import DataAccessCollection, Feature, GlobalFilter, Options, PluginCollector, mloda
-from tests.mixins.reader_feature_groups.source_feature_group_test_mixin import expected_implementation_version
+from mloda._testing.source.source_suite import expected_implementation_version
 
 
 class FrameworkAdapterMixin:

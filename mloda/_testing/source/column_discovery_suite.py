@@ -2,7 +2,7 @@
 
 Without its pyarrow submodule a group raises ImportError naming mloda[pyarrow] from column_names,
 describe_columns, load_neutral and count_rows, and declines at match time with a rejection naming it.
-Unprefixed so pytest skips it standalone.
+Unprefixed so pytest skips it standalone. Imports pytest and pyarrow on purpose (the pytest-dependent subpackage).
 """
 
 import os
@@ -14,7 +14,8 @@ from typing import Any, cast
 import pytest
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, MatchRejection
+from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.provider import CHAIN_SEPARATOR, FeatureSet, ReadFileFG
 from mloda.user import DataAccessCollection, DataType, Feature, Options, PluginCollector, mloda
@@ -78,30 +79,34 @@ class ColumnDiscoveryContractTestMixin:
             self.group_cls.load_neutral(match_of(absent), features)
 
     def test_declines_with_a_rejection_naming_the_install_hint_without_optional_dependency(
-        self, monkeypatch: pytest.MonkeyPatch, data_file: str, rejection_window: dict[str, MatchRejection]
+        self, monkeypatch: pytest.MonkeyPatch, data_file: str
     ) -> None:
         """Without the dependency even a plain name declines, recording why and how to fix it."""
         monkeypatch.setitem(cast(dict[str, Any], sys.modules), self.dependency_module, None)
         dac = DataAccessCollection(files={"nodep_handle": data_file})
 
-        assert not self.group_cls.match_feature_group_criteria("a1", Options(), dac)
+        outcome = probe_match_criteria(self.group_cls, "a1", Options(), dac)
 
-        stored = rejection_window[self.group_cls.get_class_name()]
+        assert not outcome.matched
+        stored = outcome.rejection
+        assert stored is not None
         assert "mloda[pyarrow]" in stored.reason
         assert os.path.abspath(data_file) in stored.reason
         assert stored.code is CoreDeclineCode.COLUMNS_UNKNOWN
 
     def test_declines_a_chain_separated_name_without_optional_dependency(
-        self, monkeypatch: pytest.MonkeyPatch, data_file: str, rejection_window: dict[str, MatchRejection]
+        self, monkeypatch: pytest.MonkeyPatch, data_file: str
     ) -> None:
         monkeypatch.setitem(cast(dict[str, Any], sys.modules), self.dependency_module, None)
         dac = DataAccessCollection(files={"nodep_chain_handle": data_file})
         chained = f"a1{CHAIN_SEPARATOR}b1"
 
-        assert not self.group_cls.match_feature_group_criteria(chained, Options(), dac)
+        outcome = probe_match_criteria(self.group_cls, chained, Options(), dac)
 
-        assert "mloda[pyarrow]" in rejection_window[self.group_cls.get_class_name()].reason
-        assert rejection_window[self.group_cls.get_class_name()].code is CoreDeclineCode.COLUMNS_UNKNOWN
+        assert not outcome.matched
+        assert outcome.rejection is not None
+        assert "mloda[pyarrow]" in outcome.rejection.reason
+        assert outcome.rejection.code is CoreDeclineCode.COLUMNS_UNKNOWN
 
     @pytest.mark.parametrize("compute_framework", [PythonDictFramework, PyArrowTable])
     def test_count_rows_matches_expected_row_count(

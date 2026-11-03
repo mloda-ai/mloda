@@ -11,9 +11,11 @@ from typing import Any, cast
 import pyarrow as pa
 import pytest
 
+from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin
+from mloda._testing.source_applicability import NO_POINTER
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.provider import ComputeFramework
 from mloda.user import DataAccessCollection, Feature, FilterType, GlobalFilter, Options, PluginCollector, mloda
@@ -25,7 +27,6 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation  # noqa: F401
 from mloda_plugins.feature_group.input_data.db_sources import duckdb_fg as duckdb_fg_module
 from mloda_plugins.feature_group.input_data.db_sources.duckdb_fg import DuckdbFG, DuckdbTable
-from tests.mixins.reader_feature_groups.source_feature_group_test_mixin import SourceFeatureGroupTestMixin
 
 try:
     import duckdb
@@ -102,7 +103,7 @@ class TestDuckdbFGContract(SourceFeatureGroupTestMixin):
         return DataAccessCollection(connections={"foreign_handle": foreign})
 
     def own_pointer(self) -> Any:
-        return "unused"
+        return NO_POINTER
 
     def test_leaves_collection_and_options_unchanged(self) -> None:
         dac = self.own_dac()
@@ -120,38 +121,6 @@ class TestDuckdbFGContract(SourceFeatureGroupTestMixin):
         _evaluate(claimed, dac)
         assert set(claimed.options.group) <= {"connection_handle", RESERVED_READER_OPTION_KEY}
         assert claimed.options.group["connection_handle"] == HANDLE
-
-    def test_pointer_value_is_used_alone_and_ignores_the_collection(self) -> None:
-        pytest.skip("the group has no pointer; a value under its key declines (see the DuckdbFG option key test)")
-
-    def test_a_pointer_of_the_wrong_type_declines_naming_its_type_and_never_searches_the_collection(self) -> None:
-        pytest.skip("the group has no pointer; a value under its key declines (see the DuckdbFG option key test)")
-
-    def test_a_handle_of_another_kind_yields_no_sources(self) -> None:
-        pytest.skip("the group selects by connection_handle, not data_access_handle (see the non-DuckDB handle test)")
-
-    def test_an_unknown_handle_records_a_rejection_listing_the_known_handles(
-        self, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        pytest.skip("the group selects by connection_handle, not data_access_handle (see the unknown handle test)")
-
-    def test_a_non_str_handle_is_no_narrowing_and_is_rejected_by_the_option_check(self) -> None:
-        pytest.skip("data_access_handle is not an option of this group; connection_handle is always required")
-
-    def test_pointed_with_a_missing_column_aborts_naming_source_and_columns(self) -> None:
-        pytest.skip("the group has no pointer to abort on; pointing at it declines")
-
-    def test_pointed_with_query_text_aborts_naming_the_query_route_when_the_group_lists_none(self) -> None:
-        pytest.skip("the group has no pointer to abort on; pointing at it declines")
-
-    def test_missing_column_text_hides_the_columns_unless_a_handle_narrows_the_search(self) -> None:
-        pytest.skip("narrowing is by connection_handle, which every match requires; data_access_handle is unused")
-
-    def test_a_typo_of_a_known_column_suggests_it_only_where_the_columns_are_shown(self) -> None:
-        pytest.skip("the typo suggestion needs a pointed group or data_access_handle; neither applies")
-
-    def test_a_subclass_takes_over_a_pointer_keyed_on_its_parent(self) -> None:
-        pytest.skip("the group has no pointer for a subclass to take over")
 
 
 class TestDuckdbFGInPlace:

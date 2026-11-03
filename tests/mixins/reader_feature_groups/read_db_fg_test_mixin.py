@@ -28,7 +28,8 @@ from mloda.user import Credential, Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation  # noqa: F401
-from tests.mixins.reader_feature_groups.source_feature_group_test_mixin import (
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
+from mloda._testing.source.source_suite import (
     SourceFeatureGroupTestMixin,
     _LoadCapture,
 )
@@ -36,7 +37,6 @@ from tests.mixins.reader_feature_groups.source_feature_group_test_mixin import (
 if TYPE_CHECKING:
     from mloda.provider import ReadDBFG
 
-HANDLE_OPTION = "data_access_handle"
 SECRET = "toyfmt-secret-value"  # nosec B105
 OWN_TABLE = "own_table"
 QUERY_OPTION = "query_text"

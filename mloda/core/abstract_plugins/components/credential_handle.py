@@ -173,25 +173,26 @@ def _check_one(
         )
 
 
-def refuse_missing_credential_handles(feature_group: type[FeatureGroup], options: Options) -> None:
-    """Abort when a required handle key is absent, naming a close option key the group does not declare."""
+def missing_credential_handle_abort(feature_group: type[FeatureGroup], options: Options) -> ValueError | None:
+    """The marked abort for a required handle key that is absent, naming a close undeclared option key, or None."""
+    # Function-local: avoids an import cycle through the feature chain parser.
     from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 
     keys = credential_handle_keys(feature_group)
     if not keys:
-        return
+        return None
     mapping = feature_group.PROPERTY_MAPPING or {}
     absent = FeatureChainParser._name_path_missing_required_keys(feature_group.options_with_defaults(options), mapping)
     missing = [key for key in absent if key in keys]
     if not missing:
-        return
+        return None
     candidates = [key for key in [*options.group, *options.context] if key not in mapping]
-    parts = []
+    sentences = []
     for key in missing:
         close = get_close_matches(key, candidates, n=1, cutoff=0.8)
         hint = f" (did you mean '{close[0]}'?)" if close else ""
-        parts.append(f"'{key}'{hint}")
-    raise _refuse(f"{feature_group.__name__} requires credential handle option {', '.join(parts)}, which is not set.")
+        sentences.append(f"{feature_group.__name__} requires credential handle option '{key}', which is not set{hint}.")
+    return _refuse(" ".join(sentences))
 
 
 def validate_credential_handles(

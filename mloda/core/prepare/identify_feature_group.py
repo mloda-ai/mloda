@@ -28,7 +28,8 @@ from mloda.core.prepare.resolution_failure_renderer import (
     _supported_feature_names,
 )
 from mloda.core.abstract_plugins.components.credential_handle import (
-    refuse_missing_credential_handles,
+    credential_handle_keys,
+    missing_credential_handle_abort,
     validate_credential_handles,
 )
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
@@ -343,6 +344,7 @@ class IdentifyFeatureGroupClass:
 
     def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
         self._excluded = {}
+        self._missing_handle_abort: ValueError | None = None
         self._criteria_matched_feature_groups = set()
         self._abstract_matched_feature_groups = set()
         self._candidate_frameworks = {}
@@ -829,9 +831,10 @@ class IdentifyFeatureGroupClass:
                     and self._filter_feature_group_by_domain(feature_group, feature)
                     and not inspect.isabstract(feature_group)
                 ):
-                    refuse_missing_credential_handles(
-                        feature_group, self._matched_options.get(feature_group, feature.options)
-                    )
+                    if self._missing_handle_abort is None:
+                        self._missing_handle_abort = missing_credential_handle_abort(
+                            feature_group, self._matched_options.get(feature_group, feature.options)
+                        )
                 if rejection is not None:
                     # The shared mapper owns the projection, so both seams spell the taxonomy the same way.
                     self._record_elimination(
@@ -949,6 +952,9 @@ class IdentifyFeatureGroupClass:
                         raise
                     # Outside the scope, so the chain check stacks like an eager one and a cycle cannot see it unanswered.
                     check.answer = any(self._computes(fg, feature) for fg in sorted(narrowed, key=_candidate_sort_key))
+        if self._missing_handle_abort is not None:
+            if not any(credential_handle_keys(group) for group in self._criteria_matched_feature_groups):
+                raise self._missing_handle_abort
         _identified_feature_groups = identified
 
         candidates = set(_identified_feature_groups)

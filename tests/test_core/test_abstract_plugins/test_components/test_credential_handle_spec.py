@@ -168,6 +168,22 @@ class ChsBothMissingFG(ChsSource):
         return {"chs_both_a"}
 
 
+class ChsPairFirstFG(ChsSource):
+    PROPERTY_MAPPING = {"chs_pair_first_handle": credential_handle_spec("First handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_pair_a"}
+
+
+class ChsPairSecondFG(ChsSource):
+    PROPERTY_MAPPING = {"chs_pair_second_handle": credential_handle_spec("Second handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_pair_a"}
+
+
 class ChsNeverMatchFG(ChsCustomMatchFG):
     @classmethod
     def match_feature_group_criteria(
@@ -453,6 +469,22 @@ class TestMissingHandleKeyAborts:
         message = _refusal(_prepare, [Feature("chs_both_a")], None, ChsBothMissingFG, ChsFallbackFG)
 
         assert "chs_both_handle" in message
+
+    def test_another_handle_declaring_group_that_matches_wins_over_the_abort(self) -> None:
+        feature = Feature("chs_pair_a", options={"chs_pair_second_handle": "vault-main"})
+
+        session = _prepare(
+            [feature], _dac(**{"vault-main": {"key": SECRET}}), _plugins(ChsPairFirstFG, ChsPairSecondFG)
+        )
+
+        assert _steps(session, ChsPairSecondFG)
+        assert not _steps(session, ChsPairFirstFG)
+
+    def test_a_group_missing_two_handle_keys_names_both(self) -> None:
+        message = _refusal(_prepare, [Feature("chs_two_a")], None, ChsTwoHandleFG)
+
+        assert "chs_two_a_handle" in message
+        assert "chs_two_z_handle" in message
 
     def test_a_missing_plain_required_key_keeps_the_fallback(self) -> None:
         session = _prepare([Feature("chs_plain_a")], None, _plugins(ChsPlainRequiredFG, ChsFallbackFG))
@@ -758,7 +790,7 @@ class TestHandleStaysOnTheConsumer:
         with pytest.raises(ValueError, match=HANDLE_KEY):
             _prepare([_consumer("chs_consumer_req")], dac, plugins)
 
-    def test_a_required_upstream_declaring_the_same_key_does_not_receive_it(self) -> None:
+    def test_a_required_upstream_own_handle_is_not_received_from_the_consumer_and_aborts_naming_it(self) -> None:
         dac = _dac(**{"vault-a": {"key": SECRET}})
 
         with pytest.raises(

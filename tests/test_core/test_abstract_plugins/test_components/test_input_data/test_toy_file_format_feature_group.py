@@ -387,9 +387,17 @@ class TestUserinfoUriPlanIdentity:
             assert secret in source_of(session._execution_plan(), steps[0])[1].source
         del session, explained, steps, ToyfmtUriPlanFG
 
-    def test_a_provider_identity_override_holding_a_registered_token_is_masked(self) -> None:
+    @pytest.mark.parametrize(
+        ("key", "masked"),
+        [("token", True), ("botref", False)],
+        ids=["credential_shaped_key_masked", "non_shaped_key_kept"],
+    )
+    def test_a_provider_identity_override_masks_a_registered_token_only_under_a_credential_shaped_key(
+        self, key: str, masked: bool
+    ) -> None:
         column = "toyfmt_uri_override_col"
         token = "OVERRIDETOKEN9"  # nosec B105
+        expected = "api://example/bot***/x.json" if masked else f"api://example/bot{token}/x.json"
 
         class ToyfmtUriOverrideFG(ToyFileFormatFG):
             @classmethod
@@ -416,14 +424,14 @@ class TestUserinfoUriPlanIdentity:
             [Feature(column)],
             compute_frameworks=[PyArrowTable],
             data_access_collection=DataAccessCollection(
-                files={f"s3://bucket/override{TOY_SUFFIX}"}, credentials={"h": {"token": token}}
+                files={f"s3://bucket/override{TOY_SUFFIX}"}, credentials={"h": {key: token}}
             ),
             plugin_collector=PluginCollector.enabled_feature_groups({ToyfmtUriOverrideFG}),
         )
         steps = [step for step in plan if step.step_kind == "compute"]
         assert len(steps) == 1
-        assert steps[0].data_access_identity == "api://example/bot***/x.json"
-        assert token not in repr(plan)
+        assert steps[0].data_access_identity == expected
+        assert (token in repr(plan)) is (not masked)
         del plan, steps, ToyfmtUriOverrideFG
 
 

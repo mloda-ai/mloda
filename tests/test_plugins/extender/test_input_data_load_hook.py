@@ -427,7 +427,7 @@ class TestDataAccessIdentityHidesDictCredentialValues:
             pytest.param("botref", False, False, ParallelizationMode.THREADING, id="botref-run_all-threading"),
         ],
     )
-    def test_registered_literal_in_a_file_path_is_masked_end_to_end(
+    def test_registered_literal_in_a_file_path_is_masked_only_under_a_credential_shaped_key(
         self, tmp_path: Path, key: str, masked: bool, stream: bool, mode: ParallelizationMode
     ) -> None:
         folder = tmp_path / f"bot{_TOKEN}"

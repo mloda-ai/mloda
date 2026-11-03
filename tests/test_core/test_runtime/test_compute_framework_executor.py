@@ -1286,7 +1286,6 @@ class TestThreadExecuteStep:
             Mock(spec=ComputeFramework),
             None,
             registered_secrets=frozenset({_REGISTERED}),
-            identity_secrets=frozenset({"an-identity-value"}),
         )
 
         cfw_register.set_error.assert_called_once()

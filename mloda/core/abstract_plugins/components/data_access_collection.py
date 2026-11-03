@@ -4,7 +4,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any, Callable
 
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
-from mloda.core.abstract_plugins.components.credential_leaves import iter_credential_leaves
+from mloda.core.abstract_plugins.components.credential_leaves import CredentialLeaf, iter_credential_leaves
 from mloda.core.abstract_plugins.components.credential_scrub import (
     redact_mapping,
     registered_secrets_scope,
@@ -401,7 +401,7 @@ class DataAccessCollection:
         """The str leaves of 8+ chars under a credential-shaped key, for masking a published identity."""
         return self._literals_where(lambda item: item.shaped)
 
-    def _literals_where(self, predicate: Callable[[Any], bool]) -> frozenset[str]:
+    def _literals_where(self, predicate: Callable[[CredentialLeaf], bool]) -> frozenset[str]:
         leaves: set[str] = set()
         for value in self.credentials.values():
             for item in iter_credential_leaves(value):

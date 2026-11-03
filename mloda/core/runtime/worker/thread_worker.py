@@ -20,7 +20,7 @@ def thread_worker(
     cfw: ComputeFramework,
     from_cfw: ComputeFramework | UUID | None,
     registered_secrets: frozenset[str] = frozenset(),
-    identity_secrets: frozenset[str] = frozenset(),
+    identity_secrets: frozenset[str] | None = None,
 ) -> None:
     with registered_secrets_scope(registered_secrets, identity_secrets):
         try:

@@ -250,6 +250,7 @@ def mask_literals(text: str, literals: Iterable[str]) -> str:
 class registered_secrets_scope:  # noqa: N801
     """Add literals to the set ``scrub_credentials`` masks exactly, for this context only.
 
+    ``identity`` is the set that masks a published data_access_identity; None means the same as ``literals``.
     A class, not @contextmanager: that helper assigns ``__traceback__``, which a frozen-dataclass exception rejects.
     """
 

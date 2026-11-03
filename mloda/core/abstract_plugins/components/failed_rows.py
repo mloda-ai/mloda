@@ -1,6 +1,6 @@
 """Rows a feature group could not give a value, reported from calculate_feature and collected per step.
 
-Outside a collector (direct calls, streams) reporting is a no-op.
+A direct call outside a run is a no-op. In every run, streams included, entries reach HookContext.failed_rows; run() and run_all() also return them in RunResult.failed_rows.
 """
 
 from __future__ import annotations

@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.components.credential_leaves import (
     credential_key_names,
     iter_credential_leaves,
     normalize_credential_key,
+    public_key_names,
 )
 from mloda.core.abstract_plugins.components.property_spec import NO_DEFAULT, PropertySpec
 from mloda.core.abstract_plugins.components.utils import PREFIX_OPTION_KEY_FLAG, escalate_match_abort
@@ -38,6 +39,8 @@ def _handle_element_validator(value: Any) -> bool:
 
 def _field_names(spec: CredentialHandleSpec, name: str, value: Any) -> tuple[str, ...]:
     prefix = f"CredentialHandleSpec({spec.explanation!r})"
+    if name == "public_fields":
+        return public_key_names(f"{prefix}: {name}", value)
     return credential_key_names(f"{prefix}: {name}", value)
 
 

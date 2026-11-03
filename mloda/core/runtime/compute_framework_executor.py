@@ -9,6 +9,7 @@ from typing import Any, Callable
 from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.credential_grant import CredentialGrant, StaticGrant, grant_scope
+from mloda.core.abstract_plugins.components.credential_leaves import CredentialKeyPolicy
 from mloda.core.abstract_plugins.components.credential_scrub import (
     current_identity_secrets,
     current_registered_secrets,
@@ -38,7 +39,7 @@ class ComputeFrameworkExecutor:
     Extracted from Runner class to handle CFW lifecycle and step execution logic.
     """
 
-    _grant_kind: Callable[[Mapping[str, Any]], CredentialGrant] = StaticGrant
+    _grant_kind: Callable[[Mapping[str, Any], CredentialKeyPolicy | None], CredentialGrant] = StaticGrant
 
     def __init__(
         self,
@@ -359,9 +360,7 @@ class ComputeFrameworkExecutor:
         if collection is None or not isinstance(step, FeatureGroupStep) or not step.credential_handles:
             return None
         values = {h: collection.credentials[h] for h in step.credential_handles}
-        if self._grant_kind is StaticGrant:
-            return StaticGrant(values, collection.credential_key_policy())
-        return self._grant_kind(values)
+        return self._grant_kind(values, collection.credential_key_policy())
 
     def sync_execute_step(self, step: Any) -> None:
         """

@@ -259,7 +259,7 @@ Declared credential keys widen or narrow the unmasked set. A provider lists keys
 feature group and in `public_fields` of a handle spec, unioned over the loaded plugins. A data user passes `public_credential_keys` and
 `secret_credential_keys` to `DataAccessCollection`. A credential-shaped key is always masked, then a collection secret
 key, then everything public. Keys are compared lowercased with `_` and `-` removed. To mask a key a plugin declares
-public, list it in `secret_credential_keys`.
+public, list it in `secret_credential_keys`. Credential-shaped keys and the connection-string keys `dsn`, `url`, `uri`, `conn`, `connection_string` and `engine` can never be declared public.
 
 The handle name is not masked in `explain()`, `str(Options)` or the plan content hash, even under a credential-shaped
 key; other values under such a key stay masked. Name a handle by role (`pii-hmac-key`), never by environment or

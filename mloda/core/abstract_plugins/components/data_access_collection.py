@@ -12,6 +12,7 @@ from mloda.core.abstract_plugins.components.credential_leaves import (
     normalize_credential_key,
     credential_secret_literals,
     iter_credential_leaves,
+    public_key_names,
 )
 from mloda.core.abstract_plugins.components.credential_scrub import (
     redact_mapping,
@@ -110,7 +111,8 @@ class DataAccessCollection:
     def _key_set(name: str, keys: Iterable[str] | None) -> frozenset[str]:
         if keys is None:
             return frozenset()
-        return frozenset(normalize_credential_key(k) for k in credential_key_names(name, keys))
+        names = public_key_names(name, keys) if name == "public_credential_keys" else credential_key_names(name, keys)
+        return frozenset(normalize_credential_key(k) for k in names)
 
     def credential_key_policy(self) -> CredentialKeyPolicy:
         """The declared key policy: plugin public keys plus this collection's own public and secret keys."""

@@ -1,6 +1,6 @@
 """Walk a registered credential and classify each str/bytes leaf as secret or known-safe."""
 
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from typing import Any, NamedTuple
 
 from mloda.core.abstract_plugins.components.credential import Credential
@@ -60,6 +60,8 @@ _SAFE_CREDENTIAL_KEYS = frozenset(
 )
 
 
+NEVER_PUBLIC_CREDENTIAL_KEYS = frozenset({"dsn", "url", "uri", "conn", "connectionstring", "engine"})
+
 MIN_REDACT_LENGTH = 8
 
 
@@ -75,12 +77,21 @@ class CredentialKeyPolicy(NamedTuple):
 
 
 def credential_key_names(label: str, value: Any) -> tuple[str, ...]:
-    """The items of an iterable of non-empty str; a bare str or any other item is a ValueError."""
-    if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
-        raise ValueError(f"{label} must be an iterable of key names, got {type(value).__name__}.")
+    """The items of a tuple, list, set or frozenset of non-empty str; anything else is a ValueError."""
+    if not isinstance(value, (tuple, list, set, frozenset)):
+        raise ValueError(f"{label} must be a tuple, list, set or frozenset of key names, got {type(value).__name__}.")
     items = tuple(value)
     if not all(isinstance(item, str) and item for item in items):
         raise ValueError(f"{label} must hold non-empty str key names.")
+    return items
+
+
+def public_key_names(label: str, value: Any) -> tuple[str, ...]:
+    """credential_key_names, refusing connection-string keys that can never be declared public."""
+    items = credential_key_names(label, value)
+    refused = sorted(item for item in items if normalize_credential_key(item) in NEVER_PUBLIC_CREDENTIAL_KEYS)
+    if refused:
+        raise ValueError(f"{label} cannot declare connection keys public: {refused}.")
     return items
 
 

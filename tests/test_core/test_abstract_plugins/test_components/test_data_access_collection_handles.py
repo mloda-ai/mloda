@@ -1313,6 +1313,57 @@ class TestCredentialKeyPolicy:
         text = f"saw {_PW} {_VAL} db.internal.example"
         assert keyed.redact(text) == plain.redact(text)
 
+    @pytest.mark.parametrize("bad", ["zz_bare", ("",), (1,)], ids=["bare_str", "empty_item", "non_str_item"])
+    def test_malformed_public_credential_keys_raise_at_class_definition(self, bad: Any) -> None:
+        from mloda.provider import FeatureGroup
+
+        with pytest.raises(ValueError, match="ZzMalformedKeysFG"):
+
+            class ZzMalformedKeysFG(FeatureGroup):
+                PUBLIC_CREDENTIAL_KEYS = bad
+
+    @pytest.mark.parametrize("key", ["dsn", "url", "uri", "conn", "connection_string", "engine", "Connection-String"])
+    def test_connection_keys_cannot_be_declared_public(self, key: str) -> None:
+        from mloda.provider import FeatureGroup, credential_handle_spec
+
+        with pytest.raises(ValueError):
+
+            class ZzPublicConnKeyFG(FeatureGroup):
+                PUBLIC_CREDENTIAL_KEYS = (key,)
+
+        with pytest.raises(ValueError):
+            credential_handle_spec("H.", public_fields=(key,))
+        with pytest.raises(ValueError):
+            DataAccessCollection(public_credential_keys={key})
+
+    def test_connection_keys_can_be_declared_secret(self) -> None:
+        dac = DataAccessCollection(secret_credential_keys={"dsn", "Connection-String"})
+
+        assert {"dsn", "connectionstring"} <= dac.credential_key_policy().secret
+
+    @pytest.mark.parametrize("make", [lambda: {"a": 1}, lambda: (k for k in ("a",))], ids=["dict", "generator"])
+    def test_key_names_refuse_dict_and_generator(self, make: Any) -> None:
+        from mloda.provider import credential_handle_spec
+
+        with pytest.raises(ValueError):
+            credential_handle_spec("H.", required_fields=make())
+        with pytest.raises(ValueError):
+            credential_handle_spec("H.", public_fields=make())
+        with pytest.raises(ValueError):
+            DataAccessCollection(public_credential_keys=make())
+        with pytest.raises(ValueError):
+            DataAccessCollection(secret_credential_keys=make())
+
+    @pytest.mark.parametrize("wrap", [tuple, list, set, frozenset])
+    def test_key_names_accept_tuple_list_set_frozenset(self, wrap: Any) -> None:
+        from mloda.provider import credential_handle_spec
+
+        spec = credential_handle_spec("H.", required_fields=wrap(["zz_ok_key"]))
+        dac = DataAccessCollection(public_credential_keys=wrap(["zz_ok_key"]))
+
+        assert spec.required_fields == ("zz_ok_key",)
+        assert "zzokkey" in dac.credential_key_policy().public
+
 
 class TestPolicyAwareLeafHelpers:
     """iter_credential_leaves and credential_secret_literals take an optional CredentialKeyPolicy."""

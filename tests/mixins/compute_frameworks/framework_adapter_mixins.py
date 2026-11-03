@@ -6,10 +6,15 @@ Combine one adapter with FileLoadsIntoFrameworkMixin or DatabaseLoadsIntoFramewo
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
+from mloda._testing.framework_adapter import FrameworkAdapter
+from mloda._testing.framework_adapter import PandasAdapter as _PandasAdapter
+from mloda._testing.framework_adapter import PolarsAdapter as _PolarsAdapter
+from mloda._testing.framework_adapter import PyArrowAdapter as _PyArrowAdapter
+from mloda._testing.framework_adapter import PythonDictAdapter as _PythonDictAdapter
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -18,59 +23,36 @@ from tests.mixins.reader_feature_groups.source_feature_group_test_mixin import e
 
 
 class FrameworkAdapterMixin:
-    """Names one compute framework: its module, its class, and how to read a result's column names."""
+    """Names one compute framework through its adapter, which also reads a result's columns and values."""
 
-    module_name: str
-
-    def required_module(self) -> Any:
-        return pytest.importorskip(self.module_name)
+    adapter: ClassVar[FrameworkAdapter]
 
     def compute_framework(self) -> type[ComputeFramework]:
-        raise NotImplementedError
+        if not self.adapter.is_available():
+            pytest.skip(f"{type(self.adapter).__name__} dependencies are not installed")
+        return self.adapter.compute_framework()
 
     def columns_of(self, result: Any) -> set[str]:
-        return self.compute_framework().extract_column_names(result)
+        return set(self.adapter.column_names(result))
+
+    def values_of(self, result: Any, column: str) -> list[Any]:
+        return self.adapter.column_values(result, column)
 
 
 class PyArrowTableAdapter(FrameworkAdapterMixin):
-    module_name = "pyarrow"
-
-    def compute_framework(self) -> type[ComputeFramework]:
-        self.required_module()
-        from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-
-        return PyArrowTable
+    adapter = _PyArrowAdapter()
 
 
 class PandasDataFrameAdapter(FrameworkAdapterMixin):
-    module_name = "pandas"
-
-    def compute_framework(self) -> type[ComputeFramework]:
-        self.required_module()
-        from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-
-        return PandasDataFrame
+    adapter = _PandasAdapter()
 
 
 class PolarsDataFrameAdapter(FrameworkAdapterMixin):
-    module_name = "polars"
-
-    def compute_framework(self) -> type[ComputeFramework]:
-        self.required_module()
-        from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
-
-        return PolarsDataFrame
+    adapter = _PolarsAdapter()
 
 
 class PythonDictAdapter(FrameworkAdapterMixin):
-    module_name = "builtins"
-
-    def compute_framework(self) -> type[ComputeFramework]:
-        from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
-            PythonDictFramework,
-        )
-
-        return PythonDictFramework
+    adapter = _PythonDictAdapter()
 
 
 class FileLoadsIntoFrameworkMixin(FrameworkAdapterMixin):
@@ -158,9 +140,6 @@ class DatabaseLoadsIntoFrameworkMixin(FrameworkAdapterMixin):
     def write_database(self, path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
         raise NotImplementedError
 
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        raise NotImplementedError
-
     def _run(self, tmp_path: Path, extender: Any = None) -> list[Any]:
         framework = self.compute_framework()
         path = tmp_path / "dbloads.db"
@@ -236,9 +215,6 @@ class DocumentLoadsIntoFrameworkMixin(FrameworkAdapterMixin):
     context: dict[str, Any] = {}
     text = "framework loads\nbody\n"
     expected_text: str | None = None
-
-    def values_of(self, result: Any, column: str) -> list[Any]:
-        raise NotImplementedError
 
     def _run(self, tmp_path: Path, names: list[str]) -> tuple[list[Any], Path]:
         framework = self.compute_framework()

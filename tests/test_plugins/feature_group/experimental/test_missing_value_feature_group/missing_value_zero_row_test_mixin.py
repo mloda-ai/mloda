@@ -4,16 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-import pyarrow as pa
 import pytest
 
+from mloda._testing.typed_data import TypedTestData
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.user import Feature, Options
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import ZeroRowResultTypeTestMixin
 
 IMPUTATION_METHODS = sorted(MissingValueFeatureGroup.IMPUTATION_METHODS)
 
-ZERO_ROWS = pa.table({"income": pa.array([], type=pa.int64()), "temperature": pa.array([], type=pa.float64())})
+ZERO_ROWS = TypedTestData({"income": (DataType.INT64, []), "temperature": (DataType.DOUBLE, [])})
 
 # Only constant imputation reads constant_value; the other methods ignore it.
 CONSTANT_VALUES: dict[str, Any] = {"income": 0, "temperature": 0.0}

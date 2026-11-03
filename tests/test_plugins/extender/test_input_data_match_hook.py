@@ -13,7 +13,11 @@ import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_STAGE,
+    CoreDeclineCode,
+    record_match_rejection,
+)
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.verified_context import verified_context
@@ -104,6 +108,15 @@ class ImdMatchGateSource(_ImdSourceBase):
     @classmethod
     def declared_attributes(cls, features: FeatureSet | None) -> dict[str, str | int | float | bool]:
         return {"classification": "restricted", "level": 3}
+
+
+class ImdMatchDeclaredRouteSource(_ImdSourceBase):
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("imdmatch", NamePolicy.DECLARED, True),)
+    served = frozenset({_COL_A})
+
+    @classmethod
+    def declared_names(cls) -> frozenset[str]:
+        return frozenset({_COL_A})
 
 
 class ImdMatchGateSubSource(ImdMatchGateSource):
@@ -511,6 +524,20 @@ class TestRefusal:
         assert kind.gate.probes == 0
         if kind.is_source:
             assert kind.gate.column_reads == 0
+
+    def test_a_pointed_undeclared_name_on_a_declared_route_declines_before_the_refusing_hook(self) -> None:
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchDeclaredRouteSource})
+        extender = _gate(ImdMatchDeclaredRouteSource)
+        feature = Feature("imdmatch_undeclared", options={ImdMatchDeclaredRouteSource.__name__: dict(_FMT_COLUMNS)})
+
+        with pytest.raises(FeatureResolutionError) as excinfo:
+            _prepare(feature, enabled, None, extender)
+
+        elimination = excinfo.value.result.eliminations[ImdMatchDeclaredRouteSource]
+        assert elimination.code is CoreDeclineCode.NAME_NOT_DECLARED
+        assert extender.raised == []
+        assert excinfo.value.refusals == ()
+        assert ImdMatchDeclaredRouteSource.probes == 0
 
     def test_two_refused_candidates_are_both_carried_in_order(self) -> None:
         enabled = PluginCollector.enabled_feature_groups({ImdMatchGateSource, ImdMatchAaTwinSource})

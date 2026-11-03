@@ -362,7 +362,10 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin):
             rejection_window.clear()
             assert not self.feature_group_class.match_feature_group_criteria(name, options, None), name
             assert name in rejection_window[self._group_name()].reason
-            assert rejection_window[self._group_name()].code is CoreDeclineCode.SOURCE_NOT_FOUND
+            group = self.feature_group_class
+            declared = group._declared_name(group.get_column_base_feature(name))
+            expected = CoreDeclineCode.SOURCE_NOT_FOUND if declared else CoreDeclineCode.NAME_NOT_DECLARED
+            assert rejection_window[self._group_name()].code is expected, name
 
     def test_doc_the_prefix_shortcut_is_gone_for_a_name_extending_the_group_name(self) -> None:
         name = f"{self._group_name()}_extra"

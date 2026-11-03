@@ -151,6 +151,8 @@ class TestDeclaredNames:
         "name",
         [
             "toyfmt_undeclared",
+            "toyfmt_pre_",
+            "ToyDeclaredFG_",
             "toyfmt_pre_x__sum_aggr",
             "toyfmt_pre__x",
             "toyfmt_conn__knows__sum_aggr",
@@ -246,13 +248,14 @@ class TestDeclaredNamesProbeOnlyDeclaredNames:
         assert group in result.identified
         del group, result
 
-    def test_a_pointed_undeclared_name_still_probes_and_records_the_undeclared_reason(self) -> None:
+    @pytest.mark.parametrize("name", ["toyfmt_undeclared", "toyfmt_pre_x__sum_aggr", "toyfmt_pre_"])
+    def test_a_pointed_undeclared_name_is_not_probed_and_records_the_undeclared_reason(self, name: str) -> None:
         calls: list[str] = []
         group = _spy_declared_group(calls, record=False)
-        feature = Feature("toyfmt_undeclared", Options({group.get_class_name(): {COL: [1]}}))
+        feature = Feature(name, Options({group.get_class_name(): {COL: [1]}}))
         result = _identify(feature, None, group)
 
-        assert calls != []
+        assert calls == []
         assert group not in result.identified
         assert "is not a name ToyfmtSpyDeclaredFG declares" in result.eliminations[group].reason
         assert result.eliminations[group].code is CoreDeclineCode.NAME_NOT_DECLARED
@@ -1605,6 +1608,23 @@ class TestHasSource:
 
         assert calls == []
         assert outer == {}
+        del group
+
+    def test_an_undeclared_name_on_a_pointed_declared_group_is_not_probed(self) -> None:
+        calls: list[str] = []
+        group = _spy_declared_group(calls)
+        options = Options({group.get_class_name(): _COLS})
+
+        assert group.has_source(options, toy_dac(h1=_COLS), "other_connector__rows") is False
+        assert calls == []
+        del group
+
+    def test_no_name_still_probes_a_pointed_declared_group(self) -> None:
+        calls: list[str] = []
+        group = _spy_declared_group(calls, record=False)
+
+        assert group.has_source(Options({group.get_class_name(): _COLS}), None) is True
+        assert calls != []
         del group
 
     def test_a_true_probe_checks_no_name_and_leaves_the_options_untouched(self) -> None:

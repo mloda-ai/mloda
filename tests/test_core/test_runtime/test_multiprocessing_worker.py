@@ -213,7 +213,7 @@ class TestWorkerRegisteredSecrets:
         assert current_registered_secrets() == frozenset()
         assert current_identity_secrets() == frozenset()
 
-    def test_a_step_commands_secrets_are_visible_in_the_step_and_reset_after(self) -> None:
+    def test_each_step_command_sees_only_its_own_secrets_and_they_reset_after(self) -> None:
         from mloda.core.abstract_plugins.components.credential_scrub import (
             current_identity_secrets,
             current_registered_secrets,
@@ -221,31 +221,18 @@ class TestWorkerRegisteredSecrets:
 
         _SEEN_BY_STEPS.clear()
         command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
-        secrets, identity = frozenset({_STEP_A_SECRET}), frozenset({_STEP_A_IDENTITY})
-        command_queue.put((_SecretsRecordingCommand(), None, secrets, identity))
+        first = (frozenset({_STEP_A_SECRET}), frozenset({_STEP_A_IDENTITY}))
+        second = (frozenset({_STEP_B_SECRET}), frozenset())
+        empty = (frozenset(), frozenset())
+        for secrets, identity in (first, second, empty):
+            command_queue.put((_SecretsRecordingCommand(), None, secrets, identity))
         command_queue.put("STOP")
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
-        assert _SEEN_BY_STEPS == [(secrets, identity)]
+        assert _SEEN_BY_STEPS == [first, second, empty]
         assert current_registered_secrets() == frozenset()
         assert current_identity_secrets() == frozenset()
-
-    def test_a_second_command_does_not_see_the_first_commands_secrets(self) -> None:
-        _SEEN_BY_STEPS.clear()
-        command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
-        command_queue.put((_SecretsRecordingCommand(), None, frozenset({_STEP_A_SECRET}), frozenset()))
-        command_queue.put((_SecretsRecordingCommand(), None, frozenset({_STEP_B_SECRET}), frozenset()))
-        command_queue.put((_SecretsRecordingCommand(), None, frozenset(), frozenset()))
-        command_queue.put("STOP")
-
-        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
-
-        assert _SEEN_BY_STEPS == [
-            (frozenset({_STEP_A_SECRET}), frozenset()),
-            (frozenset({_STEP_B_SECRET}), frozenset()),
-            (frozenset(), frozenset()),
-        ]
 
     def test_a_failure_in_result_handling_is_masked_with_the_step_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(

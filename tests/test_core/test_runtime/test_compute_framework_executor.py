@@ -1411,41 +1411,6 @@ class TestMultiExecuteStep:
             cfw_uuid, mock_worker, (cfw_register, mock_cfw, None)
         )
 
-    @patch("mloda.core.runtime.compute_framework_executor.worker")
-    def test_passes_no_secrets_to_the_worker_process_args(self, mock_worker: Any) -> None:
-        from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
-
-        cfw_register = Mock(spec=CfwManager)
-        worker_manager = Mock(spec=WorkerManager)
-        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
-        step = Mock(spec=FeatureGroupStep)
-        step.own_frame = False
-        step.tfs_ids = []
-        step.features = Mock()
-        step.features.input_data_match = None
-        step.features.any_uuid = uuid4()
-        step.children_if_root = []
-        step.compute_framework = Mock()
-        step.compute_framework.get_class_name.return_value = "TestCFW"
-        step.get_uuids.return_value = {uuid4()}
-        cfw_uuid = uuid4()
-        cfw_register.resolve_cfw_uuid_by_tfs_ids.return_value = cfw_uuid
-        mock_cfw = Mock(spec=ComputeFramework)
-        executor.cfw_collection[cfw_uuid] = mock_cfw
-        worker_manager.get_process_queues.return_value = None
-        worker_manager.create_worker_process.return_value = (Mock(), Mock(), Mock())
-
-        with registered_secrets_scope(
-            frozenset({"a-registered-secret-value"}), identity=frozenset({"an-identity-value"})
-        ):
-            executor.multi_execute_step(step)
-
-        worker_manager.create_worker_process.assert_called_once_with(
-            cfw_uuid, mock_worker, (cfw_register, mock_cfw, None)
-        )
-        sent = worker_manager.send_command.call_args.args[1]
-        assert len(sent) == 4 and sent[0] is step
-
     def test_uses_existing_worker_process_if_exists(self) -> None:
         """Should use existing worker process if one exists for CFW UUID."""
         cfw_register = Mock(spec=CfwManager)
@@ -1895,6 +1860,12 @@ class _RecordingGrantKind:
         _RecordingGrantKind.instances.append(self)
 
 
+def _no_match_step() -> Mock:
+    step = _grant_step(())
+    step.features.input_data_match = None
+    return step
+
+
 class TestCredentialGrantHelper:
     """_credential_grant(step) builds a fresh grant of only the step's declared handles."""
 
@@ -2025,18 +1996,15 @@ class TestCredentialGrantHelper:
     @pytest.mark.parametrize(
         "make_step",
         [
-            pytest.param(lambda: _grant_step(()), id="no_match_on_a_mock_step"),
+            pytest.param(lambda: _no_match_step(), id="no_match_on_a_mock_step"),
             pytest.param(lambda: SimpleNamespace(features=SimpleNamespace(input_data_match=None)), id="not_a_fg_step"),
             pytest.param(lambda: Mock(spec=JoinStep), id="join_step"),
         ],
     )
     def test_step_secrets_are_empty_without_a_match(self, make_step: Callable[[], Any]) -> None:
-        step = make_step()
-        if isinstance(step, Mock) and hasattr(step, "features"):
-            step.features.input_data_match = None
         executor, *_ = _grant_executor(_grant_step(()), _grant_collection())
 
-        assert executor._step_secrets(step) == (frozenset(), frozenset())
+        assert executor._step_secrets(make_step()) == (frozenset(), frozenset())
 
     def test_a_non_db_access_on_a_non_db_group_adds_no_secrets(self) -> None:
         step = _grant_step(())

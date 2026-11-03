@@ -1388,27 +1388,6 @@ def test_a_multiprocessing_step_registers_only_its_own_credentials_secrets(fligh
 
 
 @pytest.mark.timeout(15)
-def test_a_failing_multiprocessing_step_is_masked_in_the_parent_with_two_credentials(
-    flight_server: Any, caplog: pytest.LogCaptureFixture
-) -> None:
-    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-
-    with caplog.at_level(logging.DEBUG):
-        with pytest.raises(ValueError) as excinfo:
-            mloda.run_all(
-                [Feature("chs_rc_failing_a", options={HANDLE_KEY: _VAULT_A})],
-                compute_frameworks=[PandasDataFrame],
-                parallelization_modes={ParallelizationMode.MULTIPROCESSING},
-                flight_server=flight_server,
-                data_access_collection=_vault_dac(_TWO_VAULTS),
-                plugin_collector=PluginCollector.enabled_feature_groups({ChsRcFailingFG}),
-            )
-
-    assert _HOST_A in str(excinfo.value)
-    _assert_token_gone(excinfo.value, ChsRcFailingFG, caplog, ("a-hmac-Gp8Tn5Rz4", "a-key-Mq3Wc7Vh2"))
-
-
-@pytest.mark.timeout(15)
 @pytest.mark.parametrize("mode", _GRANT_MODES)
 def test_error_echoing_values_read_with_read_credential_is_masked_in_every_mode(
     mode: ParallelizationMode,

@@ -916,6 +916,23 @@ class TestSuccess:
         assert record["source_feature_group"] == "JsonFG"
         assert record["join_type"] == "inner"
 
+    def test_step_record_omits_the_credential_handles(self) -> None:
+        step = PlanStep(
+            step_kind="compute",
+            feature_names=("a",),
+            feature_group=CsvFG,
+            compute_framework=None,
+            source_feature_group=None,
+            source_compute_framework=None,
+            credential_handles=("vault-a", "vault-b"),
+        )
+
+        record = _step_record(1, step, None)
+
+        assert "credential_handles" not in record
+        assert set(record) == STEP_KEYS
+        assert "vault-a" not in json.dumps(record)
+
     def test_lineage_of_source_columns(self, tmp_path: Path) -> None:
         result = _success(_explain(tmp_path, {"features": ["customer_id", "income"]}))
         assert result["lineage"] == {"customer_id": ["sales.customer_id"], "income": ["sales.income"]}

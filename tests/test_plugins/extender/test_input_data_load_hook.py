@@ -36,6 +36,7 @@ from mloda.provider import (
     FileSource,
     InputDataDescriptor,
     SourceMatch,
+    credential_handle_spec,
 )
 from mloda.steward import GateBypassError
 from mloda.user import (
@@ -1432,3 +1433,62 @@ class TestInputDataLoadAuditForSourceGroups:
         assert context.data_access_identity == "api_data:audited"
         assert context.data_access_identity_is_fallback is False
         assert context.reader_class is ApiDataFG
+
+
+class _HandleThreadedLoadFG(_threaded_load_feature_group("received"), DataCreatorFeatureGroup):  # type: ignore[misc]
+    """The threaded received-FeatureSet loader group, made a named data creator declaring a credential handle."""
+
+    PROPERTY_MAPPING = {"idl_vault_handle": credential_handle_spec("Vault handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"idl_handle_col"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"idl_handle_col": super().calculate_feature(data, features)}
+
+
+class TestInputDataLoadHookCarriesCredentialHandles:
+    """The INPUT_DATA_LOAD HookContext carries the calculate step's credential handles."""
+
+    def test_direct_path_copies_the_handles_from_the_calculate_context(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        cfw = ComputeFramework(function_extender={extender})
+        cfw.run_context = RunContext()
+
+        with cfw.activate(), _build_calc_context(credential_handles=("vault-a", "vault-b")).activate():
+            _load(_DirectLoader, "access", FeatureSet())
+
+        assert extender.captured is not None
+        assert extender.captured.credential_handles == ("vault-a", "vault-b")
+
+    def test_direct_path_without_handles_is_empty(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        cfw = ComputeFramework(function_extender={extender})
+        cfw.run_context = RunContext()
+
+        with cfw.activate(), _build_calc_context().activate():
+            _load(_DirectLoader, "access", FeatureSet())
+
+        assert extender.captured is not None
+        assert extender.captured.credential_handles == ()
+
+    def test_marker_replay_path_carries_the_handles_of_a_run(self) -> None:
+        gate = _GateInputDataLoadExtender()
+
+        mloda.run_all(
+            [Feature("idl_handle_col", options={"idl_vault_handle": "vault-main"})],
+            compute_frameworks=[PythonDictFramework],
+            data_access_collection=DataAccessCollection(credentials={"vault-main": {"key": "idl-1"}}),
+            plugin_collector=PluginCollector.enabled_feature_groups({_HandleThreadedLoadFG}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={gate},
+        )
+
+        assert len(gate.all_captured) == 1
+        assert gate.all_captured[0].credential_handles == ("vault-main",)

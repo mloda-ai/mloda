@@ -648,6 +648,7 @@ class TestPlanStepDataclass:
             "feature_group_version",
             "feature_group_hash",
             "leaves_connection",
+            "credential_handles",
         ]
 
     def test_join_keys_defaults_to_none(self) -> None:

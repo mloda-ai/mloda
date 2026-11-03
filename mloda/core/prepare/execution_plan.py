@@ -286,6 +286,7 @@ class ExecutionPlan:
                 step.credential_handles = declared_credential_handles(
                     step.feature_group, step.features.options or Options()
                 )
+                step.features.credential_handles = step.credential_handles
             elif isinstance(step, JoinStep):
                 consumers = [owner[u] for u in records.get(step.uuid, ()) if u in owner] or [
                     owner[u] for u in step.destination_framework_uuids if u in owner

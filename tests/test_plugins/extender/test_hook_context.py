@@ -899,7 +899,7 @@ class TestInstrumentPreservesSelf:
         assert not hasattr(wrapped, "__self__")
 
 
-_EMPTY_TUPLE_DEFAULTS = {"feature_names", "specialized_from", "failed_rows"}
+_EMPTY_TUPLE_DEFAULTS = {"feature_names", "specialized_from", "failed_rows", "credential_handles"}
 
 
 class TestHookContextKeywordDefaults:

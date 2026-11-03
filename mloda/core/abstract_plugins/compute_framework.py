@@ -1118,6 +1118,7 @@ class ComputeFramework(ABC):
         input_check: InputCheck | None = None
         specialized_from: tuple[str, ...] = ()
         step_uuid: UUID | None = None
+        credential_handles: tuple[str, ...] = ()
         implementation: str | None = None
         implementation_version: str | None = None
         if isinstance(features, FeatureSet):
@@ -1128,6 +1129,7 @@ class ComputeFramework(ABC):
                     lambda: as_str(impl.version()), None, field=f"{implementation}.version", warn_once_for=impl
                 )
             step_uuid = features.step_uuid
+            credential_handles = features.credential_handles
             feature_names = tuple(str(name) for name in features.get_all_names())
             input_features = self._declared_input_feature_names(feature_group_cls, features)
             input_feature_edges = getattr(features, "declared_input_feature_edges", None)
@@ -1161,6 +1163,7 @@ class ComputeFramework(ABC):
             plan_id=self.run_context.plan_id,
             structure_hash=self.run_context.structure_hash,
             step_uuid=step_uuid,
+            credential_handles=credential_handles,
             carrier=self.run_context.carrier,
             tenant_id=self.run_context.tenant_id,
             project_id=self.run_context.project_id,

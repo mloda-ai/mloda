@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -22,6 +23,8 @@ from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureGro
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsConsumerFG, ChsRawSecretFG
 from tests.mixins.neutral_csv_source import neutral_csv_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     toy_dac,
@@ -985,3 +988,48 @@ class TestImplementationIdentityOnCalculateFeature:
         assert validate_output.captured is not None
         assert validate_output.captured.implementation == extender.captured.implementation
         assert validate_output.captured.implementation_version == extender.captured.implementation_version
+
+
+class TestHookContextCredentialHandles:
+    """Every compute-step hook context carries the step's declared credential handles."""
+
+    @pytest.mark.parametrize(
+        "hook",
+        [
+            ExtenderHook.VALIDATE_INPUT_FEATURE,
+            ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+            ExtenderHook.VALIDATE_OUTPUT_FEATURE,
+        ],
+    )
+    def test_the_declared_handles_reach_the_context(self, hook: ExtenderHook) -> None:
+        extender = _ContextCapturingExtender(hook)
+
+        mloda.run_all(
+            [Feature("chs_consumer", options={HANDLE_KEY: "vault-main"})],
+            compute_frameworks=[PandasDataFrame],
+            data_access_collection=DataAccessCollection(credentials={"vault-main": {"key": "chs-wiring-1"}}),
+            plugin_collector=PluginCollector.enabled_feature_groups({ChsRawSecretFG, ChsConsumerFG}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert extender.captured is not None
+        assert extender.captured.credential_handles == ("vault-main",)
+
+    def test_a_hand_built_context_defaults_to_no_handles(self) -> None:
+        context = HookContext(
+            hook=ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+            feature_group_class=None,
+            feature_group_version=None,
+            compute_framework_name=None,
+        )
+
+        assert context.credential_handles == ()
+
+    def test_a_step_without_handles_has_an_empty_tuple(self) -> None:
+        extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+
+        _build_framework({extender}).run_calculate_feature(_CalcFeatureGroup, _build_feature_set())
+
+        assert extender.captured is not None
+        assert extender.captured.credential_handles == ()

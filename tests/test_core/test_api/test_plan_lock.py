@@ -26,7 +26,9 @@ from mloda.steward import (
     write_plan_lock,
 )
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.provider import BaseFeatureGroupVersion, ComputeFramework, FeatureGroup, Implementation
+from tests.helpers.credential_handle_stubs import ChsTwoHandleFG
 import importlib.metadata
 from collections.abc import Iterator
 
@@ -820,3 +822,113 @@ def test_plan_content_hash_is_independent_of_set_and_dict_order() -> None:
     third = _compute_step(feature_set_options=Options(group={"m": proxy_a}))
     fourth = _compute_step(feature_set_options=Options(group={"m": proxy_b}))
     assert plan_content_hash([third]) == plan_content_hash([fourth])
+
+
+_NO_HANDLE_LOCK = (
+    '{\n  "compute": [\n    {\n      "compute_framework": '
+    '"mloda_plugins.compute_framework.base_implementations.pandas.dataframe:PandasDataFrame",\n'
+    '      "compute_framework_reason": null,\n      "feature_group": '
+    '"mloda_plugins.feature_group.experimental.aggregated_feature_group.base:AggregatedFeatureGroup",\n'
+    '      "feature_names": [\n        "lock_io_value"\n      ],\n      "implementation": null,\n'
+    '      "implementation_hash": null,\n      "implementation_specialized_from": [],\n'
+    '      "input_feature_edges": {},\n      "leaves_connection": null,\n      "result_framework": null,\n'
+    '      "specialized_from": []\n    }\n  ],\n  "format": 8,\n  "joins": [],\n'
+    '  "requested_features": [\n    "lock_io_value"\n  ],\n  "transforms": []\n}\n'
+)
+_NO_HANDLE_STRUCTURE_HASH = "4596f5bde15568ac6ca82f2c379bde0522f073de137cee0e4e16aa21d1ed8cc2"
+_HANDLES = ("vault-a", "vault-b")
+
+
+def _two_handle_inputs() -> dict[str, Any]:
+    return {
+        "features": [
+            Feature("chs_two_handle_col", options={"chs_two_z_handle": "vault-b", "chs_two_a_handle": "vault-a"})
+        ],
+        "compute_frameworks": [PandasDataFrame],
+        "data_access_collection": DataAccessCollection(credentials={"vault-a": {"k": "1"}, "vault-b": {"k": "2"}}),
+        "plugin_collector": PluginCollector.enabled_feature_groups({ChsTwoHandleFG}),
+    }
+
+
+def _explain_two_handles() -> list[PlanStep]:
+    return list(mloda.explain(**_two_handle_inputs()))
+
+
+def test_explain_shows_the_declared_handles_sorted_and_the_lock_records_them() -> None:
+    steps = _explain_two_handles()
+
+    (compute,) = [s for s in steps if s.step_kind == "compute"]
+    assert compute.credential_handles == _HANDLES
+    assert json.loads(_lock_text(steps))["compute"][0]["credential_handles"] == list(_HANDLES)
+
+
+def test_a_session_resolved_plan_shows_the_declared_handles_sorted() -> None:
+    session = mloda.prepare(**_two_handle_inputs())
+
+    assert [s.credential_handles for s in session.resolved_plan() if s.step_kind == "compute"] == [_HANDLES]
+
+
+def test_steps_without_handles_default_to_an_empty_tuple_and_the_lock_has_no_key() -> None:
+    plan = _plan()
+
+    assert [s.credential_handles for s in plan] == [(), (), ()]
+    assert all("credential_handles" not in record for record in json.loads(_lock_text(plan))["compute"])
+
+
+def test_join_and_transform_steps_have_no_handles() -> None:
+    assert _join_step().credential_handles == ()
+    assert _transform_step().credential_handles == ()
+
+
+def test_the_handle_key_is_written_only_in_the_compute_record() -> None:
+    content = json.loads(_lock_text([_compute_step(credential_handles=_HANDLES), _join_step(), _transform_step()]))
+
+    assert content["compute"][0]["credential_handles"] == list(_HANDLES)
+    assert all("credential_handles" not in r for r in content["joins"] + content["transforms"])
+    assert content["format"] == PLAN_LOCK_FORMAT == 8
+
+
+def test_plan_content_hash_ignores_the_declared_handles() -> None:
+    with_handles = [_compute_step(credential_handles=_HANDLES)]
+    without = [_compute_step()]
+
+    assert plan_content_hash(with_handles) == plan_content_hash(without)
+    assert plan_structure_hash(with_handles) != plan_structure_hash(without)
+
+
+def test_plan_content_hash_of_a_real_handle_plan_equals_the_hash_with_the_field_cleared() -> None:
+    steps = _explain_two_handles()
+
+    cleared = [dataclasses.replace(s, credential_handles=()) for s in steps]
+
+    assert plan_content_hash(steps) == plan_content_hash(cleared)
+    assert plan_structure_hash(steps) != plan_structure_hash(cleared)
+
+
+def test_a_no_handle_plan_renders_the_frozen_lock_text_and_structure_hash() -> None:
+    plan = [_compute_step()]
+
+    assert _lock_text(plan) == _NO_HANDLE_LOCK
+    assert plan_structure_hash(plan) == _NO_HANDLE_STRUCTURE_HASH
+    assert plan_structure_hash(plan) == hashlib.sha256(_NO_HANDLE_LOCK.encode("utf-8")).hexdigest()
+
+
+def test_a_pre_field_lock_still_passes_for_a_no_handle_plan(tmp_path: Path) -> None:
+    lock = tmp_path / "plan.lock"
+    lock.write_text(_NO_HANDLE_LOCK, encoding="utf-8")
+
+    check_plan_lock([_compute_step()], lock)
+
+
+def test_a_pre_field_lock_fails_for_a_handle_plan_with_a_diff_naming_only_the_handles(tmp_path: Path) -> None:
+    lock = tmp_path / "plan.lock"
+    lock.write_text(_NO_HANDLE_LOCK, encoding="utf-8")
+
+    with pytest.raises(PlanLockMismatchError) as caught:
+        check_plan_lock([_compute_step(credential_handles=_HANDLES)], lock)
+
+    lines = str(caught.value).splitlines()
+    changed = [ln for ln in lines if ln[:1] in "+-" and not ln.startswith(("+++", "---"))]
+    assert changed
+    assert all(ln.startswith("+") for ln in changed)
+    assert {ln[1:].strip() for ln in changed} == {'"credential_handles": [', '"vault-a",', '"vault-b"', "],"}

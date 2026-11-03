@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from mloda.core.abstract_plugins.components.credential_leaves import iter_credential_leaves
 from mloda.core.abstract_plugins.components.property_spec import NO_DEFAULT, PropertySpec
 from mloda.core.abstract_plugins.components.utils import PREFIX_OPTION_KEY_FLAG, escalate_match_abort
 
@@ -99,28 +100,10 @@ def declared_credential_handles(feature_group: type[FeatureGroup], options: Opti
     return tuple(sorted({v for v in _declared(feature_group, options).values() if isinstance(v, str)}))
 
 
-def _is_safe_credential_key(key: str) -> bool:
-    """Whether a bytes value under this key is allowed; one place for a later safe-key list."""
-    return False
-
-
-def _bytes_path(value: Any, path: str, seen: set[int]) -> str | None:
-    if isinstance(value, (bytes, bytearray)):
-        return path
-    if id(value) in seen:
-        return None
-    children: list[tuple[str, Any]]
-    if isinstance(value, Mapping):
-        children = [(f"{path}.{k}" if path else str(k), v) for k, v in value.items()]
-    elif isinstance(value, (list, tuple, set, frozenset)):
-        children = [(f"{path}[{i}]", v) for i, v in enumerate(value)]
-    else:
-        return None
-    seen.add(id(value))
-    for child_path, child in children:
-        found = _bytes_path(child, child_path, seen)
-        if found is not None:
-            return found
+def _bytes_path(entry: Any) -> str | None:
+    for item in iter_credential_leaves(entry):
+        if item.secret and isinstance(item.leaf, (bytes, bytearray)):
+            return item.path
     return None
 
 
@@ -171,8 +154,8 @@ def _check_one(
                 f"Credential handle '{handle}' for option '{key}' of {group_name} is missing required "
                 f"fields: {missing}."
             )
-    path = _bytes_path(entry, "", set())
-    if path is not None and not _is_safe_credential_key(path):
+    path = _bytes_path(entry)
+    if path is not None:
         raise _refuse(
             f"Credential handle '{handle}' for option '{key}' of {group_name} holds bytes at '{path}'. "
             f"Store a hex or base64 str and decode it in the plugin."

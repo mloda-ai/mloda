@@ -656,6 +656,58 @@ def test_threading_load_error_masks_registered_token(
     _assert_token_gone(excinfo.value, group, caplog)
 
 
+_TOKEN_KEYS = ["key", "hmac", "toyfmt_custom_field"]
+
+
+@pytest.mark.parametrize("token_key", _TOKEN_KEYS)
+def test_sync_load_error_masks_registered_token_under_any_key(token_key: str, caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(Exception) as excinfo:
+            mloda.run_all(
+                [Feature(name=_TOKEN_COLUMN)],
+                **toy_token_request(TokenValueErrorFG, _TOKEN_COLUMN, token_key=token_key),
+            )
+
+    _assert_token_gone(excinfo.value, TokenValueErrorFG, caplog)
+
+
+@pytest.mark.parametrize("token_key", _TOKEN_KEYS)
+def test_threading_load_error_masks_registered_token_under_any_key(
+    token_key: str, flight_server: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(Exception) as excinfo:
+            mloda.run_all(
+                [Feature(name=_TOKEN_COLUMN)],
+                parallelization_modes={ParallelizationMode.THREADING},
+                flight_server=flight_server,
+                **toy_token_request(TokenValueErrorFG, _TOKEN_COLUMN, token_key=token_key),
+            )
+
+    _assert_token_gone(excinfo.value, TokenValueErrorFG, caplog)
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("token_key", _TOKEN_KEYS)
+def test_multiprocessing_load_error_masks_registered_token_under_any_key(
+    token_key: str, flight_server: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(Exception) as excinfo:
+            mloda.run_all(
+                [Feature(name=_TOKEN_COLUMN)],
+                parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+                flight_server=flight_server,
+                **toy_token_request(TokenValueErrorFG, _TOKEN_COLUMN, token_key=token_key),
+            )
+
+    exc = excinfo.value
+    assert type(exc) is ValueError
+    assert TOY_TOKEN not in str(exc)
+    assert TOY_TOKEN not in repr(exc.args)
+    assert TOY_TOKEN not in caplog.text
+
+
 def test_stream_all_load_error_masks_registered_token(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.DEBUG):
         with pytest.raises(ValueError) as excinfo:

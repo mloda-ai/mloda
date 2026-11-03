@@ -151,7 +151,7 @@ Not every backend's native type system can distinguish every precision mloda dec
 
 Integer widths without a member resolve to the next lossless one: int16 and uint16 to INT32, uint32 to INT64.
 
-Naive Arrow `s` and `ns` timestamps resolve to TIMESTAMP_MICROS.
+Naive Arrow `s` and `ns` timestamps resolve to TIMESTAMP_MICROS. Polars has no second precision, so a naive `s` column reads back as TIMESTAMP_MILLIS.
 
 | Framework | INT32 / INT64 | INT8 / UINT8 / UINT64 | FLOAT / DOUBLE | TIMESTAMP_MILLIS / MICROS | TIMESTAMP_MICROS_TZ | LIST |
 |---|---|---|---|---|---|---|

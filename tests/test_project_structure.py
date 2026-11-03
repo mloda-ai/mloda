@@ -420,7 +420,7 @@ class TestToxConfig:
         readme = _read_text(PROJECT_ROOT / "README.md")
         code, output = first_example(readme)
         assert "PythonDictFramework" in code, "the first README example must run on a bare install"
-        assert "## 30-Second Example" in readme, "`mloda demo` links the #30-second-example anchor"
+        assert "## Run it" in readme, "`mloda demo` links the #run-it anchor"
         (run_all,) = [
             node
             for node in ast.walk(ast.parse(code))

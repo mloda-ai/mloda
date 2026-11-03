@@ -1,4 +1,4 @@
-"""Run the README first example on a bare wheel install, as a new user would.
+"""Run every README python block on a bare wheel install, as a new user would.
 
 Usage: python -m tests.readme_first_run <README.md> <dist-dir>
 """
@@ -13,7 +13,7 @@ from pathlib import Path
 
 from tests.docs_corpus import OUTPUT_TAG, RUNNABLE_TAG
 
-_FIRST_EXAMPLE = re.compile(
+_PYTHON_BLOCK = re.compile(
     rf"```{RUNNABLE_TAG}\n(.*?)```(?:\s*```{OUTPUT_TAG}\n(.*?)```)?",
     re.DOTALL,
 )
@@ -22,18 +22,25 @@ _PANDAS_HINT = 'pip install "mloda[pandas]"'
 _timings: list[tuple[str, float]] = []
 
 
+def python_blocks(readme_text: str) -> list[tuple[str, str | None]]:
+    """Every python block paired with the text block directly after it (None if absent), in document order."""
+    return [(match.group(1), match.group(2)) for match in _PYTHON_BLOCK.finditer(readme_text)]
+
+
 def first_example(readme_text: str) -> tuple[str, str | None]:
     """The first python block and the text block directly after it (None if absent)."""
-    match = _FIRST_EXAMPLE.search(readme_text)
-    assert match, f"README has no ```{RUNNABLE_TAG} block"
-    return match.group(1), match.group(2)
+    blocks = python_blocks(readme_text)
+    assert blocks, f"README has no ```{RUNNABLE_TAG} block"
+    return blocks[0]
 
 
-def _run(label: str, argv: list[str], env: dict[str, str] | None = None) -> "subprocess.CompletedProcess[str]":
+def _run(label: str | None, argv: list[str], env: dict[str, str] | None = None) -> "subprocess.CompletedProcess[str]":
+    """Run argv; a label records the run in the time-to-first-success timings, None leaves it out."""
     start = time.monotonic()
     # Safe: argv is built from sys.executable, a temp venv and caller-given paths, no shell.
     result = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=300)  # nosec B603
-    _timings.append((label, time.monotonic() - start))
+    if label is not None:
+        _timings.append((label, time.monotonic() - start))
     return result
 
 
@@ -47,8 +54,22 @@ def _summary() -> str:
     return "\n".join(lines)
 
 
+def _block_failure(index: int, code: str, expected: str | None, run: "subprocess.CompletedProcess[str]") -> str | None:
+    """Why the run of README python block ``index`` is not acceptable, or None when it is."""
+    first_line = next((line for line in code.splitlines() if line.strip()), "")
+    where = f"README python block {index} ({first_line!r})"
+    if run.returncode != 0:
+        return f"{where} failed, exit code {run.returncode}\nstdout:\n{run.stdout}\nstderr:\n{run.stderr}"
+    if run.stderr.strip():
+        return f"{where} must run quietly, stderr was:\n{run.stderr}"
+    if expected is not None and run.stdout.strip() != expected.strip():
+        return f"{where} stdout differs from README\nexpected:\n{expected.strip()}\nactual:\n{run.stdout.strip()}"
+    return None
+
+
 def main(readme: Path, dist: Path) -> int:
-    code, expected = first_example(readme.read_text(encoding="utf-8"))
+    blocks = python_blocks(readme.read_text(encoding="utf-8"))
+    assert blocks, f"README has no ```{RUNNABLE_TAG} block"
     wheels = sorted(dist.glob("*.whl"))
     assert len(wheels) == 1, f"expected exactly one wheel in {dist}, found {wheels}"
     with tempfile.TemporaryDirectory() as tmp:
@@ -70,22 +91,21 @@ def main(readme: Path, dist: Path) -> int:
         present = probed.stdout.strip()
         assert present == "[]", f"bare install must not contain optional backends, found {present}"
 
-        script = Path(tmp) / "first_example.py"
-        script.write_text(code, encoding="utf-8")
-        run = _run("run README first example", [python, "-I", str(script)], env=_clean_env())
-        print(_summary())
-        if run.returncode != 0:
-            print(f"first example failed, exit code {run.returncode}\nstdout:\n{run.stdout}\nstderr:\n{run.stderr}")
-            return 1
-        if run.stderr.strip():
-            print(f"first example must run quietly, stderr was:\n{run.stderr}")
-            return 1
-        if expected is None:
-            print("README has no ```text block after the first example")
-            return 1
-        if run.stdout.strip() != expected.strip():
-            print(f"stdout differs from README\nexpected:\n{expected.strip()}\nactual:\n{run.stdout.strip()}")
-            return 1
+        for index, (code, expected) in enumerate(blocks, 1):
+            script = Path(tmp) / f"block_{index}.py"
+            script.write_text(code, encoding="utf-8")
+            # Only the first block counts towards time to first success.
+            label = "run README first example" if index == 1 else None
+            run = _run(label, [python, "-I", str(script)], env=_clean_env())
+            if index == 1:
+                print(_summary())
+            failure = _block_failure(index, code, expected, run)
+            if failure:
+                print(failure)
+                return 1
+            if index == 1 and expected is None:
+                print("README has no ```text block after the first example")
+                return 1
 
         mloda_script = str(
             venv / ("Scripts" if os.name == "nt" else "bin") / ("mloda.exe" if os.name == "nt" else "mloda")
@@ -103,8 +123,9 @@ def main(readme: Path, dist: Path) -> int:
             print(f"mloda demo output lacks {missing}\nstdout:\n{demo.stdout}\nstderr:\n{demo.stderr}")
             return 1
 
-        pandas_code = code.replace('"PythonDictFramework"', '"PandasDataFrame"')
-        assert pandas_code != code, 'README first example must name "PythonDictFramework"'
+        first_code = blocks[0][0]
+        pandas_code = first_code.replace('"PythonDictFramework"', '"PandasDataFrame"')
+        assert pandas_code != first_code, 'README first example must name "PythonDictFramework"'
         pandas_script = Path(tmp) / "pandas_example.py"
         pandas_script.write_text(pandas_code, encoding="utf-8")
         # Not recorded in the time-to-first-success timings.

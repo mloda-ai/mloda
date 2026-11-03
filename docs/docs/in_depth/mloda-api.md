@@ -160,6 +160,8 @@ for step in results.plan:
 
 `RunResult.frame_for(feature)` returns the frame that holds a requested feature, matched by name, or by a `Feature` whose group options (and pinned compute framework) are a subset of the step's; the closest step wins. It raises `ValueError` if none or several match (the error notes a feature that was computed but not requested).
 
+`RunResult.summary(max_rows=20)` renders the frames and the plan as plain text: a `Result` section with one aligned table per dict-of-lists frame, cut to `max_rows` rows with a remainder line (other frame types print via `str`), then a `Plan` section with one line per step naming its feature group, feature names and its `api_data` source or input features. `mloda demo` prints the same layout, and the method imports no optional backend.
+
 `run_id` and `plan_id` on `RunResult` and `ResultStream` (from `run_all`, `stream_all`, `run()` and `stream_run()`) are the run's `HookContext.run_id` and `plan_id`, so a result can be matched to the records extenders wrote for its run; a `ResultStream` has them before its first element.
 
 To pin a resolved plan, see [Plan Lock](plan-lock.md).

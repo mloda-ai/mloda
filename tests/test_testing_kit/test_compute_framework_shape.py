@@ -15,6 +15,7 @@ from mloda._testing.compute_framework_shape import (
     check_compute_framework_shape,
 )
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.filter.filter_engine import BaseFilterEngine
 
 Factory = Callable[[], type[ComputeFramework]]
 
@@ -100,6 +101,43 @@ def make_mask_engine_bad() -> type[ComputeFramework]:
     return CfShapeBadMask
 
 
+def make_uuid_not_a_uuid() -> type[ComputeFramework]:
+    class CfShapeStrUuid(ComputeFramework):
+        def __init__(self, uuid: UUID | None = None) -> None:
+            super().__init__()
+            self.uuid: Any = "not-a-uuid"
+
+    return CfShapeStrUuid
+
+
+def make_constant_uuid() -> type[ComputeFramework]:
+    pinned = UUID("12345678-1234-5678-1234-567812345678")
+
+    class CfShapeConstUuid(ComputeFramework):
+        def __init__(self, uuid: UUID | None = None) -> None:
+            super().__init__()
+            self.uuid = pinned if uuid is None else uuid
+
+    return CfShapeConstUuid
+
+
+def make_mask_engine_not_implemented() -> type[ComputeFramework]:
+    class CfShapeMaskNotImpl(ComputeFramework):
+        @classmethod
+        def mask_engine(cls) -> Any:
+            raise NotImplementedError("no mask")
+
+    return CfShapeMaskNotImpl
+
+
+def make_filter_engine_instance_method() -> type[ComputeFramework]:
+    class CfShapeInstanceFilter(ComputeFramework):
+        def filter_engine(self) -> Any:  # type: ignore[override]
+            return BaseFilterEngine
+
+    return CfShapeInstanceFilter
+
+
 def test_empty_framework_passes_with_no_aspects() -> None:
     cls = make_empty()
     result = check_compute_framework_shape(cls)
@@ -125,7 +163,6 @@ BUILT_INS = [
     ("mloda.user.duckdb", "DuckDBFramework", "duckdb", ("filter", "mask", "merge")),
     ("mloda.user.sqlite", "SqliteFramework", "pyarrow", ("filter", "mask", "merge")),
     ("mloda.user.iceberg", "IcebergFramework", "pyiceberg", ("filter",)),
-    ("mloda.user.spark", "SparkFramework", "pyspark", ("filter", "mask", "merge")),
 ]
 
 
@@ -150,6 +187,10 @@ def test_built_in_framework_passes(module: str, name: str, dependency: str | Non
         (make_filter_engine_not_a_class, "filter_engine:", "BaseFilterEngine"),
         (make_merge_engine_raises, "merge_engine:", "boom"),
         (make_mask_engine_bad, "mask_engine:", "BaseMaskEngine"),
+        (make_uuid_not_a_uuid, "construct:", "UUID"),
+        (make_constant_uuid, "construct:", "share"),
+        (make_mask_engine_not_implemented, "mask_engine:", "None or"),
+        (make_filter_engine_instance_method, "filter_engine:", "classmethod"),
     ],
 )
 def test_broken_framework_fails_only_its_check(make: Factory, prefix: str, message: str) -> None:

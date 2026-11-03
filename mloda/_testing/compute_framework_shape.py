@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from uuid import UUID
 
 from mloda._testing.result import CheckResult
@@ -37,11 +38,14 @@ def _construct_failures(cls: type[ComputeFramework]) -> list[str]:
     return []
 
 
-def _read_accessor(cls: type[ComputeFramework], name: str) -> _Read:
-    """Return (value, error); NotImplementedError reads as (_ABSENT, None)."""
+def _read_accessor(cls: type[ComputeFramework], name: str, absent_ok: bool = True) -> _Read:
+    """Return (value, error); NotImplementedError reads as (_ABSENT, None) when absent_ok."""
+    catching: tuple[type[Exception], ...] = (NotImplementedError,) if absent_ok else ()
 
     def read() -> _Read:
-        return safe_field_with_error(lambda: getattr(cls, name)(), _ABSENT, (NotImplementedError,))
+        if not catching:
+            return getattr(cls, name)(), None
+        return safe_field_with_error(lambda: getattr(cls, name)(), _ABSENT, catching)
 
     fallback: _Read = (_ABSENT, None)
     result, error = safe_field_with_error(read, fallback)
@@ -60,16 +64,27 @@ def _engine_failure(cls: type[ComputeFramework], name: str, base: type) -> str |
 
 
 def _mask_failure(cls: type[ComputeFramework]) -> str | None:
-    value, error = _read_accessor(cls, "mask_engine")
+    value, error = _read_accessor(cls, "mask_engine", absent_ok=False)
     if error is not None:
-        return f"mask_engine: raised {error}"
+        return f"mask_engine: must return None or a BaseMaskEngine subclass, but raised {error}"
     if value is _ABSENT or value is None or is_nominal_subclass(value, BaseMaskEngine):
         return None
     return f"mask_engine: must return None or a type subclassing BaseMaskEngine, got {value!r}"
 
 
+def _instance_method_failures(cls: type[ComputeFramework], names: tuple[str, ...]) -> list[str]:
+    return [
+        f"{name}: must be a classmethod, not an instance method"
+        for name in names
+        if not isinstance(inspect.getattr_static(cls, name), (classmethod, staticmethod))
+    ]
+
+
 def _accessor_failures(cls: type[ComputeFramework]) -> list[str]:
-    failures: list[str] = []
+    names = ("expected_data_framework", "filter_engine", "mask_engine", "merge_engine")
+    failures = _instance_method_failures(cls, names)
+    if failures:
+        return failures
     data, error = safe_field_with_error(lambda: cls.expected_data_framework(), None)
     if error is not None:
         failures.append(f"expected_data_framework: raised {error}")
@@ -95,7 +110,7 @@ def _is_available(cls: type[ComputeFramework]) -> tuple[bool, str | None]:
 
 
 def applicable_aspects(cls: type[ComputeFramework]) -> tuple[str, ...]:
-    """Return the subset of filter, mask, merge the framework serves; empty when it is unavailable."""
+    """Return the subset of filter, mask, merge the framework serves; () for unavailable frameworks."""
     available, _ = _is_available(cls)
     if not available:
         return ()

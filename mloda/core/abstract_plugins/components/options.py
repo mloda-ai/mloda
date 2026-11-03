@@ -265,8 +265,8 @@ class Options:
         self._own_keys_locked = True
 
     def add_to_group(self, key: str, value: Any, forward: bool = True) -> None:
-        """Add parameter to group (affects Feature Group resolution/splitting); ``forward=False``
-        marks the key via ``mark_non_forwarded`` so it never flows to input features through ``inherit_from``."""
+        """Add parameter to group (affects Feature Group resolution/splitting); ``forward=False`` also calls
+        ``mark_non_forwarded`` (stripped from pickled snapshots, still forwarded to input features)."""
         OptionsValidator.validate_can_add_to_group(key, value, self.group, self.context)
         self.group[key] = value
         if not self._own_keys_locked:
@@ -275,7 +275,11 @@ class Options:
             self.mark_non_forwarded(key)
 
     def mark_non_forwarded(self, key: str) -> None:
-        """Union ``key`` into ``non_forwarded_group_keys``, opting it out of ``inherit_from`` forwarding."""
+        """Union ``key`` into ``non_forwarded_group_keys`` so ``__getstate__`` strips it from pickled snapshots.
+
+        The key is still forwarded by ``inherit_from``, and its mark follows it there and through copies (unlike
+        ``NON_FORWARDED_KEYS``, which are never forwarded). Keep a key off input features with
+        ``PropertySpec.forward_to_inputs=False`` or ``forward_group``/``forward_group_exclude``."""
         self.non_forwarded_group_keys = self.non_forwarded_group_keys | frozenset({key})
 
     def add_to_context(self, key: str, value: Any) -> None:

@@ -31,11 +31,10 @@ from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
 from mloda.provider import SourceFeatureGroup
-from mloda.user import DataAccessCollection, Feature, ParallelizationMode, PluginCollector, mloda
+from mloda.user import DataAccessCollection, Feature, ParallelizationMode, PluginCollector, PluginLoader, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
-from mloda.user import PluginLoader
 from tests.helpers.subclass_walks import collect_until_dead, count_root_walks
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group import (
     OpToyBareFG,

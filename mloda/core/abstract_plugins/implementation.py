@@ -93,8 +93,7 @@ def _is_pair(cls: Any) -> bool:
 class Implementation(ABC, Generic[G]):
     """Names its pair with feature_group and compute_framework and computes it in calculate.
 
-    A subclass that defines `__init_subclass__` must call `super().__init_subclass__()`, since that call is what
-    registers it as a loaded implementation.
+    An overriding `__init_subclass__` must call super(), which registers the class.
     """
 
     feature_group: ClassVar[type[FeatureGroup]]

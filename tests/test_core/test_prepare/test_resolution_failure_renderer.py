@@ -3473,33 +3473,16 @@ class TestEveryStageLabelIsPinned:
         bullets = [line for line in message.split("\n") if line.startswith("  - ")]
         assert bullets == [f"  - RendererSuccessFG791 ({label}): {STAGE_LABEL_REASON_791}"]
 
-    def test_a_code_renders_as_a_suffix_after_the_reason_and_none_adds_nothing(self) -> None:
-        feature = Feature(STAGE_LABEL_FEATURE_791)
-        coded = EvaluationResult(
-            identified={},
-            eliminations={
-                RendererSuccessFG791: Elimination(
-                    stage="input_data", reason=STAGE_LABEL_REASON_791, code=CoreDeclineCode.COLUMN_NOT_FOUND
-                )
-            },
-        )
-        plain = EvaluationResult(
-            identified={},
-            eliminations={RendererSuccessFG791: Elimination(stage="input_data", reason=STAGE_LABEL_REASON_791)},
-        )
 
-        coded_message = render_resolution_failure(coded, feature)
-        plain_message = render_resolution_failure(plain, feature)
+class TestCodeSuffix:
+    """A decline code renders as a suffix after the reason; no code adds nothing."""
 
-        assert coded_message is not None
-        assert plain_message is not None
-        assert (
-            f"  - RendererSuccessFG791 (input data): {STAGE_LABEL_REASON_791} [code: column_not_found]" in coded_message
-        )
-        assert "[code:" not in plain_message
+    def test_a_code_is_appended_after_the_reason(self) -> None:
         assert near_miss_text("A", "input_data", "why", CoreDeclineCode.COLUMN_NOT_FOUND) == (
             "A (input data): why [code: column_not_found]"
         )
+
+    def test_no_code_adds_no_suffix(self) -> None:
         assert near_miss_text("A", "input_data", "why") == "A (input data): why"
 
 

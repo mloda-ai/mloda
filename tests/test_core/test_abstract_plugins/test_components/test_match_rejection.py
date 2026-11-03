@@ -307,11 +307,10 @@ class TestDeclineCodeField:
 
 
 _RECORDING_CALLEES = {"record_match_rejection", "replace_probe_match_rejection", "MatchRejection"}
-_REPO = Path(__file__).resolve().parents[4]
 
 
 def _source_files() -> list[Path]:
-    roots = [_REPO / "mloda", _REPO / "mloda_plugins"]
+    roots = [REPO_ROOT / "mloda", REPO_ROOT / "mloda_plugins"]
     return [f for root in roots for f in sorted(root.rglob("*.py")) if f.name != "match_rejection.py"]
 
 

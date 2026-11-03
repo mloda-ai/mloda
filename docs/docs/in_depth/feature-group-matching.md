@@ -45,7 +45,7 @@ The probe runs per feature, but a matched filter attaches to the whole `FeatureS
 
 Every caller reads the return by truthiness: any falsy value is a non-match, any truthy value a match. Filter matching additionally reports a falsy value that is not `False`, and each distinct report is a WARNING once per setup.
 
-Each recorded rejection can carry a machine-readable `code` (a `DeclineCode`, exported from `mloda.provider`). Core paths set a `CoreDeclineCode` member, the code reaches `Elimination.code` and is rendered as ` [code: <value>]` after the reason, and tools should match on the code, not the reason text. A plugin subclasses `DeclineCode` with its own members and passes `code=` to `record_match_rejection`; prefix the values (for example `"myplugin_stale_cache"`) so they cannot collide with another plugin's.
+A recorded rejection can carry a machine-readable `code` (a `DeclineCode` from `mloda.provider`), rendered as ` [code: <value>]` after the reason and available as `Elimination.code`. Tools should match on the code, not the reason text. A plugin subclasses `DeclineCode` with its own prefixed members (for example `"myplugin_stale_cache"`) and passes `code=` to `record_match_rejection`.
 
 A match hook that refuses the feature because of its name, for example an unknown output part, records the reason with `record_match_rejection(cls.__name__, reason, stage=NAME_STAGE)` (both from `mloda.provider`) and returns `False`; the near-miss then reads `feature name` instead of `option value`. Record the reason only when the name is otherwise addressed to the group, for example its base or prefix matches but the output part is unknown; a plain name mismatch returns `False` without recording anything.
 

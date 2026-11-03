@@ -4,6 +4,7 @@ from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef, api_data_scope
+from mloda.core.abstract_plugins.components.credential_access import readable_credentials
 from mloda.core.abstract_plugins.components.failed_rows import collect_failed_rows
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.cfw_manager import CfwManager
@@ -77,7 +78,8 @@ class FeatureGroupStep(Step):
                 data = self.run_calculate_feature(cfw, data)
         if collector.entries:
             cfw_register.add_failed_rows(collector.entries)
-        self.save_artifact(self.features, cfw_register)
+        with readable_credentials():
+            self.save_artifact(self.features, cfw_register)
 
         # return_data_type_rule
 

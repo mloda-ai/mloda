@@ -115,6 +115,8 @@ call has `isError` set and one error shape: `{"error": {"code", "message", "deta
 
 ## What stays on the server
 
+Credentials a group reads at run time with `read_credential` stay here too (see [Runtime access versus match-time binding](named-data-access-handles.md#runtime-access-versus-match-time-binding)).
+
 - Sources are named by alias only. Paths, connection details, data-access objects and option values never appear in a
   result, and a request cannot set data-access options.
 - A request may set only the option keys listed in `allow_options` (default: none). Any other key in `options`,

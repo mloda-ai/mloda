@@ -222,6 +222,20 @@ def test_import_provider_base_classes() -> None:
     assert provider_module.credential_handle_spec is core_credential_handle_spec
     assert "credential_handle_spec" in provider_module.__all__
     assert "CredentialHandleSpec" not in provider_module.__all__
+    from mloda.core.abstract_plugins.components import credential_access as core_access
+
+    for access_name in (
+        "read_credential",
+        "credentials_scope",
+        "ResolvedCredential",
+        "CredentialReadRefused",
+        "CredentialFieldMissing",
+    ):
+        assert getattr(provider_module, access_name) is getattr(core_access, access_name)
+        assert access_name in provider_module.__all__
+    assert "readable_credentials" not in provider_module.__all__
+    assert not issubclass(core_access.CredentialReadRefused, LookupError)
+    assert issubclass(core_access.CredentialFieldMissing, KeyError)
 
 
 # =============================================================================

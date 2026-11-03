@@ -43,6 +43,13 @@ from mloda.core.abstract_plugins.compute_framework import EmptyResultError as Em
 # Utilities
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.credential_access import (
+    CredentialFieldMissing,
+    CredentialReadRefused,
+    ResolvedCredential,
+    credentials_scope,
+    read_credential,
+)
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 
 # Feature set (internal computation container)
@@ -221,6 +228,11 @@ __all__ = [
     "is_positive_int",
     "property_spec",
     "credential_handle_spec",
+    "read_credential",
+    "credentials_scope",
+    "ResolvedCredential",
+    "CredentialReadRefused",
+    "CredentialFieldMissing",
     "NO_DEFAULT",
     "PropertyValidationError",
     "validate_property_values",

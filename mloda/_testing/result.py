@@ -12,6 +12,7 @@ class CheckResult:
     check: str
     subject: str
     failures: tuple[str, ...] = ()
+    notes: tuple[str, ...] = ()
 
     @property
     def passed(self) -> bool:

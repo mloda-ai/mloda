@@ -40,6 +40,37 @@ assert adapter.row_count(frame) == 2
 assert adapter.column_values(frame, "a") == [1, None]
 assert "pyarrow" not in sys.modules, "PythonDictAdapter must not import pyarrow"
 
+from mloda._testing.feature_group_shape import check_feature_group_shape
+from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+
+class RunKit(FeatureGroup):
+    @classmethod
+    def feature_names_supported(cls):
+        return {"rk_out"}
+
+    def input_features(self, options, feature_name):
+        return {Feature("rk_src")}
+
+    @classmethod
+    def return_data_type_rule(cls, feature):
+        return DataType.INT64
+
+    @classmethod
+    def calculate_feature(cls, data, features):
+        data["rk_out"] = [v * 2 for v in data["rk_src"]]
+        return data
+
+
+run = check_feature_group_shape(
+    RunKit, input_data=TypedTestData({"rk_src": (DataType.INT64, [1, 2])}), adapter=PythonDictAdapter()
+)
+assert run.failures == (), run.failures
+assert "pyarrow" not in sys.modules, "shape run checks must not import pyarrow"
+assert "pytest" not in sys.modules, "shape run checks must not import pytest"
+
 print("OK")
 """
 

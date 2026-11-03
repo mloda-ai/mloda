@@ -7,6 +7,9 @@ from typing import Any
 
 import pytest
 
+from mloda._testing.framework_adapter import PandasAdapter, PyArrowAdapter, PythonDictAdapter
+from mloda._testing.typed_data import TypedTestData
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda._testing.feature_group_shape import assert_feature_group_shape, check_feature_group_shape
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -37,7 +40,85 @@ def make_toy_group() -> type[FeatureGroup]:
         def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return {Feature("toy_src")}
 
+        @classmethod
+        def return_data_type_rule(cls, feature: Feature) -> DataType | None:
+            return DataType.INT64
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: Any) -> Any:
+            return _double_into(data, "toy_a", "toy_src")
+
     return ToyGroup
+
+
+def _is_columnar_dict(data: Any) -> bool:
+    return isinstance(data, dict)
+
+
+def _double_into(data: Any, out: str, src: str) -> Any:
+    """Add out = src * 2 to a dict or Arrow table frame."""
+    if _is_columnar_dict(data):
+        data[out] = [v * 2 for v in data[src]]
+        return data
+    import pyarrow.compute as pc
+
+    return data.append_column(out, pc.multiply(data[src], 2))
+
+
+def make_run_group(kind: str = "ok") -> type[FeatureGroup]:
+    """A group over input rg_src (INT64) and rg_label (STRING) that writes rg_out; kind injects one defect."""
+    counter = [0]
+
+    class RunGroup(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {"rg_out"}
+
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+            return {Feature("rg_src"), Feature("rg_label")}
+
+        @classmethod
+        def return_data_type_rule(cls, feature: Feature) -> DataType | None:
+            return DataType.INT64
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: Any) -> Any:
+            if kind == "drops_output":
+                return data
+            if kind == "overwrites_input":
+                data = _double_into(data, "rg_out", "rg_src")
+                data["rg_src"] = [0 for _ in data["rg_src"]]
+                return data
+            if kind == "wrong_type":
+                data["rg_out"] = [str(v) for v in data["rg_src"]]
+                return data
+            if kind == "loses_schema_on_zero_rows":
+                import pyarrow as pa
+
+                if data.num_rows == 0:
+                    return data.append_column("rg_out", pa.nulls(0))
+                return _double_into(data, "rg_out", "rg_src")
+            if kind == "leaks_cell_in_error":
+                labels = data["rg_label"]
+                if labels and labels[0] != "alpha-secret":
+                    raise ValueError("unexpected label, expected 'alpha-secret'")
+                return _double_into(data, "rg_out", "rg_src")
+            if kind == "nondeterministic":
+                counter[0] += 1
+                data["rg_out"] = [counter[0]] * len(data["rg_src"])
+                return data
+            return _double_into(data, "rg_out", "rg_src")
+
+    return RunGroup
+
+
+def _run_data() -> TypedTestData:
+    return TypedTestData(
+        {
+            "rg_src": (DataType.INT64, [1, 2, 3]),
+            "rg_label": (DataType.STRING, ["alpha-secret", "beta-secret", "gamma-secret"]),
+        }
+    )
 
 
 def make_always_matches() -> type[FeatureGroup]:
@@ -238,3 +319,103 @@ def test_assert_raises_pytest_failure_for_broken_group() -> None:
     with pytest.raises(pytest.fail.Exception) as excinfo:
         assert_feature_group_shape(make_always_matches())
     assert "foreign:" in str(excinfo.value)
+
+
+def _toy_data() -> TypedTestData:
+    return TypedTestData({"toy_src": (DataType.INT64, [1, 2, 3])})
+
+
+def test_toy_group_passes_run_checks_on_python_dict() -> None:
+    result = check_feature_group_shape(make_toy_group(), input_data=_toy_data(), adapter=PythonDictAdapter())
+    assert result.failures == ()
+
+
+def test_toy_group_passes_run_checks_on_pyarrow() -> None:
+    pytest.importorskip("pyarrow")
+    result = check_feature_group_shape(make_toy_group(), input_data=_toy_data(), adapter=PyArrowAdapter())
+    assert result.failures == ()
+
+
+def test_assert_forwards_run_keywords() -> None:
+    assert_feature_group_shape(make_toy_group(), input_data=_toy_data(), adapter=PythonDictAdapter())
+    with pytest.raises(pytest.fail.Exception) as excinfo:
+        assert_feature_group_shape(make_run_group("drops_output"), input_data=_run_data(), adapter=PythonDictAdapter())
+    assert "outputs:" in str(excinfo.value)
+
+
+def test_no_input_data_notes_run_checks_not_run() -> None:
+    result = check_feature_group_shape(make_toy_group())
+    assert result.passed
+    assert any("not run" in n for n in result.notes), result.notes
+
+
+def test_run_group_conforms() -> None:
+    result = check_feature_group_shape(make_run_group(), input_data=_run_data(), adapter=PythonDictAdapter())
+    assert result.failures == (), result.failures
+
+
+def test_missing_declared_input_fails_outputs_and_skips_run_checks() -> None:
+    data = TypedTestData({"rg_src": (DataType.INT64, [1])})
+    result = check_feature_group_shape(make_run_group(), input_data=data, adapter=PythonDictAdapter())
+    assert result.failures
+    assert all(f.startswith("outputs:") for f in result.failures), result.failures
+    assert any("rg_label" in f for f in result.failures), result.failures
+
+
+def test_requested_name_already_in_input_data_fails_outputs() -> None:
+    data = TypedTestData(
+        {
+            "rg_src": (DataType.INT64, [1]),
+            "rg_label": (DataType.STRING, ["alpha-secret"]),
+            "rg_out": (DataType.INT64, [9]),
+        }
+    )
+    result = check_feature_group_shape(make_run_group(), input_data=data, adapter=PythonDictAdapter())
+    assert result.failures
+    assert all(f.startswith("outputs:") for f in result.failures), result.failures
+
+
+@pytest.mark.parametrize(
+    ("kind", "prefix", "adapter_cls"),
+    [
+        ("drops_output", "outputs:", PythonDictAdapter),
+        ("overwrites_input", "outputs:", PythonDictAdapter),
+        ("wrong_type", "type:", PythonDictAdapter),
+        ("loses_schema_on_zero_rows", "zero_rows:", PyArrowAdapter),
+        ("leaks_cell_in_error", "error_values:", PythonDictAdapter),
+        ("nondeterministic", "determinism:", PythonDictAdapter),
+    ],
+)
+def test_broken_run_group_fails_only_its_sub_check(kind: str, prefix: str, adapter_cls: type[Any]) -> None:
+    if adapter_cls is PyArrowAdapter:
+        pytest.importorskip("pyarrow")
+    result = check_feature_group_shape(make_run_group(kind), input_data=_run_data(), adapter=adapter_cls())
+    assert not result.passed
+    assert all(f.startswith(prefix) for f in result.failures), result.failures
+
+
+def test_list_directory_runs_on_pandas(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("pandas")
+    pytest.importorskip("pyarrow")
+    (tmp_path / "a.txt").write_text("x")
+    monkeypatch.chdir(tmp_path)
+    result = check_feature_group_shape(ListDirectoryFeatureGroup, input_data=TypedTestData({}), adapter=PandasAdapter())
+    assert result.failures == (), result.failures
+
+
+def test_installed_packages_runs_on_pandas() -> None:
+    pytest.importorskip("pandas")
+    pytest.importorskip("pyarrow")
+    result = check_feature_group_shape(
+        InstalledPackagesFeatureGroup, input_data=TypedTestData({}), adapter=PandasAdapter()
+    )
+    assert result.failures == (), result.failures
+
+
+def test_source_input_feature_run_is_not_applicable() -> None:
+    base = Options(group={DefaultOptionKeys.in_features: frozenset(["src_feature"])})
+    result = check_feature_group_shape(
+        SourceInputFeature, base_options=base, input_data=TypedTestData({}), adapter=PythonDictAdapter()
+    )
+    assert result.passed, result.failures
+    assert any("not applicable" in n for n in result.notes), result.notes

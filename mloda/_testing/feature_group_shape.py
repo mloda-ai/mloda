@@ -25,7 +25,6 @@ def _mapping(cls: type[FeatureGroup]) -> dict[str, PropertySpec]:
 
 
 def _required_keys(cls: type[FeatureGroup]) -> list[str]:
-    """Keys the presence guard flags on empty options."""
     return FeatureChainParser._name_path_missing_required_keys(Options(), _mapping(cls))
 
 
@@ -106,7 +105,7 @@ def _declared_inputs(cls: type[FeatureGroup], base: Options, name: str) -> set[F
 def _check_inputs(cls: type[FeatureGroup], names: list[str], base: Options) -> list[str]:
     failures = []
     for name in names:
-        # Root groups raise NotImplementedError; others (e.g. SourceInputFeature) raise when base options lack in_features.
+        # Groups that cannot declare inputs from the base options raise; skip them.
         declared = _declared_inputs(cls, base, name)
         if declared is None:
             continue
@@ -123,7 +122,7 @@ def _check_inputs(cls: type[FeatureGroup], names: list[str], base: Options) -> l
 
 
 def _check_required(cls: type[FeatureGroup], name: str, base: Options) -> list[str]:
-    """Match-time presence: dropping each required key must record REQUIRED_OPTION_ABSENT naming it."""
+    """Dropping each required key must record REQUIRED_OPTION_ABSENT naming it."""
     failures = []
     for key in _required_keys(cls):
         matched, rejection = _probe(cls, name, _without_key(base, key))
@@ -154,7 +153,7 @@ def _check_strict(cls: type[FeatureGroup], name: str, base: Options) -> list[str
 
 
 def check_feature_group_shape(cls: type[FeatureGroup], base_options: Options | None = None) -> CheckResult:
-    """Check a plain FeatureGroup's match contract; a matcher that raises counts as a non-match. Required keys are match-time."""
+    """Check a plain FeatureGroup's match contract; a raising matcher counts as a non-match."""
     base = base_options if base_options is not None else _base_options(cls)
     if base is None:
         failures = ["names: cannot build a matching request; declare allowed_values or default, or pass base_options"]
@@ -171,5 +170,5 @@ def check_feature_group_shape(cls: type[FeatureGroup], base_options: Options | N
 
 
 def assert_feature_group_shape(cls: type[FeatureGroup], base_options: Options | None = None) -> None:
-    """Fail the running pytest test when check_feature_group_shape reports failures."""
+    """Fail the running pytest test if the shape check reports failures."""
     assert_passed(check_feature_group_shape(cls, base_options))

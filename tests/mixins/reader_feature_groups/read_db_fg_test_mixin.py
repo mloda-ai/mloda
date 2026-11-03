@@ -19,7 +19,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
-from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import loaded_implementations
@@ -203,6 +203,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
         result = self._evaluate(self._pointed(self.present_column, {"toyfmt_foreign_key": 1}), self.own_dac())
         assert self.feature_group_class not in result.identified
         assert result.eliminations[self.feature_group_class].reason
+        assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.CREDENTIALS_INVALID
 
     @pytest.mark.parametrize("option_items", [{}, {"query_text": "select 1"}], ids=["plain", "query_text"])
     def test_db_foreign_credentials_stay_silent(
@@ -275,6 +276,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
         assert reason.count(self.identity_of(path)) == 1
         assert "toyfmt_tbl_alpha" not in reason
         assert "toyfmt_tbl_beta" not in reason
+        assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.COLUMN_NOT_FOUND
 
     def test_db_a_preset_table_name_restricts_the_lookup_to_that_table(self, monkeypatch: pytest.MonkeyPatch) -> None:
         path = self._make("preset", {"table_a": {self.present_column: [1]}, "table_b": {self.present_column: [2]}})
@@ -300,6 +302,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
         reason = result.eliminations[self.feature_group_class].reason
         assert self.identity_of(path) in reason
         assert "toyfmt_tbl_lacks" not in reason
+        assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.COLUMN_NOT_FOUND
         with pytest.raises(ValueError) as exc_info:
             self._resolve(self._pointed(self.present_column, credential), None)
         assert self._source_of(path, "toyfmt_tbl_lacks") in str(exc_info.value)
@@ -315,6 +318,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
         reason = result.eliminations[self.feature_group_class].reason
         assert self.identity_of(self.own_path) in reason
         assert "toyfmt_no_such_table" not in reason
+        assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.COLUMNS_UNKNOWN
         with pytest.raises(ValueError, match="toyfmt_no_such_table"):
             self._resolve(self._pointed(self.present_column, credential), None)
         assert spy.list_tables >= 1
@@ -478,6 +482,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
         result = self._evaluate(Feature(self.present_column), self.own_dac())
         assert self.feature_group_class not in result.identified
         assert "could not read its tables" in result.eliminations[self.feature_group_class].reason
+        assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.COLUMNS_UNKNOWN
         with pytest.raises(ValueError, match="could not read its tables"):
             self._resolve(self._pointed(self.present_column, self.own_pointer()), None)
 
@@ -536,6 +541,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
         reason = result.eliminations[self.feature_group_class].reason
         assert identity in reason
         assert "could not read" in reason
+        assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.COLUMNS_UNKNOWN
 
         with pytest.raises(ValueError) as exc_info:
             self._resolve(self._pointed(self.present_column, self.make_credential(path)), None)

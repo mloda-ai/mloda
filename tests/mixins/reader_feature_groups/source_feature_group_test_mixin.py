@@ -13,12 +13,16 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, MatchRejection
 from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
+from mloda.core.prepare.identify_feature_group import (
+    FeatureResolutionError,
+    IdentifyFeatureGroupClass,
+    resolve_or_raise,
+)
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.provider import CHAIN_SEPARATOR, COLUMN_SEPARATOR, ComputeFramework, NamePolicy, SourceFeatureGroup
 from mloda.steward import ReaderProbeScope, reader_probe_scope
@@ -97,6 +101,7 @@ class SourceFeatureGroupTestMixin:
     expected_source: str
     load_framework: type[ComputeFramework] = PyArrowTable
     context_options: ClassVar[dict[str, Any]] = {}
+    wrong_pointer_code: ClassVar[CoreDeclineCode | None] = CoreDeclineCode.POINTER_INVALID
 
     @property
     def unpointed_source(self) -> str:
@@ -263,6 +268,7 @@ class SourceFeatureGroupTestMixin:
         reason = result.eliminations[self.feature_group_class].reason
         assert "refused at INPUT_DATA_MATCH" in reason
         assert "no clearance" in reason
+        assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.EXTENDER_REFUSED
 
     def test_fires_input_data_match_naming_the_group_class_and_format(self) -> None:
         capture = _MatchCapture()
@@ -290,6 +296,8 @@ class SourceFeatureGroupTestMixin:
         result = self._evaluate(feature, self.own_dac())
         assert self.feature_group_class not in result.identified
         assert "int" in result.eliminations[self.feature_group_class].reason
+        if self.wrong_pointer_code is not None:
+            assert result.eliminations[self.feature_group_class].code is self.wrong_pointer_code
 
     def test_a_handle_of_another_kind_yields_no_sources(self) -> None:
         dac, handle = self.foreign_handle_dac()
@@ -306,6 +314,7 @@ class SourceFeatureGroupTestMixin:
         assert "toyfmt_missing_handle" in reason
         for handle in known:
             assert handle in reason
+        assert rejection_window[self._group_name()].code is CoreDeclineCode.HANDLE_UNKNOWN
 
     def test_a_non_str_handle_is_no_narrowing_and_is_rejected_by_the_option_check(self) -> None:
         feature = Feature(self.present_column, self._options(context={HANDLE_OPTION: ["own_handle"]}))
@@ -313,11 +322,12 @@ class SourceFeatureGroupTestMixin:
 
     def test_pointed_with_a_missing_column_aborts_naming_source_and_columns(self) -> None:
         feature = self._feature(self.missing_column, {self._group_name(): self.own_pointer()})
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(FeatureResolutionError) as exc_info:
             self._resolve(feature, None)
         message = str(exc_info.value)
         assert self.expected_source in message
         assert self.present_column in message
+        assert exc_info.value.result.eliminations[self.feature_group_class].code is CoreDeclineCode.COLUMN_NOT_FOUND
 
     def _skip_if_query_route(self) -> None:
         if any("query_text" in route.required_options for route in self.feature_group_class.CLAIM_ROUTES):
@@ -326,9 +336,10 @@ class SourceFeatureGroupTestMixin:
     def test_pointed_with_query_text_aborts_naming_the_query_route_when_the_group_lists_none(self) -> None:
         self._skip_if_query_route()
         feature = self._feature(self.present_column, {self._group_name(): self.own_pointer(), "query_text": "select 1"})
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(FeatureResolutionError) as exc_info:
             self._resolve(feature, None)
         assert "QUERY_ROUTE" in str(exc_info.value)
+        assert exc_info.value.result.eliminations[self.feature_group_class].code is CoreDeclineCode.NO_QUERY_ROUTE
 
     def test_unpointed_with_query_text_declines_naming_the_query_route_when_the_group_lists_none(self) -> None:
         self._skip_if_query_route()
@@ -336,6 +347,7 @@ class SourceFeatureGroupTestMixin:
         result = self._evaluate(feature, self.own_dac())
         assert self.feature_group_class not in result.identified
         assert "QUERY_ROUTE" in result.eliminations[self.feature_group_class].reason
+        assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.NO_QUERY_ROUTE
 
     def test_unpointed_missing_column_declines_with_a_rejection(self) -> None:
         result = self._evaluate(Feature(self.missing_column), self.own_dac())
@@ -343,6 +355,7 @@ class SourceFeatureGroupTestMixin:
         reason = result.eliminations[self.feature_group_class].reason
         assert self.unpointed_source in reason
         assert self.missing_column in reason
+        assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.COLUMN_NOT_FOUND
 
     def test_missing_column_text_hides_the_columns_unless_a_handle_narrows_the_search(self) -> None:
         unpointed = self._evaluate(Feature(self.missing_column), self.own_dac())
@@ -383,6 +396,7 @@ class SourceFeatureGroupTestMixin:
         reason = rejection_window[self._group_name()].reason
         assert self.unpointed_source in reason
         assert chained in reason
+        assert rejection_window[self._group_name()].code is CoreDeclineCode.COLUMN_NOT_FOUND
         assert not self._claims(Feature(separated), self.own_dac())
 
     def test_a_subclass_takes_over_a_pointer_keyed_on_its_parent(self) -> None:
@@ -405,4 +419,5 @@ class SourceFeatureGroupTestMixin:
         reason = result.eliminations[self.feature_group_class].reason
         assert f"options point at {sub.__name__}" in reason
         assert "does not search the collection" in reason
+        assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.POINTED_ELSEWHERE
         del sub, mapping, result, feature

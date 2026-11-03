@@ -19,6 +19,7 @@ E = TypeVar("E", bound=BaseException)
 MATCH_ABORT_FLAG = "_mloda_match_abort"
 PREFIX_OPTION_KEY_FLAG = "prefix_option_key"
 DEFERRED_MATCH_ABORT_FLAG = "_mloda_deferred_match_abort"
+DECLINE_CODE_FLAG = "_mloda_decline_code"
 
 # Exception classes a user callable raises when it merely cannot judge a value.
 _EXPECTED_JUDGMENT_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError, AttributeError)
@@ -63,6 +64,17 @@ def defer_match_abort(exc: E) -> E:
 def is_deferred_match_abort(exc: BaseException) -> bool:
     """Is this raise a match abort the resolver may defer."""
     return exc.__dict__.get(DEFERRED_MATCH_ABORT_FLAG, False) is True
+
+
+def stamp_decline_code(exc: E, code: Any) -> E:
+    """Carry a decline code on a raised match abort so the resolver can record it."""
+    exc.__dict__[DECLINE_CODE_FLAG] = code
+    return exc
+
+
+def decline_code_of(exc: BaseException) -> Any:
+    """The decline code stamped on a raise, else None."""
+    return exc.__dict__.get(DECLINE_CODE_FLAG)
 
 
 def safe_exc_str(exc: BaseException) -> str:

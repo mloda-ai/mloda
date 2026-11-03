@@ -28,7 +28,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
-from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, MatchRejection
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import DataCreatorFeatureGroup, PropertySpec, property_spec
 from mloda.user import FeatureName, Options
@@ -562,6 +562,7 @@ class TestPlainGroupPresence:
         assert list(rejection_window) == [PlainRootPgp.get_class_name()]
         rejection = rejection_window[PlainRootPgp.get_class_name()]
         assert rejection.stage == "value_rejection"
+        assert rejection.code is CoreDeclineCode.REQUIRED_OPTION_ABSENT
         assert rejection.reason == FeatureChainParser.name_path_presence_rejection_reason(
             Options(), PlainRootPgp.PROPERTY_MAPPING or {}
         )
@@ -644,5 +645,6 @@ class TestPlainGroupExemptions:
 
         assert PlainExemptPlusRequiredPgp.match_feature_group_criteria(name, Options()) is False
         assert rejection_window[name].reason.startswith(PGP_MISSING_PREFIX)
+        assert rejection_window[name].code is CoreDeclineCode.REQUIRED_OPTION_ABSENT
         assert "deferred_pgp" not in rejection_window[name].reason
         assert "defaulted_none_pgp" not in rejection_window[name].reason

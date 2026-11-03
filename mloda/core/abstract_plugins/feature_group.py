@@ -31,7 +31,7 @@ from mloda.core.abstract_plugins.components.property_spec import PropertySpec, i
 from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, record_match_rejection
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -761,7 +761,7 @@ class FeatureGroup(ABC):
         except ValueError as exc:
             if is_match_abort(exc):
                 raise
-            record_match_rejection(cls.__name__, str(exc))
+            record_match_rejection(cls.__name__, str(exc), code=CoreDeclineCode.OPTION_VALUE_REJECTED)
             return False
 
         return FeatureChainParser._validate_match_guards(cls.__name__, options, property_mapping)

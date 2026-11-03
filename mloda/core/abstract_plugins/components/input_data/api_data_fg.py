@@ -7,6 +7,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef, read_api_data
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
 from mloda.core.abstract_plugins.components.options import Options
 
 
@@ -46,6 +47,7 @@ class ApiDataFG(SourceFeatureGroup):
             if not isinstance(key, str) or key not in spec:
                 cls._abort(
                     ValueError(f"{pointer_key}={key!r} is not an api_data set key; known keys: {sorted(spec)}"),
+                    code=CoreDeclineCode.HANDLE_UNKNOWN,
                     deferrable=True,
                 )
                 return []

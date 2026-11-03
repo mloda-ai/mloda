@@ -3,6 +3,7 @@
 import logging
 from difflib import get_close_matches
 
+from mloda.core.abstract_plugins.components.match_rejection import DeclineCode
 from mloda.core.abstract_plugins.components.utils import safe_field, as_str
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.domain import Domain
@@ -85,9 +86,10 @@ def _stage_label(stage: EliminationStage) -> str:
     return label
 
 
-def near_miss_text(candidate_name: str, stage: EliminationStage, reason: str) -> str:
-    """One near-miss as '<Candidate> (<stage label>): <reason>'."""
-    return f"{candidate_name} ({_stage_label(stage)}): {reason}"
+def near_miss_text(candidate_name: str, stage: EliminationStage, reason: str, code: DeclineCode | None = None) -> str:
+    """One near-miss as '<Candidate> (<stage label>): <reason>', plus ' [code: <value>]' when coded."""
+    suffix = "" if code is None else f" [code: {code.value}]"
+    return f"{candidate_name} ({_stage_label(stage)}): {reason}{suffix}"
 
 
 def _render_near_miss_block(result: EvaluationResult, feature: Feature) -> str | None:
@@ -95,7 +97,7 @@ def _render_near_miss_block(result: EvaluationResult, feature: Feature) -> str |
     if not result.eliminations:
         return None
     lines = "\n".join(
-        f"  - {near_miss_text(fg.__name__, elimination.stage, elimination.reason)}"
+        f"  - {near_miss_text(fg.__name__, elimination.stage, elimination.reason, elimination.code)}"
         for fg, elimination in sorted(result.eliminations.items(), key=lambda item: _candidate_sort_key(item[0]))
     )
     return f"Feature group(s) eliminated while matching '{str(feature.name)}':\n{lines}"

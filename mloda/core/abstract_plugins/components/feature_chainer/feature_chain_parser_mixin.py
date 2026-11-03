@@ -77,7 +77,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     PropertyValueRejection,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import NameResolution
-from mloda.core.abstract_plugins.components.match_rejection import NAME_STAGE, record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import NAME_STAGE, CoreDeclineCode, record_match_rejection
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.utils import (
@@ -362,7 +362,7 @@ class FeatureChainParserMixin:
         except PropertyValueRejection as exc:
             if is_match_abort(exc):
                 raise
-            record_match_rejection(cls.__name__, str(exc))
+            record_match_rejection(cls.__name__, str(exc), code=CoreDeclineCode.OPTION_VALUE_REJECTED)
             return False
         # A marked raise crosses this containment; an unmarked ValueError stays a non-match.
         except ValueError as exc:
@@ -696,7 +696,7 @@ class FeatureChainParserMixin:
             reason = cls.source_features_reason(feature_name, name_sources)
             if reason is None:
                 return True
-            record_match_rejection(cls.__name__, reason, stage=NAME_STAGE)
+            record_match_rejection(cls.__name__, reason, stage=NAME_STAGE, code=CoreDeclineCode.IN_FEATURE_COUNT)
             return False
 
         in_features_raw = options.get(DefaultOptionKeys.in_features)

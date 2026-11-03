@@ -31,6 +31,7 @@ from mloda.core.abstract_plugins.components.property_spec import property_spec
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -39,7 +40,7 @@ from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.prepare import resolution_types
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
-from mloda.core.prepare.resolution_failure_renderer import _STAGE_LABELS, render_resolution_failure
+from mloda.core.prepare.resolution_failure_renderer import _STAGE_LABELS, near_miss_text, render_resolution_failure
 from mloda.core.prepare.resolution_types import (
     CandidateFrameworks,
     Elimination,
@@ -1855,7 +1856,10 @@ class TestRenderResolutionFailureMessages:
         lines = message.split("\n")
         assert lines[0] == f"No feature groups found for feature name: '{TYPO_FEATURE_791}'."
         assert lines[1] == f"Feature group(s) eliminated while matching '{TYPO_FEATURE_791}':"
-        assert lines[2] == f"  - RendererStrictFG791 (option value): {WINDOW_REJECTION_REASON}"
+        assert (
+            lines[2]
+            == f"  - RendererStrictFG791 (option value): {WINDOW_REJECTION_REASON} [code: option_value_rejected]"
+        )
         assert lines[3].startswith("Did you mean one of: [")
         assert f"'{KNOWN_FEATURE_791}'" in lines[3]
         assert lines[4] == "Use resolve_feature(name, options=...) to debug feature resolution."
@@ -1870,13 +1874,20 @@ class TestRenderResolutionFailureMessages:
 
         assert result.failure_kind == "none"
         assert result.eliminations == {
-            RendererMissingOptionFG791: Elimination(stage="value_rejection", reason=MISSING_OPTION_REASON_791)
+            RendererMissingOptionFG791: Elimination(
+                stage="value_rejection",
+                reason=MISSING_OPTION_REASON_791,
+                code=CoreDeclineCode.REQUIRED_OPTION_ABSENT,
+            )
         }
 
         message = render_resolution_failure(result, feature)
         assert message is not None
         assert f"Feature group(s) eliminated while matching '{MISSING_OPTION_FEATURE_791}':" in message
-        assert f"  - RendererMissingOptionFG791 (option value): {MISSING_OPTION_REASON_791}" in message
+        assert (
+            f"  - RendererMissingOptionFG791 (option value): {MISSING_OPTION_REASON_791} [code: required_option_absent]"
+            in message
+        )
 
     def test_scoped_none_renders_callout_and_scoped_pointer(self) -> None:
         """A scoped no-match carries the scope callout and the scoped resolve_feature pointer."""
@@ -2029,7 +2040,9 @@ class TestFactsCapturedDuringEvaluate:
 
         assert result.failure_kind == "none"
         assert result.eliminations == {
-            RendererStrictFG791: Elimination(stage="value_rejection", reason=WINDOW_REJECTION_REASON)
+            RendererStrictFG791: Elimination(
+                stage="value_rejection", reason=WINDOW_REJECTION_REASON, code=CoreDeclineCode.OPTION_VALUE_REJECTED
+            )
         }
         assert KNOWN_FEATURE_791 in result.facts.known_names
         assert "RendererKnownNamesFG791" in result.facts.known_names
@@ -2108,12 +2121,17 @@ class TestFactCaptureNeverTakesEvaluateDown:
         assert result.failure_kind == "none"
         assert "RendererRaisingRejectionFG791._strict_validation_rejection_reason" not in HOOK_CALLS
         assert result.eliminations == {
-            RendererStrictFG791: Elimination(stage="value_rejection", reason=WINDOW_REJECTION_REASON)
+            RendererStrictFG791: Elimination(
+                stage="value_rejection", reason=WINDOW_REJECTION_REASON, code=CoreDeclineCode.OPTION_VALUE_REJECTED
+            )
         }
 
         message = render_resolution_failure(result, feature)
         assert message is not None
-        assert f"  - RendererStrictFG791 (option value): {WINDOW_REJECTION_REASON}" in message
+        assert (
+            f"  - RendererStrictFG791 (option value): {WINDOW_REJECTION_REASON} [code: option_value_rejected]"
+            in message
+        )
         assert "RendererRaisingRejectionFG791 (option value)" not in message
 
     def test_raising_compute_framework_rule_falls_back_to_the_bare_abstract_message(self) -> None:
@@ -2573,7 +2591,11 @@ class TestSuggestionsNeverPointAtADeadGroupsSiblingName:
         result = _evaluate(scenario)
 
         assert result.eliminations == {
-            RendererValueStageFG791: Elimination(stage="value_rejection", reason=VALUE_STAGE_REJECTION_REASON_791)
+            RendererValueStageFG791: Elimination(
+                stage="value_rejection",
+                reason=VALUE_STAGE_REJECTION_REASON_791,
+                code=CoreDeclineCode.OPTION_VALUE_REJECTED,
+            )
         }
         assert VALUE_STAGE_SPARE_791 not in result.facts.dead_only_names
 
@@ -2847,7 +2869,9 @@ class TestANameBlindGateKillsEveryNameItsCandidateDeclares:
         # Premise: the recorded stage is name-DEPENDENT, so the record alone keeps this candidate live.
         assert result.eliminations == {
             ValueRejectingCrossDomainFG791: Elimination(
-                stage="value_rejection", reason=VALUE_DOMAIN_REJECTION_REASON_791
+                stage="value_rejection",
+                reason=VALUE_DOMAIN_REJECTION_REASON_791,
+                code=CoreDeclineCode.OPTION_VALUE_REJECTED,
             )
         }
         assert "value_rejection" in NAME_DEPENDENT_STAGES_791
@@ -2865,7 +2889,8 @@ class TestANameBlindGateKillsEveryNameItsCandidateDeclares:
             f"No feature groups found for feature name: '{VALUE_DOMAIN_FEATURE_791}'. "
             f"Requested domain: '{REQUESTED_DOMAIN_791}'.\n"
             f"Feature group(s) eliminated while matching '{VALUE_DOMAIN_FEATURE_791}':\n"
-            f"  - ValueRejectingCrossDomainFG791 (option value): {VALUE_DOMAIN_REJECTION_REASON_791}\n"
+            f"  - ValueRejectingCrossDomainFG791 (option value): {VALUE_DOMAIN_REJECTION_REASON_791} "
+            "[code: option_value_rejected]\n"
             "Use resolve_feature(name, options=...) to debug feature resolution.\n"
             f"{TROUBLESHOOTING_LINE}"
         )
@@ -2878,7 +2903,11 @@ class TestANameBlindGateKillsEveryNameItsCandidateDeclares:
 
         # Premise: the recorded stage is name-DEPENDENT, so the record alone keeps this candidate live.
         assert result.eliminations == {
-            ValueRejectingUnlinkedFG791: Elimination(stage="value_rejection", reason=VALUE_LINKS_REJECTION_REASON_791)
+            ValueRejectingUnlinkedFG791: Elimination(
+                stage="value_rejection",
+                reason=VALUE_LINKS_REJECTION_REASON_791,
+                code=CoreDeclineCode.OPTION_VALUE_REJECTED,
+            )
         }
         assert "value_rejection" in NAME_DEPENDENT_STAGES_791
         # Premise: the spare is the one name this request ranks, so only this rule can drop it.
@@ -2894,7 +2923,8 @@ class TestANameBlindGateKillsEveryNameItsCandidateDeclares:
         assert message == (
             f"No feature groups found for feature name: '{VALUE_LINKS_FEATURE_791}'.\n"
             f"Feature group(s) eliminated while matching '{VALUE_LINKS_FEATURE_791}':\n"
-            f"  - ValueRejectingUnlinkedFG791 (option value): {VALUE_LINKS_REJECTION_REASON_791}\n"
+            f"  - ValueRejectingUnlinkedFG791 (option value): {VALUE_LINKS_REJECTION_REASON_791} "
+            "[code: option_value_rejected]\n"
             "Use resolve_feature(name, options=...) to debug feature resolution.\n"
             f"{TROUBLESHOOTING_LINE}"
         )
@@ -3442,6 +3472,35 @@ class TestEveryStageLabelIsPinned:
         assert message is not None
         bullets = [line for line in message.split("\n") if line.startswith("  - ")]
         assert bullets == [f"  - RendererSuccessFG791 ({label}): {STAGE_LABEL_REASON_791}"]
+
+    def test_a_code_renders_as_a_suffix_after_the_reason_and_none_adds_nothing(self) -> None:
+        feature = Feature(STAGE_LABEL_FEATURE_791)
+        coded = EvaluationResult(
+            identified={},
+            eliminations={
+                RendererSuccessFG791: Elimination(
+                    stage="input_data", reason=STAGE_LABEL_REASON_791, code=CoreDeclineCode.COLUMN_NOT_FOUND
+                )
+            },
+        )
+        plain = EvaluationResult(
+            identified={},
+            eliminations={RendererSuccessFG791: Elimination(stage="input_data", reason=STAGE_LABEL_REASON_791)},
+        )
+
+        coded_message = render_resolution_failure(coded, feature)
+        plain_message = render_resolution_failure(plain, feature)
+
+        assert coded_message is not None
+        assert plain_message is not None
+        assert (
+            f"  - RendererSuccessFG791 (input data): {STAGE_LABEL_REASON_791} [code: column_not_found]" in coded_message
+        )
+        assert "[code:" not in plain_message
+        assert near_miss_text("A", "input_data", "why", CoreDeclineCode.COLUMN_NOT_FOUND) == (
+            "A (input data): why [code: column_not_found]"
+        )
+        assert near_miss_text("A", "input_data", "why") == "A (input data): why"
 
 
 class TestAnUnlabeledStageStillRenders:

@@ -13,7 +13,7 @@ import pytest
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
-from mloda.core.abstract_plugins.components.match_rejection import NAME_STAGE, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import NAME_STAGE, CoreDeclineCode, MatchRejection
 from mloda.provider import DefaultOptionKeys, PropertySpec
 from mloda.user import Feature, FeatureName, Options
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
@@ -274,7 +274,11 @@ class TestNameSourceCountRejectionIsRecorded:
         result = _NameSourceGate944.match_feature_group_criteria(BELOW_MIN_NAME_944, _options())
 
         assert result is False
-        assert rejection_window == {OWNER_944: MatchRejection(reason=BELOW_MIN_REASON_944, stage=NAME_STAGE)}
+        assert rejection_window == {
+            OWNER_944: MatchRejection(
+                reason=BELOW_MIN_REASON_944, stage=NAME_STAGE, code=CoreDeclineCode.IN_FEATURE_COUNT
+            )
+        }
         assert (
             _NameSourceGate944._strict_validation_rejection_reason(BELOW_MIN_NAME_944, _options())
             == BELOW_MIN_REASON_944
@@ -294,7 +298,11 @@ class TestNameSourceCountRejectionIsRecorded:
         result = _NameSourceGate944.match_feature_group_criteria(ABOVE_MAX_NAME_944, _options())
 
         assert result is False
-        assert rejection_window == {OWNER_944: MatchRejection(reason=ABOVE_MAX_REASON_944, stage=NAME_STAGE)}
+        assert rejection_window == {
+            OWNER_944: MatchRejection(
+                reason=ABOVE_MAX_REASON_944, stage=NAME_STAGE, code=CoreDeclineCode.IN_FEATURE_COUNT
+            )
+        }
 
     def test_below_min_records_the_name_count_even_with_a_passing_option(
         self, rejection_window: dict[str, MatchRejection]
@@ -302,7 +310,11 @@ class TestNameSourceCountRejectionIsRecorded:
         """The option value would pass the gate, so the reason must report the name's count, not the option's."""
         _NameSourceGate944.match_feature_group_criteria(BELOW_MIN_NAME_944, _options(["a", "b"]))
 
-        assert rejection_window == {OWNER_944: MatchRejection(reason=BELOW_MIN_REASON_944, stage=NAME_STAGE)}
+        assert rejection_window == {
+            OWNER_944: MatchRejection(
+                reason=BELOW_MIN_REASON_944, stage=NAME_STAGE, code=CoreDeclineCode.IN_FEATURE_COUNT
+            )
+        }
 
     def test_a_count_inside_the_range_records_nothing(self, rejection_window: dict[str, MatchRejection]) -> None:
         result = _NameSourceGate944.match_feature_group_criteria("f1&f2&f3__op1_gate944", _options())
@@ -326,7 +338,11 @@ class TestNameSourceCountRejectionIsRecorded:
         result = _NameSourceGuardGate944.match_feature_group_criteria("f1__op1_guardgate944", options)
 
         assert result is False
-        assert rejection_window == {"_NameSourceGuardGate944": MatchRejection(reason=count_reason, stage=NAME_STAGE)}
+        assert rejection_window == {
+            "_NameSourceGuardGate944": MatchRejection(
+                reason=count_reason, stage=NAME_STAGE, code=CoreDeclineCode.IN_FEATURE_COUNT
+            )
+        }
         assert (
             _NameSourceGuardGate944._strict_validation_rejection_reason("f1__op1_guardgate944", options) == count_reason
         )
@@ -348,6 +364,7 @@ class TestEmptyOperandIsRejected:
         recorded = rejection_window[OWNER_944]
         assert recorded.stage == NAME_STAGE
         assert "empty in_feature" in recorded.reason
+        assert recorded.code is CoreDeclineCode.IN_FEATURE_COUNT
 
     @pytest.mark.parametrize("name", EMPTY_OPERAND_NAMES_1716)
     def test_strict_validation_reason_reports_the_same_reason(

@@ -17,7 +17,7 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
-from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
@@ -374,6 +374,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         match = SourceMatch(source=os.path.abspath(path), access=str(path))
         assert self.feature_group_class.columns(match) is None
         assert os.path.abspath(path) in rejection_window[self._group_name()].reason
+        assert rejection_window[self._group_name()].code is CoreDeclineCode.SOURCE_UNREADABLE
 
     def test_file_non_regular_file_is_never_opened(
         self, monkeypatch: pytest.MonkeyPatch, rejection_window: dict[str, MatchRejection]
@@ -386,6 +387,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         assert self.feature_group_class.columns(match) is None
         assert not names
         assert os.path.abspath(directory) in rejection_window[self._group_name()].reason
+        assert rejection_window[self._group_name()].code is CoreDeclineCode.SOURCE_UNREADABLE
 
     @pytest.mark.parametrize("error", [OSError("toyfmt os failure"), ValueError("toyfmt value failure")])
     def test_file_read_failures_are_none_with_a_rejection(
@@ -398,6 +400,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         match = SourceMatch(source=os.path.abspath(self.own_path), access=str(self.own_path))
         assert self.feature_group_class.columns(match) is None
         assert str(error) in rejection_window[self._group_name()].reason
+        assert rejection_window[self._group_name()].code is CoreDeclineCode.SOURCE_UNREADABLE
 
     def test_file_missing_backend_listing_is_none_with_a_rejection(
         self, monkeypatch: pytest.MonkeyPatch, rejection_window: dict[str, MatchRejection]
@@ -409,6 +412,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         match = SourceMatch(source=os.path.abspath(self.own_path), access=str(self.own_path))
         assert self.feature_group_class.columns(match) is None
         assert "toyfmt backend is not installed" in rejection_window[self._group_name()].reason
+        assert rejection_window[self._group_name()].code is CoreDeclineCode.SOURCE_UNREADABLE
 
     def test_file_a_type_error_from_column_names_propagates(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def defect(klass: Any, path: str) -> Any:
@@ -437,12 +441,14 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         reason = result.eliminations[self.feature_group_class].reason
         assert os.path.abspath(path) in reason
         assert "could not read" in reason
+        assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.COLUMNS_UNKNOWN
 
         pointed = Feature(self.present_column, Options({self._group_name(): str(path)}))
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(FeatureResolutionError) as exc_info:
             self._resolve(pointed, None)
         assert os.path.abspath(path) in str(exc_info.value)
         assert "could not read its columns" in str(exc_info.value)
+        assert exc_info.value.result.eliminations[self.feature_group_class].code is CoreDeclineCode.COLUMNS_UNKNOWN
 
     def test_file_pointed_at_a_missing_file_aborts_with_the_listing_reason(self) -> None:
         missing = self.tmp_path / f"pointed_missing{self._suffix()}"
@@ -457,13 +463,14 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
     def test_file_no_source_lists_columns_so_the_head_says_so_and_each_source_gives_its_reason(self) -> None:
         missing = self.tmp_path / f"head_missing{self._suffix()}"
         pointed = Feature(self.present_column, Options({self._group_name(): str(missing)}))
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(FeatureResolutionError) as exc_info:
             self._resolve(pointed, None)
         message = str(exc_info.value)
         assert f"could not list the columns of any of its sources for column '{self.present_column}'" in message
         assert f"{os.path.abspath(missing)}: it does not exist" in message
         assert "is in none of the sources" not in message
         assert "has columns unknown" not in message
+        assert exc_info.value.result.eliminations[self.feature_group_class].code is CoreDeclineCode.COLUMNS_UNKNOWN
 
     @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="fifos need POSIX")
     def test_file_a_pointer_to_a_non_regular_path_says_so_instead_of_missing(self) -> None:
@@ -485,6 +492,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         assert str(self.foreign_path) in reason
         assert f"does not end in a {self._group_name()} suffix" in reason
         assert self._suffix() in reason
+        assert rejection_window[self._group_name()].code is CoreDeclineCode.SUFFIX_NOT_OWNED
 
     def test_file_a_pointer_to_an_own_suffix_excluded_by_document_suffixes_gets_no_suffix_reason(
         self, rejection_window: dict[str, MatchRejection]
@@ -621,6 +629,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         reason = rejection_window[self._group_name()].reason
         assert "is in none of the sources" in reason
         assert "link outside their folder" in reason
+        assert rejection_window[self._group_name()].code is CoreDeclineCode.COLUMN_NOT_FOUND
         assert "elsewhere_target" not in reason
 
     def test_file_a_pointer_with_a_foreign_suffix_masks_a_credential_in_the_suffix_reason(
@@ -649,6 +658,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
 
         reason = rejection_window[self._group_name()].reason
         assert "links outside its folder" in reason
+        assert rejection_window[self._group_name()].code is CoreDeclineCode.FOLDER_ESCAPE
         assert "toyfmt-secret-1234" not in reason
         assert "token=***" in reason
 
@@ -666,6 +676,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         assert "is in none of the sources" in reason
         assert self.missing_column in reason
         assert f"{os.path.abspath(corrupt)}: could not read its columns" in reason
+        assert rejection_window[self._group_name()].code is CoreDeclineCode.COLUMN_NOT_FOUND
         assert rejection_window["SomeOtherOwner"] == MatchRejection("recorded earlier")
 
     # pointer of the wrong type
@@ -767,6 +778,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         assert link.name in reason
         assert target.name not in reason
         assert "files handle" in reason
+        assert rejection_window[self._group_name()].code is CoreDeclineCode.FOLDER_ESCAPE
 
         pointed = Feature(self.present_column, Options({self._group_name(): str(link)}))
         assert self._claims(pointed, None)

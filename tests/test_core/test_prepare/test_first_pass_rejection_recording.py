@@ -25,6 +25,7 @@ from mloda.core.abstract_plugins.components.default_options_key import DefaultOp
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,
+    CoreDeclineCode,
     MatchRejection,
     record_match_rejection,
 )
@@ -454,7 +455,11 @@ class TestFirstPassRejectionRecording:
         result = _failed_result(feature, accessible_plugins)
 
         assert result.eliminations == {
-            StrictRecordingFGOs005r: Elimination(stage="value_rejection", reason=STRICT_REJECTION_REASON_OS005R)
+            StrictRecordingFGOs005r: Elimination(
+                stage="value_rejection",
+                reason=STRICT_REJECTION_REASON_OS005R,
+                code=CoreDeclineCode.OPTION_VALUE_REJECTED,
+            )
         }
         assert VALIDATOR_CALLS_OS005R == [14]
 
@@ -466,7 +471,11 @@ class TestFirstPassRejectionRecording:
         result = _failed_result(feature, accessible_plugins)
 
         assert result.eliminations == {
-            MissingOptionRecordingFGOs005r: Elimination(stage="value_rejection", reason=MISSING_OPTION_REASON_OS005R)
+            MissingOptionRecordingFGOs005r: Elimination(
+                stage="value_rejection",
+                reason=MISSING_OPTION_REASON_OS005R,
+                code=CoreDeclineCode.REQUIRED_OPTION_ABSENT,
+            )
         }
 
     def test_strict_match_guard_rejection_is_reported_from_the_first_pass(self) -> None:
@@ -480,7 +489,11 @@ class TestFirstPassRejectionRecording:
         result = _failed_result(feature, accessible_plugins)
 
         assert result.eliminations == {
-            GuardRecordingFGOs005r: Elimination(stage="value_rejection", reason=GUARD_REJECTION_REASON_OS005R)
+            GuardRecordingFGOs005r: Elimination(
+                stage="value_rejection",
+                reason=GUARD_REJECTION_REASON_OS005R,
+                code=CoreDeclineCode.MATCH_GUARD_REJECTED,
+            )
         }
 
     def test_strict_match_guard_rejection_is_not_reported_when_in_features_is_absent(self) -> None:
@@ -520,8 +533,12 @@ class TestFirstPassRejectionRecording:
         result = _failed_result(feature, accessible_plugins)
 
         assert result.eliminations == {
-            group_a: Elimination(stage="value_rejection", reason=COLLIDE_A_REASON_OS005C),
-            group_b: Elimination(stage="value_rejection", reason=COLLIDE_B_REASON_OS005C),
+            group_a: Elimination(
+                stage="value_rejection", reason=COLLIDE_A_REASON_OS005C, code=CoreDeclineCode.OPTION_VALUE_REJECTED
+            ),
+            group_b: Elimination(
+                stage="value_rejection", reason=COLLIDE_B_REASON_OS005C, code=CoreDeclineCode.OPTION_VALUE_REJECTED
+            ),
         }
 
 
@@ -714,7 +731,12 @@ class TestExpectedGuardRejectionRecording:
             return
 
         elimination = result.eliminations.get(group)
-        assert elimination == Elimination(stage="value_rejection", reason=expected_reason)
+        expected_code = (
+            CoreDeclineCode.OPTION_VALUE_REJECTED
+            if group in (StrictElementRejectFGMge, StrictAllowedValuesFGMge)
+            else CoreDeclineCode.MATCH_GUARD_REJECTED
+        )
+        assert elimination == Elimination(stage="value_rejection", reason=expected_reason, code=expected_code)
         assert facade_reason == expected_reason
         if isinstance(option_value, dict):
             assert elimination is not None and "hidden_mge" not in elimination.reason
@@ -893,7 +915,9 @@ class TestPlainGroupRejectionRecording:
         result = _failed_result(feature, accessible_plugins)
 
         assert result.eliminations == {
-            PlainMissingKeyFGPpr: Elimination(stage="value_rejection", reason=PLAIN_MISSING_REASON_PPR)
+            PlainMissingKeyFGPpr: Elimination(
+                stage="value_rejection", reason=PLAIN_MISSING_REASON_PPR, code=CoreDeclineCode.REQUIRED_OPTION_ABSENT
+            )
         }
 
     def test_expected_guard_rejection_reason_is_reported_from_the_first_pass(self) -> None:
@@ -903,7 +927,9 @@ class TestPlainGroupRejectionRecording:
         result = _failed_result(feature, accessible_plugins)
 
         assert result.eliminations == {
-            PlainExpectedGuardFGPpr: Elimination(stage="value_rejection", reason=PLAIN_GUARD_REASON_PPR)
+            PlainExpectedGuardFGPpr: Elimination(
+                stage="value_rejection", reason=PLAIN_GUARD_REASON_PPR, code=CoreDeclineCode.MATCH_GUARD_REJECTED
+            )
         }
 
     def test_guard_rejection_without_expected_is_a_silent_non_match(self) -> None:

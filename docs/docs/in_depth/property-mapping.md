@@ -533,7 +533,7 @@ discarded candidate and why it dropped:
 
 ```
 Feature group(s) eliminated while matching 'window_size_windowed':
-  - WindowedFeatureGroup (option value): Property value int 14 failed validation for 'window_size'
+  - WindowedFeatureGroup (option value): Property value int 14 failed validation for 'window_size' [code: option_value_rejected]
 ```
 
 This is diagnostic only. It does not change the `True`/`False` contract, so a value rejected by
@@ -561,7 +561,7 @@ PROPERTY_MAPPING = {
 ```
 
 ```text
-  - WorkerPoolFeatureGroup (option value): option 'concurrency' must be a whole number of 1 or more, got str '4'
+  - WorkerPoolFeatureGroup (option value): option 'concurrency' must be a whole number of 1 or more, got str '4' [code: match_guard_rejected]
 ```
 
 The `expected` reason above, the strict match_guard reason (`Property value <text> rejected by

@@ -7,6 +7,7 @@ from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
     NAME_STAGE,
+    DeclineCode,
 )
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -57,6 +58,7 @@ class Elimination:
 
     stage: EliminationStage
     reason: str
+    code: DeclineCode | None = None
 
 
 @dataclass(frozen=True)

@@ -7,6 +7,40 @@ import contextvars
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from enum import StrEnum
+
+
+class DeclineCode(StrEnum):
+    """Memberless base for machine-readable decline codes; plugins subclass it (prefix values)."""
+
+
+class CoreDeclineCode(DeclineCode):
+    """Decline codes recorded by core match paths."""
+
+    OUTPUT_PART_UNKNOWN = "output_part_unknown"
+    IN_FEATURE_COUNT = "in_feature_count"
+    OPTION_VALUE_REJECTED = "option_value_rejected"
+    MATCH_GUARD_REJECTED = "match_guard_rejected"
+    REQUIRED_OPTION_ABSENT = "required_option_absent"
+    EXTENDER_REFUSED = "extender_refused"
+    ABSTRACT_SOURCE = "abstract_source"
+    AMBIGUOUS_SOURCE = "ambiguous_source"
+    NO_QUERY_ROUTE = "no_query_route"
+    COLUMN_NOT_FOUND = "column_not_found"
+    COLUMNS_UNKNOWN = "columns_unknown"
+    POINTED_ELSEWHERE = "pointed_elsewhere"
+    NAME_NOT_DECLARED = "name_not_declared"
+    SOURCE_NOT_FOUND = "source_not_found"
+    POINTER_INVALID = "pointer_invalid"
+    HANDLE_UNKNOWN = "handle_unknown"
+    SUFFIX_NOT_OWNED = "suffix_not_owned"
+    NO_READER_FOR_SUFFIX = "no_reader_for_suffix"
+    HANDED_OVER = "handed_over"
+    FOLDER_ESCAPE = "folder_escape"
+    SOURCE_UNREADABLE = "source_unreadable"
+    QUERY_INVALID = "query_invalid"
+    QUERY_ROUTE_TAKEN = "query_route_taken"
+    CREDENTIALS_INVALID = "credentials_invalid"
 
 
 @dataclass(frozen=True)
@@ -21,6 +55,7 @@ class MatchRejection:
     stage: str = "value_rejection"
     candidates: tuple[str, ...] = ()
     refusal: Exception | None = field(default=None, compare=False, repr=False)
+    code: DeclineCode | None = None
 
 
 INPUT_DATA_STAGE = "input_data"
@@ -43,12 +78,13 @@ def record_match_rejection(
     stage: str = "value_rejection",
     candidates: tuple[str, ...] = (),
     refusal: Exception | None = None,
+    code: DeclineCode | None = None,
 ) -> None:
     """Record a match rejection; the first per owner wins, and outside an active evaluation it is a no-op."""
     reasons = MATCH_REJECTION_REASONS.get()
     if reasons is None:
         return
-    reasons.setdefault(owner_name, MatchRejection(reason, stage, candidates, refusal))
+    reasons.setdefault(owner_name, MatchRejection(reason, stage, candidates, refusal, code))
 
 
 @contextmanager
@@ -63,16 +99,20 @@ def collect_match_rejections() -> Iterator[dict[str, MatchRejection]]:
 
 
 def replace_probe_match_rejection(
-    owner_name: str, reason: str, known_owners: frozenset[str], stage: str = "value_rejection"
+    owner_name: str,
+    reason: str,
+    known_owners: frozenset[str],
+    stage: str = "value_rejection",
+    code: DeclineCode | None = None,
 ) -> None:
     """Record, replacing the owner's rejection only when it was recorded after the known_owners snapshot."""
     reasons = MATCH_REJECTION_REASONS.get()
     if reasons is None:
         return
     if owner_name in known_owners:
-        reasons.setdefault(owner_name, MatchRejection(reason, stage))
+        reasons.setdefault(owner_name, MatchRejection(reason, stage, code=code))
     else:
-        reasons[owner_name] = MatchRejection(reason, stage)
+        reasons[owner_name] = MatchRejection(reason, stage, code=code)
 
 
 def match_rejection_owners() -> frozenset[str]:

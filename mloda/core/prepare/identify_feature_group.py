@@ -50,7 +50,7 @@ from mloda.core.abstract_plugins.components.input_data.source_feature_group impo
 )
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options, reject_reserved_reader_key
-from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import DeclineCode, MatchRejection
 from mloda.core.abstract_plugins.components.match_hook import CriteriaProbeOutcome, probe_match_criteria
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
@@ -68,6 +68,7 @@ from mloda.core.prepare.input_chain import (
 from mloda.core.abstract_plugins.components.utils import (
     as_str,
     contained_raise_log_level,
+    decline_code_of,
     escalate_match_abort,
     is_nominal_subclass,
     is_deferred_match_abort,
@@ -801,7 +802,7 @@ class IdentifyFeatureGroupClass:
                     self._record_elimination(feature_group, "domain", self._domain_reason(feature_group, feature))
                 elif is_deferred_match_abort(exc):
                     self._deferred_aborts[feature_group] = exc
-                    self._record_elimination(feature_group, "input_data", safe_exc_str(exc))
+                    self._record_elimination(feature_group, "input_data", safe_exc_str(exc), decline_code_of(exc))
                 else:
                     raise
                 continue
@@ -816,7 +817,7 @@ class IdentifyFeatureGroupClass:
                 if rejection is not None:
                     # The shared mapper owns the projection, so both seams spell the taxonomy the same way.
                     self._record_elimination(
-                        feature_group, rejection_elimination_stage(rejection.stage), rejection.reason
+                        feature_group, rejection_elimination_stage(rejection.stage), rejection.reason, rejection.code
                     )
                 continue
 
@@ -1216,9 +1217,11 @@ class IdentifyFeatureGroupClass:
         matched = self._input_data_matches.get(feature_group)
         return cast("type | None", matched[0]) if matched else None
 
-    def _record_elimination(self, feature_group: type[FeatureGroup], stage: EliminationStage, reason: str) -> None:
+    def _record_elimination(
+        self, feature_group: type[FeatureGroup], stage: EliminationStage, reason: str, code: DeclineCode | None = None
+    ) -> None:
         """Record the first gate a non-winning name-matching candidate failed; one entry per candidate."""
-        self._eliminations.setdefault(feature_group, Elimination(stage=stage, reason=reason))
+        self._eliminations.setdefault(feature_group, Elimination(stage=stage, reason=reason, code=code))
 
     def _value_rejection(self, feature_group: type[FeatureGroup]) -> MatchRejection | None:
         """The MatchRejection the first match pass recorded for this candidate class, if any.

@@ -1217,6 +1217,7 @@ class TestDeclaredOutputParts:
         message = str(exc_info.value)
         assert part in message
         assert f"MeasureProducer (feature name): '{part}' is not an output part" in message
+        assert message.count("[code: output_part_unknown]") == 1
         assert "value" in message and "unit" in message
         assert MeasureProducer.calls == 0
 

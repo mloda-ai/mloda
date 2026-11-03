@@ -17,6 +17,7 @@ import mloda.provider as provider
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.api.plan_info import source_of
@@ -289,6 +290,8 @@ class TestPinnedFileOwnedBySomeFileGroup:
         if extender is not None:
             assert len(extender.refused) == 1
         assert str(excinfo.value).count(self.UNOWNED_FRAGMENT) == 1
+        unowned = [e for e in excinfo.value.result.eliminations.values() if self.UNOWNED_FRAGMENT in e.reason]
+        assert [e.code for e in unowned] == [CoreDeclineCode.NO_READER_FOR_SUFFIX]
 
     def test_the_unowned_pin_message_scrubs_uri_credentials(self) -> None:
         uri = "s3://AKIAKEY:supersecret@bucket/data.weirdext"

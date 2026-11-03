@@ -191,6 +191,48 @@ def _check_one(
         )
 
 
+def _credential_hit(value: Any, seen: set[int]) -> str | None:
+    """The credential type name found in value, descending containers, or None."""
+    from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
+
+    if isinstance(value, (Credential, RegisteredCredential)):
+        return type(value).__name__
+    if not isinstance(value, (Mapping, list, tuple, set, frozenset)) or id(value) in seen:
+        return None
+    seen.add(id(value))
+    children = [*value.keys(), *value.values()] if isinstance(value, Mapping) else list(value)
+    for child in children:
+        hit = _credential_hit(child, seen)
+        if hit is not None:
+            return hit
+    return None
+
+
+def refuse_credential_option_values(options: Options) -> None:
+    """Refuse a Credential or RegisteredCredential in any non-pointer option value, naming key and type only."""
+    # Function-local: avoids an import cycle through the source feature group module.
+    from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
+
+    from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
+
+    pointer_keys: Any = None
+    for key, value in [*options.group.items(), *options.context.items()]:
+        hit = _credential_hit(value, set())
+        if hit is None:
+            continue
+        if pointer_keys is None:
+            pointer_keys = concrete_source_groups().keys()
+        if key in pointer_keys:
+            continue
+        direct = isinstance(value, (Credential, RegisteredCredential))
+        where = "" if direct else " nested in its value"
+        raise _refuse(
+            f"Option '{key}' holds a {hit}{where}. A credential is never an option value: register it in the "
+            f"DataAccessCollection and name its handle in an option declared with credential_handle_spec, "
+            f"then read it with read_credential."
+        )
+
+
 def missing_credential_handle_abort(feature_group: type[FeatureGroup], options: Options) -> ValueError | None:
     """The marked abort for a required handle key that is absent, naming a close undeclared option key, or None."""
     # Function-local: avoids an import cycle through the feature chain parser.

@@ -1,4 +1,5 @@
 import copy
+from collections.abc import Callable
 import pickle  # nosec B403
 from copy import deepcopy
 from itertools import islice
@@ -632,8 +633,18 @@ class TestOptionsWithCredentialValues:
         options2 = Options(group={"credential_option_key": Credential(sqlite="/y.db")})
         assert options1 != options2
 
-    def test_str_never_contains_the_secret_value(self) -> None:
-        options = Options(group={"credential_option_key": Credential(sqlite="/secret/path/analytics.db")})
+    @pytest.mark.parametrize(
+        "make_value",
+        [
+            lambda: Credential(sqlite="/secret/path/analytics.db"),
+            lambda: [Credential(sqlite="/secret/path/analytics.db")],
+            lambda: {"inner": Credential(sqlite="/secret/path/analytics.db")},
+            lambda: {Credential(sqlite="/secret/path/analytics.db")},
+        ],
+        ids=["direct", "list", "dict-value", "set"],
+    )
+    def test_str_never_contains_the_secret_value(self, make_value: Callable[[], Any]) -> None:
+        options = Options(group={"credential_option_key": make_value()})
         assert "/secret/path/analytics.db" not in str(options)
 
     def test_str_prints_a_marked_handle_key_as_given_and_masks_an_unmarked_one(self) -> None:

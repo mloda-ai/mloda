@@ -43,7 +43,8 @@ It never holds option values, `data_access_identity`, feature group or implement
 
 The content hash includes the name of a declared credential handle, never the credential; the lock's `credential_handles` key is left out of it. `explain()` validates
 handles like `prepare()`, so a CI lock check registers a placeholder credential (8 characters or longer, with the
-required fields) under each declared handle. See
+required fields) under each declared handle. The lock and the content hash carry handle names, never credential values;
+a credential value in an option is refused at planning. See
 [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle).
 
 ## Structure hash

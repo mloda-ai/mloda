@@ -273,6 +273,10 @@ A handle stays on the feature that declares it: input features inherit it only w
 allowlist names the key. A handle is never part of a feature name: a pattern that captures a handle key raises at class
 definition.
 
+A credential is never an option value. A `Credential` or `RegisteredCredential` anywhere in a non-pointer option,
+nested in lists, tuples, dicts or sets, is refused at plan time. The source pointer form (`{"SqliteFG": Credential(...)}`) still works.
+A bare `str` secret under an ordinary key cannot be detected, so do not do it.
+
 ## Runtime access versus match-time binding
 
 A source group binds a credential at match time. Any other group reads a declared handle at run time with
@@ -344,6 +348,7 @@ Limits:
 - **"Handle 'X' is registered under kind 'K1', but kind 'K2' was requested"**: you set `data_access_handle='X'`, but the registry has `X` under a different kind. A connection consumer cannot bind to a file handle even if the names match.
 - **"Ambiguous resolve for kind 'K': N candidates [...]; set 'data_access_handle' in Options to disambiguate"**: more than one entry of the requested kind matched. Set `data_access_handle` on the feature's `Options` to pick one, or remove the extras from the DAC.
 - **"credentials value for handle 'X' is not a mapping"**: you passed a bare `{connector_id: slot}` dict as `credentials`, which the named form reads as `{handle: credential}`. Use `credentials=Credential(...)`, the list form `credentials=[{...}]`, or the named form `{handle: {connector_id: slot}}`. See [Typed credentials](#typed-credentials-credential).
+- **"Option 'K' holds a Credential. A credential is never an option value: ..."**: a `Credential` or `RegisteredCredential` sits in an option other than a source pointer (the message says "nested in its value" when it is inside a container). Register it in the `DataAccessCollection`, name its handle in an option declared with `credential_handle_spec`, and read it with `read_credential`.
 - **"credentials list entry N has type T, not a mapping"**: each list entry must be a dict or `Credential`; wrap a bare value such as a DSN as `Credential(dsn=...)`.
 - **"HashableDict is no longer accepted as a credential value"**: pre-0.7 call sites wrapped credentials in `HashableDict`. The credentials path no longer accepts it; pass `Credential(...)` or a plain dict instead. `HashableDict` is not removed from the library: it still backs hashability-required internals (for example `Options` hashing and similar internals). It is simply no longer unwrapped anywhere on the database credential / data-access path.
 

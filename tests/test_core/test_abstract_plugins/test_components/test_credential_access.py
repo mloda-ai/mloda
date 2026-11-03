@@ -22,6 +22,7 @@ from mloda.core.abstract_plugins.components.credential_access import (
     readable_credentials,
 )
 from mloda.core.abstract_plugins.components.credential_grant import StaticGrant, grant_scope
+from datetime import UTC
 
 _HOST = "access-host.internal.example"
 _HMAC = "hmac-access-Qv7Lk2Xz9"  # nosec B105
@@ -78,6 +79,25 @@ class TestResolvedCredential:
         assert cred.version is None
         assert cred.expires_at is None
         assert cred.store is None
+
+    def test_has_no_instance_dict_so_fields_are_reachable_only_by_mapping_access(self) -> None:
+        cred = ResolvedCredential("h", _credential())
+
+        with pytest.raises(TypeError):
+            vars(cred)
+        assert cred["host"] == _HOST
+
+    def test_metadata_can_be_passed_at_construction(self) -> None:
+        from datetime import datetime
+
+        expires = datetime(2030, 1, 1, tzinfo=UTC)
+
+        cred = ResolvedCredential("h", _credential(), version="v1", expires_at=expires, store="vault")
+
+        assert cred.version == "v1"
+        assert cred.expires_at == expires
+        assert cred.store == "vault"
+        assert cred["host"] == _HOST
 
     def test_missing_field_raises_the_typed_key_error_naming_handle_and_field(self) -> None:
         cred = ResolvedCredential("h", _credential())
@@ -190,6 +210,16 @@ class TestReadCredential:
 
         with pytest.raises(CredentialReadRefused, match="h"):
             captured.run(read_credential, "h")
+
+    def test_the_same_scope_instance_entered_twice_in_sequence_reads_both_times(self) -> None:
+        scope = _scope()
+
+        with scope:
+            assert read_credential("h")["host"] == _HOST
+        with scope:
+            assert read_credential("h")["host"] == _HOST
+        with pytest.raises(CredentialReadRefused):
+            read_credential("h")
 
     def test_a_read_after_the_scope_exited_is_refused(self) -> None:
         with _scope():

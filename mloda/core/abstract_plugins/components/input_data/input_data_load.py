@@ -8,7 +8,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
     mask_literals,
     registered_secrets_scope,
 )
-from mloda.core.abstract_plugins.components.credential_access import hidden_credentials, readable
+from mloda.core.abstract_plugins.components.credential_access import hidden_credentials, restore_readable
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import ExtenderHook, GateBypassError, _invoke_extender
 from mloda.core.abstract_plugins.hook_context import HookContext, input_data_load_gate_scopes_active, instrument
@@ -143,7 +143,8 @@ def dispatch_input_data_load(
         ),
         reader_class=owner_type,
     )
+    restored_load = restore_readable(load)
     with context.activate(), hidden_credentials():
         return _invoke_extender(
-            extender, instrument(context, readable(load), row_count=cfw._row_count), data_access, features
+            extender, instrument(context, restored_load, row_count=cfw._row_count), data_access, features
         )

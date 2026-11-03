@@ -319,6 +319,7 @@ Limits:
 - An awaited asyncio task and `asyncio.to_thread` carry the scope; `run_in_executor` does not.
 - A value captured in a serialized UDF closure is outside every mask; read on the driver, never capture.
 - Cached or transformed values are outside the masks.
+- A lazy result (generator, lazy frame) that reads a credential after `calculate_feature` returns is refused; read before returning.
 - A saver's return value must never carry a credential.
 - `repr` redacts; `json.dumps`, pickle and deepcopy raise; `dict(cred)` copies the values, so never serialize it.
 - Trust boundary: code that declares a handle can read it; only the process worker is an OS boundary.

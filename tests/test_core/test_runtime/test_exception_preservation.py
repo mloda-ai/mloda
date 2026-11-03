@@ -1452,6 +1452,52 @@ _WINDOW_SHAPES = [
 ]
 
 
+def _closed_window_load(data_access: Any, features: FeatureSet) -> str:
+    try:
+        _read_host(features.get_options_key(HANDLE_KEY))
+        _WINDOW_EVENTS.append(("closed_load", "readable"))
+    except CredentialReadRefused:
+        _WINDOW_EVENTS.append(("closed_load", "refused"))
+    return "loaded"
+
+
+class ChsClosedWindowFG(ChsSource):
+    """Dispatches a load while the readable window is closed (grant held, no readable scope)."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_closed_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        from mloda.core.abstract_plugins.components.credential_access import hidden_credentials
+        from mloda.core.abstract_plugins.components.input_data.input_data_load import dispatch_input_data_load
+
+        with hidden_credentials():
+            dispatch_input_data_load(
+                cls,
+                cls,
+                _closed_window_load,
+                "access",
+                features,
+                identity=lambda: "chs-closed-source",
+                data_access_format=lambda: "chs",
+            )
+        return pd.DataFrame({name: [1] for name in features.get_all_names()})
+
+
+@pytest.mark.timeout(15)
+def test_a_load_dispatched_while_the_window_is_closed_keeps_its_reads_refused(flight_server: Any) -> None:
+    _WINDOW_EVENTS.clear()
+    probe = _ReadProbeExtender({ExtenderHook.INPUT_DATA_LOAD})
+
+    _grant_run(ChsClosedWindowFG, "chs_closed_a", ParallelizationMode.SYNC, flight_server, {probe})
+
+    assert _events("closed_load") == ["refused"]
+
+
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("hooks", _WINDOW_SHAPES)
 def test_read_credential_is_open_in_calculate_an_awaited_task_and_the_load_but_not_in_extenders(

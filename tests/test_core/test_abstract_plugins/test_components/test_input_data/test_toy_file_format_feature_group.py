@@ -17,6 +17,7 @@ import mloda.provider as provider
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
+from mloda.core.api.plan_info import source_of
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.provider import ReadFileFG, SourceFeatureGroup
@@ -306,23 +307,45 @@ class TestUserinfoUriPlanIdentity:
     """A userinfo URI handle never shows its password in the plan step identity or the rendered plan."""
 
     @pytest.mark.parametrize(
-        "template,expected,secret",
+        "template,expected,secret,credentials",
         [
-            ("s3://alice:hunter2@bucket/plan{s}", "s3://bucket/plan{s}", "hunter2"),  # nosec B105
+            ("s3://alice:hunter2@bucket/plan{s}", "s3://bucket/plan{s}", "hunter2", None),  # nosec B105
             (
                 "s3://bucket/dir;jsessionid=SECRETSESSION/plan{s}",  # nosec B105
                 "s3://bucket/dir;***/plan{s}",
                 "SECRETSESSION",
+                None,
             ),
             (
                 "s3://bucket/dir;%74oken=SECRETENCODED/plan{s}",  # nosec B105
                 "s3://bucket/dir;***/plan{s}",
                 "SECRETENCODED",
+                None,
+            ),
+            (
+                "s3://bucket/botLITERALTOKEN1/plan{s}",
+                "s3://bucket/bot***/plan{s}",
+                "LITERALTOKEN1",  # nosec B105
+                {"h": {"token": "LITERALTOKEN1"}},  # nosec B105
+            ),
+            (
+                "s3://bucket/auth=LITERALTOKEN2/plan{s}",
+                "s3://bucket/auth=***/plan{s}",
+                "LITERALTOKEN2",  # nosec B105
+                {"h": {"token": "LITERALTOKEN2"}},  # nosec B105
             ),
         ],
-        ids=["userinfo-password", "session-id-path-param", "encoded-path-param"],
+        ids=[
+            "userinfo-password",
+            "session-id-path-param",
+            "encoded-path-param",
+            "literal-path-segment",
+            "literal-hive-segment",
+        ],
     )
-    def test_plan_step_identity_and_render_hide_the_password(self, template: str, expected: str, secret: str) -> None:
+    def test_plan_step_identity_and_render_hide_the_password(
+        self, template: str, expected: str, secret: str, credentials: dict[str, Any] | None
+    ) -> None:
         column = "toyfmt_uri_plan_col"
         uri = template.format(s=TOY_SUFFIX)
 
@@ -343,10 +366,15 @@ class TestUserinfoUriPlanIdentity:
             def has_column(cls, match: Any, column_name: str) -> bool | None:
                 return column_name == column
 
+        def collection() -> DataAccessCollection:
+            if credentials is None:
+                return DataAccessCollection(files={uri})
+            return DataAccessCollection(files={uri}, credentials=credentials)
+
         explained = mloda.explain(
             [Feature(column)],
             compute_frameworks=[PyArrowTable],
-            data_access_collection=DataAccessCollection(files={uri}),
+            data_access_collection=collection(),
             plugin_collector=PluginCollector.enabled_feature_groups({ToyfmtUriPlanFG}),
         )
         steps = [step for step in explained if step.step_kind == "compute"]
@@ -354,6 +382,17 @@ class TestUserinfoUriPlanIdentity:
         assert steps[0].data_access_identity == expected.format(s=TOY_SUFFIX)
         assert secret not in repr(explained)
         assert secret not in str(explained)
+        if credentials is not None:
+            session = mloda.prepare(
+                [Feature(column)],
+                compute_frameworks=[PyArrowTable],
+                data_access_collection=collection(),
+                plugin_collector=PluginCollector.enabled_feature_groups({ToyfmtUriPlanFG}),
+            )
+            compute = [step for step in session.resolved_plan() if step.step_kind == "compute"]
+            assert len(compute) == 1
+            assert secret in source_of(session._execution_plan(), compute[0])[1].source
+            del session, compute
         del explained, steps, ToyfmtUriPlanFG
 
 

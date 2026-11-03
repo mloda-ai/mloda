@@ -3,6 +3,11 @@ import weakref
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    current_registered_secrets,
+    mask_literals,
+    registered_secrets_scope,
+)
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import ExtenderHook, GateBypassError, _invoke_extender
 from mloda.core.abstract_plugins.hook_context import HookContext, input_data_load_gate_scopes_active, instrument
@@ -47,7 +52,7 @@ def dispatch_input_data_load(
         if marker is not None:
             active = marker.active
             if active is not None and marker.has_extender:
-                with active[0].activate(), active[1].activate():
+                with active[0].activate(), active[1].activate(), registered_secrets_scope(marker.secrets):
                     return dispatch_input_data_load(
                         owner,
                         owner_type,
@@ -87,6 +92,7 @@ def dispatch_input_data_load(
 
     access_identity = identity()
     is_fallback = _is_fallback_identity(data_access, access_identity)
+    access_identity = mask_literals(access_identity, current_registered_secrets())
     if is_fallback and owner_type not in _fallback_identity_warned:
         _fallback_identity_warned.add(owner_type)
         logger.warning(

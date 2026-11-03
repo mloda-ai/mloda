@@ -12,7 +12,7 @@ from mloda.core.abstract_plugins.components.input_data.match_cache import run_ma
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.user import DataAccessCollection, Feature
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.mixins.reader_feature_groups.column_discovery_contract_test_mixin import (
+from mloda._testing.source.column_discovery_suite import (
     PHYSICAL_COLUMNS,
     ColumnDiscoveryContractTestMixin,
     match_of,

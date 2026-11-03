@@ -14,7 +14,15 @@ import pyarrow as pa
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.provider import ClaimRoute, SourceFeatureGroup, NamePolicy, SourceMatch
+from mloda.provider import (
+    INPUT_DATA_STAGE,
+    ClaimRoute,
+    CoreDeclineCode,
+    NamePolicy,
+    SourceFeatureGroup,
+    SourceMatch,
+    record_match_rejection,
+)
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -73,12 +81,28 @@ class ToySourceBase(SourceFeatureGroup):
         options: Options,
         data_access_collection: DataAccessCollection | None,
     ) -> list[SourceMatch]:
-        scoped = options.get(cls.get_class_name())
-        if scoped is not None:
-            return [SourceMatch(source="scoped:toy", access=scoped)]
+        key = next((key for key in cls.pointer_keys() if key in options), None)
+        if key is not None:
+            scoped = options.get(key)
+            if isinstance(scoped, dict):
+                return [SourceMatch(source="scoped:toy", access=scoped)]
+            record_match_rejection(
+                cls.get_class_name(),
+                f"the pointer value must be a dict of columns, got {type(scoped).__name__}",
+                stage=INPUT_DATA_STAGE,
+                code=CoreDeclineCode.POINTER_INVALID,
+            )
+            return []
         if data_access_collection is None:
             return []
         wanted = options.get(TOY_HANDLE_OPTION)
+        if wanted is not None and wanted not in data_access_collection.handles():
+            record_match_rejection(
+                cls.get_class_name(),
+                f"data_access_handle '{wanted}' is unknown; handles: {sorted(data_access_collection.handles())}",
+                stage=INPUT_DATA_STAGE,
+                code=CoreDeclineCode.HANDLE_UNKNOWN,
+            )
         found: list[SourceMatch] = []
         for handle, value in sorted(data_access_collection.credentials.items()):
             if wanted is not None and handle != wanted:

@@ -97,6 +97,9 @@ _VALIDATE_PROPERTY_SPEC_RAISES = (
 )
 
 RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
+    ("mloda/_testing/source/column_discovery_suite.py", "match_feature_group_criteria"): (
+        "test-kit probe subclass whose matcher returns False and never raises"
+    ),
     ("mloda/core/abstract_plugins/components/input_data/source_feature_group.py", "_matches_by_default_rules"): (
         "real edge, collided verdict: the source group override of the default rules; its raises are marked aborts, "
         "except the reader pair conflict, a plain ValueError the seam contains"
@@ -141,6 +144,9 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
 # Swallowing functions OUTSIDE the declared modules that the match path calls; the containment there is decided
 # here. The closure is transitive and resolves by name, so an entry can be a name COLLISION, not a call edge.
 SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
+    ("mloda/_testing/source/column_discovery_suite.py", "match_feature_group_criteria"): (
+        "test-kit probe subclass whose matcher returns False and never raises"
+    ),
     ("mloda/core/abstract_plugins/components/input_data/source_feature_group.py", "_matches_by_default_rules"): (
         "real edge: the source group override of the default rules reaches probe_source_group's contained "
         "extender raise, which declines one candidate and re-raises probe and match aborts"

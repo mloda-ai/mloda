@@ -28,15 +28,15 @@ from mloda.user import Credential, Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation  # noqa: F401
-from tests.mixins.reader_feature_groups.source_feature_group_test_mixin import (
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
+from mloda._testing.source.source_suite import (
     SourceFeatureGroupTestMixin,
-    _LoadCapture,
+    LoadCapture,
 )
 
 if TYPE_CHECKING:
     from mloda.provider import ReadDBFG
 
-HANDLE_OPTION = "data_access_handle"
 SECRET = "toyfmt-secret-value"  # nosec B105
 OWN_TABLE = "own_table"
 QUERY_OPTION = "query_text"
@@ -668,7 +668,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
 
     def test_db_input_data_load_identity_ignores_credential_values(self) -> None:
         path = self._make("identity_db", {"identity_table": {"toyfmt_identity": [1]}})
-        capture = _LoadCapture()
+        capture = LoadCapture()
 
         mloda.run_all(
             ["toyfmt_identity"],
@@ -726,7 +726,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
 
         expected = {"toyfmt_qa": [0, 10], "toyfmt_qc": [2, 12]}
         for framework in (PyArrowTable, PythonDictFramework):
-            capture = _LoadCapture()
+            capture = LoadCapture()
             result = mloda.run_all(
                 [self._query_feature(name, query, credential) for name in ("toyfmt_qa", "toyfmt_qc")],
                 compute_frameworks=[framework],

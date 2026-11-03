@@ -108,9 +108,7 @@ def applicable_aspects(cls: type[ComputeFramework]) -> tuple[str, ...]:
 
 
 def check_compute_framework_shape(cls: type[ComputeFramework]) -> CheckResult:
-    """Check construction (including uuid=), is_available and the accessors.
-
-    Accessors are skipped for unavailable frameworks."""
+    """Check construction (including uuid=), is_available and, if available, the accessors."""
     failures = _construct_failures(cls)
     available, failure = _is_available(cls)
     if failure is not None:

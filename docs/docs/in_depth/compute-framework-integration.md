@@ -434,4 +434,4 @@ rolling = relation.window(
 
 ## Testing
 
-Call `check_compute_framework_shape` or `assert_compute_framework_shape` from `mloda._testing.compute_framework_shape` to verify a framework; the constructor must accept the `uuid=` keyword and keep it as `.uuid`, and `applicable_aspects` lists which of filter, mask and merge the framework serves.
+Use `assert_compute_framework_shape` (or `check_compute_framework_shape`) from `mloda._testing.compute_framework_shape` to verify a framework. Its constructor must accept a `uuid=` keyword and keep it as `.uuid`. `applicable_aspects` lists which of filter, mask and merge it serves.

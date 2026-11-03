@@ -25,7 +25,7 @@ class MissingInputFeatureError(ValueError):
         *,
         dropped_by: tuple[tuple[str, str], ...] = (),
     ) -> None:
-        self.dropped_by = tuple((c, g) for c, g in dropped_by)
+        self.dropped_by = tuple(dropped_by)
         self.feature_group = feature_group
         self.feature = feature
         self.missing_inputs = tuple(missing_inputs)

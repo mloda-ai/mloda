@@ -1492,3 +1492,31 @@ class TestMissingInputNamesDroppingGroup:
         assert "NonReducingReducer" in message
         assert "replaces_rows()" in message
         assert "Link" in message
+
+    @staticmethod
+    def _framework_with_missing_input() -> tuple[PyArrowTable, FeatureSet]:
+        cfw = PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        cfw.set_data(pa.table({"present": [1]}))
+        features = FeatureSet()
+        features.declared_input_features_resolved = True
+        features.declared_input_columns = {"consumer": ("raw_val",)}
+        return cfw, features
+
+    def test_missing_input_without_dropped_by_attribute_raises_missing_input_error(self) -> None:
+        """A worker-unpickled framework may lack _dropped_by; the check must not raise AttributeError."""
+        cfw, features = self._framework_with_missing_input()
+        del cfw._dropped_by
+
+        with pytest.raises(MissingInputFeatureError) as exc_info:
+            cfw.run_validate_input_features(DroppedInputConsumer, features)
+
+        assert exc_info.value.missing_inputs == ("raw_val",)
+
+    def test_missing_input_hint_only_for_recorded_drops(self) -> None:
+        cfw, features = self._framework_with_missing_input()
+        cfw._dropped_by["other"] = "SomeGroup"
+
+        with pytest.raises(MissingInputFeatureError) as exc_info:
+            cfw.run_validate_input_features(DroppedInputConsumer, features)
+
+        assert "SomeGroup" not in str(exc_info.value)

@@ -446,6 +446,7 @@ class ComputeFramework(ABC):
     def run_calculation(
         self, feature_group: Any, features: Any, location: str | None, data: Any | None = None
     ) -> Any | None:
+        # data passed in (worker or own-frame step) is not tracked, so the hint covers in-process frames only
         incoming_columns = set(self.column_names) if data is None else set()
         # case multiprocessing or case base api input feature
         if data is not None:
@@ -483,12 +484,15 @@ class ComputeFramework(ABC):
             self.data = data
 
             self.set_column_names()
-            for col in incoming_columns - self.column_names:
-                # such groups get their own frame
-                if not feature_group.replaces_rows():
-                    self._dropped_by[col] = feature_group.get_class_name()
-            for col in self.column_names:
-                self._dropped_by.pop(col, None)
+            dropped = incoming_columns - self.column_names
+            if dropped and not feature_group.replaces_rows():
+                # a replaces_rows() group owns its frame, so its drops are expected
+                tracked = self.__dict__.setdefault("_dropped_by", {})
+                for col in dropped:
+                    tracked[col] = feature_group.get_class_name()
+            if "_dropped_by" in self.__dict__:
+                for col in self.column_names:
+                    self._dropped_by.pop(col, None)
         except Exception as e:
             if not self.is_missing_column_error(e):
                 raise
@@ -951,12 +955,13 @@ class ComputeFramework(ABC):
                 )
             )
             if missing:
+                tracked = getattr(self, "_dropped_by", {})
                 raise MissingInputFeatureError(
                     feature_group=feature_group.get_class_name(),
                     feature=name,
                     missing_inputs=missing,
                     available_columns=tuple(sorted(columns)),
-                    dropped_by=tuple((c, self._dropped_by[c]) for c in missing if c in self._dropped_by),
+                    dropped_by=tuple((c, tracked[c]) for c in missing if c in tracked),
                 )
 
     def _validate_requested_parts(self, features: Any) -> None:

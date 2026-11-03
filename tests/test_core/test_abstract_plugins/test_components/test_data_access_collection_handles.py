@@ -1126,6 +1126,15 @@ class TestCredentialSecretLiteralsPerCredential:
         union: frozenset[str] = frozenset().union(*(credential_secret_literals(v) for v in dac.credentials.values()))
         assert union == dac.secret_literals()
 
+    @pytest.mark.parametrize("credentials", _PER_CREDENTIAL_CASES)
+    def test_per_credential_union_equals_identity_literals(self, credentials: dict[str, Any]) -> None:
+        from mloda.core.abstract_plugins.components.credential_leaves import credential_identity_literals
+
+        dac = DataAccessCollection(credentials=credentials)
+
+        union: frozenset[str] = frozenset().union(*(credential_identity_literals(v) for v in dac.credentials.values()))
+        assert union == dac.identity_literals()
+
     @pytest.mark.parametrize(
         "value, expected",
         [

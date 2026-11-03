@@ -12,7 +12,10 @@ from mloda.core.abstract_plugins.components.credential_grant import (
     _read_granted,
     grant_scope,
 )
-from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    current_identity_secrets,
+    current_registered_secrets,
+)
 
 _HMAC = "hmac-grant-Qv7Lk2Xz9"  # nosec B105
 _KEY = "key-grant-Wn4Rt8Bm3"  # nosec B105
@@ -106,6 +109,20 @@ class TestGrantScope:
 
         assert current_registered_secrets() == before
         assert _HMAC not in current_registered_secrets()
+
+    def test_only_credential_shaped_leaves_reach_the_identity_set(self) -> None:
+        shaped = "pw-grant-Zx3Cv7Bn5"  # nosec B105
+        value = {"host": _HOST, "password": shaped, "hmac": _HMAC}  # nosec B105
+        before = current_identity_secrets()
+
+        with grant_scope(StaticGrant({"h": value})):
+            assert {shaped, _HMAC} <= current_registered_secrets()
+            assert shaped in current_identity_secrets()
+            assert _HMAC not in current_identity_secrets()
+
+        assert current_identity_secrets() == before
+        assert shaped not in current_identity_secrets()
+        assert shaped not in current_registered_secrets()
 
     def test_a_safe_key_leaf_is_not_registered(self) -> None:
         with grant_scope(StaticGrant({"h": _credential()})):

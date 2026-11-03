@@ -4,7 +4,10 @@ from collections.abc import Mapping
 from contextvars import ContextVar, Token
 from typing import Any, Protocol
 
-from mloda.core.abstract_plugins.components.credential_leaves import credential_secret_literals
+from mloda.core.abstract_plugins.components.credential_leaves import (
+    credential_identity_literals,
+    credential_secret_literals,
+)
 from mloda.core.abstract_plugins.components.credential_scrub import redact_escaping_exception, registered_secrets_scope
 
 
@@ -64,9 +67,11 @@ class grant_scope:  # noqa: N801
     def __enter__(self) -> None:
         lookup = CredentialLookup({}) if self._grant is None else self._grant.open()
         leaves: set[str] = set()
+        identity: set[str] = set()
         for value in lookup._values():
             leaves |= credential_secret_literals(value)
-        secrets = registered_secrets_scope(frozenset(leaves))
+            identity |= credential_identity_literals(value)
+        secrets = registered_secrets_scope(frozenset(leaves), frozenset(identity))
         secrets.__enter__()
         redaction = redact_escaping_exception()
         redaction.__enter__()

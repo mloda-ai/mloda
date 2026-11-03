@@ -6,7 +6,7 @@ from typing import Any, Callable
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
 from mloda.core.abstract_plugins.components.credential_leaves import (
     MIN_REDACT_LENGTH,
-    CredentialLeaf,
+    credential_identity_literals,
     credential_secret_literals,
     iter_credential_leaves,
 )
@@ -402,16 +402,7 @@ class DataAccessCollection:
 
     def identity_literals(self) -> frozenset[str]:
         """The str leaves of 8+ chars under a credential-shaped key, for masking a published identity."""
-        return self._literals_where(lambda item: item.shaped)
-
-    def _literals_where(self, predicate: Callable[[CredentialLeaf], bool]) -> frozenset[str]:
-        leaves: set[str] = set()
-        for value in self.credentials.values():
-            for item in iter_credential_leaves(value):
-                text = item.leaf
-                if predicate(item) and isinstance(text, str) and len(text) >= MIN_REDACT_LENGTH and text.strip():
-                    leaves.add(text)
-        return frozenset(leaves)
+        return frozenset().union(*(credential_identity_literals(value) for value in self.credentials.values()))
 
     def _warn_short_secrets(self, handle: str) -> None:
         shown = "<unnamed>" if handle in self._auto_handles else handle

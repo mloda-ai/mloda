@@ -240,7 +240,7 @@ What keeps a subclass out:
 - A compute-framework pin the subclass cannot serve.
 - A [plan lock](../plan-lock.md): a takeover changes the recorded class and fails `check_plan_lock` with `PlanLockMismatchError`.
 
-To test that a subclass takes over only for its own option, call `check_subclass_scope(Sub, Parent, selecting)` (or `assert_subclass_scope`) from `mloda._testing.subclass_scope`. It reports a subclass that steals plain requests or misses its own.
+To test that a subclass takes over only for its own option, call `check_subclass_scope(Sub, Parent, selecting)` (or `assert_subclass_scope`) from `mloda._testing.subclass_scope`. A pattern-matching parent needs `requests=`, and values are not compared. It reports a subclass that steals plain requests or misses its own.
 
 `PlanStep.specialized_from` names the parents a step's feature group replaced, so `explain()` shows a takeover before anything runs. It stays empty when the parent was disabled, because the parent was never a candidate.
 

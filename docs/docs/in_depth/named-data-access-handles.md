@@ -244,6 +244,7 @@ fails, in `prepare()`, `explain()` and `run_all()` alike, with an error naming t
 credential value) when:
 
 - the key is set in `Options.context` instead of the group options;
+- a required handle key (no default) is absent from the options of a group that owns the feature name, and no other matching group declares a credential handle; the message names a close option key when one exists;
 - the value is not a non-empty `str`;
 - the handle is not registered, or is registered under another kind (the message lists the named credential handles);
 - the handle is an unnamed credential (a declared handle must be named);

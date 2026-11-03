@@ -9,19 +9,21 @@
 
 [Documentation](https://mloda-ai.github.io/mloda/) · [Plugin guides](https://github.com/mloda-ai/mloda-registry/tree/main/docs/guides) · [Website](https://mloda.ai)
 
-You name the features you want. mloda finds the plugins that produce them, orders them, runs them, and shows you the chain it used. The same request runs on plain Python, pandas, Polars, PyArrow and more.
+You name the features you want. mloda finds the plugins that produce them, orders them, runs them, and shows you the plan it used. The same request runs on plain Python, pandas, Polars, PyArrow and more.
 
-## Try it
+## See it
 
-No install needed:
+Needs [uv](https://docs.astral.sh/uv/). Nothing is added to your project: `uvx` fetches mloda into uv's own cache and runs it from there.
 
 ```bash
-uvx mloda demo
+uvx mloda@latest demo
 ```
 
-It prints a result table and the plan mloda resolved to produce it.
+It runs the example below and prints the result, then the two steps mloda chose: read the data, then aggregate. You named the features; mloda found the steps.
 
 ## Run it
+
+Install mloda, paste the example into a file and run it. Then change the feature names or the data and run it again.
 
 ```bash
 pip install mloda

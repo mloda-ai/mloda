@@ -24,6 +24,7 @@ from mloda.core.abstract_plugins.components.validators.datatype_validator import
 from mloda.provider import DefaultOptionKeys
 from mloda.user import JoinSpec
 from mloda.user import Link
+from mloda.user import MissingInputFeatureError
 from tests.test_core.test_tooling import (
     MlodaTestRunner,
     PARALLELIZATION_MODES_ALL,
@@ -1476,8 +1477,6 @@ class DroppedInputConsumer(FeatureGroup):
 
 class TestMissingInputNamesDroppingGroup:
     def test_error_names_dropping_group_and_suggests_replaces_rows(self) -> None:
-        from mloda.user import MissingInputFeatureError
-
         with pytest.raises(MissingInputFeatureError) as exc_info:
             mloda.run_all(
                 [Feature("dropped_input_consumer")],

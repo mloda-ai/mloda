@@ -882,13 +882,14 @@ def _grant_run(
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
     from tests.helpers.credential_handle_stubs import HANDLE_KEY
 
+    groups = set(group) if isinstance(group, tuple) else {group}
     return mloda.run_all(
         [Feature(name, options={HANDLE_KEY: _E2E_HANDLE})],
         compute_frameworks=[PandasDataFrame],
         parallelization_modes={mode},
         flight_server=flight_server,
         data_access_collection=_vault_dac(),
-        plugin_collector=PluginCollector.enabled_feature_groups({group}),
+        plugin_collector=PluginCollector.enabled_feature_groups(groups),
         function_extender=function_extender,
     )
 
@@ -940,6 +941,23 @@ class ChsReadingFG(ChsSource):
         host = _granted(handle)["host"]
         row = f"{host}|{_secret_length_via_helper(handle)}"
         return pd.DataFrame({name: [row] for name in features.get_all_names()})
+
+
+class ChsReadSourceFG(ChsSource):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_read_src_a"}
+
+
+class ChsReadingConsumerFG(ChsReadingFG):
+    """Reads its declared handle over a plain input feature that never receives the handle."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_read_consumer_a"}
+
+    def input_features(self, options: Any, feature_name: Any) -> set[Feature] | None:
+        return {Feature("chs_read_src_a")}
 
 
 class ChsFailingReadFG(ChsSource):
@@ -1007,10 +1025,19 @@ class GrantOnlyKind:
         pytest.param(True, f"grant-only.example|{len(GRANT_ONLY_SECRET)}", id="grant_only_value"),
     ],
 )
+@pytest.mark.parametrize(
+    "groups, name",
+    [
+        pytest.param(ChsReadingFG, "chs_read_a", id="direct"),
+        pytest.param((ChsReadingConsumerFG, ChsReadSourceFG), "chs_read_consumer_a", id="over_input"),
+    ],
+)
 def test_declared_credential_is_readable_in_calculate_feature_and_a_helper_in_every_mode(
     mode: ParallelizationMode,
     grant_only: bool,
     expected: str,
+    groups: Any,
+    name: str,
     flight_server: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1019,9 +1046,9 @@ def test_declared_credential_is_readable_in_calculate_feature_and_a_helper_in_ev
     if grant_only:
         monkeypatch.setattr(ComputeFrameworkExecutor, "_grant_kind", GrantOnlyKind)
 
-    result = _grant_run(ChsReadingFG, "chs_read_a", mode, flight_server)
+    result = _grant_run(groups, name, mode, flight_server)
 
-    assert list(result[0]["chs_read_a"]) == [expected]
+    assert list(result[0][name]) == [expected]
 
 
 @pytest.mark.timeout(15)

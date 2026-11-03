@@ -496,6 +496,7 @@ class Options:
         forward_group_exclude: frozenset[str] = frozenset(),
         inherit_context_keys: frozenset[str] = frozenset(),
         owner: str | None = None,
+        consumer_local_keys: frozenset[str] = frozenset(),
     ) -> frozenset[str]:
         """
         Inherit options from the consumer feature that declared this input feature.
@@ -508,6 +509,8 @@ class Options:
           False is the explicit opt-out and copies nothing. A frozenset restricts the copy to
           the listed keys. Group-to-group only; keys absent from consumer.group are skipped
           silently.
+        - consumer_local_keys: keys the consumer keeps local; subtracted under None/True, but an
+          explicit frozenset allowlist that names one still forwards it.
         - forward_group_exclude: keys subtracted from whatever set forward_group produced.
           Combining it (non-empty) with forward_group=False is contradictory and raises.
         - inherit_context_keys: consumer.context keys pulled into self.context. Context-to-context
@@ -563,7 +566,7 @@ class Options:
         if forward_group is False:
             group_keys: frozenset[str] = frozenset()
         elif forward_group is None or forward_group is True:
-            group_keys = frozenset(consumer.group.keys())
+            group_keys = frozenset(consumer.group.keys()) - consumer_local_keys
         else:
             group_keys = forward_group
 

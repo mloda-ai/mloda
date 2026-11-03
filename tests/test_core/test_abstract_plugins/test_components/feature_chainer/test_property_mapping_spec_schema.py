@@ -58,6 +58,7 @@ class TestTheConstructorIsTheSchema:
             "allow_explicit_none",
             "deferred_binding",
             "caller_settable",
+            "forward_to_inputs",
             "name_converter",
             "expected",
         }

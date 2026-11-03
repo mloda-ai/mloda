@@ -757,6 +757,18 @@ class TestPropertySpecCallerSettable:
         with pytest.raises(ValueError, match="caller_settable must be a bool"):
             property_spec("d", caller_settable=not_a_bool)
 
+    def test_forward_to_inputs_defaults_true_and_passes_through_builder(self) -> None:
+        assert property_spec("d").forward_to_inputs is True
+        assert PropertySpec("d").forward_to_inputs is True
+        assert property_spec("d", forward_to_inputs=False).forward_to_inputs is False
+
+    def test_non_bool_forward_to_inputs_raises(self) -> None:
+        not_a_bool: Any = "no"
+        with pytest.raises(ValueError, match="forward_to_inputs must be a bool"):
+            PropertySpec("d", forward_to_inputs=not_a_bool)
+        with pytest.raises(ValueError, match="forward_to_inputs must be a bool"):
+            property_spec("d", forward_to_inputs=not_a_bool)
+
 
 class TestCredentialHandleSpecBuilder:
     """``credential_handle_spec`` is a PropertySpec builder with the handle fields fixed."""
@@ -767,6 +779,7 @@ class TestCredentialHandleSpecBuilder:
         assert isinstance(spec, CredentialHandleSpec)
         assert isinstance(spec, PropertySpec)
         assert (spec.context, spec.strict_validation, spec.caller_settable) == (False, True, False)
+        assert spec.forward_to_inputs is False
         assert callable(spec.element_validator)
         assert (spec.required_fields, spec.public_fields) == ((), ())
         with pytest.raises(dataclasses.FrozenInstanceError):
@@ -793,6 +806,7 @@ class TestCredentialHandleSpecBuilder:
             {"context": True},
             {"strict_validation": False},
             {"caller_settable": True},
+            {"forward_to_inputs": True},
             {"match_guard": lambda value: True, "expected": "a name"},
             {"allowed_values": ("vault-x",)},
             {"required_when": lambda options: True},

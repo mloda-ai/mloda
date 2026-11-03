@@ -43,6 +43,7 @@ PROPERTY_MAPPING = {
 | `deferred_binding` | `bool` | `False` | Exempts a required key from the string-named path presence check only; its value is bound outside match-time name capture. Not optionality: the key stays required on the config path. See [Required presence on the string-named path](#required-presence-on-the-string-named-path). |
 | `name_converter` | `Callable[[str], Any] \| None` | `None` | Converts the captured text of a named capture bound to this key (e.g. `int`), before validation. Never applied to explicit options or the legacy positional fallback. |
 | `caller_settable` | `bool` | `True` | `False`: an MCP caller may never set the key, even when `[mcp] allow_options` lists it. See [MCP Server and CLI](mcp-server.md#what-stays-on-the-server). |
+| `forward_to_inputs` | `bool` | `True` | `False`: the key stays on the feature that declares it; input features do not inherit it unless an explicit `forward_group` allowlist names it. Group forwarding only: context pushes and pulls are unchanged. |
 
 A key declared with `credential_handle_spec(...)` names a credential handle and may not be moved to context. See [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle).
 
@@ -452,6 +453,7 @@ name is authoritative for every value it encodes. Every named capture group `(?P
 owned name that is a PROPERTY_MAPPING key binds to that key and is validated like an option, even
 when the option is also present; an unsupported value is a recorded match-time rejection. This
 covers a secondary capture and an `element_validator`-only spec (one with no `allowed_values`).
+A key declared with `credential_handle_spec` may not be a named capture; the class definition raises.
 
 By default, `_get_prefix_patterns()` collects `PREFIX_PATTERN` and `SUFFIX_PATTERN`. A custom or
 inherited override supplies the effective patterns used by matching, `name_bindings`, `resolve_subtype`,
@@ -693,6 +695,8 @@ if it really is a whole-value check.
 | Shape rules, relocated from class definition to construction | `tests/.../feature_chainer/test_property_mapping_spec_shape.py` |
 | Declared-default invariant | `tests/test_core/test_abstract_plugins/test_property_mapping_default_invariant.py` |
 | Declared defaults materialized into runtime options | `tests/test_core/test_abstract_plugins/test_options_with_defaults.py` |
+| A credential handle never forwards to input features and is never a named capture | `tests/test_core/test_abstract_plugins/test_components/test_credential_handle_spec.py` |
+| `consumer_local_keys` and the explicit-allowlist override in `Options.inherit_from` | `tests/test_core/test_abstract_plugins/test_components/test_options_inherit_from.py` |
 | Declared defaults materialized at the compute boundary | `tests/test_core/test_abstract_plugins/test_materialize_defaults_boundary.py` |
 | Declared defaults materialized at intake, canonicalizing default-equivalent twins | `tests/test_core/test_abstract_plugins/test_intake_default_canonicalization.py` |
 | Filter criteria matching observes effective options | `tests/test_core/test_filter/test_filter_criteria_effective_options.py` |

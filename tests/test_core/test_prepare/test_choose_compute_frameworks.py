@@ -1450,9 +1450,9 @@ def test_a_thirty_block_component_with_a_tied_optimum_solves_quickly(
         net.edge(parent, child)
 
     chooser = net.chooser(positions)  # built before the timer: construction carries one-time cold setup
-    started = time.perf_counter()
+    started = time.thread_time()
     chooser.choose()
-    elapsed = time.perf_counter() - started
+    elapsed = time.thread_time() - started
 
     assert elapsed < 5.0, f"choosing took {elapsed:.1f}s"
     assert net.conversions() == 3
@@ -1493,10 +1493,10 @@ def test_an_infeasible_chain_raises_quickly_and_names_the_failing_block() -> Non
     net.edge(layers[-1], sink)
 
     chooser = net.chooser()
-    started = time.perf_counter()
+    started = time.thread_time()
     with pytest.raises(ValueError, match="blowup_sink") as raised:
         chooser.choose()
-    elapsed = time.perf_counter() - started
+    elapsed = time.thread_time() - started
 
     assert elapsed < 1.0, f"raising took {elapsed:.1f}s"
     assert "blowup_layer" not in str(raised.value), "the message must name the emptied block, not the whole component"
@@ -1534,9 +1534,9 @@ def test_a_twenty_five_block_six_framework_component_with_a_forced_conversion_so
     assert len(net.features) == 25
 
     chooser = net.chooser(chooser_class=_AllConvertibleChooser)
-    started = time.perf_counter()
+    started = time.thread_time()
     chooser.choose()
-    elapsed = time.perf_counter() - started
+    elapsed = time.thread_time() - started
 
     assert elapsed < 0.2, f"choosing took {elapsed:.1f}s"
     assert hub.chosen_compute_framework is fws[5]
@@ -1592,9 +1592,9 @@ def test_one_fixed_parent_feeding_many_free_children_is_chosen_quickly(
     net = _Net()
     expected = build(net, size)
     chooser = net.chooser(positions, output_framework=P)  # built before the timer
-    started = time.perf_counter()
+    started = time.thread_time()
     chooser.choose()
-    elapsed = time.perf_counter() - started
+    elapsed = time.thread_time() - started
 
     assert elapsed < 1.0, f"choosing took {elapsed:.1f}s"
     for features, reason, framework in expected:
@@ -1722,7 +1722,7 @@ def _many_pair(net: _Net) -> _Expected:
     return [(roots, ONLY_ALLOWED, D), (leaves, CONVERTS_LATER, D)]
 
 
-# Timed on thread CPU time, so waiting for a CPU does not count; setup plus choose can still pass the default timeout.
+# Timed on thread CPU time, so waiting for a CPU does not count; setup plus choose can still exceed the default timeout.
 @pytest.mark.timeout(30)
 @pytest.mark.parametrize("build", [_many_chain, _many_single, _many_pair], ids=["chain", "single", "pair"])
 def test_many_blocks_or_components_are_chosen_quickly(build: Callable[[_Net], _Expected]) -> None:

@@ -71,6 +71,54 @@ def test_round_trip(adapter: Any) -> None:
         assert adapter.column_values(result, "i") == [1, None, 3]
         assert adapter.column_values(result, "d") == [1.5, 2.5, None]
         assert adapter.column_values(result, "s") == ["a", None, "c"]
+        assert adapter.column_values(result, "b") == [True, False, None]
+
+
+def test_null_timestamp_reads_back_as_none(adapter: Any) -> None:
+    values = [datetime(2024, 1, 1), None]
+    with adapter:
+        result = adapter.from_typed(TypedTestData({"t": (DataType.TIMESTAMP_MICROS, values)}))
+
+        read = adapter.column_values(result, "t")
+
+    assert read[0] == datetime(2024, 1, 1)
+    assert read[1] is None
+
+
+def test_list_cells_read_back_as_lists(adapter: Any) -> None:
+    if type(adapter).__name__ == "SqliteAdapter":
+        pytest.skip("SQLite cannot hold LIST")
+    values = [[1, 2], None, [3]]
+    with adapter:
+        result = adapter.from_typed(TypedTestData({"l": (DataType.LIST, values)}))
+
+        assert adapter.column_values(result, "l") == values
+
+
+def test_pandas_string_column_keeps_string_dtype() -> None:
+    adapter = _make("Pandas")
+    if not adapter.is_available():
+        pytest.skip("Pandas backend unavailable")
+
+    assert adapter.lost_type(adapter.from_typed(_data()), "s") is False
+
+
+@pytest.mark.parametrize("name", _CONNECTION)
+def test_open_twice_raises(name: str) -> None:
+    adapter = _make(name)
+    if not adapter.is_available():
+        pytest.skip(f"{name} backend unavailable")
+    with adapter:
+        with pytest.raises(RuntimeError):
+            adapter.open()
+
+
+def test_to_arrow_table_only_empty_lists_raises_naming_column() -> None:
+    pytest.importorskip("pyarrow")
+    from mloda._testing.framework_adapter import to_arrow_table
+
+    with pytest.raises(ValueError, match="items"):
+        to_arrow_table(TypedTestData({"items": (DataType.LIST, [[], []])}))
 
 
 def test_zero_row_keeps_names(adapter: Any) -> None:
@@ -117,7 +165,7 @@ _INT32_CHECKS: dict[str, Callable[[Any], bool]] = {
     "Pandas": lambda t: str(t) == "int32",
     "Polars": lambda t: str(t) == "Int32",
     "PolarsLazy": lambda t: str(t) == "Int32",
-    "DuckDB": lambda t: "32" in str(t) or "INTEGER" in str(t).upper(),
+    "DuckDB": lambda t: str(t) == "int32",
 }
 
 

@@ -29,4 +29,7 @@ class TimeWindowZeroRowTestMixin(ZeroRowResultTypeTestMixin):
     @pytest.mark.parametrize("window_function", WINDOW_FUNCTIONS)
     def test_zero_rows_result_is_typed(self, window_function: str, source: str) -> None:
         feature_name = f"{source}__{window_function}_3_day_window"
-        self.assert_typed(self.calculate(ZERO_ROWS, Feature(feature_name)), feature_name, 0)
+        pa = pytest.importorskip("pyarrow")
+        arrow_types = {DefaultOptionKeys.reference_time.value: pa.timestamp("ns")}
+        result = self.calculate(ZERO_ROWS, Feature(feature_name), arrow_types=arrow_types)
+        self.assert_typed(result, feature_name, 0)

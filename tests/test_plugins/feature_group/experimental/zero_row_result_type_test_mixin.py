@@ -6,7 +6,7 @@ feature_group_class is a feature group, or an Implementation for operation famil
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from mloda._testing.framework_adapter import FrameworkAdapter
 from mloda._testing.framework_adapter import PandasAdapter as _PandasAdapter
@@ -18,6 +18,9 @@ from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Feature
+
+if TYPE_CHECKING:
+    import pyarrow as pa
 
 
 def edit_columns(
@@ -41,11 +44,13 @@ class ZeroRowResultTypeTestMixin:
     feature_group_class: ClassVar[type[FeatureGroup] | type[Implementation[Any]]]
     adapter: ClassVar[FrameworkAdapter]
 
-    def calculate(self, data: TypedTestData, *features: Feature) -> Any:
+    def calculate(
+        self, data: TypedTestData, *features: Feature, arrow_types: Mapping[str, pa.DataType] | None = None
+    ) -> Any:
         feature_set = FeatureSet()
         for feature in features:
             feature_set.add(feature)
-        frame = self.adapter.from_typed(data)
+        frame = self.adapter.from_typed(data, arrow_types)
         if issubclass(self.feature_group_class, Implementation):
             return self.feature_group_class.calculate(self.feature_group_class.feature_group, frame, feature_set, None)
         return self.feature_group_class.calculate_feature(frame, feature_set)

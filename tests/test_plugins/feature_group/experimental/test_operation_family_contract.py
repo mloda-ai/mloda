@@ -17,7 +17,6 @@ from mloda._testing.framework_adapter import FrameworkAdapter
 from mloda._testing.framework_adapter import PandasAdapter, PolarsLazyAdapter, PyArrowAdapter, PythonDictAdapter
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.data_types import DataType
-
 from mloda.core.abstract_plugins.components.code_closure import closure_parts
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
@@ -452,6 +451,7 @@ def test_loop_runs_on_declared_inputs_only(name: str, impl: type[Any], options: 
     assert declared is not None
     inputs = LOOP_INPUT_CASES[name][0]()
     declared_names = {str(f.name) for f in declared}
+    assert declared_names <= set(inputs.types)
     table = edit_columns(inputs, drop=[column for column in inputs.types if column not in declared_names])
     data = _ADAPTERS[impl.compute_framework].from_typed(table)
     feature_set = FeatureSet()
@@ -483,6 +483,7 @@ def _dropped_input_cases() -> list[Any]:
 def test_core_rejects_each_dropped_declared_input(name: str, impl: type[Any], options: Options, dropped: str) -> None:
     feature = Feature(OPERATION_FAMILIES[name][3], options)
     table = LOOP_INPUT_CASES[name][0]()
+    assert dropped in table.types
     table = edit_columns(table, add={"spare": (DataType.INT64, [0] * table.row_count)}, drop=[dropped])
     data = _ADAPTERS[impl.compute_framework].from_typed(table)
 

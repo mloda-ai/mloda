@@ -6,11 +6,12 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.optional_dependency import require
+from mloda.user.python_dict import row_count
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
 class AdapterCapabilities:
     """typed_columns: the frame carries a native type per column (False for PythonDict)."""
 
-    typed_columns: bool
+    typed_columns: bool = True
 
 
 def _module_available(name: str) -> bool:
@@ -48,9 +49,12 @@ def to_arrow_table(data: TypedTestData, arrow_types: Mapping[str, pa.DataType] |
             else:
                 arrays.append(pa.array(values))
         elif data_type == DataType.LIST:
-            if all(v is None for v in values):
-                raise ValueError(f"column '{name}': a LIST column without values needs an arrow_types override")
-            arrays.append(pa.array(values))
+            array = pa.array(values)
+            if pa.types.is_null(array.type) or (
+                pa.types.is_list(array.type) and pa.types.is_null(array.type.value_type)
+            ):
+                raise ValueError(f"column '{name}': a LIST column without element values needs an arrow_types override")
+            arrays.append(array)
         else:
             arrays.append(pa.array(values, type=DataType.to_arrow_type(data_type)))
     return pa.table(arrays, names=list(data.types))
@@ -101,7 +105,7 @@ class FrameworkAdapter(ABC):
     def close(self) -> None:
         return None
 
-    def __enter__(self) -> FrameworkAdapter:
+    def __enter__(self) -> Self:
         self.open()
         return self
 
@@ -128,13 +132,14 @@ class PythonDictAdapter(FrameworkAdapter):
         return table.to_pydict()
 
     def from_typed(self, data: TypedTestData, arrow_types: Mapping[str, pa.DataType] | None = None) -> Any:
+        """arrow_types does not apply to Python dicts."""
         return data.to_python_dict()
 
     def column_names(self, result: Any) -> list[str]:
         return list(result)
 
     def row_count(self, result: Any) -> int:
-        return len(next(iter(result.values()), []))
+        return row_count(result)
 
     def column_values(self, result: Any, column: str) -> list[Any]:
         return list(result[column])
@@ -146,15 +151,11 @@ class PythonDictAdapter(FrameworkAdapter):
         return False
 
 
-class _ArrowBuiltAdapter(FrameworkAdapter):
-    """Frames are built from Arrow tables, so pyarrow is required."""
+class _ArrowReadAdapter(FrameworkAdapter):
+    """Reads results through an Arrow table, so pyarrow is required."""
 
     def is_available(self) -> bool:
         return super().is_available() and _module_available("pyarrow")
-
-
-class _ArrowReadAdapter(_ArrowBuiltAdapter):
-    """Reads results through an Arrow table."""
 
     @abstractmethod
     def to_table(self, result: Any) -> pa.Table: ...
@@ -192,7 +193,7 @@ class PyArrowAdapter(_ArrowReadAdapter):
         return result
 
 
-class PandasAdapter(_ArrowBuiltAdapter):
+class PandasAdapter(FrameworkAdapter):
     capabilities = AdapterCapabilities(typed_columns=True)
 
     def compute_framework(self) -> type[ComputeFramework]:
@@ -201,7 +202,13 @@ class PandasAdapter(_ArrowBuiltAdapter):
         return PandasDataFrame
 
     def from_arrow(self, table: pa.Table) -> Any:
-        return table.to_pandas()
+        pd = require("pandas", "building pandas test frames")
+        pa = require("pyarrow", "building pandas test frames")
+
+        return table.to_pandas(
+            types_mapper={pa.string(): pd.StringDtype()}.get,
+            coerce_temporal_nanoseconds=False,
+        )
 
     def column_names(self, result: Any) -> list[str]:
         return [str(c) for c in result.columns]
@@ -210,10 +217,15 @@ class PandasAdapter(_ArrowBuiltAdapter):
         return int(len(result))
 
     def column_values(self, result: Any, column: str) -> list[Any]:
-        """Scalar NaN and NA read as None; list cells are untouched. Not a NaN-versus-null oracle."""
+        """NaT, NaN and NA read as None and array cells as lists. Not a NaN-versus-null oracle."""
         pd = require("pandas", "reading pandas test frames")
 
-        return [None if v is pd.NA or (isinstance(v, float) and v != v) else v for v in result[column].tolist()]
+        def plain(v: Any) -> Any:
+            if v is pd.NA or v is pd.NaT or (isinstance(v, float) and v != v):
+                return None
+            return v.tolist() if hasattr(v, "tolist") else v
+
+        return [plain(v) for v in result[column].tolist()]
 
     def column_type(self, result: Any, column: str) -> Any:
         return result[column].dtype
@@ -222,7 +234,7 @@ class PandasAdapter(_ArrowBuiltAdapter):
         return str(self.column_type(result, column)) == "object"
 
 
-class PolarsAdapter(_ArrowBuiltAdapter):
+class PolarsAdapter(FrameworkAdapter):
     capabilities = AdapterCapabilities(typed_columns=True)
 
     def compute_framework(self) -> type[ComputeFramework]:
@@ -231,7 +243,8 @@ class PolarsAdapter(_ArrowBuiltAdapter):
         return PolarsDataFrame
 
     def from_arrow(self, table: pa.Table) -> Any:
-        pl = require("polars", "reading polars test frames")
+        pl = require("polars", "building polars test frames")
+        require("pyarrow", "building polars test frames")
 
         return pl.from_arrow(table)
 
@@ -268,6 +281,12 @@ class PolarsLazyAdapter(PolarsAdapter):
     def _eager(self, result: Any) -> Any:
         return result.collect()
 
+    def column_names(self, result: Any) -> list[str]:
+        return list(result.collect_schema().names())
+
+    def column_type(self, result: Any, column: str) -> Any:
+        return result.collect_schema()[column]
+
 
 class DuckDBAdapter(_ArrowReadAdapter):
     capabilities = AdapterCapabilities(typed_columns=True)
@@ -285,12 +304,15 @@ class DuckDBAdapter(_ArrowReadAdapter):
         return DuckDBFramework
 
     def open(self) -> None:
+        if self._connection is not None:
+            raise RuntimeError("DuckDBAdapter is already open")
         duckdb = require("duckdb", "opening a DuckDB test session")
 
         from mloda.user import ParallelizationMode
         from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 
         self._connection = duckdb.connect()
+        # Building the framework object is what pins the session time zone to UTC.
         framework = DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         framework.set_framework_connection_object(self._connection)
 
@@ -328,10 +350,14 @@ class SqliteAdapter(_ArrowReadAdapter):
     def open(self) -> None:
         import sqlite3
 
+        if self._connection is not None:
+            raise RuntimeError("SqliteAdapter is already open")
+
         from mloda.user import ParallelizationMode
         from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 
         self._connection = sqlite3.connect(":memory:")
+        # Building the framework object is what registers REGEXP and DQS handling.
         framework = SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         framework.set_framework_connection_object(self._connection)
 

@@ -8,7 +8,8 @@ on framework-native data (not just PyArrow).
 
 The canonical test data lives here as class-level ``VALIDATOR_COLUMNS`` / ``PRECISION_COLUMNS``
 ``ColumnSpec`` tuples. The mixin materialises that spec into a canonical, typed ``pa.Table``
-via ``_arrow_table`` (the only place ``c.values`` is read, validated through ``TypedTestData``). Framework subclasses implement
+via ``_arrow_table`` (the only place ``c.values`` is read, validated through ``TypedTestData``).
+Framework subclasses implement
 ``from_arrow(table)`` to convert that table into the framework-native container, and only
 override the data fixtures when they need an additional fixture such as ``connection`` or
 ``spark_session``.

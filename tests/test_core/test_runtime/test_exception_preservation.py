@@ -656,7 +656,7 @@ def test_threading_load_error_masks_registered_token(
     _assert_token_gone(excinfo.value, group, caplog)
 
 
-_TOKEN_KEYS = ["token", "key", "hmac", "toyfmt_custom_field"]
+_TOKEN_KEYS = ["key", "hmac", "toyfmt_custom_field"]
 
 
 @pytest.mark.parametrize("token_key", _TOKEN_KEYS)

@@ -11,9 +11,10 @@ if TYPE_CHECKING:
 class InputDataLoadMarker:
     """Holds (framework, calculate HookContext) while its calculation runs; survives copies, pickles inactive."""
 
-    __slots__ = ("active", "framework", "has_extender", "gate")
+    __slots__ = ("active", "framework", "has_extender", "gate", "secrets")
 
     def __init__(self, has_extender: bool, gate: bool) -> None:
+        self.secrets: frozenset[str] = frozenset()
         self.active: tuple[ComputeFramework, HookContext] | None = None
         self.framework: ComputeFramework | None = None
         self.has_extender = has_extender

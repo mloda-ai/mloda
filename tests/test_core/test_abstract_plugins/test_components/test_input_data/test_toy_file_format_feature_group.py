@@ -19,6 +19,7 @@ from mloda.core.abstract_plugins.components.input_data.file_source import FileSo
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
+from mloda.core.api.plan_info import source_of
 from mloda.provider import ReadFileFG, SourceFeatureGroup
 from mloda.steward import ReaderProbeScope, reader_probe_scope
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -306,23 +307,45 @@ class TestUserinfoUriPlanIdentity:
     """A userinfo URI handle never shows its password in the plan step identity or the rendered plan."""
 
     @pytest.mark.parametrize(
-        "template,expected,secret",
+        "template,expected,secret,credentials",
         [
-            ("s3://alice:hunter2@bucket/plan{s}", "s3://bucket/plan{s}", "hunter2"),  # nosec B105
+            ("s3://alice:hunter2@bucket/plan{s}", "s3://bucket/plan{s}", "hunter2", None),  # nosec B105
             (
                 "s3://bucket/dir;jsessionid=SECRETSESSION/plan{s}",  # nosec B105
                 "s3://bucket/dir;***/plan{s}",
                 "SECRETSESSION",
+                None,
             ),
             (
                 "s3://bucket/dir;%74oken=SECRETENCODED/plan{s}",  # nosec B105
                 "s3://bucket/dir;***/plan{s}",
                 "SECRETENCODED",
+                None,
+            ),
+            (
+                "s3://bucket/botLITERALTOKEN1/plan{s}",
+                "s3://bucket/bot***/plan{s}",
+                "LITERALTOKEN1",  # nosec B105
+                {"h": {"token": "LITERALTOKEN1"}},  # nosec B105
+            ),
+            (
+                "s3://bucket/auth=LITERALTOKEN2/plan{s}",
+                "s3://bucket/auth=***/plan{s}",
+                "LITERALTOKEN2",  # nosec B105
+                {"h": {"token": "LITERALTOKEN2"}},  # nosec B105
             ),
         ],
-        ids=["userinfo-password", "session-id-path-param", "encoded-path-param"],
+        ids=[
+            "userinfo-password",
+            "session-id-path-param",
+            "encoded-path-param",
+            "literal-path-segment",
+            "literal-hive-segment",
+        ],
     )
-    def test_plan_step_identity_and_render_hide_the_password(self, template: str, expected: str, secret: str) -> None:
+    def test_plan_step_identity_and_render_hide_the_password(
+        self, template: str, expected: str, secret: str, credentials: dict[str, Any] | None
+    ) -> None:
         column = "toyfmt_uri_plan_col"
         uri = template.format(s=TOY_SUFFIX)
 
@@ -343,18 +366,65 @@ class TestUserinfoUriPlanIdentity:
             def has_column(cls, match: Any, column_name: str) -> bool | None:
                 return column_name == column
 
-        explained = mloda.explain(
+        def collection() -> DataAccessCollection:
+            if credentials is None:
+                return DataAccessCollection(files={uri})
+            return DataAccessCollection(files={uri}, credentials=credentials)
+
+        session = mloda.prepare(
             [Feature(column)],
             compute_frameworks=[PyArrowTable],
-            data_access_collection=DataAccessCollection(files={uri}),
+            data_access_collection=collection(),
             plugin_collector=PluginCollector.enabled_feature_groups({ToyfmtUriPlanFG}),
         )
+        explained = session.resolved_plan()
         steps = [step for step in explained if step.step_kind == "compute"]
         assert len(steps) == 1
         assert steps[0].data_access_identity == expected.format(s=TOY_SUFFIX)
         assert secret not in repr(explained)
         assert secret not in str(explained)
-        del explained, steps, ToyfmtUriPlanFG
+        if credentials is not None:
+            assert secret in source_of(session._execution_plan(), steps[0])[1].source
+        del session, explained, steps, ToyfmtUriPlanFG
+
+    def test_a_provider_identity_override_holding_a_registered_token_is_masked(self) -> None:
+        column = "toyfmt_uri_override_col"
+        token = "OVERRIDETOKEN9"  # nosec B105
+
+        class ToyfmtUriOverrideFG(ToyFileFormatFG):
+            @classmethod
+            def match_feature_group_criteria(
+                cls, feature_name: Any, options: Options, data_access_collection: Any = None
+            ) -> bool:
+                if str(feature_name) != column:
+                    return False
+                return bool(super().match_feature_group_criteria(feature_name, options, data_access_collection))
+
+            @classmethod
+            def columns(cls, match: Any) -> Collection[str] | None:
+                return [column]
+
+            @classmethod
+            def has_column(cls, match: Any, column_name: str) -> bool | None:
+                return column_name == column
+
+            @classmethod
+            def data_access_identity(cls, match: Any) -> str:
+                return f"api://example/bot{token}/x.json"
+
+        plan = mloda.explain(
+            [Feature(column)],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=DataAccessCollection(
+                files={f"s3://bucket/override{TOY_SUFFIX}"}, credentials={"h": {"token": token}}
+            ),
+            plugin_collector=PluginCollector.enabled_feature_groups({ToyfmtUriOverrideFG}),
+        )
+        steps = [step for step in plan if step.step_kind == "compute"]
+        assert len(steps) == 1
+        assert steps[0].data_access_identity == "api://example/bot***/x.json"
+        assert token not in repr(plan)
+        del plan, steps, ToyfmtUriOverrideFG
 
 
 class TestFileSourceUriProjection:

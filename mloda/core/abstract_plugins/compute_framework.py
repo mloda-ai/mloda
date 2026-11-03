@@ -7,6 +7,7 @@ from contextvars import ContextVar
 from typing import Any, ClassVar, NoReturn, final, get_origin
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
+from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
@@ -862,6 +863,7 @@ class ComputeFramework(ABC):
         if stamped:
             features._load_marker = marker
         marker.framework = self
+        marker.secrets = current_registered_secrets()
         token = current_input_data_load_marker.set(marker)
         try:
             if extender is None and fetch_extender is None:

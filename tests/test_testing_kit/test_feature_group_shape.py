@@ -90,7 +90,20 @@ def make_run_group(kind: str = "ok") -> type[FeatureGroup]:
                 data["rg_src"] = [0 for _ in data["rg_src"]]
                 return data
             if kind == "wrong_type":
-                data["rg_out"] = [str(v) for v in data["rg_src"]]
+                if _is_columnar_dict(data):
+                    data["rg_out"] = [str(v) for v in data["rg_src"]]
+                    return data
+                if hasattr(data, "iloc"):
+                    data["rg_out"] = data["rg_src"].astype("string")
+                    return data
+                import pyarrow as pa
+
+                strings = [str(v) for v in data["rg_src"].to_pylist()]
+                return data.append_column("rg_out", pa.array(strings, type=pa.string()))
+            if kind == "emits_na":
+                import pandas as pd
+
+                data["rg_out"] = pd.array([1 if i % 2 == 0 else pd.NA for i in range(len(data))], dtype="Int64")
                 return data
             if kind == "loses_schema_on_zero_rows":
                 import pyarrow as pa
@@ -101,7 +114,7 @@ def make_run_group(kind: str = "ok") -> type[FeatureGroup]:
             if kind == "leaks_cell_in_error":
                 labels = data["rg_label"]
                 if labels and labels[0] != "alpha-secret":
-                    raise ValueError("unexpected label, expected 'alpha-secret'")
+                    raise ValueError(f"unexpected label {labels[0]}")
                 return _double_into(data, "rg_out", "rg_src")
             if kind == "nondeterministic":
                 counter[0] += 1
@@ -110,6 +123,26 @@ def make_run_group(kind: str = "ok") -> type[FeatureGroup]:
             return _double_into(data, "rg_out", "rg_src")
 
     return RunGroup
+
+
+def make_static_run_group() -> type[FeatureGroup]:
+    class StaticRunGroup(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {"rg_out"}
+
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+            return {Feature("rg_src"), Feature("rg_label")}
+
+        @classmethod
+        def return_data_type_rule(cls, feature: Feature) -> DataType | None:
+            return DataType.INT64
+
+        @staticmethod
+        def calculate_feature(data: Any, features: Any) -> Any:
+            return _double_into(data, "rg_out", "rg_src")
+
+    return StaticRunGroup
 
 
 def _run_data() -> TypedTestData:
@@ -325,15 +358,32 @@ def _toy_data() -> TypedTestData:
     return TypedTestData({"toy_src": (DataType.INT64, [1, 2, 3])})
 
 
-def test_toy_group_passes_run_checks_on_python_dict() -> None:
-    result = check_feature_group_shape(make_toy_group(), input_data=_toy_data(), adapter=PythonDictAdapter())
+@pytest.mark.parametrize("adapter_cls", [PythonDictAdapter, PyArrowAdapter])
+def test_toy_group_passes_run_checks(adapter_cls: type[Any]) -> None:
+    if adapter_cls is PyArrowAdapter:
+        pytest.importorskip("pyarrow")
+    result = check_feature_group_shape(make_toy_group(), input_data=_toy_data(), adapter=adapter_cls())
     assert result.failures == ()
 
 
-def test_toy_group_passes_run_checks_on_pyarrow() -> None:
+def test_static_calculate_feature_run_group_passes() -> None:
+    result = check_feature_group_shape(make_static_run_group(), input_data=_run_data(), adapter=PythonDictAdapter())
+    assert result.failures == (), result.failures
+
+
+def test_pandas_na_output_passes_determinism() -> None:
+    pytest.importorskip("pandas")
     pytest.importorskip("pyarrow")
-    result = check_feature_group_shape(make_toy_group(), input_data=_toy_data(), adapter=PyArrowAdapter())
-    assert result.failures == ()
+    result = check_feature_group_shape(make_run_group("emits_na"), input_data=_run_data(), adapter=PandasAdapter())
+    assert result.failures == (), result.failures
+
+
+def test_root_group_run_notes_skipped_checks(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("pandas")
+    pytest.importorskip("pyarrow")
+    monkeypatch.chdir(tmp_path)
+    result = check_feature_group_shape(ListDirectoryFeatureGroup, input_data=TypedTestData({}), adapter=PandasAdapter())
+    assert any("zero_rows" in n and "error_values" in n and "not run" in n for n in result.notes), result.notes
 
 
 def test_assert_forwards_run_keywords() -> None:
@@ -381,6 +431,8 @@ def test_requested_name_already_in_input_data_fails_outputs() -> None:
         ("drops_output", "outputs:", PythonDictAdapter),
         ("overwrites_input", "outputs:", PythonDictAdapter),
         ("wrong_type", "type:", PythonDictAdapter),
+        ("wrong_type", "type:", PyArrowAdapter),
+        ("wrong_type", "type:", PandasAdapter),
         ("loses_schema_on_zero_rows", "zero_rows:", PyArrowAdapter),
         ("leaks_cell_in_error", "error_values:", PythonDictAdapter),
         ("nondeterministic", "determinism:", PythonDictAdapter),
@@ -388,6 +440,9 @@ def test_requested_name_already_in_input_data_fails_outputs() -> None:
 )
 def test_broken_run_group_fails_only_its_sub_check(kind: str, prefix: str, adapter_cls: type[Any]) -> None:
     if adapter_cls is PyArrowAdapter:
+        pytest.importorskip("pyarrow")
+    if adapter_cls is PandasAdapter:
+        pytest.importorskip("pandas")
         pytest.importorskip("pyarrow")
     result = check_feature_group_shape(make_run_group(kind), input_data=_run_data(), adapter=adapter_cls())
     assert not result.passed

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+import math
 from itertools import product
 from typing import Any
 
@@ -159,8 +161,16 @@ def _check_strict(cls: type[FeatureGroup], names: list[str], base: Options) -> l
     return failures
 
 
+def _cell_same(x: Any, y: Any) -> bool:
+    if x is y:
+        return True
+    if isinstance(x, float) and isinstance(y, float) and math.isnan(x) and math.isnan(y):
+        return True
+    return bool((x == y) is True)
+
+
 def _same(a: list[Any], b: list[Any]) -> bool:
-    return len(a) == len(b) and all(x == y or (x != x and y != y) for x, y in zip(a, b))
+    return len(a) == len(b) and all(_cell_same(x, y) for x, y in zip(a, b))
 
 
 def _run(
@@ -271,16 +281,18 @@ def _check_error_values(
     strings = {n for n, t in types.items() if t == DataType.STRING}
     cells = {str(v) for n in strings for v in columns[n] if v is not None and len(str(v)) >= 4}
     perturbed: dict[str, tuple[DataType, list[Any]]] = {}
+    inserted: set[str] = set()
     for n, t in types.items():
         values = columns[n]
         if n in strings:
             values = [None if v is None else f"perturbed_{n}_{i}" for i, v in enumerate(values)]
+            inserted |= {v for v in values if v is not None}
         perturbed[n] = (t, values)
     _, error = _run(cls, adapter, TypedTestData(perturbed), names, base)
     if error is None:
         notes.append("error_values: the perturbed run did not raise, nothing to inspect")
         return []
-    return [f"error_values: the error text echoes the input cell '{c}'" for c in sorted(cells) if c in error]
+    return [f"error_values: the error text echoes the input cell '{c}'" for c in sorted(cells | inserted) if c in error]
 
 
 def _check_determinism(
@@ -310,7 +322,7 @@ def _run_checks(
     adapter: FrameworkAdapter,
     notes: list[str],
 ) -> list[str]:
-    if cls.calculate_feature.__func__ is FeatureGroup.calculate_feature.__func__:  # type: ignore[attr-defined]
+    if inspect.getattr_static(cls, "calculate_feature") is inspect.getattr_static(FeatureGroup, "calculate_feature"):
         notes.append("run: not applicable, the group has no calculate_feature")
         return []
     framework = adapter.compute_framework()
@@ -335,6 +347,8 @@ def _run_checks(
     if data.types:
         failures += _check_zero_rows(cls, adapter, data, names, base, result)
         failures += _check_error_values(cls, adapter, data, names, base, notes)
+    else:
+        notes.append("run: zero_rows and error_values were not run (input_data has no columns)")
     failures += _check_determinism(cls, adapter, data, names, base, result)
     return failures
 

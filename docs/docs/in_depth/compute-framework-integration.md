@@ -431,3 +431,7 @@ rolling = relation.window(
 
 !!! warning "SQLite version requirement"
     On SQLite, `with_row_number` and `window` require SQLite >= 3.28.0; using `NULLS` placement in `order_by` additionally requires SQLite >= 3.30.0. Both raise `ValueError` on older runtimes. DuckDB has no such gate.
+
+## Testing
+
+Use `assert_compute_framework_shape` (or `check_compute_framework_shape`) from `mloda._testing.compute_framework_shape` to verify a framework. The constructor must work with no arguments and accept a `uuid=` keyword, keeping it as `.uuid`. Accessors are skipped when `is_available()` is False, `applicable_aspects` lists which of filter, mask and merge it serves, and dtype is not covered.

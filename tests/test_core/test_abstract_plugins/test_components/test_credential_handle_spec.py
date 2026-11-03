@@ -281,9 +281,9 @@ class TestPlanTimeRefusals:
             ({"chs_blob": BYTES_SECRET}, "chs_blob"),
             ({"chs_outer": {"chs_inner": [BYTES_SECRET]}}, "chs_outer"),
             ({"chs_outer": ({"chs_inner": bytearray(BYTES_SECRET)},)}, "chs_outer"),
-            ({"host": {"password": BYTES_SECRET}}, "host"),
-            ({"password": {"host": BYTES_SECRET}}, "password"),
-            ({"chs_outer": Credential(chs_inner=BYTES_SECRET)}, "chs_outer"),
+            ({"host": {"password": BYTES_SECRET}}, "host.password"),
+            ({"password": {"host": BYTES_SECRET}}, "password.host"),
+            ({"chs_outer": Credential(chs_inner=BYTES_SECRET)}, "chs_outer.chs_inner"),
         ],
     )
     def test_a_bytes_leaf_is_refused_naming_the_handle_and_key_path(

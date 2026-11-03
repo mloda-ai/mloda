@@ -886,9 +886,9 @@ class TestCopy:
 
 
 class TestSecretLiterals:
-    """secret_literals() yields only 8+ char str leaves under credential-shaped keys."""
+    """secret_literals() yields every 8+ char str leaf except under known-safe connection keys."""
 
-    def test_only_credential_keyed_leaves_are_registered(self, tmp_path: Path) -> None:
+    def test_every_leaf_except_safe_keys_is_registered(self, tmp_path: Path) -> None:
         dac = DataAccessCollection(
             credentials={
                 "db": {
@@ -927,7 +927,9 @@ class TestSecretLiterals:
 
         assert dac.secret_literals() == frozenset({"pw-value-123456"})
 
-    @pytest.mark.parametrize("key", ["db_password", "db-password", "client_secret", "dsn", "url", "conn"])
+    @pytest.mark.parametrize(
+        "key", ["db_password", "db-password", "client_secret", "dsn", "url", "conn", "uri", "connection_string"]
+    )
     def test_masked_keys_are_registered(self, key: str) -> None:
         dac = DataAccessCollection(credentials={"db": {key: "masked-value-12345", "client_id": "client-id-12345"}})
 

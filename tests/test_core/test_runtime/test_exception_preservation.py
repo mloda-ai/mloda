@@ -687,8 +687,8 @@ def test_threading_load_error_masks_registered_token_under_any_key(
     _assert_token_gone(excinfo.value, TokenValueErrorFG, caplog)
 
 
-@pytest.mark.timeout(30)
-@pytest.mark.parametrize("token_key", ["key", "hmac"])
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("token_key", _TOKEN_KEYS)
 def test_multiprocessing_load_error_masks_registered_token_under_any_key(
     token_key: str, flight_server: Any, caplog: pytest.LogCaptureFixture
 ) -> None:

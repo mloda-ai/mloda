@@ -49,6 +49,7 @@ class FeatureSet:
         # This is just one uuid for easier access
         self.any_uuid: UUID | None = None
         self.step_uuid: UUID | None = None
+        self.credential_handles: tuple[str, ...] = ()
         self.filters: set[SingleFilter] | None = None
         self.name_of_one_feature: FeatureName | None = None
         self.artifact_to_save: str | None = None

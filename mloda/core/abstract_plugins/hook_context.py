@@ -102,6 +102,7 @@ class HookContext:
     reader_class: "DataAccessReader | None" = None
     result_attributes: dict[str, str | int | float | bool] | None = None
     failed_rows: tuple[FailedRows, ...] = ()
+    credential_handles: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         # Hand-built contexts get the same portable-scalar guarantee publish_result_attributes gives the dispatch path.

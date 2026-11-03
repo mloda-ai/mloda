@@ -123,6 +123,7 @@ def dispatch_input_data_load(
         plan_id=calc_context.plan_id,
         structure_hash=calc_context.structure_hash,
         step_uuid=calc_context.step_uuid,
+        credential_handles=calc_context.credential_handles,
         carrier=calc_context.carrier,
         tenant_id=calc_context.tenant_id,
         project_id=calc_context.project_id,

@@ -10,7 +10,8 @@ import pytest
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.plan_context import PlanContext
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureSet
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureSet, credential_handle_spec
 from mloda.steward import FeatureResolutionError, PlanStep, plan_content_hash, plan_structure_hash
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -525,3 +526,60 @@ class _Calculated(Extender):
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         self.calculated.append("calculated")
         return func(*args, **kwargs)
+
+
+class _HandleRefuser(_Recorder):
+    """Refuses the run in on_run_start when any step declares the given credential handle."""
+
+    def __init__(self, label: str, log: list[tuple[Any, ...]], handle: str) -> None:
+        super().__init__(label, log, priority=10)
+        self.handle = handle
+
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        self.log.append((self.label, "run_start"))
+        if any(self.handle in step.credential_handles for step in steps):
+            raise RuntimeError(f"refused-handle-{self.handle}")
+
+
+class _HandleFeatureGroup(_LifecycleFeatureGroup):
+    PROPERTY_MAPPING = {"lifecycle_vault_handle": credential_handle_spec("Vault handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"lifecycle_handle_col"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"lifecycle_handle_col": [1, 2, 3]}
+
+
+def _prepare_with_handle(extenders: set[Extender]) -> Any:
+    return mloda.prepare(
+        [Feature("lifecycle_handle_col", options={"lifecycle_vault_handle": "vault-main"})],
+        compute_frameworks=["PythonDictFramework"],
+        data_access_collection=DataAccessCollection(credentials={"vault-main": {"key": "lifecycle-1"}}),
+        plugin_collector=PluginCollector.enabled_feature_groups({_HandleFeatureGroup}),
+        parallelization_modes=_SYNC,
+        function_extender=extenders,
+    )
+
+
+class TestOnRunStartSeesStepCredentialHandles:
+    def test_run_start_steps_carry_the_declared_handles(self) -> None:
+        log: list[tuple[Any, ...]] = []
+        session = _prepare_with_handle({_Recorder("rec", log)})
+
+        session.run(parallelization_modes=_SYNC)
+
+        (start,) = [e for e in log if e[1] == "run_start"]
+        assert [s.credential_handles for s in start[4] if s.step_kind == "compute"] == [("vault-main",)]
+
+    def test_an_extender_refuses_the_run_for_a_handle_before_any_step_runs(self) -> None:
+        log: list[tuple[Any, ...]] = []
+        calculated: list[str] = []
+        session = _prepare_with_handle({_HandleRefuser("refuser", log, "vault-main"), _Calculated(calculated)})
+
+        with pytest.raises(RuntimeError, match="refused-handle-vault-main"):
+            session.run(parallelization_modes=_SYNC)
+
+        assert calculated == []

@@ -1077,19 +1077,10 @@ class TestHookContextBoundCredentialHandle:
 
     @pytest.mark.parametrize("hook", _HOOKS)
     def test_a_file_source_keeps_no_handles(self, tmp_path: Path, hook: ExtenderHook) -> None:
-        extender = _ContextCapturingExtender(hook)
+        captured = self._run(hook, csv_file_source(tmp_path), {}, CsvFG)
 
-        mloda.run_all(
-            ["bound_col"],
-            compute_frameworks=[PyArrowTable],
-            data_access_collection=csv_file_source(tmp_path),
-            plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
-            parallelization_modes={ParallelizationMode.SYNC},
-            function_extender={extender},
-        )
-
-        assert extender.captured is not None
-        assert extender.captured.credential_handles == ()
+        assert captured is not None
+        assert captured.credential_handles == ()
 
     @pytest.mark.parametrize("hook", _HOOKS)
     def test_a_handle_declared_and_bound_is_listed_once(self, tmp_path: Path, hook: ExtenderHook) -> None:

@@ -18,7 +18,7 @@ from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
-from tests.helpers.bound_credential_cases import write_bound_sqlite
+from tests.helpers.bound_credential_cases import bound_case
 
 _COLUMN = "lifecycle_hooks_col"
 
@@ -569,11 +569,11 @@ def _prepare_with_handle(extenders: set[Extender]) -> Any:
 
 
 def _prepare_sqlite(tmp_path: Path, extenders: set[Extender]) -> Any:
-    path = write_bound_sqlite(tmp_path)
+    dac, _, _ = bound_case(tmp_path, "named")
     return mloda.prepare(
         ["bound_col"],
         compute_frameworks=[PyArrowTable],
-        data_access_collection=DataAccessCollection(credentials={"db-main": {"sqlite": str(path)}}),
+        data_access_collection=dac,
         plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
         parallelization_modes=_SYNC,
         function_extender=extenders,

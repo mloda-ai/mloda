@@ -17,10 +17,13 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
-from tests.helpers.bound_credential_cases import write_bound_sqlite
+from tests.helpers.bound_credential_cases import bound_case, write_bound_sqlite
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsRawSecretFG, ChsSource, ChsVaultFG
 from mloda.provider import (
     ComputeFramework,
+    CredentialReadRefused,
+    SourceMatch,
+    read_credential,
     FeatureGroup,
     PropertySpec,
     credential_handle_spec,
@@ -33,6 +36,7 @@ from mloda.user import (
     FeatureName,
     FilterType,
     GlobalFilter,
+    ParallelizationMode,
     PluginCollector,
     mloda,
 )
@@ -270,17 +274,88 @@ class TestBoundHandleIsNotGranted:
     def test_a_database_source_step_keeps_declared_handles_empty_and_reports_the_bound_one(
         self, tmp_path: Path
     ) -> None:
-        path = write_bound_sqlite(tmp_path)
+        dac, _, _ = bound_case(tmp_path, "named")
         session = mloda.prepare(
             ["bound_col"],
             compute_frameworks=[PyArrowTable],
-            data_access_collection=_dac(**{"db-main": {"sqlite": str(path)}}),
+            data_access_collection=dac,
             plugin_collector=_plugins(SqliteFG),
         )
 
         (step,) = _steps(session, SqliteFG)
         assert step.credential_handles == ()
         assert step.features.credential_handles == ("db-main",)
+
+    def test_a_source_group_cannot_read_the_bound_credential_at_run_time(self, tmp_path: Path) -> None:
+        dac, _, _ = bound_case(tmp_path, "named")
+
+        class _ReadingSqliteFG(SqliteFG):
+            @classmethod
+            def _fetch(cls, connection: Any, table: str, features: Any) -> Any:
+                read_credential("db-main")
+                return super()._fetch(connection, table, features)
+
+        with pytest.raises(CredentialReadRefused, match="db-main"):
+            mloda.run_all(
+                ["bound_col"],
+                compute_frameworks=[PyArrowTable],
+                data_access_collection=dac,
+                plugin_collector=_plugins(_ReadingSqliteFG),
+                parallelization_modes={ParallelizationMode.SYNC},
+            )
+
+    def test_a_source_match_without_credentials_plans_and_reports_no_handle(self) -> None:
+        class _NoCredentialAccess:
+            table = None
+
+        class _NoCredentialFG(SqliteFG):
+            @classmethod
+            def _hidden_source(cls, match: SourceMatch) -> str:
+                return match.source
+
+            @classmethod
+            def columns(cls, match: SourceMatch) -> tuple[str, ...]:
+                return ("bound_col",)
+
+            @classmethod
+            def _raw_reason(cls, match: SourceMatch) -> str | None:
+                return None
+
+            @classmethod
+            def data_access_identity(cls, match: SourceMatch) -> str:
+                return match.source
+
+            @classmethod
+            def find_sources(
+                cls,
+                route: Any,
+                feature_name: str,
+                options: Options,
+                data_access_collection: DataAccessCollection | None,
+            ) -> list[SourceMatch]:
+                return [SourceMatch("no-credential-source", _NoCredentialAccess())]
+
+        steps = mloda.explain(
+            ["bound_col"],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=_dac(**{"db-main": {"sqlite": "unused.db"}}),
+            plugin_collector=_plugins(_NoCredentialFG),
+        )
+
+        (compute,) = [s for s in steps if s.step_kind == "compute"]
+        assert compute.credential_handles == ()
+
+    def test_one_credential_registered_under_two_handles_reports_the_selected_handle(self, tmp_path: Path) -> None:
+        shared = Credential(sqlite=str(write_bound_sqlite(tmp_path)))
+        session = mloda.prepare(
+            [Feature("bound_col", options={"data_access_handle": "auditor"})],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=DataAccessCollection(credentials={"reader": shared, "auditor": shared}),
+            plugin_collector=_plugins(SqliteFG),
+        )
+
+        (step,) = _steps(session, SqliteFG)
+        assert step.features.credential_handles == ("auditor",)
 
 
 class TestPlanTimeRefusals:

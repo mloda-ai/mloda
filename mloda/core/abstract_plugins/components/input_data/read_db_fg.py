@@ -266,7 +266,7 @@ class ReadDBFG(SourceFeatureGroup):
     @classmethod
     def match_credentials(cls, match: SourceMatch) -> Any | None:
         """The credentials the matched table or query reads with."""
-        return match.access.credentials
+        return getattr(match.access, "credentials", None)
 
     @classmethod
     def login_key(cls, credentials: Any) -> Hashable:

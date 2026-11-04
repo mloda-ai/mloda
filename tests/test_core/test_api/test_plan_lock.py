@@ -29,7 +29,7 @@ from mloda.core.abstract_plugins.components.credential import RegisteredCredenti
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.provider import BaseFeatureGroupVersion, ComputeFramework, FeatureGroup, Implementation
 from tests.helpers.credential_handle_stubs import ChsTwoHandleFG
-from tests.helpers.bound_credential_cases import write_bound_sqlite
+from tests.helpers.bound_credential_cases import bound_case
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 import importlib.metadata
 from collections.abc import Iterator
@@ -910,20 +910,29 @@ def test_plan_content_hash_of_a_real_handle_plan_equals_the_hash_with_the_field_
     assert plan_structure_hash(steps) != plan_structure_hash(cleared)
 
 
-def _explain_sqlite(tmp_path: Path) -> list[PlanStep]:
-    path = write_bound_sqlite(tmp_path)
+def _explain_sqlite(
+    tmp_path: Path, group: type[SqliteFG] = SqliteFG, options: dict[str, Any] | None = None
+) -> list[PlanStep]:
+    dac, _, _ = bound_case(tmp_path, "named")
     return list(
         mloda.explain(
-            ["bound_col"],
+            [Feature("bound_col", options=options or {})],
             compute_frameworks=[PyArrowTable],
-            data_access_collection=DataAccessCollection(credentials={"db-main": {"sqlite": str(path)}}),
-            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
+            data_access_collection=dac,
+            plugin_collector=PluginCollector.enabled_feature_groups({group}),
         )
     )
 
 
-def test_the_lock_of_a_database_source_plan_names_the_bound_handle(tmp_path: Path) -> None:
-    steps = _explain_sqlite(tmp_path)
+@pytest.mark.parametrize("route", ["table", "query"])
+def test_the_lock_of_a_database_source_plan_names_the_bound_handle(tmp_path: Path, route: str) -> None:
+    class _QuerySqliteFG(SqliteFG):
+        CLAIM_ROUTES = (*SqliteFG.CLAIM_ROUTES, SqliteFG.QUERY_ROUTE)
+
+    if route == "query":
+        steps = _explain_sqlite(tmp_path, _QuerySqliteFG, {"query_text": "select bound_col from bound_table"})
+    else:
+        steps = _explain_sqlite(tmp_path)
 
     (compute,) = [s for s in steps if s.step_kind == "compute"]
     assert compute.credential_handles == ("db-main",)

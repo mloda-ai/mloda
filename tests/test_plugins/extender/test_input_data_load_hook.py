@@ -1524,17 +1524,9 @@ class TestInputDataLoadHookCarriesBoundCredentialHandle:
         assert [c.credential_handles for c in contexts] == [expected]
 
     def test_a_file_source_keeps_no_handles(self, tmp_path: Path) -> None:
-        extender = _InputDataLoadCapturingExtender()
+        contexts = self._load_contexts(csv_file_source(tmp_path), {}, CsvFG)
 
-        mloda.run_all(
-            ["bound_col"],
-            compute_frameworks=[PyArrowTable],
-            data_access_collection=csv_file_source(tmp_path),
-            plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
-            function_extender={extender},
-        )
-
-        assert [c.credential_handles for c in extender.all_captured] == [()]
+        assert [c.credential_handles for c in contexts] == [()]
 
     def test_a_handle_declared_and_bound_is_listed_once(self, tmp_path: Path) -> None:
         dac, _, _ = bound_case(tmp_path, "named")

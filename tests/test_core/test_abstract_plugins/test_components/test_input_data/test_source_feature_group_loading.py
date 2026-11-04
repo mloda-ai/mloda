@@ -1256,5 +1256,8 @@ class TestTools:
     def test_match_connection_defaults_to_none(self) -> None:
         assert SourceFeatureGroup.match_connection(_MATCH) is None
 
+    def test_match_credentials_defaults_to_none(self) -> None:
+        assert SourceFeatureGroup.match_credentials(_MATCH) is None
+
     def test_neutral_type_defaults_to_none(self) -> None:
         assert SourceFeatureGroup.neutral_type(_MATCH) is None

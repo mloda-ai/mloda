@@ -291,7 +291,7 @@ class ExecutionPlan:
         return "<unnamed>" if collection is not None and handle in collection.auto_handles else handle
 
     def _stamp_connection_handles(self, steps: Sequence[Step]) -> None:
-        """Set connection_handle on every feature group and join step from its features' options."""
+        """Stamp connection, declared and bound credential handles on every feature group and join step."""
         owner = {u: s for s in steps if isinstance(s, FeatureGroupStep) for u in s.get_uuids()}
         records = {r.token: r.consumers for r in self.planned_records}
         for step in steps:

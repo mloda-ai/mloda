@@ -6,7 +6,7 @@ from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDat
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef, api_data_scope
 from mloda.core.abstract_plugins.components.credential_access import readable_credentials
 from mloda.core.abstract_plugins.components.failed_rows import collect_failed_rows
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, _current_hook_step
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.core.step.abstract_step import Step
@@ -107,8 +107,12 @@ class FeatureGroupStep(Step):
         if self.feature_group.calculate_feature is None:
             raise ValueError("FeatureGroup calculate_feature is not implemented")
 
-        with cfw._hook_step_scope(self.features, self.uuid, self.credential_handles):
+        # Generator context managers can try to rewrite the traceback of a frozen exception.
+        token = _current_hook_step.set((cfw, self.features, self.uuid, self.credential_handles))
+        try:
             data = cfw.run_calculation(self.feature_group, self.features, self.location, data)
+        finally:
+            _current_hook_step.reset(token)
         cfw.validate_expected_framework(self.location)
         return data
 

@@ -850,17 +850,6 @@ class ComputeFramework(ABC):
         finally:
             _current_compute_framework.reset(token)
 
-    @contextlib.contextmanager
-    def _hook_step_scope(
-        self, features: Any, step_uuid: UUID, credential_handles: tuple[str, ...]
-    ) -> Generator[None, None, None]:
-        """Keep planned step facts across hooks even if a plugin reassigns them on the FeatureSet."""
-        token = _current_hook_step.set((self, features, step_uuid, credential_handles))
-        try:
-            yield
-        finally:
-            _current_hook_step.reset(token)
-
     @final
     def _run_hook(self, hook: ExtenderHook, feature_group: Any, method: Callable[..., Any], features: Any) -> Any:
         """Dispatch method through hook's extender (if any), instrumenting the call with a HookContext.

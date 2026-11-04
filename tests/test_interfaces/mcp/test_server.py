@@ -39,6 +39,7 @@ from tests.test_interfaces.source_groups import (  # noqa: E402
     RunnerFailedRowsMcp5,
     RunnerMissingInputMcp5,
     cred_digest,
+    credential_config,
 )
 
 pytestmark = pytest.mark.anyio
@@ -767,8 +768,7 @@ def _credential_settings(tmp_path: Path, handle: str) -> Settings:
     settings = _settings(tmp_path, "execute")
     config = tmp_path / "cred.toml"
     config.write_text(
-        CONFIG.replace('segment = "public"', f'segment = "public"\n{CRED_FEATURE} = "public"')
-        + f'\n[mcp.options]\nmcp_cred_handle = "{handle}"\n\n[mcp.credentials.db]\ntoken = "TOK_VAR"\n',
+        credential_config(CONFIG, 'segment = "public"', handle=handle),
         encoding="utf-8",
     )
     return load_settings(config, ENV, {"mode": settings.mode})

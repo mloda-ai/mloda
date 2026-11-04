@@ -217,6 +217,16 @@ CRED_DEFAULT_FEATURE = "mcp_cred_default_feature"
 CRED_DEFAULT_HANDLE = "mcp_default_handle_name"
 
 
+def credential_config(
+    base_config: str, anchor: str, *, handle: str | None = None, credentials: str = 'token = "TOK_VAR"'
+) -> str:
+    """Config text with CRED_FEATURE classified after `anchor`, an optional handle option and a `db` credential."""
+    text = base_config.replace(anchor, f'{anchor}\n{CRED_FEATURE} = "public"')
+    if handle is not None:
+        text += f'\n[mcp.options]\n{CRED_KEY} = "{handle}"\n'
+    return text + f"\n[mcp.credentials.db]\n{credentials}\n"
+
+
 def cred_digest(secret: str) -> str:
     """The value CredentialReadMcp8 emits for a secret, so tests can check it without echoing the secret."""
     return hashlib.sha256(secret.encode()).hexdigest()[:12]

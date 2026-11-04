@@ -64,6 +64,7 @@ from tests.test_interfaces.source_groups import (
     CredentialReadMcp8,
     PlanRaiseMcp5,
     cred_digest,
+    credential_config,
 )
 
 
@@ -1613,30 +1614,32 @@ def _write_sqlite(tmp_path: Path) -> Path:
     return path
 
 
-def _cred_settings(tmp_path: Path, credentials: str, **overrides: Any) -> Settings:
+def _cred_settings(tmp_path: Path, credentials: str = 'token = "TOK_VAR"', **overrides: Any) -> Settings:
     sales = _write_sales(tmp_path)
-    text = (
+    head = (
         '[mcp]\nmode = "execute"\n\n'
-        '[mcp.classification]\nsq_amount = "public"\nsq_id = "public"\n'
-        f'{CRED_FEATURE} = "public"\n\n'
-        f'[mcp.sources.sales]\nfiles = ["{sales.as_posix()}"]\n{credentials}'
+        '[mcp.classification]\nsq_amount = "public"\nsq_id = "public"\n\n'
+        f'[mcp.sources.sales]\nfiles = ["{sales.as_posix()}"]\n'
     )
     path = tmp_path / "cred.toml"
-    path.write_text(text, encoding="utf-8")
+    path.write_text(credential_config(head, 'sq_id = "public"', credentials=credentials), encoding="utf-8")
     return load_settings(path, env={}, overrides=overrides or None)
 
 
-def _cred_services(settings: Settings, env: Mapping[str, str]) -> tuple[Planner, Runner]:
-    base = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, SqliteFG, CredentialReadMcp8})
-    catalog = Catalog.build(settings, base, env=env)
+def _cred_services(
+    settings: Settings, env: Mapping[str, str], base: DataAccessCollection | None = None
+) -> tuple[Planner, Runner]:
+    plugins = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, SqliteFG, CredentialReadMcp8})
+    catalog = Catalog.build(settings, plugins, env=env, data_access_collection=base)
     planner = Planner(
         settings,
         catalog,
         signing_key=KEY,
         principal="alice",
-        plugin_collector=base,
+        plugin_collector=plugins,
         clock=lambda: CLOCK_START,
         env=env,
+        data_access_collection=base,
     )
     return planner, Runner(planner, clock=lambda: CLOCK_START)
 
@@ -1679,7 +1682,7 @@ class TestCredentialTable:
         self, tmp_path: Path, credentials: str, env: dict[str, str], message_has: list[str]
     ) -> None:
         (tmp_path / "empty.txt").write_text("")
-        settings = _cred_settings(tmp_path, f"\n[mcp.credentials.db]\n{credentials}\n")
+        settings = _cred_settings(tmp_path, credentials)
 
         with pytest.raises(ConfigError) as raised:
             service_sources.check_credentials(settings, env)
@@ -1690,20 +1693,20 @@ class TestCredentialTable:
 
     def test_check_passes_when_every_credential_resolves(self, tmp_path: Path) -> None:
         (tmp_path / "pii").write_text(ROTATED + "\n")
-        settings = _cred_settings(tmp_path, '\n[mcp.credentials.db]\ntoken = "TOK_VAR"\nother = { file = "pii" }\n')
+        settings = _cred_settings(tmp_path, 'token = "TOK_VAR"\nother = { file = "pii" }')
 
         service_sources.check_credentials(settings, {"TOK_VAR": TOKEN})
 
     def test_values_read_env_and_file_and_strip_one_newline(self, tmp_path: Path) -> None:
         (tmp_path / "pii").write_text(ROTATED + "\n\n")
-        settings = _cred_settings(tmp_path, '\n[mcp.credentials.db]\ntoken = "TOK_VAR"\nother = { file = "pii" }\n')
+        settings = _cred_settings(tmp_path, 'token = "TOK_VAR"\nother = { file = "pii" }')
 
         values = service_sources.credential_values(settings.credentials, {"TOK_VAR": TOKEN})
 
         assert values == {"db": Credential(token=TOKEN, other=ROTATED + "\n")}
 
     def test_check_refuses_a_handle_already_in_the_base_collection(self, tmp_path: Path) -> None:
-        settings = _cred_settings(tmp_path, '\n[mcp.credentials.db]\ntoken = "TOK_VAR"\n')
+        settings = _cred_settings(tmp_path)
         base = DataAccessCollection()
         base.add_credentials("db", Credential(token="other-value-123"))
 
@@ -1711,7 +1714,7 @@ class TestCredentialTable:
             service_sources.check_credentials(settings, {"TOK_VAR": TOKEN}, base)
 
     def test_collection_merges_into_a_copy_of_the_base(self, tmp_path: Path) -> None:
-        settings = _cred_settings(tmp_path, '\n[mcp.credentials.db]\ntoken = "TOK_VAR"\n')
+        settings = _cred_settings(tmp_path)
         base = DataAccessCollection()
         base.add_credentials("code", Credential(token="code-value-123"))
 
@@ -1737,7 +1740,7 @@ class TestCredentialRuns:
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         db = _write_sqlite(tmp_path)
-        settings = _cred_settings(tmp_path, '\n[mcp.credentials.db]\nsqlite = "WH_PATH"\n')
+        settings = _cred_settings(tmp_path, 'sqlite = "WH_PATH"')
         planner, runner = _cred_services(settings, {"WH_PATH": str(db)})
 
         with caplog.at_level(logging.DEBUG):
@@ -1753,7 +1756,7 @@ class TestCredentialRuns:
     def test_read_credential_group_gets_the_registered_value(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
-        settings = _cred_settings(tmp_path, '\n[mcp.credentials.db]\ntoken = "TOK_VAR"\n', options={CRED_KEY: "db"})
+        settings = _cred_settings(tmp_path, options={CRED_KEY: "db"})
         planner, runner = _cred_services(settings, {"TOK_VAR": TOKEN})
 
         with caplog.at_level(logging.DEBUG):
@@ -1766,7 +1769,7 @@ class TestCredentialRuns:
         )
 
     def test_handle_option_in_a_request_is_refused_even_when_listed(self, tmp_path: Path) -> None:
-        settings = _cred_settings(tmp_path, '\n[mcp.credentials.db]\ntoken = "TOK_VAR"\n', allow_options=[CRED_KEY])
+        settings = _cred_settings(tmp_path, allow_options=[CRED_KEY])
         planner, _ = _cred_services(settings, {"TOK_VAR": TOKEN})
         feature = {"name": CRED_FEATURE, "options": {CRED_KEY: "db"}}
 
@@ -1777,9 +1780,7 @@ class TestCredentialRuns:
     def test_rotated_secret_file_is_used_by_the_next_run(self, tmp_path: Path) -> None:
         secret_file = tmp_path / "pii"
         secret_file.write_text(TOKEN + "\n")
-        settings = _cred_settings(
-            tmp_path, '\n[mcp.credentials.db]\ntoken = { file = "pii" }\n', options={CRED_KEY: "db"}
-        )
+        settings = _cred_settings(tmp_path, 'token = { file = "pii" }', options={CRED_KEY: "db"})
         planner, runner = _cred_services(settings, {})
         request = {"features": [CRED_FEATURE]}
 
@@ -1792,7 +1793,7 @@ class TestCredentialRuns:
 
     def test_env_is_read_live_not_copied(self, tmp_path: Path) -> None:
         env = {"TOK_VAR": TOKEN}
-        settings = _cred_settings(tmp_path, '\n[mcp.credentials.db]\ntoken = "TOK_VAR"\n', options={CRED_KEY: "db"})
+        settings = _cred_settings(tmp_path, options={CRED_KEY: "db"})
         planner, runner = _cred_services(settings, env)
         request = {"features": [CRED_FEATURE]}
 
@@ -1803,9 +1804,7 @@ class TestCredentialRuns:
     def test_credential_gone_after_startup_is_an_internal_error_naming_no_handle(self, tmp_path: Path) -> None:
         secret_file = tmp_path / "pii"
         secret_file.write_text(TOKEN)
-        settings = _cred_settings(
-            tmp_path, '\n[mcp.credentials.db]\ntoken = { file = "pii" }\n', options={CRED_KEY: "db"}
-        )
+        settings = _cred_settings(tmp_path, 'token = { file = "pii" }', options={CRED_KEY: "db"})
         planner, runner = _cred_services(settings, {})
         explained = _success(planner.explain({"features": [CRED_FEATURE]}))
         secret_file.unlink()
@@ -1820,22 +1819,11 @@ class TestCredentialRuns:
         _assert_value_absent(TOKEN, dumped)
 
     def test_base_collection_credential_is_usable_next_to_the_table(self, tmp_path: Path) -> None:
-        settings = _cred_settings(tmp_path, '\n[mcp.credentials.db]\ntoken = "TOK_VAR"\n', options={CRED_KEY: "code"})
-        base = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, CredentialReadMcp8})
+        settings = _cred_settings(tmp_path, options={CRED_KEY: "code"})
         collection = DataAccessCollection()
         collection.add_credentials("code", Credential(token=ROTATED))
-        env = {"TOK_VAR": TOKEN}
-        catalog = Catalog.build(settings, base, env=env, data_access_collection=collection)
-        planner = Planner(
-            settings,
-            catalog,
-            signing_key=KEY,
-            plugin_collector=base,
-            clock=lambda: CLOCK_START,
-            env=env,
-            data_access_collection=collection,
-        )
+        planner, runner = _cred_services(settings, {"TOK_VAR": TOKEN}, collection)
 
-        result = _run(planner, Runner(planner, clock=lambda: CLOCK_START), {"features": [CRED_FEATURE]})
+        result = _run(planner, runner, {"features": [CRED_FEATURE]})
 
         assert _preview_rows(result)[0] == {CRED_FEATURE: cred_digest(ROTATED)}

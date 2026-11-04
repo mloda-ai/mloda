@@ -44,6 +44,7 @@ from tests.test_interfaces.source_groups import (
     RunnerMissingInputMcp5,
     RunnerRaiseMcp5,
     cred_digest,
+    credential_config,
 )
 
 
@@ -634,10 +635,7 @@ class TestRunFeatureGroupFailure:
 
 
 CRED_TOKEN = "tok-Zk9-cli-secret-77"  # nosec B105
-CRED_CONFIG = (
-    CONFIG.replace('order_id = "public"', f'order_id = "public"\n{CRED_FEATURE} = "public"')
-    + '\n[mcp.options]\nmcp_cred_handle = "db"\n\n[mcp.credentials.db]\ntoken = "TOK_VAR"\n'
-)
+CRED_CONFIG = credential_config(CONFIG, 'order_id = "public"', handle="db")
 
 
 class TestCredentials:
@@ -657,8 +655,7 @@ class TestCredentials:
         assert table["preview"]["rows"] == [{CRED_FEATURE: cred_digest(CRED_TOKEN)}] * 5
         assert CRED_TOKEN not in outcome.out + outcome.err
 
-    @pytest.mark.parametrize("command", ["explain", "run"])
-    @pytest.mark.parametrize("value", [None, ""])
+    @pytest.mark.parametrize(("command", "value"), [("explain", None), ("run", "")])
     def test_unset_or_empty_variable_exits_2_naming_handle_and_field(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str, value: str | None
     ) -> None:

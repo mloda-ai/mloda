@@ -155,6 +155,15 @@ This pattern is useful when:
 - Providing controlled test data for reproducible tests
 - Isolating the feature under test from its dependencies
 
+### 7. Plugins That Talk to a Service
+
+If your plugin sends anything over the network — usage telemetry, a license check, a remote sink — its tests must never reach the real backend. The testing kit (published as `mloda.testing`) ships a loopback stand-in and an env preset for this:
+
+- The `loopback_server` pytest fixture starts an HTTP server on `127.0.0.1` that records every request and answers `200` with `{}`. Point the plugin at `loopback_server.url` and assert on `loopback_server.requests` (each has `method`, `path`, `headers` and `body`; `request.json()` parses the body). Without pytest, use the `LoopbackServer` context manager from `mloda._testing.loopback` directly.
+- The `no_network_env` fixture returns the env preset that keeps code off the real service — proxy variables cleared and `DO_NOT_TRACK=1` set — and applies it to the test process. Pass the returned dict as `env=` when the plugin under test runs in a subprocess; the same preset is available without pytest as `no_network_env()` in `mloda._testing.loopback`.
+
+Use them whenever a test would otherwise depend on an env var being unset or on a host being unreachable: a config built from an explicit env dict bypasses `os.environ` guards, so the stand-in URL has to be the only reachable address the plugin is given.
+
 ## Test Organization
 
 Organize tests into three categories:

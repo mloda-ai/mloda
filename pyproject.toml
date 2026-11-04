@@ -110,6 +110,7 @@ mloda-mcp = "mloda.interfaces.mcp.main:main"
 
 [project.entry-points.pytest11]
 mloda = "mloda.core.abstract_plugins.plugin_registry.fixtures"
+mloda-testing = "mloda._testing.fixtures"
 
 [project.urls]
 "Bug Tracker" = "https://github.com/mloda-ai/mloda/issues"

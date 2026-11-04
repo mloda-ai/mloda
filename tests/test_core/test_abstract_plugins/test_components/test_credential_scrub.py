@@ -1244,7 +1244,7 @@ class TestScrubUriProjection:
                 id="path-at-digest-with-tail-kept",
             ),
             pytest.param("https://host:8443/a/b@c/d", "https://host:8443/a/b@c/d", id="path-at-mid-segment-kept"),
-            pytest.param("https://user:123/PW@host", "https://user:123/PW@host", id="digit-userinfo-no-path-kept"),
+            pytest.param("https://user:123/PW@host", "https://host", id="digit-userinfo-no-path-dropped"),
             pytest.param("https://host:8443/a@b/c.csv", "https://b/c.csv", id="ambiguous-path-at-host-shape-dropped"),
             pytest.param(
                 "https://host:8443/alice@corp.com/report.csv",
@@ -1277,6 +1277,26 @@ class TestScrubUriProjection:
                 "abfss://ab@account.dfs.core.windows.net/p",
                 "abfss://account.dfs.core.windows.net/p",
                 id="too-short-container-is-dropped",
+            ),
+            pytest.param(
+                "alice:p@ss9://host/db",
+                "alice:***://host/db",
+                id="password-in-scheme-position-is-masked",
+            ),
+            pytest.param(
+                "user:pw:x://host",
+                "user:***://host",
+                id="password-and-extra-colon-in-scheme-position-are-masked",
+            ),
+            pytest.param(
+                "x/alice:hunter2://host",
+                "x/alice:***://host",
+                id="password-in-scheme-position-after-a-slash-is-masked",
+            ),
+            pytest.param(
+                "postgresql://u:12/ss@host",
+                "postgresql://host",
+                id="slash-in-userinfo-after-digit-segment-is-dropped",
             ),
         ],
     )
@@ -1355,6 +1375,10 @@ class TestScrubUriFailClosed:
             pytest.param("s3://b/d;v=1&token=SECRETAMP/x.csv", "SECRETAMP", id="path-param-ampersand"),
             pytest.param("s3://b/d;token = SECRETSPACE/x.csv", "SECRETSPACE", id="path-param-spaces-around-equals"),
             pytest.param("s3://b/d;token=SECRETVAL,b/x.csv", "SECRETVAL", id="path-param-comma-in-value"),
+            pytest.param("alice:p@ss9://host/db", "p@ss9", id="at-sign-in-password-in-scheme-position"),
+            pytest.param("user:pw:x://host", "pw", id="extra-colon-after-password-in-scheme-position"),
+            pytest.param("x/alice:hunter2://host", "hunter2", id="slash-before-user-in-scheme-position"),
+            pytest.param("postgresql://u:12/ss@host", "12/ss", id="slash-in-userinfo-after-digit-segment-no-path"),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:

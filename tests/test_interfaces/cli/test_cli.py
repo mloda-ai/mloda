@@ -23,13 +23,14 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.interfaces.cli import demo
 from mloda.interfaces.cli.main import build_services, main
 from mloda.interfaces.service.catalog import Catalog
-from mloda.interfaces.service.config import Settings, load_settings
+from mloda.interfaces.service.config import ConfigError, Settings, load_settings
 from mloda.interfaces.service.errors import is_error
 from mloda.interfaces.service.planner import Planner
 from mloda.interfaces.service.runner import Runner
 from mloda.user import PluginCollector, PluginLoader
 from tests.helpers.docs_scope import shipped_feature_group_registry
 from tests.test_interfaces.source_groups import (
+    CRED_FEATURE,
     FAILED,
     FILE_SOURCE_GROUPS,
     MISSING,
@@ -37,10 +38,12 @@ from tests.test_interfaces.source_groups import (
     PLAN_RAISE_SECRET,
     RAISE,
     RAISE_SECRET,
+    CredentialReadMcp8,
     PlanRaiseMcp5,
     RunnerFailedRowsMcp5,
     RunnerMissingInputMcp5,
     RunnerRaiseMcp5,
+    cred_digest,
 )
 
 
@@ -628,6 +631,55 @@ class TestRunFeatureGroupFailure:
         assert outcome.code == 2
         assert _error_code(outcome) == "internal"
         assert PLAN_RAISE_SECRET not in outcome.out
+
+
+CRED_TOKEN = "tok-Zk9-cli-secret-77"  # nosec B105
+CRED_CONFIG = (
+    CONFIG.replace('order_id = "public"', f'order_id = "public"\n{CRED_FEATURE} = "public"')
+    + '\n[mcp.options]\nmcp_cred_handle = "db"\n\n[mcp.credentials.db]\ntoken = "TOK_VAR"\n'
+)
+
+
+class TestCredentials:
+    def test_run_reads_a_table_credential_from_the_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path, CRED_CONFIG)
+        _elsewhere(tmp_path, monkeypatch)
+        request = _request_file(tmp_path, {"features": [CRED_FEATURE]})
+
+        outcome = _cli(
+            ["run", str(request), "--config", str(config)],
+            env={**ENV, "TOK_VAR": CRED_TOKEN},
+            extra_groups=[CredentialReadMcp8],
+        )
+
+        assert outcome.code == 0, outcome.err
+        (table,) = outcome.json()["tables"]
+        assert table["preview"]["rows"] == [{CRED_FEATURE: cred_digest(CRED_TOKEN)}] * 5
+        assert CRED_TOKEN not in outcome.out + outcome.err
+
+    @pytest.mark.parametrize("command", ["explain", "run"])
+    @pytest.mark.parametrize("value", [None, ""])
+    def test_unset_or_empty_variable_exits_2_naming_handle_and_field(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str, value: str | None
+    ) -> None:
+        config = _config(tmp_path, CRED_CONFIG)
+        _elsewhere(tmp_path, monkeypatch)
+        request = _request_file(tmp_path, {"features": [CRED_FEATURE]})
+        env = ENV if value is None else {**ENV, "TOK_VAR": value}
+
+        outcome = _cli([command, str(request), "--config", str(config)], env=env, extra_groups=[CredentialReadMcp8])
+
+        assert outcome.code == 2
+        assert outcome.out == ""
+        assert outcome.err.startswith("mloda: error:")
+        assert "db" in outcome.err
+        assert "token" in outcome.err
+
+    def test_services_check_credentials_before_building(self, tmp_path: Path) -> None:
+        settings = load_settings(_config(tmp_path, CRED_CONFIG), ENV)
+
+        with pytest.raises(ConfigError, match="token"):
+            build_services(settings, env=ENV, plugin_collector=_base(CredentialReadMcp8), clock=_clock)
 
 
 class TestRunFormats:

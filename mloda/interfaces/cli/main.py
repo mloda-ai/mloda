@@ -18,6 +18,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, TextIO
 
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.version import get_mloda_version
 from mloda.interfaces.cli import demo
 from mloda.interfaces.service.catalog import Catalog
@@ -25,6 +26,7 @@ from mloda.interfaces.service.config import ConfigError, Settings, load_settings
 from mloda.interfaces.service.errors import is_error
 from mloda.interfaces.service.planner import Planner
 from mloda.interfaces.service.runner import Runner
+from mloda.interfaces.service.sources import check_credentials
 from mloda.user import PluginCollector
 
 DEFAULT_CONFIG = "mloda.toml"
@@ -40,11 +42,18 @@ def build_services(
     env: Mapping[str, str],
     plugin_collector: PluginCollector | None = None,
     clock: Callable[[], float] | None = None,
+    data_access_collection: DataAccessCollection | None = None,
 ) -> tuple[Catalog, Planner, Runner]:
-    """Build the catalog, planner and runner for ``settings``, signing plans with the env key if set."""
+    """Build the catalog, planner and runner for ``settings``, signing plans with the env key if set.
+
+    Every configured credential is resolved first; ``data_access_collection`` is the embedding's own base.
+    """
+    check_credentials(settings, env, data_access_collection)
     key = env.get(SIGNING_KEY_ENV)
     principal = getpass.getuser()
-    catalog = Catalog.build(settings, plugin_collector, principal=principal)
+    catalog = Catalog.build(
+        settings, plugin_collector, principal=principal, env=env, data_access_collection=data_access_collection
+    )
     now = time.time if clock is None else clock
     planner = Planner(
         settings,
@@ -53,6 +62,8 @@ def build_services(
         principal=principal,
         plugin_collector=plugin_collector,
         clock=now,
+        env=env,
+        data_access_collection=data_access_collection,
     )
     return catalog, planner, Runner(planner, clock=now)
 
@@ -178,6 +189,15 @@ def _settings(args: argparse.Namespace, env: Mapping[str, str]) -> Settings | st
         return str(error)
 
 
+def _credential_problem(settings: Settings, env: Mapping[str, str]) -> str | None:
+    # check_credentials signals an unresolvable credential only by raising ConfigError.
+    try:
+        check_credentials(settings, env)
+    except ConfigError as error:
+        return str(error)
+    return None
+
+
 def _serve_mcp(args: argparse.Namespace, env: Mapping[str, str], err: TextIO) -> int:
     """Serve over MCP; the module is looked up at call time so ``mcp`` stays an optional extra."""
     from mloda.interfaces.mcp import main as mcp_main
@@ -188,6 +208,10 @@ def _serve_mcp(args: argparse.Namespace, env: Mapping[str, str], err: TextIO) ->
     settings = _settings(args, env)
     if isinstance(settings, str):
         err.write(f"mloda: error: {settings}\n")
+        return FAILED
+    problem = _credential_problem(settings, env)
+    if problem is not None:
+        err.write(f"mloda: error: {problem}\n")
         return FAILED
     if args.transport == "stdio":
         return mcp_main.serve(settings, env=env)
@@ -338,6 +362,10 @@ def main(
         loaded = _settings(args, env)
         if isinstance(loaded, str):
             err.write(f"mloda: error: {loaded}\n")
+            return FAILED
+        problem = _credential_problem(loaded, env)
+        if problem is not None:
+            err.write(f"mloda: error: {problem}\n")
             return FAILED
         settings, collector = replace(loaded, trusted_caller=True), plugin_collector
         request, problem = _load_request(args, sys.stdin if stdin is None else stdin)

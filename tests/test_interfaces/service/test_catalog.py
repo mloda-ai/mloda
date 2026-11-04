@@ -33,8 +33,14 @@ from tests.test_interfaces.source_groups import (
     CALLER_LOCKED_FEATURE,
     CALLER_LOCKED_KEY,
     CALLER_OPEN_FEATURE,
+    CRED_DEFAULT_FEATURE,
+    CRED_DEFAULT_HANDLE,
+    CRED_FEATURE,
+    CRED_KEY,
     CallerLockedMcp6,
     CallerOpenMcp7,
+    CredentialDefaultMcp8,
+    CredentialReadMcp8,
 )
 
 
@@ -668,3 +674,42 @@ class TestDescribeOptionAllowList:
         result = flagged.describe(CALLER_LOCKED_FEATURE, options={"CsvFG": SECRET, CALLER_LOCKED_KEY: SECRET})
 
         assert [detail["problem"] for detail in result["error"]["details"]] == ["data_access_option"]
+
+
+HANDLE = "mcp_vault_handle_zq"
+
+
+def _credential_catalog(tmp_path: Path, **kwargs: Any) -> Catalog:
+    collector = PluginCollector.enabled_feature_groups({*ALLOWED, CredentialReadMcp8, CredentialDefaultMcp8})
+    credentials = {HANDLE: {"token": "VAULT_TOKEN_VAR"}, CRED_DEFAULT_HANDLE: {"token": "VAULT_TOKEN_VAR"}}
+    settings = _settings(tmp_path, credentials=credentials, **kwargs)
+    return Catalog.build(settings, collector, env={"VAULT_TOKEN_VAR": "tok-Zk9-secret-77"})
+
+
+class TestCredentialCatalog:
+    def test_search_lists_no_credential_handle(self, tmp_path: Path) -> None:
+        catalog = _credential_catalog(tmp_path, options={CRED_KEY: HANDLE})
+
+        assert HANDLE not in json.dumps(catalog.search("", limit=MAX_SEARCH_LIMIT))
+
+    def test_describe_resolves_a_handle_set_in_the_operator_options(self, tmp_path: Path) -> None:
+        catalog = _credential_catalog(tmp_path, options={CRED_KEY: HANDLE})
+
+        result = catalog.describe(CRED_FEATURE)
+
+        assert not is_error(result), result
+        assert result["feature_group"] == "CredentialReadMcp8"
+        assert {entry["name"]: entry["caller_settable"] for entry in result["options"]} == {CRED_KEY: False}
+        assert HANDLE not in json.dumps(result)
+
+    def test_describe_without_the_operator_handle_is_an_error(self, tmp_path: Path) -> None:
+        assert is_error(_credential_catalog(tmp_path).describe(CRED_FEATURE))
+
+    def test_describe_does_not_show_a_default_handle(self, tmp_path: Path) -> None:
+        result = _credential_catalog(tmp_path).describe(CRED_DEFAULT_FEATURE)
+
+        assert not is_error(result), result
+        (option,) = result["options"]
+        assert option["name"] == CRED_KEY
+        assert option.get("default") is None
+        assert CRED_DEFAULT_HANDLE not in json.dumps(result)

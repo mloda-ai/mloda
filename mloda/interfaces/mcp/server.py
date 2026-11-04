@@ -16,6 +16,7 @@ from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.applications import Starlette
 
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.utils import failure_report
 from mloda.interfaces.cli import main as cli_main
 from mloda.interfaces.service.catalog import DEFAULT_SEARCH_LIMIT, Catalog
@@ -182,8 +183,17 @@ def build_server(catalog: Catalog, planner: Planner, runner: Runner) -> MCPServe
     return server
 
 
-def create_app(settings: Settings, *, env: Mapping[str, str], host: str = "127.0.0.1") -> Starlette:
-    """The streamable HTTP app at /mcp; bound to loopback it accepts only loopback Host and Origin headers."""
+def create_app(
+    settings: Settings,
+    *,
+    env: Mapping[str, str],
+    host: str = "127.0.0.1",
+    data_access_collection: DataAccessCollection | None = None,
+) -> Starlette:
+    """The streamable HTTP app at /mcp; bound to loopback it accepts only loopback Host and Origin headers.
+
+    ``data_access_collection`` is the embedding's own connections and credentials, merged into every request.
+    """
     settings = replace(settings, trusted_caller=False)
     security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
     if cli_main._is_loopback(host):
@@ -196,6 +206,5 @@ def create_app(settings: Settings, *, env: Mapping[str, str], host: str = "127.0
             allowed_hosts=names,
             allowed_origins=[f"http://{name}" for name in names],
         )
-    return build_server(*cli_main.build_services(settings, env=env)).streamable_http_app(
-        host=host, transport_security=security
-    )
+    services = cli_main.build_services(settings, env=env, data_access_collection=data_access_collection)
+    return build_server(*services).streamable_http_app(host=host, transport_security=security)

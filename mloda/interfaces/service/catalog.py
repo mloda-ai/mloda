@@ -12,6 +12,8 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from mloda.core.abstract_plugins.components.credential_handle import CredentialHandleSpec
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import COLUMN_SEPARATOR
@@ -34,7 +36,7 @@ from mloda.interfaces.service.request import (
     refused_group_option_violations,
     unlisted_group_option_violations,
 )
-from mloda.interfaces.service.sources import data_access_collection, source_columns
+from mloda.interfaces.service.sources import credential_values, data_access_collection, source_columns
 from mloda.steward import verified_context
 
 MAX_DESCRIPTION_LENGTH = 300
@@ -154,7 +156,7 @@ def _options(fg: type[FeatureGroup], allowed: Collection[str]) -> tuple[list[dic
             "required": is_no_default(spec.default),
             "caller_settable": str(key) in allowed and str(key) not in refused,
         }
-        if not is_no_default(spec.default):
+        if not is_no_default(spec.default) and not isinstance(spec, CredentialHandleSpec):
             entry["default"] = _json_value(spec.default)
         if spec.allowed_values is not None:
             entry["allowed_values"] = [_json_value(value) for value in spec.allowed_values]
@@ -174,8 +176,12 @@ class Catalog:
         entries: Sequence[_Entry],
         *,
         principal: str | None = None,
+        env: Mapping[str, str] | None = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> None:
         self._settings = settings
+        self._env: Mapping[str, str] = {} if env is None else env
+        self._base = data_access_collection
         self._principal = principal
         self._collector = collector
         self._entries = tuple(entries)
@@ -184,7 +190,13 @@ class Catalog:
 
     @classmethod
     def build(
-        cls, settings: Settings, base: PluginCollector | None = None, *, principal: str | None = None
+        cls,
+        settings: Settings,
+        base: PluginCollector | None = None,
+        *,
+        principal: str | None = None,
+        env: Mapping[str, str] | None = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> "Catalog":
         """Load the installed plugins, then index the FeatureGroups ``base`` enables minus the denied ones, once.
 
@@ -194,7 +206,10 @@ class Catalog:
             PluginLoader.all()
             collector = plugin_collector_for(settings, base)
             infos = get_feature_group_docs(plugin_collector=collector)
-        return cls(settings, collector, [_entry(info) for info in infos], principal=principal)
+        entries = [_entry(info) for info in infos]
+        return cls(
+            settings, collector, entries, principal=principal, env=env, data_access_collection=data_access_collection
+        )
 
     def search(
         self,
@@ -256,11 +271,14 @@ class Catalog:
                 message = "A request may only set options listed in allow_options."
                 return error_result("policy_denied", message, problems_to_details(unlisted))
         with verified_context(principal=self._principal), MLODA_LOCK:
+            collection = data_access_collection(
+                self._settings.sources, credential_values(self._settings.credentials, self._env), self._base
+            )
             resolved = resolve_feature(
                 name,
-                options=Options(group=group),
+                options=Options(group={**self._settings.options, **group}),
                 plugin_collector=self._collector,
-                data_access_collection=data_access_collection(self._settings.sources),
+                data_access_collection=collection,
             )
         if resolved.feature_group is not None:
             return self._described(name, resolved.feature_group, resolved)

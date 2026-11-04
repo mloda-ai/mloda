@@ -30,9 +30,11 @@ _MCP_KEYS = frozenset(
         "allow_options",
         "options",
         "context_options",
+        "credentials",
     }
 )
 _SOURCE_KEYS = frozenset({"files", "folders"})
+_AUTO_PREFIX = "_auto_"
 _ENV_PREFIX = "MLODA_MCP_"
 _INLINE_LIMIT_KEYS = ("max_inline_values", "max_inline_chars")
 _ENV_INT_KEYS = frozenset({"max_rows", *_INLINE_LIMIT_KEYS})
@@ -53,6 +55,16 @@ class SourceConfig:
     alias: str
     files: tuple[str, ...] = ()
     folders: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class FileRef:
+    """A credential field read from a file, by absolute path; never the content."""
+
+    path: str
+
+
+CredentialRef = str | FileRef
 
 
 @dataclass(frozen=True)
@@ -78,12 +90,16 @@ class Settings:
     trusted_caller: bool = False
     options: Mapping[str, Any] = field(default_factory=dict)
     context_options: Mapping[str, Any] = field(default_factory=dict)
+    credentials: Mapping[str, Mapping[str, CredentialRef]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
             raise ConfigError(f"'mode' must be one of {list(MODES)}, got {self.mode!r}")
         if self.max_preview_rows <= 0:
             raise ConfigError("'max_preview_rows' must be a positive integer")
+        shared = sorted(set(self.credentials) & set(self.sources))
+        if shared:
+            raise ConfigError(f"Handles are unique across kinds; {shared} is both a source and a credential")
 
     def config_hash(self) -> str:
         """SHA-256 hex digest of the settings, independent of mapping insertion order."""
@@ -202,6 +218,27 @@ def _build_source(alias: str, value: Any, base_dir: Path) -> SourceConfig:
     )
 
 
+def _build_credential_ref(handle: str, name: str, value: Any, base_dir: Path) -> CredentialRef:
+    where = f"[mcp.credentials.{handle}] field '{name}'"
+    if isinstance(value, str) and value:
+        return value
+    if isinstance(value, Mapping) and set(value) == {"file"} and isinstance(value["file"], str) and value["file"]:
+        return FileRef(str((base_dir / value["file"]).resolve()))
+    raise ConfigError(f"{where} must be an environment variable name or a table with a non-empty 'file' path")
+
+
+def _build_credentials(value: Any, base_dir: Path) -> dict[str, dict[str, CredentialRef]]:
+    handles = _str_mapping(value, "credentials")
+    built: dict[str, dict[str, CredentialRef]] = {}
+    for handle, table in handles.items():
+        if handle.startswith(_AUTO_PREFIX):
+            raise ConfigError(f"[mcp.credentials.{handle}]: handles starting with '{_AUTO_PREFIX}' are reserved")
+        if not isinstance(table, Mapping) or not table or not all(isinstance(k, str) for k in table):
+            raise ConfigError(f"[mcp.credentials.{handle}] must be a non-empty table of fields")
+        built[handle] = {name: _build_credential_ref(handle, name, ref, base_dir) for name, ref in table.items()}
+    return built
+
+
 def _build(raw: Mapping[str, Any], base_dir: Path) -> Settings:
     kwargs: dict[str, Any] = {}
     if "mode" in raw:
@@ -248,4 +285,6 @@ def _build(raw: Mapping[str, Any], base_dir: Path) -> Settings:
     if "sources" in raw:
         sources = _str_mapping(raw["sources"], "sources")
         kwargs["sources"] = {alias: _build_source(alias, v, base_dir) for alias, v in sources.items()}
+    if "credentials" in raw:
+        kwargs["credentials"] = _build_credentials(raw["credentials"], base_dir)
     return Settings(**kwargs)

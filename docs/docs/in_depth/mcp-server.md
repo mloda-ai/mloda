@@ -55,6 +55,10 @@ customer_id = "personal"
 income = "internal"
 segment = "public"
 
+[mcp.credentials.db]                   # a credential handle: field = env var name, or { file = path }
+token = "DB_TOKEN"
+sqlite = { file = "secrets/wh_path" }
+
 [mcp.options]                          # default group options for every requested feature
 model = "small"
 
@@ -69,6 +73,13 @@ signs plan ids; without it every process uses a random key, so a plan id is vali
 `[mcp.options]` and `[mcp.context_options]` are operator defaults merged under each requested feature; a feature's own
 value wins. They are not subject to `allow_options` and their values never appear in results. Values are strings,
 numbers, booleans, lists or tables (no TOML dates or times), and `in_features` is not allowed.
+
+`[mcp.credentials.<handle>]` registers a credential for groups that read it with `read_credential` and for database
+sources. The table holds environment variable names and file paths, never values. Every credential is checked at
+startup: an unset or empty variable, or a missing or empty file, fails naming the handle and the field. A handle may not
+start with `_auto_` or equal a source alias. The server reads the credentials again for every request, so a rotated
+secret file takes effect without a restart; an environment variable needs a restart, since a process cannot see a
+changed environment. A group declares its handle option with `credential_handle_spec`; set it in `[mcp.options]`.
 
 ## Tools
 
@@ -117,6 +128,8 @@ call has `isError` set and one error shape: `{"error": {"code", "message", "deta
 
 Credentials a group reads at run time with `read_credential` stay here too (see [Runtime access versus match-time binding](named-data-access-handles.md#runtime-access-versus-match-time-binding)).
 
+- Credentials are registered by the operator, never listed by search or describe, and never settable by a request: a
+  declared handle option is refused even when listed in `allow_options`.
 - Sources are named by alias only. Paths, connection details, data-access objects and option values never appear in a
   result, and a request cannot set data-access options.
 - A request may set only the option keys listed in `allow_options` (default: none). Any other key in `options`,
@@ -166,7 +179,8 @@ There is no authentication: a non-loopback host exposes the server to the networ
 principal (the OS user) and one set of plan ids.
 
 To embed it, call `mloda.interfaces.mcp.server.create_app(settings, env=env, host=...)`, which returns a Starlette app.
-A mounted sub-app's lifespan does not run, so run the returned app's lifespan or serve it directly.
+Pass `data_access_collection=` to add connections and credentials built in code; a handle that duplicates one of the
+`[mcp.credentials]` table is refused. A mounted sub-app's lifespan does not run, so run the returned app's lifespan or serve it directly.
 
 Not yet: approvals, cancellation, and remote HTTP with OAuth.
 

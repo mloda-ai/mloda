@@ -1,5 +1,6 @@
 """The stock file source groups, and a deliberately failing group, the interface tests enable in their collectors."""
 
+import hashlib
 from typing import Any
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -9,7 +10,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
-from mloda.provider import FeatureSet, property_spec
+from mloda.provider import FeatureSet, credential_handle_spec, property_spec
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.file_formats.feather_fg import FeatherFG
@@ -207,3 +208,61 @@ class CallerOpenMcp7(CallerLockedMcp6):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {CALLER_OPEN_FEATURE: list(data["income"])}
+
+
+CRED_KEY = "mcp_cred_handle"
+CRED_FIELD = "token"
+CRED_FEATURE = "mcp_cred_feature"
+CRED_DEFAULT_FEATURE = "mcp_cred_default_feature"
+CRED_DEFAULT_HANDLE = "mcp_default_handle_name"
+
+
+def cred_digest(secret: str) -> str:
+    """The value CredentialReadMcp8 emits for a secret, so tests can check it without echoing the secret."""
+    return hashlib.sha256(secret.encode()).hexdigest()[:12]
+
+
+class CredentialReadMcp8(FeatureGroup):
+    """Reads the operator-registered credential named by its handle option."""
+
+    PROPERTY_MAPPING = {CRED_KEY: credential_handle_spec("Operator-registered credential handle.")}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == CRED_FEATURE
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("income")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        from mloda.provider import read_credential
+
+        secret = str(read_credential(features.get_options_key(CRED_KEY))[CRED_FIELD])
+        return {CRED_FEATURE: [cred_digest(secret) for _ in data["income"]]}
+
+
+class CredentialDefaultMcp8(CredentialReadMcp8):
+    """Declares the handle option with a default handle."""
+
+    PROPERTY_MAPPING = {
+        CRED_KEY: credential_handle_spec("Handle with a default.", default=CRED_DEFAULT_HANDLE),
+    }
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == CRED_DEFAULT_FEATURE

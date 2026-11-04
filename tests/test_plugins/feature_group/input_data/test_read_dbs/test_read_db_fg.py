@@ -210,7 +210,7 @@ class TestReadDBFGBase:
         assert "mloda.testing" in doc
         assert "tests/mixins/reader_feature_groups" not in doc
         assert "catalog" in doc.lower()
-        assert "gc.collect" in doc
+        assert "gc.collect" not in doc
 
     def test_the_catalog_is_not_versioned_by_file_stat(self) -> None:
         assert not hasattr(ReadDBFG, "catalog_version")

@@ -8,11 +8,13 @@ Unprefixed so pytest skips it standalone. Imports pytest at top on purpose (the 
 import os
 import shutil
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
+from mloda._testing.source import reclaim
 from mloda._testing.suite import ConformanceSuite
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
@@ -39,6 +41,10 @@ class ColumnDiscoveryContractTestMixin(ConformanceSuite, suite_base=True):
     dependency_module: str
     expected_row_count: int | None = 3
     row_count_module: str | None = None
+
+    @pytest.fixture(autouse=True)
+    def _a_reclaim_suite_built_classes(self) -> Iterator[None]:
+        yield from reclaim.reclaimed_scope()
 
     @pytest.fixture
     def data_file(self, tmp_path: Path) -> str:
@@ -174,5 +180,6 @@ class ColumnDiscoveryContractTestMixin(ConformanceSuite, suite_base=True):
             def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
                 return super().load_neutral(match, features)
 
+        reclaim.track(_CountRowsProbeFG)
         assert _CountRowsProbeFG.count_rows(match_of(data_file), PyArrowTable) is None
         del _CountRowsProbeFG

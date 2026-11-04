@@ -13,18 +13,19 @@ from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
+from mloda._testing.source import reclaim
+from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin, _chain_consumer
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
-from mloda.core.optional_dependency import require
 from mloda.core.abstract_plugins.implementation import loaded_implementations
+from mloda.core.optional_dependency import require
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.provider import CHAIN_SEPARATOR, SourceFeatureGroup
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin, _chain_consumer
 
 if TYPE_CHECKING:
     from mloda.provider import ReadFileFG
@@ -701,10 +702,12 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
         def load_neutral(cls: Any, match: SourceMatch, features: Any) -> Any:
             return pa.table({column: [neutral_value]})
 
-        sub = type(
-            sub_name,
-            (parent,),
-            {"match_feature_group_criteria": classmethod(gated), "load_neutral": classmethod(load_neutral)},
+        sub = reclaim.track(
+            type(
+                sub_name,
+                (parent,),
+                {"match_feature_group_criteria": classmethod(gated), "load_neutral": classmethod(load_neutral)},
+            )
         )
         impl = None
         if loader_value is not None:

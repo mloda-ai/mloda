@@ -121,6 +121,26 @@ def _values_for_arrow_type(values: list[Any], arrow_type: pa.DataType) -> list[A
     return values
 
 
+_WINDOW_OFFSET_PATTERN = re.compile(r"(?i)\b(?:lag|lead)\s*\([^)]*?,\s*(\d+)\s*\)")
+# Cap on probe repetitions: offsets beyond it still type a window result as string.
+_MAX_PROBE_REPETITIONS = 32
+
+
+def _probe_repetitions(projection: str) -> int:
+    """How often to repeat the probe rows so each partition holds a LAG/LEAD neighbour.
+
+    The placeholder rows concentrate a partition on the repeated first row, so an offset past the
+    repeat count finds no neighbour and the window result types as string; a source probe that
+    collapses duplicates (DISTINCT, GROUP BY, aggregates) can leave one row per partition at any
+    offset. Repeating the source rows multiplies every partition alike, so the largest LAG/LEAD
+    offset in the projection sets the count.
+    """
+    offsets = [int(match.group(1)) for match in _WINDOW_OFFSET_PATTERN.finditer(projection)]
+    if not offsets:
+        return 1
+    return min(max(offsets) + 1, _MAX_PROBE_REPETITIONS)
+
+
 def _placeholder_values(arrow_type: pa.DataType | None) -> tuple[Any, Any]:
     if arrow_type is None:
         return (None, None)
@@ -317,6 +337,9 @@ class SqliteRelation(SqlBaseRelation):
         source_rows = source._placeholder_rows()
         if not source_rows:
             return []
+        repetitions = _probe_repetitions(projection)
+        if repetitions > 1:
+            source_rows = source_rows * repetitions
         width = len(source_rows[0])
         first = ", ".join(f"? AS {quote_ident(column)}" for column in source.columns)
         rest = " UNION ALL SELECT " + ", ".join("?" for _ in range(width))

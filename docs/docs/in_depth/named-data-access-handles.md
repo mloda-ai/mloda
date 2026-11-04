@@ -101,7 +101,7 @@ Two safety behaviors come with it:
 
 - **Early mis-wrap error.** Passing a bare dict whose values are not mappings (the mis-wrap shape above) now raises `ValueError` at construction time, naming the offending handle and showing the three correct alternatives, instead of failing silently later during matcher selection.
 - **Redacted error output.** `repr(Credential(password="hunter2"))` prints `Credential(password='***')`, and the resolver's ambiguity error renders credential candidates with keys visible and values replaced by `***`. Mapping credentials registered through the constructor or `add_credentials` print (print, f-strings, logging, pprint) with values `***`. Copies (`dict(cred)`, `{**cred}`, `.copy()`), `.items()`/`.values()` and `json.dumps` see raw values; `yaml.safe_dump` rejects the subclass, so convert with `dict(cred)` first. Direct assignment into `dac.credentials` stores the value as-is and prints raw; registration copies the caller's dict. A match keeps credentials out of its `repr`, and the caller's own dict stays untouched. Option conflict errors and filter divergence warnings mask mapping values and scrub credential-shaped strings (URI user info, query and fragment, `password=` values) inside nested lists, tuples and sets (mapping keys print as given). A database group's matched options hold a plain-dict pointer as a `RegisteredCredential`, so `str(features.options)` masks it. `str(Options)` masks the reserved reader tuple (a mapping masked, a DSN string scrubbed) and the value under any credential-shaped key (nested too); every other option prints as given, including the caller's own `Options` (mloda works on copies) and a pointer forwarded to a consumer, so `Credential(...)` (e.g. `options={"SqliteFG": Credential(sqlite="/x.db")}`) stays the recommended form.
-- **`dac.redact(text)`.** Exact-matches every registered credential string value of 8 or more characters (host, user, path, not just password; shorter values are left to the pattern rules), only from `credentials` (not connections, files, folders), then scrubs the result through `scrub_credentials`. During a run, every string value of 8 or more characters of a registered credential is already masked in raised errors (args including nested strings, instance attributes (str ones, and the strings and keys inside dict, list and tuple ones), `OSError` fields, notes, refusals, cause and context chain) and logs; a container attribute holding a registered value is rebuilt as a plain dict, list or tuple (others are left untouched), and containers nested deeper than 32 levels are masked whole; an `ExceptionGroup`'s own message, bytes, C-level attributes, objects held in attributes or nested in their containers (exceptions included), sets and non-dict mappings (such as HTTP header objects) are not masked. Values under these connection fields are not masked: `host`, `hostname`, `server`, `server_hostname`, `port`, `database`, `db`, `dbname`, `schema`, `catalog`, `warehouse`, `account`, `role`, `project`, `dataset`, `location`, `region`, `bucket`, `container`, `namespace`, `cluster`, `endpoint`, `endpoint_url`, `http_path`, `driver`, `dialect`, `scheme`, `protocol`, `sslmode`, `authenticator`, `application_name`, `client_id`, `tenant_id`, `user`, `username`, `sqlite`, `path`, `file`, `folder`, `table_name`, `table`, `database_name`, `schema_name`, `bucket_name`, `project_id`, `dataset_id` and `file_path`. Keys are compared lowercased with `_` and `-` removed; a credential-shaped key or ancestor key always wins, and unknown keys (including `dsn`, `url`, `conn`) are masked. A plugin keeping a secret under a listed key is a bug. `redact` still masks every value. A credential-shaped value shorter than 8 characters logs a warning at registration naming the handle and key, since it cannot be masked by exact match.
+- **`dac.redact(text)`.** Exact-matches every registered credential string value of 8 or more characters (host, user, path, not just password; shorter values are left to the pattern rules), only from `credentials` (not connections, files, folders), then scrubs the result through `scrub_credentials`. During a run, every string value of 8 or more characters of a registered credential is already masked in raised errors (args including nested strings, instance attributes (str ones, and the strings and keys inside dict, list and tuple ones), `OSError` fields, notes, refusals, cause and context chain) and in every log record (see [Log record masking](#log-record-masking)); a container attribute holding a registered value is rebuilt as a plain dict, list or tuple (others are left untouched), and containers nested deeper than 32 levels are masked whole; an `ExceptionGroup`'s own message, bytes, C-level attributes, objects held in attributes or nested in their containers (exceptions included), sets and non-dict mappings (such as HTTP header objects) are not masked. Values under these connection fields are not masked: `host`, `hostname`, `server`, `server_hostname`, `port`, `database`, `db`, `dbname`, `schema`, `catalog`, `warehouse`, `account`, `role`, `project`, `dataset`, `location`, `region`, `bucket`, `container`, `namespace`, `cluster`, `endpoint`, `endpoint_url`, `http_path`, `driver`, `dialect`, `scheme`, `protocol`, `sslmode`, `authenticator`, `application_name`, `client_id`, `tenant_id`, `user`, `username`, `sqlite`, `path`, `file`, `folder`, `table_name`, `table`, `database_name`, `schema_name`, `bucket_name`, `project_id`, `dataset_id` and `file_path`. Keys are compared lowercased with `_` and `-` removed; a credential-shaped key or ancestor key always wins, and unknown keys (including `dsn`, `url`, `conn`) are masked. A plugin keeping a secret under a listed key is a bug. `redact` still masks every value. A credential-shaped value shorter than 8 characters logs a warning at registration naming the handle and key, since it cannot be masked by exact match.
 
 ### Why a typed class: four kinds of users
 
@@ -338,8 +338,36 @@ Limits:
 - Values under 8 characters are not masked.
 - A key outside the listed connection fields is masked unless declared public (see declared credential keys).
 - A prepared session holds the registered value.
-- Plugin log lines are the provider's duty (`scrub_credentials`).
+- Log masking covers exact registered literals only; see [Log record masking](#log-record-masking) for its limits.
 - In a notebook the caller reads any environment variable on its own side.
+
+## Log record masking
+
+Inside a run with registered secrets, every log record created in that context, from any logger including plugin code, has each registered literal masked to `***`: the message template and args (mapping values, not keys), `exc_info`, stack info and `str` values of `extra`. Only exact literals are matched, so a pattern-shaped secret that is not registered is not masked. The masking is installed lazily on the first use of a non-empty registered set (a run, `dac.redact`, `resolve_feature`), not at import, and does nothing outside such a run.
+
+Limits:
+
+- A `threading.Thread` started by a plugin has no scope and logs raw; join it inside the step with `contextvars.copy_context().run`.
+- A process worker masks only the step's own secrets; logs from worker bootstrap and extender `close()` run outside the scope.
+- A logger class that overrides `makeRecord` without calling `super()` skips the `extra` masking.
+- A record factory set mid-run that does not chain to the previous one is wrapped again at the next outermost scope entry (one entered from an empty context), not before.
+- Non-str `extra` values are not masked.
+- Exception text in a record has the same limits as [exception redaction](#typed-credentials-credential).
+- Records built by hand (`logging.LogRecord(...)`, `logging.makeLogRecord`) bypass the factory and are not masked.
+- Each record is formatted once at creation inside a run, so a non-str argument's `__str__` runs even when a handler level later drops the record.
+- `logger.exception` masks the live exception in place.
+
+`disable_log_masking()` from `mloda.steward` turns the masking off for the process and for the process workers of its later runs; plugin log lines are then the provider's duty (`scrub_credentials`).
+
+### Process-global changes
+
+mloda changes these process-wide settings:
+
+- The log record factory and `logging.Logger.makeRecord` wrappers (and a fork hook that renews their lock).
+- Fork hooks in `mp_context.py` and `cfw_manager.py`.
+- The gRPC message-size environment variables `flight_server.py` sets.
+- The `SyntaxWarning` filter `code_closure.py` installs.
+- The shared manager server.
 
 ## Common errors
 

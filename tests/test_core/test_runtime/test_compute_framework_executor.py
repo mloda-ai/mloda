@@ -2227,3 +2227,24 @@ class TestGrantOnlyValueIsMaskedInEveryFailureReport:
 
         step.execute.assert_called_once()
         cfw_register.set_error.assert_not_called()
+
+
+class TestDisableLogMaskingDispatch:
+    """A disabled process sends the worker the disable command right before the step."""
+
+    @pytest.mark.parametrize("disabled", [True, False])
+    def test_the_disable_command_is_sent_only_when_masking_is_disabled(
+        self, monkeypatch: pytest.MonkeyPatch, disabled: bool
+    ) -> None:
+        from mloda.core.abstract_plugins.components import log_masking
+
+        monkeypatch.setattr(log_masking, "_disabled", disabled)
+        step = _grant_step(())
+        executor, _, worker_manager, cfw_uuid = _grant_executor(step, _grant_collection())
+
+        executor.multi_execute_step(step)
+
+        step_command: tuple[Any, Any] = (cfw_uuid, (step, None, frozenset(), frozenset()))
+        disable_command: tuple[Any, Any] = (cfw_uuid, log_masking.DISABLE_LOG_MASKING_COMMAND)
+        expected = [disable_command, step_command] if disabled else [step_command]
+        assert [call.args for call in worker_manager.send_command.call_args_list] == expected

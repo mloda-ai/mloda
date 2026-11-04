@@ -59,6 +59,7 @@ from mloda.core.abstract_plugins.pickle_safety import (
 # Credential scrubbing for text an Extender logs
 from mloda.core.abstract_plugins.components.credential_access import CredentialReadRefused
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+from mloda.core.abstract_plugins.components.log_masking import disable_log_masking
 
 # Plugin governance
 from mloda.core.abstract_plugins.plugin_registry.plugin_policy import (
@@ -125,6 +126,7 @@ __all__ = [
     "WarnOncePerInstance",
     # Credential scrubbing
     "scrub_credentials",
+    "disable_log_masking",
     "CredentialReadRefused",
     # Plugin governance
     "ApprovalStatus",

@@ -272,12 +272,18 @@ class registered_secrets_scope:  # noqa: N801
         self._tokens: list[tuple[Token[frozenset[str]], Token[frozenset[str]]]] = []
 
     def __enter__(self) -> None:
+        previous = _REGISTERED_SECRETS.get()
+        merged = previous | self._literals
         self._tokens.append(
             (
-                _REGISTERED_SECRETS.set(_REGISTERED_SECRETS.get() | self._literals),
+                _REGISTERED_SECRETS.set(merged),
                 _IDENTITY_SECRETS.set(_IDENTITY_SECRETS.get() | self._identity),
             )
         )
+        if merged and not previous:
+            from mloda.core.abstract_plugins.components.log_masking import ensure_log_masking
+
+            ensure_log_masking()
 
     def __exit__(self, *exc_info: object) -> None:
         secrets_token, identity_token = self._tokens.pop()

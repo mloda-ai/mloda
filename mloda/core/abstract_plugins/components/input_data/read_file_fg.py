@@ -1,11 +1,8 @@
 """Abstract base of one-FeatureGroup-per-file-format: finds files and folders, lists columns, caches per run.
 
 A subclass declares ``suffixes()`` and ``column_names(path)``; the base claims a feature when a file has the column.
-Third-party groups should run the contract mixins in mloda's ``tests/mixins/reader_feature_groups/``
-(``read_file_fg_test_mixin``); the mixins need an autouse fixture that runs ``gc.collect()`` after each test to
-reclaim their test-local subclasses (mloda's ``_no_feature_group_registry_pollution`` in ``tests/conftest.py`` is the
-stricter version), plus the ``rejection_window`` and ``make_implementation`` fixtures from ``tests/conftest.py``,
-which build on ``tests/registry_isolation.py``.
+Third-party groups should run ``mloda._testing.source.read_file_suite`` (re-exported by ``mloda.testing``); a host
+needs an autouse fixture that runs ``gc.collect()`` after each test to reclaim its test-local subclasses.
 """
 
 import os
@@ -29,7 +26,10 @@ from mloda.core.abstract_plugins.components.utils import is_match_abort
 
 
 class ReadFileFG(_FileSourceFG):
-    """Abstract tabular file group: claims features found as columns of owned files and folder entries."""
+    """Abstract tabular file group: claims features found as columns of owned files and folder entries.
+
+    Run ``mloda._testing.source.read_file_suite`` (re-exported by ``mloda.testing``) against a subclass.
+    """
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
         ClaimRoute("file", NamePolicy.CHECKED, True),

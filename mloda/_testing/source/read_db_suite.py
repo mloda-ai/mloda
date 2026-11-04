@@ -23,13 +23,11 @@ from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCo
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import loaded_implementations
-from mloda.provider import CHAIN_SEPARATOR
 from mloda.user import Credential, Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation  # noqa: F401
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
 from mloda._testing.source.source_suite import (
+    _chain_consumer,
     SourceFeatureGroupTestMixin,
     LoadCapture,
 )
@@ -55,7 +53,7 @@ class _Spy:
         return all(any(conn is closed for closed in self.closed) for conn in self.opened)
 
 
-class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
+class ReadDBFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
     """Contract of every ReadDBFG; adds credential, catalog, handle, cache, lifecycle and failure checks."""
 
     feature_group_class: type[ReadDBFG]
@@ -209,9 +207,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
     def test_db_foreign_credentials_stay_silent(
         self, rejection_window: dict[str, MatchRejection], option_items: dict[str, str]
     ) -> None:
-        assert not self.feature_group_class.match_feature_group_criteria(
-            self.present_column, Options(option_items), self.foreign_dac()
-        )
+        assert not self._matches(self.present_column, Options(option_items), self.foreign_dac())
         assert self._group_name() not in rejection_window
 
     # missing columns, tables and ambiguity
@@ -419,16 +415,18 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
         columns = [f"{self.present_column}_run_{n}" for n in ("a", "b", "c")]
         path = self._make("run_db", {"run_table": {name: [1, 2, 3] for name in columns}})
         spy = self._spy(monkeypatch)
+        consumer, chained = _chain_consumer(columns[0])
 
         mloda.run_all(
-            [*columns, f"{columns[0]}{CHAIN_SEPARATOR}sum_aggr"],
+            [*columns, chained],
             compute_frameworks=[PyArrowTable],
-            plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class, AggregatedFeatureGroup}),
+            plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class, consumer}),
             data_access_collection=self._dac_of(path),
         )
 
         assert spy.list_tables == 1
         assert spy.all_closed()
+        del consumer
 
     # listing failures
 
@@ -581,20 +579,20 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
 
         missing = Feature(self.missing_column, Options(context={HANDLE_OPTION: "toyfmt_unknown_handle"}))
         dac = DataAccessCollection(credentials={"secret_handle": credential})
-        assert not self.feature_group_class.match_feature_group_criteria(self.missing_column, missing.options, dac)
+        assert not self._matches(self.missing_column, missing.options, dac)
         assert SECRET not in "".join(entry.reason for entry in rejection_window.values())
 
     # names
 
     @pytest.mark.parametrize("variant", ["unpointed", "query_and_pointer", "query_only"])
-    def test_db_a_chain_shaped_name_resolves_to_the_aggregation_only(self, variant: str) -> None:
+    def test_db_a_chain_shaped_name_resolves_to_the_chain_consumer_only(self, variant: str) -> None:
         column = f"{self.present_column}_agg"
-        name = f"{column}{CHAIN_SEPARATOR}sum_aggr"
+        consumer, name = _chain_consumer(column)
         path = self._make("agg_db", {"agg_table": {column: [1, 2, 3]}})
         dac: DataAccessCollection | None = self._dac_of(path)
         feature: Feature | str = name
         if variant != "unpointed":
-            self._require_query_route()
+            self._require(self._applicability().query_route, "the group lists no query route")
             query = self.query_for("agg_table", [column])
             if variant == "query_and_pointer":
                 feature = self._query_feature(name, query, self.make_credential(path))
@@ -604,10 +602,11 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
         result = mloda.run_all(
             [feature],
             compute_frameworks=[PyArrowTable],
-            plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class, AggregatedFeatureGroup}),
+            plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class, consumer}),
             data_access_collection=dac,
         )
         assert result[0].to_pydict()[name] == [6, 6, 6]
+        del consumer
 
     # loading
 
@@ -685,12 +684,6 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
 
     # query route (groups that list ReadDBFG.QUERY_ROUTE in their CLAIM_ROUTES)
 
-    def _require_query_route(self) -> None:
-        from mloda.provider import ReadDBFG as Base
-
-        if Base.QUERY_ROUTE not in self.feature_group_class.CLAIM_ROUTES:
-            pytest.skip(f"{self._group_name()} has no query route")
-
     def _query_source(self, path: Path, query: str) -> str:
         return f"{self.identity_of(path)}::query:{hashlib.sha256(query.encode()).hexdigest()[:16]}"
 
@@ -701,7 +694,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
         return Feature(name, Options(group))
 
     def test_db_query_pointer_claims_a_query_source_and_loads_the_requested_columns_without_secrets(self) -> None:
-        self._require_query_route()
+        self._require(self._applicability().query_route, "the group lists no query route")
         from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery
 
         columns = ["toyfmt_qa", "toyfmt_qb", "toyfmt_qc"]
@@ -742,7 +735,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
             assert SECRET not in str(identity)
 
     def test_db_query_with_two_credentials_aborts_naming_both_query_sources_and_a_fix_without_any_secret(self) -> None:
-        self._require_query_route()
+        self._require(self._applicability().query_route, "the group lists no query route")
         other = self._make("query_second_db", {OWN_TABLE: {self.present_column: [9]}})
         query = self.query_for(OWN_TABLE, [self.present_column])
         dac = DataAccessCollection(
@@ -762,7 +755,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
     def test_db_query_text_suppresses_the_table_route_and_opens_no_connection_at_match_time(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        self._require_query_route()
+        self._require(self._applicability().query_route, "the group lists no query route")
         query = self.query_for(OWN_TABLE, [self.present_column])
         spy = self._spy(monkeypatch)
         feature = self._query_feature(self.present_column, query)
@@ -774,7 +767,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin):
 
     @pytest.mark.parametrize("same", [True, False], ids=["same_query", "different_queries"])
     def test_db_query_source_is_a_stable_function_of_the_query_text(self, same: bool) -> None:
-        self._require_query_route()
+        self._require(self._applicability().query_route, "the group lists no query route")
         first = self.query_for(OWN_TABLE, [self.present_column])
         second = first if same else f"{first} WHERE 1 = 1"
         feature_a = self._query_feature(self.present_column, first)

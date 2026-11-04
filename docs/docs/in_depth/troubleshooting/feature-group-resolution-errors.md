@@ -244,7 +244,7 @@ To test that a subclass takes over only for its own option, call `check_subclass
 
 For an operation group, `check_operation_group_shape` (or `assert_operation_group_shape`) from `mloda._testing.operation_group_shape` checks that each Implementation declares valid `supported` and `divergent` subtypes and declines the rest; pass `alias_pairs=` for aliased subtypes and `probe=` for groups that resolve subtypes without an option key.
 
-For a source group, inherit `SourceFeatureGroupTestMixin` from `mloda._testing.source.source_suite` (pytest required) to run the shared claim, decline and abort contract (switching off an inherited contract test, by a skip mark or an override, needs a declared `switched_off` cause); `NO_POINTER` marks a group that takes no pointer.
+For a source group, inherit `SourceFeatureGroupTestMixin` from `mloda._testing.source.source_suite` (pytest required) to run the shared claim, decline and abort contract (switching off an inherited contract test, by a skip mark or an override, needs a declared `switched_off` cause); `NO_POINTER` marks a group that takes no pointer. File, database and document groups use `read_file_suite`, `read_db_suite` and `read_document_suite` in the same package.
 
 `PlanStep.specialized_from` names the parents a step's feature group replaced, so `explain()` shows a takeover before anything runs. It stays empty when the parent was disabled, because the parent was never a candidate.
 

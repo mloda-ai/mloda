@@ -371,11 +371,32 @@ def _column_discovery_mixin() -> type:
     return ColumnDiscoveryContractTestMixin
 
 
+def _read_file_mixin() -> type:
+    from mloda._testing.source.read_file_suite import ReadFileFGTestMixin
+
+    return ReadFileFGTestMixin
+
+
+def _read_db_mixin() -> type:
+    from mloda._testing.source.read_db_suite import ReadDBFGTestMixin
+
+    return ReadDBFGTestMixin
+
+
+def _read_document_mixin() -> type:
+    from mloda._testing.source.read_document_suite import ReadDocumentFGTestMixin
+
+    return ReadDocumentFGTestMixin
+
+
 @pytest.mark.parametrize(
     ("get_mixin", "contract_test", "near_miss", "hook"),
     [
         (_source_mixin, "test_claims_its_own_source", "feature_group_clas", "feature_group_class"),
         (_column_discovery_mixin, "test_session_route_equals_the_group_call", "group_clss", "group_cls"),
+        (_read_file_mixin, "test_file_claims_via_a_folder_entry", "write_fiel", "write_file"),
+        (_read_db_mixin, "test_db_handle_names_one_credential", "credential_kee", "credential_key"),
+        (_read_document_mixin, "test_doc_owns_exactly_the_expected_suffixes", "expected_sufixes", "expected_suffixes"),
     ],
 )
 def test_source_mixins_are_checked_conformance_suites(
@@ -392,6 +413,25 @@ def test_source_mixins_are_checked_conformance_suites(
         type("_Typo", (mixin,), {near_miss: _Plugin})
 
     assert _hint(near_miss, hook) in str(hooked.value)
+
+
+def test_no_testing_module_imports_a_plugin_feature_group() -> None:
+    import ast
+    from pathlib import Path
+
+    import mloda._testing
+
+    offenders = []
+    for path in Path(mloda._testing.__file__).parent.rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text())):
+            names = []
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                names = [node.module]
+            offenders += [f"{path.name}: {n}" for n in names if n.startswith("mloda_plugins.feature_group")]
+
+    assert offenders == []
 
 
 def test_assert_passed_accepts_passing_result() -> None:

@@ -1,10 +1,7 @@
 """Abstract base of one-FeatureGroup-per-document-format: one file in, three outputs (text, source, file_type).
 
-A subclass declares ``suffixes()``. Third-party groups should run the contract mixins in mloda's
-``tests/mixins/reader_feature_groups/`` (``read_document_fg_test_mixin``); the mixins need an autouse fixture that
-runs ``gc.collect()`` after each test to reclaim their test-local subclasses (mloda's
-``_no_feature_group_registry_pollution`` in ``tests/conftest.py`` is the stricter version), plus the
-``rejection_window`` fixture from ``tests/conftest.py``.
+A subclass declares ``suffixes()``. Third-party groups should run ``mloda._testing.source.read_document_suite``
+(re-exported by ``mloda.testing``); a host needs an autouse fixture that runs ``gc.collect()`` after each test.
 """
 
 import os
@@ -29,11 +26,9 @@ FILE_TYPE_SUFFIX = "~file_type"
 
 
 class ReadDocumentFG(_FileSourceFG):
-    """Document source group; run tests/mixins/reader_feature_groups/read_document_fg_test_mixin.py.
+    """Document source group; run mloda._testing.source.read_document_suite (re-exported by mloda.testing).
 
-    The mixin needs an autouse fixture that runs gc.collect() after each test to reclaim its test-local subclasses
-    (mloda's _no_feature_group_registry_pollution in tests/conftest.py is the stricter version). It also needs the
-    rejection_window fixture from tests/conftest.py.
+    A host needs an autouse fixture that runs gc.collect() after each test to reclaim its test-local subclasses.
     """
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (

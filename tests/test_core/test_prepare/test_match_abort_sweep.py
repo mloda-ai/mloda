@@ -100,6 +100,9 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/_testing/source/column_discovery_suite.py", "match_feature_group_criteria"): (
         "test-kit probe subclass whose matcher returns False and never raises"
     ),
+    ("mloda/_testing/source/source_suite.py", "match_feature_group_criteria"): (
+        "suite chain consumer whose matcher compares the name and never raises"
+    ),
     ("mloda/core/abstract_plugins/components/input_data/source_feature_group.py", "_matches_by_default_rules"): (
         "real edge, collided verdict: the source group override of the default rules; its raises are marked aborts, "
         "except the reader pair conflict, a plain ValueError the seam contains"
@@ -146,6 +149,9 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
 SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/_testing/source/column_discovery_suite.py", "match_feature_group_criteria"): (
         "test-kit probe subclass whose matcher returns False and never raises"
+    ),
+    ("mloda/_testing/source/source_suite.py", "match_feature_group_criteria"): (
+        "suite chain consumer whose matcher compares the name and never raises"
     ),
     ("mloda/core/abstract_plugins/components/input_data/source_feature_group.py", "_matches_by_default_rules"): (
         "real edge: the source group override of the default rules reaches probe_source_group's contained "

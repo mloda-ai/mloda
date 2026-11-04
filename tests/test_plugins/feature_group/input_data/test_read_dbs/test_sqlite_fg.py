@@ -41,7 +41,7 @@ from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     PyArrowTableAdapter,
     PythonDictAdapter,
 )
-from tests.mixins.reader_feature_groups.read_db_fg_test_mixin import (
+from mloda._testing.source.read_db_suite import (
     ReadDBFGTestMixin,
 )
 from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite

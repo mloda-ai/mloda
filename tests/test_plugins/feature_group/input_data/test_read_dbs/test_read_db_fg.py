@@ -206,8 +206,9 @@ class TestReadDBFGBase:
 
     def test_the_docstring_points_third_party_groups_at_the_contract_mixins_and_states_the_scope(self) -> None:
         doc = ReadDBFG.__doc__ or ""
-        assert "tests/mixins/reader_feature_groups" in doc
-        assert "read_db_fg_test_mixin" in doc
+        assert "mloda._testing.source.read_db_suite" in doc
+        assert "mloda.testing" in doc
+        assert "tests/mixins/reader_feature_groups" not in doc
         assert "catalog" in doc.lower()
         assert "gc.collect" in doc
 

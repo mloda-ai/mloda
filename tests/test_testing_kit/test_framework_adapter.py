@@ -252,9 +252,10 @@ def _iceberg() -> Any:
 
 def test_iceberg_from_typed_returns_real_table_and_reads_plain_arrow() -> None:
     import pyarrow as pa
-    from pyiceberg.table import Table
 
     adapter = _iceberg()
+    from pyiceberg.table import Table
+
     with adapter:
         result = adapter.from_typed(_data())
         plain = pa.table({"x": [1, 2], "y": ["a", "b"]})
@@ -289,9 +290,9 @@ def test_iceberg_null_typed_column_raises_value_error() -> None:
 
 def test_iceberg_fixed_offset_timestamp_raises_unsupported() -> None:
     pa = pytest.importorskip("pyarrow")
+    adapter = _iceberg()
     from pyiceberg.io.pyarrow import UnsupportedPyArrowTypeException
 
-    adapter = _iceberg()
     table = pa.table({"t": pa.array([], type=pa.timestamp("us", tz="+02:00"))})
     with adapter:
         with pytest.raises(UnsupportedPyArrowTypeException):

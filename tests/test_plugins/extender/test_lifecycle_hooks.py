@@ -18,7 +18,7 @@ from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
-from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
+from tests.helpers.bound_credential_cases import write_bound_sqlite
 
 _COLUMN = "lifecycle_hooks_col"
 
@@ -568,6 +568,18 @@ def _prepare_with_handle(extenders: set[Extender]) -> Any:
     )
 
 
+def _prepare_sqlite(tmp_path: Path, extenders: set[Extender]) -> Any:
+    path = write_bound_sqlite(tmp_path)
+    return mloda.prepare(
+        ["bound_col"],
+        compute_frameworks=[PyArrowTable],
+        data_access_collection=DataAccessCollection(credentials={"db-main": {"sqlite": str(path)}}),
+        plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
+        parallelization_modes=_SYNC,
+        function_extender=extenders,
+    )
+
+
 class TestOnRunStartSeesStepCredentialHandles:
     def test_run_start_steps_carry_the_declared_handles(self) -> None:
         log: list[tuple[Any, ...]] = []
@@ -588,21 +600,6 @@ class TestOnRunStartSeesStepCredentialHandles:
 
         assert calculated == []
 
-
-def _prepare_sqlite(tmp_path: Path, extenders: set[Extender]) -> Any:
-    path = tmp_path / "bound.db"
-    write_sqlite(path, {"bound_table": {"bound_col": [1, 2]}})
-    return mloda.prepare(
-        ["bound_col"],
-        compute_frameworks=[PyArrowTable],
-        data_access_collection=DataAccessCollection(credentials={"db-main": {"sqlite": str(path)}}),
-        plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
-        parallelization_modes=_SYNC,
-        function_extender=extenders,
-    )
-
-
-class TestOnRunStartSeesBoundCredentialHandle:
     def test_run_start_source_step_carries_the_bound_handle(self, tmp_path: Path) -> None:
         log: list[tuple[Any, ...]] = []
         session = _prepare_sqlite(tmp_path, {_Recorder("rec", log)})

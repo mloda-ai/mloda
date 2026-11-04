@@ -17,7 +17,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
-from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
+from tests.helpers.bound_credential_cases import write_bound_sqlite
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsRawSecretFG, ChsSource, ChsVaultFG
 from mloda.provider import (
     ComputeFramework,
@@ -270,8 +270,7 @@ class TestBoundHandleIsNotGranted:
     def test_a_database_source_step_keeps_declared_handles_empty_and_reports_the_bound_one(
         self, tmp_path: Path
     ) -> None:
-        path = tmp_path / "bound.db"
-        write_sqlite(path, {"bound_table": {"bound_col": [1, 2]}})
+        path = write_bound_sqlite(tmp_path)
         session = mloda.prepare(
             ["bound_col"],
             compute_frameworks=[PyArrowTable],

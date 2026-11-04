@@ -29,7 +29,7 @@ from mloda.core.abstract_plugins.components.credential import RegisteredCredenti
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.provider import BaseFeatureGroupVersion, ComputeFramework, FeatureGroup, Implementation
 from tests.helpers.credential_handle_stubs import ChsTwoHandleFG
-from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
+from tests.helpers.bound_credential_cases import write_bound_sqlite
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 import importlib.metadata
 from collections.abc import Iterator
@@ -898,8 +898,11 @@ def test_plan_content_hash_ignores_the_declared_handles() -> None:
     assert plan_structure_hash(with_handles) != plan_structure_hash(without)
 
 
-def test_plan_content_hash_of_a_real_handle_plan_equals_the_hash_with_the_field_cleared() -> None:
-    steps = _explain_two_handles()
+@pytest.mark.parametrize("plan_kind", ["declared", "bound"])
+def test_plan_content_hash_of_a_real_handle_plan_equals_the_hash_with_the_field_cleared(
+    tmp_path: Path, plan_kind: str
+) -> None:
+    steps = _explain_two_handles() if plan_kind == "declared" else _explain_sqlite(tmp_path)
 
     cleared = [dataclasses.replace(s, credential_handles=()) for s in steps]
 
@@ -908,8 +911,7 @@ def test_plan_content_hash_of_a_real_handle_plan_equals_the_hash_with_the_field_
 
 
 def _explain_sqlite(tmp_path: Path) -> list[PlanStep]:
-    path = tmp_path / "bound.db"
-    write_sqlite(path, {"bound_table": {"bound_col": [1, 2]}})
+    path = write_bound_sqlite(tmp_path)
     return list(
         mloda.explain(
             ["bound_col"],
@@ -926,15 +928,6 @@ def test_the_lock_of_a_database_source_plan_names_the_bound_handle(tmp_path: Pat
     (compute,) = [s for s in steps if s.step_kind == "compute"]
     assert compute.credential_handles == ("db-main",)
     assert json.loads(_lock_text(steps))["compute"][0]["credential_handles"] == ["db-main"]
-
-
-def test_plan_content_hash_of_a_database_source_plan_ignores_the_bound_handle(tmp_path: Path) -> None:
-    steps = _explain_sqlite(tmp_path)
-
-    cleared = [dataclasses.replace(s, credential_handles=()) for s in steps]
-
-    assert plan_content_hash(steps) == plan_content_hash(cleared)
-    assert plan_structure_hash(steps) != plan_structure_hash(cleared)
 
 
 def test_a_no_handle_plan_renders_the_frozen_lock_text_and_structure_hash() -> None:

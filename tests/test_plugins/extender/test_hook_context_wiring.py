@@ -20,14 +20,14 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureGroup, credential_handle_spec
-from mloda.user import Credential, Feature, ParallelizationMode, PluginCollector, mloda
+from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
-from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
+from tests.helpers.bound_credential_cases import BOUND_KINDS, bound_case, csv_file_source
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsConsumerFG, ChsRawSecretFG
 from tests.mixins.neutral_csv_source import neutral_csv_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
@@ -1039,20 +1039,6 @@ class TestHookContextCredentialHandles:
         assert extender.captured.credential_handles == ()
 
 
-def _bound_case(tmp_path: Path, kind: str) -> tuple[DataAccessCollection | None, dict[str, Any], tuple[str, ...]]:
-    """A SqliteFG source setup per binding kind with its expected handles."""
-    path = tmp_path / "bound.db"
-    write_sqlite(path, {"bound_table": {"bound_col": [1, 2]}})
-    if kind == "named":
-        return DataAccessCollection(credentials={"db-main": {"sqlite": str(path)}}), {}, ("db-main",)
-    if kind == "unnamed":
-        return DataAccessCollection(credentials=[{"sqlite": str(path)}]), {}, ("<unnamed>",)
-    pointer = {"SqliteFG": Credential(sqlite=str(path))}
-    if kind == "pointer":
-        return DataAccessCollection(credentials={"other": {"sqlite": str(path)}}), pointer, ("<pointer>",)
-    return None, pointer, ("<pointer>",)
-
-
 class TestHookContextBoundCredentialHandle:
     """A database source step reports the handle of the credential its match binds."""
 
@@ -1080,9 +1066,9 @@ class TestHookContextBoundCredentialHandle:
         return extender.captured
 
     @pytest.mark.parametrize("hook", _HOOKS)
-    @pytest.mark.parametrize("kind", ["named", "unnamed", "pointer", "pointer-no-collection"])
+    @pytest.mark.parametrize("kind", BOUND_KINDS)
     def test_the_bound_handle_reaches_the_context(self, tmp_path: Path, hook: ExtenderHook, kind: str) -> None:
-        dac, options, expected = _bound_case(tmp_path, kind)
+        dac, options, expected = bound_case(tmp_path, kind)
 
         captured = self._run(hook, dac, options)
 
@@ -1091,14 +1077,12 @@ class TestHookContextBoundCredentialHandle:
 
     @pytest.mark.parametrize("hook", _HOOKS)
     def test_a_file_source_keeps_no_handles(self, tmp_path: Path, hook: ExtenderHook) -> None:
-        path = tmp_path / "bound.csv"
-        path.write_text("bound_col\n1\n2\n")
         extender = _ContextCapturingExtender(hook)
 
         mloda.run_all(
             ["bound_col"],
             compute_frameworks=[PyArrowTable],
-            data_access_collection=DataAccessCollection(files={str(path)}),
+            data_access_collection=csv_file_source(tmp_path),
             plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
             parallelization_modes={ParallelizationMode.SYNC},
             function_extender={extender},
@@ -1109,7 +1093,7 @@ class TestHookContextBoundCredentialHandle:
 
     @pytest.mark.parametrize("hook", _HOOKS)
     def test_a_handle_declared_and_bound_is_listed_once(self, tmp_path: Path, hook: ExtenderHook) -> None:
-        dac, _, _ = _bound_case(tmp_path, "named")
+        dac, _, _ = bound_case(tmp_path, "named")
 
         class _BoundHandleSqliteFG(SqliteFG):
             PROPERTY_MAPPING = {"bound_vault_handle": credential_handle_spec("Vault handle.")}

@@ -14,7 +14,7 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import (
     BaseFeatureGroupVersion,
     ThirdPartyVersionMode,
 )
-from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses, is_nominal_subclass
 from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -189,6 +189,23 @@ def serving_implementation(
 def loaded_implementations() -> list[type[Implementation[Any]]]:
     """Concrete loaded Implementation classes naming a valid pair."""
     return [impl for impl in _registry.members() if _is_concrete(impl) and _is_pair(impl)]
+
+
+def unregistered_named_implementations(name: str) -> list[type[Implementation[Any]]]:
+    """Live concrete Implementation subclasses matching a pin name that the registry never saw.
+
+    A class lands here when its __init_subclass__ override (or a mixin's) skipped
+    super().__init_subclass__(), so it was never registered and cannot be pinned.
+    """
+    registered = _registry.members()
+    return [
+        impl
+        for impl in get_all_subclasses(Implementation)
+        if impl not in registered
+        and _is_concrete(impl)
+        and _is_pair(impl)
+        and name in (impl.__name__, f"{impl.__module__}:{impl.__qualname__}")
+    ]
 
 
 _ACCESSIBLE: ContextVar[frozenset[type[Implementation[Any]]] | None] = ContextVar(

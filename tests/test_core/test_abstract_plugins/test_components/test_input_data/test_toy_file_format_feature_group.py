@@ -481,6 +481,8 @@ class TestFileSourceUriProjection:
             ("https://host/x{s};sessid=abc", "https://host/x{s};***"),  # nosec B105
             ("https://host/d;v=1;token=abc;lang=en/x{s}", "https://host/d;***/x{s}"),  # nosec B105
             ("https://host/d;token=a;v=1/x{s}", "https://host/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;token=SE::CRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
+            ("s3://b/d;token::SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
             ("https://host/x{s};token=", "https://host/x{s};***"),
             ("s3://u:pw@bucket/d;token=abc/x{s}?q=1#f", "s3://bucket/d;***/x{s}"),  # nosec B105
             ("https://host/x{s};v=1", "https://host/x{s};***"),
@@ -559,6 +561,8 @@ class TestFileSourceUriProjection:
             "sessid",
             "secret-among-others",
             "secret-first",
+            "double-colon-in-value",
+            "double-colon-assignment",
             "empty-value",
             "with-userinfo-query-fragment",
             "kept-v",
@@ -656,7 +660,7 @@ class TestFileSourceUriProjection:
         for key, sep, assign, depth, position, chain in itertools.product(
             ["token", "auth", "key", "session", "jsessionid", ""],
             [";", "?", "#"],
-            ["=", ":", ""],
+            ["=", ":", "::", ""],
             range(6),
             ["mid", "file", "first"],
             ["plain", "zip"],
@@ -678,7 +682,7 @@ class TestFileSourceUriProjection:
             if match.access != uri:
                 failures.append(f"{label}: access {match.access!r} != raw {uri!r}")
 
-        assert cases == 1944
+        assert cases == 2592
         assert not failures, f"{len(failures)} failures, first 20:\n" + "\n".join(failures[:20])
 
 

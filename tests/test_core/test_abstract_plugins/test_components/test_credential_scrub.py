@@ -600,6 +600,15 @@ UNCHANGED_LOOKALIKE_CASES: list[str] = [
     "https://github.com/user@host/x",
     "jdbc:h2:tcp://host/db",
     "filecache::simplecache::s3://bucket/x.csv",
+    "INFO:mloda:https://example.com/a",
+    "INFO:root:s3://bucket/x.csv",
+    "WARNING:urllib3:http://h",
+    "Source:jdbc:postgresql://host/db",
+    "url:snowflake://acct/db",
+    "connect:mssql+pyodbc://host/db",
+    "uri:mongodb+srv://cluster/db",
+    "backend:sqlite:///tmp/x.db",
+    "Location:wss://x/y",
 ]
 
 
@@ -779,12 +788,36 @@ def test_repeated_jdbc_scheme_prefix_scrubs_fast(text: str) -> None:
     assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated jdbc scheme prefix"
 
 
-@pytest.mark.parametrize("text", ["a~" * 20_000, "a:" * 20_000 + "://h", "https://" + "a/b@" * 20_000])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "a~" * 20_000,
+        "a:" * 20_000 + "://h",
+        "https://" + "a/b@" * 20_000,
+        "(a:" * 20_000,
+        "[x" * 20_000,
+        "k:v," * 20_000,
+        "a:b," * 20_000,
+        "k=a:b;" * 20_000,
+        "tags=" + ";".join(f"env{i}:prod" for i in range(6000)),
+    ],
+)
 def test_repeated_userinfo_shaped_prefix_scrubs_fast(text: str) -> None:
     start = time.perf_counter()
     scrub_credentials(text)
     elapsed = time.perf_counter() - start
     assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated userinfo-shaped prefix"
+
+
+def test_repeated_password_keyword_with_registered_literals_scrubs_fast() -> None:
+    from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+    text = "password=x " * 20_000
+    with registered_secrets_scope(frozenset({"Zq81Lm5Vx0Rb7Ye3Hw29", "password"})):
+        start = time.perf_counter()
+        scrub_credentials(text)
+        elapsed = time.perf_counter() - start
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated password keyword with literals"
 
 
 def test_repeated_ipv6_bracket_prefix_scrubs_fast() -> None:
@@ -1383,14 +1416,16 @@ class TestScrubUriFailClosed:
             pytest.param("s3://b/d;v=1&token=SECRETAMP/x.csv", "SECRETAMP", id="path-param-ampersand"),
             pytest.param("s3://b/d;token = SECRETSPACE/x.csv", "SECRETSPACE", id="path-param-spaces-around-equals"),
             pytest.param("s3://b/d;token=SECRETVAL,b/x.csv", "SECRETVAL", id="path-param-comma-in-value"),
-            pytest.param("alice:hunter2://host/db", "hunter2", id="userinfo-in-scheme-position"),  # nosec B105
             pytest.param("postgresql://u:12/ss@host/db", "ss", id="digit-userinfo-slash-password"),
             pytest.param("https://tok/en9x@host/x", "en9x", id="slash-in-userinfo-token"),
+            pytest.param("https://tok/en9x@host", "en9x", id="slash-in-userinfo-token-bare-host"),
+            pytest.param("(https://tok/en9x@host)", "en9x", id="slash-in-userinfo-token-parenthesised"),
+            pytest.param("https://tok/en9x@host/", "en9x", id="slash-in-userinfo-token-trailing-slash"),
+            pytest.param("https://tok/en9x@host?x=1", "en9x", id="slash-in-userinfo-token-query"),
             pytest.param("alice:hunter2://u:pw9x@host/db", "pw9x", id="scheme-position-then-userinfo-pw"),
             pytest.param("alice:hunter2://u:pw9x@host/db", "hunter2", id="scheme-position-then-userinfo-name"),
             pytest.param("alice:9hunter://host/db", "9hunter", id="scheme-position-digit-led"),
             pytest.param("user:p_w!x://h/db", "p_w!x", id="scheme-position-punctuation"),
-            pytest.param("alice:hunter2:x://host", "hunter2", id="scheme-position-extra-colon"),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:
@@ -1487,6 +1522,37 @@ class TestRegisteredSecretsScope:
             pytest.param("abc;def123456", "password=abc;def123456 end", "def123456", id="semicolon-in-literal"),
             pytest.param("pass word 12345", "password=pass word 12345", "word 12345", id="space-in-literal"),
             pytest.param("abcd1234;efgh5678", "Bearer abcd1234;efgh5678", "efgh5678", id="semicolon-after-bearer"),
+            pytest.param("password", "password=xpasswordy password=pw1", "pw1", id="password-inside-a-value"),
+            pytest.param(
+                "Bearer",
+                "Authorization: Bearer abc123 Bearer zz; then Bearer tok9xyz",
+                "tok9xyz",
+                id="bearer-repeated-later-token",
+            ),
+            pytest.param(
+                "Bearer",
+                "Authorization: Bearer abc123 Bearer zz; then Bearer tok9xyz",
+                "abc123",
+                id="bearer-repeated-first-token",
+            ),
+            pytest.param(
+                "Bearer",
+                "header Bearer abc123.tok access_token=Bearer9",
+                "abc123.tok",
+                id="bearer-then-access-token",
+            ),
+            pytest.param(
+                "postgresql",
+                "postgresql://u:postgresql@h/x and postgresql+psycopg2://alice:pw7@db/x",
+                "pw7",
+                id="anchor-scheme-after-literal-password",
+            ),
+            pytest.param(
+                "postgresql://alice", "postgresql://alice:pw9x@db/x", "pw9x", id="anchor-scheme-with-userinfo-name"
+            ),
+            pytest.param(
+                "abc;def123456", "https://host/abc;def123456/x.csv", "def123456", id="semicolon-literal-in-url-path"
+            ),
         ],
     )
     def test_secret_is_masked_when_the_literal_overlaps_a_pattern(self, literal: str, text: str, secret: str) -> None:

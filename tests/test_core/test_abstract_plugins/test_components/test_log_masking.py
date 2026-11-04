@@ -84,7 +84,8 @@ class _Capture(logging.Handler):
     def __init__(self) -> None:
         super().__init__(logging.DEBUG)
         self.records: list[logging.LogRecord] = []
-        self.logger = logging.getLogger(f"lm_test.{uuid4().hex}.child")
+        # Not in logging's manager: pytest 9.2 attaches its handler to registered non-propagating loggers.
+        self.logger = logging.Logger(f"lm_test.{uuid4().hex}.child")
         self.logger.setLevel(logging.DEBUG)
         self.logger.propagate = False
         self.logger.addHandler(self)

@@ -59,6 +59,9 @@ _registry: SubclassRegistry[type["ComputeFramework"]] = SubclassRegistry()
 _current_compute_framework: ContextVar["ComputeFramework | None"] = ContextVar(
     "_current_compute_framework", default=None
 )
+_current_hook_step: ContextVar[tuple["ComputeFramework", Any, UUID, tuple[str, ...]] | None] = ContextVar(
+    "_current_hook_step", default=None
+)
 
 
 def framework_rank_key(
@@ -1128,8 +1131,12 @@ class ComputeFramework(ABC):
                 implementation_version = safe_field(
                     lambda: as_str(impl.version()), None, field=f"{implementation}.version", warn_once_for=impl
                 )
-            step_uuid = features.step_uuid
-            credential_handles = features.credential_handles
+            step = _current_hook_step.get()
+            if step is not None and step[0] is self and step[1] is features:
+                _, _, step_uuid, credential_handles = step
+            else:
+                step_uuid = features.step_uuid
+                credential_handles = features.credential_handles
             feature_names = tuple(str(name) for name in features.get_all_names())
             input_features = self._declared_input_feature_names(feature_group_cls, features)
             input_feature_edges = getattr(features, "declared_input_feature_edges", None)

@@ -8,6 +8,7 @@ deny-with-fallback, and the "activate only when needed" short-circuit.
 import concurrent.futures
 import contextvars
 import copy
+import json
 import logging
 import os
 import pickle  # nosec B403
@@ -16,6 +17,7 @@ import threading
 from pathlib import Path, PurePosixPath
 from collections.abc import Mapping
 from typing import Any, cast
+from uuid import UUID
 
 import pytest
 
@@ -54,6 +56,7 @@ from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
 from tests.mixins.neutral_csv_source import neutral_csv_group
+from tests.test_core.test_tooling import PARALLELIZATION_MODES_ALL
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     toy_dac,
 )
@@ -1450,7 +1453,31 @@ class _HandleThreadedLoadFG(_threaded_load_feature_group("received"), DataCreato
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        features.step_uuid = UUID(int=1)
+        features.credential_handles = ("forged-handle",)
         return {"idl_handle_col": super().calculate_feature(data, features)}
+
+
+class _StepFactsRecordingExtender(Extender):
+    """Records hook facts across the multiprocessing boundary."""
+
+    never_fall_back = True
+
+    def __init__(self, output_dir: Path) -> None:
+        self.priority = 100
+        self.output_dir = output_dir
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_LOAD, ExtenderHook.VALIDATE_OUTPUT_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        assert context is not None
+        (self.output_dir / context.hook.name).write_text(
+            json.dumps([str(context.step_uuid), context.credential_handles]), encoding="utf-8"
+        )
+        return result
 
 
 class TestInputDataLoadHookCarriesCredentialHandles:
@@ -1478,17 +1505,24 @@ class TestInputDataLoadHookCarriesCredentialHandles:
         assert extender.captured is not None
         assert extender.captured.credential_handles == ()
 
-    def test_marker_replay_path_carries_the_handles_of_a_run(self) -> None:
-        gate = _GateInputDataLoadExtender()
-
-        mloda.run_all(
+    @PARALLELIZATION_MODES_ALL
+    def test_later_hook_contexts_keep_planned_step_facts(
+        self, modes: set[ParallelizationMode], flight_server: Any, tmp_path: Path
+    ) -> None:
+        session = mloda.prepare(
             [Feature("idl_handle_col", options={"idl_vault_handle": "vault-main"})],
             compute_frameworks=[PythonDictFramework],
             data_access_collection=DataAccessCollection(credentials={"vault-main": {"key": "idl-1"}}),
             plugin_collector=PluginCollector.enabled_feature_groups({_HandleThreadedLoadFG}),
-            parallelization_modes={ParallelizationMode.SYNC},
-            function_extender={gate},
+            parallelization_modes=modes,
+            function_extender={_StepFactsRecordingExtender(tmp_path)},
         )
+        step = next(s for s in session.resolved_plan() if s.feature_group is _HandleThreadedLoadFG)
+        assert step.step_uuid is not None
+        assert step.credential_handles == ("vault-main",)
 
-        assert len(gate.all_captured) == 1
-        assert gate.all_captured[0].credential_handles == ("vault-main",)
+        session.run(parallelization_modes=modes, flight_server=flight_server)
+
+        expected = [str(step.step_uuid), ["vault-main"]]
+        for hook in (ExtenderHook.INPUT_DATA_LOAD, ExtenderHook.VALIDATE_OUTPUT_FEATURE):
+            assert json.loads((tmp_path / hook.name).read_text(encoding="utf-8")) == expected, hook

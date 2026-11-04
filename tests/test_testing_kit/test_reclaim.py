@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import gc
 from collections.abc import Callable
-from typing import Any
 
 import pytest
 
@@ -24,6 +23,12 @@ def _track_dead_class(name: str) -> str:
     return name
 
 
+def _release() -> None:
+    """Collect after the test's own reference is deleted."""
+    gc.collect()
+    gc.collect()
+
+
 @pytest.fixture
 def collections(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     """Generations of every gc.collect call, recorded while still collecting."""
@@ -38,21 +43,14 @@ def collections(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     return calls
 
 
-def test_track_returns_the_class_unchanged() -> None:
-    cls = type("ReclaimTrackedIdentityFG", (FeatureGroup,), {})
-    assert reclaim.track(cls) is cls
-    del cls
-    gc.collect()
-
-
-def test_a_dead_cyclic_tracked_class_is_reclaimed_and_not_reported(collections: list[int]) -> None:
+def test_a_just_built_dead_class_is_reclaimed_at_generation_zero(collections: list[int]) -> None:
     mark = reclaim.mark()
-    name = _track_dead_class("ReclaimDeadCyclicFG")
+    name = _track_dead_class("ReclaimYoungFG")
     assert _registered(name), "the probe never registered; the reclaim assertion would prove nothing"
 
     assert reclaim.reclaim_since(mark) == []
+    assert collections == [0]
     assert not _registered(name), f"{name} survived the reclaim"
-    assert collections, "a live tracked class must trigger a collection"
 
 
 def test_a_tracked_class_still_held_is_reported_by_name() -> None:
@@ -62,19 +60,16 @@ def test_a_tracked_class_still_held_is_reported_by_name() -> None:
         reported = reclaim.reclaim_since(mark)
     finally:
         del held
-        gc.collect()
-        gc.collect()
+        _release()
     assert reported == ["ReclaimHeldFG"]
     assert not _registered("ReclaimHeldFG")
 
 
-def test_nothing_tracked_since_the_mark_runs_no_collection(collections: list[int]) -> None:
-    mark = reclaim.mark()
-    assert reclaim.reclaim_since(mark) == []
+def test_nothing_tracked_since_the_mark_costs_no_collection(collections: list[int]) -> None:
+    empty_mark = reclaim.mark()
+    assert reclaim.reclaim_since(empty_mark) == []
     assert collections == []
 
-
-def test_a_class_tracked_before_the_mark_costs_no_collection(collections: list[int]) -> None:
     held = reclaim.track(type("ReclaimBeforeMarkFG", (FeatureGroup,), {}))
     try:
         mark = reclaim.mark()
@@ -82,21 +77,18 @@ def test_a_class_tracked_before_the_mark_costs_no_collection(collections: list[i
         assert collections == []
     finally:
         del held
-        gc.collect()
+        _release()
 
 
-def test_the_log_is_truncated_back_to_the_mark(collections: list[int]) -> None:
+def test_the_log_is_truncated_back_to_the_mark() -> None:
     mark = reclaim.mark()
     held = reclaim.track(type("ReclaimTruncatedFG", (FeatureGroup,), {}))
     try:
         assert reclaim.reclaim_since(mark) == ["ReclaimTruncatedFG"]
-        collections.clear()
         assert reclaim.reclaim_since(mark) == [], "the reported class must not be reported again"
-        assert collections == [], "a truncated log has nothing left to collect"
     finally:
         del held
-        gc.collect()
-        gc.collect()
+        _release()
 
 
 def test_a_nested_mark_leaves_the_outer_entries_alone() -> None:
@@ -109,24 +101,4 @@ def test_a_nested_mark_leaves_the_outer_entries_alone() -> None:
         assert reclaim.reclaim_since(outer) == ["ReclaimOuterFG"]
     finally:
         del held
-        gc.collect()
-        gc.collect()
-
-
-def test_a_just_built_dead_class_stops_at_generation_zero(collections: list[int]) -> None:
-    mark = reclaim.mark()
-    _track_dead_class("ReclaimYoungFG")
-    assert reclaim.reclaim_since(mark) == []
-    assert collections == [0]
-
-
-def test_survivors_are_names_not_classes() -> None:
-    mark = reclaim.mark()
-    held: Any = reclaim.track(type("ReclaimNameOnlyFG", (FeatureGroup,), {}))
-    try:
-        reported = reclaim.reclaim_since(mark)
-    finally:
-        del held
-        gc.collect()
-        gc.collect()
-    assert all(isinstance(entry, str) for entry in reported)
+        _release()

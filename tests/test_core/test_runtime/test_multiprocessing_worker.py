@@ -1171,6 +1171,8 @@ class TestWorkerHonoursTheDisableLogMaskingCommand:
         from mloda.core.abstract_plugins.components import log_masking
 
         monkeypatch.setattr(log_masking, "_disabled", False)
+        for name in ("_installed_factory", "_installed_make_record", "_previous_factory", "_previous_make_record"):
+            monkeypatch.setattr(log_masking, name, getattr(log_masking, name))
         saved_factory = logging.getLogRecordFactory()
         request.addfinalizer(lambda: logging.setLogRecordFactory(saved_factory))
         monkeypatch.setattr(logging.Logger, "makeRecord", logging.Logger.makeRecord)

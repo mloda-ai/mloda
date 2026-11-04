@@ -343,14 +343,18 @@ Limits:
 
 ## Log record masking
 
-Inside a run with registered secrets, every log record created in that context, from any logger including plugin code, has each registered literal masked to `***`: the message template and args (mapping values, not keys), `exc_info`, stack info and `str` values of `extra`. Only exact literals are matched, so a pattern-shaped secret that is not registered is not masked. The masking is installed lazily on the first run that registers a secret, not at import, and does nothing outside such a run.
+Inside a run with registered secrets, every log record created in that context, from any logger including plugin code, has each registered literal masked to `***`: the message template and args (mapping values, not keys), `exc_info`, stack info and `str` values of `extra`. Only exact literals are matched, so a pattern-shaped secret that is not registered is not masked. The masking is installed lazily on the first use of a non-empty registered set (a run, `dac.redact`, `resolve_feature`), not at import, and does nothing outside such a run.
 
 Limits:
 
 - A `threading.Thread` started by a plugin has no scope and logs raw; join it inside the step with `contextvars.copy_context().run`.
 - A process worker masks only the step's own secrets; logs from worker bootstrap and extender `close()` run outside the scope.
 - A logger class that overrides `makeRecord` without calling `super()` skips the `extra` masking.
-- A record factory set mid-run that does not chain to the previous one is wrapped again at the next scope entry, not before.
+- A record factory set mid-run that does not chain to the previous one is wrapped again at the next outermost scope entry (one entered from an empty context), not before.
+- Non-str `extra` values are not masked.
+- Exception text in a record has the same limits as [exception redaction](#typed-credentials-credential).
+- Records built by hand (`logging.LogRecord(...)`, `logging.makeLogRecord`) bypass the factory and are not masked.
+- Each record is formatted once at creation inside a run, so a non-str argument's `__str__` runs even when a handler level later drops the record.
 - `logger.exception` masks the live exception in place.
 
 `disable_log_masking()` from `mloda.steward` turns the masking off for the process and for the process workers of its later runs; plugin log lines are then the provider's duty (`scrub_credentials`).

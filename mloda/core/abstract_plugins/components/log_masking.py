@@ -22,7 +22,13 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
 DISABLE_LOG_MASKING_COMMAND = "DISABLE_LOG_MASKING"
 
 _UNFORMATTABLE = "<log record masked: unformattable>"
-_PROBE = object()
+
+
+class _Probe(str):
+    """Sentinel msg for chain probes, compared by identity; a str so common hooks do not choke."""
+
+
+_PROBE = _Probe("probe")
 _lock = threading.Lock()
 _disabled = False
 _warned = False
@@ -46,20 +52,18 @@ def log_masking_disabled() -> bool:
     return _disabled
 
 
+def _with_escaped(literals: frozenset[str]) -> frozenset[str]:
+    """The literals plus their repr-escaped forms, which an object's repr can carry instead."""
+    return literals | {repr(literal)[1:-1] for literal in literals if literal}
+
+
 def _holds_literal(text: str, literals: frozenset[str]) -> bool:
-    return any(literal and literal in text for literal in literals)
+    return any(literal and literal in text for literal in _with_escaped(literals))
 
 
 def _mask_args(args: Any, literals: frozenset[str]) -> Any:
-    if isinstance(args, tuple):
-        return tuple(_mask_item(arg, literals) if isinstance(arg, str) else arg for arg in args)
-    if isinstance(args, Mapping):
-        masked: dict[Any, Any] = {}
-        for key in args:
-            value = args[key]
-            masked[key] = _mask_item(value, literals) if isinstance(value, str) else value
-        return masked
-    return args
+    """Masked args; a non-dict mapping is kept as is, the leak check on its rendering decides."""
+    return args if isinstance(args, Mapping) and type(args) is not dict else _mask_item(args, literals)
 
 
 def _mask_extras(record: logging.LogRecord, literals: frozenset[str]) -> None:
@@ -77,11 +81,7 @@ def _formatted(msg: Any, args: Any) -> str:
 
 def _mask_formatted(record: logging.LogRecord, literals: frozenset[str]) -> bool:
     """Mask msg and args in place, keeping the template; False when the result would still leak."""
-    msg = record.msg
-    if isinstance(msg, str):
-        msg = mask_literals(msg, literals)
-    elif isinstance(msg, (dict, list, tuple)):
-        msg = _mask_item(msg, literals)
+    msg = _mask_item(record.msg, literals)
     args = _mask_args(record.args, literals)
     if _holds_literal(_formatted(msg, args), literals):
         return False
@@ -92,7 +92,7 @@ def _mask_formatted(record: logging.LogRecord, literals: frozenset[str]) -> bool
 
 
 def _mask_flattened(record: logging.LogRecord, literals: frozenset[str]) -> bool:
-    record.msg = mask_literals(record.getMessage(), literals)
+    record.msg = mask_literals(record.getMessage(), _with_escaped(literals))
     record.args = ()
     _mask_extras(record, literals)
     return True
@@ -107,8 +107,10 @@ def _stringify_args(args: Any, literals: frozenset[str]) -> Any:
 
 
 def _masked_text(value: Any, literals: frozenset[str]) -> Any:
-    text = str(value)
-    return mask_literals(text, literals) if _holds_literal(text, literals) else value
+    for text in (str(value), repr(value)):
+        if _holds_literal(text, literals):
+            return mask_literals(text, _with_escaped(literals))
+    return value
 
 
 def _mask_unformattable(record: logging.LogRecord, literals: frozenset[str]) -> bool:
@@ -184,16 +186,22 @@ def _wrap_make_record(previous: Callable[..., logging.LogRecord]) -> Callable[..
     return masking_make_record
 
 
-def _factory_in_chain() -> bool:
+def _factory_in_chain() -> bool | None:
     _probe_seen["factory"] = False
-    logging.getLogRecordFactory()("probe", logging.INFO, "", 0, _PROBE, (), None)
+    try:
+        logging.getLogRecordFactory()("probe", logging.INFO, "", 0, _PROBE, (), None)
+    except Exception:  # noqa: BLE001  # a third-party factory may reject the probe; unknown, never break entry
+        return None
     return _probe_seen["factory"]
 
 
-def _make_record_in_chain() -> bool:
+def _make_record_in_chain() -> bool | None:
     _probe_seen["make_record"] = False
     probe_logger = logging.Logger("mloda.log_masking.probe")
-    logging.Logger.makeRecord(probe_logger, "probe", logging.INFO, "", 0, _PROBE, (), None)
+    try:
+        logging.Logger.makeRecord(probe_logger, "probe", logging.INFO, "", 0, _PROBE, (), None)
+    except Exception:  # noqa: BLE001  # a third-party makeRecord may reject the probe; unknown, never break entry
+        return None
     return _probe_seen["make_record"]
 
 
@@ -202,18 +210,24 @@ def _installed() -> bool:
 
 
 def ensure_log_masking() -> None:
-    """Install the factory and makeRecord wrappers unless they are already in the chain or masking is disabled."""
+    """Install the factory and makeRecord wrappers unless already in the chain or disabled; never raises."""
     global _installed_factory, _installed_make_record, _previous_factory, _previous_make_record
     if _disabled or _installed():
         return
     with _lock:
         if _disabled:
             return
-        if not _factory_in_chain():
+        in_chain = _factory_in_chain()
+        if in_chain is None:
+            in_chain = logging.getLogRecordFactory() is _installed_factory
+        if not in_chain:
             _previous_factory = logging.getLogRecordFactory()
             _installed_factory = _wrap_factory(_previous_factory)
             logging.setLogRecordFactory(_installed_factory)
-        if not _make_record_in_chain():
+        in_chain = _make_record_in_chain()
+        if in_chain is None:
+            in_chain = logging.Logger.makeRecord is _installed_make_record
+        if not in_chain:
             _previous_make_record = logging.Logger.makeRecord
             _installed_make_record = _wrap_make_record(_previous_make_record)
             setattr(logging.Logger, "makeRecord", _installed_make_record)

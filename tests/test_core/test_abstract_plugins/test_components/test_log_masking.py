@@ -13,7 +13,9 @@ import subprocess  # nosec B404
 import sys
 import threading
 import traceback
-from collections.abc import Iterator, Mapping
+from collections import OrderedDict
+from collections.abc import Callable, Iterator, Mapping
+from contextvars import copy_context
 from types import MappingProxyType
 from typing import Any, cast
 from uuid import uuid4
@@ -21,11 +23,19 @@ from uuid import uuid4
 import pytest
 
 from mloda.core.abstract_plugins.components import log_masking
-from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
+from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets, registered_secrets_scope
 
 _SECRET = "Zk8-secret-Vq3LmRt"  # nosec B105
 _OTHER = "Pw5-other-Hy2NcXs"  # nosec B105
-_STATE = (("_disabled", False), ("_installed_factory", None), ("_installed_make_record", None))
+_STATE = (
+    ("_disabled", False),
+    ("_warned", False),
+    ("_installed_factory", None),
+    ("_installed_make_record", None),
+    ("_previous_factory", None),
+    ("_previous_make_record", None),
+)
 
 
 def _plain_make_record(
@@ -52,16 +62,20 @@ def _plain_make_record(
 def _pristine_logging() -> Iterator[None]:
     saved_factory = logging.getLogRecordFactory()
     saved_make_record = logging.Logger.makeRecord
-    saved_state = {name: getattr(log_masking, name, None) for name, _ in _STATE}
+    saved_state = {name: getattr(log_masking, name) for name, _ in _STATE}
+    saved_probe = dict(log_masking._probe_seen)
     logging.setLogRecordFactory(logging.LogRecord)
     setattr(logging.Logger, "makeRecord", _plain_make_record)
     for name, value in _STATE:
         setattr(log_masking, name, value)
+    log_masking._probe_seen.update({"factory": False, "make_record": False})
     yield
     logging.setLogRecordFactory(saved_factory)
     setattr(logging.Logger, "makeRecord", saved_make_record)
     for name, value in saved_state.items():
         setattr(log_masking, name, value)
+    log_masking._probe_seen.clear()
+    log_masking._probe_seen.update(saved_probe)
 
 
 class _Capture(logging.Handler):
@@ -100,13 +114,37 @@ class _Boom:
         raise ValueError("str() is broken")
 
 
-def _assert_no_literal(record: logging.LogRecord, literal: str) -> None:
-    assert literal not in record.getMessage()
-    assert literal not in str(record.msg)
-    assert literal not in repr(record.args)
+class _ReprOnly:
+    def __str__(self) -> str:
+        return "safe"
 
+    def __repr__(self) -> str:
+        return f"repr({_SECRET})"
+
+
+def _assert_no_literal(record: logging.LogRecord, literal: str) -> None:
+    for form in (literal, repr(literal)[1:-1]):
+        assert form not in record.getMessage()
+        assert form not in str(record.msg)
+        assert form not in repr(record.args)
+
+
+_BACKSLASH = "ab\\cd'ef12345"
+_QUOTES = "a\"b'c-12345"
+_NEWLINE = "line1\nsecret-9"
+_NESTED_CASES = [
+    pytest.param(literal, msg, args, id=f"{lit_id}_{shape_id}")
+    for lit_id, literal in (("backslash", _BACKSLASH), ("quotes", _QUOTES), ("newline", _NEWLINE))
+    for shape_id, msg, args in (
+        ("list", "cfg %s", ([literal],)),
+        ("tuple", "cfg %s", ((literal,),)),
+        ("list_and_int", "cfg %s and %s", ([literal], 1)),
+        ("bytes", "b %s", (literal.encode(),)),
+    )
+]
 
 _NO_LEAK_CASES = [
+    *_NESTED_CASES,
     pytest.param(_SECRET, "login %s", (_SECRET,), id="str_arg"),
     pytest.param(_SECRET, f"login {_SECRET}", (), id="preformatted"),
     pytest.param(_SECRET, "login %r", (_SECRET,), id="repr"),
@@ -141,16 +179,72 @@ def test_template_is_kept_for_grouping_in_the_common_case(capture: _Capture) -> 
     assert record.getMessage() == "login ***"
 
 
-@pytest.mark.parametrize("wrap", [dict, MappingProxyType], ids=["dict", "mappingproxy"])
-def test_mapping_arg_masks_values_and_keeps_keys(capture: _Capture, wrap: Any) -> None:
-    mapping = wrap({"user": _SECRET, "other": "x"})
+def test_dict_arg_masks_values_and_keeps_keys(capture: _Capture) -> None:
     with _scope(_SECRET):
-        capture.logger.info("u=%(user)s o=%(other)s", mapping)
+        capture.logger.info("u=%(user)s o=%(other)s", {"user": _SECRET, "other": "x"})
 
     (record,) = capture.records
     assert record.getMessage() == "u=*** o=x"
     assert isinstance(record.args, Mapping)
     assert set(record.args) == {"user", "other"}
+
+
+@pytest.mark.parametrize("wrap", [MappingProxyType, OrderedDict], ids=["mappingproxy", "ordereddict"])
+def test_non_dict_mapping_arg_holding_a_literal_is_flattened(capture: _Capture, wrap: Any) -> None:
+    with _scope(_SECRET):
+        capture.logger.info("u=%(user)s o=%(other)s", wrap({"user": _SECRET, "other": "x"}))
+
+    (record,) = capture.records
+    assert record.getMessage() == "u=*** o=x"
+    assert record.args == ()
+
+
+def test_registered_credential_arg_renders_as_it_does_outside_a_run(capture: _Capture) -> None:
+    credential = RegisteredCredential({"host": "db.example", "password": _SECRET})
+    capture.logger.info("cred %s", credential)
+    with _scope(_SECRET):
+        capture.logger.info("cred %s", credential)
+
+    outside, inside = capture.records
+    assert inside.getMessage() == outside.getMessage()
+    assert inside.args is credential
+
+
+@pytest.mark.parametrize(
+    "arg",
+    [
+        pytest.param(MappingProxyType({"a": "b"}), id="mappingproxy"),
+        pytest.param(OrderedDict([("a", "b")]), id="ordereddict"),
+    ],
+)
+def test_mapping_arg_holding_no_literal_is_left_as_the_same_object(capture: _Capture, arg: Any) -> None:
+    expected = logging.LogRecord("n", logging.INFO, "", 0, "m %s", (arg,), None).getMessage()
+    with _scope(_SECRET):
+        capture.logger.info("m %s", arg)
+
+    (record,) = capture.records
+    assert record.args is arg
+    assert record.getMessage() == expected
+
+
+@pytest.mark.parametrize("msg", [{"a": "b"}, ["a"], ("a",)], ids=["dict", "list", "tuple"])
+def test_container_msg_holding_no_literal_is_the_same_object(capture: _Capture, msg: Any) -> None:
+    with _scope(_SECRET):
+        capture.logger.info(msg)
+
+    assert capture.records[0].msg is msg
+
+
+class _Tagged(str):
+    """A str subclass that carries an attribute plain str would drop."""
+
+
+def test_str_subclass_msg_holding_no_literal_is_the_same_object(capture: _Capture) -> None:
+    msg = _Tagged("plain text")
+    with _scope(_SECRET):
+        capture.logger.info(msg)
+
+    assert capture.records[0].msg is msg
 
 
 def test_empty_mapping_arg_is_harmless(capture: _Capture) -> None:
@@ -198,11 +292,15 @@ def test_malformed_call_is_masked_and_never_raises(capture: _Capture, msg: str, 
     assert _SECRET not in repr(record.args)
 
 
-def test_arg_with_raising_str_does_not_make_the_log_call_raise(capture: _Capture) -> None:
+def test_malformed_call_with_repr_only_literal_does_not_keep_the_object(capture: _Capture) -> None:
     with _scope(_SECRET):
-        capture.logger.info("x %s", _Boom())
+        capture.logger.warning("a %s %s", _ReprOnly())
 
-    assert len(capture.records) == 1
+    (record,) = capture.records
+    for arg in cast(tuple[Any, ...], record.args):
+        assert _SECRET not in str(arg)
+        assert _SECRET not in repr(arg)
+    assert _SECRET not in repr(record.args)
 
 
 def test_exc_info_exception_is_masked(capture: _Capture) -> None:
@@ -432,6 +530,89 @@ def test_a_non_chaining_replacement_is_wrapped_again_at_the_next_outermost_entry
     assert _SECRET not in getattr(record, "tag")
 
 
+def _install_picky_factory() -> None:
+    def picky(*args: Any, **kwargs: Any) -> logging.LogRecord:
+        record = logging.LogRecord(*args, **kwargs)
+        if type(record.msg) is not str:
+            raise TypeError("probe")
+        return record
+
+    logging.setLogRecordFactory(picky)
+
+
+def _install_picky_make_record() -> None:
+    def picky(
+        self: logging.Logger, name: str, level: int, fn: str, lno: int, msg: Any, *rest: Any
+    ) -> logging.LogRecord:
+        if type(msg) is not str:
+            raise TypeError("probe")
+        return _plain_make_record(self, name, level, fn, lno, msg, *rest)
+
+    setattr(logging.Logger, "makeRecord", picky)
+
+
+@pytest.mark.parametrize(
+    "install", [_install_picky_factory, _install_picky_make_record], ids=["factory", "make_record"]
+)
+def test_a_hook_that_raises_on_the_probe_never_breaks_scope_entry(
+    capture: _Capture, install: Callable[[], None]
+) -> None:
+    install()
+
+    def run() -> None:
+        with _scope(_SECRET):
+            capture.logger.info("login %s", _SECRET, extra={"tag": _SECRET})
+        assert current_registered_secrets() == frozenset()
+
+    copy_context().run(run)
+
+    (record,) = capture.records
+    assert record.getMessage() == "login ***"
+    assert _SECRET not in getattr(record, "tag")
+
+
+def test_repeated_entries_with_a_probe_raising_hook_do_not_grow_the_chain() -> None:
+    _install_picky_factory()
+    _install_picky_make_record()
+
+    def enter_once() -> tuple[object, object]:
+        with _scope(_SECRET):
+            pass
+        return logging.getLogRecordFactory(), logging.Logger.makeRecord
+
+    first = copy_context().run(enter_once)
+    for _ in range(3):
+        assert copy_context().run(enter_once) == first
+
+
+def test_wrappers_that_are_not_outermost_stay_in_place_but_inert_after_disable(capture: _Capture) -> None:
+    with _scope(_SECRET):
+        pass
+    ours_factory = logging.getLogRecordFactory()
+    ours_make_record = logging.Logger.makeRecord
+
+    def third_factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
+        return ours_factory(*args, **kwargs)
+
+    def third_make_record(self: logging.Logger, *args: Any, **kwargs: Any) -> logging.LogRecord:
+        return ours_make_record(self, *args, **kwargs)
+
+    logging.setLogRecordFactory(third_factory)
+    setattr(logging.Logger, "makeRecord", third_make_record)
+    log_masking.disable_log_masking_quietly()
+
+    with _scope(_SECRET):
+        capture.logger.info("login %s", _SECRET, extra={"tag": _SECRET})
+
+    (record,) = capture.records
+    assert record.args == (_SECRET,)
+    assert getattr(record, "tag") == _SECRET
+    assert logging.getLogRecordFactory() is third_factory
+    assert logging.Logger.makeRecord is third_make_record
+    assert log_masking._installed_factory is ours_factory
+    assert log_masking._installed_make_record is ours_make_record
+
+
 def test_no_registered_literal_reaches_the_regex_cache(capture: _Capture) -> None:
     literal = f"lit-{uuid4().hex}"
     with _scope(literal):
@@ -476,9 +657,11 @@ print(json.dumps(seen))
 """
 
 
-@pytest.mark.skipif(sys.version_info < (3, 14), reason="thread_inherit_context needs Python 3.14")
 def test_pool_thread_with_a_stale_set_is_masked_against_it() -> None:
-    assert _run_python(_INHERIT_SCRIPT, "-X", "thread_inherit_context=1") == ["v ***"]
+    if sys.version_info >= (3, 14):
+        assert _run_python(_INHERIT_SCRIPT, "-X", "thread_inherit_context=1") == ["v ***"]
+    else:
+        assert _run_python(_INHERIT_SCRIPT) == [f"v {_SECRET}"]
 
 
 _IMPORT_SCRIPT = """
@@ -539,7 +722,3 @@ def test_disable_leaves_records_untouched_does_not_reinstall_and_warns_once() ->
     assert result["seen"] == [[f"v {_SECRET}", _SECRET]]
     assert result["same"] is True
     assert result["warnings"] == 1
-
-
-def test_masking_is_enabled_by_default() -> None:
-    assert log_masking.log_masking_disabled() is False

@@ -80,3 +80,18 @@ tests/
 ```
 
 Test dependencies are declared in the `test` extra in `pyproject.toml`.
+
+## Conventions
+
+### Module-level source FeatureGroups must narrow what they claim
+
+A `SourceFeatureGroup` subclass defined at module level in a test module stays registered for
+the whole worker process, so it can match credentials or files that other test modules use and
+make their resolution ambiguous depending on which tests share a worker. Collection therefore
+fails when a collected test module defines a concrete source group that overrides none of
+`is_valid_credentials`, `match_feature_group_criteria`, `find_sources` or `match_connection`
+relative to its production base class (`tests/helpers/module_level_source_groups.py`, wired into
+`tests/conftest.py`). Gate the group on a marker instead — for example
+`SecretsRecordingSqliteFG` requires a marker key in `is_valid_credentials` — or define the class
+inside the test that uses it, where the registry-pollution fixture reclaims it afterwards.
+

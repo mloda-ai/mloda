@@ -107,7 +107,8 @@ class FeatureGroupStep(Step):
         if self.feature_group.calculate_feature is None:
             raise ValueError("FeatureGroup calculate_feature is not implemented")
 
-        data = cfw.run_calculation(self.feature_group, self.features, self.location, data)
+        with cfw._hook_step_scope(self.features, self.uuid, self.credential_handles):
+            data = cfw.run_calculation(self.feature_group, self.features, self.location, data)
         cfw.validate_expected_framework(self.location)
         return data
 

@@ -1,5 +1,6 @@
 """Strip credentials from free text before it reaches core's failure logs or MlodaRunError."""
 
+import io
 import re
 from collections.abc import Iterable, Mapping
 from contextvars import ContextVar, Token
@@ -92,6 +93,21 @@ _AUTHORIZATION_PATTERN = re.compile(
 # (?!\d+/) keeps a bare port like `8080/` from being read as the user.
 _SLASH_DSN_PATTERN = re.compile(
     r"(?<![\w.$#/-])(?!\d+/)(?P<user>[\w.$#-]+)/[^\s/]+@(?=//|\(|[\w.-]+:\d+(?!\w)|[\w.-]+/\w)"
+)
+# Slash in userinfo right after `://`; the dotless user keeps `unpkg.com/react@18/` and `github.com/user@host` intact.
+_SCHEME_SLASH_DSN_PATTERN = re.compile(r"(?<=://)(?P<user>[\w$#~-]+)/[^\s/@]+@(?=[\w.-]+(?:[/:?#\s)\]'\"]|$))")
+
+_PLAIN_URI_SCHEMES = (
+    "http|https|s3|s3a|s3n|gs|gcs|abfs|abfss|wasb|wasbs|az|adl|file|ftp|sftp|hdfs|"
+    "postgres|postgresql|mysql|mongodb|redis|sqlite|snowflake|mssql|ws|wss|ssh|git|grpc|kafka|ftps|"
+    "oracle|redshift|bigquery|databricks"
+)
+# `user:password://host`: the password sits in the scheme position. Delimiters are excluded from both classes
+# and the lookbehind anchors the start, so the scan stays linear.
+_DELIM = "\\s\"'(\\[{<=,;"
+_PASSWORD_AS_SCHEME_PATTERN = re.compile(
+    rf"(?<![^{_DELIM}])(?!(?i:jdbc):)(?P<user>[^{_DELIM}:/@]+):"
+    rf"(?!(?i:{_PLAIN_URI_SCHEMES})(?:\+[\w.-]+)?://)(?P<pw>[^{_DELIM}:/@]+)(?=://)"
 )
 
 
@@ -204,7 +220,6 @@ def _cut_path_parameter_regions(uri: str) -> str:
     return "".join(parts)
 
 
-_PLACEHOLDER = "\ue000"
 _REGISTERED_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_registered_secrets", default=frozenset())
 _IDENTITY_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_identity_secrets", default=frozenset())
 
@@ -232,19 +247,16 @@ def _merge_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
     return merged
 
 
-def placeholder_mask(text: str, literals: Iterable[str]) -> str:
-    """Replace every occurrence of each literal with an inert placeholder."""
-    masked = ""
-    cursor = 0
-    for start, end in _merge_spans(_literal_spans(text, literals)):
-        masked += text[cursor:start] + _PLACEHOLDER
-        cursor = end
-    return masked + text[cursor:]
-
-
 def mask_literals(text: str, literals: Iterable[str]) -> str:
     """Replace every occurrence of each literal with ``***``, merging overlaps."""
-    return placeholder_mask(text, literals).replace(_PLACEHOLDER, "***")
+    out = io.StringIO()
+    cursor = 0
+    for start, end in _merge_spans(_literal_spans(text, literals)):
+        out.write(text[cursor:start])
+        out.write("***")
+        cursor = end
+    out.write(text[cursor:])
+    return out.getvalue()
 
 
 class registered_secrets_scope:  # noqa: N801
@@ -284,27 +296,112 @@ def current_identity_secrets() -> frozenset[str]:
 def scrub_credentials(text: str) -> str:
     """Mask URI user info, bearer/Authorization tokens, key=value and quoted-key secrets, user/password@host DSNs.
 
-    Inside a ``registered_secrets_scope`` the registered literals are masked exactly first.
+    Patterns run on the original text so a literal never deletes their anchors; every output char that came
+    from a registered literal is masked, so no fragment of one survives.
     """
     registered = _REGISTERED_SECRETS.get()
-    if registered:
-        text = placeholder_mask(text, registered)
-    text = _scrub_passes(text)
-    if registered:
-        text = text.replace(_PLACEHOLDER, "***")
-    return text
+    if not registered:
+        return _scrub_passes(text)
+    hidden = _merge_spans(_literal_spans(text, registered))
+    scrubbed, origin = _scrub_tracked(text)
+    if hidden:
+        scrubbed = _mask_hidden(scrubbed, origin, hidden, len(text))
+    return mask_literals(scrubbed, registered)
+
+
+def _mask_hidden(text: str, origin: list[int], hidden: list[tuple[int, int]], size: int) -> str:
+    flags = bytearray(size)
+    for start, end in hidden:
+        flags[start:end] = b"\x01" * (end - start)
+    out = io.StringIO()
+    tail = ""  # last three emitted chars: a masked run right after `***` emits nothing
+    in_run = False
+    for index, source in enumerate(origin):
+        if source >= 0 and flags[source]:
+            in_run = True
+            continue
+        if in_run and tail != "***":
+            out.write("***")
+            tail = "***"
+        in_run = False
+        out.write(text[index])
+        tail = (tail + text[index])[-3:]
+    if in_run and tail != "***":
+        out.write("***")
+    return out.getvalue()
+
+
+def _replacement(match: re.Match[str], repl: Any) -> str:
+    return str(repl(match)) if callable(repl) else match.expand(repl)
+
+
+def _align(matched: str, matched_origin: list[int], replacement: str) -> list[int]:
+    """Origins for a replacement: greedy subsequence walk of its non-`*` chars through the matched text."""
+    result: list[int] = []
+    position = 0
+    for char in replacement:
+        found = position
+        if char != "*":
+            while found < len(matched) and matched[found] != char:
+                found += 1
+        if char != "*" and found < len(matched):
+            result.extend((matched_origin[found],))
+            position = found + 1
+        else:
+            result.extend((-1,))
+    return result
+
+
+def _sub_tracked(pattern: re.Pattern[str], repl: Any, text: str, origin: list[int]) -> tuple[str, list[int]]:
+    out = io.StringIO()
+    origins: list[int] = []
+    cursor = 0
+    for match in pattern.finditer(text):
+        start, end = match.span()
+        out.write(text[cursor:start])
+        origins.extend(origin[cursor:start])
+        replacement = _replacement(match, repl)
+        out.write(replacement)
+        origins.extend(_align(match[0], origin[start:end], replacement))
+        cursor = end
+    out.write(text[cursor:])
+    origins.extend(origin[cursor:])
+    return out.getvalue(), origins
+
+
+def _authorization_repl(m: re.Match[str]) -> str:
+    return m["head"] + (f"{m['scheme']} ***" if m["scheme"] else "***")
+
+
+_QUOTED_KEY_REPL = r"\g<lead>\g<quote>\g<keyword>\g<quote>: \g<quote>***\g<quote>"
+
+_PASSES: list[tuple[re.Pattern[str], Any]] = [
+    (_FREE_TEXT_USERINFO_PATTERN, r"\g<scheme>://"),
+    (_FREE_TEXT_URI_PATTERN, _scrub_uri_match),
+    (_JDBC_CUT_PATTERN, ""),  # a dropped jdbc path also takes its token tail
+    (_PASSWORD_AS_SCHEME_PATTERN, r"\g<user>:***"),
+    (_AUTHORIZATION_PATTERN, _authorization_repl),
+    (_BEARER_PATTERN, r"\g<scheme> ***"),
+    (_KEYWORD_PATTERN, r"\g<keyword>\g<sep>***"),
+    (_QUOTED_KEY_PATTERN, _QUOTED_KEY_REPL),
+    (_SLASH_DSN_PATTERN, r"\g<user>/***@"),
+    (_SCHEME_SLASH_DSN_PATTERN, r"\g<user>/***@"),
+]
 
 
 def _scrub_passes(text: str) -> str:
     text = text.replace(_JDBC_CUT, "\ufffd")
-    text = _drop_free_text_userinfo(text)
-    text = _FREE_TEXT_URI_PATTERN.sub(_scrub_uri_match, text)
-    text = _JDBC_CUT_PATTERN.sub("", text)  # a dropped jdbc path also takes its token tail
-    text = _AUTHORIZATION_PATTERN.sub(lambda m: m["head"] + (f"{m['scheme']} ***" if m["scheme"] else "***"), text)
-    text = _BEARER_PATTERN.sub(r"\g<scheme> ***", text)
-    text = _KEYWORD_PATTERN.sub(r"\g<keyword>\g<sep>***", text)
-    text = _QUOTED_KEY_PATTERN.sub(r"\g<lead>\g<quote>\g<keyword>\g<quote>: \g<quote>***\g<quote>", text)
-    return _SLASH_DSN_PATTERN.sub(r"\g<user>/***@", text)
+    for pattern, repl in _PASSES:
+        text = pattern.sub(repl, text)
+    return text
+
+
+def _scrub_tracked(text: str) -> tuple[str, list[int]]:
+    text = text.replace(_JDBC_CUT, "\ufffd")
+    origin = list(range(len(text)))
+    for pattern, repl in _PASSES:
+        text, origin = _sub_tracked(pattern, repl, text, origin)
+    return text, origin
 
 
 # Bounds recursion so a deeply nested attribute cannot hit RecursionError on the failure path.

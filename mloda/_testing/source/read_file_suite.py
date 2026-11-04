@@ -284,7 +284,9 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
 
     def test_file_a_non_str_handle_is_no_narrowing_of_the_file_sources(self) -> None:
         cls = self.feature_group_class
-        route = next(r for r in cls.CLAIM_ROUTES if r.source_kind == "file")
+        route = next((r for r in cls.CLAIM_ROUTES if r.source_kind == "file"), None)
+        self._require(route is not None, "the group lists no file route")
+        assert route is not None
         dac = self.own_dac()
         plain = cls.find_sources(route, self.present_column, Options(), dac)
         listed = cls.find_sources(route, self.present_column, Options(context={HANDLE_OPTION: ["own_handle"]}), dac)
@@ -338,7 +340,6 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
         assert names.count(mine) <= 1
         assert samples.count(mine) <= 1
         assert names.count(mine) + samples.count(mine) >= 1
-        del consumer
 
     def test_file_cached_listing_follows_size_and_mtime(self, monkeypatch: pytest.MonkeyPatch) -> None:
         cls = self.feature_group_class
@@ -499,12 +500,8 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
             {self._group_name(): str(self.own_path)}, context={"document_suffixes": frozenset({self._suffix()})}
         )
         assert not self._matches(self.present_column, options, None)
-        assert (
-            "does not end in"
-            not in rejection_window.get(
-                self._group_name(), MatchRejection("", code=CoreDeclineCode.COLUMN_NOT_FOUND)
-            ).reason
-        )
+        name = self._group_name()
+        assert name not in rejection_window or "does not end in" not in rejection_window[name].reason
 
     def test_file_a_missing_column_in_a_big_folder_describes_five_sources_and_counts_the_rest(self) -> None:
         folder = self.tmp_path / "big_folder"
@@ -671,7 +668,8 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
         corrupt = self.tmp_path / f"corrupt_next{self._suffix()}"
         self.write_corrupt_file(corrupt)
         dac = DataAccessCollection(files={"corrupt": str(corrupt), "own_handle": str(self.own_path)})
-        rejection_window["SomeOtherOwner"] = MatchRejection("recorded earlier", code=CoreDeclineCode.COLUMN_NOT_FOUND)
+        sentinel = MatchRejection("recorded earlier", code=CoreDeclineCode.COLUMN_NOT_FOUND)
+        rejection_window["SomeOtherOwner"] = sentinel
 
         assert not self._matches(self.missing_column, self._options(), dac)
 
@@ -680,9 +678,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
         assert self.missing_column in reason
         assert f"{os.path.abspath(corrupt)}: could not read its columns" in reason
         assert rejection_window[self._group_name()].code is CoreDeclineCode.COLUMN_NOT_FOUND
-        assert rejection_window["SomeOtherOwner"] == MatchRejection(
-            "recorded earlier", code=CoreDeclineCode.COLUMN_NOT_FOUND
-        )
+        assert rejection_window["SomeOtherOwner"] is sentinel
 
     # pointer of the wrong type
 

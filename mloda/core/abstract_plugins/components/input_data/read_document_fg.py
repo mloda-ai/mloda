@@ -1,7 +1,7 @@
 """Abstract base of one-FeatureGroup-per-document-format: one file in, three outputs (text, source, file_type).
 
 A subclass declares ``suffixes()``. Third-party groups should run ``mloda._testing.source.read_document_suite``
-(re-exported by ``mloda.testing``); a host needs an autouse fixture that runs ``gc.collect()`` after each test.
+(to be re-exported by ``mloda.testing``); a host needs an autouse fixture that runs ``gc.collect()`` after each test.
 """
 
 import os
@@ -26,7 +26,7 @@ FILE_TYPE_SUFFIX = "~file_type"
 
 
 class ReadDocumentFG(_FileSourceFG):
-    """Document source group; run mloda._testing.source.read_document_suite (re-exported by mloda.testing).
+    """Document source group; run mloda._testing.source.read_document_suite (to be re-exported by mloda.testing).
 
     A host needs an autouse fixture that runs gc.collect() after each test to reclaim its test-local subclasses.
     """

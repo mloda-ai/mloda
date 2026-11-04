@@ -426,7 +426,6 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
 
         assert spy.list_tables == 1
         assert spy.all_closed()
-        del consumer
 
     # listing failures
 
@@ -606,7 +605,6 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
             data_access_collection=dac,
         )
         assert result[0].to_pydict()[name] == [6, 6, 6]
-        del consumer
 
     # loading
 

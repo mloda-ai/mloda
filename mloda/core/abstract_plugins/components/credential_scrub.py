@@ -91,7 +91,15 @@ _AUTHORIZATION_PATTERN = re.compile(
 # host shape (EZConnect //, a descriptor (, or host:port) so `path/to/x@y` and `user@example.com` are left alone.
 # (?!\d+/) keeps a bare port like `8080/` from being read as the user.
 _SLASH_DSN_PATTERN = re.compile(
-    r"(?<![\w.$#/-])(?!\d+/)(?P<user>[\w.$#-]+)/[^\s/]+@(?=//|\(|[\w.-]+:\d+(?!\w)|[\w.-]+/\w)"
+    r"(?:(?<=://)(?=[\w$#-]+/)|(?<![\w.$#/-]))(?!\d+/)(?P<user>[\w.$#-]+)/[^\s/]+@"
+    r"(?=//|\(|[\w.-]+:\d+(?!\w)|[\w.-]+/\w)"
+)
+
+_PLAIN_URI_SCHEMES = "http|https|s3|s3a|s3n|gs|gcs|abfs|abfss|wasb|wasbs|az|adl|file|ftp|sftp|hdfs|postgres|postgresql|mysql|mongodb|redis"
+# `user:password://host`: the password sits in the scheme position. The lookbehind keeps the scan linear.
+_PASSWORD_AS_SCHEME_PATTERN = re.compile(
+    r"(?<![^\s\"'(\[{<=,;])(?!(?i:jdbc):)(?P<user>[^\s:/@\"'=,;]+):"
+    rf"(?!(?i:{_PLAIN_URI_SCHEMES})://)[^\s:/@][^\s/@]*(?=://)"
 )
 
 
@@ -284,15 +292,17 @@ def current_identity_secrets() -> frozenset[str]:
 def scrub_credentials(text: str) -> str:
     """Mask URI user info, bearer/Authorization tokens, key=value and quoted-key secrets, user/password@host DSNs.
 
-    Inside a ``registered_secrets_scope`` the registered literals are masked exactly first.
+    Patterns run on the original text so a literal never deletes their anchors; a literal a pattern cut
+    into is masked whole before the pattern pass, so its tail cannot leak.
     """
     registered = _REGISTERED_SECRETS.get()
-    if registered:
-        text = placeholder_mask(text, registered)
-    text = _scrub_passes(text)
-    if registered:
-        text = text.replace(_PLACEHOLDER, "***")
-    return text
+    if not registered:
+        return _scrub_passes(text)
+    scrubbed = _scrub_passes(text)
+    touched = frozenset(lit for lit in registered if scrubbed.count(lit) < text.count(lit))
+    if touched:
+        scrubbed = _scrub_passes(placeholder_mask(text, touched)).replace(_PLACEHOLDER, "***")
+    return mask_literals(scrubbed, registered)
 
 
 def _scrub_passes(text: str) -> str:
@@ -300,6 +310,7 @@ def _scrub_passes(text: str) -> str:
     text = _drop_free_text_userinfo(text)
     text = _FREE_TEXT_URI_PATTERN.sub(_scrub_uri_match, text)
     text = _JDBC_CUT_PATTERN.sub("", text)  # a dropped jdbc path also takes its token tail
+    text = _PASSWORD_AS_SCHEME_PATTERN.sub(r"\g<user>:***", text)
     text = _AUTHORIZATION_PATTERN.sub(lambda m: m["head"] + (f"{m['scheme']} ***" if m["scheme"] else "***"), text)
     text = _BEARER_PATTERN.sub(r"\g<scheme> ***", text)
     text = _KEYWORD_PATTERN.sub(r"\g<keyword>\g<sep>***", text)

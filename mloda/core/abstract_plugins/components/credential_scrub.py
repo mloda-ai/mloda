@@ -25,7 +25,21 @@ _USERINFO_TAIL = r"))(?:(?!://)[^\s@])*@"
 # strip_uri_userinfo feeds a data-access identity, which must name the host a client contacts: `host:port/path` is a host.
 _USERINFO_FALLBACK_PATTERN = re.compile(_USERINFO_HEAD + r"/" + _USERINFO_TAIL)
 # scrub_credentials reads `name:123/x@host/` as `user:pwd@` (a password), since free text has no such constraint.
-_FREE_TEXT_USERINFO_PATTERN = re.compile(_USERINFO_HEAD + r"/(?![^\s/?#@]+@[\w.~-]+(?::\d+)?/)" + _USERINFO_TAIL)
+# The guard after the slash also counts a bare `@host` at the end of the token (no path after the host)
+# as that userinfo shape, so `name:12/x@host` is read the same way; a dotted or port-carrying tail
+# (`a@b.csv`, `pkg@1.2.3`) stays a path, as the kept cases in the tests pin.
+_FREE_TEXT_USERINFO_PATTERN = re.compile(
+    _USERINFO_HEAD + r"/(?![^\s/?#@]+@(?:[\w.~-]+(?::\d+)?/|[\w~-]+(?=[?#\s]|$)))" + _USERINFO_TAIL
+)
+
+# A userinfo whose scheme never made it into the text: the password sits in the scheme position, in
+# front of `://` — an `@` inside the password, an extra `:word` after it, or a `/` before the user.
+# The match starts at a token boundary (whitespace, a quote, a bracket, `=`, `,`, `;` or `/`), the
+# user name itself holds none of those characters, and `jdbc:` is a real scheme prefix, never a user.
+_PASSWORD_AS_SCHEME_PATTERN = re.compile(
+    r"(?<![^\s\"'(\[{=,;/])(?P<user>(?![Jj][Dd][Bb][Cc]:)[^\s:/?#@\"'()\[\]{=,;]+)"
+    r":(?P<password>(?:(?!://)[^\s:])*(?::[A-Za-z][A-Za-z0-9+.-]*)?)://"
+)
 
 # Shared suffix a credential-shaped key name must end with, reused by the keyword and quoted-key patterns.
 _SECRET_NAME = (  # nosec B105
@@ -298,6 +312,7 @@ def scrub_credentials(text: str) -> str:
 def _scrub_passes(text: str) -> str:
     text = text.replace(_JDBC_CUT, "\ufffd")
     text = _drop_free_text_userinfo(text)
+    text = _PASSWORD_AS_SCHEME_PATTERN.sub(r"\g<user>:***://", text)
     text = _FREE_TEXT_URI_PATTERN.sub(_scrub_uri_match, text)
     text = _JDBC_CUT_PATTERN.sub("", text)  # a dropped jdbc path also takes its token tail
     text = _AUTHORIZATION_PATTERN.sub(lambda m: m["head"] + (f"{m['scheme']} ***" if m["scheme"] else "***"), text)

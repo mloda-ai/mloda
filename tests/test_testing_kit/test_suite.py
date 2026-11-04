@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import ast
+from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
 
+import mloda._testing
 from mloda._testing.result import CheckResult
 from mloda._testing.declarations import Cause
 from mloda._testing.suite import ConformanceSuite, HookError, SwitchedOffError, assert_passed, check_hooks
@@ -416,11 +419,6 @@ def test_source_mixins_are_checked_conformance_suites(
 
 
 def test_no_testing_module_imports_a_plugin_feature_group() -> None:
-    import ast
-    from pathlib import Path
-
-    import mloda._testing
-
     offenders = []
     for path in Path(mloda._testing.__file__).parent.rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):

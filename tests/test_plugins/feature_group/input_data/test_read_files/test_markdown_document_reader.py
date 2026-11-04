@@ -10,7 +10,7 @@ from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     PyArrowTableAdapter,
     PythonDictAdapter,
 )
-from tests.mixins.reader_feature_groups.read_document_fg_test_mixin import (
+from mloda._testing.source.read_document_suite import (
     ReadDocumentFGTestMixin,
 )
 from tests.mixins.reader_feature_groups.lazy_source_group import lazy_document_group

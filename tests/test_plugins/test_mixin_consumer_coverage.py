@@ -18,6 +18,10 @@ from mloda.core.abstract_plugins.operation_feature_group import OperationFeature
 from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin
 from mloda.provider import BaseFilterEngine
 from mloda.provider import BaseMaskEngine
+from mloda._testing.source.read_db_suite import ReadDBFGTestMixin
+from mloda._testing.source.read_document_suite import ReadDocumentFGTestMixin
+from mloda._testing.source.read_file_suite import ReadFileFGTestMixin
+from mloda.provider import ReadDBFG, ReadDocumentFG, ReadFileFG
 from mloda.provider import SourceFeatureGroup
 from mloda.user import PluginLoader
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
@@ -133,6 +137,27 @@ CONTRACTS: tuple[MixinContract, ...] = (
             "tests.test_core.test_abstract_plugins.test_components.test_input_data.test_toy_file_format_feature_group",
             "tests.test_core.test_abstract_plugins.test_components.test_input_data."
             "test_toy_source_feature_group_contract",
+        ),
+    ),
+    MixinContract(
+        ReadFileFG,
+        ReadFileFGTestMixin,
+        "feature_group_class",
+        (
+            f"{_INPUT_DATA}.test_read_files.test_implementations",
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.test_toy_file_format_feature_group",
+        ),
+    ),
+    MixinContract(ReadDBFG, ReadDBFGTestMixin, "feature_group_class", (f"{_INPUT_DATA}.test_read_dbs.test_sqlite_fg",)),
+    MixinContract(
+        ReadDocumentFG,
+        ReadDocumentFGTestMixin,
+        "feature_group_class",
+        (
+            f"{_INPUT_DATA}.test_read_files.test_json_document_reader",
+            f"{_INPUT_DATA}.test_read_files.test_markdown_document_reader",
+            f"{_INPUT_DATA}.test_read_files.test_text_document_reader",
+            f"{_INPUT_DATA}.test_read_files.test_yaml_document_reader",
         ),
     ),
 )

@@ -38,7 +38,7 @@ from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     PyArrowTableAdapter,
     PythonDictAdapter,
 )
-from tests.mixins.reader_feature_groups.read_file_fg_test_mixin import ReadFileFGTestMixin
+from mloda._testing.source.read_file_suite import ReadFileFGTestMixin
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_file_format_group import (
     SAMPLE_SIZE,

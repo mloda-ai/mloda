@@ -104,11 +104,9 @@ class DBQuery:
 class ReadDBFG(SourceFeatureGroup):
     """Abstract database source group: claims features found as columns of tables in matching credentials.
 
-    The base serves table catalogs; QUERY_ROUTE opts in to query text. Third-party groups should reuse the contract
-    mixin read_db_fg_test_mixin from tests/mixins/reader_feature_groups in mloda's repository; it
-    needs an autouse fixture that runs gc.collect() after each test to reclaim its test-local subclasses (mloda's
-    _no_feature_group_registry_pollution in tests/conftest.py is the stricter version), plus the rejection_window
-    fixture from tests/conftest.py.
+    The base serves table catalogs; QUERY_ROUTE opts in to query text. Third-party groups should run
+    mloda._testing.source.read_db_suite (to be re-exported by mloda.testing); a host needs an autouse fixture that runs
+    gc.collect() after each test to reclaim its test-local subclasses.
     """
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("credentials", NamePolicy.CHECKED, True),)

@@ -8,6 +8,7 @@ import copy
 import dataclasses
 import gc
 import importlib
+import itertools
 from collections.abc import Callable, Iterator
 from typing import Any, ClassVar, cast
 
@@ -18,7 +19,7 @@ from mloda._testing.source_applicability import NO_POINTER, SourceApplicability,
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
-from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
+from mloda.core.abstract_plugins.components.match_hook import call_match_hook, probe_match_criteria
 from mloda.core.abstract_plugins.components.match_rejection import (
     CoreDeclineCode,
     MatchRejection,
@@ -36,9 +37,16 @@ from mloda.core.prepare.identify_feature_group import (
     resolve_or_raise,
 )
 from mloda.core.prepare.resolution_types import EvaluationResult
-from mloda.provider import CHAIN_SEPARATOR, COLUMN_SEPARATOR, ComputeFramework, SourceFeatureGroup
+from mloda.provider import (
+    CHAIN_SEPARATOR,
+    COLUMN_SEPARATOR,
+    ComputeFramework,
+    FeatureGroup,
+    FeatureSet,
+    SourceFeatureGroup,
+)
 from mloda.steward import ReaderProbeScope, reader_probe_scope
-from mloda.user import Feature, Options, PluginCollector, mloda
+from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
@@ -142,6 +150,37 @@ def _implementation_scope() -> Iterator[Callable[..., type[Implementation[Any]]]
     loaded = loaded_implementations()
     leaked = sorted(cls.__name__ for cls in get_all_subclasses(Implementation) if cls not in before and cls in loaded)
     assert not leaked, f"leaked implementations: {leaked}"
+
+
+_CONSUMER_COUNTER = itertools.count()
+_CHAIN_SUFFIX = "suite_sum"
+
+
+def _chain_consumer(column: str) -> tuple[type[FeatureGroup], str]:
+    """A fresh group claiming only ``<column>__suite_sum``; it writes the column sum to every row."""
+    name = f"{column}{CHAIN_SEPARATOR}{_CHAIN_SUFFIX}"
+
+    class _Consumer(FeatureGroup):
+        @classmethod
+        def match_feature_group_criteria(
+            cls, feature_name: FeatureName | str, options: Options, data_access_collection: Any = None
+        ) -> bool:
+            return str(feature_name) == name
+
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+            return {Feature(column, options)}
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            total = sum(data.column(column).to_pylist())
+            return data.append_column(name, [[total] * data.num_rows])
+
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+            return {PyArrowTable}
+
+    _Consumer.__name__ = _Consumer.__qualname__ = f"SuiteChainConsumer{next(_CONSUMER_COUNTER)}"
+    return _Consumer, name
 
 
 class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
@@ -250,6 +289,12 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         feature = self._feature(self.present_column, {self._group_name(): self.own_pointer()})
         assert self._claims(feature, None)
         return self._claimed_match(feature).source
+
+    def _matches(self, name: str, options: Options, dac: DataAccessCollection | None) -> bool:
+        """The group's match verdict through the shared hook; a contained raise fails the test."""
+        outcome = call_match_hook(self.feature_group_class, name, options, dac)
+        assert outcome.error is None, outcome.error
+        return outcome.matched
 
     def _claims(self, feature: Feature, dac: DataAccessCollection | None) -> bool:
         return self.feature_group_class in self._evaluate(feature, dac).identified

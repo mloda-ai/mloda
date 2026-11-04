@@ -87,11 +87,22 @@ class TestReadDocumentFGBase:
         assert set(ReadDocumentFG.PROPERTY_MAPPING) == set(ReadFileFG.PROPERTY_MAPPING)
         assert set(ReadDocumentFG.PROPERTY_MAPPING) == {"data_access_handle", "document_suffixes"}
 
-    def test_the_docstring_points_third_party_groups_at_the_contract_mixins(self) -> None:
-        doc = ReadDocumentFG.__doc__ or ""
-        assert "tests/mixins/reader_feature_groups" in doc
-        assert "read_document_fg_test_mixin" in doc
-        assert "gc.collect" in doc
+    @pytest.mark.parametrize(
+        ("group", "suite_module", "mentions_gc_collect"),
+        [
+            (ReadDocumentFG, "mloda._testing.source.read_document_suite", True),
+            (ReadFileFG, "mloda._testing.source.read_file_suite", False),
+        ],
+    )
+    def test_the_docstring_points_third_party_groups_at_the_contract_suite(
+        self, group: type, suite_module: str, mentions_gc_collect: bool
+    ) -> None:
+        doc = group.__doc__ or ""
+        assert suite_module in doc
+        assert "mloda.testing" in doc
+        assert "tests/mixins/reader_feature_groups" not in doc
+        if mentions_gc_collect:
+            assert "gc.collect" in doc
 
     def test_the_abstract_base_never_claims_a_feature_named_after_it(self, tmp_path: Path) -> None:
         dac = DataAccessCollection(files={"toy": str(_write(tmp_path, "a.toydoc"))})

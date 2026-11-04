@@ -18,7 +18,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_s
     FileSourcePyArrowTransformer,
 )
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.mixins.reader_feature_groups.read_file_fg_test_mixin import ReadFileFGTestMixin
+from mloda._testing.source.read_file_suite import ReadFileFGTestMixin
 from tests.mixins.reader_feature_groups.format_file_writers import (
     write_csv,
     write_feather,

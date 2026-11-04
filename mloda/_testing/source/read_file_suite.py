@@ -11,22 +11,20 @@ import stat
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
+from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
+from mloda.core.optional_dependency import require
 from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.provider import CHAIN_SEPARATOR, SourceFeatureGroup
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation  # noqa: F401
-from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin
+from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin, _chain_consumer
 
 if TYPE_CHECKING:
     from mloda.provider import ReadFileFG
@@ -35,7 +33,7 @@ FOREIGN_SUFFIX = ".notmyformat"
 HANDLE_OPTION = "data_access_handle"
 
 
-class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
+class ReadFileFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
     """Contract of every ReadFileFG; adds file, folder, pin, handle, cache and failure checks."""
 
     feature_group_class: type[ReadFileFG]
@@ -286,7 +284,9 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
 
     def test_file_a_non_str_handle_is_no_narrowing_of_the_file_sources(self) -> None:
         cls = self.feature_group_class
-        route = ClaimRoute("file", NamePolicy.CHECKED, True)
+        route = next((r for r in cls.CLAIM_ROUTES if r.source_kind == "file"), None)
+        self._require(route is not None, "the group lists no file route")
+        assert route is not None
         dac = self.own_dac()
         plain = cls.find_sources(route, self.present_column, Options(), dac)
         listed = cls.find_sources(route, self.present_column, Options(context={HANDLE_OPTION: ["own_handle"]}), dac)
@@ -318,9 +318,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         assert not [p for p in names + samples if p.endswith(FOREIGN_SUFFIX)]
 
     def test_file_foreign_suffix_sources_stay_silent(self, rejection_window: dict[str, MatchRejection]) -> None:
-        assert not self.feature_group_class.match_feature_group_criteria(
-            self.present_column, Options(), self.foreign_dac()
-        )
+        assert not self._matches(self.present_column, Options(), self.foreign_dac())
         assert self._group_name() not in rejection_window
 
     # per-run cache
@@ -329,11 +327,12 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         columns = [f"{self.present_column}_cache_{n}" for n in ("a", "b", "c")]
         path = self._make("cache_file", {name: [1, 2, 3] for name in columns})
         names, samples = self._spy_reads(monkeypatch)
+        consumer, chained = _chain_consumer(columns[0])
 
         mloda.run_all(
-            [*columns, f"{columns[0]}{CHAIN_SEPARATOR}sum_aggr"],
+            [*columns, chained],
             compute_frameworks=[PyArrowTable],
-            plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class, AggregatedFeatureGroup}),
+            plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class, consumer}),
             data_access_collection=DataAccessCollection(files={"cache_handle": str(path)}),
         )
 
@@ -472,8 +471,8 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         assert "has columns unknown" not in message
         assert exc_info.value.result.eliminations[self.feature_group_class].code is CoreDeclineCode.COLUMNS_UNKNOWN
 
-    @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="fifos need POSIX")
     def test_file_a_pointer_to_a_non_regular_path_says_so_instead_of_missing(self) -> None:
+        self._require(hasattr(os, "mkfifo"), "fifos need POSIX")
         fifo = self.tmp_path / f"pointed_fifo{self._suffix()}"
         os.mkfifo(fifo)
         pointed = Feature(self.present_column, Options({self._group_name(): str(fifo)}))
@@ -487,7 +486,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:
         options = self._options({self._group_name(): str(self.foreign_path)})
-        assert not self.feature_group_class.match_feature_group_criteria(self.present_column, options, None)
+        assert not self._matches(self.present_column, options, None)
         reason = rejection_window[self._group_name()].reason
         assert str(self.foreign_path) in reason
         assert f"does not end in a {self._group_name()} suffix" in reason
@@ -500,8 +499,9 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         options = self._options(
             {self._group_name(): str(self.own_path)}, context={"document_suffixes": frozenset({self._suffix()})}
         )
-        assert not self.feature_group_class.match_feature_group_criteria(self.present_column, options, None)
-        assert "does not end in" not in rejection_window.get(self._group_name(), MatchRejection("")).reason
+        assert not self._matches(self.present_column, options, None)
+        name = self._group_name()
+        assert name not in rejection_window or "does not end in" not in rejection_window[name].reason
 
     def test_file_a_missing_column_in_a_big_folder_describes_five_sources_and_counts_the_rest(self) -> None:
         folder = self.tmp_path / "big_folder"
@@ -548,7 +548,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
 
         monkeypatch.setattr(self.feature_group_class, "column_names", classmethod(unreadable))
         dac = DataAccessCollection(files={"own_handle": str(self.own_path)})
-        assert not self.feature_group_class.match_feature_group_criteria(self.missing_column, self._options(), dac)
+        assert not self._matches(self.missing_column, self._options(), dac)
         reason = rejection_window[self._group_name()].reason
         assert "could not read its columns" in reason
         assert "toyfmt-leak-token-77" not in reason
@@ -595,7 +595,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:
         dac = DataAccessCollection(files={self._userinfo_uri()})
-        assert not self.feature_group_class.match_feature_group_criteria(self.missing_column, self._options(), dac)
+        assert not self._matches(self.missing_column, self._options(), dac)
         assert rejection_window
         assert all("hunter2" not in rejection.reason for rejection in rejection_window.values())
         self._assert_uri_password_hidden(Feature(self.missing_column), dac, rejection_window, FeatureResolutionError)
@@ -614,17 +614,17 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         )
         self._assert_uri_password_hidden(Feature(self.missing_column), dac, rejection_window, ValueError)
 
-    @pytest.mark.skipif(not hasattr(os, "symlink") or os.name == "nt", reason="symlinks need POSIX")
     def test_file_a_missing_column_summary_still_says_folder_entries_were_skipped(
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:
+        self._require(hasattr(os, "symlink") and os.name != "nt", "symlinks need POSIX")
         target = self._make("elsewhere_target", {self.missing_column: [1]})
         folder = self.tmp_path / "skip_folder"
         self._make("kept_entry", {self.present_column: [1]}, folder)
         os.symlink(target, folder / f"escape{self._suffix()}")
         dac = DataAccessCollection(folders={"skip_dir": str(folder)})
 
-        assert not self.feature_group_class.match_feature_group_criteria(self.missing_column, self._options(), dac)
+        assert not self._matches(self.missing_column, self._options(), dac)
 
         reason = rejection_window[self._group_name()].reason
         assert "is in none of the sources" in reason
@@ -638,23 +638,23 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         path = self.tmp_path / f"token=toyfmt-secret-1234{FOREIGN_SUFFIX}"
         path.write_text("x\n")
         options = self._options({self._group_name(): str(path)})
-        assert not self.feature_group_class.match_feature_group_criteria(self.present_column, options, None)
+        assert not self._matches(self.present_column, options, None)
         reason = rejection_window[self._group_name()].reason
         assert "does not end in" in reason
         assert "toyfmt-secret-1234" not in reason
         assert "token=***" in reason
 
-    @pytest.mark.skipif(not hasattr(os, "symlink") or os.name == "nt", reason="symlinks need POSIX")
     def test_file_a_folder_escape_rejection_masks_a_credential_in_the_entry_name(
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:
+        self._require(hasattr(os, "symlink") and os.name != "nt", "symlinks need POSIX")
         target = self._make("elsewhere_target", {self.present_column: [1]})
         folder = self.tmp_path / "mask_folder"
         folder.mkdir()
         os.symlink(target, folder / f"token=toyfmt-secret-1234{self._suffix()}")
         dac = DataAccessCollection(folders={"mask_dir": str(folder)})
 
-        assert not self.feature_group_class.match_feature_group_criteria(self.present_column, self._options(), dac)
+        assert not self._matches(self.present_column, self._options(), dac)
 
         reason = rejection_window[self._group_name()].reason
         assert "links outside its folder" in reason
@@ -668,16 +668,17 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         corrupt = self.tmp_path / f"corrupt_next{self._suffix()}"
         self.write_corrupt_file(corrupt)
         dac = DataAccessCollection(files={"corrupt": str(corrupt), "own_handle": str(self.own_path)})
-        rejection_window["SomeOtherOwner"] = MatchRejection("recorded earlier")
+        sentinel = MatchRejection("recorded earlier", code=CoreDeclineCode.COLUMN_NOT_FOUND)
+        rejection_window["SomeOtherOwner"] = sentinel
 
-        assert not self.feature_group_class.match_feature_group_criteria(self.missing_column, self._options(), dac)
+        assert not self._matches(self.missing_column, self._options(), dac)
 
         reason = rejection_window[self._group_name()].reason
         assert "is in none of the sources" in reason
         assert self.missing_column in reason
         assert f"{os.path.abspath(corrupt)}: could not read its columns" in reason
         assert rejection_window[self._group_name()].code is CoreDeclineCode.COLUMN_NOT_FOUND
-        assert rejection_window["SomeOtherOwner"] == MatchRejection("recorded earlier")
+        assert rejection_window["SomeOtherOwner"] is sentinel
 
     # pointer of the wrong type
 
@@ -688,6 +689,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         parent = self.feature_group_class
         column = self.present_column
         sub_name = f"{parent.__name__}ToyfmtLoaderProbe{neutral_value}"
+        pa = require("pyarrow", "the loader probe builds Arrow tables")
 
         def gated(cls: Any, feature_name: Any, options: Options, data_access_collection: Any = None) -> bool:
             if sub_name not in options:
@@ -736,8 +738,8 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
 
     # folders: FIFOs and symlinks
 
-    @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFOs need POSIX")
     def test_file_a_fifo_in_a_folder_is_skipped_without_blocking(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._require(hasattr(os, "mkfifo"), "FIFOs need POSIX")
         names, samples = self._spy_reads(monkeypatch)
         folder = self.tmp_path / "fifo_folder"
         folder.mkdir()
@@ -749,8 +751,8 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         assert self._claimed_match(feature).source == os.path.abspath(regular)
         assert str(fifo) not in names + samples
 
-    @pytest.mark.skipif(not hasattr(os, "symlink") or os.name == "nt", reason="symlinks need POSIX")
     def test_file_a_symlink_to_a_regular_file_in_a_folder_is_read(self) -> None:
+        self._require(hasattr(os, "symlink") and os.name != "nt", "symlinks need POSIX")
         folder = self.tmp_path / "link_folder"
         real = self._make("symlink_target", {self.present_column: [1]}, folder / "targets")
         link = folder / f"link{self._suffix()}"
@@ -759,10 +761,10 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         assert self._claims(feature, DataAccessCollection(folders={"link_dir": str(folder)}))
         assert os.path.basename(self._claimed_match(feature).source) == link.name
 
-    @pytest.mark.skipif(not hasattr(os, "symlink") or os.name == "nt", reason="symlinks need POSIX")
     def test_file_a_folder_entry_linking_outside_the_folder_is_skipped_with_a_rejection(
         self, monkeypatch: pytest.MonkeyPatch, rejection_window: dict[str, MatchRejection]
     ) -> None:
+        self._require(hasattr(os, "symlink") and os.name != "nt", "symlinks need POSIX")
         target = self._make("outside_target", {self.present_column: [1]})
         folder = self.tmp_path / "escape_folder"
         folder.mkdir()
@@ -771,7 +773,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
         names, samples = self._spy_reads(monkeypatch)
         dac = DataAccessCollection(folders={"escape_dir": str(folder)})
 
-        assert not self.feature_group_class.match_feature_group_criteria(self.present_column, self._options(), dac)
+        assert not self._matches(self.present_column, self._options(), dac)
 
         assert names + samples == []
         reason = rejection_window[self._group_name()].reason

@@ -37,7 +37,7 @@ SOURCE = "~source"
 FILE_TYPE = "~file_type"
 
 
-class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin):
+class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
     """Contract of every ReadDocumentFG: file, folder and pointer routes, exact names, the three outputs."""
 
     feature_group_class: type[ReadDocumentFG]
@@ -360,7 +360,7 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin):
         options = self._options({self._group_name(): str(self.own_path)})
         for name in self._undeclared_names():
             rejection_window.clear()
-            assert not self.feature_group_class.match_feature_group_criteria(name, options, None), name
+            assert not self._matches(name, options, None), name
             assert name in rejection_window[self._group_name()].reason
             is_declared = name == f"{self._group_name()}~0"
             expected = CoreDeclineCode.SOURCE_NOT_FOUND if is_declared else CoreDeclineCode.NAME_NOT_DECLARED

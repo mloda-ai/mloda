@@ -705,6 +705,22 @@ class TestCredentialCatalog:
     def test_describe_without_the_operator_handle_is_an_error(self, tmp_path: Path) -> None:
         assert is_error(_credential_catalog(tmp_path).describe(CRED_FEATURE))
 
+    def test_describe_with_an_unavailable_credential_is_an_error_without_leaks(self, tmp_path: Path) -> None:
+        (tmp_path / "gone.txt").write_text("")
+        collector = PluginCollector.enabled_feature_groups({*ALLOWED, CredentialReadMcp8})
+        credentials = {HANDLE: {"token": "MISSING_TOKEN_VAR", "other": {"file": str(tmp_path / "gone.txt")}}}
+        catalog = Catalog.build(
+            _settings(tmp_path, credentials=credentials, options={CRED_KEY: HANDLE}), collector, env={}
+        )
+
+        result = catalog.describe(CRED_FEATURE)
+
+        assert is_error(result), result
+        text = json.dumps(result)
+        assert HANDLE not in text
+        assert "MISSING_TOKEN_VAR" not in text
+        assert "gone.txt" not in text
+
     def test_describe_does_not_show_a_default_handle(self, tmp_path: Path) -> None:
         result = _credential_catalog(tmp_path).describe(CRED_DEFAULT_FEATURE)
 

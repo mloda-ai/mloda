@@ -103,7 +103,10 @@ class Settings:
 
     def config_hash(self) -> str:
         """SHA-256 hex digest of the settings, independent of mapping insertion order."""
-        canonical = json.dumps(asdict(self), sort_keys=True, default=dict)
+        fields = asdict(self)
+        if not self.credentials:
+            del fields["credentials"]
+        canonical = json.dumps(fields, sort_keys=True, default=dict)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -231,9 +234,11 @@ def _build_credentials(value: Any, base_dir: Path) -> dict[str, dict[str, Creden
     handles = _str_mapping(value, "credentials")
     built: dict[str, dict[str, CredentialRef]] = {}
     for handle, table in handles.items():
+        if not handle:
+            raise ConfigError('[mcp.credentials.""]: a handle name must not be empty')
         if handle.startswith(_AUTO_PREFIX):
             raise ConfigError(f"[mcp.credentials.{handle}]: handles starting with '{_AUTO_PREFIX}' are reserved")
-        if not isinstance(table, Mapping) or not table or not all(isinstance(k, str) for k in table):
+        if not isinstance(table, Mapping) or not table:
             raise ConfigError(f"[mcp.credentials.{handle}] must be a non-empty table of fields")
         built[handle] = {name: _build_credential_ref(handle, name, ref, base_dir) for name, ref in table.items()}
     return built

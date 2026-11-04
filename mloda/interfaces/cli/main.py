@@ -45,7 +45,9 @@ def build_services(
     data_access_collection: DataAccessCollection | None = None,
 ) -> tuple[Catalog, Planner, Runner]:
     """Build the catalog, planner and runner for ``settings``, signing plans with the env key if set."""
-    check_credentials(settings, env, data_access_collection)
+    problem = check_credentials(settings, env, data_access_collection)
+    if problem is not None:
+        raise ConfigError(problem)
     key = env.get(SIGNING_KEY_ENV)
     principal = getpass.getuser()
     catalog = Catalog.build(
@@ -186,15 +188,6 @@ def _settings(args: argparse.Namespace, env: Mapping[str, str]) -> Settings | st
         return str(error)
 
 
-def _credential_problem(settings: Settings, env: Mapping[str, str]) -> str | None:
-    # check_credentials signals an unresolvable credential only by raising ConfigError.
-    try:
-        check_credentials(settings, env)
-    except ConfigError as error:
-        return str(error)
-    return None
-
-
 def _serve_mcp(args: argparse.Namespace, env: Mapping[str, str], err: TextIO) -> int:
     """Serve over MCP; the module is looked up at call time so ``mcp`` stays an optional extra."""
     from mloda.interfaces.mcp import main as mcp_main
@@ -206,7 +199,7 @@ def _serve_mcp(args: argparse.Namespace, env: Mapping[str, str], err: TextIO) ->
     if isinstance(settings, str):
         err.write(f"mloda: error: {settings}\n")
         return FAILED
-    problem = _credential_problem(settings, env)
+    problem = check_credentials(settings, env)
     if problem is not None:
         err.write(f"mloda: error: {problem}\n")
         return FAILED
@@ -360,7 +353,7 @@ def main(
         if isinstance(loaded, str):
             err.write(f"mloda: error: {loaded}\n")
             return FAILED
-        problem = _credential_problem(loaded, env)
+        problem = check_credentials(loaded, env)
         if problem is not None:
             err.write(f"mloda: error: {problem}\n")
             return FAILED

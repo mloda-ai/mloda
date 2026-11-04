@@ -81,6 +81,10 @@ a source alias. Secret files are read again for every request, so a rotated file
 environment variable needs a restart. A group declares its handle option with `credential_handle_spec`; set it in
 `[mcp.options]`.
 
+Every request resolves every configured credential, so a missing secret fails every request until it is back.
+`restrict_sources` does not narrow credentials. A database source binds the only registered credential; with several,
+set `data_access_handle` in `[mcp.options]`.
+
 ## Tools
 
 | Tool | What it does |
@@ -131,7 +135,7 @@ Credentials a group reads at run time with `read_credential` stay here too (see 
 - Credentials are registered by the operator, never listed by search or describe, and never settable by a request: a
   declared handle option is refused even when listed in `allow_options`.
 - Sources are named by alias only. Paths, connection details, data-access objects and option values never appear in a
-  result, and a request cannot set data-access options.
+  result, and a request cannot set data-access options (such as `data_access_handle` or `connection_handle`).
 - A request may set only the option keys listed in `allow_options` (default: none). Any other key in `options`,
   `group_options` or `context_options`, nested `in_features` configs included, is refused as `policy_denied` by
   JSON pointer, never by value. Data-access keys stay refused even when listed. Options encoded in a chained feature

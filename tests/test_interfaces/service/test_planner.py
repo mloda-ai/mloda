@@ -24,7 +24,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plan_info import PlanStep
 from mloda.interfaces.service.catalog import Catalog
-from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig, load_settings
+from mloda.interfaces.service.config import Settings, SourceConfig, load_settings
 from mloda.interfaces.service.errors import ERROR_CODES, is_error
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.runner import Runner
@@ -1684,18 +1684,49 @@ class TestCredentialTable:
         (tmp_path / "empty.txt").write_text("")
         settings = _cred_settings(tmp_path, credentials)
 
-        with pytest.raises(ConfigError) as raised:
-            service_sources.check_credentials(settings, env)
+        problem = service_sources.check_credentials(settings, env)
 
+        assert problem is not None
         for part in message_has:
-            assert part in str(raised.value)
-        assert TOKEN not in str(raised.value)
+            assert part in problem
+        assert TOKEN not in problem
+
+    def test_crlf_file_is_stripped_to_the_value(self, tmp_path: Path) -> None:
+        (tmp_path / "pii").write_bytes(ROTATED.encode() + b"\r\n")
+        settings = _cred_settings(tmp_path, 'token = "TOK_VAR"\nother = { file = "pii" }')
+
+        values = service_sources.credential_values(settings.credentials, {"TOK_VAR": TOKEN})
+
+        assert values == {"db": Credential(token=TOKEN, other=ROTATED)}
+
+    def test_whitespace_only_file_is_refused(self, tmp_path: Path) -> None:
+        (tmp_path / "blank.txt").write_text("  \t \n")
+        settings = _cred_settings(tmp_path, 'token = "TOK_VAR"\nother = { file = "blank.txt" }')
+
+        problem = service_sources.check_credentials(settings, {"TOK_VAR": TOKEN})
+
+        assert problem is not None
+        assert "db" in problem
+        assert "other" in problem
+
+    def test_non_utf8_file_names_handle_and_field_not_the_bytes(self, tmp_path: Path) -> None:
+        (tmp_path / "bin.txt").write_bytes(b"\xff\xfesecretbytes\xc3")
+        settings = _cred_settings(tmp_path, 'token = "TOK_VAR"\nother = { file = "bin.txt" }')
+
+        problem = service_sources.check_credentials(settings, {"TOK_VAR": TOKEN})
+
+        assert problem is not None
+        assert "db" in problem
+        assert "other" in problem
+        assert "bin.txt" in problem
+        assert "secretbytes" not in problem
+        assert "xff" not in problem
 
     def test_check_passes_when_every_credential_resolves(self, tmp_path: Path) -> None:
         (tmp_path / "pii").write_text(ROTATED + "\n")
         settings = _cred_settings(tmp_path, 'token = "TOK_VAR"\nother = { file = "pii" }')
 
-        service_sources.check_credentials(settings, {"TOK_VAR": TOKEN})
+        assert service_sources.check_credentials(settings, {"TOK_VAR": TOKEN}) is None
 
     def test_values_read_env_and_file_and_strip_one_newline(self, tmp_path: Path) -> None:
         (tmp_path / "pii").write_text(ROTATED + "\n\n")
@@ -1710,8 +1741,10 @@ class TestCredentialTable:
         base = DataAccessCollection()
         base.add_credentials("db", Credential(token="other-value-123"))
 
-        with pytest.raises(ConfigError, match="db"):
-            service_sources.check_credentials(settings, {"TOK_VAR": TOKEN}, base)
+        problem = service_sources.check_credentials(settings, {"TOK_VAR": TOKEN}, base)
+
+        assert problem is not None
+        assert "db" in problem
 
     def test_collection_merges_into_a_copy_of_the_base(self, tmp_path: Path) -> None:
         settings = _cred_settings(tmp_path)
@@ -1767,6 +1800,33 @@ class TestCredentialRuns:
         _assert_value_absent(
             TOKEN, json.dumps(explained), _plan_text(explained["plan_id"]), json.dumps(result), caplog.text
         )
+
+    def test_operator_data_access_handle_picks_one_of_two_credentials(self, tmp_path: Path) -> None:
+        first = _write_sqlite(tmp_path)
+        other_dir = tmp_path / "other"
+        other_dir.mkdir()
+        second = _write_sqlite(other_dir)
+        connection = sqlite3.connect(second)
+        connection.execute("update facts set sq_amount = sq_amount * 10")
+        connection.commit()
+        connection.close()
+        credentials = 'sqlite = "WH_ONE"\n\n[mcp.credentials.other]\nsqlite = "WH_TWO"'
+        settings = _cred_settings(tmp_path, credentials, options={"data_access_handle": "other"})
+        planner, runner = _cred_services(settings, {"WH_ONE": str(first), "WH_TWO": str(second)})
+
+        result = _run(planner, runner, {"features": ["sq_amount"]})
+
+        assert [row["sq_amount"] for row in _preview_rows(result)] == [30, 40, 50]
+
+    @pytest.mark.parametrize("key", ["data_access_handle", "connection_handle"])
+    def test_connection_choosing_option_is_refused_even_when_listed(self, tmp_path: Path, key: str) -> None:
+        settings = _cred_settings(tmp_path, allow_options=[key])
+        planner, _ = _cred_services(settings, {"TOK_VAR": TOKEN})
+        feature = {"name": CRED_FEATURE, "options": {key: "db"}}
+
+        error = _error(planner.explain({"features": [feature]}), "policy_denied")
+
+        assert _has_detail(error, path=f"/features/0/options/{key}", problem="data_access_option")
 
     def test_handle_option_in_a_request_is_refused_even_when_listed(self, tmp_path: Path) -> None:
         settings = _cred_settings(tmp_path, allow_options=[CRED_KEY])

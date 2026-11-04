@@ -16,8 +16,9 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.feature_group import feature_group_subclasses
-from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION, concrete_source_groups
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import QUERY_OPTION
+from mloda.core.abstract_plugins.components.data_access_collection import CONNECTION_HANDLE_OPTION
 from mloda.core.api.feature_config.loader import load_features_from_config
 from mloda.core.api.feature_config.models import feature_config_schema
 from mloda.core.filter.filter_type_enum import FilterType
@@ -311,9 +312,9 @@ def validate_request(request: Any, settings: Settings) -> list[Problem]:
 
 
 def data_access_option_keys() -> frozenset[str]:
-    """Option keys that configure data access: reserved and query keys and source pointers."""
+    """Option keys that configure data access: reserved, query and handle keys and source pointers."""
     pointers = {key for group in concrete_source_groups().values() for key in group.pointer_keys()}
-    return frozenset({RESERVED_READER_OPTION_KEY, QUERY_OPTION, *pointers})
+    return frozenset({RESERVED_READER_OPTION_KEY, QUERY_OPTION, HANDLE_OPTION, CONNECTION_HANDLE_OPTION, *pointers})
 
 
 def option_data_access_violations(options: Mapping[str, Any], path: str = "") -> list[Problem]:

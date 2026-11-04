@@ -25,8 +25,8 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup, feature_grou
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.api.plugin_docs import get_feature_group_docs, resolve_feature
 from mloda.core.api.plugin_info import FeatureGroupInfo, ResolvedFeature
-from mloda.interfaces.service.config import Settings, SourceConfig
-from mloda.interfaces.service.errors import error_result, problems_to_details, strip_control_characters
+from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig
+from mloda.interfaces.service.errors import error_result, failure_result, problems_to_details, strip_control_characters
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.request import (
     MAX_NAME_LENGTH,
@@ -36,7 +36,12 @@ from mloda.interfaces.service.request import (
     refused_group_option_violations,
     unlisted_group_option_violations,
 )
-from mloda.interfaces.service.sources import credential_values, data_access_collection, source_columns
+from mloda.interfaces.service.sources import (
+    check_credentials,
+    credential_values,
+    data_access_collection,
+    source_columns,
+)
 from mloda.steward import verified_context
 
 MAX_DESCRIPTION_LENGTH = 300
@@ -270,13 +275,18 @@ class Catalog:
             if unlisted:
                 message = "A request may only set options listed in allow_options."
                 return error_result("policy_denied", message, problems_to_details(unlisted))
+        unavailable = check_credentials(self._settings, self._env)
+        if unavailable is not None:
+            return failure_result("Describe", ConfigError(unavailable))
         with verified_context(principal=self._principal), MLODA_LOCK:
             collection = data_access_collection(
                 self._settings.sources, credential_values(self._settings.credentials, self._env), self._base
             )
             resolved = resolve_feature(
                 name,
-                options=Options(group={**self._settings.options, **group}),
+                options=Options(
+                    group={**self._settings.options, **group}, context=dict(self._settings.context_options)
+                ),
                 plugin_collector=self._collector,
                 data_access_collection=collection,
             )

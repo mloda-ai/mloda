@@ -45,9 +45,15 @@ def _credential_value(handle: str, name: str, ref: CredentialRef, env: Mapping[s
     if isinstance(ref, FileRef):
         if not os.path.isfile(ref.path) or not os.access(ref.path, os.R_OK):
             raise ConfigError(f"{where}: file {ref.path} is missing or not readable")
-        with open(ref.path, encoding="utf-8") as stream:
-            value = stream.read().removesuffix("\n")
-        if not value:
+        with open(ref.path, "rb") as stream:
+            raw = stream.read()
+        # Decoding errors carry the offending bytes, so they are replaced by a message naming only the file.
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            raise ConfigError(f"{where}: file {ref.path} is not valid UTF-8") from None
+        value = text.removesuffix("\n").removesuffix("\r")
+        if not value.strip():
             raise ConfigError(f"{where}: file {ref.path} is empty")
         return value
     value = env.get(ref, "")
@@ -66,12 +72,19 @@ def credential_values(
     }
 
 
-def check_credentials(settings: Settings, env: Mapping[str, str], base: DataAccessCollection | None = None) -> None:
-    """Resolve every configured credential once and refuse a handle ``base`` already holds."""
-    credential_values(settings.credentials, env)
+def check_credentials(
+    settings: Settings, env: Mapping[str, str], base: DataAccessCollection | None = None
+) -> str | None:
+    """The problem with the configured credentials (unresolvable, or a handle ``base`` holds), else None."""
+    # credential_values signals an unresolvable credential only by raising ConfigError.
+    try:
+        credential_values(settings.credentials, env)
+    except ConfigError as error:
+        return str(error)
     taken = sorted(set(settings.credentials) & set(base.handles() if base is not None else ()))
     if taken:
-        raise ConfigError(f"[mcp.credentials.{taken[0]}]: the handle is already registered in the given collection")
+        return f"[mcp.credentials.{taken[0]}]: the handle is already registered in the given collection"
+    return None
 
 
 def data_access_collection(

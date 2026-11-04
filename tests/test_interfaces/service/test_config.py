@@ -1,6 +1,8 @@
 """Settings loading for the MCP service layer: TOML file, env vars, overrides, strictness, config hash."""
 
-from dataclasses import replace
+import hashlib
+import json
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
@@ -455,6 +457,7 @@ def test_load_does_not_check_the_environment(tmp_path: Path) -> None:
         ('[mcp.credentials.db]\ntoken = { file = "x", extra = "y" }\n', ["db", "token"]),
         ("[mcp.credentials.db]\ntoken = {}\n", ["db", "token"]),
         ('[mcp.credentials._auto_credentials_1]\ntoken = "VAR"\n', ["_auto_credentials_1"]),
+        ('[mcp.credentials.""]\ntoken = "VAR"\n', []),
         ('[mcp.credentials.db]\ntoken = "VAR"\n[mcp.sources.db]\nfiles = ["a.csv"]\n', ["db"]),
     ],
 )
@@ -486,3 +489,12 @@ def test_config_hash_changes_with_credentials() -> None:
     assert base != one
     assert one != Settings(credentials={"db": {"token": "B_VAR"}}).config_hash()
     assert one != Settings(credentials={"other": {"token": "A_VAR"}}).config_hash()
+
+
+def test_config_hash_without_credentials_is_the_pre_credentials_hash() -> None:
+    settings = Settings(mode="execute", options={"k": 1})
+    legacy = asdict(settings)
+    del legacy["credentials"]
+    canonical = json.dumps(legacy, sort_keys=True, default=dict)
+
+    assert settings.config_hash() == hashlib.sha256(canonical.encode("utf-8")).hexdigest()

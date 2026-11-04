@@ -669,8 +669,7 @@ class TestCredentials:
         assert outcome.code == 2
         assert outcome.out == ""
         assert outcome.err.startswith("mloda: error:")
-        assert "db" in outcome.err
-        assert "token" in outcome.err
+        assert "[mcp.credentials.db] field 'token'" in outcome.err
 
     def test_services_check_credentials_before_building(self, tmp_path: Path) -> None:
         settings = load_settings(_config(tmp_path, CRED_CONFIG), ENV)

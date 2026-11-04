@@ -40,7 +40,8 @@ HANDLE = "own_handle"
 
 
 def _database(opened: list[Any], rows: dict[str, list[int]], path: str = ":memory:", table: str = TABLE) -> Any:
-    duckdb = pytest.importorskip("duckdb")
+    import duckdb
+
     connection = duckdb.connect(path)
     opened.append(connection)
     columns = ", ".join(f"{name} INTEGER" for name in rows)

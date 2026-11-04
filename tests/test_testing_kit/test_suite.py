@@ -384,12 +384,12 @@ def test_source_mixins_are_checked_conformance_suites(
     mixin = get_mixin()
 
     with pytest.raises(SwitchedOffError) as switched:
-        type("_Blanked", (mixin,), {"plugin": _Plugin, contract_test: None})
+        type("_Blanked", (mixin,), {contract_test: None})
 
     assert contract_test in str(switched.value)
 
     with pytest.raises(HookError) as hooked:
-        type("_Typo", (mixin,), {"plugin": _Plugin, near_miss: _Plugin})
+        type("_Typo", (mixin,), {near_miss: _Plugin})
 
     assert _hint(near_miss, hook) in str(hooked.value)
 

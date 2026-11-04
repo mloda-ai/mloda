@@ -1483,12 +1483,16 @@ class DroppedInputConsumer(FeatureGroup):
 
 
 class TestMissingInputNamesDroppingGroup:
-    def test_error_names_dropping_group_and_suggests_replaces_rows(self) -> None:
+    @PARALLELIZATION_MODES_ALL
+    def test_error_names_dropping_group_and_suggests_replaces_rows(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
         with pytest.raises(MissingInputFeatureError) as exc_info:
             mloda.run_all(
                 [Feature("dropped_input_consumer")],
                 compute_frameworks=[PyArrowTable],
-                parallelization_modes={ParallelizationMode.SYNC},
+                parallelization_modes=modes,
+                flight_server=flight_server,
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {ReducerRawSource, NonReducingReducer, DroppedInputConsumer}
                 ),
@@ -1527,3 +1531,24 @@ class TestMissingInputNamesDroppingGroup:
             cfw.run_validate_input_features(DroppedInputConsumer, features)
 
         assert "SomeGroup" not in str(exc_info.value)
+
+    def test_reappearing_input_clears_its_previous_drop(self) -> None:
+        cfw, consumer_features = self._framework_with_missing_input()
+        cfw.set_data(pa.table({"raw_key": [1, 2], "raw_val": [10, 20]}))
+        cfw.set_column_names()
+        cfw.run_calculation(NonReducingReducer, FeatureSet([Feature("red_sum")]), None)
+
+        with pytest.raises(MissingInputFeatureError) as before:
+            cfw.run_validate_input_features(DroppedInputConsumer, consumer_features)
+        assert before.value.dropped_by == (("raw_val", "NonReducingReducer"),)
+
+        cfw.run_calculation(
+            ReducerRawSource, FeatureSet([Feature("raw_val")]), None, data=pa.table({"present": [1, 2, 3]})
+        )
+        assert "raw_val" in cfw.get_column_names()
+
+        cfw.set_data(pa.table({"present": [1]}))
+        with pytest.raises(MissingInputFeatureError) as after:
+            cfw.run_validate_input_features(DroppedInputConsumer, consumer_features)
+        assert after.value.missing_inputs == ("raw_val",)
+        assert after.value.dropped_by == ()

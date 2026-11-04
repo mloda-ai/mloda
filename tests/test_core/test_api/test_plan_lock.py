@@ -29,6 +29,8 @@ from mloda.core.abstract_plugins.components.credential import RegisteredCredenti
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.provider import BaseFeatureGroupVersion, ComputeFramework, FeatureGroup, Implementation
 from tests.helpers.credential_handle_stubs import ChsTwoHandleFG
+from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 import importlib.metadata
 from collections.abc import Iterator
 
@@ -898,6 +900,36 @@ def test_plan_content_hash_ignores_the_declared_handles() -> None:
 
 def test_plan_content_hash_of_a_real_handle_plan_equals_the_hash_with_the_field_cleared() -> None:
     steps = _explain_two_handles()
+
+    cleared = [dataclasses.replace(s, credential_handles=()) for s in steps]
+
+    assert plan_content_hash(steps) == plan_content_hash(cleared)
+    assert plan_structure_hash(steps) != plan_structure_hash(cleared)
+
+
+def _explain_sqlite(tmp_path: Path) -> list[PlanStep]:
+    path = tmp_path / "bound.db"
+    write_sqlite(path, {"bound_table": {"bound_col": [1, 2]}})
+    return list(
+        mloda.explain(
+            ["bound_col"],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=DataAccessCollection(credentials={"db-main": {"sqlite": str(path)}}),
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
+        )
+    )
+
+
+def test_the_lock_of_a_database_source_plan_names_the_bound_handle(tmp_path: Path) -> None:
+    steps = _explain_sqlite(tmp_path)
+
+    (compute,) = [s for s in steps if s.step_kind == "compute"]
+    assert compute.credential_handles == ("db-main",)
+    assert json.loads(_lock_text(steps))["compute"][0]["credential_handles"] == ["db-main"]
+
+
+def test_plan_content_hash_of_a_database_source_plan_ignores_the_bound_handle(tmp_path: Path) -> None:
+    steps = _explain_sqlite(tmp_path)
 
     cleared = [dataclasses.replace(s, credential_handles=()) for s in steps]
 

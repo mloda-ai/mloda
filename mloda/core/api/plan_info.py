@@ -108,7 +108,7 @@ class PlanStep:
     ``leaves_connection``: the handle whose connection a compute step's root read, requested result conversion or a
     transform leaves (carried through same-handle steps), "<unnamed>" for an auto handle, else None.
 
-    ``credential_handles``: the handles a compute step declares and so could read, else (); excluded from equality.
+    ``credential_handles``: the handles a compute step declares (could read) plus the one its source binds (reads), else (); excluded from equality.
 
     ``implementation``: the Implementation class serving a compute step, else None.
     ``implementation_path``: its ``module:qualname``, "neutral" for a source group step without one, else None.
@@ -399,7 +399,7 @@ def build_plan_steps(
                     input_feature_names=input_feature_names,
                     feature_set_options=snapshot,
                     step_uuid=step.uuid,
-                    credential_handles=step.credential_handles,
+                    credential_handles=step.features.credential_handles,
                     _match_digests=match_digests(options.group) if options else {},
                     _match_key_id=_key_id(),
                     input_feature_edges={

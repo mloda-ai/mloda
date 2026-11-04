@@ -227,6 +227,11 @@ class SourceFeatureGroup(FeatureGroup):
         return None
 
     @classmethod
+    def match_credentials(cls, match: SourceMatch) -> Any | None:
+        """The credentials object the match reads with, None when the source uses none."""
+        return None
+
+    @classmethod
     def neutral_type(cls, match: SourceMatch) -> type | None:
         """The type load_neutral returns, None when unknown; a default run prefers frameworks taking it as is."""
         return None

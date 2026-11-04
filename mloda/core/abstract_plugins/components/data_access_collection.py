@@ -470,6 +470,12 @@ class DataAccessCollection:
                 cls._collect_str_leaves(nested, leaves, visited)
 
 
+def credential_handle_of(dac: DataAccessCollection | None, credentials: Any) -> str | None:
+    """The handle whose registered credential is `credentials` by identity, else None."""
+    items = dac.credentials.items() if dac else ()
+    return next((handle for handle, value in items if value is credentials), None)
+
+
 def resolve_connection_handle(framework: Any, dac: Any, options: Any | None) -> tuple[str | None, bool, str | None]:
     """Resolve the DAC connection handle for `framework`: (handle, explicit, reason)."""
     named = options.get(CONNECTION_HANDLE_OPTION) if options is not None else None

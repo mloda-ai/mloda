@@ -2,6 +2,7 @@
 
 import re
 import types
+from pathlib import Path
 from abc import abstractmethod
 from collections.abc import Callable, Mapping
 from typing import Any
@@ -16,6 +17,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsRawSecretFG, ChsSource, ChsVaultFG
 from mloda.provider import (
     ComputeFramework,
@@ -36,6 +38,7 @@ from mloda.user import (
 )
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 SECRET = "chs-secret-value-1234"  # nosec B105
 OTHER_SECRET = "chs-other-secret-5678"  # nosec B105
@@ -259,6 +262,26 @@ def _refusal(
 
 def _steps(session: Any, group: type[FeatureGroup]) -> list[FeatureGroupStep]:
     return [s for s in session.engine.execution_planner if isinstance(s, FeatureGroupStep) and s.feature_group is group]
+
+
+class TestBoundHandleIsNotGranted:
+    """A bound handle is reported on the features, never in the step's declared handles that feed the grant."""
+
+    def test_a_database_source_step_keeps_declared_handles_empty_and_reports_the_bound_one(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "bound.db"
+        write_sqlite(path, {"bound_table": {"bound_col": [1, 2]}})
+        session = mloda.prepare(
+            ["bound_col"],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=_dac(**{"db-main": {"sqlite": str(path)}}),
+            plugin_collector=_plugins(SqliteFG),
+        )
+
+        (step,) = _steps(session, SqliteFG)
+        assert step.credential_handles == ()
+        assert step.features.credential_handles == ("db-main",)
 
 
 class TestPlanTimeRefusals:

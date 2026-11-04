@@ -40,6 +40,7 @@ from mloda.provider import (
 )
 from mloda.steward import GateBypassError
 from mloda.user import (
+    Credential,
     DataAccessCollection,
     Feature,
     FeatureName,
@@ -1492,3 +1493,71 @@ class TestInputDataLoadHookCarriesCredentialHandles:
 
         assert len(gate.all_captured) == 1
         assert gate.all_captured[0].credential_handles == ("vault-main",)
+
+
+class TestInputDataLoadHookCarriesBoundCredentialHandle:
+    """The INPUT_DATA_LOAD HookContext of a database source carries the handle its match binds."""
+
+    def _load_contexts(
+        self,
+        dac: DataAccessCollection | None,
+        options: dict[str, Any],
+        group: type[FeatureGroup] = SqliteFG,
+    ) -> list[HookContext]:
+        extender = _InputDataLoadCapturingExtender()
+        mloda.run_all(
+            [Feature("bound_col", options=options)],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=dac,
+            plugin_collector=PluginCollector.enabled_feature_groups({group}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+        return extender.all_captured
+
+    @pytest.mark.parametrize("kind", ["named", "unnamed", "pointer", "pointer-no-collection"])
+    def test_the_bound_handle_reaches_the_load_context(self, tmp_path: Path, kind: str) -> None:
+        path = tmp_path / "bound.db"
+        write_sqlite(path, {"bound_table": {"bound_col": [1, 2]}})
+        pointer = {"SqliteFG": Credential(sqlite=str(path))}
+        dac, options, expected = {
+            "named": (DataAccessCollection(credentials={"db-main": {"sqlite": str(path)}}), {}, ("db-main",)),
+            "unnamed": (DataAccessCollection(credentials=[{"sqlite": str(path)}]), {}, ("<unnamed>",)),
+            "pointer": (
+                DataAccessCollection(credentials={"other": {"sqlite": str(path)}}),
+                pointer,
+                ("<pointer>",),
+            ),
+            "pointer-no-collection": (None, pointer, ("<pointer>",)),
+        }[kind]
+
+        contexts = self._load_contexts(dac, options)
+
+        assert [c.credential_handles for c in contexts] == [expected]
+
+    def test_a_file_source_keeps_no_handles(self, tmp_path: Path) -> None:
+        path = tmp_path / "bound.csv"
+        path.write_text("bound_col\n1\n2\n")
+        extender = _InputDataLoadCapturingExtender()
+
+        mloda.run_all(
+            ["bound_col"],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=DataAccessCollection(files={str(path)}),
+            plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
+            function_extender={extender},
+        )
+
+        assert [c.credential_handles for c in extender.all_captured] == [()]
+
+    def test_a_handle_declared_and_bound_is_listed_once(self, tmp_path: Path) -> None:
+        path = tmp_path / "bound.db"
+        write_sqlite(path, {"bound_table": {"bound_col": [1, 2]}})
+        dac = DataAccessCollection(credentials={"db-main": {"sqlite": str(path)}})
+
+        class _BoundHandleSqliteFG(SqliteFG):
+            PROPERTY_MAPPING = {"idl_bound_vault_handle": credential_handle_spec("Vault handle.")}
+
+        contexts = self._load_contexts(dac, {"idl_bound_vault_handle": "db-main"}, _BoundHandleSqliteFG)
+
+        assert [c.credential_handles for c in contexts] == [("db-main",)]

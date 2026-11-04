@@ -3,6 +3,7 @@
 import dataclasses
 import logging
 from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -14,7 +15,10 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureSet, credential_handle_spec
 from mloda.steward import FeatureResolutionError, PlanStep, plan_content_hash, plan_structure_hash
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
+from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
 
 _COLUMN = "lifecycle_hooks_col"
 
@@ -580,6 +584,40 @@ class TestOnRunStartSeesStepCredentialHandles:
         session = _prepare_with_handle({_HandleRefuser("refuser", log, "vault-main"), _Calculated(calculated)})
 
         with pytest.raises(RuntimeError, match="refused-handle-vault-main"):
+            session.run(parallelization_modes=_SYNC)
+
+        assert calculated == []
+
+
+def _prepare_sqlite(tmp_path: Path, extenders: set[Extender]) -> Any:
+    path = tmp_path / "bound.db"
+    write_sqlite(path, {"bound_table": {"bound_col": [1, 2]}})
+    return mloda.prepare(
+        ["bound_col"],
+        compute_frameworks=[PyArrowTable],
+        data_access_collection=DataAccessCollection(credentials={"db-main": {"sqlite": str(path)}}),
+        plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
+        parallelization_modes=_SYNC,
+        function_extender=extenders,
+    )
+
+
+class TestOnRunStartSeesBoundCredentialHandle:
+    def test_run_start_source_step_carries_the_bound_handle(self, tmp_path: Path) -> None:
+        log: list[tuple[Any, ...]] = []
+        session = _prepare_sqlite(tmp_path, {_Recorder("rec", log)})
+
+        session.run(parallelization_modes=_SYNC)
+
+        (start,) = [e for e in log if e[1] == "run_start"]
+        assert [s.credential_handles for s in start[4] if s.step_kind == "compute"] == [("db-main",)]
+
+    def test_an_extender_refuses_the_run_for_a_bound_handle_before_any_step_runs(self, tmp_path: Path) -> None:
+        log: list[tuple[Any, ...]] = []
+        calculated: list[str] = []
+        session = _prepare_sqlite(tmp_path, {_HandleRefuser("refuser", log, "db-main"), _Calculated(calculated)})
+
+        with pytest.raises(RuntimeError, match="refused-handle-db-main"):
             session.run(parallelization_modes=_SYNC)
 
         assert calculated == []

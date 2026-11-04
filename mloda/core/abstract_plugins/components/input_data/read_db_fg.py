@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
-from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection, credential_handle_of
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import (
@@ -261,8 +261,12 @@ class ReadDBFG(SourceFeatureGroup):
 
     @classmethod
     def _handle_of(cls, credentials: Any, data_access_collection: DataAccessCollection | None, index: int) -> str:
-        items = data_access_collection.credentials.items() if data_access_collection else ()
-        return next((handle for handle, value in items if value is credentials), f"credential {index}")
+        return credential_handle_of(data_access_collection, credentials) or f"credential {index}"
+
+    @classmethod
+    def match_credentials(cls, match: SourceMatch) -> Any | None:
+        """The credentials the matched table or query reads with."""
+        return match.access.credentials
 
     @classmethod
     def login_key(cls, credentials: Any) -> Hashable:

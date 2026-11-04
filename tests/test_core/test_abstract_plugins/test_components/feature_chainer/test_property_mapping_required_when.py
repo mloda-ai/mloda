@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import MappingProxyType
 from typing import Any
 
 import pandas as pd
@@ -59,6 +60,35 @@ class MockWithConditionalRequired(FeatureChainParserMixin):
     }
 
 
+class MockWithConditionalRequiredProxy(FeatureChainParserMixin):
+    """MockWithConditionalRequired with its PROPERTY_MAPPING behind a MappingProxyType (#2602)."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_windowed_proxy$"
+    MIN_IN_FEATURES = 0
+
+    PROPERTY_MAPPING = MappingProxyType(
+        {
+            "aggregation_type": PropertySpec(
+                "Aggregation to apply",
+                allowed_values={
+                    "sum": "Sum of values",
+                    "avg": "Average of values",
+                    "first": "First value (requires order_by)",
+                    "last": "Last value (requires order_by)",
+                },
+                context=True,
+                strict_validation=True,
+            ),
+            "order_by": PropertySpec(
+                "Column to order by within each partition",
+                context=True,
+                strict_validation=False,
+                required_when=_needs_order_by,
+            ),
+        }
+    )
+
+
 class TestRequiredWhenUnit:
     """Unit tests for required_when predicate in PROPERTY_MAPPING."""
 
@@ -67,6 +97,18 @@ class TestRequiredWhenUnit:
         options = Options(context={"aggregation_type": "first"})
         result = MockWithConditionalRequired.match_feature_group_criteria("my_feature", options)
         assert result is False
+
+    def test_proxy_mapping_rejects_when_predicate_true_and_option_absent(self) -> None:
+        """A non-dict Mapping PROPERTY_MAPPING still installs the required_when guard (#2602)."""
+        options = Options(context={"aggregation_type": "first"})
+        result = MockWithConditionalRequiredProxy.match_feature_group_criteria("my_feature", options)
+        assert result is False
+
+    def test_proxy_mapping_accepts_when_predicate_true_and_option_present(self) -> None:
+        """The proxy mapping guard passes when the conditionally required option is present (#2602)."""
+        options = Options(context={"aggregation_type": "first", "order_by": "timestamp"})
+        result = MockWithConditionalRequiredProxy.match_feature_group_criteria("my_feature", options)
+        assert result is True
 
     def test_accepts_when_predicate_true_and_option_present(self) -> None:
         """When predicate returns True and the option is present, matching succeeds."""

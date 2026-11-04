@@ -268,7 +268,7 @@ class FeatureChainParser:
         return validate_property_spec(owner_name, key, spec)
 
     @classmethod
-    def validate_property_mapping_defaults(cls, owner_name: str, property_mapping: dict[str, Any] | None) -> None:
+    def validate_property_mapping_defaults(cls, owner_name: str, property_mapping: Mapping[str, Any] | None) -> None:
         """Validate a PROPERTY_MAPPING at class-definition time; the rules live in ``_require_spec``,
         shared with the match-time entry points."""
         if property_mapping is None:
@@ -313,7 +313,7 @@ class FeatureChainParser:
 
     @classmethod
     def _validate_final_properties(
-        cls, property_tracker: dict[str, list[Any] | None], property_mapping: dict[str, PropertySpec]
+        cls, property_tracker: dict[str, list[Any] | None], property_mapping: Mapping[str, PropertySpec]
     ) -> bool:
         """Validate that all required properties are present.
 
@@ -331,7 +331,7 @@ class FeatureChainParser:
 
     @classmethod
     def _collect_option_value(
-        cls, options: Options, property_name: str, property_mapping: dict[str, PropertySpec]
+        cls, options: Options, property_name: str, property_mapping: Mapping[str, PropertySpec]
     ) -> list[Any] | None:
         """Validate one option value and return its elements, or None when the option is absent."""
         property_config = property_mapping[property_name]
@@ -344,7 +344,7 @@ class FeatureChainParser:
         )
 
     @classmethod
-    def _validate_present_option_values(cls, options: Options, property_mapping: dict[str, PropertySpec]) -> None:
+    def _validate_present_option_values(cls, options: Options, property_mapping: Mapping[str, PropertySpec]) -> None:
         """Validate the values of the present options, without enforcing presence of the absent ones."""
         for property_name, spec in property_mapping.items():
             # The entry point is public: a caller may hand over an unmigrated mapping that never
@@ -358,7 +358,7 @@ class FeatureChainParser:
     def validate_name_bindings(
         cls,
         bindings: Mapping[str, Any],
-        property_mapping: dict[str, PropertySpec],
+        property_mapping: Mapping[str, PropertySpec],
         rejected_bindings: Mapping[str, str] | None = None,
     ) -> None:
         """Validate each name-bound value like an option value; raises PropertyValueRejection on the first invalid."""
@@ -372,7 +372,7 @@ class FeatureChainParser:
 
     @classmethod
     def _validate_options_against_property_mapping(
-        cls, options: Options, property_mapping: dict[str, PropertySpec]
+        cls, options: Options, property_mapping: Mapping[str, PropertySpec]
     ) -> bool:
         """Validate present option values and enforce required presence. False when a required option is absent.
 
@@ -393,7 +393,7 @@ class FeatureChainParser:
 
     @classmethod
     def _first_rejecting_guard(
-        cls, options: Options, property_mapping: dict[str, PropertySpec] | None, log: logging.Logger = logger
+        cls, options: Options, property_mapping: Mapping[str, PropertySpec] | None, log: logging.Logger = logger
     ) -> tuple[str, Any] | None:
         """The (key, value) of the first match_guard that rejects (falsy or raises), or None; records go to ``log``."""
         if property_mapping is None:
@@ -442,7 +442,7 @@ class FeatureChainParser:
         cls,
         owner_name: str,
         options: Options,
-        property_mapping: dict[str, PropertySpec] | None,
+        property_mapping: Mapping[str, PropertySpec] | None,
         log: logging.Logger = logger,
     ) -> bool:
         """Enforce the match_guard constraints of a PROPERTY_MAPPING; a reportable rejection is recorded."""
@@ -460,7 +460,7 @@ class FeatureChainParser:
 
     @classmethod
     def _name_path_missing_required_keys(
-        cls, effective_options: Options, property_mapping: dict[str, PropertySpec]
+        cls, effective_options: Options, property_mapping: Mapping[str, PropertySpec]
     ) -> list[str]:
         """The missing required keys on the name path (#769).
 
@@ -485,7 +485,7 @@ class FeatureChainParser:
         return missing
 
     @staticmethod
-    def _presence_rejection_reason(missing: list[str], property_mapping: dict[str, PropertySpec]) -> str:
+    def _presence_rejection_reason(missing: list[str], property_mapping: Mapping[str, PropertySpec]) -> str:
         """The one formatting of the missing-required-keys reason, shared by the matcher and the diagnostic."""
         context_keys = sorted(key for key in missing if property_mapping[key].context)
         remedy = context_forwarding_remedy(bool(context_keys), context_keys if len(missing) > 1 else None)
@@ -500,7 +500,7 @@ class FeatureChainParser:
         owner_name: str | None,
         feature_name: str | FeatureName,
         effective_options: Options,
-        property_mapping: dict[str, PropertySpec],
+        property_mapping: Mapping[str, PropertySpec],
     ) -> bool:
         """Enforce the name-path required-presence rule (#769). False means non-match."""
         missing = cls._name_path_missing_required_keys(effective_options, property_mapping)
@@ -528,7 +528,7 @@ class FeatureChainParser:
 
     @classmethod
     def name_path_presence_rejection_reason(
-        cls, effective_options: Options, property_mapping: dict[str, PropertySpec]
+        cls, effective_options: Options, property_mapping: Mapping[str, PropertySpec]
     ) -> str | None:
         """The reason a name-path candidate was rejected for missing presence (#769); None when nothing is missing.
 
@@ -546,7 +546,7 @@ class FeatureChainParser:
         cls,
         feature_name: str | FeatureName,
         options: Options,
-        property_mapping: dict[str, PropertySpec] | None = None,
+        property_mapping: Mapping[str, PropertySpec] | None = None,
         prefix_patterns: list[Any] | None = None,
         pattern: str = CHAIN_SEPARATOR,
         owner_name: str | None = None,
@@ -597,7 +597,7 @@ class FeatureChainParser:
         return False
 
     @staticmethod
-    def has_required_when_predicates(property_mapping: dict[str, Any]) -> bool:
+    def has_required_when_predicates(property_mapping: Mapping[str, Any]) -> bool:
         """Return True if any spec in property_mapping declares required_when."""
         for spec in property_mapping.values():
             if isinstance(spec, PropertySpec) and spec.required_when is not None:
@@ -620,7 +620,7 @@ class FeatureChainParser:
         return patterns
 
     @classmethod
-    def bind_name_captures(cls, parsed: ParsedFeatureName, property_mapping: dict[str, Any]) -> dict[str, Any]:
+    def bind_name_captures(cls, parsed: ParsedFeatureName, property_mapping: Mapping[str, Any]) -> dict[str, Any]:
         """Turn parse facts into PROPERTY_MAPPING bindings by name; documented and deterministic.
 
         Named captures bind EXCLUSIVELY by name: a capture whose name is a mapping key binds to that
@@ -638,7 +638,7 @@ class FeatureChainParser:
 
     @classmethod
     def _convert_name_bindings(
-        cls, parsed: ParsedFeatureName, raw: dict[str, str], property_mapping: dict[str, Any]
+        cls, parsed: ParsedFeatureName, raw: dict[str, str], property_mapping: Mapping[str, Any]
     ) -> tuple[dict[str, Any], dict[str, str]]:
         """Apply each key's name_converter to its named capture; returns (bindings, rejected key -> text)."""
         if not parsed.named_captures:
@@ -674,7 +674,7 @@ class FeatureChainParser:
         return bindings, rejected
 
     @classmethod
-    def _raw_name_bindings(cls, parsed: ParsedFeatureName, property_mapping: dict[str, Any]) -> dict[str, str]:
+    def _raw_name_bindings(cls, parsed: ParsedFeatureName, property_mapping: Mapping[str, Any]) -> dict[str, str]:
         """The bindings as captured text, before any name_converter."""
         if not parsed.matched:
             return {}
@@ -698,7 +698,7 @@ class FeatureChainParser:
         return {}
 
     @classmethod
-    def _name_identifies_group(cls, parsed: ParsedFeatureName, property_mapping: dict[str, Any] | None) -> bool:
+    def _name_identifies_group(cls, parsed: ParsedFeatureName, property_mapping: Mapping[str, Any] | None) -> bool:
         """True when a matched name string-identifies this group for matching.
 
         A legacy positional pattern whose only capture is an absent optional first group does NOT
@@ -725,7 +725,7 @@ class FeatureChainParser:
         cls,
         feature_name: FeatureName | str,
         prefix_patterns: list[Any],
-        property_mapping: dict[str, Any] | None,
+        property_mapping: Mapping[str, Any] | None,
         in_feature_separator: str = INPUT_SEPARATOR,
         pattern: str = CHAIN_SEPARATOR,
     ) -> NameResolution:
@@ -746,7 +746,7 @@ class FeatureChainParser:
 
     @classmethod
     def _merge_bindings(
-        cls, options: Options, bindings: dict[str, Any], property_mapping: dict[str, Any] | None
+        cls, options: Options, bindings: dict[str, Any], property_mapping: Mapping[str, Any] | None
     ) -> Options:
         """Merge name-derived bindings into options; a present option wins, nothing to merge is identity.
 
@@ -782,7 +782,7 @@ class FeatureChainParser:
         cls,
         feature_name: str | FeatureName,
         prefix_patterns: list[Any],
-        property_mapping: dict[str, Any],
+        property_mapping: Mapping[str, Any],
         options: Options,
     ) -> Options:
         """Merge every name-derived binding into options so predicates and validation see them.

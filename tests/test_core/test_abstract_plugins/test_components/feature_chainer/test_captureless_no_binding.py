@@ -15,6 +15,7 @@ All fixture markers carry a "c772" suffix so they cannot collide in the global p
 from __future__ import annotations
 
 import logging
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -195,6 +196,30 @@ class TestCapturelessDefinitionDiagnostic:
             if record.levelno == logging.WARNING
             and record.name == AUTHOR_GUARDS_LOGGER
             and "RECOGNITION_ONLY_PATTERN" in record.getMessage()
+        ]
+        assert warnings
+
+    def test_captureless_proxy_mapping_without_marker_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A non-dict Mapping PROPERTY_MAPPING still gets the captureless diagnostic (#2602)."""
+        with caplog.at_level(logging.WARNING):
+
+            class _CapturelessProxyM2602(FeatureChainParserMixin):
+                PREFIX_PATTERN = r".*__recognize_m2602$"
+                PROPERTY_MAPPING = MappingProxyType(
+                    {
+                        "operation_m2602": PropertySpec(
+                            "op", allowed_values=("normalize",), context=True, strict_validation=True
+                        ),
+                    }
+                )
+
+        warnings = [
+            record
+            for record in caplog.records
+            if record.levelno == logging.WARNING
+            and record.name == AUTHOR_GUARDS_LOGGER
+            and "RECOGNITION_ONLY_PATTERN" in record.getMessage()
+            and "_CapturelessProxyM2602" in record.getMessage()
         ]
         assert warnings
 

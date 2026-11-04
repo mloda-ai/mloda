@@ -16,6 +16,7 @@ from __future__ import annotations
 import functools
 import logging
 from collections.abc import Callable
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -95,6 +96,35 @@ class TestOverrideBypass:
         warnings = _presence_warnings(caplog, "_PatternPresenceR2353")
         assert len(warnings) == 1
         assert "missing_r2353" in warnings[0].getMessage()
+
+    def test_proxy_mapping_presence_guard_still_rejects(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A non-dict Mapping PROPERTY_MAPPING still installs the presence guard (#2602)."""
+
+        class _ProxyPresenceM2602(FeatureChainParserMixin):
+            PREFIX_PATTERN = r".*__(?P<carried_m2602>\w+)$"
+            PROPERTY_MAPPING = MappingProxyType(
+                {
+                    "carried_m2602": PropertySpec("required, carried by the name", context=True),
+                    "missing_m2602": PropertySpec("required, options-only, absent", context=True),
+                }
+            )
+
+            @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: str | FeatureName,
+                options: Options,
+                data_access_collection: Any = None,
+            ) -> bool:
+                return True
+
+        with caplog.at_level(logging.WARNING):
+            result = _ProxyPresenceM2602.match_feature_group_criteria("src__op_m2602", Options())
+
+        assert result is False, "a non-delegating True override must not bypass the presence rule"
+        warnings = _presence_warnings(caplog, "_ProxyPresenceM2602")
+        assert warnings, "the guarded non-match must warn, naming the class"
+        assert "missing_m2602" in warnings[0].getMessage(), "the warning must name the missing key"
 
     def test_non_delegating_true_override_is_still_a_non_match(self, caplog: pytest.LogCaptureFixture) -> None:
         """The override never reaches the inner rule, so the guard must reject and warn itself."""

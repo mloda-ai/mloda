@@ -8,6 +8,7 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -94,6 +95,17 @@ class TestMissingInFeaturesWarns:
             assert _EmptyMappingM951o.PROPERTY_MAPPING == {}
 
         assert len(_missing_in_features_warnings(caplog, "_EmptyMappingM951o")) == 1
+
+    def test_proxy_mapping_without_in_features_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A non-dict Mapping PROPERTY_MAPPING still gets the source-contract warning (#2602)."""
+        with caplog.at_level(logging.WARNING):
+
+            class _ProxyMappingM2602(FeatureChainParserMixin):
+                PROPERTY_MAPPING = MappingProxyType(
+                    {"req_m2602": PropertySpec("required", allowed_values=("v_m2602",))}
+                )
+
+        assert len(_missing_in_features_warnings(caplog, "_ProxyMappingM2602")) == 1
 
     def test_guard_takes_owner_and_mixin(self) -> None:
         signature = inspect.signature(feature_chain_author_guards.warn_missing_in_features_declaration)

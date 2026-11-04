@@ -83,7 +83,7 @@ A dict returned by a non-root feature group is appended to the frame when its co
 
 A group whose result has other rows than its input (an aggregation, a resample) opts in by overriding `replaces_rows()` to return True. Each of its steps with an input frame then writes a frame of its own, while sibling steps keep reading the unchanged input. Such a group must return a new frame and never mutate its input in place. A consumer reading two such frames, or one and the unchanged input, needs a `Link` between them; `mloda.prepare` raises otherwise.
 
-A group that could not compute a value for some rows can say so with `report_failed_rows(column, rows, reason)` (import from `mloda.provider`) inside `calculate_feature`. `reason` is a short code, never row data; `rows` are positions in the group's own output. Entries reach `RunResult.failed_rows` of `run()` and `run_all()`; `stream_run` and `stream_all` do not collect them.
+A group that could not compute a value for some rows can say so with `report_failed_rows(column, rows, reason)` (import from `mloda.provider`) inside `calculate_feature`. `reason` is a short code, never row data; `rows` are positions in the group's own output. Entries reach `HookContext.failed_rows` in every run; `run()` and `run_all()` also return them in `RunResult.failed_rows`, while `stream_run` and `stream_all` expose no `RunResult.failed_rows` because streams return no `RunResult`.
 
 #### 6. Advanced Feature Group Topics
 

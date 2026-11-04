@@ -359,6 +359,41 @@ def test_suite_base_with_skip_mark_is_rejected(mark: Any) -> None:
                 pass
 
 
+def _source_mixin() -> type:
+    from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin
+
+    return SourceFeatureGroupTestMixin
+
+
+def _column_discovery_mixin() -> type:
+    from mloda._testing.source.column_discovery_suite import ColumnDiscoveryContractTestMixin
+
+    return ColumnDiscoveryContractTestMixin
+
+
+@pytest.mark.parametrize(
+    ("get_mixin", "contract_test", "near_miss", "hook"),
+    [
+        (_source_mixin, "test_claims_its_own_source", "feature_group_clas", "feature_group_class"),
+        (_column_discovery_mixin, "test_session_route_equals_the_group_call", "group_clss", "group_cls"),
+    ],
+)
+def test_source_mixins_are_checked_conformance_suites(
+    get_mixin: Any, contract_test: str, near_miss: str, hook: str
+) -> None:
+    mixin = get_mixin()
+
+    with pytest.raises(SwitchedOffError) as switched:
+        type("_Blanked", (mixin,), {"plugin": _Plugin, contract_test: None})
+
+    assert contract_test in str(switched.value)
+
+    with pytest.raises(HookError) as hooked:
+        type("_Typo", (mixin,), {"plugin": _Plugin, near_miss: _Plugin})
+
+    assert _hint(near_miss, hook) in str(hooked.value)
+
+
 def test_assert_passed_accepts_passing_result() -> None:
     assert_passed(CheckResult(check="c", subject="s"))
 

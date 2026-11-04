@@ -13,6 +13,7 @@ from typing import Any, ClassVar, cast
 
 import pytest
 
+from mloda._testing.suite import ConformanceSuite
 from mloda._testing.source_applicability import NO_POINTER, SourceApplicability, source_applicability
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
@@ -143,7 +144,7 @@ def _implementation_scope() -> Iterator[Callable[..., type[Implementation[Any]]]
     assert not leaked, f"leaked implementations: {leaked}"
 
 
-class SourceFeatureGroupTestMixin:
+class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
     """Contract tests of a source group.
 
     Required: feature_group_class, present_column, missing_column, expected_source, own_dac, foreign_dac,
@@ -407,6 +408,7 @@ class SourceFeatureGroupTestMixin:
         assert not self._claims(feature, self.own_dac())
 
     def test_pointed_with_a_missing_column_aborts_naming_source_and_columns(self) -> None:
+        self._require(self._applicability().checked_route, "no checked route")
         self._require(self._applicability().pointer, "the group takes no pointer")
         feature = self._feature(self.missing_column, {self._group_name(): self.own_pointer()})
         with pytest.raises(FeatureResolutionError) as exc_info:
@@ -435,6 +437,7 @@ class SourceFeatureGroupTestMixin:
         assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.NO_QUERY_ROUTE
 
     def test_unpointed_missing_column_declines_with_a_rejection(self) -> None:
+        self._require(self._applicability().checked_route, "no checked route")
         result = self._evaluate(Feature(self.missing_column), self.own_dac())
         assert self.feature_group_class not in result.identified
         reason = result.eliminations[self.feature_group_class].reason
@@ -443,6 +446,7 @@ class SourceFeatureGroupTestMixin:
         assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.COLUMN_NOT_FOUND
 
     def test_missing_column_text_hides_the_columns_unless_a_handle_narrows_the_search(self) -> None:
+        self._require(self._applicability().checked_route, "no checked route")
         self._require(self._applicability().data_access_handle, "narrowing is by connection_handle")
         unpointed = self._evaluate(Feature(self.missing_column), self.own_dac())
         reason = unpointed.eliminations[self.feature_group_class].reason
@@ -457,6 +461,7 @@ class SourceFeatureGroupTestMixin:
         assert self.present_column in reason
 
     def test_a_typo_of_a_known_column_suggests_it_only_where_the_columns_are_shown(self) -> None:
+        self._require(self._applicability().checked_route, "no checked route")
         applicability = self._applicability()
         self._require(applicability.pointer or applicability.data_access_handle, "no pointer or data_access_handle")
         typo = f"{self.present_column}x"
@@ -477,6 +482,7 @@ class SourceFeatureGroupTestMixin:
             assert suggestion in self._evaluate(narrowed, dac).eliminations[self.feature_group_class].reason
 
     def test_chain_and_column_separated_names_that_are_not_columns_decline(self) -> None:
+        self._require(self._applicability().checked_route, "no checked route")
         chained = f"{self.present_column}{CHAIN_SEPARATOR}suite_rebased"
         separated = f"{self.missing_column}{COLUMN_SEPARATOR}0"
         assert not self._claims(Feature(chained), self.own_dac())

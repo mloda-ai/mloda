@@ -426,23 +426,6 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin):
         result = IdentifyFeatureGroupClass.evaluate(feature, self._plugins(), None, self.own_dac())
         assert (self.feature_group_class in result.identified) is (not self.handed_over)
 
-    # opt-outs of shared contract cases that need a column listing
-
-    def test_pointed_with_a_missing_column_aborts_naming_source_and_columns(self) -> None:
-        pytest.skip("document names are declared, so an undeclared name declines even when pointed")
-
-    def test_unpointed_missing_column_declines_with_a_rejection(self) -> None:
-        pytest.skip("document names are declared, so an undeclared name has no column listing to cite")
-
-    def test_missing_column_text_hides_the_columns_unless_a_handle_narrows_the_search(self) -> None:
-        pytest.skip("undeclared document names decline without a column listing")
-
-    def test_a_typo_of_a_known_column_suggests_it_only_where_the_columns_are_shown(self) -> None:
-        pytest.skip("undeclared document names decline without a column listing")
-
-    def test_chain_and_column_separated_names_that_are_not_columns_decline(self) -> None:
-        pytest.skip("undeclared document names decline without a column listing; the undeclared-name tests cover them")
-
     # subclass takeover
 
     def test_doc_a_subclass_takes_over_the_other_declared_names_keyed_on_its_parent(self) -> None:

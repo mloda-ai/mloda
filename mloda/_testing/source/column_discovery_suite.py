@@ -13,6 +13,7 @@ from typing import Any, cast
 
 import pytest
 
+from mloda._testing.suite import ConformanceSuite
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
@@ -31,7 +32,7 @@ def match_of(path: str | Path) -> SourceMatch:
     return SourceMatch(source=os.path.abspath(path), access=str(path))
 
 
-class ColumnDiscoveryContractTestMixin:
+class ColumnDiscoveryContractTestMixin(ConformanceSuite, suite_base=True):
     """Shared column_names/describe_columns/count_rows contract for one pyarrow-backed file source group."""
 
     group_cls: type[ReadFileFG]

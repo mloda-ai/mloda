@@ -11,6 +11,7 @@ from typing import Any, cast
 import pyarrow as pa
 import pytest
 
+from mloda._testing.declarations import Cause
 from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin
 from mloda._testing.source_applicability import NO_POINTER
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
@@ -28,18 +29,18 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow i
 from mloda_plugins.feature_group.input_data.db_sources import duckdb_fg as duckdb_fg_module
 from mloda_plugins.feature_group.input_data.db_sources.duckdb_fg import DuckdbFG, DuckdbTable
 
-try:
-    import duckdb
-except ImportError:
-    duckdb = None  # type: ignore[assignment]
 
-pytestmark = pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed.")
+@pytest.fixture(autouse=True)
+def _require_duckdb() -> None:
+    pytest.importorskip("duckdb")
+
 
 TABLE = "duck_table"
 HANDLE = "own_handle"
 
 
 def _database(opened: list[Any], rows: dict[str, list[int]], path: str = ":memory:", table: str = TABLE) -> Any:
+    duckdb = pytest.importorskip("duckdb")
     connection = duckdb.connect(path)
     opened.append(connection)
     columns = ", ".join(f"{name} INTEGER" for name in rows)
@@ -88,6 +89,8 @@ class TestDuckdbFGContract(SourceFeatureGroupTestMixin):
     missing_column = "impl_duckdb_missing"
     expected_source = f"memory::{TABLE}"
     context_options = {"connection_handle": HANDLE}
+    # the base deep-copies the collection, which a DuckDB connection cannot do; the override skips the copy
+    switched_off = {"test_leaves_collection_and_options_unchanged": Cause.OTHER}
 
     @pytest.fixture(autouse=True)
     def _duckdb_setup(self, opened: list[Any]) -> None:

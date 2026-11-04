@@ -1,6 +1,5 @@
 from mloda.user import Features
 import pytest
-from collections.abc import Iterator
 from typing import Any
 from unittest.mock import Mock
 
@@ -21,6 +20,7 @@ from mloda.user import Link
 from mloda.user import JoinSpec
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.test_plugins.compute_framework.base_implementations.iceberg.iceberg_test_table import real_iceberg_table
 from tests.test_core.test_filter.test_feature_group_final_filters import RegularFeatureGroupForFilterTest
 from tests.test_core.test_tooling import PARALLELIZATION_MODES_SYNC_THREADING
 
@@ -45,19 +45,9 @@ except ImportError:
     StringType = None  # type: ignore
 
 
-# Open adapter for the data creators below, which cannot take fixtures; set per test by the fixture below.
-_adapter_handle: list[Any] = []
-
-
 @pytest.fixture(autouse=True)
-def iceberg_handle(iceberg_adapter: Any) -> Iterator[None]:
-    _adapter_handle.append(iceberg_adapter)
-    yield
-    _adapter_handle.clear()
-
-
-def _real_table(arrow_data: Any) -> Any:
-    return _adapter_handle[0].from_arrow(arrow_data)
+def _use_iceberg_table_source(iceberg_table_source: None) -> None:
+    """Every test in this module needs the published adapter."""
 
 
 iceberg_test_dict = {
@@ -77,8 +67,7 @@ class IcebergTestDataCreator(DataCreatorFeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """Create a real Iceberg table with test data."""
-        return _real_table(pa.Table.from_pydict(iceberg_test_dict))
+        return real_iceberg_table(pa.Table.from_pydict(iceberg_test_dict))
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -192,7 +181,7 @@ class IcebergTableRegularFeatureGroupForFilterTest(RegularFeatureGroupForFilterT
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _real_table(super().calculate_feature(data, features))
+        return real_iceberg_table(super().calculate_feature(data, features))
 
 
 class IcebergTableStructFieldFilterTest(DataCreatorFeatureGroup):
@@ -210,7 +199,7 @@ class IcebergTableStructFieldFilterTest(DataCreatorFeatureGroup):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         b = pa.array([{"c": 10}, {"c": 20}, {"c": 30}, {"c": 40}], type=pa.struct([("c", pa.int64())]))
         status = pa.array(["active", "inactive", "active", "inactive"])
-        return _real_table(pa.table({"b": b, "status": status}))
+        return real_iceberg_table(pa.table({"b": b, "status": status}))
 
 
 IJK_KEY = "ijk_key"
@@ -330,7 +319,7 @@ class AncestorStampRootFG(DataCreatorFeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _real_table(
+        return real_iceberg_table(
             pa.table(
                 {
                     ANCESTOR_STAMP_DESC_K: ["d1", "d2", "d3", "d4"],

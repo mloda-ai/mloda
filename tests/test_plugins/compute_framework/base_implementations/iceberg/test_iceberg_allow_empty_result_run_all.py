@@ -8,7 +8,6 @@ IcebergTable (schema) branch is covered by the unit mixin test.
 """
 
 from typing import Any
-from collections.abc import Iterator
 
 import pytest
 
@@ -16,6 +15,7 @@ from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
+from tests.test_plugins.compute_framework.base_implementations.iceberg.iceberg_test_table import real_iceberg_table
 from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
     MissingColumnConsumer,
     MissingColumnRoot,
@@ -81,23 +81,12 @@ class TestIcebergMissingColumnRunAll(MissingColumnRunAllTestBase):
         return [PyArrowKeyReadConsumer, PyArrowFilterReadConsumer]
 
 
-# Open adapter for IcebergNativeRoot, which cannot take fixtures; set per test by the fixture below.
-_adapter_handle: list[Any] = []
-
-
-@pytest.fixture
-def iceberg_root_handle(iceberg_adapter: Any) -> Iterator[None]:
-    _adapter_handle.append(iceberg_adapter)
-    yield
-    _adapter_handle.clear()
-
-
 class IcebergNativeRoot(MissingColumnRoot):
     """Root producing a real native IcebergTable; projecting an unknown column raises in its scan."""
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _adapter_handle[0].from_arrow(pa.table({"mc_declared": [1, 2, 3]}))
+        return real_iceberg_table(pa.table({"mc_declared": [1, 2, 3]}))
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -119,7 +108,7 @@ class IcebergNativeScanReadConsumer(MissingColumnConsumer):
 @pytest.mark.skipif(
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
-@pytest.mark.usefixtures("iceberg_root_handle")
+@pytest.mark.usefixtures("iceberg_table_source")
 class TestIcebergNativeMissingColumnRunAll(TestIcebergMissingColumnRunAll):
     """Undeclared column reads on a native Iceberg scan raise an explanatory error."""
 

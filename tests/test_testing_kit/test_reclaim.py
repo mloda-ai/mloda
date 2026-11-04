@@ -80,15 +80,17 @@ def test_nothing_tracked_since_the_mark_costs_no_collection(collections: list[in
         _release()
 
 
-def test_the_log_is_truncated_back_to_the_mark() -> None:
+def test_dead_entries_are_truncated_so_a_later_reclaim_costs_no_collection(collections: list[int]) -> None:
     mark = reclaim.mark()
     held = reclaim.track(type("ReclaimTruncatedFG", (FeatureGroup,), {}))
-    try:
-        assert reclaim.reclaim_since(mark) == ["ReclaimTruncatedFG"]
-        assert reclaim.reclaim_since(mark) == [], "the reported class must not be reported again"
-    finally:
-        del held
-        _release()
+    assert reclaim.reclaim_since(mark) == ["ReclaimTruncatedFG"]
+    del held
+    _release()
+    collections.clear()
+
+    assert reclaim.reclaim_since(mark) == []
+    assert reclaim.reclaim_since(mark) == []
+    assert collections == []
 
 
 def test_a_nested_mark_leaves_the_outer_entries_alone() -> None:
@@ -102,3 +104,43 @@ def test_a_nested_mark_leaves_the_outer_entries_alone() -> None:
     finally:
         del held
         _release()
+
+
+def test_an_inner_reclaim_keeps_a_survivor_visible_to_the_outer_scope() -> None:
+    outer = reclaim.mark()
+    inner = reclaim.mark()
+    held = reclaim.track(type("ReclaimNestedHeldFG", (FeatureGroup,), {}))
+    try:
+        assert reclaim.reclaim_since(inner) == ["ReclaimNestedHeldFG"]
+        assert reclaim.reclaim_since(outer) == ["ReclaimNestedHeldFG"]
+    finally:
+        del held
+        _release()
+
+
+def test_a_later_scope_collects_an_earlier_survivor_once_released() -> None:
+    scope_a = reclaim.mark()
+    held = reclaim.track(type("ReclaimLateFG", (FeatureGroup,), {}))
+    try:
+        assert reclaim.reclaim_since(scope_a) == ["ReclaimLateFG"]
+    finally:
+        del held
+
+    scope_b = reclaim.mark()
+    assert reclaim.reclaim_since(scope_b) == []
+    assert not _registered("ReclaimLateFG"), "the earlier survivor was never retried"
+
+
+def test_a_released_survivor_is_collected_by_a_later_reclaimed_scope() -> None:
+    first = reclaim.reclaimed_scope()
+    next(first)
+    held = reclaim.track(type("ReclaimPinnedFG", (FeatureGroup,), {}))
+    with pytest.raises(AssertionError):
+        next(first)
+    del held
+
+    second = reclaim.reclaimed_scope()
+    next(second)
+    with pytest.raises(StopIteration):
+        next(second)
+    assert not _registered("ReclaimPinnedFG"), "the earlier survivor was never retried"

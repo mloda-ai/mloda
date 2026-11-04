@@ -1,8 +1,7 @@
 """Abstract base of one-FeatureGroup-per-file-format: finds files and folders, lists columns, caches per run.
 
 A subclass declares ``suffixes()`` and ``column_names(path)``; the base claims a feature when a file has the column.
-Third-party groups should run ``mloda._testing.source.read_file_suite`` (to be re-exported by ``mloda.testing``); a host
-needs an autouse fixture that runs ``gc.collect()`` after each test to reclaim its test-local subclasses.
+Third-party groups should run ``mloda._testing.source.read_file_suite`` (to be re-exported by ``mloda.testing``).
 """
 
 import os

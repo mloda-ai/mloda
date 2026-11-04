@@ -10,6 +10,7 @@ from typing import Any, TypeVar
 T = TypeVar("T", bound=type)
 
 _LOG: list[weakref.ref[Any]] = []
+_SURVIVORS: weakref.WeakSet[type] = weakref.WeakSet()
 
 
 def track(cls: T) -> T:
@@ -28,15 +29,24 @@ def _alive_since(position: int) -> list[str]:
     return [cls.__name__ for cls in alive if cls is not None]
 
 
+def _remember_survivors(position: int) -> None:
+    _SURVIVORS.update(cls for cls in (ref() for ref in _LOG[position:]) if cls is not None)
+
+
 def reclaim_since(position: int) -> list[str]:
-    """Collect young-first until nothing tracked since the mark lives; return survivor names."""
+    """Collect young-first; return the names of survivors logged since the mark, keeping them logged.
+
+    Survivors of earlier scopes are collected too once released, but only those since the mark are reported.
+    """
     survivors = _alive_since(position)
     for generation in (0, 1, 2):
-        if not survivors:
+        if not survivors and not _SURVIVORS:
             break
         gc.collect(generation)
         survivors = _alive_since(position)
-    del _LOG[position:]
+    if survivors:
+        _remember_survivors(position)
+    _LOG[position:] = [ref for ref in _LOG[position:] if ref() is not None]
     return survivors
 
 
@@ -45,4 +55,7 @@ def reclaimed_scope() -> Iterator[None]:
     position = mark()
     yield
     survivors = reclaim_since(position)
-    assert not survivors, f"suite-built classes left registered: {survivors}"
+    assert not survivors, (
+        f"suite-built classes left registered: {survivors}; one may be pinned by a failing test's traceback "
+        "or held by the host, which is unsupported"
+    )

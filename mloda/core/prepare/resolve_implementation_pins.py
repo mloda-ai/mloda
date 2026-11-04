@@ -7,7 +7,12 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations, serving_implementation
+from mloda.core.abstract_plugins.implementation import (
+    Implementation,
+    loaded_implementations,
+    serving_implementation,
+    unregistered_named_implementations,
+)
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation_pin_error import ImplementationPinError
@@ -18,6 +23,18 @@ Framework = type[ComputeFramework]
 
 def _qualified(cls: type) -> str:
     return f"{cls.__module__}:{cls.__qualname__}"
+
+
+def _unregistered_hint(name: str) -> str:
+    """Name live subclasses matching the pin that never reached Implementation.__init_subclass__, if any."""
+    unregistered = unregistered_named_implementations(name)
+    if not unregistered:
+        return ""
+    names = sorted(c.__name__ for c in unregistered)
+    return (
+        f" {names} subclass Implementation without reaching Implementation.__init_subclass__: "
+        "an __init_subclass__ override must call super().__init_subclass__()."
+    )
 
 
 class ResolveImplementationPins:
@@ -76,6 +93,7 @@ class ResolveImplementationPins:
         if not matches:
             raise ImplementationPinError(
                 f"Step {request} pins implementation {name}, which is not a loaded Implementation."
+                + _unregistered_hint(name)
             )
         if len(matches) > 1:
             raise ImplementationPinError(

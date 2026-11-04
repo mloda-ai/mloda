@@ -1086,6 +1086,30 @@ class TestImplementationPin:
         assert feature_name in str(caught.value)
         assert needle in str(caught.value)
 
+    def test_a_pin_naming_an_unregistered_implementation_names_the_skipped_super_call(self) -> None:
+        from mloda.provider import ImplementationPinError
+
+        class _SkipsRegistration:
+            def __init_subclass__(cls, **kwargs: Any) -> None:
+                pass
+
+        class ZzSkippedPinImpl(_SkipsRegistration, Implementation[Any]):
+            feature_group = ToySourceFG
+            compute_framework = PythonDictFramework
+
+            @classmethod
+            def calculate(cls, *args: Any) -> Any:
+                return None
+
+        with pytest.raises(ImplementationPinError) as caught:
+            _run_pinned([_op_feature("ZzSkippedPinImpl")])
+
+        assert "not a loaded Implementation" in str(caught.value)
+        assert "without reaching Implementation.__init_subclass__" in str(caught.value)
+        assert "ZzSkippedPinImpl" in str(caught.value)
+        del ZzSkippedPinImpl
+        gc.collect()
+
     def test_two_requests_pinning_a_shared_step_differently_raise_naming_both(self) -> None:
         from mloda.provider import ImplementationPinError
 

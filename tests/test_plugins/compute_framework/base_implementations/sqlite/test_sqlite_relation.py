@@ -306,6 +306,38 @@ class TestSqliteRelation(SqlRelationWindowTestMixin, RelationTestMixin):
         assert (types["w"], types["d"]) == (pa.int64(), pa.int64())
         assert (schema.field("w").type, schema.field("d").type) == (pa.int64(), pa.int64())
 
+    @pytest.mark.parametrize("expr", ["LAG(score, 3)", "LEAD(score, 3)", "LAG(score, 5)", "LEAD(score, 5)"])
+    @pytest.mark.parametrize("partition_by", [["region"], ["region", "sub"]])
+    def test_large_offset_window_type_on_all_null_source_keeps_source_type(
+        self, connection: sqlite3.Connection, expr: str, partition_by: list[str]
+    ) -> None:
+        table = pa.table({"region": ["A"] * 3, "sub": ["x"] * 3, "score": pa.array([None] * 3, pa.int64())})
+        source = SqliteRelation.from_arrow(connection, table)
+        built = source.window(expr, "w", partition_by=partition_by, order_by=[OrderBy("score")])
+        types = dict(zip(built.columns, built.types, strict=True))
+
+        assert types["w"] == pa.int64()
+        assert built.to_arrow_table().schema.field("w").type == pa.int64()
+
+    @pytest.mark.parametrize(
+        "collapse_sql",
+        [
+            "DISTINCT region, score",
+            "region, MAX(score) AS score",
+        ],
+    )
+    def test_window_type_over_a_collapsing_probe_keeps_source_type(
+        self, connection: sqlite3.Connection, collapse_sql: str
+    ) -> None:
+        table = pa.table({"region": ["A", "A"], "score": pa.array([None, None], pa.int64())})
+        source = SqliteRelation.from_arrow(connection, table)
+        collapsed = source.select(_raw_sql=collapse_sql)
+        built = collapsed.window("LAG(score, 1)", "w", partition_by=["region"], order_by=[OrderBy("score")])
+        types = dict(zip(built.columns, built.types, strict=True))
+
+        assert types["w"] == pa.int64()
+        assert built.to_arrow_table().schema.field("w").type == pa.int64()
+
     @pytest.mark.parametrize(
         "raw_sql, column, expected",
         [

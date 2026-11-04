@@ -451,8 +451,9 @@ class ComputeFramework(ABC):
     def run_calculation(
         self, feature_group: Any, features: Any, location: str | None, data: Any | None = None
     ) -> Any | None:
-        # data passed in (worker or own-frame step) is not tracked, so the hint covers in-process frames only
-        incoming_columns = set(self.column_names) if data is None else set()
+        # A worker passes its resident frame back to the next step. Its cached columns
+        # still apply, but a different frame would require resolving its schema early.
+        incoming_columns = set(self.column_names) if data is None or data is self.data else set()
         # case multiprocessing or case base api input feature
         if data is not None:
             self.data = data

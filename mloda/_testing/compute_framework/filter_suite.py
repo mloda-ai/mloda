@@ -104,6 +104,9 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
         """The frame the do_* methods receive; identity unless the engine runs them on another frame."""
         return frame
 
+    def apply_filters_names(self) -> list[str]:
+        return ["age", "category"]
+
     def decimal_dtype(self, adapter: FrameworkAdapter, result: Any) -> Any:
         return adapter.column_type(result, "d")
 
@@ -121,8 +124,8 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
         result = filter_engine.do_range_filter(self.per_filter_frame(adapter, sample_data), single_filter)
 
         assert self.row_count(adapter, result) == 3
-        self._assert_values_equal(self.values(adapter, result, "age"), [30, 35, 40])
-        self._assert_values_equal(self.values(adapter, result, "id"), [2, 3, 4])
+        self._assert_values_equal(self.column_values(adapter, result, "age"), [30, 35, 40])
+        self._assert_values_equal(self.column_values(adapter, result, "id"), [2, 3, 4])
 
     def test_do_range_filter_exclusive(self, filter_engine: Any, adapter: FrameworkAdapter, sample_data: Any) -> None:
         """Test range filter with exclusive max value."""
@@ -134,8 +137,8 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
         result = filter_engine.do_range_filter(self.per_filter_frame(adapter, sample_data), single_filter)
 
         assert self.row_count(adapter, result) == 2
-        self._assert_values_equal(self.values(adapter, result, "age"), [30, 35])
-        self._assert_values_equal(self.values(adapter, result, "id"), [2, 3])
+        self._assert_values_equal(self.column_values(adapter, result, "age"), [30, 35])
+        self._assert_values_equal(self.column_values(adapter, result, "id"), [2, 3])
 
     def test_do_min_filter(self, filter_engine: Any, adapter: FrameworkAdapter, sample_data: Any) -> None:
         """Test min filter."""
@@ -147,8 +150,8 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
         result = filter_engine.do_min_filter(self.per_filter_frame(adapter, sample_data), single_filter)
 
         assert self.row_count(adapter, result) == 2
-        self._assert_values_equal(self.values(adapter, result, "age"), [40, 45])
-        self._assert_values_equal(self.values(adapter, result, "id"), [4, 5])
+        self._assert_values_equal(self.column_values(adapter, result, "age"), [40, 45])
+        self._assert_values_equal(self.column_values(adapter, result, "id"), [4, 5])
 
     def test_do_min_filter_drops_null_or_nan_rows(
         self, filter_engine: Any, adapter: FrameworkAdapter, nullable_data: Any
@@ -158,7 +161,7 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
         result = filter_engine.do_min_filter(self.per_filter_frame(adapter, nullable_data), single_filter)
 
         assert self.row_count(adapter, result) == 2
-        self._assert_values_equal(self.values(adapter, result, "id"), [3, 5])
+        self._assert_values_equal(self.column_values(adapter, result, "id"), [3, 5])
 
     def test_do_max_filter(self, filter_engine: Any, adapter: FrameworkAdapter, sample_data: Any) -> None:
         """Test max filter."""
@@ -170,8 +173,8 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
         result = filter_engine.do_max_filter(self.per_filter_frame(adapter, sample_data), single_filter)
 
         assert self.row_count(adapter, result) == 2
-        self._assert_values_equal(self.values(adapter, result, "age"), [25, 30])
-        self._assert_values_equal(self.values(adapter, result, "id"), [1, 2])
+        self._assert_values_equal(self.column_values(adapter, result, "age"), [25, 30])
+        self._assert_values_equal(self.column_values(adapter, result, "id"), [1, 2])
 
     @pytest.mark.parametrize(
         ("max_exclusive", "expected_ages", "expected_ids"),
@@ -198,8 +201,8 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
         result = filter_engine.do_max_filter(self.per_filter_frame(adapter, sample_data), single_filter)
 
         assert self.row_count(adapter, result) == len(expected_ages)
-        self._assert_values_equal(self.values(adapter, result, "age"), expected_ages)
-        self._assert_values_equal(self.values(adapter, result, "id"), expected_ids)
+        self._assert_values_equal(self.column_values(adapter, result, "age"), expected_ages)
+        self._assert_values_equal(self.column_values(adapter, result, "id"), expected_ids)
 
     def test_do_equal_filter(self, filter_engine: Any, adapter: FrameworkAdapter, sample_data: Any) -> None:
         """Test equal filter."""
@@ -211,8 +214,8 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
         result = filter_engine.do_equal_filter(self.per_filter_frame(adapter, sample_data), single_filter)
 
         assert self.row_count(adapter, result) == 1
-        assert self.values(adapter, result, "age")[0] == 35
-        assert self.values(adapter, result, "id")[0] == 3
+        assert self.column_values(adapter, result, "age")[0] == 35
+        assert self.column_values(adapter, result, "id")[0] == 3
 
     def test_do_regex_filter(self, filter_engine: Any, adapter: FrameworkAdapter, sample_data: Any) -> None:
         """Test regex filter."""
@@ -224,8 +227,8 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
         result = filter_engine.do_regex_filter(self.per_filter_frame(adapter, sample_data), single_filter)
 
         assert self.row_count(adapter, result) == 1
-        assert self.values(adapter, result, "name")[0] == "Alice"
-        assert self.values(adapter, result, "id")[0] == 1
+        assert self.column_values(adapter, result, "name")[0] == "Alice"
+        assert self.column_values(adapter, result, "id")[0] == 1
 
     def test_do_regex_filter_is_unanchored(
         self, filter_engine: Any, adapter: FrameworkAdapter, sample_data: Any
@@ -245,8 +248,8 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
         result = filter_engine.do_regex_filter(self.per_filter_frame(adapter, sample_data), single_filter)
 
         assert self.row_count(adapter, result) == 2
-        self._assert_values_equal(self.values(adapter, result, "name"), ["Alice", "Charlie"])
-        self._assert_values_equal(self.values(adapter, result, "id"), [1, 3])
+        self._assert_values_equal(self.column_values(adapter, result, "name"), ["Alice", "Charlie"])
+        self._assert_values_equal(self.column_values(adapter, result, "id"), [1, 3])
 
     def test_do_categorical_inclusion_filter(
         self, filter_engine: Any, adapter: FrameworkAdapter, sample_data: Any
@@ -262,8 +265,8 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
         )
 
         assert self.row_count(adapter, result) == 4
-        assert set(self.values(adapter, result, "category")) == {"A", "B"}
-        assert set(self.values(adapter, result, "id")) == {1, 2, 3, 5}
+        assert set(self.column_values(adapter, result, "category")) == {"A", "B"}
+        assert set(self.column_values(adapter, result, "id")) == {1, 2, 3, 5}
 
     @pytest.mark.parametrize("make_values", NON_COLLECTION_VALUES)
     def test_do_categorical_inclusion_rejects_non_collection_values(
@@ -314,7 +317,7 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
         )
 
         assert self.row_count(adapter, result) == 3
-        self._assert_values_equal(self.values(adapter, result, "id"), [1, 2, 4])
+        self._assert_values_equal(self.column_values(adapter, result, "id"), [1, 2, 4])
 
     @pytest.mark.parametrize(
         ("column", "values"),
@@ -337,7 +340,7 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
         )
 
         assert self.row_count(adapter, result) == 1
-        self._assert_values_equal(self.values(adapter, result, "id"), [1])
+        self._assert_values_equal(self.column_values(adapter, result, "id"), [1])
 
     @pytest.mark.parametrize(
         ("column", "values"),
@@ -361,7 +364,7 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
         )
 
         assert self.row_count(adapter, result) == 2
-        self._assert_values_equal(self.values(adapter, result, "id"), [2, 4])
+        self._assert_values_equal(self.column_values(adapter, result, "id"), [2, 4])
 
     def test_apply_filters(self, filter_engine: Any, adapter: FrameworkAdapter, sample_data: Any) -> None:
         """Test applying multiple filters."""
@@ -371,22 +374,24 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
             SingleFilter(Feature("category"), FilterType.EQUAL, {"value": "A"}),
         ]
 
+        names = self.apply_filters_names()
+
         class MockFeatureSet:
             def __init__(self, filters: Any) -> None:
                 self.filters = filters
                 self.link_index_columns: frozenset[str] = frozenset()
 
             def get_all_names(self) -> Any:
-                return ["id", "age", "name", "category"]
+                return names
 
         feature_set = MockFeatureSet(filters)
 
         result = filter_engine.apply_filters(sample_data, feature_set)
 
         assert self.row_count(adapter, result) == 1
-        assert self.values(adapter, result, "age")[0] == 35
-        assert self.values(adapter, result, "category")[0] == "A"
-        assert self.values(adapter, result, "id")[0] == 3
+        assert self.column_values(adapter, result, "age")[0] == 35
+        assert self.column_values(adapter, result, "category")[0] == "A"
+        assert self.column_values(adapter, result, "id")[0] == 3
 
     def test_final_filters(self, filter_engine: Any) -> None:
         """Test that final_filters returns True."""
@@ -458,7 +463,7 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
 
         result = filter_engine.do_min_filter(self.per_filter_frame(adapter, decimal_data), single_filter)
 
-        values = self.values(adapter, result, "d")
+        values = self.column_values(adapter, result, "d")
         assert values == [Decimal("12.34"), Decimal("99.99")]
         assert all(isinstance(value, Decimal) for value in values)
         assert self.decimal_dtype(adapter, result) == self.decimal_dtype(adapter, decimal_data)
@@ -477,7 +482,7 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
             self.per_filter_frame(adapter, decimal_data), single_filter
         )
 
-        values = self.values(adapter, result, "d")
+        values = self.column_values(adapter, result, "d")
         assert values == [Decimal("12.34"), Decimal("5.50")]
         assert all(isinstance(value, Decimal) for value in values)
         assert self.decimal_dtype(adapter, result) == self.decimal_dtype(adapter, decimal_data)
@@ -499,7 +504,7 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
             self.per_filter_frame(adapter, decimal_data), single_filter
         )
 
-        assert self.values(adapter, result, "d") == []
+        assert self.column_values(adapter, result, "d") == []
         assert self.decimal_dtype(adapter, result) == self.decimal_dtype(adapter, decimal_data)
 
     def test_categorical_inclusion_decimal_with_null(
@@ -516,7 +521,7 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
             self.per_filter_frame(adapter, decimal_data), single_filter
         )
 
-        values = self.values(adapter, result, "d")
+        values = self.column_values(adapter, result, "d")
         assert values == [Decimal("12.34"), None]
         assert self.decimal_dtype(adapter, result) == self.decimal_dtype(adapter, decimal_data)
 
@@ -532,7 +537,7 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
 
         result = filter_engine.do_range_filter(self.per_filter_frame(adapter, time_data), single_filter)
 
-        ids = sorted(self.values(adapter, result, "id"))
+        ids = sorted(self.column_values(adapter, result, "id"))
         assert ids == EXPECTED_IDS_RANGE_EXCLUSIVE
 
     def test_do_min_filter_tz_aware_datetime_bound(
@@ -543,7 +548,7 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
 
         result = filter_engine.do_min_filter(self.per_filter_frame(adapter, time_data), single_filter)
 
-        ids = sorted(self.values(adapter, result, "id"))
+        ids = sorted(self.column_values(adapter, result, "id"))
         assert ids == EXPECTED_IDS_MIN
 
     def test_do_max_filter_tz_aware_datetime_bound(
@@ -554,5 +559,5 @@ class FilterEngineSuite(ComputeFrameworkSuite, suite_base=True):
 
         result = filter_engine.do_max_filter(self.per_filter_frame(adapter, time_data), single_filter)
 
-        ids = sorted(self.values(adapter, result, "id"))
+        ids = sorted(self.column_values(adapter, result, "id"))
         assert ids == EXPECTED_IDS_MAX

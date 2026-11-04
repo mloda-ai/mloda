@@ -29,22 +29,11 @@ for info in pkgutil.walk_packages(mloda._testing.__path__, "mloda._testing."):
     importlib.import_module(info.name)
 
 
-def _blocks_pytest(finder):
-    try:
-        finder.find_spec("pytest")
-    except ModuleNotFoundError:
-        return True
-    return False
-
-
-_pytest_blocker = next(finder for finder in sys.meta_path if _blocks_pytest(finder))
+_pytest_blocker = sys.meta_path[0]
 sys.meta_path.remove(_pytest_blocker)
 for info in pkgutil.walk_packages(mloda._testing.__path__, "mloda._testing."):
     if _in_subtree(info.name, _PYTEST_SUBTREE):
         importlib.import_module(info.name)
-importlib.import_module("mloda._testing.compute_framework.host")
-importlib.import_module("mloda._testing.compute_framework.filter_suite")
-importlib.import_module("mloda._testing.compute_framework.mask_suite")
 assert "pyarrow" not in sys.modules, "mloda._testing.compute_framework must not import pyarrow"
 for name in [m for m in sys.modules if m == "pytest" or m.startswith(("pytest.", "_pytest"))]:
     del sys.modules[name]

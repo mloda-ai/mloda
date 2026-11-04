@@ -6,7 +6,7 @@ import logging
 import pytest
 
 from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
-from mloda._testing.framework_adapter import PolarsAdapter, PolarsLazyAdapter
+from mloda._testing.framework_adapter import FrameworkAdapter, PolarsAdapter, PolarsLazyAdapter
 from mloda.user import Feature
 from mloda.user import SingleFilter
 from mloda.user import FilterType
@@ -46,7 +46,7 @@ class TestPolarsFilterEngine(FilterEngineSuite):
         assert None not in ages
         assert ages == [30, 35, 40, 45]
 
-    def test_do_min_filter_missing_column_raises_column_not_found(self, adapter: Any) -> None:
+    def test_do_min_filter_missing_column_raises_column_not_found(self, adapter: FrameworkAdapter) -> None:
         """A missing column must surface polars' own error, not an AttributeError from the NaN check."""
         data = pl.DataFrame({"a": [1.0, 2.0]})
         single_filter = SingleFilter(Feature("missing"), FilterType.MIN, {"value": 1.0})

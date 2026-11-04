@@ -55,9 +55,11 @@ class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
         return None
 
     def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
-        return adapter.from_typed(data, self.arrow_types(name))
+        if adapter.capabilities.typed_columns:
+            return adapter.from_typed(data, self.arrow_types(name))
+        return adapter.from_typed(data)
 
-    def values(self, adapter: FrameworkAdapter, result: Any, column: str) -> list[Any]:
+    def column_values(self, adapter: FrameworkAdapter, result: Any, column: str) -> list[Any]:
         return adapter.column_values(result, column)
 
     def row_count(self, adapter: FrameworkAdapter, result: Any) -> int:

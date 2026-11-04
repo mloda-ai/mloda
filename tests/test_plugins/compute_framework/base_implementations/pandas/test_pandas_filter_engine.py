@@ -10,6 +10,7 @@ import pyarrow as pa
 from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
 from mloda._testing.framework_adapter import FrameworkAdapter, PandasAdapter
 from mloda._testing.typed_data import TypedTestData
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.user import Feature
 from mloda.user import SingleFilter
 from mloda.user import FilterType
@@ -23,9 +24,12 @@ class TestPandasFilterEngine(FilterEngineSuite):
     adapter_class = PandasAdapter
 
     def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
-        """NaN stays apart from null in ratio and the decimal dtype survives, both via ArrowDtype."""
+        """Strings use pandas' default inference as in production; NaN/null and decimal survive via ArrowDtype."""
         frame = super().frame(adapter, name, data)
         columns = data.to_python_dict()
+        for column, data_type in data.types.items():
+            if data_type == DataType.STRING:
+                frame[column] = pd.Series(columns[column], index=frame.index)
         if name == "nullable":
             frame["ratio"] = pd.Series(pd.arrays.ArrowExtensionArray(pa.array(columns["ratio"], type=pa.float64())))
         if name == "decimal":

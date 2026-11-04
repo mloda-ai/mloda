@@ -1,6 +1,6 @@
 import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 import pytest
 import numpy as np
 from unittest.mock import Mock, patch
@@ -134,7 +134,11 @@ class TestIcebergFilterEngine(FilterEngineSuite):
 
     def per_filter_frame(self, adapter: FrameworkAdapter, frame: Any) -> Any:
         """The do_* methods run on the Arrow table a scan returns; apply_filters gets the real Iceberg table."""
-        return adapter.to_table(frame)  # type: ignore[attr-defined]
+        return cast(IcebergAdapter, adapter).to_table(frame)
+
+    def apply_filters_names(self) -> list[str]:
+        # Iceberg's pushdown projects to the feature names, so id and name must be requested.
+        return ["id", "age", "name", "category"]
 
     @pytest.fixture
     def mock_source_data(self) -> Any:

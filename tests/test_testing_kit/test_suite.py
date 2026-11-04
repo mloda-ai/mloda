@@ -15,6 +15,9 @@ from mloda._testing.suite import ConformanceSuite, HookError, SwitchedOffError, 
 from mloda.user.python_dict import PythonDictFramework
 
 
+pytest_plugins = ["pytester"]
+
+
 class _Plugin:
     pass
 
@@ -446,8 +449,6 @@ def test_assert_passed_fails_with_the_failures() -> None:
     assert "first problem" in message and "second problem" in message
 
 
-pytest_plugins = ["pytester"]
-
 _WIRING_MODULE = """
 from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
 from mloda._testing.framework_adapter import PythonDictAdapter
@@ -566,7 +567,7 @@ def test_framework_without_the_aspect_fails_with_the_wiring_message(pytester: py
 def test_adapter_is_fresh_per_test_and_closed_afterwards(pytester: pytest.Pytester) -> None:
     pytester.makepyfile(test_lifecycle=_LIFECYCLE_MODULE)
 
-    result = pytester.runpytest_inprocess("-p", "no:cacheprovider")
+    result = pytester.runpytest_inprocess("-p", "no:cacheprovider", "-p", "no:randomly")
 
     assert result.parseoutcomes().get("failed", 0) == 0
     assert result.ret == 0

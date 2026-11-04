@@ -88,7 +88,7 @@ class MaskEngineSuite(ComputeFrameworkSuite, suite_base=True):
 
     def _selected(self, adapter: FrameworkAdapter, mask: Any, data: Any) -> dict[str, list[Any]]:
         result = self.select_rows(adapter, mask, data)
-        return {name: self.values(adapter, result, name) for name in adapter.column_names(result)}
+        return {name: self.column_values(adapter, result, name) for name in adapter.column_names(result)}
 
     def test_equal(self, engine: Any, adapter: FrameworkAdapter, sample_data: Any) -> None:
         mask = engine.equal(sample_data, "status", "active")

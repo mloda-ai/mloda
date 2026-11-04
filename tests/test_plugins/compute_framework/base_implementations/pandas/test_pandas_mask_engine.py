@@ -8,6 +8,7 @@ import pytest
 from mloda._testing.compute_framework.mask_suite import MaskEngineSuite
 from mloda._testing.framework_adapter import FrameworkAdapter, PandasAdapter
 from mloda._testing.typed_data import TypedTestData
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_mask_engine import (
     PandasMaskEngine,
 )
@@ -17,9 +18,12 @@ class TestPandasMaskEngine(MaskEngineSuite):
     adapter_class = PandasAdapter
 
     def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
-        """NaN stays apart from null in ratio and the decimal dtype survives, both via ArrowDtype."""
+        """Strings use pandas' default inference as in production; NaN/null and decimal survive via ArrowDtype."""
         frame = super().frame(adapter, name, data)
         columns = data.to_python_dict()
+        for column, data_type in data.types.items():
+            if data_type == DataType.STRING:
+                frame[column] = pd.Series(columns[column], index=frame.index)
         if name == "null":
             frame["ratio"] = pd.Series(pd.arrays.ArrowExtensionArray(pa.array(columns["ratio"], type=pa.float64())))
         if name == "decimal":

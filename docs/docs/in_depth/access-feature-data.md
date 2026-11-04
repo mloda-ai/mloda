@@ -230,6 +230,34 @@ Output:
 1          TestValue4
 ```
 
+A prepared session can be rerun with fresh data. The rerun check compares names and shape only: the set keys must be exactly the prepared ones and each set must carry exactly the prepared column names (order may differ), and a set prepared as a dict of lists must be given as a dict of lists again. Values, row counts and value types are not compared, so the pair below passes although the rerun carries different values and fewer rows.
+
+```python
+from mloda.user import mloda
+from mloda.user.pandas import PandasDataFrame
+
+# prepare() fixes the set key "ExampleApiData" and its column names
+session = mloda.prepare(
+        ["FeatureInputAPITest"],
+        compute_frameworks=[PandasDataFrame],
+        api_data={"ExampleApiData": {"FeatureInputAPITest": ["TestValue3", "TestValue4"]}},
+)
+
+# Same set key and column names, so the rerun check passes
+result = session.run(
+        api_data={"ExampleApiData": {"FeatureInputAPITest": ["NewValue"]}},
+)
+for res in result:
+    print(res)
+```
+
+Output:
+
+```text
+  FeatureInputAPITest
+0            NewValue
+```
+
 Further, we do not want to always load data from outside, be it before or during the framework run, but we want to be able to create Data. For this purpose, we have the `DataCreatorFeatureGroup`.
 
 #### DataCreatorFeatureGroup

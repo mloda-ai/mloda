@@ -446,3 +446,56 @@ class IcebergAdapter(_ArrowReadAdapter):
         if isinstance(result, pa.Table):
             return result
         return result.scan().to_arrow()
+
+
+class SparkAdapter(_ArrowReadAdapter):
+    """Borrows the caller's active SparkSession, never starts or stops one."""
+
+    capabilities = AdapterCapabilities(typed_columns=True)
+
+    def __init__(self) -> None:
+        self._session: Any = None
+
+    @property
+    def connection(self) -> Any:
+        return self._session
+
+    def compute_framework(self) -> type[ComputeFramework]:
+        from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
+
+        return SparkFramework
+
+    def open(self) -> None:
+        if self._session is not None:
+            raise RuntimeError("SparkAdapter is already open")
+        session = require("pyspark.sql", "opening a Spark test session").SparkSession.getActiveSession()
+        if session is None:
+            raise RuntimeError("SparkAdapter needs an active SparkSession")
+        self._session = session
+
+    def close(self) -> None:
+        self._session = None
+
+    def from_arrow(self, table: pa.Table) -> Any:
+        if self._session is None:
+            raise RuntimeError("SparkAdapter needs an open session: use it as a context manager")
+        from_arrow_schema = require("pyspark.sql.pandas.types", "building Spark test frames").from_arrow_schema
+
+        # The NTZ schema keeps naive timestamps from being shifted by the session time zone.
+        return self._session.createDataFrame(table, schema=from_arrow_schema(table.schema, prefer_timestamp_ntz=True))
+
+    def to_table(self, result: Any) -> pa.Table:
+        return result.toArrow()
+
+    def column_names(self, result: Any) -> list[str]:
+        return list(result.columns)
+
+    def row_count(self, result: Any) -> int:
+        return int(result.count())
+
+    def column_type(self, result: Any, column: str) -> Any:
+        return result.schema[column].dataType
+
+    def lost_type(self, result: Any, column: str) -> bool:
+        null_type = require("pyspark.sql.types", "reading Spark test frames").NullType
+        return isinstance(self.column_type(result, column), null_type)

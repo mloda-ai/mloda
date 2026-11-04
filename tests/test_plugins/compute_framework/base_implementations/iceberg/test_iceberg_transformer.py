@@ -1,5 +1,6 @@
 import pytest
-from unittest.mock import Mock, patch
+from typing import Any
+from unittest.mock import patch
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_pyarrow_transformer import (
     IcebergPyArrowTransformer,
 )
@@ -45,20 +46,16 @@ class TestIcebergPyArrowTransformer:
         # Should not raise an exception
         IcebergPyArrowTransformer.import_other_fw()
 
-    def test_transform_fw_to_other_fw_success(self) -> None:
+    def test_transform_fw_to_other_fw_success(self, iceberg_adapter: Any) -> None:
         """Test successful transformation from Iceberg table to PyArrow table."""
-        # Create mock Iceberg table
-        mock_iceberg_table = Mock(spec=IcebergTable)
-        mock_scan = Mock()
-        mock_arrow_table = Mock(spec=pa.Table)
-        mock_scan.to_arrow.return_value = mock_arrow_table
-        mock_iceberg_table.scan.return_value = mock_scan
+        expected = pa.table({"a": [1, 2, 3], "s": ["x", "y", "z"]})
+        table = iceberg_adapter.from_arrow(expected)
 
-        result = IcebergPyArrowTransformer.transform_fw_to_other_fw(mock_iceberg_table)
+        result = IcebergPyArrowTransformer.transform_fw_to_other_fw(table)
 
-        mock_iceberg_table.scan.assert_called_once()
-        mock_scan.to_arrow.assert_called_once()
-        assert result is mock_arrow_table
+        assert isinstance(result, pa.Table)
+        assert result.schema == expected.schema
+        assert result.to_pydict() == expected.to_pydict()
 
     def test_transform_fw_to_other_fw_invalid_input(self) -> None:
         """Test that transform_fw_to_other_fw raises ValueError for invalid input."""
@@ -80,17 +77,16 @@ class TestIcebergPyArrowTransformer:
         orientation = IcebergPyArrowTransformer.identify_orientation(str, int)
         assert orientation is None
 
-    def test_transform_left_direction(self) -> None:
+    def test_transform_left_direction(self, iceberg_adapter: Any) -> None:
         """Test transform method with left direction (Iceberg -> PyArrow)."""
-        mock_iceberg_table = Mock(spec=IcebergTable)
-        mock_scan = Mock()
-        mock_arrow_table = Mock(spec=pa.Table)
-        mock_scan.to_arrow.return_value = mock_arrow_table
-        mock_iceberg_table.scan.return_value = mock_scan
+        expected = pa.table({"a": [1, 2, 3], "s": ["x", "y", "z"]})
+        table = iceberg_adapter.from_arrow(expected)
 
-        result = IcebergPyArrowTransformer.transform(IcebergTable, pa.Table, mock_iceberg_table, None)
+        result = IcebergPyArrowTransformer.transform(IcebergTable, pa.Table, table, None)
 
-        assert result is mock_arrow_table
+        assert isinstance(result, pa.Table)
+        assert result.schema == expected.schema
+        assert result.to_pydict() == expected.to_pydict()
 
 
 @pytest.mark.skipif(

@@ -121,6 +121,7 @@ def test_every_pyarrow_requirement_has_floor() -> None:
         ("yaml", "pyyaml"),
         ("test", "pyyaml"),
         ("test", "pyarrow>=14.0.1"),
+        ("test", "sqlalchemy"),
         ("pyarrow", "pyarrow>=14.0.1"),
         ("duckdb", "pyarrow>=14.0.1"),
         ("sqlite", "pyarrow>=14.0.1"),

@@ -375,3 +375,75 @@ class SqliteAdapter(_ArrowReadAdapter):
 
     def to_table(self, result: Any) -> pa.Table:
         return result.to_arrow_table()
+
+
+class IcebergAdapter(_ArrowReadAdapter):
+    """Iceberg over a temp SQLite-backed catalog; Iceberg rejects null-typed columns and non-UTC time zones."""
+
+    capabilities = AdapterCapabilities(typed_columns=True)
+
+    def __init__(self) -> None:
+        self._catalog: Any = None
+        self._tmp: Any = None
+        self._warehouse: str | None = None
+        self._counter = 0
+
+    @property
+    def connection(self) -> Any:
+        return self._catalog
+
+    @property
+    def warehouse(self) -> str | None:
+        return self._warehouse
+
+    def compute_framework(self) -> type[ComputeFramework]:
+        from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
+
+        return IcebergFramework
+
+    def is_available(self) -> bool:
+        return super().is_available() and _module_available("sqlalchemy")
+
+    def open(self) -> None:
+        if self._catalog is not None:
+            raise RuntimeError("IcebergAdapter is already open")
+
+        import tempfile
+
+        SqlCatalog = require("pyiceberg.catalog.sql", "opening an Iceberg test catalog").SqlCatalog
+
+        # The TemporaryDirectory finalizer removes the dir if catalog creation fails below.
+        tmp = tempfile.TemporaryDirectory()
+        catalog = SqlCatalog(
+            "mloda_test",
+            uri=f"sqlite:///{tmp.name}/catalog.db",
+            warehouse=f"file://{tmp.name}",
+        )
+        catalog.create_namespace("mloda_test")
+        self._tmp = tmp
+        self._catalog = catalog
+        self._warehouse = tmp.name
+        self._counter = 0
+
+    def close(self) -> None:
+        if self._catalog is not None:
+            self._catalog.engine.dispose()
+        if self._tmp is not None:
+            self._tmp.cleanup()
+        self._catalog = None
+        self._tmp = None
+        self._warehouse = None
+
+    def from_arrow(self, table: pa.Table) -> Any:
+        if self._catalog is None:
+            raise RuntimeError("IcebergAdapter needs an open session: use it as a context manager")
+        self._counter += 1
+        iceberg_table = self._catalog.create_table(f"mloda_test.t{self._counter}", schema=table.schema)
+        iceberg_table.append(table)
+        return iceberg_table
+
+    def to_table(self, result: Any) -> pa.Table:
+        pa = require("pyarrow", "reading Iceberg test tables")
+        if isinstance(result, pa.Table):
+            return result
+        return result.scan().to_arrow()

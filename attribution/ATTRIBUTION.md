@@ -3,6 +3,7 @@
 | PyJWT                     | 2.15.1          | MIT                                                |
 | PyYAML                    | 6.0.3           | MIT License                                        |
 | Pygments                  | 2.20.0          | BSD-2-Clause                                       |
+| SQLAlchemy                | 2.1.6           | MIT                                                |
 | annotated-types           | 0.7.0           | MIT License                                        |
 | anyio                     | 4.14.2          | MIT                                                |
 | ast_serialize             | 0.4.0           | MIT                                                |

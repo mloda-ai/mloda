@@ -1,5 +1,6 @@
 from mloda.user import Features
 import pytest
+from collections.abc import Iterator
 from typing import Any
 from unittest.mock import Mock
 
@@ -31,54 +32,32 @@ try:
     import pyiceberg
     import pyarrow as pa
     from pyiceberg.table import Table as IcebergTable
-    from pyiceberg.catalog import Catalog
     from pyiceberg.schema import Schema
-    from pyiceberg.types import LongType, NestedField, StringType, StructType
+    from pyiceberg.types import LongType, NestedField, StringType
 except ImportError:
     logger.warning("PyIceberg or PyArrow is not installed. Some tests will be skipped.")
     pyiceberg = None  # type: ignore
     pa = None  # type: ignore[assignment, unused-ignore]
     IcebergTable = None  # type: ignore
-    Catalog = None  # type: ignore
     Schema = None  # type: ignore
     LongType = None  # type: ignore
     NestedField = None  # type: ignore
     StringType = None  # type: ignore
-    StructType = None  # type: ignore
 
 
-@pytest.fixture
-def mock_iceberg_catalog() -> Mock:
-    """Create a mock Iceberg catalog for testing."""
-    mock_catalog = Mock(spec=Catalog)
-    mock_catalog.load_table = Mock()
-    return mock_catalog
+# Open adapter for the data creators below, which cannot take fixtures; set per test by the fixture below.
+_adapter_handle: list[Any] = []
 
 
-@pytest.fixture
-def mock_iceberg_table() -> Mock:
-    """Create a mock Iceberg table for testing."""
-    mock_table = Mock(spec=IcebergTable)
+@pytest.fixture(autouse=True)
+def iceberg_handle(iceberg_adapter: Any) -> Iterator[None]:
+    _adapter_handle.append(iceberg_adapter)
+    yield
+    _adapter_handle.clear()
 
-    # Create mock scan that returns PyArrow data
-    mock_scan = Mock()
-    arrow_data = pa.Table.from_pydict(
-        {
-            "id": [1, 2, 3, 4, 5],
-            "value": [10, 20, 30, 40, 50],
-            "category": ["A", "B", "A", "C", "B"],
-            "score": [1.5, 2.5, 3.5, 4.5, 5.5],
-        }
-    )
-    mock_scan.to_arrow.return_value = arrow_data
-    mock_table.scan.return_value = mock_scan
 
-    # Mock schema
-    mock_schema = Mock()
-    mock_schema.column_names = ["id", "value", "category", "score"]
-    mock_table.schema.return_value = mock_schema
-
-    return mock_table
+def _real_table(arrow_data: Any) -> Any:
+    return _adapter_handle[0].from_arrow(arrow_data)
 
 
 iceberg_test_dict = {
@@ -98,21 +77,8 @@ class IcebergTestDataCreator(DataCreatorFeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """Create mock Iceberg table with test data."""
-        mock_table = Mock(spec=IcebergTable)
-
-        # Create mock scan that returns PyArrow data
-        mock_scan = Mock()
-        arrow_data = pa.Table.from_pydict(iceberg_test_dict)
-        mock_scan.to_arrow.return_value = arrow_data
-        mock_table.scan.return_value = mock_scan
-
-        # Mock schema
-        mock_schema = Mock()
-        mock_schema.column_names = list(iceberg_test_dict.keys())
-        mock_table.schema.return_value = mock_schema
-
-        return mock_table
+        """Create a real Iceberg table with test data."""
+        return _real_table(pa.Table.from_pydict(iceberg_test_dict))
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -218,7 +184,7 @@ class IcebergPyArrowRegularFeatureGroupForFilterTest(RegularFeatureGroupForFilte
 
 
 class IcebergTableRegularFeatureGroupForFilterTest(RegularFeatureGroupForFilterTest):
-    """Same data as RegularFeatureGroupForFilterTest, in a Mock Iceberg Table whose schema() returns a real Schema."""
+    """Same data as RegularFeatureGroupForFilterTest, in a real Iceberg Table."""
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -226,17 +192,7 @@ class IcebergTableRegularFeatureGroupForFilterTest(RegularFeatureGroupForFilterT
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        arrow_data = super().calculate_feature(data, features)
-
-        mock_table = Mock(spec=IcebergTable)
-        mock_scan = Mock()
-        mock_scan.to_arrow.return_value = arrow_data
-        mock_table.scan.return_value = mock_scan
-        mock_table.schema.return_value = Schema(
-            NestedField(1, cls.get_class_name(), LongType()),
-            NestedField(2, "status", StringType()),
-        )
-        return mock_table
+        return _real_table(super().calculate_feature(data, features))
 
 
 class IcebergTableStructFieldFilterTest(DataCreatorFeatureGroup):
@@ -254,17 +210,7 @@ class IcebergTableStructFieldFilterTest(DataCreatorFeatureGroup):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         b = pa.array([{"c": 10}, {"c": 20}, {"c": 30}, {"c": 40}], type=pa.struct([("c", pa.int64())]))
         status = pa.array(["active", "inactive", "active", "inactive"])
-        arrow_data = pa.table({"b": b, "status": status})
-
-        mock_table = Mock(spec=IcebergTable)
-        mock_scan = Mock()
-        mock_scan.to_arrow.return_value = arrow_data
-        mock_table.scan.return_value = mock_scan
-        mock_table.schema.return_value = Schema(
-            NestedField(1, "b", StructType(NestedField(2, "c", LongType(), required=False)), required=False),
-            NestedField(3, "status", StringType(), required=False),
-        )
-        return mock_table
+        return _real_table(pa.table({"b": b, "status": status}))
 
 
 IJK_KEY = "ijk_key"
@@ -384,28 +330,15 @@ class AncestorStampRootFG(DataCreatorFeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        arrow_data = pa.table(
-            {
-                ANCESTOR_STAMP_DESC_K: ["d1", "d2", "d3", "d4"],
-                ANCESTOR_STAMP_VALUE: [10, 20, 30, 40],
-                ANCESTOR_STAMP_STATUS: ["active", "inactive", "active", "inactive"],
-            }
+        return _real_table(
+            pa.table(
+                {
+                    ANCESTOR_STAMP_DESC_K: ["d1", "d2", "d3", "d4"],
+                    ANCESTOR_STAMP_VALUE: [10, 20, 30, 40],
+                    ANCESTOR_STAMP_STATUS: ["active", "inactive", "active", "inactive"],
+                }
+            )
         )
-
-        def _scan(*args: Any, **kwargs: Any) -> Mock:
-            selected = kwargs.get("selected_fields", arrow_data.column_names)
-            mock_scan = Mock()
-            mock_scan.to_arrow.return_value = arrow_data.select(list(selected))
-            return mock_scan
-
-        mock_table = Mock(spec=IcebergTable)
-        mock_table.scan.side_effect = _scan
-        mock_table.schema.return_value = Schema(
-            NestedField(1, ANCESTOR_STAMP_DESC_K, StringType(), required=False),
-            NestedField(2, ANCESTOR_STAMP_VALUE, LongType(), required=False),
-            NestedField(3, ANCESTOR_STAMP_STATUS, StringType(), required=False),
-        )
-        return mock_table
 
 
 class AncestorStampMiddleFG(FeatureGroup):
@@ -640,7 +573,7 @@ class TestIcebergIntegrationWithMlodaAPI:
         [({ParallelizationMode.SYNC})],
     )
     def test_basic_iceberg_feature_calculation(
-        self, modes: set[ParallelizationMode], flight_server: Any, mock_iceberg_catalog: Mock
+        self, modes: set[ParallelizationMode], flight_server: Any, iceberg_adapter: Any
     ) -> None:
         """Test basic feature calculation with Iceberg framework."""
         # Enable the test feature groups
@@ -651,7 +584,7 @@ class TestIcebergIntegrationWithMlodaAPI:
         # Define features to calculate with catalog connection
         feature_list: Features | list[Feature | str] = [Feature(name="doubled_value"), Feature(name="score_plus_ten")]
 
-        data_access_collection = DataAccessCollection(connections={mock_iceberg_catalog})
+        data_access_collection = DataAccessCollection(connections={iceberg_adapter.connection})
 
         # Run with Iceberg framework
         result = mloda.run_all(
@@ -679,7 +612,7 @@ class TestIcebergIntegrationWithMlodaAPI:
         score_plus_ten = data_dict["score_plus_ten"]
         assert score_plus_ten == [11.5, 12.5, 13.5, 14.5, 15.5]  # Original scores + 10
 
-    def test_iceberg_to_pyarrow_transformation(self, flight_server: Any, mock_iceberg_catalog: Mock) -> None:
+    def test_iceberg_to_pyarrow_transformation(self, flight_server: Any, iceberg_adapter: Any) -> None:
         """Test transformation from Iceberg to PyArrow framework."""
         # Enable feature groups for cross-framework transformation
         plugin_collector = PluginCollector.enabled_feature_groups(
@@ -689,7 +622,7 @@ class TestIcebergIntegrationWithMlodaAPI:
         # Define feature that requires transformation between frameworks
         feature_list: Features | list[Feature | str] = [Feature(name="arrow_doubled_value")]
 
-        data_access_collection = DataAccessCollection(connections={mock_iceberg_catalog})
+        data_access_collection = DataAccessCollection(connections={iceberg_adapter.connection})
 
         # Run with both Iceberg and PyArrow frameworks
         result = mloda.run_all(
@@ -715,7 +648,7 @@ class TestIcebergIntegrationWithMlodaAPI:
         # This test verifies that the framework correctly detects PyIceberg availability
         assert IcebergFramework.is_available() is True
 
-    def test_iceberg_data_creator_basic_functionality(self, flight_server: Any, mock_iceberg_catalog: Mock) -> None:
+    def test_iceberg_data_creator_basic_functionality(self, flight_server: Any, iceberg_adapter: Any) -> None:
         """Test basic functionality of the Iceberg data creator."""
         # Enable just the data creator
         plugin_collector = PluginCollector.enabled_feature_groups({IcebergTestDataCreator})
@@ -727,7 +660,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             Feature(name="category"),
         ]
 
-        data_access_collection = DataAccessCollection(connections={mock_iceberg_catalog})
+        data_access_collection = DataAccessCollection(connections={iceberg_adapter.connection})
 
         # Run with Iceberg framework
         result = mloda.run_all(

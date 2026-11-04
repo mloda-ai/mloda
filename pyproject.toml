@@ -43,6 +43,8 @@ test = [
     "mktestdocs",
     "pandera",
     "pyarrow>=14.0.1",
+    # Bound matches pyiceberg's sql-sqlite extra; backs the Iceberg test catalog.
+    "sqlalchemy>=2.0.18,<3",
     "ipykernel",
     "bandit",
     "pyyaml",

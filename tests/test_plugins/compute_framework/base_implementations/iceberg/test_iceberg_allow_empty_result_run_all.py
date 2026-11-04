@@ -8,7 +8,7 @@ IcebergTable (schema) branch is covered by the unit mixin test.
 """
 
 from typing import Any
-from unittest.mock import Mock
+from collections.abc import Iterator
 
 import pytest
 
@@ -38,17 +38,10 @@ logger = logging.getLogger(__name__)
 try:
     import pyiceberg
     import pyarrow as pa
-    from pyiceberg.schema import Schema
-    from pyiceberg.table import Table as IcebergTable
-    from pyiceberg.types import LongType, NestedField
 except ImportError:
     logger.warning("PyIceberg or PyArrow is not installed. Some tests will be skipped.")
     pyiceberg = None  # type: ignore[assignment]
     pa = None  # type: ignore[assignment, unused-ignore]
-    Schema = None  # type: ignore
-    IcebergTable = None  # type: ignore
-    LongType = None  # type: ignore
-    NestedField = None  # type: ignore
 
 
 @pytest.mark.skipif(
@@ -88,27 +81,23 @@ class TestIcebergMissingColumnRunAll(MissingColumnRunAllTestBase):
         return [PyArrowKeyReadConsumer, PyArrowFilterReadConsumer]
 
 
+# Open adapter for IcebergNativeRoot, which cannot take fixtures; set per test by the fixture below.
+_adapter_handle: list[Any] = []
+
+
+@pytest.fixture
+def iceberg_root_handle(iceberg_adapter: Any) -> Iterator[None]:
+    _adapter_handle.append(iceberg_adapter)
+    yield
+    _adapter_handle.clear()
+
+
 class IcebergNativeRoot(MissingColumnRoot):
-    """Root producing a mock native IcebergTable whose scan projects through a real pyiceberg Schema."""
+    """Root producing a real native IcebergTable; projecting an unknown column raises in its scan."""
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        schema = Schema(NestedField(field_id=1, name="mc_declared", field_type=LongType(), required=False))
-
-        def scan(selected_fields: tuple[str, ...] = ("*",), **_: Any) -> Mock:
-            result = Mock()
-
-            def to_arrow() -> Any:
-                schema.select(*selected_fields)
-                return pa.table({"mc_declared": [1, 2, 3]})
-
-            result.to_arrow.side_effect = to_arrow
-            return result
-
-        table = Mock(spec=IcebergTable)
-        table.scan.side_effect = scan
-        table.schema.return_value = Mock(column_names=["mc_declared"])
-        return table
+        return _adapter_handle[0].from_arrow(pa.table({"mc_declared": [1, 2, 3]}))
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -130,6 +119,7 @@ class IcebergNativeScanReadConsumer(MissingColumnConsumer):
 @pytest.mark.skipif(
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
+@pytest.mark.usefixtures("iceberg_root_handle")
 class TestIcebergNativeMissingColumnRunAll(TestIcebergMissingColumnRunAll):
     """Undeclared column reads on a native Iceberg scan raise an explanatory error."""
 

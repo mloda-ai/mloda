@@ -24,6 +24,7 @@ from tests.test_plugins.compute_framework.test_tooling.availability_test_helper 
 )
 
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,13 @@ except ImportError:
     TimestamptzType = None  # type: ignore
     ListType = None  # type: ignore
     StructType = None  # type: ignore
+
+
+def _table_from_schema(adapter: Any, schema: Any) -> Any:
+    """Create a real, empty Iceberg table (no append) from a hand-built pyiceberg Schema."""
+    catalog = adapter.connection
+    namespace = ".".join(catalog.list_namespaces()[0])
+    return catalog.create_table(f"{namespace}.t_{uuid.uuid4().hex}", schema=schema)
 
 
 _ICEBERG_TYPE_MAP: dict[DataType, Any] = (
@@ -117,31 +125,30 @@ class TestIcebergFrameworkComputeFramework:
         assert result.column_names == ["column1", "column2"]
         assert result.to_pydict() == self.dict_data
 
-    def test_transform_iceberg_table_passthrough(self) -> None:
+    def test_transform_iceberg_table_passthrough(self, iceberg_adapter: Any) -> None:
         """Test that Iceberg tables pass through unchanged."""
-        mock_iceberg_table = Mock(spec=IcebergTable)
-        result = self.iceberg_framework.transform(mock_iceberg_table, [])
-        assert result is mock_iceberg_table
+        table = iceberg_adapter.from_arrow(pa.table({"a": [1]}))
+        result = self.iceberg_framework.transform(table, [])
+        assert result is table
 
     def test_transform_invalid_data(self) -> None:
         """Test that invalid data types raise ValueError."""
         with pytest.raises(ValueError, match="Data type .* is not supported"):
             self.iceberg_framework.transform(data=["invalid"], feature_names=[])
 
-    def test_set_framework_connection_object_catalog(self) -> None:
+    def test_set_framework_connection_object_catalog(self, iceberg_adapter: Any) -> None:
         """Test setting a catalog as framework connection object."""
-        mock_catalog = Mock(spec=Catalog)
-        mock_catalog.load_table = Mock()
+        catalog = iceberg_adapter.connection
 
-        self.iceberg_framework.set_framework_connection_object(mock_catalog)
-        assert self.iceberg_framework.framework_connection_object is mock_catalog
+        self.iceberg_framework.set_framework_connection_object(catalog)
+        assert self.iceberg_framework.framework_connection_object is catalog
 
-    def test_set_framework_connection_object_table(self) -> None:
+    def test_set_framework_connection_object_table(self, iceberg_adapter: Any) -> None:
         """Test setting an Iceberg table as framework connection object."""
-        mock_table = Mock(spec=IcebergTable)
+        table = iceberg_adapter.from_arrow(pa.table({"a": [1]}))
 
-        self.iceberg_framework.set_framework_connection_object(mock_table)
-        assert self.iceberg_framework.framework_connection_object is mock_table
+        self.iceberg_framework.set_framework_connection_object(table)
+        assert self.iceberg_framework.framework_connection_object is table
 
     def test_set_framework_connection_object_invalid(self) -> None:
         """Test that invalid connection objects raise ValueError."""
@@ -154,68 +161,61 @@ class TestIcebergFrameworkComputeFramework:
         result = self.iceberg_framework.select_data_by_column_names(data, [FeatureName("a")])
         assert result.column_names == ["a"]
 
-    def test_select_data_by_column_names_iceberg_table(self) -> None:
+    def test_select_data_by_column_names_iceberg_table(self, iceberg_adapter: Any) -> None:
         """An Iceberg Table is scanned with selected_fields and materialized in request order."""
-        mock_table = Mock(spec=IcebergTable)
-        mock_schema = Mock()
-        mock_schema.column_names = ["a", "b", "c"]
-        mock_table.schema.return_value = mock_schema
-        mock_scan = Mock()
-        mock_scan.to_arrow.return_value = pa.table({"a": [1], "c": [3]})
-        mock_table.scan.return_value = mock_scan
+        table = iceberg_adapter.from_arrow(pa.table({"a": [1, 2], "b": [4, 5], "c": [7, 8]}))
 
-        result = self.iceberg_framework.select_data_by_column_names(
-            mock_table,
-            [FeatureName("c"), FeatureName("a")],
-            column_ordering="request_order",
-            request_feature_order=["c", "a"],
-        )
+        with patch.object(table, "scan", wraps=table.scan) as spy:
+            result = self.iceberg_framework.select_data_by_column_names(
+                table,
+                [FeatureName("c"), FeatureName("a")],
+                column_ordering="request_order",
+                request_feature_order=["c", "a"],
+            )
 
-        mock_table.scan.assert_called_once()
-        _, kwargs = mock_table.scan.call_args
+        spy.assert_called_once()
+        _, kwargs = spy.call_args
         assert set(kwargs["selected_fields"]) == {"a", "c"}
         assert isinstance(result, pa.Table)
         assert result.column_names == ["c", "a"]
+        assert result["c"].to_pylist() == [7, 8]
+        assert result["a"].to_pylist() == [1, 2]
 
-    def test_select_data_by_column_names_iceberg_table_nested_field(self) -> None:
+    def test_select_data_by_column_names_iceberg_table_nested_field(self, iceberg_adapter: Any) -> None:
         """A nested field path comes back as its own top-level column, named "b.c", in requested order."""
-        mock_table = Mock(spec=IcebergTable)
-        mock_schema = Mock()
-        mock_schema.column_names = ["id", "b.c", "b"]
-        mock_table.schema.return_value = mock_schema
-        mock_scan = Mock()
         struct_type = pa.struct([("c", pa.int64())])
-        scanned = pa.table(
-            {
-                "id": pa.array([1], type=pa.int64()),
-                "b": pa.array([{"c": 2}], type=struct_type),
-            }
-        )
-        mock_scan.to_arrow.return_value = scanned
-        mock_table.scan.return_value = mock_scan
-
-        result = self.iceberg_framework.select_data_by_column_names(
-            mock_table,
-            [FeatureName("id"), FeatureName("b.c")],
-            column_ordering="request_order",
+        table = iceberg_adapter.from_arrow(
+            pa.table(
+                {
+                    "id": pa.array([1], type=pa.int64()),
+                    "b": pa.array([{"c": 2}], type=struct_type),
+                }
+            )
         )
 
-        mock_table.scan.assert_called_once()
-        _, kwargs = mock_table.scan.call_args
+        scanned = table.scan(selected_fields=("id", "b.c")).to_arrow()
+        assert scanned.schema.field("b").type == struct_type
+
+        with patch.object(table, "scan", wraps=table.scan) as spy:
+            result = self.iceberg_framework.select_data_by_column_names(
+                table,
+                [FeatureName("id"), FeatureName("b.c")],
+                column_ordering="request_order",
+            )
+
+        spy.assert_called_once()
+        _, kwargs = spy.call_args
         assert set(kwargs["selected_fields"]) == {"id", "b.c"}
         assert result.column_names == ["id", "b.c"]
         assert "b" not in result.column_names
         assert result["b.c"].to_pylist() == [2]
         assert result["b.c"].type == pa.int64()
 
-    def test_set_column_names_iceberg_table(self) -> None:
+    def test_set_column_names_iceberg_table(self, iceberg_adapter: Any) -> None:
         """Test setting column names from Iceberg table."""
-        mock_table = Mock(spec=IcebergTable)
-        mock_schema = Mock()
-        mock_schema.column_names = ["col1", "col2", "col3"]
-        mock_table.schema.return_value = mock_schema
+        table = iceberg_adapter.from_arrow(pa.table({"col1": [1], "col2": [2], "col3": [3]}))
 
-        self.iceberg_framework.data = mock_table
+        self.iceberg_framework.data = table
         self.iceberg_framework.set_column_names()
 
         assert self.iceberg_framework.column_names == {"col1", "col2", "col3"}
@@ -268,32 +268,12 @@ class TestIcebergFrameworkUnavailable:
 class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     """Test DataTypeValidator enforcement on IcebergFramework using shared mixin.
 
-    Iceberg tables require catalog context to construct, so the fixture wraps a real
-    ``pyiceberg.schema.Schema`` (carrying real ``IntegerType``/``LongType``/... field
-    types) inside a ``Mock`` IcebergTable. The mock's ``schema()`` returns a wrapper
-    that adapts ``find_field`` to return ``None`` for missing columns (real pyiceberg
-    raises ``ValueError`` here; the framework code assumes ``None``).
+    Each fixture creates a real, empty Iceberg table in the adapter's catalog from a
+    hand-built ``pyiceberg.schema.Schema`` (real ``IntegerType``/``LongType``/... field types).
 
     Iceberg has only one TimestampType (microsecond precision per spec), so the
     millisecond-precision tests are skipped on this subclass.
     """
-
-    @staticmethod
-    def _wrap_schema(schema: Any) -> Any:
-        """Wrap a real pyiceberg Schema so that find_field returns None on missing."""
-        wrapper = Mock()
-        wrapper.column_names = list(schema.column_names)
-
-        def _find_field_safe(name: str) -> Any:
-            for field in schema.fields:
-                if field.name == name:
-                    return field
-            return None
-
-        wrapper.find_field = _find_field_safe
-        mock_table = Mock(spec=IcebergTable)
-        mock_table.schema.return_value = wrapper
-        return mock_table
 
     @pytest.fixture
     def framework_instance(self) -> Any:
@@ -309,17 +289,17 @@ class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     }
 
     @pytest.fixture
-    def extended_sample_data(self, spec: ColumnSpec) -> Any:
+    def extended_sample_data(self, spec: ColumnSpec, iceberg_adapter: Any) -> Any:
         self._skip_if_unsupported(spec)
-        return self._build_iceberg((spec,))
+        return self._build_iceberg(iceberg_adapter, (spec,))
 
     @pytest.fixture
-    def validator_sample_data(self) -> Any:
-        return self._build_iceberg(self.VALIDATOR_COLUMNS)
+    def validator_sample_data(self, iceberg_adapter: Any) -> Any:
+        return self._build_iceberg(iceberg_adapter, self.VALIDATOR_COLUMNS)
 
     @pytest.fixture
-    def precision_sample_data(self) -> Any:
-        return self._build_iceberg(self.PRECISION_COLUMNS)
+    def precision_sample_data(self, iceberg_adapter: Any) -> Any:
+        return self._build_iceberg(iceberg_adapter, self.PRECISION_COLUMNS)
 
     @staticmethod
     def _iceberg_type(spec: ColumnSpec) -> Any:
@@ -336,7 +316,7 @@ class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
             return ListType(100, struct, element_required=False)
         return _ICEBERG_TYPE_MAP[spec.data_type]
 
-    def _build_iceberg(self, columns: tuple[ColumnSpec, ...]) -> Any:
+    def _build_iceberg(self, adapter: Any, columns: tuple[ColumnSpec, ...]) -> Any:
         # Iceberg needs explicit NestedField/IcebergType per column; the schema carries no
         # values. _ICEBERG_TYPE_MAP omits TIMESTAMP_MILLIS, so unsupported columns are
         # filtered out (the MILLIS test methods skip explicitly).
@@ -345,7 +325,7 @@ class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
             for i, c in enumerate(columns)
             if c.arrow_type is not None or c.data_type in _ICEBERG_TYPE_MAP
         ]
-        return self._wrap_schema(Schema(*fields))
+        return _table_from_schema(adapter, Schema(*fields))
 
     def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
         pytest.skip("Iceberg has only one TimestampType (microseconds per spec); millisecond cannot be expressed")
@@ -360,10 +340,9 @@ class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 class TestIcebergDtypeExtraction(DtypeExtractionTestMixin):
     """Test IcebergFramework._extract_column_dtype using shared mixin.
 
-    Iceberg tables need catalog context to construct, so the fixture wraps a real
+    Each fixture builds a real
     ``pyiceberg.schema.Schema`` (carrying real ``LongType``/``StringType``/``DoubleType``
-    field types) inside a ``Mock`` IcebergTable, reusing TestIcebergDataTypeValidator's
-    ``_wrap_schema`` helper.
+    field types) in a real, empty Iceberg table created through the adapter.
     """
 
     @pytest.fixture
@@ -371,17 +350,17 @@ class TestIcebergDtypeExtraction(DtypeExtractionTestMixin):
         return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
     @pytest.fixture
-    def dtype_sample_data(self) -> Any:
+    def dtype_sample_data(self, iceberg_adapter: Any) -> Any:
         schema = Schema(
             NestedField(1, "int_col", LongType()),
             NestedField(2, "str_col", StringType()),
             NestedField(3, "float_col", DoubleType()),
         )
-        return TestIcebergDataTypeValidator._wrap_schema(schema)
+        return _table_from_schema(iceberg_adapter, schema)
 
     @pytest.fixture
-    def decimal_sample_data(self) -> Any:
-        return TestIcebergDataTypeValidator._wrap_schema(Schema(NestedField(1, "d", DecimalType(10, 2))))
+    def decimal_sample_data(self, iceberg_adapter: Any) -> Any:
+        return _table_from_schema(iceberg_adapter, Schema(NestedField(1, "d", DecimalType(10, 2))))
 
 
 @pytest.mark.skipif(
@@ -465,10 +444,8 @@ class TestIcebergEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFramewo
       a pa.Table for dict input, so post-transform working data takes the pa.Table branch
       (``set(data.schema.names)``); this pins that a zero-row pa.Table still exposes its
       schema (state C).
-    - ``non_empty_data`` is a ``Mock`` typed as ``IcebergTable`` (catalog context is needed
-      to construct a real one, mirroring ``test_iceberg_integration.py``) whose
-      ``schema().column_names`` returns a known column list, pinning the native-table
-      branch's access pattern.
+    - ``non_empty_data`` is a real native IcebergTable built through the adapter, pinning
+      the native-table branch's access pattern.
     """
 
     @pytest.fixture
@@ -480,10 +457,8 @@ class TestIcebergEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFramewo
         return pa.table({"a": pa.array([], pa.int64())})
 
     @pytest.fixture
-    def non_empty_data(self) -> Any:
-        mock_table = Mock(spec=IcebergTable)
-        mock_table.schema.return_value.column_names = ["a"]
-        return mock_table
+    def non_empty_data(self, iceberg_adapter: Any) -> Any:
+        return iceberg_adapter.from_arrow(pa.table({"a": [1, 2]}))
 
     @pytest.fixture
     def appendable_data(self) -> Any:

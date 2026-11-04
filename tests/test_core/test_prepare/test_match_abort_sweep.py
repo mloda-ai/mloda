@@ -97,6 +97,12 @@ _VALIDATE_PROPERTY_SPEC_RAISES = (
 )
 
 RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
+    ("mloda/_testing/compute_framework/host.py", "values"): (
+        "name collision: the suite host hook reading a result column, not a call from the match path"
+    ),
+    ("mloda/core/filter/filter_parameter.py", "values"): (
+        "name collision: the filter parameter values accessor, not a call from the match path"
+    ),
     ("mloda/_testing/source/column_discovery_suite.py", "match_feature_group_criteria"): (
         "test-kit probe subclass whose matcher returns False and never raises"
     ),
@@ -147,6 +153,12 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
 # Swallowing functions OUTSIDE the declared modules that the match path calls; the containment there is decided
 # here. The closure is transitive and resolves by name, so an entry can be a name COLLISION, not a call edge.
 SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
+    ("mloda/_testing/compute_framework/host.py", "values"): (
+        "name collision: the suite host hook reading a result column, not a call from the match path"
+    ),
+    ("mloda/core/filter/filter_parameter.py", "values"): (
+        "name collision: the filter parameter values accessor, not a call from the match path"
+    ),
     ("mloda/_testing/source/column_discovery_suite.py", "match_feature_group_criteria"): (
         "test-kit probe subclass whose matcher returns False and never raises"
     ),

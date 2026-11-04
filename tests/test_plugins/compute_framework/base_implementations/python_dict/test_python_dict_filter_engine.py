@@ -3,8 +3,8 @@
 from decimal import Decimal
 from typing import Any
 
-import pytest
-
+from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
+from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter
 from mloda.user import Feature
 from mloda.user import SingleFilter
 from mloda.user import FilterType
@@ -12,68 +12,18 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
     PythonDictFilterEngine,
 )
 
-from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
-    FilterEngineTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.time_range_filter_engine_test_mixin import (
-    SAMPLE_IDS,
-    SAMPLE_TIMESTAMPS,
-    TimeRangeFilterEngineTestMixin,
-)
 
+class TestPythonDictFilterEngine(FilterEngineSuite):
+    """Unit tests for the PythonDictFilterEngine class using the shared suite."""
 
-class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
-    """Unit tests for the PythonDictFilterEngine class using shared mixins."""
+    adapter_class = PythonDictAdapter
 
-    filter_engine_class = PythonDictFilterEngine
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        """Create a sample columnar dict for testing."""
-        return {
-            "id": [1, 2, 3, 4, 5],
-            "age": [25, 30, 35, 40, 45],
-            "name": ["Alice", "Bob", "Charlie", "David", "Eve"],
-            "category": ["A", "B", "A", "C", "B"],
-        }
-
-    @pytest.fixture
-    def nullable_category_sample_data(self) -> Any:
-        """Create a sample columnar dict with null categories for testing."""
-        return {
-            "id": [1, 2, 3, 4, 5],
-            "category": ["A", None, "B", None, "C"],
-            "score": [1, None, 2, None, 3],
-            "ratio": [1.0, float("nan"), 2.0, None, 3.0],
-        }
-
-    @pytest.fixture
-    def decimal_sample_data(self) -> Any:
-        return {"d": [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]}
-
-    def get_decimal_column_dtype(self, data: Any) -> Any:
-        return type(next((value for value in data["d"] if value is not None), Decimal("0")))
-
-    def result_row_count(self, result: Any) -> int:
-        """A columnar dict's row count is the length of any of its columns."""
-        for column in result.values():
-            return len(column)
-        return 0
-
-    def get_column_values(self, result: Any, column: str) -> list[Any]:
-        """Extract column values from a columnar dict."""
-        return list(result[column])
-
-    @pytest.fixture
-    def sample_time_data(self) -> Any:
-        return {"id": list(SAMPLE_IDS), "ts": list(SAMPLE_TIMESTAMPS)}
-
-    def get_id_column_values(self, result: Any) -> list[int]:
-        return list(result["id"])
+    def decimal_dtype(self, adapter: FrameworkAdapter, result: Any) -> Any:
+        return type(next((value for value in result["d"] if value is not None), Decimal("0")))
 
     # Framework-specific tests below
 
-    def test_filter_with_none_values(self, sample_data: Any) -> None:
+    def test_filter_with_none_values(self, adapter: FrameworkAdapter, sample_data: Any) -> None:
         """Test filtering with None values in data."""
         data_with_none = {
             "id": sample_data["id"] + [6],
@@ -89,7 +39,7 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTes
 
         result = PythonDictFilterEngine.do_min_filter(data_with_none, single_filter)
 
-        assert self.result_row_count(result) == 4
+        assert self.row_count(adapter, result) == 4
         ages = list(result["age"])
         assert None not in ages
         assert ages == [30, 35, 40, 45]

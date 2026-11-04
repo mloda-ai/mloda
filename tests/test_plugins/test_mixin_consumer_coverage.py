@@ -7,16 +7,18 @@ from __future__ import annotations
 
 import importlib
 import inspect
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 import pytest
 
+from mloda._testing.compute_framework_shape import applicable_aspects
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin
-from mloda.provider import BaseFilterEngine
 from mloda.provider import BaseMaskEngine
 from mloda._testing.source.read_db_suite import ReadDBFGTestMixin
 from mloda._testing.source.read_document_suite import ReadDocumentFGTestMixin
@@ -27,7 +29,7 @@ from mloda.user import PluginLoader
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
-from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import FilterEngineTestMixin
+from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
 from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import MaskEngineTestMixin
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_calculate_test_mixin import (
     AggregatedCalculateTestMixin,
@@ -57,12 +59,22 @@ _AGGREGATED_CONSUMERS = (
 
 @dataclass(frozen=True)
 class MixinContract:
-    """A plugin base, the mixin its implementations must join, and where the consumers live."""
+    """A plugin base, the mixin its implementations must join, and where the consumers live.
+
+    With `aspect` set, only implementations whose `applicable_aspects` include it need a consumer, and
+    `resolver` maps a consumer's `attribute` value to the implementation it covers."""
 
     base: type[Any]
     mixin: type[Any]
     attribute: str
     consumer_modules: tuple[str, ...]
+    resolver: Callable[[type[Any]], type[Any]] | None = None
+    aspect: str | None = None
+
+
+def _framework_of_adapter(adapter_class: type[Any]) -> type[Any]:
+    framework: type[Any] = adapter_class().compute_framework()
+    return framework
 
 
 CONTRACTS: tuple[MixinContract, ...] = (
@@ -108,9 +120,9 @@ CONTRACTS: tuple[MixinContract, ...] = (
         ),
     ),
     MixinContract(
-        BaseFilterEngine,
-        FilterEngineTestMixin,
-        "filter_engine_class",
+        ComputeFramework,
+        FilterEngineSuite,
+        "adapter_class",
         (
             f"{_FRAMEWORKS}.duckdb.test_duckdb_filter_engine",
             f"{_FRAMEWORKS}.iceberg.test_iceberg_filter_engine",
@@ -121,6 +133,8 @@ CONTRACTS: tuple[MixinContract, ...] = (
             f"{_FRAMEWORKS}.spark.test_spark_filter_engine",
             f"{_FRAMEWORKS}.sqlite.test_sqlite_filter_engine",
         ),
+        resolver=_framework_of_adapter,
+        aspect="filter",
     ),
     MixinContract(
         SourceFeatureGroup,
@@ -168,9 +182,17 @@ def _qualified_name(cls: type[Any]) -> str:
     return f"{cls.__module__}.{cls.__qualname__}"
 
 
-def concrete_plugin_classes(base: type[Any]) -> set[str]:
+def concrete_plugin_classes(base: type[Any], aspect: str | None = None) -> set[str]:
     """Concrete subclasses of base defined under mloda_plugins; test-local subclasses fall out by module."""
     PluginLoader.all()
+    if aspect is not None:
+        return {
+            _qualified_name(cls)
+            for cls in get_all_subclasses(base)
+            if cls.__module__.startswith("mloda_plugins.")
+            and not inspect.isabstract(cls)
+            and aspect in applicable_aspects(cls)
+        }
     if issubclass(base, OperationFeatureGroup):
         return {
             _qualified_name(impl)
@@ -187,8 +209,9 @@ def concrete_plugin_classes(base: type[Any]) -> set[str]:
 def covered_classes(contract: MixinContract) -> set[str]:
     """Classes named by the contract attribute of the mixin consumers defined in the listed modules."""
     modules = {importlib.import_module(name).__name__ for name in contract.consumer_modules}
+    resolve = contract.resolver or (lambda value: value)
     return {
-        _qualified_name(getattr(consumer, contract.attribute))
+        _qualified_name(resolve(getattr(consumer, contract.attribute)))
         for consumer in get_all_subclasses(contract.mixin)
         if consumer.__module__ in modules and hasattr(consumer, contract.attribute)
     }
@@ -196,7 +219,7 @@ def covered_classes(contract: MixinContract) -> set[str]:
 
 @pytest.mark.parametrize("contract", CONTRACTS, ids=[contract.mixin.__name__ for contract in CONTRACTS])
 def test_every_concrete_implementation_has_a_mixin_consumer(contract: MixinContract) -> None:
-    implementations = concrete_plugin_classes(contract.base)
+    implementations = concrete_plugin_classes(contract.base, contract.aspect)
     assert implementations, f"no concrete {contract.base.__name__} found under mloda_plugins: the plugin import broke"
     uncovered = sorted(implementations - covered_classes(contract))
     assert uncovered == [], (

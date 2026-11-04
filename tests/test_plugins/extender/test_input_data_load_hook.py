@@ -810,6 +810,54 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
         assert len(extender.all_captured) == 1
         assert extender.all_captured[0].data_access_identity == expected_identity
 
+    def test_hopped_load_sees_a_per_run_context_var_nothing_carries_by_hand(self) -> None:
+        per_run: contextvars.ContextVar[str | None] = contextvars.ContextVar("per_run_for_hop", default=None)
+        seen: list[str | None] = []
+
+        class _ContextVarCapturingExtender(_InputDataLoadCapturingExtender):
+            def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+                result = super().__call__(func, *args, **kwargs)
+                seen.append(per_run.get())
+                return result
+
+        extender = _ContextVarCapturingExtender()
+        cfw = PythonDictFramework(function_extender={extender})
+        token = per_run.set("per-run-value")
+        try:
+            result = _run_calculate(cfw, _threaded_load_feature_group("received"))
+        finally:
+            per_run.reset(token)
+
+        assert result == [1, 2, 3]
+        assert seen == ["per-run-value"]
+
+    def test_concurrent_hops_from_one_calculation_are_each_dispatched(self) -> None:
+        barrier = threading.Barrier(2)
+
+        class _BarrierReader(_CountingReader):
+            loads = 0
+
+            @classmethod
+            def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+                barrier.wait(timeout=5)
+                return super().load_data(data_access, features)
+
+        class _ConcurrentHopFeatureGroup(FeatureGroup):
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                    futures = [pool.submit(_load, _BarrierReader, "access", features) for _ in range(2)]
+                    return [future.result() for future in futures]
+
+        extender = _InputDataLoadCapturingExtender()
+        cfw = PythonDictFramework(function_extender={extender})
+
+        results = _run_calculate(cfw, _ConcurrentHopFeatureGroup)
+
+        assert results == [[1, 2, 3], [1, 2, 3]]
+        assert len(extender.all_captured) == 2
+        assert _BarrierReader.loads == 2
+
     def test_non_gate_extender_observes_the_hopped_load(self) -> None:
         extender = _InputDataLoadCapturingExtender()
         cfw = PythonDictFramework(function_extender={extender})

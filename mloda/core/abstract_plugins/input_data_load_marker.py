@@ -1,6 +1,6 @@
 """Per-calculation marker a FeatureSet carries so a thread-hopped reader load finds its run's INPUT_DATA_LOAD hook."""
 
-from contextvars import ContextVar
+from contextvars import Context, ContextVar
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -9,15 +9,16 @@ if TYPE_CHECKING:
 
 
 class InputDataLoadMarker:
-    """Holds (framework, calculate HookContext) while its calculation runs; survives copies, pickles inactive."""
+    """Holds (framework, calculate HookContext) and a snapshot of the calculation's contextvars while its
+    calculation runs; a thread hop re-dispatches inside a copy of the snapshot instead of restoring values
+    one by one. Survives copies, pickles inactive (the snapshot is runtime-only and never pickled)."""
 
-    __slots__ = ("active", "framework", "has_extender", "gate", "secrets", "identity_secrets")
+    __slots__ = ("active", "context", "framework", "gate", "has_extender")
 
     def __init__(self, has_extender: bool, gate: bool) -> None:
-        self.secrets: frozenset[str] = frozenset()
-        self.identity_secrets: frozenset[str] = frozenset()
         self.active: tuple[ComputeFramework, HookContext] | None = None
         self.framework: ComputeFramework | None = None
+        self.context: Context | None = None
         self.has_extender = has_extender
         self.gate = gate
 

@@ -3,7 +3,7 @@ import pickle  # nosec B403
 from abc import ABC
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
 from typing import Any, ClassVar, NoReturn, final, get_origin
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
@@ -11,10 +11,6 @@ from mloda.core.abstract_plugins.components.credential_access import (
     CredentialFieldMissing,
     CredentialReadRefused,
     readable,
-)
-from mloda.core.abstract_plugins.components.credential_scrub import (
-    current_identity_secrets,
-    current_registered_secrets,
 )
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
@@ -883,8 +879,6 @@ class ComputeFramework(ABC):
         if stamped:
             features._load_marker = marker
         marker.framework = self
-        marker.secrets = current_registered_secrets()
-        marker.identity_secrets = current_identity_secrets()
         token = current_input_data_load_marker.set(marker)
         try:
             if extender is None and fetch_extender is None:
@@ -897,6 +891,10 @@ class ComputeFramework(ABC):
                 context.activate(),
                 input_data_load_gate_scope() if gated else contextlib.nullcontext(),
             ):
+                # Snapshot the whole calculation context for thread-hopped loads: it carries the
+                # framework, this HookContext, the gate scope and every per-run ContextVar (such as
+                # the registered secret literals) together, so the hop needs no hand-threaded values.
+                marker.context = copy_context()
                 if extender is None:
                     return method(self.data, features)
                 return _invoke_extender(
@@ -907,6 +905,7 @@ class ComputeFramework(ABC):
                 )
         finally:
             marker.active = None
+            marker.context = None
             marker.framework = None
             current_input_data_load_marker.reset(token)
             if stamped and prior_marker is not None and prior_marker.active is not None:

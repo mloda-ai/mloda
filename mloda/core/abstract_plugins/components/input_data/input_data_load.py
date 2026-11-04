@@ -6,7 +6,6 @@ from typing import Any
 from mloda.core.abstract_plugins.components.credential_scrub import (
     current_identity_secrets,
     mask_literals,
-    registered_secrets_scope,
 )
 from mloda.core.abstract_plugins.components.credential_access import hidden_credentials, restore_readable
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -51,23 +50,22 @@ def dispatch_input_data_load(
     if cfw is None:
         marker = features._load_marker
         if marker is not None:
-            active = marker.active
-            if active is not None and marker.has_extender:
-                with (
-                    active[0].activate(),
-                    active[1].activate(),
-                    registered_secrets_scope(marker.secrets, marker.identity_secrets),
-                ):
-                    return dispatch_input_data_load(
-                        owner,
-                        owner_type,
-                        load,
-                        data_access,
-                        features,
-                        identity=identity,
-                        data_access_format=data_access_format,
-                        loader_name=loader_name,
-                    )
+            snapshot = marker.context
+            if marker.active is not None and marker.has_extender and snapshot is not None:
+                # A Context can be entered by only one thread at a time, so each hop runs in its
+                # own copy of the calculation's snapshot; the copy carries the framework, the
+                # calculate HookContext and every per-run ContextVar the load depends on.
+                return snapshot.copy().run(
+                    dispatch_input_data_load,
+                    owner,
+                    owner_type,
+                    load,
+                    data_access,
+                    features,
+                    identity=identity,
+                    data_access_format=data_access_format,
+                    loader_name=loader_name,
+                )
             if marker.gate:
                 raise GateBypassError(
                     f"{owner_type.__qualname__} loaded its source after its calculation finished under an "

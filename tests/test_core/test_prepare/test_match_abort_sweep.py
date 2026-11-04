@@ -990,13 +990,37 @@ def test_no_marked_comment_without_an_escalation() -> None:
     )
 
 
+_COLLISION_HINT_THRESHOLD = 5
+
+
+def _collision_hints(undeclared: list[ExternalCall]) -> str:
+    """Prefix naming (module, function) pairs that account for many of the undeclared calls.
+
+    Resolution is by name, so one new raising or swallowing definition under a common name (say
+    ``get``) makes every same-named call on the match path count as a call into it. Declaring a
+    hundred pairs would be the wrong fix; the hint says so before the list buries the cause.
+    """
+    counts: dict[tuple[str, str], int] = {}
+    for call in undeclared:
+        counts[(call.module, call.function)] = counts.get((call.module, call.function), 0) + 1
+    return "".join(
+        f"Hint: {module}::{function} alone accounts for {count} of these calls. That is likely a name "
+        f"collision: a new definition named '{function}' that the name-based resolution now matches "
+        "everywhere. Rename the new method to a name not used on the match path instead of declaring "
+        "every caller.\n\n"
+        for (module, function), count in sorted(counts.items())
+        if count >= _COLLISION_HINT_THRESHOLD
+    )
+
+
 def test_calls_into_raising_helpers_outside_the_path_are_declared() -> None:
     undeclared = [
         call for call in sweep().external if (call.module, call.function) not in RAISING_HELPERS_OUTSIDE_THE_PATH
     ]
 
     assert undeclared == [], (
-        "The match path calls raising functions outside the declared modules:\n"
+        _collision_hints(undeclared)
+        + "The match path calls raising functions outside the declared modules:\n"
         + "\n".join(f"  {call.module}::{call.function} from {call.caller}" for call in undeclared)
         + "\n\nDeclare the (module, function) pair in RAISING_HELPERS_OUTSIDE_THE_PATH with a reason, or add "
         "the module to MATCH_PATH_MODULES so its raises are swept."
@@ -1009,6 +1033,24 @@ def test_declared_helpers_outside_the_path_are_still_called() -> None:
     stale = sorted(entry for entry in RAISING_HELPERS_OUTSIDE_THE_PATH if entry not in called)
 
     assert stale == [], f"RAISING_HELPERS_OUTSIDE_THE_PATH entries the match path no longer calls: {stale}"
+
+
+def test_collision_hints_name_a_pair_that_accounts_for_many_callers() -> None:
+    undeclared = [ExternalCall("mloda/core/somewhere.py", "get", f"caller_{index}") for index in range(5)]
+
+    hint = _collision_hints(undeclared)
+
+    assert hint.startswith("Hint: mloda/core/somewhere.py::get")
+    assert "name collision" in hint
+    assert "instead of declaring every caller" in hint
+
+
+def test_collision_hints_stay_empty_below_the_threshold() -> None:
+    few = [ExternalCall("mloda/core/somewhere.py", "get", f"caller_{index}") for index in range(4)]
+
+    assert _collision_hints(few) == ""
+    assert _collision_hints([ExternalCall("mloda/core/somewhere.py", "get", "one_caller")]) == ""
+    assert _collision_hints([]) == ""
 
 
 def test_every_seed_resolves_inside_a_declared_module() -> None:
@@ -1176,7 +1218,8 @@ def test_calls_into_swallowing_helpers_outside_the_path_are_declared() -> None:
     ]
 
     assert undeclared == [], (
-        "The match path calls functions outside the declared modules that swallow exceptions:\n"
+        _collision_hints(undeclared)
+        + "The match path calls functions outside the declared modules that swallow exceptions:\n"
         + "\n".join(f"  {call.module}::{call.function} from {call.caller}" for call in undeclared)
         + "\n\nDeclare the (module, function) pair in SWALLOWING_HELPERS_OUTSIDE_THE_PATH with a reason, or add "
         "the module to MATCH_PATH_MODULES so its handlers are swept."

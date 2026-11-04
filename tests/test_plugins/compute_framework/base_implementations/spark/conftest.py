@@ -118,5 +118,14 @@ def spark_case_sensitive(spark_session: Any) -> Any:
     spark_session.conf.set("spark.sql.caseSensitive", previous)
 
 
+@pytest.fixture
+def spark_non_utc_timezone(spark_session: Any) -> Any:
+    """Run the test with spark.sql.session.timeZone=America/New_York and restore the previous value afterwards."""
+    previous = spark_session.conf.get("spark.sql.session.timeZone")
+    spark_session.conf.set("spark.sql.session.timeZone", "America/New_York")
+    yield spark_session
+    spark_session.conf.set("spark.sql.session.timeZone", previous)
+
+
 # Export availability flags for use in test files
-__all__ = ["spark_session", "spark_case_sensitive", "PYSPARK_AVAILABLE", "SKIP_REASON"]
+__all__ = ["spark_session", "spark_case_sensitive", "spark_non_utc_timezone", "PYSPARK_AVAILABLE", "SKIP_REASON"]

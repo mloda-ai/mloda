@@ -449,7 +449,7 @@ class IcebergAdapter(_ArrowReadAdapter):
 
 
 class SparkAdapter(_ArrowReadAdapter):
-    """Borrows the caller's active SparkSession, never starts or stops one."""
+    """Borrows the caller's active SparkSession, never starts or stops one; Spark rejects unsigned integer types."""
 
     capabilities = AdapterCapabilities(typed_columns=True)
 

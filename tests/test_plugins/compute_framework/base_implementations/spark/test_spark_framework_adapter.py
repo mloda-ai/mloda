@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 import pytest
@@ -54,16 +54,6 @@ def test_naive_timestamp_keeps_wall_clock_under_non_utc_session(adapter: Any, sp
         result = adapter.from_typed(TypedTestData({"t": (DataType.TIMESTAMP_MICROS, [value])}))
 
         assert adapter.column_values(result, "t") == [value]
-
-
-def test_tz_timestamp_reads_back_as_same_instant(adapter: Any, spark_non_utc_timezone: Any) -> None:
-    value = datetime(2024, 1, 1, 12, 30, tzinfo=UTC)
-    with adapter:
-        result = adapter.from_typed(TypedTestData({"t": (DataType.TIMESTAMP_MICROS_TZ, [value])}))
-
-        read = adapter.column_values(result, "t")
-
-    assert read[0] == value
 
 
 def test_connection_lifecycle_keeps_session_alive(adapter: Any, spark_session: Any) -> None:

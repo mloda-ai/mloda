@@ -24,6 +24,7 @@ diagnostic in scope is the universal-matcher warning, never the captureless one.
 from __future__ import annotations
 
 import logging
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -93,6 +94,21 @@ class TestUniversalMatcherWarns:
             assert "opt_a_u771a" in _InheritedAllDefaultU771a.PROPERTY_MAPPING
 
         warnings = _universal_matcher_warnings(caplog, "_InheritedAllDefaultU771a")
+        assert warnings, "expected an ALLOW_UNIVERSAL_MATCHER warning naming the class"
+
+    def test_proxy_mapping_all_declared_default_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A non-dict Mapping PROPERTY_MAPPING still gets the universal-matcher warning (#2602)."""
+        with caplog.at_level(logging.WARNING):
+
+            class _ProxyAllDefaultM2602(FeatureChainParserMixin, FeatureGroup):
+                PROPERTY_MAPPING = MappingProxyType(
+                    {
+                        "opt_a_m2602": PropertySpec("optional a", default=None),
+                        "opt_b_m2602": PropertySpec("optional b", default=None),
+                    }
+                )
+
+        warnings = _universal_matcher_warnings(caplog, "_ProxyAllDefaultM2602")
         assert warnings, "expected an ALLOW_UNIVERSAL_MATCHER warning naming the class"
 
     def test_declared_default_value_is_optional_warns(self, caplog: pytest.LogCaptureFixture) -> None:

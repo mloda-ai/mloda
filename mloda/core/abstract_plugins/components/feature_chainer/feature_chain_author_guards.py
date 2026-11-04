@@ -197,7 +197,7 @@ def warn_captureless_without_binding(owner: type[Any]) -> None:
     if getattr(owner, "RECOGNITION_ONLY_PATTERN", False):
         return
     property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
-    if not isinstance(property_mapping, dict) or not property_mapping:
+    if not isinstance(property_mapping, Mapping) or not property_mapping:
         return
     patterns = _effective_prefix_patterns(owner)
     if not patterns:
@@ -230,9 +230,9 @@ def warn_universal_optional_matcher(owner: type[Any]) -> None:
     if getattr(owner, "ALLOW_UNIVERSAL_MATCHER", False):
         return
     property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
-    # A None mapping is not a configuration matcher; an EMPTY dict is the strongest universal
+    # A None mapping is not a configuration matcher; an EMPTY mapping is the strongest universal
     # matcher (it validates vacuously), so it stays in scope.
-    if not isinstance(property_mapping, dict):
+    if not isinstance(property_mapping, Mapping):
         return
     for spec in property_mapping.values():
         if not isinstance(spec, PropertySpec):
@@ -328,7 +328,7 @@ def warn_missing_in_features_declaration(owner: type[Any], mixin: type[Any]) -> 
     the matcher, or a class above it already warned (once per hierarchy). Never raises.
     """
     property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
-    if not isinstance(property_mapping, dict) or DefaultOptionKeys.in_features.value in property_mapping:
+    if not isinstance(property_mapping, Mapping) or DefaultOptionKeys.in_features.value in property_mapping:
         return
     if not (hasattr(owner, "MIN_IN_FEATURES") and hasattr(owner, "MAX_IN_FEATURES")):
         return
@@ -359,7 +359,7 @@ def check_required_when(
     owner_name: str,
     feature_name: str | FeatureName,
     prefix_patterns: list[Any],
-    property_mapping: dict[str, Any] | None,
+    property_mapping: Mapping[str, Any] | None,
     options: Options,
 ) -> bool:
     """Evaluate every required_when predicate of a mapping. False means the feature is not a match."""
@@ -511,7 +511,9 @@ def install_required_when_guard(owner: type[Any]) -> None:
     AFTER the class body is not seen by the guard.
     """
     property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
-    if not isinstance(property_mapping, dict) or not FeatureChainParser.has_required_when_predicates(property_mapping):
+    if not isinstance(property_mapping, Mapping) or not FeatureChainParser.has_required_when_predicates(
+        property_mapping
+    ):
         return
 
     _reject_staticmethod_matcher(owner)
@@ -557,7 +559,7 @@ def install_required_when_guard(owner: type[Any]) -> None:
     setattr(owner, "match_feature_group_criteria", classmethod(guarded))
 
 
-def _plain_presence_holds(owner_name: str, options: Options, mapping: dict[str, PropertySpec]) -> bool:
+def _plain_presence_holds(owner_name: str, options: Options, mapping: Mapping[str, PropertySpec]) -> bool:
     """Required-presence rule on a plain group's raw options; debug-logged to avoid a warning per candidate probe."""
     missing = FeatureChainParser._name_path_missing_required_keys(options, mapping)
     if not missing:
@@ -584,7 +586,7 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
     patterned one keeps the name-path rule, so a name no pattern owns keeps the inner verdict.
     """
     property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
-    if not isinstance(property_mapping, dict):
+    if not isinstance(property_mapping, Mapping):
         return
     plain = not getattr(owner, CHAIN_PARSER_MIXIN_MARKER, False)
     has_patterns = bool(_effective_prefix_patterns(owner))
@@ -641,7 +643,7 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
                 return True
 
             mapping = getattr(guarded_cls, "PROPERTY_MAPPING", None)
-            if not isinstance(mapping, dict):
+            if not isinstance(mapping, Mapping):
                 return True
             # Flattened, because a matcher passes a list-valued pattern attribute straight to
             # parse_name, so its ELEMENTS are the concrete patterns. A matcher must never leak

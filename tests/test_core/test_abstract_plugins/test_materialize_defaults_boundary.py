@@ -436,6 +436,49 @@ class TestRuntimeDefaultMaterializationEndToEnd:
             _run_direct_and_chained(calls, include_direct=False, chained_options=propagate, extra_requests=[other])
         assert calls == []
 
+    def test_two_direct_requests_differing_only_in_plain_context_raise(self) -> None:
+        calls: list[list[str]] = []
+        fg = make_name_bound_fg(
+            "Mdb",
+            __name__,
+            "mdbop",
+            (MDB_FIRST, MDB_SECOND),
+            defaults={MDB_FIRST: "a", MDB_SECOND: "a"},
+            input_column="mdb_src",
+            calls=calls,
+            append_columns=True,
+        )
+        source = make_root_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
+        with pytest.raises(ValueError, match=rf"{re.escape(MDB_DIRECT)}.*\by\b"):
+            mloda.run_all(
+                [Feature(MDB_DIRECT), Feature(MDB_DIRECT, Options(context={"y": 1}))],
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups({fg, source}),
+            )
+        assert calls == []
+
+    def test_pinned_direct_and_propagating_consumer_with_overlapping_frameworks_raise(self) -> None:
+        calls: list[list[str]] = []
+        fg = make_name_bound_fg(
+            "Mdb",
+            __name__,
+            "mdbop",
+            (MDB_FIRST, MDB_SECOND),
+            defaults={MDB_FIRST: "a", MDB_SECOND: "a"},
+            input_column="mdb_src",
+            calls=calls,
+            append_columns=True,
+        )
+        source = make_root_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
+        propagate = Options(context={"x": 1}, propagate_context_keys=frozenset({"x"}))
+        with pytest.raises(ValueError, match=rf"{re.escape(MDB_DIRECT)}.*\bx\b"):
+            mloda.run_all(
+                [Feature(MDB_DIRECT, compute_framework="PyArrowTable"), Feature(MDB_CHAINED, propagate)],
+                compute_frameworks=[PyArrowTable, PythonDictFramework],
+                plugin_collector=PluginCollector.enabled_feature_groups({fg, source}),
+            )
+        assert calls == []
+
     @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
     @pytest.mark.parametrize(
         "direct_options",

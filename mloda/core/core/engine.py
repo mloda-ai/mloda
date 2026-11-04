@@ -789,17 +789,22 @@ class Engine:
         return existing
 
     def _reject_twins_sharing_a_frame(self) -> None:
-        """Rejects same-named copies split only by a pushed-down context key while reading the same inputs."""
+        """Rejects same-named copies split only by a context key while reading the same inputs.
+
+        Context never splits resolution, so two copies of one feature that read the same inputs
+        (same link parents, same input data match) and differ only in context values land in one
+        frame and would write the same column twice. That holds whether the differing key was
+        pushed down from a consumer or set directly on the requests, and whether the copies'
+        framework sets are equal or merely overlap (an overlapping set still resolves both copies
+        onto a shared framework for their common parent). Copies whose framework sets are disjoint
+        can never share a frame, and copies with different parents read different inputs (a
+        cascaded key splits the inputs themselves), so both are left alone.
+        """
         for group_class, collection in sorted(
             self.feature_group_collection.items(), key=lambda item: format_feature_group_class(item[0])
         ):
-            split_keys = frozenset(k for f in collection for k in f.options.inherited_context_keys)
-            if not split_keys:
-                continue
             buckets: dict[str, list[Feature]] = defaultdict(list)
-            for member in sorted(
-                collection, key=lambda f: (str(f._split_context_hashable(split_keys)), str(f.data_type), str(f.uuid))
-            ):
+            for member in sorted(collection, key=lambda f: (str(f.name), str(f.uuid))):
                 buckets[str(member.name)].append(member)
             for name, members in sorted(buckets.items()):
                 for i, a in enumerate(members):
@@ -807,16 +812,20 @@ class Engine:
                         parents = self.feature_link_parents.get(a.uuid)
                         if (
                             a.options == b.options
-                            and a.compute_frameworks == b.compute_frameworks
                             and a.data_type == b.data_type
                             and a._input_data_match_key() == b._input_data_match_key()
                             and parents
                             and parents == self.feature_link_parents.get(b.uuid)
-                            and a._split_context_hashable(split_keys) != b._split_context_hashable(split_keys)
+                            and not _deep_equal(a.options.context, b.options.context)
+                            and (
+                                a.compute_frameworks is None
+                                or b.compute_frameworks is None
+                                or a.compute_frameworks & b.compute_frameworks
+                            )
                         ):
                             keys = sorted(
                                 k
-                                for k in split_keys
+                                for k in set(a.options.context) | set(b.options.context)
                                 if (k in a.options.context) != (k in b.options.context)
                                 or (
                                     k in a.options.context
@@ -825,8 +834,8 @@ class Engine:
                             )
                             raise ValueError(
                                 f"Feature '{name}' of {format_feature_group_class(group_class)} is reached twice with "
-                                f"differing values for context key(s) {keys} pushed down from a consumer, but both "
-                                "copies read the same inputs, so they would write the same column into one frame. "
+                                f"differing values for context key(s) {keys}, but both copies read the same "
+                                "inputs, so they would write the same column into one frame. "
                                 "Give every request the same value, push the key with cascade_context_keys so the "
                                 "inputs split too, or make it a group option."
                             )

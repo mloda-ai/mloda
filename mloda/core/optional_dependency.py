@@ -7,6 +7,16 @@ import sys
 from typing import Any
 
 
+# Import roots whose extra has another name.
+IMPORT_ROOT_EXTRA: dict[str, str] = {"pyiceberg": "iceberg", "pyspark": "spark"}
+
+
+def extra_for(module: str) -> str:
+    """The pip extra that provides the module's import root."""
+    root = module.partition(".")[0]
+    return IMPORT_ROOT_EXTRA.get(root, root)
+
+
 def require(module: str, reason: str) -> Any:
     """Import an optional backend at the point of use, or raise ImportError naming the extra to install.
 
@@ -21,7 +31,7 @@ def require(module: str, reason: str) -> Any:
         if exc.name != distribution and not (exc.name or "").startswith(f"{distribution}."):
             raise
         raise ImportError(
-            f"{distribution} is required for {reason}. Install it with: pip install 'mloda[{distribution}]'"
+            f"{distribution} is required for {reason}. Install it with: pip install 'mloda[{extra_for(module)}]'"
         ) from exc
 
 

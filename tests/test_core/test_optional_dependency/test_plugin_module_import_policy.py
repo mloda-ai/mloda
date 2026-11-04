@@ -850,7 +850,9 @@ class RequireSite(NamedTuple):
 
     @property
     def root(self) -> str:
-        return self.literal.partition(".")[0]
+        from mloda.core import optional_dependency
+
+        return optional_dependency.extra_for(self.literal)
 
 
 # Only a first positional string literal is scanned; keyword and f-string forms are not.
@@ -881,30 +883,60 @@ def undeclared_require_messages(sites: list[RequireSite], extras: Collection[str
 
 
 _SYNTHETIC_EXTRAS = frozenset({"pyarrow", "numpy"})
+_ICEBERG_EXTRAS = _SYNTHETIC_EXTRAS | {"iceberg"}
 
-_REQUIRE_SITE_CASES: list[tuple[str, str, list[tuple[int, str]]]] = [
-    ("undeclared_at_module_level", "import os\n\nrequire('somelib', 'x')\n", [(3, "somelib")]),
-    ("declared_root_reports_nothing", "require('numpy', 'x')\n", []),
-    ("declared_submodule_reduces_to_root", "require('pyarrow.flight', 'x')\n", []),
-    ("undeclared_submodule_reduces_to_root", "require('somelib.sub', 'x')\n", [(1, "somelib.sub")]),
-    ("undeclared_inside_function_body", "def f():\n    require('somelib', 'x')\n", [(2, "somelib")]),
+# (id, source, extras, expected (lineno, literal, expected root extra))
+_REQUIRE_SITE_CASES: list[tuple[str, str, frozenset[str], list[tuple[int, str, str]]]] = [
+    (
+        "undeclared_at_module_level",
+        "import os\n\nrequire('somelib', 'x')\n",
+        _SYNTHETIC_EXTRAS,
+        [(3, "somelib", "somelib")],
+    ),
+    ("declared_root_reports_nothing", "require('numpy', 'x')\n", _SYNTHETIC_EXTRAS, []),
+    ("declared_submodule_reduces_to_root", "require('pyarrow.flight', 'x')\n", _SYNTHETIC_EXTRAS, []),
+    (
+        "undeclared_submodule_reduces_to_root",
+        "require('somelib.sub', 'x')\n",
+        _SYNTHETIC_EXTRAS,
+        [(1, "somelib.sub", "somelib")],
+    ),
+    (
+        "undeclared_inside_function_body",
+        "def f():\n    require('somelib', 'x')\n",
+        _SYNTHETIC_EXTRAS,
+        [(2, "somelib", "somelib")],
+    ),
+    (
+        "mapped_root_reports_its_extra",
+        "require('pyiceberg.catalog.sql', 'x')\n",
+        _SYNTHETIC_EXTRAS,
+        [(1, "pyiceberg.catalog.sql", "iceberg")],
+    ),
+    (
+        "mapped_root_declared_reports_nothing",
+        "require('pyiceberg.catalog.sql', 'x')\n",
+        _ICEBERG_EXTRAS,
+        [],
+    ),
 ]
 
 
 @pytest.mark.parametrize(
-    ("source", "expected"), [case[1:] for case in _REQUIRE_SITE_CASES], ids=[case[0] for case in _REQUIRE_SITE_CASES]
+    ("source", "extras", "expected"),
+    [case[1:] for case in _REQUIRE_SITE_CASES],
+    ids=[case[0] for case in _REQUIRE_SITE_CASES],
 )
 def test_undeclared_require_messages_reports_only_roots_missing_from_extras(
-    tmp_path: Path, source: str, expected: list[tuple[int, str]]
+    tmp_path: Path, source: str, extras: frozenset[str], expected: list[tuple[int, str, str]]
 ) -> None:
     module = tmp_path / "mod.py"
     module.write_text(source)
 
-    messages = undeclared_require_messages(require_sites(tmp_path), _SYNTHETIC_EXTRAS)
+    messages = undeclared_require_messages(require_sites(tmp_path), extras)
 
     assert len(messages) == len(expected)
-    for message, (lineno, literal) in zip(messages, expected):
-        root = literal.partition(".")[0]
+    for message, (lineno, _literal, root) in zip(messages, expected):
         assert message.startswith(f"{module}:{lineno}: ")
         assert f"mloda[{root}]" in message
         assert f"no '{root}' extra" in message

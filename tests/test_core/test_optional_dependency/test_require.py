@@ -83,6 +83,28 @@ def test_require_absent_module_raises_import_error_naming_the_extra() -> None:
     assert str(exc_info.value) == _expected_message(_ABSENT, "some reason")
 
 
+@pytest.mark.parametrize(
+    ("module", "extra"),
+    [("pyiceberg.catalog.sql", "iceberg"), ("pyspark.sql", "spark"), ("pyarrow.flight", "pyarrow")],
+)
+def test_extra_for_maps_the_import_root_to_its_extra(module: str, extra: str) -> None:
+    from mloda.core import optional_dependency
+
+    assert optional_dependency.extra_for(module) == extra
+
+
+def test_require_hint_uses_the_mapped_extra(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mloda.core import optional_dependency
+
+    monkeypatch.setitem(optional_dependency.IMPORT_ROOT_EXTRA, "mloda_absent_backend_xyz", "someextra")
+
+    with pytest.raises(ImportError) as exc_info:
+        require("mloda_absent_backend_xyz.sub", "testing")
+
+    assert "mloda[someextra]" in str(exc_info.value)
+    assert str(exc_info.value).startswith("mloda_absent_backend_xyz is required for testing.")
+
+
 def test_require_absent_dotted_module_names_the_root_distribution() -> None:
     """The install hint is the root package, so pyarrow.flight resolves to mloda[pyarrow]."""
     with pytest.raises(ImportError) as exc_info:

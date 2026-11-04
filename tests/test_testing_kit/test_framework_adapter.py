@@ -11,7 +11,7 @@ import pytest
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.data_types import DataType
 
-_NAMES = ["PythonDict", "PyArrow", "Pandas", "Polars", "PolarsLazy", "DuckDB", "Sqlite"]
+_NAMES = ["PythonDict", "PyArrow", "Pandas", "Polars", "PolarsLazy", "DuckDB", "Sqlite", "Iceberg"]
 _TYPED = {
     "PythonDict": False,
     "PyArrow": True,
@@ -20,8 +20,9 @@ _TYPED = {
     "PolarsLazy": True,
     "DuckDB": True,
     "Sqlite": True,
+    "Iceberg": True,
 }
-_CONNECTION = ["DuckDB", "Sqlite"]
+_CONNECTION = ["DuckDB", "Sqlite", "Iceberg"]
 
 
 def _make(name: str) -> Any:
@@ -166,6 +167,7 @@ _INT32_CHECKS: dict[str, Callable[[Any], bool]] = {
     "Polars": lambda t: str(t) == "Int32",
     "PolarsLazy": lambda t: str(t) == "Int32",
     "DuckDB": lambda t: str(t) == "int32",
+    "Iceberg": lambda t: str(t) == "int32",
 }
 
 
@@ -239,3 +241,59 @@ def test_connection_lifecycle(name: str) -> None:
     with adapter:
         assert adapter.connection is not None
     assert adapter.connection is None
+
+
+def _iceberg() -> Any:
+    adapter = _make("Iceberg")
+    if not adapter.is_available():
+        pytest.skip("Iceberg backend unavailable")
+    return adapter
+
+
+def test_iceberg_from_typed_returns_real_table_and_reads_plain_arrow() -> None:
+    import pyarrow as pa
+
+    adapter = _iceberg()
+    from pyiceberg.table import Table
+
+    with adapter:
+        result = adapter.from_typed(_data())
+        plain = pa.table({"x": [1, 2], "y": ["a", "b"]})
+
+        assert isinstance(result, Table)
+        assert adapter.namespace == "mloda_test"
+        assert result.name()[:-1] == (adapter.namespace,)
+        assert adapter.column_names(plain) == ["x", "y"]
+        assert adapter.column_values(plain, "y") == ["a", "b"]
+
+
+def test_iceberg_close_removes_warehouse_directory() -> None:
+    """The warehouse temp dir exists while open and is removed and reset to None on close."""
+    from pathlib import Path
+
+    adapter = _iceberg()
+    with adapter:
+        warehouse = Path(adapter.warehouse)
+        assert warehouse.is_dir()
+
+    assert not warehouse.exists()
+    assert adapter.warehouse is None
+
+
+def test_iceberg_null_typed_column_raises_value_error() -> None:
+    pa = pytest.importorskip("pyarrow")
+    adapter = _iceberg()
+    with adapter:
+        with pytest.raises(ValueError):
+            adapter.from_arrow(pa.table({"n": pa.array([None, None], type=pa.null())}))
+
+
+def test_iceberg_fixed_offset_timestamp_raises_unsupported() -> None:
+    pa = pytest.importorskip("pyarrow")
+    adapter = _iceberg()
+    from pyiceberg.io.pyarrow import UnsupportedPyArrowTypeException
+
+    table = pa.table({"t": pa.array([], type=pa.timestamp("us", tz="+02:00"))})
+    with adapter:
+        with pytest.raises(UnsupportedPyArrowTypeException):
+            adapter.from_arrow(table)

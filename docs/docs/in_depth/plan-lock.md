@@ -26,7 +26,48 @@ write_plan_lock(mloda.explain(features, parallelization_modes={ParallelizationMo
 
 ## What the file holds
 
-Sorted JSON with a `format` number, the requested feature names, and one record per compute, join and transform step, as class paths (`module:QualName`). Compute records include the framework choice reason (for example `pinned`) and the `result_framework` (the `output_framework` option if set, else the framework of the returned frame type). Compute records also hold the serving `implementation` (`module:qualname`, `neutral` for a source group loaded without one, or null), its `implementation_hash` (the hash of the first-party code the implementation reaches, its group included, never dependency versions; null without an implementation) and `implementation_specialized_from` (the winner's concrete `Implementation` ancestors that serve the step's pair), a `feature_group_hash` (only when an inherited implementation serves a subclass group or a source group loads neutrally, so an older lock with such a record fails once until rewritten; a group without readable source is written as `unavailable`, not refused, and its edits are not tracked), a `credential_handles` list (declared handle names, only for steps that declare any; older locks of such plans fail once until rewritten), and each output feature's input names (`input_feature_edges`), join records the link's `join_keys` (`left=right` column pairs, null for append/union). Compute and transform records also hold `leaves_connection`: the handle of the connection a root read, a requested result converted into another framework (including `output_framework`) or a transform leaves, `<unnamed>` for an auto-named connection, else null. A step bound implicitly to the same handle as its parent counts as on that connection. Duplicate steps keep one record each. A `format` bump makes a lock file written by an older mloda fail `check_plan_lock` until rewritten with `write_plan_lock`.
+Sorted JSON with a `format` number, the requested feature names (`requested_features`), and one record per compute, join and transform step, as class paths (`module:QualName`). Duplicate steps keep one record each. A `format` bump makes a lock file written by an older mloda fail `check_plan_lock` until rewritten with `write_plan_lock`. The last column says whether the key enters `plan_content_hash` (see Structure hash below).
+
+Compute records:
+
+| Key | Meaning | When present | In the content hash |
+| --- | --- | --- | --- |
+| `feature_names` | The step's output feature names, sorted | Always | Yes |
+| `feature_group` | The winning feature group class | Always | Yes |
+| `compute_framework` | The winning compute framework class | Always | Yes |
+| `compute_framework_reason` | The framework choice reason (for example `pinned`) | Always (null when no reason was recorded) | No |
+| `specialized_from` | The parent classes the winning feature group replaced for at least one feature in the step, sorted | Always (empty when it replaced none) | Yes |
+| `result_framework` | The `output_framework` option if set, else the framework of the returned frame type | Always (null when neither applies) | Yes |
+| `input_feature_edges` | Each output feature's input names | Always | Yes |
+| `implementation` | The serving implementation: `module:qualname`, `neutral` for a source group loaded without one, or null | Always | Yes |
+| `implementation_hash` | The hash of the first-party code the implementation reaches, its group included, never dependency versions | Always (null without an implementation) | Yes |
+| `implementation_specialized_from` | The winner's concrete `Implementation` ancestors that serve the step's pair | Always | Yes |
+| `feature_group_hash` | The feature group's code hash; a group without readable source is written as `unavailable`, not refused, and its edits are not tracked | Only when an inherited implementation serves a subclass group or a source group loads neutrally; an older lock with such a record fails once until rewritten | Yes |
+| `credential_handles` | The declared credential handle names | Only for steps that declare any; an older lock of such a plan fails once until rewritten | No (the names still enter through the step's options, see Declared credential handles) |
+| `leaves_connection` | The handle of the connection the step leaves (see below) | Always (null when the step leaves no connection) | No |
+
+Join records:
+
+| Key | Meaning | When present | In the content hash |
+| --- | --- | --- | --- |
+| `left_feature_group` | The link's declared left feature group class | Always | Yes |
+| `right_feature_group` | The link's declared right feature group class | Always | Yes |
+| `join_type` | The link's join type | Always | Yes |
+| `compute_framework` | The framework the merge runs on | Always | Yes |
+| `source_compute_framework` | The framework merged in | Always | Yes |
+| `destination_side` | The declared side holding the destination | Always (null without a resolved join plan) | Yes |
+| `join_keys` | The link's `left=right` column pairs | Always (null for append/union) | Yes |
+
+Transform records:
+
+| Key | Meaning | When present | In the content hash |
+| --- | --- | --- | --- |
+| `feature_group` | The feature group class the transform belongs to | Always | Yes |
+| `from_compute_framework` | The framework the data comes from | Always | Yes |
+| `to_compute_framework` | The framework the data is converted into | Always | Yes |
+| `leaves_connection` | The handle of the connection the transform leaves | Always (null when it leaves no connection) | No |
+
+`leaves_connection` is the handle of the connection a root read, a requested result converted into another framework (including `output_framework`) or a transform leaves, `<unnamed>` for an auto-named connection, else null. A step bound implicitly to the same handle as its parent counts as on that connection.
 
 `plan_structure_hash` includes the format number, so a bump changes it for every plan; `plan_content_hash` leaves the format out and changes only when the records do.
 

@@ -1608,3 +1608,95 @@ def test_the_hook_context_feature_group_is_the_same_with_and_without_a_calculate
     assert with_calculate == with_both
     assert len(with_calculate) == 1
     assert "ChsWindowFG" in str(next(iter(with_calculate)))
+
+
+# --------------------------------------------------------------------------- #
+# Run-scoped log masking: a plugin's own log lines never carry a registered literal.
+# --------------------------------------------------------------------------- #
+
+
+class _LineCapture(logging.Handler):
+    """Collects the formatted message of every record, so a spawned worker's view is returnable as a value."""
+
+    def __init__(self) -> None:
+        super().__init__(logging.DEBUG)
+        self.lines: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.lines.append(record.getMessage())
+
+
+def _capture_plugin_lines(emit: Any) -> str:
+    plugin_logger = logging.getLogger(f"mloda_test.plugin_log.{threading.get_ident()}")
+    plugin_logger.setLevel(logging.DEBUG)
+    plugin_logger.propagate = False
+    handler = _LineCapture()
+    plugin_logger.addHandler(handler)
+    try:
+        emit(plugin_logger)
+    finally:
+        plugin_logger.removeHandler(handler)
+    return "|".join(handler.lines)
+
+
+class ChsLoggingFG(ChsSource):
+    """Logs the granted secrets through %s args and a pre-formatted message."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_log_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        value = read_credential(features.get_options_key(HANDLE_KEY))
+
+        def emit(plugin_logger: logging.Logger) -> None:
+            plugin_logger.info("connect %s", value["hmac"])
+            plugin_logger.info(f"key is {value['key']}")
+            plugin_logger.info("host %s", value["host"])
+
+        row = _capture_plugin_lines(emit)
+        return pd.DataFrame({name: [row] for name in features.get_all_names()})
+
+
+class ChsThreadLoggingFG(ChsSource):
+    """Logs the granted secret from a plain threading.Thread, which runs outside the run scope."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_log_thread_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        secret = str(read_credential(features.get_options_key(HANDLE_KEY))["hmac"])
+
+        def emit(plugin_logger: logging.Logger) -> None:
+            worker = threading.Thread(target=lambda: plugin_logger.info("from thread %s", secret))
+            worker.start()
+            worker.join(5)
+
+        row = _capture_plugin_lines(emit)
+        return pd.DataFrame({name: [row] for name in features.get_all_names()})
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_plugin_log_lines_are_masked_in_every_mode_but_the_host_stays(
+    mode: ParallelizationMode, flight_server: Any
+) -> None:
+    result = _grant_run(ChsLoggingFG, "chs_log_a", mode, flight_server)
+
+    assert list(result[0]["chs_log_a"]) == [f"connect ***|key is ***|host {_E2E_HOST}"]
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_a_plugin_thread_outside_the_run_scope_logs_unmasked(mode: ParallelizationMode, flight_server: Any) -> None:
+    """Documented limit: a thread the plugin starts has no scope."""
+    result = _grant_run(ChsThreadLoggingFG, "chs_log_thread_a", mode, flight_server)
+
+    assert list(result[0]["chs_log_thread_a"]) == [f"from thread {_E2E_HMAC}"]

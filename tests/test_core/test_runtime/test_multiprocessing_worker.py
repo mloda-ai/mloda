@@ -1160,3 +1160,30 @@ class TestWorkerCredentialGrant:
         message = cfw_register.set_error.call_args.args[0]
         assert "public_registered=False" in message
         assert "token_registered=True" in message
+
+
+class TestWorkerHonoursTheDisableLogMaskingCommand:
+    """The disable command switches masking off in the worker quietly and the loop carries on."""
+
+    def test_the_command_disables_masking_and_the_next_step_still_runs(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, request: pytest.FixtureRequest
+    ) -> None:
+        from mloda.core.abstract_plugins.components import log_masking
+
+        monkeypatch.setattr(log_masking, "_disabled", False)
+        saved_factory = logging.getLogRecordFactory()
+        request.addfinalizer(lambda: logging.setLogRecordFactory(saved_factory))
+        monkeypatch.setattr(logging.Logger, "makeRecord", logging.Logger.makeRecord)
+        _SEEN_BY_STEPS.clear()
+        command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
+        command_queue.put(log_masking.DISABLE_LOG_MASKING_COMMAND)
+        command_queue.put((_SecretsRecordingCommand(), None, frozenset(), frozenset()))
+        command_queue.put("STOP")
+
+        with caplog.at_level(logging.WARNING):
+            worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        assert log_masking.log_masking_disabled() is True
+        assert len(_SEEN_BY_STEPS) == 1
+        assert not [r for r in caplog.records if "scrub_credentials" in r.getMessage()]
+        cfw_register.set_error.assert_not_called()

@@ -16,6 +16,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
     redact_exception,
 )
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.log_masking import DISABLE_LOG_MASKING_COMMAND, log_masking_disabled
 from mloda.core.abstract_plugins.components.credential_leaves import (
     credential_identity_literals,
     credential_secret_literals,
@@ -470,6 +471,8 @@ class ComputeFrameworkExecutor:
             process, command_queue, result_queue = existing
 
         secrets, identity = self._step_secrets(step)
+        if log_masking_disabled():
+            self.worker_manager.send_command(cfw_uuid, DISABLE_LOG_MASKING_COMMAND)
         self.worker_manager.send_command(cfw_uuid, (step, self._credential_grant(step), secrets, identity))
         # Track by step.get_result_uuid() (== step.uuid), the id a worker reports back via
         # result_queue. get_uuids() returns feature uuids instead, a different namespace that

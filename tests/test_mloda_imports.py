@@ -303,6 +303,10 @@ def test_import_steward_governance() -> None:
     # Credential scrubbing
     assert callable(scrub_credentials)
     assert "scrub_credentials" in steward_module.__all__
+    from mloda.steward import disable_log_masking
+
+    assert callable(disable_log_masking)
+    assert "disable_log_masking" in steward_module.__all__
     # Plan/run lifecycle
     for lifecycle_name, lifecycle_type in (
         ("LifecycleOutcome", LifecycleOutcome),

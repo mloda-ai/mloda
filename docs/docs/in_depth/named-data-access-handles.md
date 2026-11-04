@@ -281,6 +281,8 @@ A bare `str` secret under an ordinary key cannot be detected, so do not do it.
 
 A source group binds a credential at match time. Any other group reads a declared handle at run time with
 `read_credential(handle)` from `mloda.provider`. The value never enters options, hashing, the plan or `explain()`.
+The MCP server and the `mloda` command register credentials from a config table: see
+[Configure](mcp-server.md#configure).
 
 ```py
 import pandas as pd

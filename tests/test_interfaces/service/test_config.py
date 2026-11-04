@@ -1,6 +1,8 @@
 """Settings loading for the MCP service layer: TOML file, env vars, overrides, strictness, config hash."""
 
-from dataclasses import replace
+import hashlib
+import json
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
@@ -402,3 +404,97 @@ class TestInlineLimits:
     def test_config_hash_changes(self, key: str) -> None:
         changes: dict[str, Any] = {key: 5}
         assert Settings().config_hash() != replace(Settings(), **changes).config_hash()
+
+
+CRED_TOML = """
+[mcp.credentials.db]
+token = "DB_TOKEN_VAR"
+path = { file = "secrets/pii" }
+"""
+
+
+def test_credentials_default_to_empty() -> None:
+    assert dict(Settings().credentials) == {}
+
+
+def test_credentials_table_loads_env_and_file_refs(tmp_path: Path) -> None:
+    settings = load_settings(_write(tmp_path, CRED_TOML), env={})
+
+    assert set(settings.credentials) == {"db"}
+    assert set(settings.credentials["db"]) == {"token", "path"}
+    assert settings.credentials["db"]["token"] == "DB_TOKEN_VAR"
+    assert (tmp_path / "secrets" / "pii").as_posix() in repr(settings.credentials["db"]["path"])
+
+
+def test_relative_credential_file_resolves_against_config_dir_not_cwd(tmp_path: Path) -> None:
+    config_dir = tmp_path / "nested" / "cfg"
+    config_dir.mkdir(parents=True)
+    path = config_dir / "mloda-mcp.toml"
+    path.write_text('[mcp.credentials.db]\ntoken = { file = "../secrets/pii" }\n', encoding="utf-8")
+
+    ref = load_settings(path, env={}).credentials["db"]["token"]
+
+    assert (tmp_path / "nested" / "secrets" / "pii").as_posix() in repr(ref)
+    assert ".." not in repr(ref)
+
+
+def test_load_does_not_check_the_environment(tmp_path: Path) -> None:
+    settings = load_settings(_write(tmp_path, '[mcp.credentials.db]\ntoken = "UNSET_VAR_XYZ"\n'), env={})
+
+    assert settings.credentials["db"]["token"] == "UNSET_VAR_XYZ"
+
+
+@pytest.mark.parametrize(
+    ("body", "names"),
+    [
+        ("[mcp.credentials]\ndb = 5\n", ["db"]),
+        ("[mcp.credentials.db]\n", ["db"]),
+        ("[mcp.credentials.db]\ntoken = 5\n", ["db", "token"]),
+        ('[mcp.credentials.db]\ntoken = ""\n', ["db", "token"]),
+        ('[mcp.credentials.db]\ntoken = { file = "" }\n', ["db", "token"]),
+        ("[mcp.credentials.db]\ntoken = { file = 3 }\n", ["db", "token"]),
+        ('[mcp.credentials.db]\ntoken = { path = "x" }\n', ["db", "token"]),
+        ('[mcp.credentials.db]\ntoken = { file = "x", extra = "y" }\n', ["db", "token"]),
+        ("[mcp.credentials.db]\ntoken = {}\n", ["db", "token"]),
+        ('[mcp.credentials._auto_credentials_1]\ntoken = "VAR"\n', ["_auto_credentials_1"]),
+        ('[mcp.credentials.""]\ntoken = "VAR"\n', []),
+        ('[mcp.credentials.db]\ntoken = "VAR"\n[mcp.sources.db]\nfiles = ["a.csv"]\n', ["db"]),
+    ],
+)
+def test_bad_credentials_table_is_config_error_naming_handle_and_field(
+    tmp_path: Path, body: str, names: list[str]
+) -> None:
+    with pytest.raises(ConfigError) as raised:
+        load_settings(_write(tmp_path, body), env={})
+
+    for name in names:
+        assert name in str(raised.value)
+
+
+def test_credential_handle_equal_to_a_source_alias_is_config_error() -> None:
+    with pytest.raises(ConfigError, match="db"):
+        Settings(sources={"db": SourceConfig(alias="db")}, credentials={"db": {"token": "VAR"}})
+
+
+def test_repr_holds_names_only(tmp_path: Path) -> None:
+    settings = load_settings(_write(tmp_path, CRED_TOML), env={"DB_TOKEN_VAR": "supersecret-value"})
+
+    assert "DB_TOKEN_VAR" in repr(settings)
+    assert "supersecret-value" not in repr(settings)
+
+
+def test_config_hash_changes_with_credentials() -> None:
+    base = Settings().config_hash()
+    one = Settings(credentials={"db": {"token": "A_VAR"}}).config_hash()
+    assert base != one
+    assert one != Settings(credentials={"db": {"token": "B_VAR"}}).config_hash()
+    assert one != Settings(credentials={"other": {"token": "A_VAR"}}).config_hash()
+
+
+def test_config_hash_without_credentials_is_the_pre_credentials_hash() -> None:
+    settings = Settings(mode="execute", options={"k": 1})
+    legacy = asdict(settings)
+    del legacy["credentials"]
+    canonical = json.dumps(legacy, sort_keys=True, default=dict)
+
+    assert settings.config_hash() == hashlib.sha256(canonical.encode("utf-8")).hexdigest()

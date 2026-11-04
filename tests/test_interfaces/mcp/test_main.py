@@ -216,6 +216,20 @@ class TestMcpMainErrors:
         assert outcome.err.strip()
         assert served == []
 
+    def test_unresolvable_credential_is_a_named_stderr_error_with_exit_2(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, served: list[_Served]
+    ) -> None:
+        config = _config(tmp_path, '[mcp.credentials.db]\ntoken = "UNSET_TOK_VAR"\n', "cred.toml")
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _mcp(["--config", str(config)])
+
+        assert outcome.code == 2
+        assert outcome.out == ""
+        assert outcome.err.startswith("mloda: error:")
+        assert "[mcp.credentials.db] field 'token'" in outcome.err
+        assert served == []
+
     def test_config_and_no_config_are_exclusive(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, served: list[_Served]
     ) -> None:
@@ -381,6 +395,20 @@ class TestCliMcpServe:
         assert outcome.code == 2
         assert outcome.out == ""
         assert outcome.err.strip()
+        assert served == []
+
+    def test_unresolvable_credential_is_a_named_stderr_error_with_exit_2(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, served: list[_Served]
+    ) -> None:
+        config = _config(tmp_path, '[mcp.credentials.db]\ntoken = "UNSET_TOK_VAR"\n', "cred.toml")
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli(["mcp", "serve", "--config", str(config)])
+
+        assert outcome.code == 2
+        assert outcome.out == ""
+        assert outcome.err.startswith("mloda: error:")
+        assert "[mcp.credentials.db] field 'token'" in outcome.err
         assert served == []
 
     def test_missing_mcp_extra_prints_the_install_hint(

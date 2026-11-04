@@ -22,18 +22,24 @@ from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTIO
 from mloda.interfaces.cli.main import build_services  # noqa: E402
 from mloda.interfaces.mcp.server import SCHEMA_URI, build_server  # noqa: E402
 from mloda.interfaces.service.catalog import Catalog  # noqa: E402
-from mloda.interfaces.service.config import Settings, load_settings  # noqa: E402
+from mloda.core.abstract_plugins.components.credential import Credential  # noqa: E402
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection  # noqa: E402
+from mloda.interfaces.service.config import ConfigError, Settings, load_settings  # noqa: E402
 from mloda.interfaces.service.planner import Planner  # noqa: E402
 from mloda.interfaces.service.request import MAX_FEATURES, SCHEMA_ID, request_schema  # noqa: E402
 from mloda.interfaces.service.runner import Runner  # noqa: E402
 from mloda.user import PluginCollector  # noqa: E402
 from tests.test_interfaces.source_groups import (  # noqa: E402
+    CRED_FEATURE,
     FAILED,
     FILE_SOURCE_GROUPS,
     MISSING,
     MISSING_INPUT,
+    CredentialReadMcp8,
     RunnerFailedRowsMcp5,
     RunnerMissingInputMcp5,
+    cred_digest,
+    credential_config,
 )
 
 pytestmark = pytest.mark.anyio
@@ -752,6 +758,75 @@ class TestCreateApp:
 
     def test_non_loopback_bind_does_not_restrict_the_host(self, tmp_path: Path) -> None:
         assert _initialize(tmp_path, {"Host": "evil.example:8000"}, host="0.0.0.0") == 200  # nosec B104
+
+
+CRED_TOKEN = "tok-Zk9-server-secret-77"  # nosec B105
+CODE_TOKEN = "tok-Qw3-code-built-55"  # nosec B105
+
+
+def _credential_settings(tmp_path: Path, handle: str) -> Settings:
+    settings = _settings(tmp_path, "execute")
+    config = tmp_path / "cred.toml"
+    config.write_text(
+        credential_config(CONFIG, 'segment = "public"', handle=handle),
+        encoding="utf-8",
+    )
+    return load_settings(config, ENV, {"mode": settings.mode})
+
+
+def _credential_services(
+    settings: Settings, base: DataAccessCollection | None = None
+) -> tuple[Catalog, Planner, Runner]:
+    services: tuple[Catalog, Planner, Runner] = build_services(
+        settings,
+        env={**ENV, "TOK_VAR": CRED_TOKEN},
+        plugin_collector=PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, CredentialReadMcp8}),
+        clock=_clock,
+        data_access_collection=base,
+    )
+    return services
+
+
+class TestCredentials:
+    @pytest.mark.parametrize(("handle", "token"), [("db", CRED_TOKEN), ("code", CODE_TOKEN)])
+    async def test_run_reads_the_table_or_code_built_credential(self, tmp_path: Path, handle: str, token: str) -> None:
+        base = DataAccessCollection()
+        base.add_credentials("code", Credential(token=CODE_TOKEN))
+        settings = _credential_settings(tmp_path, handle)
+
+        async with Client(build_server(*_credential_services(settings, base))) as client:
+            explained = await client.call_tool(EXPLAIN, {"request": {"features": [CRED_FEATURE]}})
+            ran = await client.call_tool(RUN, {"plan_id": _assert_envelope(explained)["plan_id"]})
+
+        result = _assert_envelope(ran)
+        assert ran.is_error is False
+        assert result["tables"][0]["preview"]["rows"] == [{CRED_FEATURE: cred_digest(token)}] * 5
+        for text in _texts(explained) + _texts(ran):
+            assert CRED_TOKEN not in text
+            assert CODE_TOKEN not in text
+
+    def test_a_base_handle_equal_to_a_table_handle_is_refused(self, tmp_path: Path) -> None:
+        base = DataAccessCollection()
+        base.add_credentials("db", Credential(token=CODE_TOKEN))
+
+        with pytest.raises(ConfigError, match="db"):
+            _credential_services(_credential_settings(tmp_path, "db"), base)
+
+    def test_create_app_forwards_the_base_collection(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from mloda.interfaces.mcp.server import create_app
+
+        seen: list[dict[str, Any]] = []
+
+        def spy(settings: Settings, **kwargs: Any) -> Any:
+            seen.append(kwargs)
+            return _services(settings)
+
+        monkeypatch.setattr("mloda.interfaces.cli.main.build_services", spy)
+        base = DataAccessCollection()
+
+        create_app(_settings(tmp_path), env=ENV, data_access_collection=base)
+
+        assert [kwargs["data_access_collection"] for kwargs in seen] == [base]
 
 
 class TestServeTrustedCaller:

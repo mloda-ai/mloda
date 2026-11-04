@@ -19,6 +19,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.interfaces.service.catalog import MAX_DESCRIPTION_LENGTH, Catalog, plugin_collector_for, sanitize_text
@@ -37,7 +38,7 @@ from mloda.interfaces.service.request import (
     in_feature_sources,
     validate_request,
 )
-from mloda.interfaces.service.sources import READER_ERRORS, data_access_collection, source_columns
+from mloda.interfaces.service.sources import READER_ERRORS, credential_values, data_access_collection, source_columns
 from mloda.provider import ApiDataFG, ReadFileFG, SourceMatch
 from mloda.steward import verified_context
 from mloda.user import (
@@ -191,6 +192,8 @@ class Planner:
         principal: str | None = None,
         plugin_collector: PluginCollector | None = None,
         clock: Callable[[], float] = time.time,
+        env: Mapping[str, str] | None = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> None:
         self._settings = settings
         self._catalog = catalog
@@ -199,6 +202,8 @@ class Planner:
         self._principal = principal
         self._base = plugin_collector
         self._clock = clock
+        self._env: Mapping[str, str] = {} if env is None else env
+        self._dac = data_access_collection
 
     @property
     def settings(self) -> Settings:
@@ -350,9 +355,10 @@ class Planner:
         return {alias: self._settings.sources[alias] for alias in restrict}
 
     def _plan_kwargs(self, parsed: ParsedRequest, sources: Mapping[str, SourceConfig]) -> dict[str, Any]:
+        credentials = credential_values(self._settings.credentials, self._env)
         return {
             "compute_frameworks": list(self._settings.compute_frameworks),
-            "data_access_collection": data_access_collection(sources),
+            "data_access_collection": data_access_collection(sources, credentials, self._dac),
             "global_filter": parsed.global_filter,
             "api_data": dict(parsed.inline_data) or None,
             "plugin_collector": plugin_collector_for(self._settings, self._base),

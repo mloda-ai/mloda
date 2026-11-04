@@ -4,6 +4,8 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.data_access_collection import CONNECTION_HANDLE_OPTION
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import QUERY_OPTION
@@ -72,6 +74,22 @@ def test_option_keys_contain_reserved_reader_key() -> None:
     """mloda stores the chosen reader and its data access under this key, so a request must not set it."""
     assert RESERVED_READER_OPTION_KEY == "mloda_source_reader"
     assert RESERVED_READER_OPTION_KEY in data_access_option_keys()
+
+
+@pytest.mark.parametrize("key", [HANDLE_OPTION, CONNECTION_HANDLE_OPTION])
+def test_option_keys_contain_connection_choosing_handles(key: str) -> None:
+    assert key in data_access_option_keys()
+
+
+@pytest.mark.parametrize("key", [HANDLE_OPTION, CONNECTION_HANDLE_OPTION])
+@pytest.mark.parametrize("container", ["options", "group_options", "context_options"])
+def test_connection_handle_key_is_reported(key: str, container: str) -> None:
+    request: dict[str, Any] = {"features": [{"name": "x", container: {key: "db"}}]}
+
+    problems = data_access_violations(request)
+
+    assert [p.path for p in problems] == [f"/features/0/{container}/{key}"]
+    assert problems[0].problem == "data_access_option"
 
 
 def test_reserved_reader_key_is_reported() -> None:

@@ -451,6 +451,18 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
         ["eyJhbGciOiJIUzI1NiJ9"],
         ["https://host/api/"],
     ),
+    (
+        "password_in_scheme_position",
+        "alice:hunter2://host/db",  # nosec B105
+        ["hunter2"],  # nosec B105
+        ["alice:***://host/db"],
+    ),
+    (
+        "slash_in_userinfo",
+        "https://tok/en@host/x",
+        ["tok/en@"],
+        ["https://tok/***@host/x"],
+    ),
 ]
 
 
@@ -1383,16 +1395,6 @@ class TestScrubUriFailClosed:
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:
         assert secret not in scrub_credentials(value)
-
-    @pytest.mark.parametrize(
-        ("value", "expected"),
-        [
-            pytest.param("alice:hunter2://host/db", "alice:***://host/db", id="scheme-position"),  # nosec B105
-            pytest.param("https://tok/en@host/x", "https://tok/***@host/x", id="slash-in-userinfo"),
-        ],
-    )
-    def test_exact_output(self, value: str, expected: str) -> None:
-        assert scrub_credentials(value) == expected
 
 
 def test_safe_value_text_scrubs_a_credential_str_and_keeps_the_type() -> None:

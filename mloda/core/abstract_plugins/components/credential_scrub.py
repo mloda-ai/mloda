@@ -95,7 +95,10 @@ _SLASH_DSN_PATTERN = re.compile(
     r"(?=//|\(|[\w.-]+:\d+(?!\w)|[\w.-]+/\w)"
 )
 
-_PLAIN_URI_SCHEMES = "http|https|s3|s3a|s3n|gs|gcs|abfs|abfss|wasb|wasbs|az|adl|file|ftp|sftp|hdfs|postgres|postgresql|mysql|mongodb|redis"
+_PLAIN_URI_SCHEMES = (
+    "http|https|s3|s3a|s3n|gs|gcs|abfs|abfss|wasb|wasbs|az|adl|file|ftp|sftp|hdfs|"
+    "postgres|postgresql|mysql|mongodb|redis"
+)
 # `user:password://host`: the password sits in the scheme position. The lookbehind keeps the scan linear.
 _PASSWORD_AS_SCHEME_PATTERN = re.compile(
     r"(?<![^\s\"'(\[{<=,;])(?!(?i:jdbc):)(?P<user>[^\s:/@\"'=,;]+):"
@@ -292,8 +295,8 @@ def current_identity_secrets() -> frozenset[str]:
 def scrub_credentials(text: str) -> str:
     """Mask URI user info, bearer/Authorization tokens, key=value and quoted-key secrets, user/password@host DSNs.
 
-    Patterns run on the original text so a literal never deletes their anchors; a literal a pattern cut
-    into is masked whole before the pattern pass, so its tail cannot leak.
+    Registered literals are masked after the patterns, so they never delete a pattern's anchors; a literal
+    a pattern cut into is masked whole first, so its tail cannot leak.
     """
     registered = _REGISTERED_SECRETS.get()
     if not registered:

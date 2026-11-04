@@ -69,8 +69,7 @@ except ImportError:
 def _table_from_schema(adapter: Any, schema: Any) -> Any:
     """Create a real, empty Iceberg table (no append) from a hand-built pyiceberg Schema."""
     catalog = adapter.connection
-    namespace = ".".join(catalog.list_namespaces()[0])
-    return catalog.create_table(f"{namespace}.t_{uuid.uuid4().hex}", schema=schema)
+    return catalog.create_table(f"{adapter.namespace}.t_{uuid.uuid4().hex}", schema=schema)
 
 
 _ICEBERG_TYPE_MAP: dict[DataType, Any] = (
@@ -85,6 +84,14 @@ _ICEBERG_TYPE_MAP: dict[DataType, Any] = (
     if pyiceberg is not None
     else {}
 )
+
+
+def test_real_iceberg_table_without_fixture_raises() -> None:
+    from tests.test_plugins.compute_framework.base_implementations.iceberg import iceberg_test_table
+
+    with patch.object(iceberg_test_table, "adapter_handle", []):
+        with pytest.raises(RuntimeError, match="needs the iceberg_table_source fixture"):
+            iceberg_test_table.real_iceberg_table(None)
 
 
 class TestIcebergFrameworkAvailability:

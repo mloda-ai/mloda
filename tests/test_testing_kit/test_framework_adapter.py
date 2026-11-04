@@ -260,12 +260,14 @@ def test_iceberg_from_typed_returns_real_table_and_reads_plain_arrow() -> None:
         plain = pa.table({"x": [1, 2], "y": ["a", "b"]})
 
         assert isinstance(result, Table)
+        assert adapter.namespace == "mloda_test"
+        assert result.name()[:-1] == (adapter.namespace,)
         assert adapter.column_names(plain) == ["x", "y"]
         assert adapter.column_values(plain, "y") == ["a", "b"]
 
 
 def test_iceberg_close_removes_warehouse_directory() -> None:
-    """Green must expose `warehouse`: the temp directory path while open, None once closed."""
+    """The warehouse temp dir exists while open and is removed and reset to None on close."""
     from pathlib import Path
 
     adapter = _iceberg()

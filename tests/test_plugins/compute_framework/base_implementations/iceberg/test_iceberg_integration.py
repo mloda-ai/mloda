@@ -1,7 +1,7 @@
 from mloda.user import Features
 import pytest
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import patch
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -208,8 +208,8 @@ IJK_PAYLOAD = "ijk_payload"
 IJK_STATUS = "ijk_status"
 IJK_RIGHT_PAYLOAD = "ijk_right_payload"
 
-# Captured Mock Iceberg table so the test can inspect its scan() call after mloda.run_all finishes.
-ijk_captured_tables: list[Mock] = []
+# Captured scan() spies so the test can inspect the scan call after mloda.run_all finishes.
+ijk_captured_tables: list[Any] = []
 
 
 class IcebergJoinKeyLeftFG(DataCreatorFeatureGroup):
@@ -239,22 +239,10 @@ class IcebergJoinKeyLeftFG(DataCreatorFeatureGroup):
             }
         )
 
-        def _scan(*args: Any, **kwargs: Any) -> Mock:
-            selected = kwargs.get("selected_fields", arrow_data.column_names)
-            mock_scan = Mock()
-            mock_scan.to_arrow.return_value = arrow_data.select(list(selected))
-            return mock_scan
-
-        mock_table = Mock(spec=IcebergTable)
-        mock_table.scan.side_effect = _scan
-        mock_table.schema.return_value = Schema(
-            NestedField(1, IJK_KEY, LongType(), required=False),
-            NestedField(2, IJK_KEY2, StringType(), required=False),
-            NestedField(3, IJK_PAYLOAD, LongType(), required=False),
-            NestedField(4, IJK_STATUS, StringType(), required=False),
-        )
-        ijk_captured_tables.append(mock_table)
-        return mock_table
+        table = real_iceberg_table(arrow_data)
+        scan_spy = patch.object(table, "scan", wraps=table.scan).start()
+        ijk_captured_tables.append(scan_spy)
+        return table
 
 
 class IcebergJoinKeyRightFG(DataCreatorFeatureGroup):
@@ -516,7 +504,7 @@ class TestIcebergIntegrationWithMlodaAPI:
         )
 
         assert len(ijk_captured_tables) == 1
-        call_args = ijk_captured_tables[0].scan.call_args
+        call_args = ijk_captured_tables[0].call_args
         assert IJK_KEY in call_args.kwargs["selected_fields"]
         assert IJK_KEY2 in call_args.kwargs["selected_fields"]
 

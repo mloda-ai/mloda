@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -381,12 +382,12 @@ class IcebergAdapter(_ArrowReadAdapter):
     """Iceberg over a temp SQLite-backed catalog; Iceberg rejects null-typed columns and non-UTC time zones."""
 
     capabilities = AdapterCapabilities(typed_columns=True)
+    namespace = "mloda_test"
 
     def __init__(self) -> None:
         self._catalog: Any = None
         self._tmp: Any = None
         self._warehouse: str | None = None
-        self._counter = 0
 
     @property
     def connection(self) -> Any:
@@ -419,11 +420,10 @@ class IcebergAdapter(_ArrowReadAdapter):
             uri=f"sqlite:///{tmp.name}/catalog.db",
             warehouse=f"file://{tmp.name}",
         )
-        catalog.create_namespace("mloda_test")
+        catalog.create_namespace(self.namespace)
         self._tmp = tmp
         self._catalog = catalog
         self._warehouse = tmp.name
-        self._counter = 0
 
     def close(self) -> None:
         if self._catalog is not None:
@@ -437,8 +437,7 @@ class IcebergAdapter(_ArrowReadAdapter):
     def from_arrow(self, table: pa.Table) -> Any:
         if self._catalog is None:
             raise RuntimeError("IcebergAdapter needs an open session: use it as a context manager")
-        self._counter += 1
-        iceberg_table = self._catalog.create_table(f"mloda_test.t{self._counter}", schema=table.schema)
+        iceberg_table = self._catalog.create_table(f"{self.namespace}.t{uuid.uuid4().hex}", schema=table.schema)
         iceberg_table.append(table)
         return iceberg_table
 

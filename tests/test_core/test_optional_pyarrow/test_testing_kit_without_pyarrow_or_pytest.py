@@ -44,6 +44,7 @@ for info in pkgutil.walk_packages(mloda._testing.__path__, "mloda._testing."):
         importlib.import_module(info.name)
 importlib.import_module("mloda._testing.compute_framework.host")
 importlib.import_module("mloda._testing.compute_framework.filter_suite")
+importlib.import_module("mloda._testing.compute_framework.mask_suite")
 assert "pyarrow" not in sys.modules, "mloda._testing.compute_framework must not import pyarrow"
 for name in [m for m in sys.modules if m == "pytest" or m.startswith(("pytest.", "_pytest"))]:
     del sys.modules[name]

@@ -1,69 +1,40 @@
 from typing import Any
 
-import pyarrow as pa
 import pytest
 
+from mloda._testing.compute_framework.mask_suite import SqlMaskEngineSuite
+from mloda._testing.declarations import Cause
+from mloda._testing.framework_adapter import FrameworkAdapter, SqliteAdapter
 from mloda.provider import BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
-from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_mask_engine import (
-    SqliteMaskEngine,
-)
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
-from tests.test_plugins.compute_framework.base_implementations.sql_mask_engine_test_mixin import (
-    SqlMaskEngineTestMixin,
-)
 
 
-class TestSqliteSqlMaskEngine(SqlMaskEngineTestMixin):
-    mask_engine_class = SqliteMaskEngine
+class TestSqliteSqlMaskEngine(SqlMaskEngineSuite):
+    adapter_class = SqliteAdapter
+    switched_off = {
+        "test_is_in_decimal": Cause.BACKEND,
+        "test_is_in_decimal_unrepresentable_values_match_nothing": Cause.BACKEND,
+        "test_decimal_comparison_null_row_is_false": Cause.BACKEND,
+    }
 
-    @pytest.fixture
-    def sample_data(self, connection: Any) -> Any:
-        return SqliteRelation.from_dict(
-            connection,
-            {
-                "status": ["active", "inactive", "active", "inactive"],
-                "value": [10, 20, 30, 40],
-            },
-        )
-
-    @pytest.fixture
-    def empty_data(self, connection: Any) -> Any:
-        table = pa.table({"status": pa.array([], type=pa.string()), "value": pa.array([], type=pa.int64())})
-        return SqliteRelation.from_arrow(connection, table)
-
-    @pytest.fixture
-    def null_data(self, connection: Any) -> Any:
-        table = pa.table(
-            {
-                "status": pa.array(["active", None, "inactive", None], type=pa.string()),
-                "value": pa.array([10, 20, 30, 40], type=pa.int64()),
-                "score": pa.array([1, None, 3, None], type=pa.int64()),
-                "ratio": pa.array([1.0, float("nan"), 3.0, None], type=pa.float64()),
-            }
-        )
-        return SqliteRelation.from_arrow(connection, table)
-
-    def evaluate_mask(self, mask: Any, data: SqliteRelation) -> list[bool]:
+    def evaluate_mask(self, adapter: FrameworkAdapter, mask: Any, data: SqliteRelation) -> list[bool]:
         conn = data.connection
         table_name = data.table_name
         sql = f"SELECT CASE WHEN {mask} THEN 1 ELSE 0 END AS match FROM {quote_ident(table_name)}"  # nosec
         rows = conn.execute(sql).fetchall()
         return [bool(row[0]) for row in rows]
 
-    def apply_mask(self, mask: Any, data: SqliteRelation) -> dict[str, list[Any]]:
-        result: dict[str, list[Any]] = data.filter(mask).to_arrow_table().to_pydict()
-        return result
+    def select_rows(self, adapter: FrameworkAdapter, mask: Any, data: SqliteRelation) -> Any:
+        return data.filter(mask)
 
     @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
-    def test_is_in_decimal(self, engine: type[BaseMaskEngine], decimal_sample_data: Any) -> None: ...
+    def test_is_in_decimal(self, engine: type[BaseMaskEngine], decimal_data: Any) -> None: ...
 
     @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
     def test_is_in_decimal_unrepresentable_values_match_nothing(
-        self, engine: type[BaseMaskEngine], decimal_sample_data: Any
+        self, engine: type[BaseMaskEngine], decimal_data: Any
     ) -> None: ...
 
     @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
-    def test_decimal_comparison_null_row_is_false(
-        self, engine: type[BaseMaskEngine], decimal_sample_data: Any
-    ) -> None: ...
+    def test_decimal_comparison_null_row_is_false(self, engine: type[BaseMaskEngine], decimal_data: Any) -> None: ...

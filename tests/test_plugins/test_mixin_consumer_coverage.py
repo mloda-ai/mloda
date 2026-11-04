@@ -19,7 +19,6 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin
-from mloda.provider import BaseMaskEngine
 from mloda._testing.source.read_db_suite import ReadDBFGTestMixin
 from mloda._testing.source.read_document_suite import ReadDocumentFGTestMixin
 from mloda._testing.source.read_file_suite import ReadFileFGTestMixin
@@ -30,7 +29,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
-from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import MaskEngineTestMixin
+from mloda._testing.compute_framework.mask_suite import MaskEngineSuite
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_calculate_test_mixin import (
     AggregatedCalculateTestMixin,
 )
@@ -105,9 +104,9 @@ CONTRACTS: tuple[MixinContract, ...] = (
         ),
     ),
     MixinContract(
-        BaseMaskEngine,
-        MaskEngineTestMixin,
-        "mask_engine_class",
+        ComputeFramework,
+        MaskEngineSuite,
+        "adapter_class",
         (
             f"{_FRAMEWORKS}.duckdb.test_duckdb_mask_engine",
             f"{_FRAMEWORKS}.pandas.test_pandas_mask_engine",
@@ -118,6 +117,8 @@ CONTRACTS: tuple[MixinContract, ...] = (
             f"{_FRAMEWORKS}.spark.test_spark_mask_engine",
             f"{_FRAMEWORKS}.sqlite.test_sqlite_mask_engine",
         ),
+        resolver=_framework_of_adapter,
+        aspect="mask",
     ),
     MixinContract(
         ComputeFramework,

@@ -782,6 +782,13 @@ child `Feature`. `propagate_context_keys` (or `cascade_context_keys`) is the cal
 flows see
 [Forwarding Options to Input Features](feature-chain-parser.md#forwarding-options-to-input-features).
 
+A feature group that inspects an input feature in `input_features` sees the input's options
+before this forwarding runs. `Feature.options_forwarded_from(consumer_options)` previews the
+result: it applies the same forwarding on a copy and returns it, mutating neither the input
+feature nor the consumer, so a check such as "is this input the output of a row-reducing
+group?" can match the options the input will actually be resolved with — including values
+that arrive only via the push or the pull above.
+
 A forwarded key also splits FeatureSets by value. A context key delivered via the
 push (`propagate_context_keys` or `cascade_context_keys`) or the pull
 (`inherit_context_keys`) enters the

@@ -271,6 +271,34 @@ class Feature:
         if entry not in self.consumer_attributions:
             self.consumer_attributions.append(entry)
 
+    def options_forwarded_from(self, consumer: Options, consumer_local_keys: frozenset[str] = frozenset()) -> Options:
+        """Preview the options this input feature will hold once ``consumer`` is forwarded onto it.
+
+        Runs the same forwarding as ``Features.merge_options`` (this feature's forward_group,
+        forward_group_exclude and inherit_context_keys, with ``consumer_local_keys`` subtracted
+        like the declaring collection's) on a copy of this feature's options and returns that
+        copy. Neither this feature's options nor ``consumer`` is mutated, so a feature group can
+        inspect in ``input_features`` the options its inputs will be matched with — including
+        values that reach an input only through the consumer's propagate_context_keys or
+        cascade_context_keys. Raises the same ValueError as the real merge on a conflict.
+        """
+        return self._forwarded_options_with_keys(consumer, consumer_local_keys)[0]
+
+    def _forwarded_options_with_keys(
+        self, consumer: Options, consumer_local_keys: frozenset[str] = frozenset()
+    ) -> tuple[Options, frozenset[str]]:
+        """The preview from options_forwarded_from plus the group keys the forwarding delivered."""
+        forwarded = copy(self.options)
+        keys = forwarded.inherit_from(
+            consumer,
+            forward_group=self.forward_group,
+            forward_group_exclude=self.forward_group_exclude,
+            inherit_context_keys=self.inherit_context_keys,
+            owner=str(self.name),
+            consumer_local_keys=consumer_local_keys,
+        )
+        return forwarded, keys
+
     def record_part(self, part: str | None) -> None:
         """Record the output part this intake asked for (None: the whole feature)."""
         if part is not None:

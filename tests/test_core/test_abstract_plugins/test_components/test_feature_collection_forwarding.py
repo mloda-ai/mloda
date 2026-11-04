@@ -305,3 +305,63 @@ class TestShieldMachineryRetirement:
 
     def test_options_has_no_forward_for_input_feature(self) -> None:
         assert not hasattr(Options, "forward_for_input_feature")
+
+
+class TestOptionsForwardedFromPreview:
+    """Feature.options_forwarded_from previews the collection merge without mutating anything."""
+
+    def test_preview_matches_the_collection_merge(self) -> None:
+        consumer = Options(
+            group={"backend": "neo4j", "top_k": 5},
+            context={"session_id": "abc", "local": "stays"},
+            propagate_context_keys=frozenset({"session_id"}),
+        )
+        child = Feature("child", options={"own_key": "own_value"})
+
+        preview = child.options_forwarded_from(consumer)
+        merged = _merge(Feature("child", options={"own_key": "own_value"}), consumer)
+
+        assert preview.group == merged.options.group == {"own_key": "own_value", "backend": "neo4j", "top_k": 5}
+        assert preview.context == merged.options.context == {"session_id": "abc"}
+
+    def test_preview_mutates_neither_side(self) -> None:
+        consumer = Options(group={"backend": "neo4j"}, context={"session_id": "abc"})
+        child = Feature("child", options={"own_key": "own_value"})
+
+        child.options_forwarded_from(consumer)
+
+        assert child.options.group == {"own_key": "own_value"}
+        assert child.options.context == {}
+        assert child.options.inherited_group_keys == frozenset()
+        assert consumer.group == {"backend": "neo4j"}
+        assert consumer.context == {"session_id": "abc"}
+
+    def test_preview_honors_the_child_side_directives(self) -> None:
+        consumer = Options(group={"backend": "neo4j", "top_k": 5}, context={"session_id": "abc"})
+
+        isolated = Feature("child", forward_group=False)
+        assert isolated.options_forwarded_from(consumer).group == {}
+
+        allowlisted = Feature("child", forward_group=frozenset({"backend"}))
+        assert allowlisted.options_forwarded_from(consumer).group == {"backend": "neo4j"}
+
+        excluded = Feature("child", forward_group_exclude=frozenset({"top_k"}))
+        assert excluded.options_forwarded_from(consumer).group == {"backend": "neo4j"}
+
+        pulling = Feature("child", inherit_context_keys=frozenset({"session_id"}))
+        assert pulling.options_forwarded_from(consumer).context == {"session_id": "abc"}
+
+    def test_preview_subtracts_consumer_local_keys(self) -> None:
+        consumer = Options(group={"backend": "neo4j", "top_k": 5})
+        child = Feature("child")
+
+        preview = child.options_forwarded_from(consumer, consumer_local_keys=frozenset({"top_k"}))
+
+        assert preview.group == {"backend": "neo4j"}
+
+    def test_preview_raises_on_a_conflict_like_the_merge(self) -> None:
+        consumer = Options(group={"backend": "neo4j"})
+        child = Feature("child", options={"backend": "other"})
+
+        with pytest.raises(ValueError, match="backend"):
+            child.options_forwarded_from(consumer)

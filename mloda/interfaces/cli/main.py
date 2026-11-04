@@ -44,10 +44,7 @@ def build_services(
     clock: Callable[[], float] | None = None,
     data_access_collection: DataAccessCollection | None = None,
 ) -> tuple[Catalog, Planner, Runner]:
-    """Build the catalog, planner and runner for ``settings``, signing plans with the env key if set.
-
-    Every configured credential is resolved first; ``data_access_collection`` is the embedding's own base.
-    """
+    """Build the catalog, planner and runner for ``settings``, signing plans with the env key if set."""
     check_credentials(settings, env, data_access_collection)
     key = env.get(SIGNING_KEY_ENV)
     principal = getpass.getuser()

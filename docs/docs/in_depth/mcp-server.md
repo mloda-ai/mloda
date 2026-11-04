@@ -75,11 +75,11 @@ value wins. They are not subject to `allow_options` and their values never appea
 numbers, booleans, lists or tables (no TOML dates or times), and `in_features` is not allowed.
 
 `[mcp.credentials.<handle>]` registers a credential for groups that read it with `read_credential` and for database
-sources. The table holds environment variable names and file paths, never values. Every credential is checked at
-startup: an unset or empty variable, or a missing or empty file, fails naming the handle and the field. A handle may not
-start with `_auto_` or equal a source alias. The server reads the credentials again for every request, so a rotated
-secret file takes effect without a restart; an environment variable needs a restart, since a process cannot see a
-changed environment. A group declares its handle option with `credential_handle_spec`; set it in `[mcp.options]`.
+sources. The table holds environment variable names and file paths, never values. Startup fails, naming the handle and
+the field, if a variable is unset or empty or a file is missing or empty. A handle may not start with `_auto_` or equal
+a source alias. Secret files are read again for every request, so a rotated file takes effect without a restart; an
+environment variable needs a restart. A group declares its handle option with `credential_handle_spec`; set it in
+`[mcp.options]`.
 
 ## Tools
 
@@ -180,7 +180,8 @@ principal (the OS user) and one set of plan ids.
 
 To embed it, call `mloda.interfaces.mcp.server.create_app(settings, env=env, host=...)`, which returns a Starlette app.
 Pass `data_access_collection=` to add connections and credentials built in code; a handle that duplicates one of the
-`[mcp.credentials]` table is refused. A mounted sub-app's lifespan does not run, so run the returned app's lifespan or serve it directly.
+`[mcp.credentials]` table is refused. A mounted sub-app's lifespan does not run, so run the returned app's lifespan or
+serve it directly.
 
 Not yet: approvals, cancellation, and remote HTTP with OAuth.
 

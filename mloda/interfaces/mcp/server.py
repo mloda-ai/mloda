@@ -190,10 +190,7 @@ def create_app(
     host: str = "127.0.0.1",
     data_access_collection: DataAccessCollection | None = None,
 ) -> Starlette:
-    """The streamable HTTP app at /mcp; bound to loopback it accepts only loopback Host and Origin headers.
-
-    ``data_access_collection`` is the embedding's own connections and credentials, merged into every request.
-    """
+    """The streamable HTTP app at /mcp; bound to loopback it accepts only loopback Host and Origin headers."""
     settings = replace(settings, trusted_caller=False)
     security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
     if cli_main._is_loopback(host):

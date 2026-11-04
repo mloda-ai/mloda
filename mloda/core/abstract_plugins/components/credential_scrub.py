@@ -114,8 +114,12 @@ _PASSWORD_AS_SCHEME_PATTERN = re.compile(
 # Non-whitespace text after a jdbc match, cut at the next `://` so repeated URIs scan linearly.
 _JDBC_TAIL_PATTERN = re.compile(r"(?:(?!://)\S)*")
 # Private-use marker _uri_projection appends after a dropped jdbc path; _scrub_passes cuts it with the token tail.
+# _scrub_uri_match appends the same marker when a dropped query or key=value path may continue past the match.
 _JDBC_CUT = "\ue001"
 _JDBC_CUT_PATTERN = re.compile(_JDBC_CUT + _JDBC_TAIL_PATTERN.pattern)
+# Characters the free-text URI pattern refuses inside a query or fragment (a path refuses all but `)` too):
+# a match ending right before one of them may have stopped in the middle of a dropped value.
+_MATCH_END_TERMINATORS = frozenset("\"'<>)]")
 
 
 def _cut_key_value_path(path: str) -> str:
@@ -154,12 +158,34 @@ def _cut_hidden_percent(scheme: str, host: str, path: str) -> str:
     return head[: head.rfind("/") + 1]
 
 
+def _query_part(match: re.Match[str]) -> str:
+    """The query/fragment part of the matched text (from the first `?` or `#`), or empty."""
+    starts = [index for index in (match[0].find("?"), match[0].find("#")) if index != -1]
+    return match[0][min(starts) :] if starts else ""
+
+
+def _cut_dropped_tail(match: re.Match[str], scrubbed: str, dropped_key_value: bool) -> str:
+    """Append the cut marker when a dropped key=value value may continue past the end of the match.
+
+    The URI pattern stops at a quote, bracket or angle bracket, so a dropped query or key=value path
+    whose value contains such a character leaves the rest of the value in the text after the match.
+    The marker makes _scrub_passes cut the token tail too, as it already does for a dropped jdbc path.
+    A clean URL drops nothing, so its closing quote or bracket in the text survives.
+    """
+    if scrubbed.endswith(_JDBC_CUT) or not dropped_key_value:
+        return scrubbed
+    if match.end() < len(match.string) and match.string[match.end()] in _MATCH_END_TERMINATORS:
+        return scrubbed + _JDBC_CUT
+    return scrubbed
+
+
 def _scrub_uri_match(match: re.Match[str]) -> str:
     scheme, host, path = match["scheme"], match["host"], match["path"] or ""
     projection = _uri_projection(match)
     if projection is not None:
-        return projection
-    return f"{scheme}://{host}{_cut_hidden_percent(scheme, host, _cut_key_value_path(path))}"
+        return _cut_dropped_tail(match, projection, "=" in _query_part(match))
+    scrubbed = f"{scheme}://{host}{_cut_hidden_percent(scheme, host, _cut_key_value_path(path))}"
+    return _cut_dropped_tail(match, scrubbed, True)
 
 
 def _drop_free_text_userinfo(text: str, pattern: re.Pattern[str] = _FREE_TEXT_USERINFO_PATTERN) -> str:

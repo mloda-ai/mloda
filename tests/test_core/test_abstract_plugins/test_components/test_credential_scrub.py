@@ -1309,6 +1309,28 @@ class TestScrubUriProjection:
                 "abfss://account.dfs.core.windows.net/p",
                 id="too-short-container-is-dropped",
             ),
+            pytest.param(
+                "https://h/x?password=pw]ter2&x=1",
+                "https://h/x",
+                id="dropped-query-value-with-close-bracket-leaves-no-fragment",
+            ),
+            pytest.param(
+                "https://h/x?password=pw)ter2",
+                "https://h/x",
+                id="dropped-query-value-with-close-paren-leaves-no-fragment",
+            ),
+            pytest.param(
+                "https://h/x?password=pw'ter2",
+                "https://h/x",
+                id="dropped-query-value-with-quote-leaves-no-fragment",
+            ),
+            pytest.param(
+                "https://h/a/db:password=pw]ter2",
+                "https://h/a",
+                id="key-value-path-value-with-close-bracket-leaves-no-fragment",
+            ),
+            pytest.param("(https://h/x)", "(https://h/x)", id="bracketed-clean-url-keeps-its-closing-paren"),
+            pytest.param("'https://h/x'", "'https://h/x'", id="quoted-clean-url-keeps-its-closing-quote"),
         ],
     )
     def test_scrub_keeps_host_and_path_only(self, uri: str, expected: str) -> None:
@@ -1395,6 +1417,13 @@ class TestScrubUriFailClosed:
             pytest.param("alice:hunter2://u:pw9x@host/db", "hunter2", id="scheme-position-then-userinfo-name"),
             pytest.param("alice:9hunter://host/db", "9hunter", id="scheme-position-digit-led"),
             pytest.param("user:p_w!x://h/db", "p_w!x", id="scheme-position-punctuation"),
+            pytest.param("https://h/x?password=pw]ter2&x=1", "ter2", id="query-close-bracket-in-secret"),
+            pytest.param("https://h/x?password=pw)ter2&x=1", "ter2", id="query-close-paren-in-secret"),
+            pytest.param("https://h/x?password=pw<ter2&x=1", "ter2", id="query-lt-in-secret"),
+            pytest.param("https://h/x?password=pw>ter2&x=1", "ter2", id="query-gt-in-secret"),
+            pytest.param("https://h/x?password=pw'ter2&x=1", "ter2", id="query-quote-in-secret"),
+            pytest.param('https://h/x?password=pw"ter2&x=1', "ter2", id="query-double-quote-in-secret"),
+            pytest.param("https://h/a/db:password=pw]ter2", "ter2", id="key-value-path-close-bracket-in-secret"),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:

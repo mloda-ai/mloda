@@ -24,6 +24,7 @@ from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.provider import CHAIN_SEPARATOR, SourceFeatureGroup
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda._testing.source.reclaim import track
 from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin, _chain_consumer
 
 if TYPE_CHECKING:
@@ -701,10 +702,12 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
         def load_neutral(cls: Any, match: SourceMatch, features: Any) -> Any:
             return pa.table({column: [neutral_value]})
 
-        sub = type(
-            sub_name,
-            (parent,),
-            {"match_feature_group_criteria": classmethod(gated), "load_neutral": classmethod(load_neutral)},
+        sub = track(
+            type(
+                sub_name,
+                (parent,),
+                {"match_feature_group_criteria": classmethod(gated), "load_neutral": classmethod(load_neutral)},
+            )
         )
         impl = None
         if loader_value is not None:

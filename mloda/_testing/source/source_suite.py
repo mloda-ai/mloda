@@ -6,7 +6,6 @@ Not collected on its own (no Test prefix).
 
 import copy
 import dataclasses
-import gc
 import importlib
 import itertools
 from collections.abc import Callable, Iterator
@@ -14,6 +13,8 @@ from typing import Any, ClassVar, cast
 
 import pytest
 
+from mloda._testing.source import reclaim
+from mloda._testing.source.reclaim import track
 from mloda._testing.suite import ConformanceSuite
 from mloda._testing.source_applicability import NO_POINTER, SourceApplicability, source_applicability
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -137,7 +138,7 @@ def _new_implementation_builder() -> Callable[..., type[Implementation[Any]]]:
         if name is not None:
             _Impl.__name__ = name
             _Impl.__qualname__ = name
-        return _Impl
+        return track(_Impl)
 
     return make
 
@@ -145,8 +146,9 @@ def _new_implementation_builder() -> Callable[..., type[Implementation[Any]]]:
 def _implementation_scope() -> Iterator[Callable[..., type[Implementation[Any]]]]:
     """Yield the builder; teardown asserts no class it built is still loaded after collection."""
     before = set(get_all_subclasses(Implementation))
+    position = reclaim.mark()
     yield _new_implementation_builder()
-    gc.collect()
+    reclaim.reclaim_since(position)
     loaded = loaded_implementations()
     leaked = sorted(cls.__name__ for cls in get_all_subclasses(Implementation) if cls not in before and cls in loaded)
     assert not leaked, f"leaked implementations: {leaked}"
@@ -180,7 +182,7 @@ def _chain_consumer(column: str) -> tuple[type[FeatureGroup], str]:
             return {PyArrowTable}
 
     _Consumer.__name__ = _Consumer.__qualname__ = f"SuiteChainConsumer{next(_CONSUMER_COUNTER)}"
-    return _Consumer, name
+    return track(_Consumer), name
 
 
 class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
@@ -190,7 +192,8 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
     other_pointer, foreign_handle_dac, known_handles_dac, and own_pointer (return NO_POINTER for a group that
     takes no pointer). Optional: data_access_handle (None derives it from the routes), pointed_source (None
     claims with own_pointer), load_framework, context_options. rejection_window and make_implementation are
-    fixture methods so a host in any package gets them without this repo's conftest.
+    fixture methods so a host in any package gets them without this repo's conftest; the suite reclaims the
+    subclasses it builds.
     """
 
     feature_group_class: type[SourceFeatureGroup]
@@ -201,6 +204,10 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
     context_options: ClassVar[dict[str, Any]] = {}
     data_access_handle: ClassVar[bool | None] = None
     pointed_source: ClassVar[str | None] = None
+
+    @pytest.fixture(autouse=True)
+    def _a_reclaim_suite_built_classes(self) -> Iterator[None]:
+        yield from reclaim.reclaimed_scope()
 
     @pytest.fixture
     def rejection_window(self) -> Iterator[dict[str, MatchRejection]]:
@@ -311,7 +318,9 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
                 getattr(super(cls, cls), "match_feature_group_criteria")(feature_name, options, data_access_collection)
             )
 
-        return type(f"{parent.__name__}SuiteTakeover", (parent,), {"match_feature_group_criteria": classmethod(gated)})
+        return track(
+            type(f"{parent.__name__}SuiteTakeover", (parent,), {"match_feature_group_criteria": classmethod(gated)})
+        )
 
     def test_claims_its_own_source(self) -> None:
         assert self._claims(Feature(self.present_column), self.own_dac())

@@ -17,6 +17,9 @@ _FREE_TEXT_URI_PATTERN = re.compile(
     _SCHEME + r"://"
     r"(?:(?P<userinfo>[^/?#\s]*)@)?"
     r"(?P<host>(?:\[[0-9A-Fa-f:.]+\]|[\w.~-]*)(?::\d+)?)"
+    # `;` parameters directly after a pathless host (stops at `/`, so the path group still owns
+    # later segments, and at `::`, so a chained URI keeps its own match).
+    r"(?P<params>;(?:(?!::)[^\s?#\"'<>\]/])*)?"
     r"(?P<path>/[^\s?#\"'<>\]]*)?"
     r"(?:[?#][^\s\"'<>)\]]*)?"
 )
@@ -132,7 +135,9 @@ def _cut_key_value_path(path: str) -> str:
 
 
 def _uri_projection(match: re.Match[str]) -> str | None:
-    scheme, userinfo, host, path = match["scheme"], match["userinfo"], match["host"], match["path"] or ""
+    scheme, userinfo, host = match["scheme"], match["userinfo"], match["host"]
+    # Host parameters ride along with the path: the same key=value and hidden-percent checks apply.
+    path = (match["params"] or "") + (match["path"] or "")
     container = ""
     if userinfo and scheme.lower() in _AZURE_CONTAINER_SCHEMES and _AZURE_CONTAINER_PATTERN.fullmatch(userinfo):
         container = f"{userinfo}@"
@@ -180,7 +185,8 @@ def _cut_dropped_tail(match: re.Match[str], scrubbed: str, dropped_key_value: bo
 
 
 def _scrub_uri_match(match: re.Match[str]) -> str:
-    scheme, host, path = match["scheme"], match["host"], match["path"] or ""
+    scheme, host = match["scheme"], match["host"]
+    path = (match["params"] or "") + (match["path"] or "")
     projection = _uri_projection(match)
     if projection is not None:
         return _cut_dropped_tail(match, projection, "=" in _query_part(match))

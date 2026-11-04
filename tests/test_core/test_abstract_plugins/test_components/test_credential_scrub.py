@@ -1166,6 +1166,9 @@ class TestScrubUriProjection:
                 "jdbc:derby://host:1527",
                 id="jdbc-derby-drops-semicolon-path",
             ),
+            pytest.param("zip://d;%74oken=SECRET", "zip://d", id="host-param-encoded-token-is-cut"),
+            pytest.param("s3://b;v=2/x.csv", "s3://b;v=2/x.csv", id="host-param-benign-is-kept"),
+            pytest.param("zip://d;%76=2", "zip://d;%76=2", id="host-param-encoded-benign-is-kept"),
             pytest.param(
                 "jdbc:postgresql://h/db/hunter2@x:5432/y",
                 "jdbc:postgresql://h",
@@ -1424,6 +1427,13 @@ class TestScrubUriFailClosed:
             pytest.param("https://h/x?password=pw'ter2&x=1", "ter2", id="query-quote-in-secret"),
             pytest.param('https://h/x?password=pw"ter2&x=1', "ter2", id="query-double-quote-in-secret"),
             pytest.param("https://h/a/db:password=pw]ter2", "ter2", id="key-value-path-close-bracket-in-secret"),
+            pytest.param("zip://d;%74oken=SECRETVAL", "SECRETVAL", id="host-param-encoded-token"),
+            pytest.param(
+                "failed: zip://d;%74oken=SECRETVAL::s3://b/x.csv", "SECRETVAL", id="host-param-encoded-token-in-chain"
+            ),
+            pytest.param("https://host;%70assword=SECRETVAL", "SECRETVAL", id="host-param-encoded-password"),
+            pytest.param("zip://d;api%5Fkey=SECRETVAL", "SECRETVAL", id="host-param-encoded-underscore-key"),
+            pytest.param("zip://d;%74oken=SECRETVAL/path", "SECRETVAL", id="host-param-encoded-token-before-path"),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:

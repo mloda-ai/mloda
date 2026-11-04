@@ -17,6 +17,7 @@ from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dyna
 )
 
 # The re-export registers the timeout backstop hook for the suite.
+from tests.helpers.module_level_source_groups import module_level_source_group_offenders
 from tests.helpers.timeout_backstop import pytest_timeout_cancel_timer, pytest_timeout_set_timer  # noqa: F401
 from tests.registry_isolation import (
     IMPLEMENTATIONS,
@@ -160,6 +161,16 @@ def _suite_will_freeze() -> bool:
 # registry is restored, so tests start from the same registry state. A separate hook keeps the contract test's fast
 # probes from paying the import.
 def pytest_collection_modifyitems(session: Any, config: Any, items: Any) -> None:
+    module_names = {item.module.__name__ for item in items if getattr(item, "module", None) is not None}
+    offenders = module_level_source_group_offenders(module_names)
+    if offenders:
+        raise pytest.UsageError(
+            "Module-level source FeatureGroup subclasses that narrow nothing they can claim "
+            "(#2598): " + ", ".join(offenders) + ". A module-level source group stays registered "
+            "for the whole worker and can claim other modules' credentials or files; gate it on a "
+            "marker (override is_valid_credentials, match_feature_group_criteria, find_sources or "
+            "match_connection), or define it inside the test instead."
+        )
     if not _suite_will_freeze():
         return
     snapshot = PluginRegistry.default().snapshot()

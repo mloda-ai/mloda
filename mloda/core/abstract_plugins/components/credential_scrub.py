@@ -1,5 +1,6 @@
 """Strip credentials from free text before it reaches core's failure logs or MlodaRunError."""
 
+import io
 import re
 from collections.abc import Iterable, Mapping
 from contextvars import ContextVar, Token
@@ -248,14 +249,14 @@ def _merge_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
 
 def mask_literals(text: str, literals: Iterable[str]) -> str:
     """Replace every occurrence of each literal with ``***``, merging overlaps."""
-    parts: list[str] = []
+    out = io.StringIO()
     cursor = 0
     for start, end in _merge_spans(_literal_spans(text, literals)):
-        parts.append(text[cursor:start])
-        parts.append("***")
+        out.write(text[cursor:start])
+        out.write("***")
         cursor = end
-    parts.append(text[cursor:])
-    return "".join(parts)
+    out.write(text[cursor:])
+    return out.getvalue()
 
 
 class registered_secrets_scope:  # noqa: N801
@@ -312,26 +313,22 @@ def _mask_hidden(text: str, origin: list[int], hidden: list[tuple[int, int]], si
     flags = bytearray(size)
     for start, end in hidden:
         flags[start:end] = b"\x01" * (end - start)
-    parts: list[str] = []
-    run_start = -1
+    out = io.StringIO()
+    tail = ""  # last three emitted chars: a masked run right after `***` emits nothing
+    in_run = False
     for index, source in enumerate(origin):
-        is_hidden = source >= 0 and flags[source]
-        if is_hidden:
-            if run_start < 0:
-                run_start = index
+        if source >= 0 and flags[source]:
+            in_run = True
             continue
-        if run_start >= 0:
-            _emit_mask(parts)
-            run_start = -1
-        parts.append(text[index])
-    if run_start >= 0:
-        _emit_mask(parts)
-    return "".join(parts)
-
-
-def _emit_mask(parts: list[str]) -> None:
-    if not "".join(parts[-3:]).endswith("***"):
-        parts.append("***")
+        if in_run and tail != "***":
+            out.write("***")
+            tail = "***"
+        in_run = False
+        out.write(text[index])
+        tail = (tail + text[index])[-3:]
+    if in_run and tail != "***":
+        out.write("***")
+    return out.getvalue()
 
 
 def _replacement(match: re.Match[str], repl: Any) -> str:
@@ -343,31 +340,33 @@ def _align(matched: str, matched_origin: list[int], replacement: str) -> list[in
     result: list[int] = []
     position = 0
     for char in replacement:
+        found = position
         if char != "*":
-            found = matched.find(char, position)
-            if found != -1:
-                result.append(matched_origin[found])
-                position = found + 1
-                continue
-        result.append(-1)
+            while found < len(matched) and matched[found] != char:
+                found += 1
+        if char != "*" and found < len(matched):
+            result.extend((matched_origin[found],))
+            position = found + 1
+        else:
+            result.extend((-1,))
     return result
 
 
 def _sub_tracked(pattern: re.Pattern[str], repl: Any, text: str, origin: list[int]) -> tuple[str, list[int]]:
-    parts: list[str] = []
+    out = io.StringIO()
     origins: list[int] = []
     cursor = 0
     for match in pattern.finditer(text):
         start, end = match.span()
-        parts.append(text[cursor:start])
+        out.write(text[cursor:start])
         origins.extend(origin[cursor:start])
         replacement = _replacement(match, repl)
-        parts.append(replacement)
+        out.write(replacement)
         origins.extend(_align(match[0], origin[start:end], replacement))
         cursor = end
-    parts.append(text[cursor:])
+    out.write(text[cursor:])
     origins.extend(origin[cursor:])
-    return "".join(parts), origins
+    return out.getvalue(), origins
 
 
 def _authorization_repl(m: re.Match[str]) -> str:

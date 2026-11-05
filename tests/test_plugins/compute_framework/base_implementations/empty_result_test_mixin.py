@@ -18,11 +18,9 @@ The python_dict consumer sets ``empty_data_carries_schema = False`` because its 
 It is intentionally named without a ``Test`` prefix so pytest does not collect it standalone;
 framework subclasses pick up the test methods by inheritance.
 
-Mirror of ``DataTypeValidatorFrameworkTestMixin``: framework subclasses implement the
-``framework_instance`` fixture and the ``empty_data`` / ``non_empty_data`` fixtures.
-Connection-backed frameworks (DuckDB, SQLite, Spark) override the data fixtures to pull in
-their ``connection`` / ``spark_session`` fixture, exactly as the DataTypeValidator mixin
-consumers override ``validator_sample_data``.
+Framework subclasses implement the ``framework_instance`` fixture and the ``empty_data`` /
+``non_empty_data`` fixtures. Connection-backed frameworks (DuckDB, SQLite, Spark) override the
+data fixtures to pull in their ``connection`` / ``spark_session`` fixture.
 """
 
 from typing import Any

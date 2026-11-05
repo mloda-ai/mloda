@@ -1,17 +1,13 @@
-from decimal import Decimal
 from typing import Any
 
 from mloda.user import ParallelizationMode
-import pyarrow as pa
 import pytest
 from mloda.user import FeatureName
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
-    DataTypeValidatorFrameworkTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DtypeExtractionTestMixin,
-)
+from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
+from mloda._testing.declarations import Cause
+from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter, to_arrow_table
+from mloda._testing.typed_data import TypedTestData
 
 
 class TestPythonDictFramework:
@@ -176,69 +172,88 @@ class TestFrameworkColumnarValidationAgreesWithHelper:
             validate_columnar_dict(ragged)
 
 
-class TestPythonDictDtypeExtraction(DtypeExtractionTestMixin):
-    """Test PythonDictFramework._extract_column_dtype using shared mixin."""
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    @pytest.fixture
-    def dtype_sample_data(self) -> Any:
-        return {
-            "int_col": [1, 2, 3],
-            "str_col": ["a", "b", "c"],
-            "float_col": [1.0, 2.0, 3.0],
-        }
-
-    @pytest.fixture
-    def decimal_sample_data(self) -> Any:
-        return {"d": [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]}
-
-
-class TestPythonDictDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
-    """Test DataTypeValidator enforcement on PythonDictFramework using shared mixin.
-
-    Python types do not carry width information: ``type(int_val).__name__`` is just
-    ``"int"`` regardless of value, and ``type(float_val).__name__`` is just ``"float"``
-    (always 64-bit). ``datetime.datetime`` is always microsecond precision. Precision-
-    narrowing tests that need per-width distinctions are skipped because they are
-    statically un-enforceable from Python runtime types.
-    """
-
-    EXTENDED_SKIPS = {
-        "int8_col": "Python int has no width",
-        "uint8_col": "Python int has no width",
-        "uint64_col": "Python int has no width",
-        "int16_col": "Python int has no width",
-        "uint16_col": "Python int has no width",
-        "uint32_col": "Python int has no width",
+class TestPythonDictDtypeExtractionSuite(DtypeExtractionSuite):
+    adapter_class = PythonDictAdapter
+    switched_off = {
+        "test_extract_duplicate_column_dtype_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_data_type_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_dtype_reversed_order_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_column_dtype_consistent_with_output_schema": Cause.BACKEND,
     }
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    @pytest.mark.skip(reason="A Python dict cannot hold duplicate column names")
+    def test_extract_duplicate_column_dtype_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
-    def from_arrow(self, table: pa.Table) -> Any:
-        return table.to_pydict()
+    @pytest.mark.skip(reason="A Python dict cannot hold duplicate column names")
+    def test_extract_duplicate_column_data_type_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
-    def test_int32_column_strict_int32_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
-        pytest.skip("Python type.__name__ collapses int widths; the int32 column reports INT64, not INT32")
+    @pytest.mark.skip(reason="A Python dict cannot hold duplicate column names")
+    def test_extract_duplicate_column_dtype_reversed_order_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
-    def test_int64_column_strict_int32_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
-        pytest.skip("Python type.__name__ collapses int widths; INT32 vs INT64 cannot be distinguished")
+    @pytest.mark.skip(reason="A Python dict cannot hold duplicate column names")
+    def test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
-    def test_float64_column_strict_float_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
-        pytest.skip("Python float is always 64-bit; FLOAT vs DOUBLE cannot be distinguished")
+    @pytest.mark.skip(reason="A Python dict cannot hold duplicate column names")
+    def test_extract_column_dtype_consistent_with_output_schema(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
-    def test_float32_column_strict_float_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
-        pytest.skip("Python float is always 64-bit; the column reports DOUBLE, not FLOAT")
 
-    def test_float32_column_strict_double_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
-        pytest.skip("Python float is always 64-bit; the column would already be DOUBLE-typed")
+_NO_INT_WIDTH = (Cause.BACKEND, "Python int has no width")
 
-    def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
-        pytest.skip("Python datetime is always microsecond precision; TIMESTAMP_MILLIS cannot be expressed")
 
-    def test_timestamp_us_column_strict_ms_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
-        pytest.skip("Python datetime is always microsecond precision; TIMESTAMP precision uniform")
+class TestPythonDictDataTypeValidatorSuite(DataTypeValidatorSuite):
+    """Python types carry no width: precision-narrowing tests cannot be enforced from runtime types."""
+
+    adapter_class = PythonDictAdapter
+    unsupported_cases = {
+        "int8_col": _NO_INT_WIDTH,
+        "uint8_col": _NO_INT_WIDTH,
+        "uint64_col": _NO_INT_WIDTH,
+        "int16_col": _NO_INT_WIDTH,
+        "uint16_col": _NO_INT_WIDTH,
+        "uint32_col": _NO_INT_WIDTH,
+    }
+    switched_off = {
+        "test_int32_column_strict_int32_passes": Cause.BACKEND,
+        "test_int64_column_strict_int32_raises": Cause.BACKEND,
+        "test_float64_column_strict_float_raises": Cause.BACKEND,
+        "test_float32_column_strict_float_passes": Cause.BACKEND,
+        "test_float32_column_strict_double_passes": Cause.BACKEND,
+        "test_timestamp_ms_column_strict_ms_passes": Cause.BACKEND,
+        "test_timestamp_us_column_strict_ms_raises": Cause.BACKEND,
+    }
+
+    def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
+        """Go through Arrow so nanosecond timestamps arrive as pandas Timestamps, as they do in a real run."""
+        return adapter.from_arrow(to_arrow_table(data, self.arrow_types(name)))
+
+    @pytest.mark.skip(reason="Python type.__name__ collapses int widths; the int32 column reports INT64, not INT32")
+    def test_int32_column_strict_int32_passes(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
+
+    @pytest.mark.skip(reason="Python type.__name__ collapses int widths; INT32 vs INT64 cannot be distinguished")
+    def test_int64_column_strict_int32_raises(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
+
+    @pytest.mark.skip(reason="Python float is always 64-bit; FLOAT vs DOUBLE cannot be distinguished")
+    def test_float64_column_strict_float_raises(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
+
+    @pytest.mark.skip(reason="Python float is always 64-bit; the column reports DOUBLE, not FLOAT")
+    def test_float32_column_strict_float_passes(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
+
+    @pytest.mark.skip(reason="Python float is always 64-bit; the column would already be DOUBLE-typed")
+    def test_float32_column_strict_double_passes(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
+
+    @pytest.mark.skip(reason="Python datetime is always microsecond precision; TIMESTAMP_MILLIS cannot be expressed")
+    def test_timestamp_ms_column_strict_ms_passes(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
+
+    @pytest.mark.skip(reason="Python datetime is always microsecond precision; TIMESTAMP precision uniform")
+    def test_timestamp_us_column_strict_ms_raises(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...

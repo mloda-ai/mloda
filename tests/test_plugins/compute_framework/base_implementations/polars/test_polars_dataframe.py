@@ -1,19 +1,14 @@
 import os
-from decimal import Decimal
 from typing import Any
 import pytest
-import pyarrow as pa
+from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
+from mloda._testing.declarations import Cause
+from mloda._testing.framework_adapter import FrameworkAdapter, PolarsAdapter
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
-)
-from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
-    DataTypeValidatorFrameworkTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
     AppendColumnsFrameworkTestMixin,
@@ -99,38 +94,50 @@ class TestPolarsDataFrameComputeFramework:
         assert pl_dataframe.column_names == {"column1", "column2"}
 
 
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsDtypeExtraction(DtypeExtractionTestMixin):
-    """Test PolarsDataFrame._extract_column_dtype using shared mixin."""
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    @pytest.fixture
-    def dtype_sample_data(self) -> Any:
-        return pl.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
-
-    @pytest.fixture
-    def decimal_sample_data(self) -> Any:
-        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
-        return pl.DataFrame({"d": values}, schema={"d": pl.Decimal(10, 2)})
-
-
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
-    """Test DataTypeValidator enforcement on PolarsDataFrame using shared mixin."""
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    EXTENDED_SKIPS = {
-        "timestamp_s_col": "Polars has no second-precision datetime; it widens to ms (TIMESTAMP_MILLIS)",
+class TestPolarsDtypeExtractionSuite(DtypeExtractionSuite):
+    adapter_class = PolarsAdapter
+    switched_off = {
+        "test_extract_duplicate_column_dtype_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_data_type_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_dtype_reversed_order_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_column_dtype_consistent_with_output_schema": Cause.BACKEND,
     }
 
-    def from_arrow(self, table: pa.Table) -> Any:
-        return pl.from_arrow(table)
+    @pytest.mark.skip(reason="Polars frames cannot hold duplicate column names")
+    def test_extract_duplicate_column_dtype_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="Polars frames cannot hold duplicate column names")
+    def test_extract_duplicate_column_data_type_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="Polars frames cannot hold duplicate column names")
+    def test_extract_duplicate_column_dtype_reversed_order_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="Polars frames cannot hold duplicate column names")
+    def test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="Polars frames cannot hold duplicate column names")
+    def test_extract_column_dtype_consistent_with_output_schema(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+
+class TestPolarsDataTypeValidatorSuite(DataTypeValidatorSuite):
+    adapter_class = PolarsAdapter
+    unsupported_cases = {
+        "timestamp_s_col": (
+            Cause.BACKEND,
+            "Polars has no second-precision datetime; it widens to ms (TIMESTAMP_MILLIS)",
+        ),
+    }
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")

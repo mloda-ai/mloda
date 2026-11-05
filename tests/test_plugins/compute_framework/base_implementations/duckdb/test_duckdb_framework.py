@@ -3,19 +3,14 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 import pytest
+from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
+from mloda._testing.framework_adapter import DuckDBAdapter, FrameworkAdapter
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from mloda.user import DataType, FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
-)
-from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
-    ColumnSpec,
-    DataTypeValidatorFrameworkTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
     AppendColumnsFrameworkTestMixin,
@@ -241,47 +236,25 @@ class TestDuckDBFrameworkSessionTimezone:
         )
 
 
-@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
-class TestDuckDBDtypeExtraction(DtypeExtractionTestMixin):
-    """Test DuckDBFramework._extract_column_dtype using shared mixin."""
+class TestDuckDBDtypeExtractionSuite(DtypeExtractionSuite):
+    adapter_class = DuckDBAdapter
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
+        """An un-aliased join shape: the relation is built from SQL because Arrow import renames duplicates."""
+        literal = {DataType.INT64: "1::BIGINT", DataType.STRING: "'x'::VARCHAR"}
+        conn = adapter.connection
+        return DuckdbRelation(conn, conn.sql(f"select {literal[first_type]} as a, {literal[second_type]} as a"))
 
-    @pytest.fixture
-    def dtype_sample_data(self, connection: Any) -> Any:
-        arrow_table = pa.Table.from_pydict(
-            {"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}
-        )
-        return DuckdbRelation.from_arrow(connection, arrow_table)
 
-    @pytest.fixture
-    def decimal_sample_data(self, connection: Any) -> Any:
-        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
-        return DuckdbRelation.from_arrow(connection, pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))}))
+class TestDuckDBDataTypeValidatorSuite(DataTypeValidatorSuite):
+    adapter_class = DuckDBAdapter
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
-class TestDuckDBDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
-    """Test DataTypeValidator enforcement on DuckDBFramework using shared mixin."""
-
+class TestDuckDBDataTypeValidator:
     @pytest.fixture
     def framework_instance(self) -> Any:
         return DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    @pytest.fixture
-    def extended_sample_data(self, spec: ColumnSpec, connection: Any) -> Any:
-        self._skip_if_unsupported(spec)
-        return DuckdbRelation.from_arrow(connection, self._arrow_table((spec,)))
-
-    @pytest.fixture
-    def validator_sample_data(self, connection: Any) -> Any:
-        return DuckdbRelation.from_arrow(connection, self._arrow_table(self.VALIDATOR_COLUMNS))
-
-    @pytest.fixture
-    def precision_sample_data(self, connection: Any) -> Any:
-        return DuckdbRelation.from_arrow(connection, self._arrow_table(self.PRECISION_COLUMNS))
 
     @pytest.mark.parametrize("list_size", [-1, 2])
     def test_list_of_decimal_resolves_to_list(self, framework_instance: Any, connection: Any, list_size: int) -> None:

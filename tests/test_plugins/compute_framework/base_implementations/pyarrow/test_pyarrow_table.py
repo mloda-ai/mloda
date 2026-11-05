@@ -1,21 +1,15 @@
-from decimal import Decimal
 from typing import Any
 import pytest
 import pyarrow as pa
 
+from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
+from mloda._testing.framework_adapter import PyArrowAdapter
 from mloda.provider import EmptyResultError
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
-)
-from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
-    DataTypeValidatorFrameworkTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DtypeExtractionTestMixin,
-    DuplicateColumnDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
     AppendColumnsFrameworkTestMixin,
@@ -73,42 +67,12 @@ class TestPyArrowTableComputeFramework:
         assert pyarrow_table.column_names == {"column1", "column2"}
 
 
-class TestPyArrowDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
-    """Test PyArrowTable._extract_column_dtype using shared mixins."""
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    @pytest.fixture
-    def dtype_sample_data(self) -> Any:
-        return pa.table({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
-
-    @pytest.fixture
-    def decimal_sample_data(self) -> Any:
-        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
-        return pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})
-
-    @pytest.fixture
-    def dtype_duplicate_column_data(self) -> Any:
-        table = pa.table({"dup_col": [1, 2, 3]})
-        return table.append_column("dup_col", pa.array(["x", "y", "z"]))
-
-    @pytest.fixture
-    def dtype_duplicate_column_data_reversed(self) -> Any:
-        table = pa.table({"dup_col": ["x", "y", "z"]})
-        return table.append_column("dup_col", pa.array([1, 2, 3]))
+class TestPyArrowDtypeExtractionSuite(DtypeExtractionSuite):
+    adapter_class = PyArrowAdapter
 
 
-class TestPyArrowDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
-    """Test DataTypeValidator enforcement on PyArrowTable using shared mixin."""
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    def from_arrow(self, table: pa.Table) -> pa.Table:
-        return table
+class TestPyArrowDataTypeValidatorSuite(DataTypeValidatorSuite):
+    adapter_class = PyArrowAdapter
 
 
 class TestPyArrowEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFrameworkTestMixin):

@@ -29,6 +29,7 @@ from mloda.user import PluginLoader
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
 from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
 from mloda._testing.compute_framework.mask_suite import MaskEngineSuite
 from mloda._testing.compute_framework.output_schema_suite import OutputSchemaSuite
@@ -189,6 +190,40 @@ CONTRACTS: tuple[MixinContract, ...] = (
         (
             "tests.test_plugins.compute_framework.test_output_schema_hook",
             f"{_FRAMEWORKS}.spark.test_spark_framework",
+        ),
+        resolver=_framework_of_adapter,
+    ),
+    MixinContract(
+        ComputeFramework,
+        DtypeExtractionSuite,
+        "adapter_class",
+        (
+            f"{_FRAMEWORKS}.duckdb.test_duckdb_framework",
+            f"{_FRAMEWORKS}.iceberg.test_iceberg_framework",
+            f"{_FRAMEWORKS}.pandas.test_pandas_dataframe",
+            f"{_FRAMEWORKS}.polars.test_polars_dataframe",
+            f"{_FRAMEWORKS}.polars.test_polars_lazy_dataframe",
+            f"{_FRAMEWORKS}.pyarrow.test_pyarrow_table",
+            f"{_FRAMEWORKS}.python_dict.test_python_dict_framework",
+            f"{_FRAMEWORKS}.spark.test_spark_framework",
+            f"{_FRAMEWORKS}.sqlite.test_sqlite_framework",
+        ),
+        resolver=_framework_of_adapter,
+    ),
+    MixinContract(
+        ComputeFramework,
+        DataTypeValidatorSuite,
+        "adapter_class",
+        (
+            f"{_FRAMEWORKS}.duckdb.test_duckdb_framework",
+            f"{_FRAMEWORKS}.iceberg.test_iceberg_framework",
+            f"{_FRAMEWORKS}.pandas.test_pandas_dataframe",
+            f"{_FRAMEWORKS}.polars.test_polars_dataframe",
+            f"{_FRAMEWORKS}.polars.test_polars_lazy_dataframe",
+            f"{_FRAMEWORKS}.pyarrow.test_pyarrow_table",
+            f"{_FRAMEWORKS}.python_dict.test_python_dict_framework",
+            f"{_FRAMEWORKS}.spark.test_spark_framework",
+            f"{_FRAMEWORKS}.sqlite.test_sqlite_framework",
         ),
         resolver=_framework_of_adapter,
     ),

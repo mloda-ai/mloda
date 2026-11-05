@@ -8,15 +8,12 @@ import pyarrow as pa
 import pytest
 
 from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
+from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
 from mloda._testing.declarations import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter, PandasAdapter
 from mloda._testing.typed_data import TypedTestData
 from mloda.user import DataType, FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
-    AppendColumnsFrameworkTestMixin,
-    EmptyResultFrameworkTestMixin,
-)
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -176,24 +173,15 @@ class TestPandasDataTypeValidator:
         assert framework_instance._extract_column_data_type(df, "c") == expected
 
 
-@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFrameworkTestMixin):
-    """Test PandasDataFrame schema detection via shared mixin (zero-row frame keeps columns)."""
+class TestPandasEmptyResultSuite(EmptyResultSuite):
+    adapter_class = PandasAdapter
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    @pytest.fixture
-    def empty_data(self) -> Any:
-        return pd.DataFrame({"a": pd.Series([], dtype="int64")})
+class TestPandasAppendColumnsSuite(AppendColumnsSuite):
+    adapter_class = PandasAdapter
 
     def single_column(self, values: list[Any]) -> Any | None:
         return pd.Series(values)
-
-    @pytest.fixture
-    def non_empty_data(self) -> Any:
-        return pd.DataFrame({"a": [1]})
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

@@ -7,6 +7,7 @@ import pyarrow as pa
 import pytest
 
 from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
+from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
 from mloda._testing.declarations import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter, SqliteAdapter
 from mloda.user import DataType, FeatureName, ParallelizationMode
@@ -14,11 +15,6 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framewor
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
-)
-from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
-    AppendColumnsFrameworkTestMixin,
-    AppendColumnsCaseFoldTestMixin,
-    EmptyResultFrameworkTestMixin,
 )
 
 
@@ -311,35 +307,20 @@ class TestSqliteDataTypeValidatorSuite(DataTypeValidatorSuite):
     def test_timestamp_us_column_strict_ms_raises(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
 
 
-class TestSqliteEmptyResult(
-    AppendColumnsFrameworkTestMixin, AppendColumnsCaseFoldTestMixin, EmptyResultFrameworkTestMixin
-):
-    """Test SqliteFramework schema detection via shared mixin.
+class TestSqliteEmptyResultSuite(EmptyResultSuite):
+    adapter_class = SqliteAdapter
 
-    SQLite data is a relation, so the data fixtures are built via ``from_arrow`` and pull in
-    the shared ``connection`` fixture, mirroring the DataTypeValidator consumer. A zero-row
-    relation still carries its columns (state C).
-    """
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    @pytest.fixture
-    def empty_data(self, connection: sqlite3.Connection) -> Any:
-        return SqliteRelation.from_arrow(connection, pa.table({"a": pa.array([], pa.int64())}))
+class TestSqliteAppendColumnsSuite(AppendColumnsSuite):
+    adapter_class = SqliteAdapter
+    case_folds_names = True
 
     def single_column(self, values: list[Any]) -> Any | None:
         return values
 
-    @pytest.fixture
-    def non_empty_data(self, connection: sqlite3.Connection) -> Any:
-        return SqliteRelation.from_arrow(connection, pa.table({"a": [1]}))
-
-    @pytest.fixture
-    def joined_data(self, connection: sqlite3.Connection) -> Any:
-        left = SqliteRelation.from_arrow(connection, pa.table({"a": [1, 2, 3]})).set_alias("l")
-        right = SqliteRelation.from_arrow(connection, pa.table({"a": [3, 1, 2], "b": [30, 10, 20]})).set_alias("r")
+    def joined_frame(self, adapter: FrameworkAdapter) -> Any:
+        left = adapter.from_arrow(pa.table({"a": [1, 2, 3]})).set_alias("l")
+        right = adapter.from_arrow(pa.table({"a": [3, 1, 2], "b": [30, 10, 20]})).set_alias("r")
         return left.join(right, "a")
 
 

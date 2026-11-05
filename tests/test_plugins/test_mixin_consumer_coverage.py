@@ -31,6 +31,7 @@ from mloda_plugins.feature_group.experimental.data_quality.missing_value.base im
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
 from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
+from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
 from mloda._testing.compute_framework.mask_suite import MaskEngineSuite
 from mloda._testing.compute_framework.output_schema_suite import OutputSchemaSuite
 from mloda._testing.compute_framework.relation_suite import SqlRelationWindowSuite
@@ -222,6 +223,40 @@ CONTRACTS: tuple[MixinContract, ...] = (
             f"{_FRAMEWORKS}.polars.test_polars_lazy_dataframe",
             f"{_FRAMEWORKS}.pyarrow.test_pyarrow_table",
             f"{_FRAMEWORKS}.python_dict.test_python_dict_framework",
+            f"{_FRAMEWORKS}.spark.test_spark_framework",
+            f"{_FRAMEWORKS}.sqlite.test_sqlite_framework",
+        ),
+        resolver=_framework_of_adapter,
+    ),
+    MixinContract(
+        ComputeFramework,
+        EmptyResultSuite,
+        "adapter_class",
+        (
+            f"{_FRAMEWORKS}.duckdb.test_duckdb_framework",
+            f"{_FRAMEWORKS}.iceberg.test_iceberg_framework",
+            f"{_FRAMEWORKS}.pandas.test_pandas_dataframe",
+            f"{_FRAMEWORKS}.polars.test_polars_dataframe",
+            f"{_FRAMEWORKS}.polars.test_polars_lazy_dataframe",
+            f"{_FRAMEWORKS}.pyarrow.test_pyarrow_table",
+            f"{_FRAMEWORKS}.python_dict.test_python_dict_allow_empty_result",
+            f"{_FRAMEWORKS}.spark.test_spark_framework",
+            f"{_FRAMEWORKS}.sqlite.test_sqlite_framework",
+        ),
+        resolver=_framework_of_adapter,
+    ),
+    MixinContract(
+        ComputeFramework,
+        AppendColumnsSuite,
+        "adapter_class",
+        (
+            f"{_FRAMEWORKS}.duckdb.test_duckdb_framework",
+            f"{_FRAMEWORKS}.iceberg.test_iceberg_framework",
+            f"{_FRAMEWORKS}.pandas.test_pandas_dataframe",
+            f"{_FRAMEWORKS}.polars.test_polars_dataframe",
+            f"{_FRAMEWORKS}.polars.test_polars_lazy_dataframe",
+            f"{_FRAMEWORKS}.pyarrow.test_pyarrow_table",
+            f"{_FRAMEWORKS}.python_dict.test_python_dict_allow_empty_result",
             f"{_FRAMEWORKS}.spark.test_spark_framework",
             f"{_FRAMEWORKS}.sqlite.test_sqlite_framework",
         ),

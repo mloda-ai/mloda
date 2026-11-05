@@ -3,6 +3,7 @@ from typing import Any
 import pytest
 from unittest.mock import Mock, patch
 from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
+from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
 from mloda._testing.declarations import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter, IcebergAdapter, PyArrowAdapter, to_arrow_table
 from mloda._testing.typed_data import TypedTestData
@@ -10,10 +11,6 @@ from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framew
 from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
-from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
-    AppendColumnsFrameworkTestMixin,
-    EmptyResultFrameworkTestMixin,
-)
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -329,41 +326,34 @@ def test_extract_column_data_type_pyarrow_table_returns_int64() -> None:
     assert framework._extract_column_data_type(pa.table({"a": [1]}), "a") is DataType.INT64
 
 
+class TestIcebergEmptyResultSuite(EmptyResultSuite):
+    """Both ``extract_column_names`` branches: zero-row and appended data are post-transform Arrow tables, non_empty is native."""
+
+    adapter_class = IcebergAdapter
+
+    def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
+        if name == "non_empty":
+            return super().frame(adapter, name, data)
+        return _arrow_frame(self, name, data)
+
+
+class TestIcebergAppendColumnsSuite(AppendColumnsSuite):
+    """``_append_columns`` only serves the post-transform Arrow shape, so frames are Arrow tables."""
+
+    adapter_class = IcebergAdapter
+
+    def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
+        return _arrow_frame(self, name, data)
+
+
 @pytest.mark.skipif(
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
-class TestIcebergEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFrameworkTestMixin):
-    """Test IcebergFramework schema detection via shared mixin, covering both branches.
-
-    ``IcebergFramework.extract_column_names`` has two branches and the fixtures exercise
-    one each:
-
-    - ``empty_data`` is a real zero-row PyArrow table. ``IcebergFramework.transform`` emits
-      a pa.Table for dict input, so post-transform working data takes the pa.Table branch
-      (``set(data.schema.names)``); this pins that a zero-row pa.Table still exposes its
-      schema (state C).
-    - ``non_empty_data`` is a real native IcebergTable built through the adapter, pinning
-      the native-table branch's access pattern.
-    """
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    @pytest.fixture
-    def empty_data(self) -> Any:
-        return pa.table({"a": pa.array([], pa.int64())})
-
-    @pytest.fixture
-    def non_empty_data(self, iceberg_adapter: Any) -> Any:
-        return iceberg_adapter.from_arrow(pa.table({"a": [1, 2]}))
-
-    @pytest.fixture
-    def appendable_data(self) -> Any:
-        return pa.table({"a": [1, 2]})
-
-    def test_append_columns_on_iceberg_table_returns_none(self, framework_instance: Any, non_empty_data: Any) -> None:
-        assert framework_instance._append_columns(non_empty_data, {"appended_col": [1]}) is None
+class TestIcebergEmptyResult:
+    def test_append_columns_on_iceberg_table_returns_none(self, iceberg_adapter: Any) -> None:
+        framework = IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        table = iceberg_adapter.from_arrow(pa.table({"a": [1, 2]}))
+        assert framework._append_columns(table, {"appended_col": [1]}) is None
 
 
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402

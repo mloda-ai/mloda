@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Any
 import pytest
 from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
+from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
 from mloda._testing.framework_adapter import DuckDBAdapter, FrameworkAdapter
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
@@ -11,11 +12,6 @@ from mloda.user import DataType, FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
-)
-from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
-    AppendColumnsFrameworkTestMixin,
-    AppendColumnsCaseFoldTestMixin,
-    EmptyResultFrameworkTestMixin,
 )
 
 import logging
@@ -264,38 +260,21 @@ class TestDuckDBDataTypeValidator:
         assert framework_instance._extract_column_data_type(relation, "c") == DataType.LIST
 
 
-@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
-class TestDuckDBEmptyResult(
-    AppendColumnsFrameworkTestMixin, AppendColumnsCaseFoldTestMixin, EmptyResultFrameworkTestMixin
-):
-    """Test DuckDBFramework schema detection via shared mixin.
+class TestDuckDBEmptyResultSuite(EmptyResultSuite):
+    adapter_class = DuckDBAdapter
 
-    DuckDB data is a relation, so the data fixtures are built via ``from_arrow`` and pull in
-    the shared ``connection`` fixture, mirroring the DataTypeValidator consumer. A zero-row
-    relation still carries its columns (state C).
-    """
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    @pytest.fixture
-    def empty_data(self, connection: Any) -> Any:
-        return DuckdbRelation.from_arrow(connection, pa.table({"a": pa.array([], pa.int64())}))
-
-    @pytest.fixture
-    def non_empty_data(self, connection: Any) -> Any:
-        return DuckdbRelation.from_arrow(connection, pa.table({"a": [1]}))
-
+class TestDuckDBAppendColumnsSuite(AppendColumnsSuite):
+    adapter_class = DuckDBAdapter
     needs_pinned_frame = True
+    case_folds_names = True
 
     def single_column(self, values: list[Any]) -> Any | None:
         return values
 
-    @pytest.fixture
-    def joined_data(self, connection: Any) -> Any:
-        left = DuckdbRelation.from_arrow(connection, pa.table({"a": [1, 2, 3]})).set_alias("l")
-        right = DuckdbRelation.from_arrow(connection, pa.table({"a": [3, 1, 2], "b": [30, 10, 20]})).set_alias("r")
+    def joined_frame(self, adapter: FrameworkAdapter) -> Any:
+        left = adapter.from_arrow(pa.table({"a": [1, 2, 3]})).set_alias("l")
+        right = adapter.from_arrow(pa.table({"a": [3, 1, 2], "b": [30, 10, 20]})).set_alias("r")
         return left.join(right, "a")
 
 

@@ -2,6 +2,7 @@ import os
 from typing import Any
 import pytest
 from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
+from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
 from mloda._testing.declarations import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter, PolarsAdapter
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
@@ -9,10 +10,6 @@ from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
-)
-from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
-    AppendColumnsFrameworkTestMixin,
-    EmptyResultFrameworkTestMixin,
 )
 
 import logging
@@ -140,28 +137,15 @@ class TestPolarsDataTypeValidatorSuite(DataTypeValidatorSuite):
     }
 
 
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFrameworkTestMixin):
-    """Test PolarsDataFrame schema detection via shared mixin.
+class TestPolarsEmptyResultSuite(EmptyResultSuite):
+    adapter_class = PolarsAdapter
 
-    PolarsDataFrame carries an eager ``pl.DataFrame``; a zero-row frame still carries its
-    columns, so ``_extract_column_names`` is non-empty (state C).
-    """
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    @pytest.fixture
-    def empty_data(self) -> Any:
-        return pl.DataFrame({"a": []})
+class TestPolarsAppendColumnsSuite(AppendColumnsSuite):
+    adapter_class = PolarsAdapter
 
     def single_column(self, values: list[Any]) -> Any | None:
         return pl.Series(values)
-
-    @pytest.fixture
-    def non_empty_data(self) -> Any:
-        return pl.DataFrame({"a": [1]})
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")

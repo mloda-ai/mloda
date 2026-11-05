@@ -32,10 +32,8 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.single_filter import SingleFilter
-from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
-    AppendColumnsFrameworkTestMixin,
-    EmptyResultFrameworkTestMixin,
-)
+from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
+from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter
 
 
 class _FakeFeaturesWithFilter:
@@ -186,28 +184,12 @@ class TestIsSchemalessEmptyHook:
         assert pyarrow_framework._is_schemaless_empty(pa.table({})) is False
 
 
-class TestPythonDictEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFrameworkTestMixin):
-    """Test PythonDictFramework schema detection via the shared mixin.
+class TestPythonDictEmptyResultSuite(EmptyResultSuite):
+    adapter_class = PythonDictAdapter
 
-    PythonDict's native data is a columnar dict. A schema-bearing zero-row frame keeps its
-    columns (``{"a": []}`` -> ``{"a"}``), so ``empty_data_carries_schema`` is True, matching
-    every other backend.
-    """
 
-    empty_data_carries_schema = True
+class TestPythonDictAppendColumnsSuite(AppendColumnsSuite):
+    adapter_class = PythonDictAdapter
 
-    @pytest.fixture
-    def foreign_data(self) -> Any:
+    def foreign_data(self, adapter: FrameworkAdapter) -> Any:
         return [{"a": 1}, {"a": 2}]
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return _framework()
-
-    @pytest.fixture
-    def empty_data(self) -> Any:
-        return {"a": []}
-
-    @pytest.fixture
-    def non_empty_data(self) -> Any:
-        return {"a": [1]}

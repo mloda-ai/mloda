@@ -24,6 +24,7 @@ import os
 from collections.abc import Iterator
 from typing import Any
 from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
+from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
 from mloda._testing.compute_framework.output_schema_suite import OutputSchemaSuite
 from mloda._testing.declarations import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter, SparkAdapter
@@ -35,11 +36,6 @@ from mloda.user import ParallelizationMode
 from mloda.user import Index
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
-)
-from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
-    AppendColumnsFrameworkTestMixin,
-    AppendColumnsCaseFoldTestMixin,
-    EmptyResultFrameworkTestMixin,
 )
 
 # Import shared fixtures and availability flags from conftest.py
@@ -385,39 +381,36 @@ class TestSparkDataTypeValidatorSuite(DataTypeValidatorSuite):
     def test_timestamp_us_column_strict_ms_raises(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
 
 
-@pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
-class TestSparkEmptyResult(
-    AppendColumnsFrameworkTestMixin, AppendColumnsCaseFoldTestMixin, EmptyResultFrameworkTestMixin
-):
-    """Test SparkFramework schema detection via shared mixin.
-
-    A Spark DataFrame has no rows-without-data form: the empty case needs an explicit
-    ``StructType`` so the (zero-row) frame still carries a column, mirroring how the Spark
-    framework builds empty frames, so ``_extract_column_names`` is non-empty (state C).
-    """
+class TestSparkEmptyResultSuite(EmptyResultSuite):
+    adapter_class = SparkAdapter
 
     @pytest.fixture
-    def framework_instance(self) -> Any:
-        return SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    def adapter(self, spark_session: Any) -> Iterator[FrameworkAdapter]:
+        """SparkAdapter borrows the active session, so spark_session must exist first."""
+        spark_adapter = self.adapter_class()
+        with spark_adapter:
+            yield spark_adapter
 
-    @pytest.fixture
-    def empty_data(self, spark_session: Any) -> Any:
-        schema = StructType([StructField("a", LongType())])
-        return spark_session.createDataFrame([], schema)
 
-    @pytest.fixture
-    def non_empty_data(self, spark_session: Any) -> Any:
-        return spark_session.createDataFrame([{"a": 1}])
-
+class TestSparkAppendColumnsSuite(AppendColumnsSuite):
+    adapter_class = SparkAdapter
     needs_pinned_frame = True
+    case_folds_names = True
+
+    @pytest.fixture
+    def adapter(self, spark_session: Any) -> Iterator[FrameworkAdapter]:
+        """SparkAdapter borrows the active session, so spark_session must exist first."""
+        spark_adapter = self.adapter_class()
+        with spark_adapter:
+            yield spark_adapter
 
     def single_column(self, values: list[Any]) -> Any | None:
         return values
 
-    @pytest.fixture
-    def joined_data(self, spark_session: Any) -> Any:
-        left = spark_session.createDataFrame([{"a": 1}, {"a": 2}, {"a": 3}])
-        right = spark_session.createDataFrame([{"a": 3, "b": 30}, {"a": 1, "b": 10}, {"a": 2, "b": 20}])
+    def joined_frame(self, adapter: FrameworkAdapter) -> Any:
+        session = adapter.connection
+        left = session.createDataFrame([{"a": 1}, {"a": 2}, {"a": 3}])
+        right = session.createDataFrame([{"a": 3, "b": 30}, {"a": 1, "b": 10}, {"a": 2, "b": 20}])
         return left.join(right, on="a")
 
 

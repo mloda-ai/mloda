@@ -3,6 +3,7 @@ import pytest
 import pyarrow as pa
 
 from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
+from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
 from mloda._testing.framework_adapter import PyArrowAdapter
 from mloda.provider import EmptyResultError
 from mloda.user import FeatureName
@@ -10,10 +11,6 @@ from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
-)
-from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
-    AppendColumnsFrameworkTestMixin,
-    EmptyResultFrameworkTestMixin,
 )
 
 
@@ -75,23 +72,15 @@ class TestPyArrowDataTypeValidatorSuite(DataTypeValidatorSuite):
     adapter_class = PyArrowAdapter
 
 
-class TestPyArrowEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFrameworkTestMixin):
-    """Test PyArrowTable schema detection via shared mixin (zero-row table keeps columns)."""
+class TestPyArrowEmptyResultSuite(EmptyResultSuite):
+    adapter_class = PyArrowAdapter
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    @pytest.fixture
-    def empty_data(self) -> Any:
-        return pa.table({"a": pa.array([], pa.int64())})
+class TestPyArrowAppendColumnsSuite(AppendColumnsSuite):
+    adapter_class = PyArrowAdapter
 
     def single_column(self, values: list[Any]) -> Any | None:
         return pa.array(values)
-
-    @pytest.fixture
-    def non_empty_data(self) -> Any:
-        return pa.table({"a": [1]})
 
 
 class _FakeGuardFeatureGroup:

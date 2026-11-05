@@ -21,8 +21,12 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.user import mloda, mlodaAPI, Feature, ParallelizationMode, PluginCollector
 from mloda.provider import ApiDataFG, ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
-from mloda.provider import PropertySpec
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
+from tests.test_core.test_abstract_plugins.test_materialize_defaults_boundary import (
+    CTX_DEFAULT,
+    _make_boundary_probe_fg,
+    _single_row,
+)
 from mloda.user import Options, FeatureName, Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -549,23 +553,6 @@ class TestRunRefusesShapeThatDiffersFromDefaultPrepare:
         assert extender.starts == 1
 
 
-def _make_prskip_default_fg(seen: dict[str, Any]) -> type[FeatureGroup]:
-    class PrSkipDefaultFG(DataCreatorFeatureGroup):
-        PROPERTY_MAPPING = {"prskip_default": PropertySpec("A default.", context=True, default="dflt")}
-
-        @classmethod
-        def feature_names_supported(cls) -> set[str]:
-            return {"prskip_default_feature"}
-
-        @classmethod
-        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-            for feature in features.features:
-                seen[str(feature.name)] = (feature.options.get("prskip_default"),)
-            return {"prskip_default_feature": [1, 2]}
-
-    return PrSkipDefaultFG
-
-
 def _run_twice_under_spies(name_bound: bool) -> dict[str, Any]:
     """Prepare, then run twice under spies; throwaway groups never outlive this frame."""
     seen: dict[str, Any] = {}
@@ -583,10 +570,10 @@ def _run_twice_under_spies(name_bound: bool) -> dict[str, Any]:
         name = "prskip_src__prskipop_q_b"
         expected: tuple[Any, ...] = ("q", "b")
     else:
-        fg = _make_prskip_default_fg(seen)
+        fg = _make_boundary_probe_fg("prskip_default_feature")
         source = fg
         name = "prskip_default_feature"
-        expected = ("dflt",)
+        expected = (CTX_DEFAULT,)
     try:
         session = mloda.prepare(
             [Feature(name)],
@@ -601,6 +588,8 @@ def _run_twice_under_spies(name_bound: bool) -> dict[str, Any]:
         ):
             first = session.run()
             second = session.run()
+        if not name_bound:
+            seen[name] = (_single_row(second[0], name)["ctx"],)
         return {
             "defaults": defaults.call_count,
             "bindings": bindings.call_count,

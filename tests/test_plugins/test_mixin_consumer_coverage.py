@@ -63,7 +63,7 @@ class MixinContract:
     """A plugin base, the mixin its implementations must join, and where the consumers live.
 
     With `aspect` set, only implementations whose `applicable_aspects` include it need a consumer, and
-    `resolver` maps a consumer's `attribute` value to the implementation it covers."""
+    `resolver` maps a consumer's `attribute` value to the implementation it covers; `applies` filters likewise."""
 
     base: type[Any]
     mixin: type[Any]
@@ -71,6 +71,7 @@ class MixinContract:
     consumer_modules: tuple[str, ...]
     resolver: Callable[[type[Any]], type[Any]] | None = None
     aspect: str | None = None
+    applies: Callable[[type[Any]], bool] | None = None
 
 
 def _framework_of_adapter(adapter_class: type[Any]) -> type[Any]:
@@ -78,9 +79,11 @@ def _framework_of_adapter(adapter_class: type[Any]) -> type[Any]:
     return framework
 
 
-def _data_framework_of_adapter(adapter_class: type[Any]) -> type[Any]:
-    data_framework: type[Any] = adapter_class().compute_framework().expected_data_framework()
-    return data_framework
+def _serves_sql_relation(cls: type[Any]) -> bool:
+    if not cls.is_available():
+        return False
+    data_framework = cls.expected_data_framework()
+    return isinstance(data_framework, type) and issubclass(data_framework, SqlBaseRelation)
 
 
 CONTRACTS: tuple[MixinContract, ...] = (
@@ -145,14 +148,15 @@ CONTRACTS: tuple[MixinContract, ...] = (
         aspect="filter",
     ),
     MixinContract(
-        SqlBaseRelation,
+        ComputeFramework,
         SqlRelationWindowSuite,
         "adapter_class",
         (
             f"{_FRAMEWORKS}.duckdb.test_duckdb_relation",
             f"{_FRAMEWORKS}.sqlite.test_sqlite_relation",
         ),
-        resolver=_data_framework_of_adapter,
+        resolver=_framework_of_adapter,
+        applies=_serves_sql_relation,
     ),
     MixinContract(
         SourceFeatureGroup,
@@ -200,9 +204,17 @@ def _qualified_name(cls: type[Any]) -> str:
     return f"{cls.__module__}.{cls.__qualname__}"
 
 
-def concrete_plugin_classes(base: type[Any], aspect: str | None = None) -> set[str]:
+def concrete_plugin_classes(
+    base: type[Any], aspect: str | None = None, applies: Callable[[type[Any]], bool] | None = None
+) -> set[str]:
     """Concrete subclasses of base defined under mloda_plugins; test-local subclasses fall out by module."""
     PluginLoader.all()
+    if applies is not None:
+        return {
+            _qualified_name(cls)
+            for cls in get_all_subclasses(base)
+            if cls.__module__.startswith("mloda_plugins.") and not inspect.isabstract(cls) and applies(cls)
+        }
     if aspect is not None:
         return {
             _qualified_name(cls)
@@ -237,7 +249,7 @@ def covered_classes(contract: MixinContract) -> set[str]:
 
 @pytest.mark.parametrize("contract", CONTRACTS, ids=[contract.mixin.__name__ for contract in CONTRACTS])
 def test_every_concrete_implementation_has_a_mixin_consumer(contract: MixinContract) -> None:
-    implementations = concrete_plugin_classes(contract.base, contract.aspect)
+    implementations = concrete_plugin_classes(contract.base, contract.aspect, contract.applies)
     assert implementations, f"no concrete {contract.base.__name__} found under mloda_plugins: the plugin import broke"
     uncovered = sorted(implementations - covered_classes(contract))
     assert uncovered == [], (

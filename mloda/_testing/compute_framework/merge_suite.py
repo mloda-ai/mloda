@@ -29,7 +29,7 @@ def make_merge_link(
     right_index: Index,
     asof_config: AsOfJoinConfig | None = None,
 ) -> Link:
-    """Build a minimal Link carrying jointype, indexes and an optional asof_config; merge() never reads the groups."""
+    """Minimal Link carrying jointype, indexes and an optional asof_config."""
     return Link(
         jointype,
         JoinSpec(FeatureGroup, left_index),
@@ -307,11 +307,7 @@ ASOF_SCENARIOS: dict[str, AsofScenario] = {
         "expected_rv": [10, 20],
     },
     "differing_names": {
-        "description": (
-            "Vector G: differing by-key names (lk vs rk) AND differing time-column names (lt vs rt), "
-            "backward, all matched. Both left and right by-key columns must survive in the output, so "
-            "the exact column set is asserted."
-        ),
+        "description": ("Differing by-key and time-column names, backward; both by-key columns must survive."),
         "left": TypedTestData({"lk": (_I, [1, 1, 2]), "lt": (_I, [10, 20, 15]), "lv": (_I, [100, 200, 300])}),
         "right": TypedTestData({"rk": (_I, [1, 1, 2, 2]), "rt": (_I, [5, 18, 5, 30]), "rv": (_I, [1, 2, 3, 4])}),
         "left_index": ("lk",),
@@ -345,7 +341,7 @@ def _has_null(rows: Rows, column: str) -> bool:
 
 
 class MergeEngineSuite(ComputeFrameworkSuite, suite_base=True):
-    """Contract tests of the merge engine of the host's compute framework: plain, multi-index and conformance joins."""
+    """Contract tests of the host's merge engine."""
 
     aspect = "merge"
 
@@ -452,7 +448,7 @@ class MergeEngineSuite(ComputeFrameworkSuite, suite_base=True):
     def test_merge_conformance(
         self, adapter: FrameworkAdapter, merge_engine: Any, scenario_key: str, join_name: str
     ) -> None:
-        """Every engine returns ONE canonical result for single-key equi-joins, compared as a null-normalized bag."""
+        """Single-key equi-joins give one canonical result, compared as a null-normalized bag."""
         scenario = MERGE_CONFORMANCE_SCENARIOS[scenario_key]
         left = self.frame(adapter, f"{scenario_key}_left", scenario["left"])
         right = self.frame(adapter, f"{scenario_key}_right", scenario["right"])
@@ -467,7 +463,7 @@ class MergeEngineSuite(ComputeFrameworkSuite, suite_base=True):
 
 
 class AsofMergeEngineSuite(ComputeFrameworkSuite, suite_base=True):
-    """Contract tests of the as-of join of the host's merge engine; hosts without merge_asof are not served."""
+    """Contract tests of the host's as-of join; hosts without merge_asof are not served."""
 
     aspect = "merge"
 
@@ -553,35 +549,35 @@ class AsofMergeEngineSuite(ComputeFrameworkSuite, suite_base=True):
         )
 
     def test_backward_single_key(self, adapter: FrameworkAdapter, merge_engine: Any) -> None:
-        """Vector A: backward, single by-key. Right rows shuffled to prove internal sorting."""
+        """Backward, single by-key, right rows shuffled."""
         self._run_asof_test(adapter, merge_engine, "backward_single_key")
 
     def test_forward_single_key(self, adapter: FrameworkAdapter, merge_engine: Any) -> None:
-        """Vector B: forward; row (k=1, t=20) has no right_time >= 20 -> null."""
+        """Forward; a row with no later right time is null."""
         self._run_asof_test(adapter, merge_engine, "forward_single_key")
 
     def test_allow_exact_matches_true(self, adapter: FrameworkAdapter, merge_engine: Any) -> None:
-        """Vector C: backward + allow_exact_matches=True -> exact-time row matched (rv=99)."""
+        """Exact-time row matches with allow_exact_matches=True."""
         self._run_asof_test(adapter, merge_engine, "exact_matches_true")
 
     def test_allow_exact_matches_false(self, adapter: FrameworkAdapter, merge_engine: Any) -> None:
-        """Vector C: backward + allow_exact_matches=False -> exact excluded, prior row (rv=1)."""
+        """Exact-time row is excluded with allow_exact_matches=False."""
         self._run_asof_test(adapter, merge_engine, "exact_matches_false")
 
     def test_tolerance_numeric(self, adapter: FrameworkAdapter, merge_engine: Any) -> None:
-        """Vector D: backward, tolerance=5 -> row t=100 gap 92 > 5 -> null."""
+        """A gap beyond the tolerance is null."""
         self._run_asof_test(adapter, merge_engine, "tolerance_numeric")
 
     def test_tolerance_none(self, adapter: FrameworkAdapter, merge_engine: Any) -> None:
-        """Vector D: backward, tolerance=None -> both rows match (rv=7, 7)."""
+        """Without tolerance both rows match."""
         self._run_asof_test(adapter, merge_engine, "tolerance_none")
 
     def test_multi_by_key(self, adapter: FrameworkAdapter, merge_engine: Any) -> None:
-        """Vector E: multi by-key (k1, k2), backward."""
+        """Multi by-key, backward."""
         self._run_asof_test(adapter, merge_engine, "multi_by_key")
 
     def test_differing_names(self, adapter: FrameworkAdapter, merge_engine: Any) -> None:
-        """Vector G: differing by-key and time-column names; both by-key columns survive."""
+        """Differing by-key and time-column names."""
         self._run_asof_test(adapter, merge_engine, "differing_names")
 
     def test_no_sortedness_warning_with_by_groups(self, adapter: FrameworkAdapter, merge_engine: Any) -> None:

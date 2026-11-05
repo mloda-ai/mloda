@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Callable
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -284,6 +285,98 @@ def _materialize(feature_set: FeatureSet, make_fg: Callable[[], type[FeatureGrou
     method was still absent.
     """
     feature_set.materialize_option_defaults(make_fg())
+
+
+def _stamp_present_scenario() -> dict[str, Any]:
+    """Stamp a set whose defaults are present; probe classes never outlive this frame."""
+    fg = _make_unit_group_default_fg()
+    try:
+        options = Options(group={MDB_GRP_KEY: GRP_DEFAULT})
+        feature = Feature("mdb_unit_stamp_present", options)
+        feature_set = FeatureSet([feature])
+        feature_set.stamp_option_defaults_materialized(fg)
+        marker_is_group = feature_set._defaults_materialized_for is fg
+        with patch.object(fg, "options_with_defaults", wraps=fg.options_with_defaults) as spy:
+            feature_set.materialize_option_defaults(fg)
+        return {
+            "marker_is_group": marker_is_group,
+            "spy_calls": spy.call_count,
+            "options_identical": feature.options is options and feature_set.options is options,
+        }
+    finally:
+        del fg
+
+
+def _stamp_missing_scenario() -> dict[str, Any]:
+    fg = _make_unit_group_default_fg()
+    try:
+        options = Options()
+        feature = Feature("mdb_unit_stamp_missing", options)
+        feature_set = FeatureSet([feature])
+        features_before = feature_set.features
+        set_options_before = feature_set.options
+        declared_before = {k: v for k, v in vars(feature_set).items() if k.startswith("declared_input_")}
+        feature_set.stamp_option_defaults_materialized(fg)
+        declared_after = {k: v for k, v in vars(feature_set).items() if k.startswith("declared_input_")}
+        nothing_written = (
+            feature.options is options
+            and feature_set.options is set_options_before
+            and feature_set.features is features_before
+            and declared_after == declared_before
+            and MDB_GRP_KEY not in options.group
+        )
+        marker_is_none = feature_set._defaults_materialized_for is None
+        feature_set.materialize_option_defaults(fg)
+        return {
+            "marker_is_none": marker_is_none,
+            "nothing_written": nothing_written,
+            "filled_after_materialize": feature.options.get(MDB_GRP_KEY) == GRP_DEFAULT,
+        }
+    finally:
+        del fg
+
+
+def _stamp_set_level_scenario() -> dict[str, Any]:
+    fg = _make_two_keys_fg(True, {})
+    try:
+        shared = Options()
+        feature_set = FeatureSet([Feature("mdb_src__mdbop_q_b", shared), Feature("mdb_src__mdbop_r_c", shared)])
+        set_options_before = feature_set.options
+        feature_set.stamp_option_defaults_materialized(fg)
+        return {
+            "marker_is_none": feature_set._defaults_materialized_for is None,
+            "options_unchanged": feature_set.options is set_options_before,
+        }
+    finally:
+        del fg
+
+
+def _stamp_add_scenario() -> dict[str, Any]:
+    fg = _make_unit_group_default_fg()
+    try:
+        options = Options(group={MDB_GRP_KEY: GRP_DEFAULT})
+        feature_set = FeatureSet([Feature("mdb_unit_stamp_add_a", options)])
+        feature_set.stamp_option_defaults_materialized(fg)
+        stamped = feature_set._defaults_materialized_for is fg
+        feature_set.add(Feature("mdb_unit_stamp_add_b", options))
+        return {"stamped": stamped, "cleared": feature_set._defaults_materialized_for is None}
+    finally:
+        del fg
+
+
+def _stamp_other_group_scenario() -> int:
+    stamped_fg = _make_unit_group_default_fg()
+    other_fg = _make_unit_group_default_fg()
+    try:
+        feature = Feature("mdb_unit_stamp_other", Options(group={MDB_GRP_KEY: GRP_DEFAULT}))
+        feature_set = FeatureSet([feature])
+        feature_set.stamp_option_defaults_materialized(stamped_fg)
+        with patch.object(other_fg, "options_with_defaults", wraps=other_fg.options_with_defaults) as spy:
+            feature_set.materialize_option_defaults(other_fg)
+        return int(spy.call_count)
+    finally:
+        del stamped_fg
+        del other_fg
 
 
 class TestRuntimeDefaultMaterializationEndToEnd:
@@ -656,6 +749,31 @@ class TestFeatureSetMaterializeOptionDefaults:
 
         assert MDB_GRP_KEY not in original.group, "the input Options was mutated"
         assert MDB_GRP_KEY not in original.context, "the input Options was mutated"
+
+    def test_stamp_with_defaults_present_sets_marker_and_skips_recompute(self) -> None:
+        observed = _stamp_present_scenario()
+        assert observed["marker_is_group"]
+        assert observed["spy_calls"] == 0
+        assert observed["options_identical"]
+
+    def test_stamp_with_defaults_missing_does_not_stamp_and_writes_nothing(self) -> None:
+        observed = _stamp_missing_scenario()
+        assert observed["marker_is_none"]
+        assert observed["nothing_written"]
+        assert observed["filled_after_materialize"]
+
+    def test_stamp_does_not_stamp_when_only_set_level_options_would_change(self) -> None:
+        observed = _stamp_set_level_scenario()
+        assert observed["marker_is_none"]
+        assert observed["options_unchanged"]
+
+    def test_add_after_stamp_clears_marker(self) -> None:
+        observed = _stamp_add_scenario()
+        assert observed["stamped"]
+        assert observed["cleared"]
+
+    def test_stamp_for_one_group_does_not_short_circuit_another_group(self) -> None:
+        assert _stamp_other_group_scenario() >= 1
 
     def test_collapse_of_same_name_twins_raises_actionable_duplicate_message(self) -> None:
         """Filling a context default on one twin of a same-name pair collapses the set: the ValueError

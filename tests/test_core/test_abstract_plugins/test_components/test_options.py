@@ -139,6 +139,18 @@ class TestOptions:
         # Different group -> different hash
         assert hash(options1) != hash(options3)
 
+    def test_hash_changes_after_in_place_group_add(self) -> None:
+        """Options and Feature hashes follow in-place group mutation (no hash caching)."""
+        options = Options(group={"a": 1})
+        feature = Feature("hash_inplace_feature", options)
+        options_before = hash(options)
+        feature_before = hash(feature)
+
+        options.add_to_group("b", 2)
+
+        assert hash(options) != options_before
+        assert hash(feature) != feature_before
+
     def test_get_legacy_method(self) -> None:
         """Test legacy get method searches both group and context."""
         options = Options(group={"group_key": "group_value"}, context={"context_key": "context_value"})

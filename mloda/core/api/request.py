@@ -171,6 +171,9 @@ class mlodaAPI:
                     for step in self._execution_plan()
                     if isinstance(step, FeatureGroupStep) and step.feature_group.artifact() is not None
                 )
+                for step in self._execution_plan():
+                    if isinstance(step, FeatureGroupStep):
+                        step.features.stamp_option_defaults_materialized(step.feature_group)
                 if self._extenders:
                     self._stamp_structure_hash()
             except BaseException as error:

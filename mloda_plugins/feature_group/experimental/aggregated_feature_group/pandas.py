@@ -37,6 +37,10 @@ class PandasAggregation(Implementation[AggregatedFeatureGroup]):
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
         """Add the result to the DataFrame."""
+        import pandas as pd
+
+        if isinstance(result, pd.Series) and len(result) == 1 and len(data) != 1:
+            result = pd.Series(result.iloc[0], index=data.index, dtype=result.dtype)
         data[feature_name] = result
         return data
 
@@ -102,18 +106,27 @@ class PandasAggregation(Implementation[AggregatedFeatureGroup]):
             if aggregation_type == "sum":
                 return selected_data.sum()
             elif aggregation_type == "min":
-                return selected_data.min()
+                return cls._typed_scalar(data, selected_data.min(), selected_data.dtype, selected_data.dtype)
             elif aggregation_type == "max":
-                return selected_data.max()
+                return cls._typed_scalar(data, selected_data.max(), selected_data.dtype, selected_data.dtype)
             elif aggregation_type in ["avg", "mean"]:
-                return selected_data.mean()
+                return cls._typed_scalar(data, selected_data.mean(), selected_data.dtype, "Float64")
             elif aggregation_type == "count":
                 return selected_data.count()
             elif aggregation_type == "std":
-                return selected_data.std()
+                return cls._typed_scalar(data, selected_data.std(), selected_data.dtype, "Float64")
             elif aggregation_type == "var":
-                return selected_data.var()
+                return cls._typed_scalar(data, selected_data.var(), selected_data.dtype, "Float64")
             elif aggregation_type == "median":
-                return selected_data.median()
+                return cls._typed_scalar(data, selected_data.median(), selected_data.dtype, "Float64")
             else:
                 raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
+
+    @staticmethod
+    def _typed_scalar(data: Any, value: Any, source_dtype: Any, dtype: Any) -> Any:
+        """Wrap a scalar in a one-element typed Series on nullable sources; numpy sources keep the raw scalar."""
+        import pandas as pd
+
+        if not pd.api.types.is_extension_array_dtype(source_dtype):
+            return value
+        return pd.Series([value], dtype=dtype)

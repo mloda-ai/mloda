@@ -457,6 +457,19 @@ def test_exact_type_run_group_passes(kind: str, adapter_cls: type[Any]) -> None:
     assert result.failures == (), result.failures
 
 
+@pytest.mark.parametrize("adapter_cls", [PyArrowAdapter, PandasAdapter, PolarsAdapter])
+def test_default_run_group_passes_with_nullable_int_input(adapter_cls: type[Any]) -> None:
+    _require_backend(adapter_cls)
+    data = TypedTestData(
+        {
+            "rg_src": (DataType.INT64, [1, None, 3]),
+            "rg_label": (DataType.STRING, ["alpha-secret", "beta-secret", "gamma-secret"]),
+        }
+    )
+    result = check_feature_group_shape(make_run_group(), input_data=data, adapter=adapter_cls())
+    assert result.failures == (), result.failures
+
+
 def test_pandas_object_date_run_notes_value_only_check() -> None:
     _require_backend(PandasAdapter)
     result = check_feature_group_shape(make_run_group("object_date"), input_data=_run_data(), adapter=PandasAdapter())

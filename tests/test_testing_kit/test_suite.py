@@ -550,18 +550,37 @@ def test_compute_framework_host_missing_a_required_hook_fails_naming_it() -> Non
     assert _Provided.adapter_class is PythonDictAdapter
 
 
-@pytest.mark.timeout(60)
-def test_framework_without_the_aspect_fails_with_the_wiring_message(pytester: pytest.Pytester) -> None:
-    pytester.makepyfile(test_wiring=_WIRING_MODULE)
+_RELATION_WIRING_MODULE = """
+from mloda._testing.compute_framework.relation_suite import SqlRelationWindowSuite
+from mloda._testing.framework_adapter import PythonDictAdapter
 
-    result = pytester.runpytest_subprocess("-p", "no:cacheprovider")
+
+class TestNoRelation(SqlRelationWindowSuite):
+    adapter_class = PythonDictAdapter
+"""
+
+
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    ("module", "select", "framework", "aspect"),
+    [
+        (_WIRING_MODULE, [], "NoFilterFramework", "filter"),
+        (_RELATION_WIRING_MODULE, ["-k", "test_from_dict_basic or test_len"], "PythonDictFramework", "sql_relation"),
+    ],
+)
+def test_framework_without_the_aspect_fails_with_the_wiring_message(
+    pytester: pytest.Pytester, module: str, select: list[str], framework: str, aspect: str
+) -> None:
+    pytester.makepyfile(test_wiring=module)
+
+    result = pytester.runpytest_subprocess("-p", "no:cacheprovider", *select)
 
     outcomes = result.parseoutcomes()
     assert outcomes.get("errors", 0) > 0
     assert outcomes.get("passed", 0) == 0
     failed_lines = [line for line in result.stdout.str().splitlines() if line.startswith("E ") and "Failed:" in line]
     assert failed_lines
-    assert all("NoFilterFramework" in line and "filter" in line for line in failed_lines)
+    assert all(framework in line and aspect in line for line in failed_lines)
 
 
 def test_adapter_is_fresh_per_test_and_closed_afterwards(pytester: pytest.Pytester) -> None:

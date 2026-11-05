@@ -47,9 +47,12 @@ class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
     @pytest.fixture
     def framework(self, adapter: FrameworkAdapter) -> type[ComputeFramework]:
         framework = adapter.compute_framework()
-        if self.aspect not in applicable_aspects(framework):
+        if not self._serves(adapter, framework):
             pytest.fail(f"{framework.__name__} does not serve the '{self.aspect}' aspect; this host is mis-wired")
         return framework
+
+    def _serves(self, adapter: FrameworkAdapter, framework: type[ComputeFramework]) -> bool:
+        return self.aspect in applicable_aspects(framework)
 
     def arrow_types(self, name: str) -> Mapping[str, pa.DataType] | None:
         return None

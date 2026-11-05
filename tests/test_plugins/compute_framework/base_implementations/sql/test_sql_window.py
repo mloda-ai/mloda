@@ -1,8 +1,7 @@
 """Tests for the SQL window-function primitives in sql_window.py.
 
-These tests exercise dataclass construction and validation only — they have
-no relation/backend dependency. Backend-level window tests live in the
-SqlRelationWindowTestMixin (to be added in a follow-up commit).
+These tests exercise dataclass construction and validation only, with no
+relation/backend dependency. Backend-level window tests live in SqlRelationWindowSuite.
 """
 
 import pytest

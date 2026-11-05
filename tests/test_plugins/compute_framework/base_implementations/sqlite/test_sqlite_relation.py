@@ -7,6 +7,8 @@ from typing import Any
 import pyarrow as pa
 import pytest
 
+from mloda._testing.compute_framework.relation_suite import SqlRelationWindowSuite
+from mloda._testing.framework_adapter import SqliteAdapter
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.user import DataType, Index
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine import SqliteMergeEngine
@@ -19,12 +21,6 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation
     _sqlite_affinity_to_arrow_type,
 )
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
-from tests.test_plugins.compute_framework.base_implementations.relation_test_mixin import (
-    RelationTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.sql_relation_window_test_mixin import (
-    SqlRelationWindowTestMixin,
-)
 
 _COLS = "a", "n", "d", "b", "t", "i", "r", "x"
 
@@ -67,26 +63,8 @@ _NO_HINT_BUILDERS: dict[str, Callable[[sqlite3.Connection], SqliteRelation]] = {
 }
 
 
-class TestSqliteRelation(SqlRelationWindowTestMixin, RelationTestMixin):
-    @pytest.fixture
-    def sample_relation(self, connection: sqlite3.Connection) -> SqliteRelation:
-        arrow = pa.Table.from_pydict(
-            {
-                "id": [1, 2, 3, 4, 5],
-                "age": [25, 30, 35, 40, 45],
-                "name": ["Alice", "Bob", "Charlie", "David", "Eve"],
-                "category": ["A", "B", "A", "C", "B"],
-            }
-        )
-        return SqliteRelation.from_arrow(connection, arrow)
-
-    @pytest.fixture
-    def relation_class(self) -> Any:
-        return SqliteRelation
-
-    def get_column_values(self, result: Any, column: str) -> list[Any]:
-        values: list[Any] = result.df()[column].tolist()
-        return values
+class TestSqliteRelation(SqlRelationWindowSuite):
+    adapter_class = SqliteAdapter
 
     def test_types_exposes_arrow_schema_from_arrow_aligned_with_columns(self, connection: sqlite3.Connection) -> None:
         arrow = pa.table(
@@ -633,12 +611,6 @@ class TestSqliteRelation(SqlRelationWindowTestMixin, RelationTestMixin):
                 rel.window("SUM(v)", alias, partition_by=partition_by, order_by=order_by)
             else:
                 rel.with_row_number(alias, partition_by=partition_by, order_by=order_by)
-
-    @pytest.mark.parametrize("bad", ["missing", "V"])
-    def test_select_missing_or_case_mismatched_name_raises(self, connection: sqlite3.Connection, bad: str) -> None:
-        rel = SqliteRelation.from_dict(connection, {"v": [1, 2]})
-        with pytest.raises(ValueError, match=bad):
-            rel.select(bad)
 
     @pytest.mark.parametrize("bad", ["missing", "V"])
     def test_order_missing_or_case_mismatched_name_raises(self, connection: sqlite3.Connection, bad: str) -> None:

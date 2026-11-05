@@ -30,6 +30,8 @@ from mloda_plugins.feature_group.experimental.data_quality.missing_value.base im
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
 from mloda._testing.compute_framework.mask_suite import MaskEngineSuite
+from mloda._testing.compute_framework.relation_suite import SqlRelationWindowSuite
+from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_calculate_test_mixin import (
     AggregatedCalculateTestMixin,
 )
@@ -74,6 +76,11 @@ class MixinContract:
 def _framework_of_adapter(adapter_class: type[Any]) -> type[Any]:
     framework: type[Any] = adapter_class().compute_framework()
     return framework
+
+
+def _data_framework_of_adapter(adapter_class: type[Any]) -> type[Any]:
+    data_framework: type[Any] = adapter_class().compute_framework().expected_data_framework()
+    return data_framework
 
 
 CONTRACTS: tuple[MixinContract, ...] = (
@@ -136,6 +143,16 @@ CONTRACTS: tuple[MixinContract, ...] = (
         ),
         resolver=_framework_of_adapter,
         aspect="filter",
+    ),
+    MixinContract(
+        SqlBaseRelation,
+        SqlRelationWindowSuite,
+        "adapter_class",
+        (
+            f"{_FRAMEWORKS}.duckdb.test_duckdb_relation",
+            f"{_FRAMEWORKS}.sqlite.test_sqlite_relation",
+        ),
+        resolver=_data_framework_of_adapter,
     ),
     MixinContract(
         SourceFeatureGroup,

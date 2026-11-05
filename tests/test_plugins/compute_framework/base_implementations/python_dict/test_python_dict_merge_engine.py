@@ -2,15 +2,12 @@ from datetime import UTC, datetime
 from typing import Any
 import pytest
 
+from mloda._testing.compute_framework.merge_suite import MergeEngineSuite, make_merge_link
+from mloda._testing.framework_adapter import PythonDictAdapter
 from mloda.user import JoinType
 from mloda.user import Index
-from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_merge_engine import (
     PythonDictMergeEngine,
-)
-from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
-from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
-    MultiIndexMergeEngineTestBase,
 )
 
 
@@ -306,19 +303,7 @@ class TestPythonDictMergeEngineOneToMany:
         }
 
 
-class TestPythonDictMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
-    """Test PythonDictMergeEngine multi-index support using shared test scenarios."""
+class TestPythonDictMergeEngineMultiIndex(MergeEngineSuite):
+    """Test PythonDictMergeEngine using the shared merge suite."""
 
-    @classmethod
-    def merge_engine_class(cls) -> type[BaseMergeEngine]:
-        """Return the PythonDictMergeEngine class."""
-        return PythonDictMergeEngine
-
-    @classmethod
-    def framework_type(cls) -> type[Any]:
-        """Return dict type (PythonDict uses a columnar dict)."""
-        return dict
-
-    def get_connection(self) -> Any | None:
-        """PythonDict does not require a connection object."""
-        return None
+    adapter_class = PythonDictAdapter

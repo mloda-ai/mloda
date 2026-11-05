@@ -65,6 +65,9 @@ class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
     def column_values(self, adapter: FrameworkAdapter, result: Any, column: str) -> list[Any]:
         return adapter.column_values(result, column)
 
+    def rows(self, adapter: FrameworkAdapter, result: Any) -> list[dict[str, Any]]:
+        return adapter.rows(result)
+
     def row_count(self, adapter: FrameworkAdapter, result: Any) -> int:
         return adapter.row_count(result)
 

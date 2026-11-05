@@ -13,7 +13,8 @@ from typing import Any
 
 import pytest
 
-from mloda._testing.compute_framework_shape import applicable_aspects
+from mloda._testing.compute_framework.merge_suite import AsofMergeEngineSuite, MergeEngineSuite
+from mloda._testing.compute_framework_shape import applicable_aspects, serves_asof_merge
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.implementation import loaded_implementations
@@ -146,6 +147,39 @@ CONTRACTS: tuple[MixinContract, ...] = (
         ),
         resolver=_framework_of_adapter,
         aspect="filter",
+    ),
+    MixinContract(
+        ComputeFramework,
+        MergeEngineSuite,
+        "adapter_class",
+        (
+            f"{_FRAMEWORKS}.duckdb.test_duckdb_merge_engine",
+            f"{_FRAMEWORKS}.pandas.test_pandas_merge_engine",
+            f"{_FRAMEWORKS}.polars.test_polars_lazy_merge_engine",
+            f"{_FRAMEWORKS}.polars.test_polars_merge_engine",
+            f"{_FRAMEWORKS}.pyarrow.test_pyarrow_merge_engine",
+            f"{_FRAMEWORKS}.python_dict.test_python_dict_merge_engine",
+            f"{_FRAMEWORKS}.spark.test_spark_merge_engine",
+            f"{_FRAMEWORKS}.sqlite.test_sqlite_merge_engine",
+        ),
+        resolver=_framework_of_adapter,
+        aspect="merge",
+    ),
+    MixinContract(
+        ComputeFramework,
+        AsofMergeEngineSuite,
+        "adapter_class",
+        (
+            f"{_FRAMEWORKS}.duckdb.test_duckdb_asof_merge_engine",
+            f"{_FRAMEWORKS}.pandas.test_pandas_asof_merge_engine",
+            f"{_FRAMEWORKS}.polars.test_polars_asof_merge_engine",
+            f"{_FRAMEWORKS}.pyarrow.test_pyarrow_asof_merge_engine",
+            f"{_FRAMEWORKS}.python_dict.test_python_dict_asof_merge_engine",
+            f"{_FRAMEWORKS}.spark.test_spark_asof_merge_engine",
+            f"{_FRAMEWORKS}.sqlite.test_sqlite_asof_merge_engine",
+        ),
+        resolver=_framework_of_adapter,
+        applies=serves_asof_merge,
     ),
     MixinContract(
         ComputeFramework,

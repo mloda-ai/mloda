@@ -11,7 +11,7 @@ Environment Setup:
 - JAVA_HOME: Must point to a valid Java installation
 
 Test Coverage:
-- All join types (inner, left, right, full outer, append, union)
+- Join types and multi-index through the shared MergeEngineSuite host
 - Column conflict handling
 - Multi-index validation
 - Join logic with same and different column names
@@ -20,8 +20,12 @@ The tests use a shared SparkSession fixture to avoid Java gateway conflicts and
 ensure proper resource management across all test methods.
 """
 
+from collections.abc import Iterator
 from typing import Any
 import pytest
+from mloda._testing.compute_framework.merge_suite import MergeEngineSuite
+from mloda._testing.declarations import Cause
+from mloda._testing.framework_adapter import FrameworkAdapter, SparkAdapter
 from mloda.user import Index
 from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engine import SparkMergeEngine
 
@@ -43,63 +47,6 @@ class TestSparkMergeEngine:
         merge_engine = SparkMergeEngine()
         # Should not raise an exception if PySpark is available
         merge_engine.check_import()
-
-    def test_merge_inner(self, spark_session: Any) -> None:
-        """Test inner join functionality."""
-        left_data = spark_session.createDataFrame([{"idx": 1, "col1": "a"}, {"idx": 3, "col1": "b"}])
-        right_data = spark_session.createDataFrame([{"idx": 1, "col2": "x"}, {"idx": 2, "col2": "z"}])
-        idx = Index(("idx",))
-
-        merge_engine = SparkMergeEngine(spark_session)
-        result = merge_engine.merge_inner(left_data, right_data, idx, idx)
-
-        assert result is not None
-        result_count = result.count()
-        assert result_count == 1  # Only one matching row (idx=1)
-
-        # Check that both columns are present
-        columns = set(result.columns)
-        assert "col1" in columns
-        assert "col2" in columns
-
-    def test_merge_left(self, spark_session: Any) -> None:
-        """Test left join functionality."""
-        left_data = spark_session.createDataFrame([{"idx": 1, "col1": "a"}, {"idx": 3, "col1": "b"}])
-        right_data = spark_session.createDataFrame([{"idx": 1, "col2": "x"}, {"idx": 2, "col2": "z"}])
-        idx = Index(("idx",))
-
-        merge_engine = SparkMergeEngine(spark_session)
-        result = merge_engine.merge_left(left_data, right_data, idx, idx)
-
-        assert result is not None
-        result_count = result.count()
-        assert result_count == 2  # All rows from left table
-
-    def test_merge_right(self, spark_session: Any) -> None:
-        """Test right join functionality."""
-        left_data = spark_session.createDataFrame([{"idx": 1, "col1": "a"}, {"idx": 3, "col1": "b"}])
-        right_data = spark_session.createDataFrame([{"idx": 1, "col2": "x"}, {"idx": 2, "col2": "z"}])
-        idx = Index(("idx",))
-
-        merge_engine = SparkMergeEngine(spark_session)
-        result = merge_engine.merge_right(left_data, right_data, idx, idx)
-
-        assert result is not None
-        result_count = result.count()
-        assert result_count == 2  # All rows from right table
-
-    def test_merge_full_outer(self, spark_session: Any) -> None:
-        """Test full outer join functionality."""
-        left_data = spark_session.createDataFrame([{"idx": 1, "col1": "a"}, {"idx": 3, "col1": "b"}])
-        right_data = spark_session.createDataFrame([{"idx": 1, "col2": "x"}, {"idx": 2, "col2": "z"}])
-        idx = Index(("idx",))
-
-        merge_engine = SparkMergeEngine(spark_session)
-        result = merge_engine.merge_full_outer(left_data, right_data, idx, idx)
-
-        assert result is not None
-        result_count = result.count()
-        assert result_count == 3  # All unique rows from both tables
 
     def test_merge_append(self, spark_session: Any) -> None:
         """Test append (union all) functionality."""
@@ -166,3 +113,40 @@ class TestSparkMergeEngine:
 
         with pytest.raises(ValueError, match="MultiIndex is not yet implemented"):
             merge_engine._join_logic("inner", left_data, right_data, multi_idx, idx)
+
+
+class TestSparkMergeEngineSuite(MergeEngineSuite):
+    adapter_class = SparkAdapter
+    switched_off = {
+        "test_merge_append": Cause.NOT_IMPLEMENTED,
+        "test_merge_union": Cause.NOT_IMPLEMENTED,
+        "test_merge_inner_with_multi_index": Cause.NOT_IMPLEMENTED,
+        "test_merge_left_with_multi_index": Cause.NOT_IMPLEMENTED,
+        "test_merge_full_outer_with_multi_index": Cause.NOT_IMPLEMENTED,
+    }
+
+    @pytest.fixture
+    def adapter(self, spark_session: Any) -> Iterator[FrameworkAdapter]:
+        """SparkAdapter borrows the active session, so spark_session must exist first."""
+        spark_adapter = self.adapter_class()
+        with spark_adapter:
+            yield spark_adapter
+
+    @pytest.mark.skip(
+        reason="SparkMergeEngine unions by position rather than by name, so differently named columns do not align"
+    )
+    def test_merge_append(self, adapter: FrameworkAdapter, merge_engine: Any) -> None: ...
+
+    @pytest.mark.skip(
+        reason="SparkMergeEngine unions by position rather than by name, so differently named columns do not align"
+    )
+    def test_merge_union(self, adapter: FrameworkAdapter, merge_engine: Any) -> None: ...
+
+    @pytest.mark.skip(reason="SparkMergeEngine rejects multi-column indexes, see test_multi_index_not_supported")
+    def test_merge_inner_with_multi_index(self, adapter: FrameworkAdapter, merge_engine: Any) -> None: ...
+
+    @pytest.mark.skip(reason="SparkMergeEngine rejects multi-column indexes, see test_multi_index_not_supported")
+    def test_merge_left_with_multi_index(self, adapter: FrameworkAdapter, merge_engine: Any) -> None: ...
+
+    @pytest.mark.skip(reason="SparkMergeEngine rejects multi-column indexes, see test_multi_index_not_supported")
+    def test_merge_full_outer_with_multi_index(self, adapter: FrameworkAdapter, merge_engine: Any) -> None: ...

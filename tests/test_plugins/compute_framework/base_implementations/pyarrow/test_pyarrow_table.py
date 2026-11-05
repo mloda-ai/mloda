@@ -7,7 +7,6 @@ from mloda.provider import EmptyResultError
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -75,33 +74,6 @@ class TestPyArrowTableComputeFramework:
         pyarrow_table.data = expected_data
         pyarrow_table.set_column_names()
         assert pyarrow_table.column_names == {"column1", "column2"}
-
-
-class TestPyArrowTableMerge(DataFrameTestBase):
-    """Test PyArrowTable merge operations using the base test class."""
-
-    @classmethod
-    def framework_class(cls) -> type[Any]:
-        """Return the PyArrowTable class."""
-        return PyArrowTable
-
-    def create_dataframe(self, data: dict[str, Any]) -> Any:
-        """Create a pyarrow Table from a dictionary."""
-        return pa.table(data)
-
-    def get_connection(self) -> Any | None:
-        """Return connection object (None for pyarrow)."""
-        return None
-
-    @pytest.mark.skip(reason="PyArrow requires matching schemas for append - base test uses different columns")
-    def test_merge_append(self) -> None:
-        """Skip APPEND test for PyArrow due to schema requirements."""
-        pass
-
-    @pytest.mark.skip(reason="PyArrow does not support UNION operations - see GitHub issue #30950")
-    def test_merge_union(self) -> None:
-        """Skip UNION test for PyArrow as it's not supported."""
-        pass
 
 
 class TestPyArrowDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):

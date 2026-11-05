@@ -8,7 +8,7 @@ from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe 
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from mloda.user import Index
-from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
+from mloda._testing.compute_framework.merge_suite import make_merge_link
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )

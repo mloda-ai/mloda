@@ -1,13 +1,11 @@
 from typing import Any
 import pytest
 
-from mloda.provider import BaseMergeEngine
+from mloda._testing.compute_framework.merge_suite import MergeEngineSuite, make_merge_link
+from mloda._testing.declarations import Cause
+from mloda._testing.framework_adapter import FrameworkAdapter, PyArrowAdapter
 from mloda.user import Index, JoinType
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_merge_engine import PyArrowMergeEngine
-from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
-from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
-    MultiIndexMergeEngineTestBase,
-)
 
 try:
     import pyarrow as pa
@@ -216,28 +214,21 @@ class TestPyArrowMergeEngineNestedColumns:
         assert result.column("lp").to_pylist() == ["a"] * 40000
 
 
-class TestPyArrowMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
-    """Test PyArrowMergeEngine using shared multi-index test scenarios."""
+class TestPyArrowMergeEngineMultiIndex(MergeEngineSuite):
+    """Test PyArrowMergeEngine using the shared merge suite."""
 
-    @classmethod
-    def merge_engine_class(cls) -> type[BaseMergeEngine]:
-        """Return the PyArrowMergeEngine class."""
-        return PyArrowMergeEngine
+    adapter_class = PyArrowAdapter
+    switched_off = {
+        "test_merge_append": Cause.BACKEND,
+        "test_merge_union": Cause.NOT_IMPLEMENTED,
+        "test_merge_union_with_multi_index": Cause.NOT_IMPLEMENTED,
+    }
 
-    @classmethod
-    def framework_type(cls) -> type[Any]:
-        """Return pyarrow Table type."""
-        if pa is None:
-            raise ImportError("PyArrow is not installed")
-        # mypy can't infer pa.Table type correctly
-        table_type: type[Any] = pa.Table
-        return table_type
-
-    def get_connection(self) -> Any | None:
-        """PyArrow does not require a connection object."""
-        return None
+    @pytest.mark.skip(reason="PyArrow requires matching schemas for append, the plain scenario uses different columns")
+    def test_merge_append(self, adapter: FrameworkAdapter, merge_engine: Any) -> None: ...
 
     @pytest.mark.skip(reason="PyArrow does not support UNION operations - see GitHub issue #30950")
-    def test_merge_union_with_multi_index(self) -> None:
-        """Skip UNION test for PyArrow as it's not supported."""
-        pass
+    def test_merge_union(self, adapter: FrameworkAdapter, merge_engine: Any) -> None: ...
+
+    @pytest.mark.skip(reason="PyArrow does not support UNION operations - see GitHub issue #30950")
+    def test_merge_union_with_multi_index(self, adapter: FrameworkAdapter, merge_engine: Any) -> None: ...

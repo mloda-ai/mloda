@@ -52,7 +52,7 @@ from tests.test_plugins.compute_framework.base_implementations.spark.conftest im
     PYSPARK_AVAILABLE,
     SKIP_REASON,
 )
-from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
+from mloda._testing.compute_framework.merge_suite import make_merge_link
 
 import logging
 

@@ -13,7 +13,9 @@ from mloda._testing.compute_framework_shape import (
     applicable_aspects,
     assert_compute_framework_shape,
     check_compute_framework_shape,
+    serves_asof_merge,
 )
+from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.filter.filter_engine import BaseFilterEngine
 
@@ -208,3 +210,37 @@ def test_assert_raises_pytest_failure_for_broken_framework() -> None:
     with pytest.raises(pytest.fail.Exception) as excinfo:
         assert_compute_framework_shape(make_init_ignores_uuid())
     assert "construct:" in str(excinfo.value)
+
+
+def _framework_with_merge(engine: type[BaseMergeEngine] | None, available: bool = True) -> type[ComputeFramework]:
+    class CfAsofStub(ComputeFramework):
+        @staticmethod
+        def is_available() -> bool:
+            return available
+
+        @classmethod
+        def merge_engine(cls) -> Any:
+            if engine is None:
+                raise NotImplementedError("no merge")
+            return engine
+
+    return CfAsofStub
+
+
+class _EngineWithAsof(BaseMergeEngine):
+    def merge_asof(self, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError
+
+
+class _EngineWithoutAsof(BaseMergeEngine):
+    pass
+
+
+def test_serves_asof_merge_requires_an_overridden_merge_asof() -> None:
+    assert serves_asof_merge(_framework_with_merge(_EngineWithAsof)) is True
+    assert serves_asof_merge(_framework_with_merge(_EngineWithoutAsof)) is False
+
+
+def test_serves_asof_merge_false_without_merge_or_when_unavailable() -> None:
+    assert serves_asof_merge(_framework_with_merge(None)) is False
+    assert serves_asof_merge(_framework_with_merge(_EngineWithAsof, available=False)) is False

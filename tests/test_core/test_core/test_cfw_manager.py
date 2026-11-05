@@ -16,6 +16,7 @@ from uuid import uuid4
 import pytest
 
 import mloda.core.core.cfw_manager as cfw_manager_module
+from mloda.core.abstract_plugins.components.feature_set import ArtifactBinding
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager, MyManager
@@ -632,7 +633,7 @@ class TestCfwManagerRelease:
         register.set_location("grpc://somewhere")
         register.set_error("msg", ("exc_info",), ValueError("boom"))
         register.set_artifact_to_save("artifact", {"k": 1})
-        register.set_runtime_artifacts({"runtime": 1})
+        register.set_artifact_bindings({uuid4(): ArtifactBinding("runtime", 1)})
         register.set_api_data({"api": 1})
         register.set_run_context(RunContext(run_id="run-1"))
         register.add_cfw_to_compute_frameworks(cfw_uuid, "SomeComputeFramework", {uuid4()})
@@ -643,6 +644,19 @@ class TestCfwManagerRelease:
         register.release()
 
         assert vars(register) == vars(CfwManager(modes))
+
+
+class TestCfwManagerArtifactBindings:
+    def test_binding_is_returned_per_step_uuid(self) -> None:
+        register = CfwManager({ParallelizationMode.SYNC})
+        step_uuid, other_uuid = uuid4(), uuid4()
+        binding = ArtifactBinding("model", {"w": 1})
+
+        assert register.get_artifact_binding(step_uuid) is None
+        register.set_artifact_bindings({step_uuid: binding})
+
+        assert register.get_artifact_binding(step_uuid) == binding
+        assert register.get_artifact_binding(other_uuid) is None
 
 
 class TestCfwManagerJoinTokens:

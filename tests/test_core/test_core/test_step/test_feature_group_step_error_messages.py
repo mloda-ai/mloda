@@ -26,7 +26,8 @@ def test_execute_does_not_upload_finished_data_twice() -> None:
 
     cfw_register = MagicMock()
     cfw_register.get_location.return_value = "flight-location"
-    cfw_register.get_runtime_artifacts.return_value = None
+    cfw_register.get_artifact_binding.return_value = None
+    features.for_run.return_value = features
     cfw = MagicMock(spec=ComputeFramework)
     cfw.uuid = "framework-id"
 

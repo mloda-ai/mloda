@@ -131,12 +131,10 @@ class ForecastingArtifact(BaseArtifact):
             The loaded artifact (dict containing model, scaler, etc.)
         """
 
-        options = cls.get_singular_option_from_options(features)
-
-        if options is None or features.artifact_to_load is None:
+        if features.artifact_to_load is None:
             return None
 
-        serialized_artifact = options.get(features.artifact_to_load)
+        serialized_artifact = features.artifact_value
         if serialized_artifact is None:
             return None
 

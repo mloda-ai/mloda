@@ -106,7 +106,7 @@ step declares, used for that run only (not accepted by `run_all()`/`stream_all()
 [Runtime access versus match-time binding](named-data-access-handles.md#runtime-access-versus-match-time-binding).
 
 `run()` also accepts an `artifacts` parameter for switching between artifact
-save and load modes across calls. See [Artifacts](artifacts.md#run-time-artifact-switching-with-preparerun) for details.
+save and load modes across calls; keys must be artifact inputs of the plan (`session.artifact_inputs`). See [Artifacts](artifacts.md#run-time-artifact-switching-with-preparerun) for details.
 
 `run(api_data=...)` needs the same set keys and the same column names per set as `prepare()` (order may differ); otherwise it raises a `ValueError` before the run starts. Each set must be a mapping of column to values. A set whose step loads natively as a dict must stay a dict of lists.
 

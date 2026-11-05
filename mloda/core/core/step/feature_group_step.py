@@ -1,4 +1,3 @@
-from copy import copy, deepcopy
 from typing import Any
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
@@ -57,20 +56,10 @@ class FeatureGroupStep(Step):
         data: Any | None = None,
     ) -> Any | None:
         location = cfw_register.get_location()
-        runtime_artifacts = cfw_register.get_runtime_artifacts()
-        # resolve_artifact_for_runtime writes into Options.context, so only that path pays for a deep copy
-        resolves_artifact = runtime_artifacts is not None and self.feature_group.artifact() is not None
-        if resolves_artifact:
-            features = deepcopy(self.features)
-        else:
-            features = copy(self.features)
+        binding = cfw_register.get_artifact_binding(self.uuid) if self.feature_group.artifact() is not None else None
+        features = self.features.for_run(binding)
         if self.own_frame and data is None:
             data = self._source_data(cfw, from_cfw, location)
-
-        if runtime_artifacts is not None:
-            features.reject_part_keyed_artifacts(runtime_artifacts)
-        if runtime_artifacts is not None and resolves_artifact:
-            features.resolve_artifact_for_runtime(runtime_artifacts)
 
         match = features.input_data_match
         access = None if match is None else match[1].access

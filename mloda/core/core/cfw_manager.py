@@ -11,6 +11,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
+from mloda.core.abstract_plugins.components.feature_set import ArtifactBinding
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.runtime.mp_context import mp_start_context
@@ -108,7 +109,7 @@ class CfwManager:
 
         self.failed_rows: list[FailedRows] = []
 
-        self.runtime_artifacts: dict[str, Any] | None = None
+        self.artifact_bindings: dict[UUID, ArtifactBinding] = {}
 
         self.api_data: dict[str, Any] | None = None
 
@@ -449,13 +450,13 @@ class CfwManager:
         """Retrieves every reported failed-row entry."""
         return self.failed_rows
 
-    def set_runtime_artifacts(self, artifacts: dict[str, Any]) -> None:
-        """Sets runtime artifacts passed to run() for load-mode resolution."""
-        self.runtime_artifacts = artifacts
+    def set_artifact_bindings(self, bindings: dict[UUID, ArtifactBinding]) -> None:
+        """Sets the per-step artifact bindings resolved from run(artifacts=...)."""
+        self.artifact_bindings = bindings
 
-    def get_runtime_artifacts(self) -> dict[str, Any] | None:
-        """Retrieves runtime artifacts, or None if not provided."""
-        return self.runtime_artifacts
+    def get_artifact_binding(self, step_uuid: UUID) -> ArtifactBinding | None:
+        """Retrieves the artifact binding of a step, or None."""
+        return self.artifact_bindings.get(step_uuid)
 
     def set_api_data(self, api_data: dict[str, Any]) -> None:
         """Sets the API data."""

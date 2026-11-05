@@ -21,6 +21,7 @@ from mloda.core.runtime.worker_manager import WorkerManager
 from mloda.core.runtime.worker.multiprocessing_worker import standby_worker
 from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
+from mloda.core.abstract_plugins.components.feature_set import ArtifactBinding
 from mloda.core.core.cfw_manager import CfwManager, release_shared_manager, shared_manager
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.runtime.flight.flight_server import FlightServer
@@ -599,7 +600,7 @@ class ExecutionOrchestrator:
         parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
         function_extender: set[Extender] | None = None,
         api_data: dict[str, Any] | None = None,
-        artifacts: dict[str, Any] | None = None,
+        artifact_bindings: dict[UUID, ArtifactBinding] | None = None,
         run_context: RunContext | None = None,
     ) -> None:
         """
@@ -656,8 +657,8 @@ class ExecutionOrchestrator:
         if api_data:
             self.cfw_register.set_api_data(api_data)
 
-        if artifacts:
-            self.cfw_register.set_runtime_artifacts(artifacts)
+        if artifact_bindings:
+            self.cfw_register.set_artifact_bindings(artifact_bindings)
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """

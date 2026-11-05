@@ -1,5 +1,7 @@
 from collections import Counter
-from typing import TYPE_CHECKING, Any, Iterable
+from copy import copy
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Iterable, Mapping
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -42,6 +44,14 @@ a Link if the split is intentional.
 """
 
 
+@dataclass(frozen=True)
+class ArtifactBinding:
+    """A run-time artifact value bound to the feature name that keys it."""
+
+    name: str
+    value: Any
+
+
 class FeatureSet:
     def __init__(self, features: Iterable[Feature] | None = None) -> None:
         self.features: set[Feature] = set()
@@ -54,6 +64,7 @@ class FeatureSet:
         self.name_of_one_feature: FeatureName | None = None
         self.artifact_to_save: str | None = None
         self.artifact_to_load: str | None = None
+        self.artifact_value: Any = None
         self.save_artifact: Any | None = None
         self.filter_engine: type[BaseFilterEngine] = BaseFilterEngine
         self.mask_engine: type[BaseMaskEngine] | None = None
@@ -93,6 +104,7 @@ class FeatureSet:
         for feature_name in self.get_all_names():
             if feature_name in self.options.keys():
                 self.artifact_to_load = feature_name
+                self.artifact_value = self.options[feature_name]
                 return
 
         self.reject_part_keyed_artifacts(self.options.keys())
@@ -111,22 +123,12 @@ class FeatureSet:
                         f"key the artifact by the base feature name '{feature.name}'."
                     )
 
-    def resolve_artifact_for_runtime(self, runtime_artifacts: dict[str, Any]) -> None:
-        """Re-resolve artifact save/load mode using runtime artifacts from run().
-
-        Called at step execution time on the per-run FeatureSet view when
-        artifacts are passed to run(). This enables switching between save
-        and load modes across run() calls without re-preparing.
-        """
-        FeatureSetValidator.validate_options_initialized(self.options, "resolve_artifact_for_runtime")
-        assert self.options is not None
-
+    def runtime_artifact_binding(self, artifacts: Mapping[str, Any]) -> ArtifactBinding | None:
+        """Bind the first feature name present in run(artifacts=...); writes nothing, raises on an Options.group clash."""
         for feature_name in self.get_all_names():
-            if feature_name in runtime_artifacts:
-                # Dedupe by identity, not equality: Options.__eq__/__hash__ is group-content-based,
-                # so distinct instances with equal groups must not collapse into one.
+            if feature_name in artifacts:
+                # Dedupe by identity: Options equality is group-content-based, so distinct instances must not collapse.
                 distinct_options = {id(feature.options): feature.options for feature in self.features}.values()
-
                 for options in distinct_options:
                     if feature_name in options.group:
                         raise ValueError(
@@ -134,21 +136,18 @@ class FeatureSet:
                             "save; supply it either via Options at prepare time or via run(artifacts=...), "
                             f"not both (feature set anchored on '{self.get_name_of_one_feature()}')."
                         )
+                return ArtifactBinding(feature_name, artifacts[feature_name])
+        return None
 
-                # Write to context (never group, to avoid mutating any Feature's hash) on every
-                # distinct Options instance, since get_singular_option_from_options may read any of them.
-                # A raw dict write, not add_to_context(): its value-equality check crashes on
-                # non-boolean-comparable artifacts (e.g. numpy arrays) and would block re-resolving
-                # a different artifact across repeated run() calls.
-                for options in distinct_options:
-                    options.context[feature_name] = runtime_artifacts[feature_name]
-
-                self.artifact_to_load = feature_name
-                self.artifact_to_save = None
-                return
-
-        self.artifact_to_load = None
-        self.artifact_to_save = self.get_name_of_one_feature()
+    def for_run(self, binding: ArtifactBinding | None) -> "FeatureSet":
+        """Per-run step view: a shallow copy carrying this run's artifact binding; the plan is never written."""
+        view = copy(self)
+        if binding is not None:
+            view.artifact_to_load = binding.name
+            view.artifact_to_save = None
+            view.artifact_value = binding.value
+        view.save_artifact = None
+        return view
 
     @property
     def input_data_match(self) -> "tuple[DataAccessReader, Any] | None":

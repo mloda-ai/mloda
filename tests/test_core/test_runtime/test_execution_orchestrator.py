@@ -377,7 +377,13 @@ class TestEnterAcceptsRunContext:
 
         sig = inspect.signature(orchestrator.__enter__)
         param_names = list(sig.parameters.keys())
-        assert param_names == ["parallelization_modes", "function_extender", "api_data", "artifacts", "run_context"]
+        assert param_names == [
+            "parallelization_modes",
+            "function_extender",
+            "api_data",
+            "artifact_bindings",
+            "run_context",
+        ]
 
 
 class TestEnterSetsRunContextOnCfwRegister:

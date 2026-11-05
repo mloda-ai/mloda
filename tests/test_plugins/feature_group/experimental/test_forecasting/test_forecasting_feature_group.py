@@ -287,6 +287,7 @@ class TestForecastingFeatureGroup:
 
         # Set the artifact to load
         feature_set2.artifact_to_load = feature_name
+        feature_set2.artifact_value = serialized_artifact
 
         # Calculate the feature using the saved artifact
         result_df2 = PandasForecasting.calculate(ForecastingFeatureGroup, self.df.copy(), feature_set2, None)
@@ -512,6 +513,7 @@ class TestForecastingFeatureGroup:
         feature_set = FeatureSet()
         feature_set.add(Feature(name, options))
         feature_set.artifact_to_load = name
+        feature_set.artifact_value = serialized
         return feature_set
 
     def test_expanded_source_forecasts_each_column(self) -> None:
@@ -612,6 +614,7 @@ class TestForecastingFeatureGroup:
         assert feature_set.options is not None
         feature_set.options.add_to_group(self.FEATURE_NAME, serialized)
         feature_set.artifact_to_load = self.FEATURE_NAME
+        feature_set.artifact_value = serialized
         return feature_set
 
     def test_part_request_forecasts_only_the_requested_column(self) -> None:

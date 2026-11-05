@@ -14,6 +14,7 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 # Explicit alias re-exports Engine under no_implicit_reexport so tests can patch mloda.core.api.request.Engine.
 from mloda.core.core.engine import Engine as Engine
 from mloda.core.prepare.execution_plan import ExecutionPlan
+from mloda.core.abstract_plugins.components.feature_set import ArtifactBinding, FeatureSet
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.api.plan_info import PlanStep, build_plan_steps, source_of
@@ -135,6 +136,7 @@ class mlodaAPI:
         self._extenders: set[Extender] = set(filtered) if filtered is not None else set()
         reject_old_run_complete_signature(self._extenders)
         self._plan_steps: tuple[PlanStep, ...] = ()
+        self._artifact_steps: tuple[tuple[UUID, FeatureSet], ...] = ()
         verified = current_verified_context()
         self.plan_context = PlanContext(
             plan_id=generate_run_id(),
@@ -164,6 +166,11 @@ class mlodaAPI:
                     output_framework,
                 )
                 self._plan_steps = tuple(self._resolve_plan_steps())
+                self._artifact_steps = tuple(
+                    (step.uuid, step.features)
+                    for step in self._execution_plan()
+                    if isinstance(step, FeatureGroupStep) and step.feature_group.artifact() is not None
+                )
                 if self._extenders:
                     self._stamp_structure_hash()
             except BaseException as error:
@@ -285,6 +292,31 @@ class mlodaAPI:
             for key, values in (api_data or {}).items()
             if isinstance(values, dict) and all(isinstance(column_values, list) for column_values in values.values())
         }
+
+    @property
+    def artifact_inputs(self) -> frozenset[str]:
+        """Feature names that accept a ``run(artifacts=...)`` value in this plan."""
+        return frozenset(name for _, features in self._artifact_steps for name in features.get_all_names())
+
+    def _artifact_bindings(self, artifacts: Mapping[str, Any] | None) -> dict[UUID, ArtifactBinding]:
+        """Refuse unknown or conflicting run artifacts, then bind each artifact step's value."""
+        if not artifacts:
+            return {}
+        accepted = self.artifact_inputs
+        unknown = sorted(key for key in artifacts if key not in accepted)
+        if unknown:
+            for step in self._execution_plan():
+                if isinstance(step, FeatureGroupStep):
+                    step.features.reject_part_keyed_artifacts(unknown)
+            raise ValueError(
+                f"run(artifacts=...) keys {unknown} are not artifact inputs of this plan; accepted: {sorted(accepted)}."
+            )
+        bindings: dict[UUID, ArtifactBinding] = {}
+        for step_uuid, features in self._artifact_steps:
+            binding = features.runtime_artifact_binding(artifacts)
+            if binding is not None:
+                bindings[step_uuid] = binding
+        return bindings
 
     def _validate_run_api_data(self, api_data: dict[str, Any] | None) -> None:
         """Refuse run data whose sets or column names differ from the ones prepared."""
@@ -824,8 +856,8 @@ class mlodaAPI:
 
         Args:
             api_data: Fresh runtime data, replacing any data from prepare().
-            artifacts: A previous run's ``RunResult.artifacts``.
-                When provided, feature groups with matching artifact names
+            artifacts: A previous run's ``RunResult.artifacts``; keys must be artifact inputs of this
+                plan (see ``artifact_inputs``). When provided, feature groups with matching artifact names
                 switch to load mode for this run, enabling train-then-predict
                 workflows without re-preparing.
             carrier/child_bootstrap: See ``run_all``. Like ``run_id`` (minted per
@@ -901,8 +933,9 @@ class mlodaAPI:
         """Callers build ``run_context`` at call time; no yield here, so a refusal at run start raises at the call."""
         _api_data = api_data if api_data is not None else self.api_data
         self._validate_run_api_data(_api_data)
+        artifact_bindings = self._artifact_bindings(artifacts)
         stream = self._stream_run_results(
-            flight_server, parallelization_modes, _api_data, artifacts, run_context, run_dac, stream_outcome
+            flight_server, parallelization_modes, _api_data, artifact_bindings, run_context, run_dac, stream_outcome
         )
         # Primes the generator so a refusal at run start raises here, not on first iteration.
         next(stream)
@@ -938,7 +971,7 @@ class mlodaAPI:
         flight_server: Any | None,
         parallelization_modes: set[ParallelizationMode],
         api_data: dict[str, dict[str, Any]] | None,
-        artifacts: dict[str, Any] | None,
+        artifact_bindings: dict[UUID, ArtifactBinding],
         run_context: RunContext,
         run_dac: DataAccessCollection | None,
         stream_outcome: _StreamOutcome,
@@ -958,7 +991,7 @@ class mlodaAPI:
                         runner,
                         parallelization_modes,
                         api_data,
-                        artifacts=artifacts,
+                        artifact_bindings=artifact_bindings,
                         run_context=run_context,
                     )
                 stream = runner.compute_stream()
@@ -1002,6 +1035,7 @@ class mlodaAPI:
         # Use stored api_data if not explicitly provided
         _api_data = api_data if api_data is not None else self.api_data
         self._validate_run_api_data(_api_data)
+        artifact_bindings = self._artifact_bindings(artifacts)
         if run_context is None:
             run_context = self._build_run_context(None, None)
         outcome = LifecycleOutcome("succeeded")
@@ -1012,7 +1046,7 @@ class mlodaAPI:
                 runner,
                 parallelization_modes,
                 _api_data,
-                artifacts=artifacts,
+                artifact_bindings=artifact_bindings,
                 run_context=run_context,
             )
             return runner
@@ -1029,7 +1063,7 @@ class mlodaAPI:
         runner: ExecutionOrchestrator,
         parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
         api_data: dict[str, Any] | None = None,
-        artifacts: dict[str, Any] | None = None,
+        artifact_bindings: dict[UUID, ArtifactBinding] | None = None,
         run_context: RunContext | None = None,
     ) -> None:
         """Runs the engine computation within a context manager."""
@@ -1041,7 +1075,7 @@ class mlodaAPI:
                 runner,
                 parallelization_modes,
                 api_data,
-                artifacts=artifacts,
+                artifact_bindings=artifact_bindings,
                 run_context=run_context,
             )
             runner.compute()
@@ -1053,7 +1087,7 @@ class mlodaAPI:
         runner: ExecutionOrchestrator,
         parallelization_modes: set[ParallelizationMode],
         api_data: dict[str, Any] | None,
-        artifacts: dict[str, Any] | None = None,
+        artifact_bindings: dict[UUID, ArtifactBinding] | None = None,
         run_context: RunContext | None = None,
     ) -> None:
         """Passes the runner the engine's prepare-time extender set."""
@@ -1062,7 +1096,7 @@ class mlodaAPI:
         function_extender = self.engine.function_extender or None
         if run_context is None:
             run_context = self._build_run_context(None, None)
-        runner.__enter__(parallelization_modes, function_extender, api_data, artifacts, run_context)
+        runner.__enter__(parallelization_modes, function_extender, api_data, artifact_bindings, run_context)
 
     def _exit_runner_context(self, runner: ExecutionOrchestrator) -> None:
         """Exits the runner context."""

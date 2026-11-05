@@ -157,15 +157,18 @@ def test_lost_type_false_for_numeric_columns(adapter: Any) -> None:
         assert adapter.lost_type(zero, "d") is False
 
 
-def test_pandas_boolean_with_null_is_lost() -> None:
-    adapter = _make("Pandas")
-    if not adapter.is_available():
-        pytest.skip("Pandas backend unavailable")
+@pytest.mark.parametrize("name", ["PyArrow", "Pandas", "Polars", "PolarsLazy"])
+def test_nullable_int_and_bool_keep_exact_type(adapter: Any) -> None:
+    with adapter:
+        result = adapter.from_typed(_data())
 
-    assert adapter.lost_type(adapter.from_typed(_data()), "b") is True
+        assert adapter.has_type(result, "i", DataType.INT64) is True
+        assert adapter.has_type(result, "b", DataType.BOOLEAN) is True
+        assert adapter.lost_type(result, "i") is False
+        assert adapter.lost_type(result, "b") is False
 
 
-@pytest.mark.parametrize("name", ["PyArrow", "Polars", "PolarsLazy"])
+@pytest.mark.parametrize("name", ["PyArrow", "Pandas", "Polars", "PolarsLazy"])
 def test_lost_type_true_for_null_typed_column(name: str) -> None:
     pa = pytest.importorskip("pyarrow")
     adapter = _make(name)
@@ -179,7 +182,7 @@ def test_lost_type_true_for_null_typed_column(name: str) -> None:
 
 _INT32_CHECKS: dict[str, Callable[[Any], bool]] = {
     "PyArrow": lambda t: str(t) == "int32",
-    "Pandas": lambda t: str(t) == "int32",
+    "Pandas": lambda t: str(t) == "Int32",
     "Polars": lambda t: str(t) == "Int32",
     "PolarsLazy": lambda t: str(t) == "Int32",
     "DuckDB": lambda t: str(t) == "int32",

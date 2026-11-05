@@ -288,8 +288,20 @@ class PandasAdapter(FrameworkAdapter):
         pd = require("pandas", "building pandas test frames")
         pa = require("pyarrow", "building pandas test frames")
 
+        mapping = {
+            pa.string(): pd.StringDtype(),
+            pa.bool_(): pd.BooleanDtype(),
+            pa.int8(): pd.Int8Dtype(),
+            pa.int16(): pd.Int16Dtype(),
+            pa.int32(): pd.Int32Dtype(),
+            pa.int64(): pd.Int64Dtype(),
+            pa.uint8(): pd.UInt8Dtype(),
+            pa.uint16(): pd.UInt16Dtype(),
+            pa.uint32(): pd.UInt32Dtype(),
+            pa.uint64(): pd.UInt64Dtype(),
+        }
         return table.to_pandas(
-            types_mapper={pa.string(): pd.StringDtype()}.get,
+            types_mapper=mapping.get,
             coerce_temporal_nanoseconds=False,
         )
 

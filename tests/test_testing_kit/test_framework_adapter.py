@@ -368,3 +368,46 @@ def test_iceberg_fixed_offset_timestamp_raises_unsupported() -> None:
     with adapter:
         with pytest.raises(UnsupportedPyArrowTypeException):
             adapter.from_arrow(table)
+
+
+def _pandas() -> Any:
+    pytest.importorskip("pandas")
+    adapter = _make("Pandas")
+    if not adapter.is_available():
+        pytest.skip("Pandas backend unavailable")
+    return adapter
+
+
+def test_pandas_object_string_column_fits_by_value() -> None:
+    import pandas as pd
+
+    frame = pd.DataFrame({"s": pd.Series(["a", "b"], dtype=object)})
+
+    assert _pandas().has_type(frame, "s", DataType.STRING) is None
+
+
+@pytest.mark.parametrize(
+    ("unit", "data_type", "expected"),
+    [
+        ("s", DataType.TIMESTAMP_MICROS, True),
+        ("ms", DataType.TIMESTAMP_MICROS, False),
+        ("ns", DataType.TIMESTAMP_MICROS, True),
+        ("ns", DataType.TIMESTAMP_MILLIS, False),
+        ("s", DataType.TIMESTAMP_MILLIS, False),
+        ("ms", DataType.TIMESTAMP_MILLIS, True),
+    ],
+)
+def test_pandas_timestamp_micros_accepts_s_us_ns(unit: str, data_type: DataType, expected: bool) -> None:
+    adapter = _pandas()
+    frame = adapter.from_typed(TypedTestData({"t": (DataType.TIMESTAMP_MICROS, [datetime(2024, 1, 1)])}))
+    frame["t"] = frame["t"].astype(f"datetime64[{unit}]")
+
+    assert adapter.has_type(frame, "t", data_type) is expected
+
+
+def test_pandas_sparse_column_has_type_does_not_raise() -> None:
+    import pandas as pd
+
+    frame = pd.DataFrame({"c": pd.arrays.SparseArray([1, 0, 2], dtype="int64")})
+
+    assert _pandas().has_type(frame, "c", DataType.INT64) in (True, False, None)

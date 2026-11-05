@@ -273,7 +273,10 @@ def _check_zero_rows(
             if exact is False:
                 continue
             if exact is True and data_type is not None:
-                changed = adapter.has_type(out, column, data_type) is not True
+                if data_type in (DataType.LIST, DataType.TIMESTAMP_MICROS_TZ):
+                    changed = adapter.column_type(out, column) != adapter.column_type(result, column)
+                else:
+                    changed = adapter.has_type(out, column, data_type) is not True
             else:
                 changed = adapter.column_type(out, column) != adapter.column_type(result, column)
             if changed:

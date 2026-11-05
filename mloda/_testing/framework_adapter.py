@@ -78,7 +78,7 @@ _PANDAS_NUMERIC = {
     DataType.DOUBLE: ("f", 8),
     DataType.BOOLEAN: ("b", 1),
 }
-_PANDAS_OBJECT_VALUE_FIT = (DataType.LIST, DataType.BINARY, DataType.DATE, DataType.DECIMAL)
+_PANDAS_OBJECT_VALUE_FIT = (DataType.LIST, DataType.BINARY, DataType.DATE, DataType.DECIMAL, DataType.STRING)
 
 
 def _pandas_has_type(dtype: Any, data_type: DataType) -> bool | None:
@@ -95,8 +95,10 @@ def _pandas_has_type(dtype: Any, data_type: DataType) -> bool | None:
         return None if data_type in _PANDAS_OBJECT_VALUE_FIT else False
     if numpy_dtype.kind == "M":
         unit = str(numpy_dtype).removeprefix("datetime64[").removesuffix("]")
-        return (unit, data_type) in (("ms", DataType.TIMESTAMP_MILLIS), ("us", DataType.TIMESTAMP_MICROS))
-    return _PANDAS_NUMERIC.get(data_type) == (numpy_dtype.kind, numpy_dtype.itemsize)
+        if data_type == DataType.TIMESTAMP_MICROS:
+            return unit in ("s", "us", "ns")
+        return unit == "ms" and data_type == DataType.TIMESTAMP_MILLIS
+    return _PANDAS_NUMERIC.get(data_type) == (numpy_dtype.kind, getattr(numpy_dtype, "itemsize", None))
 
 
 def _polars_has_type(dtype: Any, data_type: DataType) -> bool:

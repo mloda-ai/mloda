@@ -90,6 +90,10 @@ def make_run_group(kind: str = "ok") -> type[FeatureGroup]:
                 return DataType.DATE
             if kind == "tz_out":
                 return DataType.TIMESTAMP_MICROS_TZ
+            if kind == "object_string":
+                return DataType.STRING
+            if kind == "list_null_on_zero_rows":
+                return DataType.LIST
             return DataType.INT64
 
         @classmethod
@@ -120,6 +124,16 @@ def make_run_group(kind: str = "ok") -> type[FeatureGroup]:
 
                 data["rg_out"] = pd.Series([date(2024, 1, 1)] * len(data), index=data.index, dtype=object)
                 return data
+            if kind == "object_string":
+                import pandas as pd
+
+                data["rg_out"] = pd.Series(["x"] * len(data), index=data.index, dtype=object)
+                return data
+            if kind == "list_null_on_zero_rows":
+                import polars as pl
+
+                dtype = pl.List(pl.Int64) if len(data) else pl.List(pl.Null)
+                return data.with_columns(pl.Series("rg_out", [[1]] * len(data), dtype=dtype))
             if kind == "tz_out":
                 from datetime import UTC, datetime
 
@@ -433,6 +447,7 @@ def test_pandas_na_output_passes_determinism() -> None:
     [
         ("int64_on_zero_rows", PandasAdapter),
         ("object_date", PandasAdapter),
+        ("object_string", PandasAdapter),
         ("tz_out", PyArrowAdapter),
     ],
 )
@@ -440,6 +455,12 @@ def test_exact_type_run_group_passes(kind: str, adapter_cls: type[Any]) -> None:
     _require_backend(adapter_cls)
     result = check_feature_group_shape(make_run_group(kind), input_data=_run_data(), adapter=adapter_cls())
     assert result.failures == (), result.failures
+
+
+def test_pandas_object_date_run_notes_value_only_check() -> None:
+    _require_backend(PandasAdapter)
+    result = check_feature_group_shape(make_run_group("object_date"), input_data=_run_data(), adapter=PandasAdapter())
+    assert any("checked by value only" in n for n in result.notes), result.notes
 
 
 def test_root_group_run_notes_skipped_checks(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -501,6 +522,7 @@ def test_requested_name_already_in_input_data_fails_outputs() -> None:
         ("narrow_type", "type:", PandasAdapter),
         ("narrow_type", "type:", PolarsAdapter),
         ("loses_schema_on_zero_rows", "zero_rows:", PyArrowAdapter),
+        ("list_null_on_zero_rows", "zero_rows:", PolarsAdapter),
         ("leaks_cell_in_error", "error_values:", PythonDictAdapter),
         ("nondeterministic", "determinism:", PythonDictAdapter),
     ],

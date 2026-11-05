@@ -410,7 +410,7 @@ class ComputeFrameworkExecutor:
                 from_cfw = self.prepare_tfs_and_joinstep(step) or None
                 cfw = self.cfw_collection[cfw_uuid]
                 step.execute(self.cfw_register, cfw, from_cfw=from_cfw)
-                step.step_is_done = True
+                self.worker_manager.result_uuids_collection.add(step.uuid)
 
             except Exception as e:
                 redact_exception(e, current_registered_secrets())
@@ -437,6 +437,7 @@ class ComputeFrameworkExecutor:
                 current_registered_secrets(),
                 current_identity_secrets(),
                 self._credential_grant(step),
+                self.worker_manager.result_uuids_collection.add,
             ),
             daemon=True,  # an abandoned step thread must not block interpreter exit
         )

@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
@@ -23,11 +24,13 @@ def thread_worker(
     registered_secrets: frozenset[str] = frozenset(),
     identity_secrets: frozenset[str] | None = None,
     grant: CredentialGrant | None = None,
+    mark_done: Callable[[UUID], None] | None = None,
 ) -> None:
     with registered_secrets_scope(registered_secrets, identity_secrets), grant_scope(grant):
         try:
             command.execute(cfw_register, cfw, from_cfw=from_cfw)
-            command.step_is_done = True
+            if mark_done is not None:
+                mark_done(command.uuid)
         except BaseException as e:  # not only Exception: anything escaping a thread is lost and the run hangs
             redact_exception(e, current_registered_secrets())
             msg, exc_info = failure_report(e)

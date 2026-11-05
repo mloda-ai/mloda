@@ -176,8 +176,6 @@ class ComputeFramework(ABC):
 
         self.uuid = uuid or uuid4()
 
-        self.transformer = ComputeFrameworkTransformer()
-
         # collects all datasets which were created based on this feature group except if it is the !final! feature
         self.object_ids: list[str] = []
 
@@ -185,6 +183,18 @@ class ComputeFramework(ABC):
         self.framework_connection_object: Any | None = None
         # Implicit DataAccessCollection connection, used only when this framework must build native data itself.
         self.fallback_connection_object: Any | None = None
+
+    @property
+    def transformer(self) -> ComputeFrameworkTransformer:
+        """Built on first read: most runs never transform."""
+        if "_transformer" not in self.__dict__:
+            object.__setattr__(self, "_transformer", ComputeFrameworkTransformer())
+        built: ComputeFrameworkTransformer = self.__dict__["_transformer"]
+        return built
+
+    @transformer.setter
+    def transformer(self, value: ComputeFrameworkTransformer) -> None:
+        object.__setattr__(self, "_transformer", value)
 
     @final
     def __setattr__(self, name: str, value: Any) -> None:

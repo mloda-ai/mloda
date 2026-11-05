@@ -1,6 +1,6 @@
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
-from copy import copy, deepcopy
+from copy import copy
 from dataclasses import replace
 import logging
 from typing import Any, cast
@@ -253,9 +253,8 @@ class Engine:
         data_access_collection: DataAccessCollection | None = None,
     ) -> ExecutionOrchestrator:
         """Build the run's orchestrator; a passed collection overrides the engine's for this run only."""
-        execution_plan_copy = deepcopy(self.execution_planner)
         orchestrator = ExecutionOrchestrator(
-            execution_plan_copy,
+            self.execution_planner,
             flight_server,
             column_ordering=self.column_ordering,
             request_feature_order=self.request_feature_order,

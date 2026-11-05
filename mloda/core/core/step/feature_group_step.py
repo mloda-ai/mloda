@@ -1,3 +1,4 @@
+from copy import copy, deepcopy
 from typing import Any
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
@@ -41,8 +42,6 @@ class FeatureGroupStep(Step):
         self.uuid = uuid4()
         features.step_uuid = self.uuid
 
-        self.step_is_done = False
-
         self.need_to_upload = False
 
         self.tfs_ids: set[UUID] = set()
@@ -57,37 +56,42 @@ class FeatureGroupStep(Step):
         from_cfw: ComputeFramework | UUID | None = None,  # source frame of an own-frame step
         data: Any | None = None,
     ) -> Any | None:
-        self.location = cfw_register.get_location()
-        if self.own_frame and data is None:
-            data = self._source_data(cfw, from_cfw)
-
+        location = cfw_register.get_location()
         runtime_artifacts = cfw_register.get_runtime_artifacts()
-        if runtime_artifacts is not None:
-            self.features.reject_part_keyed_artifacts(runtime_artifacts)
+        # resolve_artifact_for_runtime writes into Options.context, so only that path pays for a deep copy
         if runtime_artifacts is not None and self.feature_group.artifact() is not None:
-            self.features.resolve_artifact_for_runtime(runtime_artifacts)
+            features = deepcopy(self.features)
+        else:
+            features = copy(self.features)
+        if self.own_frame and data is None:
+            data = self._source_data(cfw, from_cfw, location)
 
-        match = self.features.input_data_match
+        if runtime_artifacts is not None:
+            features.reject_part_keyed_artifacts(runtime_artifacts)
+        if runtime_artifacts is not None and self.feature_group.artifact() is not None:
+            features.resolve_artifact_for_runtime(runtime_artifacts)
+
+        match = features.input_data_match
         access = None if match is None else match[1].access
         with collect_failed_rows(self.feature_group.get_class_name()) as collector:
             if isinstance(access, ApiDataRef) and is_nominal_subclass(self.feature_group, ApiDataFG):
                 key = access.key
                 with api_data_scope(lambda: cfw_register.get_api_data_by_name(key), key):
-                    data = self.run_calculate_feature(cfw, data)
+                    data = self.run_calculate_feature(cfw, features, location, data)
             else:
-                data = self.run_calculate_feature(cfw, data)
+                data = self.run_calculate_feature(cfw, features, location, data)
         if collector.entries:
             cfw_register.add_failed_rows(collector.entries)
         with readable_credentials():
-            self.save_artifact(self.features, cfw_register)
+            self.save_artifact(features, cfw_register)
 
         # return_data_type_rule
 
-        if self.location:
+        if location:
             if self.need_to_upload:
                 if not isinstance(cfw.data, str):
                     native = cfw.data
-                    cfw.upload_finished_data(self.location)
+                    cfw.upload_finished_data(location)
                     if cfw.mode is not ParallelizationMode.MULTIPROCESSING:
                         # a same-process consumer or the result collector reads cfw.data next; keep it native
                         cfw.set_data(native)
@@ -95,20 +99,24 @@ class FeatureGroupStep(Step):
             return data
         return None
 
-    def _source_data(self, cfw: ComputeFramework, from_cfw: ComputeFramework | UUID | None) -> Any:
+    def _source_data(
+        self, cfw: ComputeFramework, from_cfw: ComputeFramework | UUID | None, location: str | None
+    ) -> Any:
         """The input frame of an own-frame step: in-process data, or a worker-owned source's flight table."""
         if isinstance(from_cfw, ComputeFramework):
             return from_cfw.get_data()
-        if isinstance(from_cfw, UUID) and self.location:
-            return cfw.download_frame(self.location, from_cfw)
+        if isinstance(from_cfw, UUID) and location:
+            return cfw.download_frame(location, from_cfw)
         raise ValueError(internal_invariant_error("an own-frame step has no source frame to read", f"step={self.uuid}"))
 
-    def run_calculate_feature(self, cfw: ComputeFramework, data: Any | None = None) -> Any:
+    def run_calculate_feature(
+        self, cfw: ComputeFramework, features: FeatureSet, location: str | None, data: Any | None = None
+    ) -> Any:
         if self.feature_group.calculate_feature is None:
             raise ValueError("FeatureGroup calculate_feature is not implemented")
 
-        data = cfw.run_calculation(self.feature_group, self.features, self.location, data)
-        cfw.validate_expected_framework(self.location)
+        data = cfw.run_calculation(self.feature_group, features, location, data)
+        cfw.validate_expected_framework(location)
         return data
 
     def save_artifact(self, features: FeatureSet, cfw_register: CfwManager) -> None:

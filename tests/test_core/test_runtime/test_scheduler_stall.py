@@ -41,7 +41,7 @@ class InFlightStep:
     def __init__(self) -> None:
         self.uuid = uuid4()
         self.required_uuids: set[UUID] = set()
-        self.step_is_done = False
+        self.run_done: set[UUID] = set()
         self.polls = 0
 
     def get_uuids(self) -> set[UUID]:
@@ -54,7 +54,7 @@ class InFlightStep:
         """Stands in for WorkerManager.poll_result_queues draining the worker's result queue."""
         self.polls += 1
         if self.polls >= 2:
-            self.step_is_done = True
+            self.run_done.add(self.uuid)
 
 
 class ProducerStep:
@@ -63,7 +63,6 @@ class ProducerStep:
     def __init__(self) -> None:
         self.uuid = uuid4()
         self.required_uuids: set[UUID] = set()
-        self.step_is_done = False
 
     def get_uuids(self) -> set[UUID]:
         return {self.uuid}
@@ -72,9 +71,13 @@ class ProducerStep:
         return set(self.required_uuids)
 
 
-def _finish_on_execute(step: Any) -> None:
-    """Stands in for sync_execute_step, which sets step_is_done before returning."""
-    step.step_is_done = True
+def _finish_on_execute(orchestrator: ExecutionOrchestrator) -> Any:
+    """Stands in for sync_execute_step, which marks the step done in the run state before returning."""
+
+    def finish(step: Any) -> None:
+        orchestrator.worker_manager.result_uuids_collection.add(step.uuid)
+
+    return finish
 
 
 def _orchestrator(*steps: Any) -> ExecutionOrchestrator:
@@ -137,7 +140,7 @@ def test_stall_after_a_finished_step_names_only_the_token_still_missing() -> Non
     dangling = uuid4()
     child = _feature_group_step("stall_child_feature", {producer.uuid, dangling})
     orchestrator = _orchestrator(producer, child)
-    orchestrator._execute_step = Mock(side_effect=_finish_on_execute)
+    orchestrator._execute_step = Mock(side_effect=_finish_on_execute(orchestrator))
 
     with pytest.raises(MlodaRunError) as exc_info:
         orchestrator.compute()
@@ -237,26 +240,28 @@ def test_compute_does_not_raise_while_a_step_is_in_flight() -> None:
     """A pass with no scheduling and no completion is progress while a step sits in flight."""
     step = InFlightStep()
     orchestrator = _orchestrator(step)
+    step.run_done = orchestrator.worker_manager.result_uuids_collection
     orchestrator.worker_manager.poll_result_queues = step.poll
     orchestrator._execute_step = Mock()
 
     orchestrator.compute()
 
     assert step.polls >= 2, "the step must stay in flight for at least one full pass with no progress"
-    assert step.step_is_done is True
+    assert step.uuid in orchestrator.worker_manager.result_uuids_collection
     orchestrator._execute_step.assert_called_once_with(step)
 
 
 def test_compute_stream_does_not_raise_while_a_step_is_in_flight() -> None:
     step = InFlightStep()
     orchestrator = _orchestrator(step)
+    step.run_done = orchestrator.worker_manager.result_uuids_collection
     orchestrator.worker_manager.poll_result_queues = step.poll
     orchestrator._execute_step = Mock()
 
     list(orchestrator.compute_stream())
 
     assert step.polls >= 2, "the step must stay in flight for at least one full pass with no progress"
-    assert step.step_is_done is True
+    assert step.uuid in orchestrator.worker_manager.result_uuids_collection
 
 
 def test_compute_returns_on_empty_plan() -> None:

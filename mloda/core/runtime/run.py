@@ -270,7 +270,7 @@ class ExecutionOrchestrator:
         self, made_progress: bool, finished_ids: set[UUID], currently_running_steps: set[UUID]
     ) -> None:
         """Abort a pass that scheduled nothing, finished nothing and left nothing in flight."""
-        # A dispatched step sits in currently_running_steps while step_is_done is still False,
+        # A dispatched step sits in currently_running_steps while its uuid is not yet in result_uuids_collection,
         # so a pass that only polls it is progress.
         if made_progress or currently_running_steps:
             return
@@ -451,12 +451,9 @@ class ExecutionOrchestrator:
         This method checks if a step is done, then performs specific actions based
         on the step's type, such as adding results to the data collection or dropping data.
         """
-        # set step.is_done from other processes via result queue
+        # collect step completions from other processes via result queue
         self.worker_manager.poll_result_queues()
-        if step.uuid in self.worker_manager.result_uuids_collection:
-            step.step_is_done = True
-
-        if not step.step_is_done:
+        if step.uuid not in self.worker_manager.result_uuids_collection:
             return False
 
         if isinstance(step, TransformFrameworkStep):

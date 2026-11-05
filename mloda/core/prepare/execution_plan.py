@@ -145,7 +145,7 @@ class ExecutionPlan:
         input_feature_columns: dict[UUID, tuple[str, ...]] | None = None,
     ) -> None:
         self.implementations = () if implementations is None else implementations
-        # Read only while building; cleared afterwards so a plan deepcopy never copies a connection.
+        # Read only while building; cleared afterwards so the plan never holds a connection.
         self.data_access_collection = data_access_collection
         # Maps a step to itself so a dedup hit can recover the already-inserted canonical member.
         self.tfs_collection: dict[TransformFrameworkStep, TransformFrameworkStep] = {}
@@ -238,7 +238,7 @@ class ExecutionPlan:
         self._anchor_join_consumers_on_destination(self.execution_plan)
         self.raise_on_step_cycle(self.execution_plan)
 
-        # Only read during add_joinstep above; ExecutionPlan gets deepcopy'd on every Engine.compute()
+        # Only read during add_joinstep above; ExecutionPlan is shared by every Engine.compute()
         # call, so this (potentially O(#features), UUID-keyed) dict and its live reference into
         # ResolveComputeFrameworks's own dict must not linger past the plan build that needs it, and
         # neither must the engine's resolved_input_feature_names map that run_feature_group read.

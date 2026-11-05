@@ -465,7 +465,6 @@ def _single_step_mock() -> MagicMock:
     step.own_frame = False
     step.get_uuids.return_value = {step_uuid}
     step.required_uuids = set()
-    step.step_is_done = False
     step.uuid = step_uuid
     return step
 
@@ -474,7 +473,7 @@ class TestSyncModeSkipsSleep:
     """Tests that SYNC mode does not call time.sleep in the compute loop.
 
     In SYNC mode, all steps complete inline within sync_execute_step (which
-    sets step.step_is_done = True before returning). There is no need to poll
+    marks the step done in the run state before returning). There is no need to poll
     for results from worker threads or processes, so the time.sleep(0.01) call
     in the compute() while-loop is pure waste. The compute loop should skip
     the sleep when running in SYNC mode.
@@ -487,8 +486,8 @@ class TestSyncModeSkipsSleep:
         orchestrator = ExecutionOrchestrator(planner)  # type: ignore[arg-type]
         orchestrator.cfw_register = CfwManager({ParallelizationMode.SYNC})
 
-        def fake_execute_step(step: object) -> None:
-            step.step_is_done = True  # type: ignore[attr-defined]
+        def fake_execute_step(step: Any) -> None:
+            orchestrator.worker_manager.result_uuids_collection.add(step.uuid)
 
         orchestrator._execute_step = Mock(side_effect=fake_execute_step)  # type: ignore[method-assign]
         orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
@@ -521,8 +520,8 @@ class TestJoinAbandonsThreadsOnlyWhenCancelled:
         orchestrator = ExecutionOrchestrator(ReiterablePlan(_single_step_mock()))  # type: ignore[arg-type]
         orchestrator.cfw_register = CfwManager({ParallelizationMode.SYNC})
 
-        def fake_execute_step(step: object) -> None:
-            step.step_is_done = True  # type: ignore[attr-defined]
+        def fake_execute_step(step: Any) -> None:
+            orchestrator.worker_manager.result_uuids_collection.add(step.uuid)
 
         orchestrator._execute_step = Mock(side_effect=fake_execute_step)  # type: ignore[method-assign]
         orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
@@ -767,10 +766,11 @@ class TestEnterPrestartsStandbyWorkers:
         orchestrator = ExecutionOrchestrator(ReiterablePlan(_single_step_mock()))  # type: ignore[arg-type]
         orchestrator.cfw_register = CfwManager({mode})
         orchestrator.worker_manager = Mock()
+        orchestrator.worker_manager.result_uuids_collection = set()
         orchestrator.worker_manager.find_dead_workers.return_value = []
         orchestrator.worker_manager.find_orphaned_steps.return_value = []
         orchestrator._execute_step = Mock(  # type: ignore[method-assign]
-            side_effect=lambda step: setattr(step, "step_is_done", True)
+            side_effect=lambda step: orchestrator.worker_manager.result_uuids_collection.add(step.uuid)
         )
         orchestrator._process_step_result = Mock(return_value=True)  # type: ignore[method-assign]
         orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]

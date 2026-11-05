@@ -37,11 +37,22 @@ class DataLifecycleManager:
         self.track_data_to_drop: dict[UUID, set[UUID]] = {}
         self.artifacts: dict[str, Any] = {}
         self.failed_rows: tuple[FailedRows, ...] = ()
-        self.transformer = transformer if transformer is not None else ComputeFrameworkTransformer()
+        self._transformer = transformer
         self.column_ordering = column_ordering
         self.request_feature_order = request_feature_order
         self.output_framework = output_framework
         self.output_connection = output_connection
+
+    @property
+    def transformer(self) -> ComputeFrameworkTransformer:
+        """Built on first read: most runs never transform."""
+        if self._transformer is None:
+            self._transformer = ComputeFrameworkTransformer()
+        return self._transformer
+
+    @transformer.setter
+    def transformer(self, value: ComputeFrameworkTransformer) -> None:
+        self._transformer = value
 
     def drop_data_for_finished_cfws(
         self,

@@ -114,7 +114,7 @@ class FeatureSet:
     def resolve_artifact_for_runtime(self, runtime_artifacts: dict[str, Any]) -> None:
         """Re-resolve artifact save/load mode using runtime artifacts from run().
 
-        Called at step execution time on the deep-copied FeatureSet when
+        Called at step execution time on the per-run FeatureSet view when
         artifacts are passed to run(). This enables switching between save
         and load modes across run() calls without re-preparing.
         """

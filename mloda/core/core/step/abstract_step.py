@@ -14,7 +14,6 @@ class Step(ABC):
     def __init__(self, required_uuids: set[UUID]) -> None:
         self.required_uuids = required_uuids
         self.uuid = uuid4()
-        self.step_is_done = False
 
     @abstractmethod
     def execute(

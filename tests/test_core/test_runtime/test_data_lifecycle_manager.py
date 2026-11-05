@@ -19,6 +19,19 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
+class TestDataLifecycleManagerLazyTransformer:
+    """The default transformer registry is built on first read, then cached."""
+
+    def test_default_registry_built_on_first_read_only(self) -> None:
+        with patch("mloda.core.runtime.data_lifecycle_manager.ComputeFrameworkTransformer") as registry:
+            manager = DataLifecycleManager()
+            registry.assert_not_called()
+
+            first = manager.transformer
+            assert manager.transformer is first
+            registry.assert_called_once_with()
+
+
 class TestDataLifecycleManagerInit:
     """Test DataLifecycleManager initialization."""
 

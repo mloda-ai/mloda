@@ -69,6 +69,7 @@ class TestDuckDBAsofMergeEngine(AsofMergeEngineSuite):
         with pytest.raises(ValueError, match=r"'t'.*(offset|timezone|tz)"):
             engine.merge_asof(left_z, right_z, Index(("k",)), Index(("k",)), cfg)
 
+    @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed")
     def test_nearest_raises_value_error(self) -> None:
         """Vector F: DuckDB native ASOF cannot express 'nearest' in v1 -> ValueError."""
         import duckdb as _duckdb  # noqa: PLC0415
@@ -82,6 +83,7 @@ class TestDuckDBAsofMergeEngine(AsofMergeEngineSuite):
         with pytest.raises(ValueError):
             engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
 
+    @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed")
     def test_timedelta_tolerance_raises_value_error(self) -> None:
         """A timedelta tolerance is unsupported on the DuckDB SQL backend (which needs a numeric
         gap). It must raise a clear ValueError mentioning 'timedelta', not the confusing

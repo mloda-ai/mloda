@@ -129,7 +129,7 @@ def serves_asof_merge(cls: type[ComputeFramework]) -> bool:
     engine, error = _read_accessor(cls, "merge_engine")
     if error is not None or not isinstance(engine, type):
         return False
-    return issubclass(engine, BaseMergeEngine) and engine.merge_asof is not BaseMergeEngine.merge_asof
+    return is_nominal_subclass(engine, BaseMergeEngine) and engine.merge_asof is not BaseMergeEngine.merge_asof
 
 
 def check_compute_framework_shape(cls: type[ComputeFramework]) -> CheckResult:

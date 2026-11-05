@@ -6,9 +6,7 @@ from decimal import Decimal
 import pytest
 from typing import Any
 from mloda.core.filter.filter_parameter import FilterParameter, FilterParameterImpl
-from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import (
-    NON_COLLECTION_VALUES,
-)
+from mloda._testing.compute_framework.filter_suite import NON_COLLECTION_VALUES
 
 
 class AlwaysRaisesOnHash:

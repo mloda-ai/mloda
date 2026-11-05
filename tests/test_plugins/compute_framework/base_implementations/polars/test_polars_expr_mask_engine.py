@@ -5,7 +5,6 @@ and a LazyFrame end-to-end test.
 """
 
 import re
-from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -14,9 +13,8 @@ from mloda.provider import BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_expr_mask_engine import (
     PolarsExprMaskEngine,
 )
-from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import (
-    MaskEngineTestMixin,
-)
+from mloda._testing.compute_framework.mask_suite import MaskEngineSuite
+from mloda._testing.framework_adapter import FrameworkAdapter, PolarsLazyAdapter
 
 try:
     import polars as pl
@@ -24,50 +22,20 @@ except ImportError:
     pl = None  # type: ignore[assignment]
 
 
-@pytest.mark.skipif(pl is None, reason="polars not installed")
-class TestPolarsExprMaskEngine(MaskEngineTestMixin):
+class TestPolarsExprMaskEngine(MaskEngineSuite):
     """Tests for the PolarsExprMaskEngine that returns pl.Expr objects."""
 
-    mask_engine_class = PolarsExprMaskEngine
+    adapter_class = PolarsLazyAdapter
 
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return pl.LazyFrame(
-            {
-                "status": ["active", "inactive", "active", "inactive"],
-                "value": [10, 20, 30, 40],
-            }
-        )
-
-    @pytest.fixture
-    def empty_data(self) -> Any:
-        return pl.LazyFrame({"status": pl.Series([], dtype=pl.String), "value": pl.Series([], dtype=pl.Int64)})
-
-    @pytest.fixture
-    def null_data(self) -> Any:
-        return pl.LazyFrame(
-            {
-                "status": pl.Series(["active", None, "inactive", None], dtype=pl.String),
-                "value": pl.Series([10, 20, 30, 40], dtype=pl.Int64),
-                "score": pl.Series([1, None, 3, None], dtype=pl.Int64),
-                "ratio": pl.Series([1.0, float("nan"), 3.0, None], dtype=pl.Float64),
-            }
-        )
-
-    @pytest.fixture
-    def decimal_sample_data(self) -> Any:
-        return pl.LazyFrame({"d": [Decimal("12.34"), Decimal("5.50"), None]}, schema={"d": pl.Decimal(10, 2)})
-
-    def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
+    def evaluate_mask(self, adapter: FrameworkAdapter, mask: Any, data: Any) -> list[bool]:
         result: list[bool] = data.select(mask.alias("__mask")).collect()["__mask"].to_list()
         return result
 
-    def is_boolean_mask(self, mask: Any, data: Any) -> bool:
+    def is_boolean_mask(self, adapter: FrameworkAdapter, mask: Any, data: Any) -> bool:
         return bool(data.select(mask.alias("__mask")).collect()["__mask"].dtype == pl.Boolean)
 
-    def apply_mask(self, mask: Any, data: Any) -> dict[str, list[Any]]:
-        result: dict[str, list[Any]] = data.filter(mask).collect().to_dict(as_series=False)
-        return result
+    def select_rows(self, adapter: FrameworkAdapter, mask: Any, data: Any) -> Any:
+        return data.filter(mask)
 
     # -- Polars-expr-specific tests --
 

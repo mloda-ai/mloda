@@ -1,6 +1,6 @@
 import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 import pytest
 import numpy as np
 from unittest.mock import Mock, patch
@@ -10,9 +10,8 @@ from mloda.user import SingleFilter
 from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine import IcebergFilterEngine
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine import scan_columns
-from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
-    FilterEngineTestMixin,
-)
+from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
+from mloda._testing.framework_adapter import FrameworkAdapter, IcebergAdapter
 
 import logging
 
@@ -122,16 +121,27 @@ def build_mock_iceberg_table(data: Any, schema: Any) -> Mock:
     return mock_table
 
 
-@pytest.mark.skipif(
-    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
-)
-class TestIcebergFilterEngine(FilterEngineTestMixin):
+class TestIcebergFilterEngine(FilterEngineSuite):
     """Unit tests for the IcebergFilterEngine class."""
 
-    filter_engine_class = IcebergFilterEngine
+    adapter_class = IcebergAdapter
+
+    @pytest.fixture(autouse=True)
+    def _require_iceberg(self) -> None:
+        """The mock-based extra tests build no adapter, so they need their own availability guard."""
+        pytest.importorskip("pyiceberg")
+        pytest.importorskip("pyarrow")
+
+    def per_filter_frame(self, adapter: FrameworkAdapter, frame: Any) -> Any:
+        """The do_* methods run on the Arrow table a scan returns; apply_filters gets the real Iceberg table."""
+        return cast(IcebergAdapter, adapter).to_table(frame)
+
+    def apply_filters_names(self) -> list[str]:
+        # Iceberg's pushdown projects to the feature names, so id and name must be requested.
+        return ["id", "age", "name", "category"]
 
     @pytest.fixture
-    def sample_data(self) -> Any:
+    def mock_source_data(self) -> Any:
         return pa.table(
             {
                 "id": [1, 2, 3, 4, 5],
@@ -151,10 +161,10 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         )
 
     @pytest.fixture
-    def mock_iceberg_table(self, sample_data: Any, sample_schema: Any) -> Mock:
-        """Mock Iceberg table whose scan returns sample_data projected to selected_fields, row-unfiltered;
+    def mock_iceberg_table(self, mock_source_data: Any, sample_schema: Any) -> Mock:
+        """Mock Iceberg table whose scan returns mock_source_data projected to selected_fields, row-unfiltered;
         row filtering happens in the PyArrow re-pass."""
-        return build_mock_iceberg_table(sample_data, sample_schema)
+        return build_mock_iceberg_table(mock_source_data, sample_schema)
 
     @pytest.fixture
     def mock_feature_set(self) -> Mock:
@@ -163,28 +173,6 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         mock_feature_set.get_all_names.return_value = ["age", "name", "category"]
         mock_feature_set.link_index_columns = frozenset()
         return mock_feature_set
-
-    @pytest.fixture
-    def nullable_category_sample_data(self) -> Any:
-        return pa.Table.from_pydict(
-            {
-                "id": [1, 2, 3, 4, 5],
-                "category": ["A", None, "B", None, "C"],
-                "score": [1, None, 2, None, 3],
-                "ratio": pa.array([1.0, float("nan"), 2.0, None, 3.0], type=pa.float64()),
-            }
-        )
-
-    @pytest.fixture
-    def decimal_sample_data(self) -> Any:
-        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
-        return pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})
-
-    def get_decimal_column_dtype(self, data: Any) -> Any:
-        return data["d"].type
-
-    def get_column_values(self, result: Any, column: str) -> list[Any]:
-        return result[column].to_pylist()  # type: ignore[no-any-return]
 
     @pytest.mark.parametrize(
         "filter_type,parameter,expected_expression",
@@ -379,7 +367,7 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         assert call_args.kwargs["selected_fields"] == ("age", "name", "category")
 
         # The PyArrow re-pass over the scan result keeps every row (age >= 25 matches all).
-        assert self.get_column_values(result, "age") == [25, 30, 35, 40, 45]
+        assert result["age"].to_pylist() == [25, 30, 35, 40, 45]
         # "id" was never selected, so the scan result carries no "id" column to leak.
         assert "id" not in result.column_names
 
@@ -397,7 +385,7 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         assert set(call_args.kwargs["selected_fields"]) == {"age", "name", "category", "id"}
 
     def test_apply_filters_iceberg_table_selected_fields_include_multi_output_columns(
-        self, sample_data: Any, mock_feature_set: Mock
+        self, mock_source_data: Any, mock_feature_set: Mock
     ) -> None:
         """A schema column named '<feature>~0' (multi-output) is selected alongside its base feature."""
         age_filter = SingleFilter(Feature("age"), FilterType.MIN, {"value": 25})
@@ -409,7 +397,7 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
             NestedField(3, "name~0", StringType(), required=False),
             NestedField(4, "category", StringType(), required=False),
         )
-        data = sample_data.append_column("name~0", sample_data["name"])
+        data = mock_source_data.append_column("name~0", mock_source_data["name"])
         mock_iceberg_table = build_mock_iceberg_table(data, schema)
 
         IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
@@ -468,7 +456,7 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         assert call_args.kwargs["row_filter"] == And(
             GreaterThanOrEqual(Reference("age"), 25), EqualTo(Reference("name"), "Alice")
         )
-        assert self.get_column_values(result, "age") == [25]
+        assert result["age"].to_pylist() == [25]
 
     def test_apply_filters_filtered_features(self, mock_iceberg_table: Mock, mock_feature_set: Mock) -> None:
         """Test applying filters where some features are not in the feature set."""
@@ -484,7 +472,7 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         mock_iceberg_table.scan.assert_called_once()
         call_args = mock_iceberg_table.scan.call_args
         assert call_args.kwargs["row_filter"] == GreaterThanOrEqual(Reference("age"), 25)
-        assert self.get_column_values(result, "age") == [25, 30, 35, 40, 45]
+        assert result["age"].to_pylist() == [25, 30, 35, 40, 45]
 
     @pytest.mark.parametrize(
         "filters,expected_row_filter,expected_ages",
@@ -531,7 +519,7 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         mock_iceberg_table.scan.assert_called_once()
         call_args = mock_iceberg_table.scan.call_args
         assert call_args.kwargs["row_filter"] == expected_row_filter()
-        assert self.get_column_values(result, "age") == expected_ages
+        assert result["age"].to_pylist() == expected_ages
 
     def test_apply_filters_custom_filter_type_raises(self, mock_iceberg_table: Mock, mock_feature_set: Mock) -> None:
         """A filter type with no Iceberg pushdown and no PyArrow method reaches do_custom_filter."""

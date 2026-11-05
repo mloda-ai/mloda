@@ -3,7 +3,7 @@
 Requires PySpark installed and JAVA_HOME set; see conftest.py for the shared SparkSession.
 """
 
-from decimal import Decimal
+from collections.abc import Iterator
 from typing import Any
 import pytest
 from mloda.user import Feature
@@ -16,9 +16,8 @@ from tests.test_plugins.compute_framework.base_implementations.spark.conftest im
     PYSPARK_AVAILABLE,
     SKIP_REASON,
 )
-from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
-    FilterEngineTestMixin,
-)
+from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
+from mloda._testing.framework_adapter import FrameworkAdapter, SparkAdapter
 
 import logging
 
@@ -53,51 +52,17 @@ def spark_sample_data(spark_session: Any) -> Any:
     return spark_session.createDataFrame(data)
 
 
-@pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
-class TestSparkFilterEngine(FilterEngineTestMixin):
-    filter_engine_class = SparkFilterEngine
+class TestSparkFilterEngine(FilterEngineSuite):
+    adapter_class = SparkAdapter
 
     @pytest.fixture
-    def sample_data(self, spark_session: Any) -> Any:
-        return spark_session.createDataFrame(
-            [
-                (1, 25, "Alice", "A"),
-                (2, 30, "Bob", "B"),
-                (3, 35, "Charlie", "A"),
-                (4, 40, "David", "C"),
-                (5, 45, "Eve", "B"),
-            ],
-            "id bigint, age bigint, name string, category string",
-        )
+    def adapter(self, spark_session: Any) -> Iterator[FrameworkAdapter]:
+        """SparkAdapter borrows the active session, so spark_session must exist first."""
+        spark_adapter = self.adapter_class()
+        with spark_adapter:
+            yield spark_adapter
 
-    @pytest.fixture
-    def nullable_category_sample_data(self, spark_session: Any) -> Any:
-        return spark_session.createDataFrame(
-            [
-                (1, "A", 1, 1.0),
-                (2, None, None, float("nan")),
-                (3, "B", 2, 2.0),
-                (4, None, None, None),
-                (5, "C", 3, 3.0),
-            ],
-            "id bigint, category string, score bigint, ratio double",
-        )
-
-    @pytest.fixture
-    def decimal_sample_data(self, spark_session: Any) -> Any:
-        rows = [(Decimal("12.34"),), (Decimal("5.50"),), (Decimal("99.99"),), (None,)]
-        return spark_session.createDataFrame(rows, "d decimal(10,2)")
-
-    def get_column_values(self, result: Any, column: str) -> list[Any]:
-        return [row[column] for row in result.collect()]
-
-    def get_decimal_column_dtype(self, data: Any) -> Any:
-        return data.schema["d"].dataType
-
-    def result_row_count(self, result: Any) -> int:
-        """Spark DataFrames have no ``__len__``."""
-        count: int = result.count()
-        return count
+    # Framework-specific tests below
 
     def test_equal_filter_string(self, spark_sample_data: Any) -> None:
         """Test equality filter on string column."""

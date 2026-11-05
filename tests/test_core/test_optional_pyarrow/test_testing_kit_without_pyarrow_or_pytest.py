@@ -14,11 +14,30 @@ import sys
 import mloda._testing
 
 # mloda._testing.source holds the pytest mixins and imports pytest and pyarrow on purpose, so it is skipped.
-_PYTEST_SUBTREE = "mloda._testing.source"
+# mloda._testing.compute_framework holds pytest suites, so pytest is let through for it, but pyarrow stays blocked.
+_SKIPPED_SUBTREE = "mloda._testing.source"
+_PYTEST_SUBTREE = "mloda._testing.compute_framework"
+
+
+def _in_subtree(name, subtree):
+    return name == subtree or name.startswith(subtree + ".")
+
+
 for info in pkgutil.walk_packages(mloda._testing.__path__, "mloda._testing."):
-    if info.name == _PYTEST_SUBTREE or info.name.startswith(_PYTEST_SUBTREE + "."):
+    if _in_subtree(info.name, _SKIPPED_SUBTREE) or _in_subtree(info.name, _PYTEST_SUBTREE):
         continue
     importlib.import_module(info.name)
+
+
+_pytest_blocker = sys.meta_path[0]
+sys.meta_path.remove(_pytest_blocker)
+for info in pkgutil.walk_packages(mloda._testing.__path__, "mloda._testing."):
+    if _in_subtree(info.name, _PYTEST_SUBTREE):
+        importlib.import_module(info.name)
+assert "pyarrow" not in sys.modules, "mloda._testing.compute_framework must not import pyarrow"
+for name in [m for m in sys.modules if m == "pytest" or m.startswith(("pytest.", "_pytest"))]:
+    del sys.modules[name]
+sys.meta_path.insert(0, _pytest_blocker)
 
 from mloda._testing.source_applicability import NO_POINTER, source_applicability
 from mloda._testing.result import CheckResult

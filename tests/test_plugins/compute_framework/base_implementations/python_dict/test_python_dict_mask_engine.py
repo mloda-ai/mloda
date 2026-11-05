@@ -1,50 +1,22 @@
-from decimal import Decimal
 from typing import Any
 
-import pytest
-
+from mloda._testing.compute_framework.mask_suite import MaskEngineSuite
+from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_mask_engine import (
     PythonDictMaskEngine,
 )
-from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import (
-    MaskEngineTestMixin,
-)
 
 
-class TestPythonDictMaskEngine(MaskEngineTestMixin):
-    mask_engine_class = PythonDictMaskEngine
+class TestPythonDictMaskEngine(MaskEngineSuite):
+    adapter_class = PythonDictAdapter
 
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return {
-            "status": ["active", "inactive", "active", "inactive"],
-            "value": [10, 20, 30, 40],
-        }
-
-    @pytest.fixture
-    def empty_data(self) -> Any:
-        return {"status": [], "value": []}
-
-    @pytest.fixture
-    def null_data(self) -> Any:
-        return {
-            "status": ["active", None, "inactive", None],
-            "value": [10, 20, 30, 40],
-            "score": [1, None, 3, None],
-            "ratio": [1.0, float("nan"), 3.0, None],
-        }
-
-    @pytest.fixture
-    def decimal_sample_data(self) -> Any:
-        return {"d": [Decimal("12.34"), Decimal("5.50"), None]}
-
-    def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
+    def evaluate_mask(self, adapter: FrameworkAdapter, mask: Any, data: Any) -> list[bool]:
         return list(mask)
 
-    def is_boolean_mask(self, mask: Any, data: Any) -> bool:
+    def is_boolean_mask(self, adapter: FrameworkAdapter, mask: Any, data: Any) -> bool:
         return all(isinstance(v, bool) for v in mask)
 
-    def apply_mask(self, mask: Any, data: Any) -> dict[str, list[Any]]:
+    def select_rows(self, adapter: FrameworkAdapter, mask: Any, data: Any) -> Any:
         return {column: [v for v, keep in zip(values, mask) if keep] for column, values in data.items()}
 
 

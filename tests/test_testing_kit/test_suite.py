@@ -15,6 +15,9 @@ from mloda._testing.suite import ConformanceSuite, HookError, SwitchedOffError, 
 from mloda.user.python_dict import PythonDictFramework
 
 
+pytest_plugins = ["pytester"]
+
+
 class _Plugin:
     pass
 
@@ -444,3 +447,127 @@ def test_assert_passed_fails_with_the_failures() -> None:
 
     message = str(excinfo.value)
     assert "first problem" in message and "second problem" in message
+
+
+_WIRING_MODULE = """
+from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
+from mloda._testing.framework_adapter import PythonDictAdapter
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+
+
+class NoFilterFramework(ComputeFramework):
+    pass
+
+
+class NoFilterAdapter(PythonDictAdapter):
+    def compute_framework(self):
+        return NoFilterFramework
+
+
+class TestNoFilter(FilterEngineSuite):
+    adapter_class = NoFilterAdapter
+"""
+
+_LIFECYCLE_MODULE = """
+from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
+from mloda._testing.framework_adapter import PythonDictAdapter
+
+INSTANCES = []
+SEEN = []
+
+
+class RecordingAdapter(PythonDictAdapter):
+    def __init__(self):
+        self.opened = 0
+        self.closed = False
+        INSTANCES.append(self)
+
+    def open(self):
+        self.opened += 1
+
+    def close(self):
+        self.closed = True
+
+
+class TestRecording(FilterEngineSuite):
+    adapter_class = RecordingAdapter
+
+    def test_first_adapter_is_open(self, adapter):
+        assert adapter.opened == 1 and not adapter.closed
+        SEEN.append(adapter)
+
+    def test_second_adapter_is_a_new_open_one(self, adapter):
+        assert adapter.opened == 1 and not adapter.closed
+        assert all(adapter is not earlier for earlier in SEEN)
+        SEEN.append(adapter)
+
+
+def test_every_adapter_was_closed_and_each_was_opened_once():
+    assert len(SEEN) == 2
+    assert len(INSTANCES) > 2
+    assert [a for a in INSTANCES if not a.closed] == []
+    assert [a for a in INSTANCES if a.opened != 1] == []
+"""
+
+
+def test_compute_framework_host_without_adapter_class_fails_at_class_creation() -> None:
+    from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
+
+    with pytest.raises(HookError) as excinfo:
+
+        class _NoAdapter(FilterEngineSuite):
+            pass
+
+    assert "_NoAdapter" in str(excinfo.value)
+    assert "adapter_class" in str(excinfo.value)
+
+
+def test_compute_framework_host_missing_a_required_hook_fails_naming_it() -> None:
+    from mloda._testing.compute_framework.host import ComputeFrameworkSuite
+    from mloda._testing.framework_adapter import PythonDictAdapter
+
+    class _NeedsHook(ComputeFrameworkSuite, suite_base=True):
+        aspect = "filter"
+        required_hooks = ("evaluate_rows",)
+
+        def evaluate_rows(self) -> list[int]:
+            raise NotImplementedError
+
+    with pytest.raises(HookError) as excinfo:
+
+        class _Missing(_NeedsHook):
+            adapter_class = PythonDictAdapter
+
+    assert "_Missing" in str(excinfo.value)
+    assert "evaluate_rows" in str(excinfo.value)
+
+    class _Provided(_NeedsHook):
+        adapter_class = PythonDictAdapter
+
+        def evaluate_rows(self) -> list[int]:
+            return [1]
+
+    assert _Provided.adapter_class is PythonDictAdapter
+
+
+@pytest.mark.timeout(60)
+def test_framework_without_the_aspect_fails_with_the_wiring_message(pytester: pytest.Pytester) -> None:
+    pytester.makepyfile(test_wiring=_WIRING_MODULE)
+
+    result = pytester.runpytest_subprocess("-p", "no:cacheprovider")
+
+    outcomes = result.parseoutcomes()
+    assert outcomes.get("errors", 0) > 0
+    assert outcomes.get("passed", 0) == 0
+    failed_lines = [line for line in result.stdout.str().splitlines() if line.startswith("E ") and "Failed:" in line]
+    assert failed_lines
+    assert all("NoFilterFramework" in line and "filter" in line for line in failed_lines)
+
+
+def test_adapter_is_fresh_per_test_and_closed_afterwards(pytester: pytest.Pytester) -> None:
+    pytester.makepyfile(test_lifecycle=_LIFECYCLE_MODULE)
+
+    result = pytester.runpytest_inprocess("-p", "no:cacheprovider", "-p", "no:randomly")
+
+    assert result.parseoutcomes().get("failed", 0) == 0
+    assert result.ret == 0

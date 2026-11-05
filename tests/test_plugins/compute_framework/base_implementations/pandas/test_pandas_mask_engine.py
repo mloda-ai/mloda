@@ -1,4 +1,3 @@
-from decimal import Decimal
 from typing import Any
 
 import numpy as np
@@ -6,57 +5,39 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+from mloda._testing.compute_framework.mask_suite import MaskEngineSuite
+from mloda._testing.framework_adapter import FrameworkAdapter, PandasAdapter
+from mloda._testing.typed_data import TypedTestData
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_mask_engine import (
     PandasMaskEngine,
 )
-from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import (
-    MaskEngineTestMixin,
-)
 
 
-class TestPandasMaskEngine(MaskEngineTestMixin):
-    mask_engine_class = PandasMaskEngine
+class TestPandasMaskEngine(MaskEngineSuite):
+    adapter_class = PandasAdapter
 
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return pd.DataFrame(
-            {
-                "status": ["active", "inactive", "active", "inactive"],
-                "value": [10, 20, 30, 40],
-            }
-        )
+    def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
+        """Strings use pandas' default inference as in production; NaN/null and decimal survive via ArrowDtype."""
+        frame = super().frame(adapter, name, data)
+        columns = data.to_python_dict()
+        for column, data_type in data.types.items():
+            if data_type == DataType.STRING:
+                frame[column] = pd.Series(columns[column], index=frame.index)
+        if name == "null":
+            frame["ratio"] = pd.Series(pd.arrays.ArrowExtensionArray(pa.array(columns["ratio"], type=pa.float64())))
+        if name == "decimal":
+            frame["d"] = pd.Series(columns["d"], dtype=pd.ArrowDtype(pa.decimal128(10, 2)))
+        return frame
 
-    @pytest.fixture
-    def empty_data(self) -> Any:
-        return pd.DataFrame({"status": pd.Series([], dtype=str), "value": pd.Series([], dtype="int64")})
-
-    @pytest.fixture
-    def null_data(self) -> Any:
-        return pd.DataFrame(
-            {
-                "status": pd.Series(["active", None, "inactive", None], dtype=str),
-                "value": pd.Series([10, 20, 30, 40], dtype="int64"),
-                "score": [1, None, 3, None],
-                "ratio": pd.Series(
-                    pd.arrays.ArrowExtensionArray(pa.array([1.0, float("nan"), 3.0, None], type=pa.float64()))
-                ),
-            }
-        )
-
-    @pytest.fixture
-    def decimal_sample_data(self) -> Any:
-        values = [Decimal("12.34"), Decimal("5.50"), None]
-        return pd.DataFrame({"d": pd.Series(values, dtype=pd.ArrowDtype(pa.decimal128(10, 2)))})
-
-    def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
+    def evaluate_mask(self, adapter: FrameworkAdapter, mask: Any, data: Any) -> list[bool]:
         return list(mask)
 
-    def is_boolean_mask(self, mask: Any, data: Any) -> bool:
+    def is_boolean_mask(self, adapter: FrameworkAdapter, mask: Any, data: Any) -> bool:
         return bool(mask.dtype == bool)
 
-    def apply_mask(self, mask: Any, data: Any) -> dict[str, list[Any]]:
-        result: dict[str, list[Any]] = data[mask].to_dict("list")
-        return result
+    def select_rows(self, adapter: FrameworkAdapter, mask: Any, data: Any) -> Any:
+        return data[mask]
 
     @pytest.mark.parametrize(
         "values",

@@ -1,7 +1,7 @@
 """Tests for mask engine: setup wiring and integration with FeatureGroups.
 
 Per-framework mask engine tests live in the framework-specific test directories and
-use the shared MaskEngineTestMixin (see mask_engine_test_mixin.py).
+use the shared suites in mloda._testing.compute_framework.mask_suite.
 """
 
 from typing import Any

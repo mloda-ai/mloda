@@ -1,61 +1,20 @@
 """Unit tests for the PyArrowFilterEngine class."""
 
-from decimal import Decimal
 from typing import Any
 
-import pytest
 import pyarrow as pa
 
+from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
+from mloda._testing.framework_adapter import PyArrowAdapter
 from mloda.user import Feature
 from mloda.user import SingleFilter
 from mloda.user import FilterType
-from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
-
-from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
-    FilterEngineTestMixin,
-)
 
 
-class TestPyArrowFilterEngine(FilterEngineTestMixin):
-    """Unit tests for the PyArrowFilterEngine class using shared mixin."""
+class TestPyArrowFilterEngine(FilterEngineSuite):
+    """Unit tests for the PyArrowFilterEngine class using the shared suite."""
 
-    filter_engine_class = PyArrowFilterEngine
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        """Create a sample PyArrow table for testing."""
-        return pa.table(
-            {
-                "id": [1, 2, 3, 4, 5],
-                "age": [25, 30, 35, 40, 45],
-                "name": ["Alice", "Bob", "Charlie", "David", "Eve"],
-                "category": ["A", "B", "A", "C", "B"],
-            }
-        )
-
-    @pytest.fixture
-    def nullable_category_sample_data(self) -> Any:
-        """Create a sample PyArrow table with null categories for testing."""
-        return pa.Table.from_pydict(
-            {
-                "id": [1, 2, 3, 4, 5],
-                "category": ["A", None, "B", None, "C"],
-                "score": [1, None, 2, None, 3],
-                "ratio": pa.array([1.0, float("nan"), 2.0, None, 3.0], type=pa.float64()),
-            }
-        )
-
-    @pytest.fixture
-    def decimal_sample_data(self) -> Any:
-        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
-        return pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})
-
-    def get_decimal_column_dtype(self, data: Any) -> Any:
-        return data["d"].type
-
-    def get_column_values(self, result: Any, column: str) -> list[Any]:
-        """Extract column values from PyArrow table."""
-        return result[column].to_pylist()  # type: ignore[no-any-return]
+    adapter_class = PyArrowAdapter
 
     def test_categorical_inclusion_on_dictionary_encoded_column(self, filter_engine: Any) -> None:
         """CATEGORICAL_INCLUSION must work on dictionary-encoded (categorical) columns.

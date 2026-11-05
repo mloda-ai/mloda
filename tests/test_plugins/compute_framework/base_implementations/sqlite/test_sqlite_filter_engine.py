@@ -4,79 +4,38 @@ from typing import Any
 import pyarrow as pa
 import pytest
 
+from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
+from mloda._testing.declarations import Cause
+from mloda._testing.framework_adapter import SqliteAdapter
 from mloda.user import Feature
 from mloda.user import SingleFilter
 from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_filter_engine import SqliteFilterEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 
-from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
-    FilterEngineTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.time_range_filter_engine_test_mixin import (
-    SAMPLE_IDS,
-    SAMPLE_TIMESTAMPS,
-    TimeRangeFilterEngineTestMixin,
-)
 
-
-class TestSqliteFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
-    filter_engine_class = SqliteFilterEngine
-
-    @pytest.fixture
-    def sample_data(self, connection: sqlite3.Connection) -> Any:
-        arrow_table = pa.Table.from_pydict(
-            {
-                "id": [1, 2, 3, 4, 5],
-                "age": [25, 30, 35, 40, 45],
-                "name": ["Alice", "Bob", "Charlie", "David", "Eve"],
-                "category": ["A", "B", "A", "C", "B"],
-            }
-        )
-        return SqliteRelation.from_arrow(connection, arrow_table)
-
-    @pytest.fixture
-    def nullable_category_sample_data(self, connection: sqlite3.Connection) -> Any:
-        arrow_table = pa.Table.from_pydict(
-            {
-                "id": [1, 2, 3, 4, 5],
-                "category": ["A", None, "B", None, "C"],
-                "score": [1, None, 2, None, 3],
-                "ratio": pa.array([1.0, float("nan"), 2.0, None, 3.0], type=pa.float64()),
-            }
-        )
-        return SqliteRelation.from_arrow(connection, arrow_table)
-
-    def get_column_values(self, result: Any, column: str) -> list[Any]:
-        values: list[Any] = result.df()[column].tolist()
-        return values
-
-    @pytest.fixture
-    def sample_time_data(self, connection: sqlite3.Connection) -> Any:
-        # pa.array with a tz-typed timestamp interprets naive datetimes as already in that tz;
-        # tz-aware datetimes are rejected on some PyArrow versions.
-        naive_ts = [ts.replace(tzinfo=None) for ts in SAMPLE_TIMESTAMPS]
-        arrow_table = pa.table(
-            {"id": pa.array(SAMPLE_IDS), "ts": pa.array(naive_ts, type=pa.timestamp("us", tz="UTC"))}
-        )
-        return SqliteRelation.from_arrow(connection, arrow_table)
-
-    def get_id_column_values(self, result: Any) -> list[int]:
-        return list(result.df()["id"].tolist())
+class TestSqliteFilterEngine(FilterEngineSuite):
+    adapter_class = SqliteAdapter
+    switched_off = {
+        "test_min_filter_decimal": Cause.BACKEND,
+        "test_categorical_inclusion_decimal": Cause.BACKEND,
+        "test_categorical_inclusion_decimal_unrepresentable_values_match_nothing": Cause.BACKEND,
+        "test_categorical_inclusion_decimal_with_null": Cause.BACKEND,
+    }
 
     @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
-    def test_min_filter_decimal(self, filter_engine: Any, decimal_sample_data: Any) -> None: ...
+    def test_min_filter_decimal(self, filter_engine: Any, decimal_data: Any) -> None: ...
 
     @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
-    def test_categorical_inclusion_decimal(self, filter_engine: Any, decimal_sample_data: Any) -> None: ...
+    def test_categorical_inclusion_decimal(self, filter_engine: Any, decimal_data: Any) -> None: ...
 
     @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
     def test_categorical_inclusion_decimal_unrepresentable_values_match_nothing(
-        self, filter_engine: Any, decimal_sample_data: Any
+        self, filter_engine: Any, decimal_data: Any
     ) -> None: ...
 
     @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
-    def test_categorical_inclusion_decimal_with_null(self, filter_engine: Any, decimal_sample_data: Any) -> None: ...
+    def test_categorical_inclusion_decimal_with_null(self, filter_engine: Any, decimal_data: Any) -> None: ...
 
     def test_filter_with_null_values(self, connection: sqlite3.Connection) -> None:
         arrow_table = pa.Table.from_pydict(

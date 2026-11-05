@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -198,6 +198,61 @@ def test_int32_keeps_native_width(name: str) -> None:
         assert _INT32_CHECKS[name](adapter.column_type(result, "c"))
 
 
+_EXACT = ["PyArrow", "Pandas", "Polars", "PolarsLazy"]
+_NEIGHBORS = [
+    (DataType.INT32, DataType.INT64, [1, 2]),
+    (DataType.FLOAT, DataType.DOUBLE, [1.5, 2.5]),
+    (DataType.TIMESTAMP_MILLIS, DataType.TIMESTAMP_MICROS, [datetime(2024, 1, 1), datetime(2024, 1, 2)]),
+]
+_UTC = datetime(2024, 1, 1, tzinfo=UTC)
+
+
+@pytest.mark.parametrize("name", _EXACT)
+@pytest.mark.parametrize(("own", "neighbor", "values"), _NEIGHBORS)
+def test_has_type_is_exact(adapter: Any, own: DataType, neighbor: DataType, values: list[Any]) -> None:
+    with adapter:
+        result = adapter.from_typed(TypedTestData({"c": (own, values)}))
+
+        assert adapter.has_type(result, "c", own) is True
+        assert adapter.has_type(result, "c", neighbor) is False
+
+
+@pytest.mark.parametrize("name", ["PythonDict", "DuckDB", "Sqlite", "Iceberg"])
+def test_has_type_is_none_without_exact_native_type(name: str, adapter: Any) -> None:
+    with adapter:
+        result = adapter.from_typed(TypedTestData({"c": (DataType.INT64, [1, 2])}))
+
+        assert adapter.has_type(result, "c", DataType.INT64) is None
+
+
+@pytest.mark.parametrize("name", _EXACT)
+def test_has_type_timezone_aware_vs_naive(name: str, adapter: Any) -> None:
+    with adapter:
+        aware = adapter.from_typed(TypedTestData({"t": (DataType.TIMESTAMP_MICROS_TZ, [_UTC])}))
+        naive = adapter.from_typed(TypedTestData({"t": (DataType.TIMESTAMP_MICROS, [datetime(2024, 1, 1)])}))
+
+        assert adapter.has_type(aware, "t", DataType.TIMESTAMP_MICROS_TZ) is True
+        assert adapter.has_type(naive, "t", DataType.TIMESTAMP_MICROS_TZ) is False
+
+
+@pytest.mark.parametrize("name", ["PyArrow", "Polars", "PolarsLazy"])
+def test_has_type_list(name: str, adapter: Any) -> None:
+    with adapter:
+        result = adapter.from_typed(TypedTestData({"l": (DataType.LIST, [[1, 2], [3]])}))
+
+        assert adapter.has_type(result, "l", DataType.LIST) is True
+        assert adapter.has_type(result, "l", DataType.INT64) is False
+
+
+def test_pandas_object_date_has_no_exact_type() -> None:
+    adapter = _make("Pandas")
+    if not adapter.is_available():
+        pytest.skip("Pandas backend unavailable")
+    result = adapter.from_typed(TypedTestData({"d": (DataType.DATE, [datetime(2024, 1, 1).date()])}))
+
+    assert adapter.has_type(result, "d", DataType.DATE) is None
+
+
 def test_to_arrow_table_fixed_offset_timezone() -> None:
     pa = pytest.importorskip("pyarrow")
     from mloda._testing.framework_adapter import to_arrow_table
@@ -313,3 +368,46 @@ def test_iceberg_fixed_offset_timestamp_raises_unsupported() -> None:
     with adapter:
         with pytest.raises(UnsupportedPyArrowTypeException):
             adapter.from_arrow(table)
+
+
+def _pandas() -> Any:
+    pytest.importorskip("pandas")
+    adapter = _make("Pandas")
+    if not adapter.is_available():
+        pytest.skip("Pandas backend unavailable")
+    return adapter
+
+
+def test_pandas_object_string_column_fits_by_value() -> None:
+    import pandas as pd
+
+    frame = pd.DataFrame({"s": pd.Series(["a", "b"], dtype=object)})
+
+    assert _pandas().has_type(frame, "s", DataType.STRING) is None
+
+
+@pytest.mark.parametrize(
+    ("unit", "data_type", "expected"),
+    [
+        ("s", DataType.TIMESTAMP_MICROS, True),
+        ("ms", DataType.TIMESTAMP_MICROS, False),
+        ("ns", DataType.TIMESTAMP_MICROS, True),
+        ("ns", DataType.TIMESTAMP_MILLIS, False),
+        ("s", DataType.TIMESTAMP_MILLIS, False),
+        ("ms", DataType.TIMESTAMP_MILLIS, True),
+    ],
+)
+def test_pandas_timestamp_micros_accepts_s_us_ns(unit: str, data_type: DataType, expected: bool) -> None:
+    adapter = _pandas()
+    frame = adapter.from_typed(TypedTestData({"t": (DataType.TIMESTAMP_MICROS, [datetime(2024, 1, 1)])}))
+    frame["t"] = frame["t"].astype(f"datetime64[{unit}]")
+
+    assert adapter.has_type(frame, "t", data_type) is expected
+
+
+def test_pandas_sparse_column_has_type_does_not_raise() -> None:
+    import pandas as pd
+
+    frame = pd.DataFrame({"c": pd.arrays.SparseArray([1, 0, 2], dtype="int64")})
+
+    assert _pandas().has_type(frame, "c", DataType.INT64) in (True, False, None)

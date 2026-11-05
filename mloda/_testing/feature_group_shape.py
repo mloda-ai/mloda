@@ -7,7 +7,7 @@ import math
 from itertools import product
 from typing import Any
 
-from mloda._testing.framework_adapter import FrameworkAdapter, PyArrowAdapter, PythonDictAdapter
+from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter
 from mloda._testing.result import CheckResult
 from mloda._testing.suite import assert_passed
 from mloda._testing.typed_data import TypedTestData
@@ -226,19 +226,24 @@ def _check_outputs(
 
 def _check_types(adapter: FrameworkAdapter, expected: dict[str, DataType], result: Any, notes: list[str]) -> list[str]:
     failures = []
-    exact = isinstance(adapter, PyArrowAdapter)
     for name, data_type in expected.items():
         if name not in adapter.column_names(result):
             continue
-        if exact:
+        exact = adapter.has_type(result, name, data_type)
+        if exact is True:
+            continue
+        if exact is False:
             if adapter.lost_type(result, name):
                 failures.append(f"type: '{name}' lost its type")
-            elif adapter.column_type(result, name) != DataType.to_arrow_type(data_type):
+            else:
                 failures.append(f"type: '{name}' is {adapter.column_type(result, name)}, expected {data_type.name}")
-        elif not all(value_fits(data_type, v) for v in adapter.column_values(result, name)):
+            continue
+        if not all(value_fits(data_type, v) for v in adapter.column_values(result, name)):
             failures.append(f"type: '{name}' holds values that do not fit {data_type.name}")
-    if not exact and adapter.capabilities.typed_columns:
-        notes.append("type: exact column types are only checked on the PyArrow adapter")
+        if adapter.capabilities.typed_columns:
+            notes.append(
+                f"type: '{name}' checked by value only, {type(adapter).__name__} has no exact {data_type.name} type"
+            )
     return failures
 
 
@@ -249,6 +254,7 @@ def _check_zero_rows(
     names: list[str],
     base: Options,
     result: Any,
+    expected: dict[str, DataType],
 ) -> list[str]:
     empty = TypedTestData({n: (t, []) for n, t in data.types.items()})
     out, error = _run(cls, adapter, empty, names, base)
@@ -262,7 +268,18 @@ def _check_zero_rows(
         failures.append("zero_rows: column names differ from the run with rows")
     elif adapter.capabilities.typed_columns:
         for column in columns:
-            if adapter.column_type(out, column) != adapter.column_type(result, column):
+            data_type = expected.get(column)
+            exact = None if data_type is None else adapter.has_type(result, column, data_type)
+            if exact is False:
+                continue
+            if exact is True and data_type is not None:
+                if data_type in (DataType.LIST, DataType.TIMESTAMP_MICROS_TZ):
+                    changed = adapter.column_type(out, column) != adapter.column_type(result, column)
+                else:
+                    changed = adapter.has_type(out, column, data_type) is not True
+            else:
+                changed = adapter.column_type(out, column) != adapter.column_type(result, column)
+            if changed:
                 failures.append(f"zero_rows: column '{column}' changes type on zero rows")
     return failures
 
@@ -343,9 +360,10 @@ def _run_checks(
     if error is not None:
         return [f"outputs: run raised: {error}"]
     failures = _check_outputs(cls, adapter, data, names, result)
-    failures += _check_types(adapter, _expected_types(cls, names, base), result, notes)
+    expected = _expected_types(cls, names, base)
+    failures += _check_types(adapter, expected, result, notes)
     if data.types:
-        failures += _check_zero_rows(cls, adapter, data, names, base, result)
+        failures += _check_zero_rows(cls, adapter, data, names, base, result, expected)
         failures += _check_error_values(cls, adapter, data, names, base, notes)
     else:
         notes.append("run: zero_rows and error_values were not run (input_data has no columns)")

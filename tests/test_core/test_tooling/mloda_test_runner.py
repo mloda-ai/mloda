@@ -45,7 +45,6 @@ class RunResult:
 
     results: list[Any] = field(default_factory=list)
     artifacts: dict[str, Any] = field(default_factory=dict)
-    runner: ExecutionOrchestrator | None = None  # already torn down; only get_result()/get_artifacts() are safe
 
 
 class MlodaTestRunner:
@@ -97,7 +96,7 @@ class MlodaTestRunner:
             strict_type_enforcement: If True, enforce strict type matching for typed features
 
         Returns:
-            RunResult containing results, artifacts, and the runner
+            RunResult containing results and artifacts
         """
         if compute_frameworks is None:
             compute_frameworks = [PyArrowTable]
@@ -118,12 +117,11 @@ class MlodaTestRunner:
             parallelization_modes=parallelization_modes,
             flight_server=flight_server,
         )
-        artifacts = api.get_artifacts()
 
         if cleanup_flight_server:
             MlodaTestRunner.assert_flight_server_clean(parallelization_modes, flight_server)
 
-        return RunResult(results=results, artifacts=artifacts, runner=api.runner)
+        return RunResult(results=results, artifacts=results.artifacts)
 
     @staticmethod
     def run_api_simple(

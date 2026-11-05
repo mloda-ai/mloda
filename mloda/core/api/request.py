@@ -26,7 +26,7 @@ from mloda.core.prepare.resolution_types import (
     ResolutionDiagnosis,
     ResolutionRecord,
 )
-from mloda.core.api.run_result import ResultStream, RunResult
+from mloda.core.api.run_result import ResultStream, RunResult, _StreamOutcome
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda.core.prepare.accessible_plugins import (
     EnvironmentPreconditionError,
@@ -128,14 +128,13 @@ class mlodaAPI:
         function_extender: set[Extender] | None = None,
         output_framework: str | type[ComputeFramework] | None = None,
     ) -> None:
-        self.runner: None | ExecutionOrchestrator = None
         self.engine: None | Engine = None
         self.function_extender = function_extender
         self.plugin_collector = plugin_collector
         filtered = filter_extenders_by_strict_mode(function_extender, plugin_collector)
         self._extenders: set[Extender] = set(filtered) if filtered is not None else set()
         reject_old_run_complete_signature(self._extenders)
-        self._plan_steps: tuple[PlanStep, ...] | None = None
+        self._plan_steps: tuple[PlanStep, ...] = ()
         verified = current_verified_context()
         self.plan_context = PlanContext(
             plan_id=generate_run_id(),
@@ -164,6 +163,7 @@ class mlodaAPI:
                     parallelization_modes,
                     output_framework,
                 )
+                self._plan_steps = tuple(self._resolve_plan_steps())
                 if self._extenders:
                     self._stamp_structure_hash()
             except BaseException as error:
@@ -177,7 +177,6 @@ class mlodaAPI:
     def _stamp_structure_hash(self) -> None:
         if self.engine is None:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
-        self._plan_steps = tuple(self.resolved_plan())
         self.plan_context = replace(
             self.plan_context,
             structure_hash=plan_structure_hash(self._plan_steps),
@@ -699,6 +698,9 @@ class mlodaAPI:
         Available after ``prepare()`` and unchanged by ``run()``. Steps are in dependency order,
         independent ones sorted by content.
         """
+        return list(self._plan_steps)
+
+    def _resolve_plan_steps(self) -> list[PlanStep]:
         with self._credential_redaction():
             execution_plan = self._execution_plan()
             engine = cast(Engine, self.engine)
@@ -822,7 +824,7 @@ class mlodaAPI:
 
         Args:
             api_data: Fresh runtime data, replacing any data from prepare().
-            artifacts: Artifact dict from a previous run's ``get_artifacts()``.
+            artifacts: A previous run's ``RunResult.artifacts``.
                 When provided, feature groups with matching artifact names
                 switch to load mode for this run, enabling train-then-predict
                 workflows without re-preparing.
@@ -853,8 +855,9 @@ class mlodaAPI:
             items,
             run_id=run_context.run_id,
             plan_id=self.plan_id,
-            connection_handles=self._connection_handles,
+            connection_handles=dict(self._connection_handles),
             failed_rows=runner.get_failed_rows(),
+            artifacts=runner.get_artifacts(),
         )
 
     def stream_run(
@@ -879,8 +882,11 @@ class mlodaAPI:
             run_dac, names = self._run_collection(credentials)
         run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, names)
         plan = list(self._plan_snapshot())
-        stream = self._start_stream(api_data, parallelization_modes, flight_server, artifacts, run_context, run_dac)
-        return ResultStream(stream, plan, run_id=run_context.run_id, plan_id=self.plan_id)
+        stream_outcome = _StreamOutcome()
+        stream = self._start_stream(
+            api_data, parallelization_modes, flight_server, artifacts, run_context, run_dac, stream_outcome
+        )
+        return ResultStream(stream, plan, run_id=run_context.run_id, plan_id=self.plan_id, outcome=stream_outcome)
 
     def _start_stream(
         self,
@@ -889,13 +895,14 @@ class mlodaAPI:
         flight_server: Any | None,
         artifacts: dict[str, Any] | None,
         run_context: RunContext,
-        run_dac: DataAccessCollection | None = None,
+        run_dac: DataAccessCollection | None,
+        stream_outcome: _StreamOutcome,
     ) -> Generator[Any, None, None]:
         """Callers build ``run_context`` at call time; no yield here, so a refusal at run start raises at the call."""
         _api_data = api_data if api_data is not None else self.api_data
         self._validate_run_api_data(_api_data)
         stream = self._stream_run_results(
-            flight_server, parallelization_modes, _api_data, artifacts, run_context, run_dac
+            flight_server, parallelization_modes, _api_data, artifacts, run_context, run_dac, stream_outcome
         )
         # Primes the generator so a refusal at run start raises here, not on first iteration.
         next(stream)
@@ -921,8 +928,6 @@ class mlodaAPI:
         call_run_start_hook(self._extenders, run_context, plan, self._plan_snapshot())
 
     def _plan_snapshot(self) -> tuple[PlanStep, ...]:
-        if self._plan_steps is None:
-            self._plan_steps = tuple(self.resolved_plan())
         return self._plan_steps
 
     def _complete_run(self, run_context: RunContext, outcome: LifecycleOutcome) -> None:
@@ -935,7 +940,8 @@ class mlodaAPI:
         api_data: dict[str, dict[str, Any]] | None,
         artifacts: dict[str, Any] | None,
         run_context: RunContext,
-        run_dac: DataAccessCollection | None = None,
+        run_dac: DataAccessCollection | None,
+        stream_outcome: _StreamOutcome,
     ) -> Generator[Any, None, None]:
         """Deferred half of ``stream_run``: the priming yield separates run start from computation."""
         outcome = LifecycleOutcome("succeeded")
@@ -943,11 +949,8 @@ class mlodaAPI:
         identity = self._identity_literals(run_dac)
         try:
             with self._credential_redaction(literals, identity):
-                self.runner = None
                 self._start_run(run_context)
                 runner = self._setup_engine_runner(parallelization_modes, flight_server, run_dac)
-                # Assigned before any yield so get_result()/get_artifacts() work after an early exit.
-                self.runner = runner
             yield None
             try:
                 with self._credential_redaction(literals, identity):
@@ -973,6 +976,8 @@ class mlodaAPI:
             finally:
                 with self._credential_redaction(literals, identity):
                     self._exit_runner_context(runner)
+                    stream_outcome.artifacts = runner.get_artifacts()
+                    stream_outcome.failed_rows = runner.get_failed_rows()
         except GeneratorExit:
             outcome = LifecycleOutcome("cancelled")
             raise
@@ -1001,11 +1006,8 @@ class mlodaAPI:
             run_context = self._build_run_context(None, None)
         outcome = LifecycleOutcome("succeeded")
         try:
-            self.runner = None
             self._start_run(run_context)
             runner = self._setup_engine_runner(parallelization_modes, flight_server, run_dac)
-            # Assigned before computing so a failed run still exposes its runner, never a prior run's.
-            self.runner = runner
             self._run_engine_computation(
                 runner,
                 parallelization_modes,
@@ -1109,19 +1111,6 @@ class mlodaAPI:
 
         return runner
 
-    def get_result(self) -> list[Any]:
-        """Return the computed run results in plan order; raises if no run function has executed yet."""
-        if self.runner is None:
-            raise ValueError("You need to run any run function beforehand.")
-        items = self._plan_ordered_items(self.runner, list(self._plan_snapshot()))
-        return [r for _, r in items]
-
     def _plan_ordered_items(self, runner: Any, plan: list[PlanStep]) -> list[tuple[UUID, Any]]:
         position = {step.step_uuid: index for index, step in enumerate(plan)}
         return sorted(runner.get_result_items(), key=lambda item: position.get(item[0], len(position)))
-
-    def get_artifacts(self) -> dict[str, Any]:
-        """Return the artifacts produced by the run; raises if no run function has executed yet."""
-        if self.runner is None:
-            raise ValueError("You need to run any run function beforehand.")
-        return self.runner.get_artifacts()

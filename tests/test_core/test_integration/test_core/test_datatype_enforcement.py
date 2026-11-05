@@ -30,6 +30,7 @@ from tests.test_core.test_tooling import (
     PARALLELIZATION_MODES_ALL,
     PARALLELIZATION_MODES_SYNC_THREADING,
 )
+from tests.test_core.test_tooling.runner_recorder import record_runners
 
 
 def _arrow_resolver(table: pa.Table) -> Callable[[str], DataType | None]:
@@ -1062,11 +1063,17 @@ class TestRowReducingGroupBatching(_ReducerRunHelpers):
         ids=["plain", "reducing"],
     )
     def test_every_frame_is_released_after_the_run(
-        self, features: list[Feature], modes: set[ParallelizationMode], flight_server: Any
+        self,
+        features: list[Feature],
+        modes: set[ParallelizationMode],
+        flight_server: Any,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        run_result = self._run_result(features, modes, flight_server, extra_groups={RawPlusOne})
+        runners = record_runners(monkeypatch)
+        self._run_result(features, modes, flight_server, extra_groups={RawPlusOne})
 
-        assert all(cfw.data is None for cfw in run_result.runner.executor.cfw_collection.values())
+        assert len(runners) == 1
+        assert all(cfw.data is None for cfw in runners[0].executor.cfw_collection.values())
         MlodaTestRunner.assert_flight_server_clean(modes, flight_server)
 
 

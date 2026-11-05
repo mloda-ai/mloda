@@ -1,6 +1,7 @@
 """Run results that carry the resolved plan of the run that produced them."""
 
 from collections.abc import Generator
+from dataclasses import dataclass, field
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -33,9 +34,11 @@ class RunResult(list[Any]):
         plan_id: str | None = None,
         connection_handles: dict[int, str] | None = None,
         failed_rows: tuple[FailedRows, ...] = (),
+        artifacts: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(results)
         self._failed_rows = failed_rows
+        self._artifacts: dict[str, Any] = {} if artifacts is None else artifacts
         self._connection_handles = connection_handles or {}
         self._plan = plan
         self._result_items = tuple(result_items or ())
@@ -46,6 +49,11 @@ class RunResult(list[Any]):
     def failed_rows(self) -> tuple[FailedRows, ...]:
         """Rows feature groups reported as valueless in this run; empty when none."""
         return self._failed_rows
+
+    @property
+    def artifacts(self) -> dict[str, Any]:
+        """Artifacts saved by this run; pass them to a later ``run(artifacts=...)``."""
+        return self._artifacts
 
     @property
     def run_id(self) -> str | None:
@@ -141,6 +149,14 @@ def _redacted(group: Any) -> dict[Any, Any]:
     return {k: redact_option_value(v) for k, v in group.items()}
 
 
+@dataclass
+class _StreamOutcome:
+    """Per-run artifacts and failed rows, filled when the stream's runner context exits."""
+
+    artifacts: dict[str, Any] = field(default_factory=dict)
+    failed_rows: tuple[FailedRows, ...] = ()
+
+
 class ResultStream(Generator[Any, None, None]):
     """A ``stream_all`` or ``stream_run()`` result stream: iterates like a generator and exposes the resolved plan."""
 
@@ -151,11 +167,23 @@ class ResultStream(Generator[Any, None, None]):
         *,
         run_id: str | None = None,
         plan_id: str | None = None,
+        outcome: _StreamOutcome | None = None,
     ) -> None:
         self._stream = stream
         self._plan = plan
         self._run_id = run_id
         self._plan_id = plan_id
+        self._outcome = _StreamOutcome() if outcome is None else outcome
+
+    @property
+    def artifacts(self) -> dict[str, Any]:
+        """Artifacts saved by the run; empty until the stream is exhausted or closed."""
+        return self._outcome.artifacts
+
+    @property
+    def failed_rows(self) -> tuple[FailedRows, ...]:
+        """Valueless rows reported by the run; empty until the stream is exhausted or closed."""
+        return self._outcome.failed_rows
 
     @property
     def run_id(self) -> str | None:

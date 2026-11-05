@@ -1116,9 +1116,9 @@ def test_the_grant_spans_save_artifact_in_every_mode(mode: ParallelizationMode, 
         data_access_collection=_vault_dac(),
         plugin_collector=PluginCollector.enabled_feature_groups({ChsArtifactFG}),
     )
-    api.run(parallelization_modes={mode}, flight_server=flight_server)
+    results = api.run(parallelization_modes={mode}, flight_server=flight_server)
 
-    assert api.get_artifacts() == {"chs_artifact_a": {"saved_host": _E2E_HOST}}
+    assert results.artifacts == {"chs_artifact_a": {"saved_host": _E2E_HOST}}
 
 
 # --------------------------------------------------------------------------- #
@@ -1419,9 +1419,9 @@ def test_read_credential_works_in_custom_saver_in_every_mode(mode: Parallelizati
         data_access_collection=_vault_dac(),
         plugin_collector=PluginCollector.enabled_feature_groups({ChsRcArtifactFG}),
     )
-    api.run(parallelization_modes={mode}, flight_server=flight_server)
+    results = api.run(parallelization_modes={mode}, flight_server=flight_server)
 
-    assert api.get_artifacts() == {"chs_rc_artifact_a": {"saved_host": _E2E_HOST}}
+    assert results.artifacts == {"chs_rc_artifact_a": {"saved_host": _E2E_HOST}}
 
 
 @pytest.mark.timeout(15)

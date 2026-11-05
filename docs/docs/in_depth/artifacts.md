@@ -59,8 +59,7 @@ from mloda.user import mloda
 from mloda.user.pyarrow import PyArrowTable
 
 api = mloda(["BaseExampleArtifactFeature"], [PyArrowTable])
-api.run()
-artifacts = api.get_artifacts()
+artifacts = api.run().artifacts
 print(artifacts)
 ```
 
@@ -104,8 +103,7 @@ from mloda.user.pyarrow import PyArrowTable
 session = mloda.prepare(["BaseExampleArtifactFeature"], [PyArrowTable])
 
 # 2. First run: save mode (train)
-session.run()
-saved_artifacts = session.get_artifacts()
+saved_artifacts = session.run().artifacts
 # {'BaseExampleArtifactFeature': 'BasicArtifact'}
 
 # 3. Second run: load mode (predict), using artifacts from step 2
@@ -120,8 +118,7 @@ session = mloda.prepare(["MyArtifactFeature"], [PyArrowTable])
 
 for fold_data in folds:
     # Train fold
-    session.run()
-    trained = session.get_artifacts()
+    trained = session.run().artifacts
 
     # Predict fold
     session.run(artifacts=trained)

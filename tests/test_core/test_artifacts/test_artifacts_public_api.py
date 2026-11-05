@@ -1,7 +1,7 @@
 """Tests that artifact workflows work correctly through the public API.
 
 Validates the patterns documented in docs/docs/in_depth/artifacts.md:
-  1. prepare() + run() + get_artifacts() for saving artifacts
+  1. prepare() + run() + result.artifacts for saving artifacts
   2. run_all() for loading artifacts via options
 """
 
@@ -33,14 +33,13 @@ class PublicApiArtifactFeature(DataCreatorFeatureGroup):
 
 
 class TestArtifactsRunGetArtifacts:
-    """Test the constructor + run() + get_artifacts() pattern for saving artifacts."""
+    """Test the constructor + run() + result.artifacts pattern for saving artifacts."""
 
     def test_run_returns_artifacts(self) -> None:
         api = mloda(["PublicApiArtifactFeature"], [PyArrowTable])
-        api.run()
-        artifacts = api.get_artifacts()
+        result = api.run()
 
-        assert artifacts == {"PublicApiArtifactFeature": "TestPublicApiArtifact"}
+        assert result.artifacts == {"PublicApiArtifactFeature": "TestPublicApiArtifact"}
 
 
 class TestArtifactsRunAll:

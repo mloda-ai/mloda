@@ -60,7 +60,7 @@ class TestScalingFeatureGroupIntegration:
             plugin_collector=plugin_collector,
         )
         results1 = api1.run()
-        artifacts1 = api1.get_artifacts()
+        artifacts1 = results1.artifacts
 
         # Verify scaling feature was created
         assert len(results1) == 1
@@ -90,7 +90,7 @@ class TestScalingFeatureGroupIntegration:
             plugin_collector=plugin_collector,
         )
         results2 = api2.run()
-        artifacts2 = api2.get_artifacts()
+        artifacts2 = results2.artifacts
 
         # Verify results are identical (indicating artifact reuse)
         assert len(results2) == 1

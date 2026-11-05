@@ -62,7 +62,7 @@ class TestEncodingFeatureGroupIntegration:
             plugin_collector=plugin_collector,
         )
         results1 = api1.run()
-        artifacts1 = api1.get_artifacts()
+        artifacts1 = results1.artifacts
 
         # Verify encoding feature was created
         assert len(results1) == 1
@@ -91,7 +91,7 @@ class TestEncodingFeatureGroupIntegration:
             plugin_collector=plugin_collector,
         )
         results2 = api2.run()
-        artifacts2 = api2.get_artifacts()
+        artifacts2 = results2.artifacts
 
         # Verify results are identical (indicating artifact reuse)
         assert len(results2) == 1
@@ -129,7 +129,7 @@ class TestEncodingFeatureGroupIntegration:
             plugin_collector=plugin_collector,
         )
         results1 = api1.run()
-        artifacts1 = api1.get_artifacts()
+        artifacts1 = results1.artifacts
 
         # Verify encoding feature was created
         assert len(results1) == 1
@@ -175,7 +175,7 @@ class TestEncodingFeatureGroupIntegration:
             plugin_collector=plugin_collector,
         )
         results1 = api1.run()
-        artifacts1 = api1.get_artifacts()
+        artifacts1 = results1.artifacts
 
         # Verify specific columns were created
         assert len(results1) == 1
@@ -267,7 +267,7 @@ class TestEncodingFeatureGroupIntegration:
             plugin_collector=plugin_collector,
         )
         results = api.run()
-        artifacts = api.get_artifacts()
+        artifacts = results.artifacts
 
         # Verify results
         assert len(results) == 1

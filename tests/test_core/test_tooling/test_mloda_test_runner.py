@@ -1,30 +1,21 @@
-"""MlodaTestRunner.run_api must populate RunResult.runner with the ExecutionOrchestrator."""
+"""MlodaTestRunner.run_api must populate RunResult.artifacts from the run result."""
 
-from typing import Any
-
-from mloda.provider import DataCreatorFeatureGroup
-from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda.user import Features
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.test_core.test_artifacts.test_artifact_prepare_run import PrepareRunArtifactFeature
 from tests.test_core.test_tooling import MlodaTestRunner
 
 
-class RunnerFieldRootFeature(DataCreatorFeatureGroup):
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {cls.get_class_name(): [1]}
-
-
-def test_run_api_populates_runner() -> None:
-    features = Features([Feature(name=RunnerFieldRootFeature.get_class_name())])
+def test_run_api_populates_artifacts() -> None:
+    features = Features([Feature(name=PrepareRunArtifactFeature.get_class_name())])
 
     result = MlodaTestRunner.run_api(
         features,
         compute_frameworks=[PyArrowTable],
-        plugin_collector=PluginCollector.enabled_feature_groups({RunnerFieldRootFeature}),
+        plugin_collector=PluginCollector.enabled_feature_groups({PrepareRunArtifactFeature}),
     )
 
-    assert result.runner is not None
-    assert result.runner.get_artifacts() is result.artifacts
+    assert result.artifacts == {"PrepareRunArtifactFeature": "trained_model_v1"}
+    assert not hasattr(result, "runner")

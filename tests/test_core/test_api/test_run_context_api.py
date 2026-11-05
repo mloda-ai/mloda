@@ -15,6 +15,7 @@ from mloda.core.runtime.worker_manager import WorkerManager
 from mloda.provider import ComputeFramework, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_core.test_tooling.runner_recorder import record_runners
 
 _CARRIER = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
 
@@ -50,7 +51,10 @@ def _prepare_session() -> mlodaAPI:
 
 
 class TestSessionRunSetsRunContextOnCfwRegister:
-    def test_cfw_register_get_run_context_matches_session_plan_id_carrier_and_bootstrap(self) -> None:
+    def test_cfw_register_get_run_context_matches_session_plan_id_carrier_and_bootstrap(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        runners = record_runners(monkeypatch)
         session = _prepare_session()
 
         session.run(
@@ -59,8 +63,8 @@ class TestSessionRunSetsRunContextOnCfwRegister:
             child_bootstrap=_run_context_api_bootstrap,
         )
 
-        assert session.runner is not None
-        got = session.runner.cfw_register.get_run_context()
+        assert len(runners) == 1
+        got = runners[0].cfw_register.get_run_context()
         assert got.run_id is not None
         assert got.started_at is not None
         assert got == replace(
@@ -124,21 +128,25 @@ class TestBuildRunContextGracefulShutdownTimeout:
 
         assert built.graceful_shutdown_timeout == 7.5
 
-    def test_custom_graceful_shutdown_timeout_round_trips_through_session_run(self) -> None:
+    def test_custom_graceful_shutdown_timeout_round_trips_through_session_run(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        runners = record_runners(monkeypatch)
         session = _prepare_session()
 
         session.run(parallelization_modes={ParallelizationMode.SYNC}, graceful_shutdown_timeout=9.5)
 
-        assert session.runner is not None
-        assert session.runner.cfw_register.get_run_context().graceful_shutdown_timeout == 9.5
+        assert runners[0].cfw_register.get_run_context().graceful_shutdown_timeout == 9.5
 
-    def test_default_graceful_shutdown_timeout_round_trips_through_session_run(self) -> None:
+    def test_default_graceful_shutdown_timeout_round_trips_through_session_run(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        runners = record_runners(monkeypatch)
         session = _prepare_session()
 
         session.run(parallelization_modes={ParallelizationMode.SYNC})
 
-        assert session.runner is not None
-        assert session.runner.cfw_register.get_run_context().graceful_shutdown_timeout == 2.0
+        assert runners[0].cfw_register.get_run_context().graceful_shutdown_timeout == 2.0
 
     @pytest.mark.parametrize("call_site", ["run_all", "stream_all"])
     def test_custom_graceful_shutdown_timeout_reaches_worker_manager_join_all(
@@ -167,14 +175,14 @@ class TestBuildRunContextGracefulShutdownTimeout:
 
 
 class TestBatchRunWithoutRunContextMintsAFreshRunId:
-    def test_batch_run_without_run_context_mints_a_fresh_run_id_per_call(self) -> None:
+    def test_batch_run_without_run_context_mints_a_fresh_run_id_per_call(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        runners = record_runners(monkeypatch)
         session = _prepare_session()
 
         session._batch_run({ParallelizationMode.SYNC})
-        assert session.runner is not None
-        first = session.runner.cfw_register.get_run_context()
         session._batch_run({ParallelizationMode.SYNC})
-        second = session.runner.cfw_register.get_run_context()
+        first = runners[0].cfw_register.get_run_context()
+        second = runners[1].cfw_register.get_run_context()
 
         assert first.run_id is not None and second.run_id is not None
         assert first.run_id != second.run_id
@@ -182,26 +190,32 @@ class TestBatchRunWithoutRunContextMintsAFreshRunId:
 
 
 class TestRunMintsRunIdPerCall:
-    def test_run_context_run_id_differs_between_run_calls(self) -> None:
+    def test_run_context_run_id_differs_between_run_calls(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        runners = record_runners(monkeypatch)
         session = _prepare_session()
 
-        session.run(parallelization_modes={ParallelizationMode.SYNC})
-        assert session.runner is not None
-        first = session.runner.cfw_register.get_run_context().run_id
-        session.run(parallelization_modes={ParallelizationMode.SYNC})
-        second = session.runner.cfw_register.get_run_context().run_id
+        first_result = session.run(parallelization_modes={ParallelizationMode.SYNC})
+        second_result = session.run(parallelization_modes={ParallelizationMode.SYNC})
+        first = runners[0].cfw_register.get_run_context().run_id
+        second = runners[1].cfw_register.get_run_context().run_id
+
+        assert first_result.run_id == first
+        assert second_result.run_id == second
 
         assert first is not None and second is not None
         assert first != second
 
-    def test_stream_run_mints_its_own_run_id(self) -> None:
+    def test_stream_run_mints_its_own_run_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        runners = record_runners(monkeypatch)
         session = _prepare_session()
 
         session.run(parallelization_modes={ParallelizationMode.SYNC})
-        assert session.runner is not None
-        first = session.runner.cfw_register.get_run_context().run_id
-        list(session.stream_run(parallelization_modes={ParallelizationMode.SYNC}))
-        second = session.runner.cfw_register.get_run_context().run_id
+        stream = session.stream_run(parallelization_modes={ParallelizationMode.SYNC})
+        list(stream)
+        first = runners[0].cfw_register.get_run_context().run_id
+        second = runners[1].cfw_register.get_run_context().run_id
+
+        assert stream.run_id == second
 
         assert first is not None and second is not None
         assert first != second

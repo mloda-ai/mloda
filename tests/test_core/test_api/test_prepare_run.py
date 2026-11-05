@@ -6,7 +6,9 @@ These tests define the contract for a two-phase execution model:
   2. run() - instance method that executes with fresh api_data, reusing the cached plan
 """
 
+import threading
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from types import MappingProxyType
 from typing import Any
 
@@ -14,6 +16,7 @@ import numpy as np
 import pytest
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.user import mloda, mlodaAPI, Feature, PluginCollector
 from mloda.provider import ApiDataFG, ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Options, FeatureName, Index
@@ -213,17 +216,17 @@ class _RefuseSecondRunStartExtender(Extender):
             raise RuntimeError("refuse second run")
 
 
-def _rerun(session: Any, path: str, api_data: dict[str, Any]) -> None:
+def _rerun(session: Any, path: str, api_data: dict[str, Any]) -> list[Any]:
     if path == "batch":
-        session.run(api_data=api_data)
-    else:
-        list(session.stream_run(api_data=api_data))
+        return list(session.run(api_data=api_data))
+    return list(session.stream_run(api_data=api_data))
 
 
 class TestFailedRerunDoesNotExposeStaleResults:
-    """After a re-run raises, get_result()/get_artifacts() never return a previous run's data."""
+    """A failed re-run raises, and the next successful run returns only its own fresh data."""
 
     _first = {"PrepareExample": {"api_id": [1, 2], "api_value": ["a", "b"]}}
+    _fresh = {"PrepareExample": {"api_id": [7, 8, 9], "api_value": ["p", "q", "r"]}}
 
     def _prepare(self, function_extender: Any = None) -> Any:
         features: list[Feature | str] = [Feature(name="PrepareRunApiFeature")]
@@ -235,10 +238,15 @@ class TestFailedRerunDoesNotExposeStaleResults:
             function_extender=function_extender,
         )
 
+    @staticmethod
+    def _assert_fresh(frames: list[Any]) -> None:
+        assert len(frames) == 1
+        assert frames[0]["PrepareRunApiFeature"].tolist() == ["7_p", "8_q", "9_r"]
+
     @pytest.mark.parametrize("path", ["batch", "stream"])
-    def test_rerun_failing_in_computation_hides_first_run_data(self, path: str) -> None:
+    def test_rerun_failing_in_computation_then_fresh_run(self, path: str) -> None:
         session = self._prepare()
-        first = session.run(api_data=self._first)
+        first = _rerun(session, path, self._first)
         assert first[0]["PrepareRunApiFeature"].tolist() == ["1_a", "2_b"]
 
         bad = {"PrepareExample": {"api_id": [1, 2], "api_value": [3, 4]}}
@@ -246,21 +254,81 @@ class TestFailedRerunDoesNotExposeStaleResults:
             _rerun(session, path, bad)
         assert getattr(raised.value, "__notes__", None) is None
 
-        with pytest.raises(ValueError, match="No results found"):
-            session.get_result()
+        self._assert_fresh(_rerun(session, path, self._fresh))
+        assert not hasattr(session, "runner")
 
     @pytest.mark.parametrize("path", ["batch", "stream"])
-    def test_rerun_refused_at_start_clears_previous_runner(self, path: str) -> None:
+    def test_rerun_refused_at_start_then_fresh_run(self, path: str) -> None:
         session = self._prepare(function_extender={_RefuseSecondRunStartExtender()})
-        session.run(api_data=self._first)
+        _rerun(session, path, self._first)
 
         with pytest.raises(RuntimeError, match="refuse second run"):
             _rerun(session, path, self._first)
 
-        with pytest.raises(ValueError, match="You need to run any run function beforehand."):
-            session.get_result()
-        with pytest.raises(ValueError, match="You need to run any run function beforehand."):
-            session.get_artifacts()
+        self._assert_fresh(_rerun(session, path, self._fresh))
+        assert not hasattr(session, "runner")
+
+
+class TestSessionKeepsNoPerRunState:
+    """The prepared session holds no orchestrator and RunResult carries none."""
+
+    def test_removed_session_api_and_result_holds_no_orchestrator(self) -> None:
+        features: list[Feature | str] = [Feature(name="PrepareRunApiFeature")]
+        data = {"PrepareExample": {"api_id": [1], "api_value": ["a"]}}
+        session = mloda.prepare(
+            features, compute_frameworks=[PandasDataFrame], api_data=data, plugin_collector=_enabled
+        )
+
+        session._connection_handles[0] = "handle"
+
+        result = session.run(api_data=data)
+
+        for name in ("runner", "get_result", "get_artifacts"):
+            assert not hasattr(session, name)
+        assert not hasattr(result, "runner")
+        assert not any(isinstance(value, ExecutionOrchestrator) for value in vars(result).values())
+        assert not any(isinstance(value, ExecutionOrchestrator) for value in vars(session).values())
+        assert result._connection_handles is not session._connection_handles
+
+
+class TestConcurrentRunsOnOneSession:
+    """One prepared session serves concurrent runs without sharing per-run state."""
+
+    @staticmethod
+    def _data(i: int) -> dict[str, Any]:
+        return {"PrepareExample": {"api_id": [i, i + 100], "api_value": [f"v{i}", f"w{i}"]}}
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_threads_get_their_own_results_and_session_is_unchanged(self, path: str) -> None:
+        features: list[Feature | str] = [Feature(name="PrepareRunApiFeature")]
+        session = mloda.prepare(
+            features,
+            compute_frameworks=[PandasDataFrame],
+            api_data=self._data(0),
+            plugin_collector=_enabled,
+        )
+        expected = {
+            i: [f["PrepareRunApiFeature"].tolist() for f in _rerun(session, path, self._data(i))] for i in range(8)
+        }
+
+        session_before = dict(vars(session))
+        engine_before = dict(vars(session.engine))
+        plan_before = session.resolved_plan()
+        barrier = threading.Barrier(8, timeout=5)
+
+        def worker(i: int) -> list[Any]:
+            barrier.wait()
+            return [f["PrepareRunApiFeature"].tolist() for f in _rerun(session, path, self._data(i))]
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = [pool.submit(worker, i) for i in range(8)]
+            got = {i: future.result(timeout=8) for i, future in enumerate(futures)}
+
+        assert got == expected
+        for before, after in ((session_before, vars(session)), (engine_before, vars(session.engine))):
+            assert after.keys() == before.keys()
+            assert all(after[key] is before[key] for key in before)
+        assert session.resolved_plan() == plan_before
 
 
 class _StartCountingExtender(Extender):

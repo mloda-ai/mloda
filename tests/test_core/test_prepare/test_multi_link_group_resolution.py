@@ -33,6 +33,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 import mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer  # noqa: F401
 
 from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks import SecondCfw, ThirdCfw
+from tests.test_core.test_tooling.runner_recorder import record_runners
 
 
 MLG_INDEX = Index(("mlg_idx",))
@@ -2536,15 +2537,15 @@ def test_a_left_join_keeping_the_hub_beside_an_inner_join_returns_the_inner_rows
 @pytest.mark.parametrize("spoke_c", [StarSpokeCArrow, StarSpokeCSecond], ids=["one_framework", "spokes_differ"])
 @pytest.mark.parametrize("link_factory, hub_first", [pytest.param(Link.inner, False), pytest.param(Link.left, True)])
 def test_a_join_group_consumer_is_never_left_stranded_in_a_frames_keep_alive_after_a_star_run(
-    link_factory: Any, hub_first: bool, spoke_c: type[FeatureGroup]
+    link_factory: Any, hub_first: bool, spoke_c: type[FeatureGroup], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    runners = record_runners(monkeypatch)
     session = _star_prepare(link_factory, hub_first, spoke_c)
     session.run()
 
-    assert session.runner is not None
     stranded = {
         type(cfw).__name__: cfw.keep_alive - cfw.already_calculated_children_tracker
-        for cfw in session.runner.executor.cfw_collection.values()
+        for cfw in runners[0].executor.cfw_collection.values()
         if cfw.data is not None and cfw.keep_alive - cfw.already_calculated_children_tracker
     }
     assert stranded == {}

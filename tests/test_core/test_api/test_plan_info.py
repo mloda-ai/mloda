@@ -110,6 +110,7 @@ from mloda.steward import (
     write_plan_lock,
 )
 from tests.helpers.probe_runner import run_probes
+from tests.test_core.test_tooling.runner_recorder import record_runners
 from mloda.user import (
     Credential,
     DataAccessCollection,
@@ -1671,32 +1672,30 @@ class TestResolvedPlanBeforeAndAfterRun:
         assert len(results) == 1
         assert "plan_info_sales__mean_aggr" in results[0].columns
 
-    def test_resolved_plan_matches_the_plan_that_actually_executed(self) -> None:
+    def test_resolved_plan_matches_the_plan_that_actually_executed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The reported plan must be the plan that ran.
 
         ``resolved_plan()`` reads the engine's planner, while ``Engine.compute`` deep-copies that
         planner before executing. Comparing against the runner's copy is what proves the reported
         records describe the executed steps, not a plan that was silently rewritten on the way in.
         """
+        runners = record_runners(monkeypatch)
         session = _prepare_chained_session()
 
         session.run()
 
-        assert session.runner is not None
-        executed_plan = build_plan_steps(session.runner.execution_planner)
+        executed_plan = build_plan_steps(runners[0].execution_planner)
 
         assert executed_plan == session.resolved_plan()
 
-    def test_join_plan_matches_the_plan_that_actually_executed(self) -> None:
+    def test_join_plan_matches_the_plan_that_actually_executed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Same claim on a plan that contains a join step."""
+        runners = record_runners(monkeypatch)
         session = _prepare_single_framework_join_session()
 
         session.run()
 
-        assert session.runner is not None
-        executed_plan = build_plan_steps(
-            session.runner.execution_planner, session.runner.execution_planner.resolved_join_plan
-        )
+        executed_plan = build_plan_steps(runners[0].execution_planner, runners[0].execution_planner.resolved_join_plan)
 
         assert executed_plan == session.resolved_plan()
 

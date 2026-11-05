@@ -81,10 +81,9 @@ class TestArtifactSaveWithPrepareRun:
             plugin_collector=_enabled,
         )
         result = session.run()
-        artifacts = session.get_artifacts()
 
         assert len(result) == 1
-        assert artifacts == {"PrepareRunArtifactFeature": "trained_model_v1"}
+        assert result.artifacts == {"PrepareRunArtifactFeature": "trained_model_v1"}
 
 
 class TestArtifactLoadViaOptionsWithPrepareRun:
@@ -104,7 +103,7 @@ class TestArtifactLoadViaOptionsWithPrepareRun:
 
         assert len(result) == 1
         # Load mode produces no new artifacts
-        assert session.get_artifacts() == {}
+        assert result.artifacts == {}
 
 
 class TestArtifactSaveThenLoadSameSession:
@@ -119,7 +118,7 @@ class TestArtifactSaveThenLoadSameSession:
 
         # First run: save mode (default, no artifacts param)
         save_result = session.run()
-        saved_artifacts = session.get_artifacts()
+        saved_artifacts = save_result.artifacts
         assert saved_artifacts == {"PrepareRunArtifactFeature": "trained_model_v1"}
         assert len(save_result) == 1
 
@@ -138,11 +137,8 @@ class TestMultipleSaveRunsIndependent:
             plugin_collector=_enabled,
         )
 
-        session.run()
-        artifacts_first = session.get_artifacts()
-
-        session.run()
-        artifacts_second = session.get_artifacts()
+        artifacts_first = session.run().artifacts
+        artifacts_second = session.run().artifacts
 
         assert artifacts_first == {"PrepareRunArtifactFeature": "trained_model_v1"}
         assert artifacts_second == {"PrepareRunArtifactFeature": "trained_model_v1"}
@@ -158,8 +154,7 @@ class TestFullRoundTripSeparateSessions:
             [PyArrowTable],
             plugin_collector=_enabled,
         )
-        save_session.run()
-        saved = save_session.get_artifacts()
+        saved = save_session.run().artifacts
         assert "PrepareRunArtifactFeature" in saved
 
         # Session 2: load via options (existing pattern)
@@ -171,7 +166,7 @@ class TestFullRoundTripSeparateSessions:
         )
         load_result = load_session.run()
         assert len(load_result) == 1
-        assert load_session.get_artifacts() == {}
+        assert load_result.artifacts == {}
 
 
 class TestAlternatingSaveLoadCrossValidation:
@@ -185,8 +180,7 @@ class TestAlternatingSaveLoadCrossValidation:
         )
 
         # Fold 1: save (train)
-        session.run()
-        saved = session.get_artifacts()
+        saved = session.run().artifacts
         assert saved == {"PrepareRunArtifactFeature": "trained_model_v1"}
 
         # Fold 2: load (predict using trained model)
@@ -194,8 +188,7 @@ class TestAlternatingSaveLoadCrossValidation:
         assert len(load_result) == 1
 
         # Fold 3: save again (retrain)
-        session.run()
-        saved_again = session.get_artifacts()
+        saved_again = session.run().artifacts
         assert saved_again == {"PrepareRunArtifactFeature": "trained_model_v1"}
 
         # Fold 4: load again (predict with retrained model)
@@ -222,7 +215,7 @@ class TestArtifactValueAccessibleInCalculateFeature:
         df = result[0].to_pandas()
         assert list(df["VerifiableArtifactFeature"]) == ["no_artifact"] * 3
 
-        artifacts = session.get_artifacts()
+        artifacts = result.artifacts
         assert artifacts["VerifiableArtifactFeature"] == VerifiableArtifactFeature.ARTIFACT_VALUE
 
     def test_load_embeds_correct_artifact_hash_in_output(self) -> None:
@@ -235,8 +228,7 @@ class TestArtifactValueAccessibleInCalculateFeature:
         )
 
         # Save
-        session.run()
-        saved = session.get_artifacts()
+        saved = session.run().artifacts
 
         # Load: the hash in the output must match the artifact we saved
         result = session.run(artifacts=saved)
@@ -285,7 +277,7 @@ class TestArtifactValueAccessibleInCalculateFeature:
         save_result = session.run()
         df_save = save_result[0].to_pandas()
         assert list(df_save["VerifiableArtifactFeature"]) == ["no_artifact"] * 3
-        saved = session.get_artifacts()
+        saved = save_result.artifacts
 
         # Step 2: load the saved artifact
         load_result = session.run(artifacts=saved)

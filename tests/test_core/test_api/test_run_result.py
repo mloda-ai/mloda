@@ -236,6 +236,44 @@ class TestRunResultPlan:
         assert session_results.plan == session.resolved_plan()
 
 
+class TestRunResultArtifacts:
+    """RunResult.artifacts is the read-only artifacts dict of the run, the same object passed in."""
+
+    def test_artifacts_default_to_an_empty_dict(self) -> None:
+        from mloda.user import RunResult
+
+        assert RunResult([], []).artifacts == {}
+
+    def test_artifacts_are_the_passed_object_not_a_copy(self) -> None:
+        from mloda.user import RunResult
+
+        saved: dict[str, Any] = {"feature": {"state": 1}}
+
+        assert RunResult([], [], artifacts=saved).artifacts is saved
+
+    def test_artifacts_are_read_only(self) -> None:
+        with pytest.raises(AttributeError):
+            _run_all().artifacts = {}
+
+    def test_run_returns_the_runs_artifacts(self) -> None:
+        session = mloda.prepare(
+            _CHAINED_FEATURES,
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_PLUGINS,
+        )
+
+        results = session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert results.artifacts == {}
+
+    def test_artifacts_survive_pickle_round_trip(self) -> None:
+        from mloda.user import RunResult
+
+        loaded = pickle.loads(pickle.dumps(RunResult([], [], artifacts={"a": {"b": 1}})))  # nosec B301
+
+        assert loaded.artifacts == {"a": {"b": 1}}
+
+
 class TestSinglePlanningPass:
     """run_all plans exactly once; reading the plan afterwards must not re-plan."""
 
@@ -317,6 +355,48 @@ class TestStreamEarlyClose:
         assert first is not None
 
         stream.close()
+
+
+class TestResultStreamArtifactsAndFailedRows:
+    """ResultStream.artifacts and failed_rows are read live from the run and complete after the stream ends."""
+
+    def test_defaults_before_consumption_and_after_exhaustion(self) -> None:
+        stream = _stream_all()
+
+        assert stream.artifacts == {}
+        assert stream.failed_rows == ()
+
+        list(stream)
+
+        assert stream.artifacts == {}
+        assert stream.failed_rows == ()
+
+    def test_readable_after_early_close(self) -> None:
+        stream = _stream_all(_TWO_GROUP_FEATURES)
+        next(stream)
+
+        stream.close()
+
+        assert isinstance(stream.artifacts, dict)
+        assert stream.failed_rows == ()
+
+    def test_properties_are_read_only(self) -> None:
+        stream = _stream_all()
+
+        with pytest.raises(AttributeError):
+            stream.artifacts = {}
+        with pytest.raises(AttributeError):
+            stream.failed_rows = ()
+
+    def test_stream_run_exposes_them_and_session_does_not(self) -> None:
+        session = mloda.prepare(_CHAINED_FEATURES, compute_frameworks=[PandasDataFrame], plugin_collector=_PLUGINS)
+
+        stream = session.stream_run(parallelization_modes={ParallelizationMode.SYNC})
+        list(stream)
+
+        assert stream.artifacts == {}
+        assert stream.failed_rows == ()
+        assert not hasattr(session, "get_artifacts")
 
 
 class TestPublicExports:
@@ -811,7 +891,7 @@ class TestRunAllListOrderMatchesPlanOrder:
             )
             result = gated.run(parallelization_modes={ParallelizationMode.THREADING})
             expected = _order_probe_ids_in_plan(result.plan)
-            stored = [f["run_result_order_probe_value"].iloc[0] for f in gated.get_result()]
+            stored = [f["run_result_order_probe_value"].iloc[0] for f in result]
             assert stored == expected
             return result
 

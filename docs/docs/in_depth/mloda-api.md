@@ -110,6 +110,11 @@ save and load modes across calls. See [Artifacts](artifacts.md#run-time-artifact
 
 `run(api_data=...)` needs the same set keys and the same column names per set as `prepare()` (order may differ); otherwise it raises a `ValueError` before the run starts. Each set must be a mapping of column to values. A set whose step loads natively as a dict must stay a dict of lists.
 
+One prepared session may be shared by threads. Each `run()` returns its own results, `artifacts` and `failed_rows`
+(`stream.artifacts` and `stream.failed_rows` are complete once the stream is exhausted), and the session keeps no
+per-run state. Extender hooks of concurrent runs may run concurrently. A run that raises returns nothing, so its
+artifacts are not readable.
+
 `run_all()` is equivalent to `prepare()` followed by a single `run()`.
 `stream_all()` is equivalent to `prepare()` followed by a single `stream_run()`.
 

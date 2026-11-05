@@ -175,21 +175,21 @@ class TestStreamRunPlanReuse:
         assert results_second[0].to_pydict() == {"EngineRunnerTest1": [1, 2, 3]}
 
 
-class TestStreamRunRunnerAssignment:
-    """stream_run must set the runner attribute on the session after execution."""
+class TestStreamRunStreamState:
+    """stream_run exposes artifacts and failed_rows on the stream, not on the session."""
 
-    def test_runner_set_after_stream_run(self) -> None:
-        """After consuming the full generator from stream_run(), session.runner must not be None."""
+    def test_stream_state_after_stream_run(self) -> None:
         features = _get_features(["EngineRunnerTest1"])
         session = mlodaAPI.prepare(
             features,
             compute_frameworks=COMPUTE_FRAMEWORKS,
         )
 
-        _results = list(
-            session.stream_run(
-                parallelization_modes=PARALLELIZATION_MODES,
-            )
+        stream = session.stream_run(
+            parallelization_modes=PARALLELIZATION_MODES,
         )
+        _results = list(stream)
 
-        assert session.runner is not None, "session.runner must be set after stream_run() completes"
+        assert stream.artifacts == {}
+        assert stream.failed_rows == ()
+        assert not hasattr(session, "runner")

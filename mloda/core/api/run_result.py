@@ -13,6 +13,7 @@ from mloda.core.api.plan_info import PlanStep, _key_id, match_digests, snapshot_
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature import Feature
+    from mloda.core.runtime.run import ExecutionOrchestrator
 
 
 class RunResult(list[Any]):
@@ -33,9 +34,11 @@ class RunResult(list[Any]):
         plan_id: str | None = None,
         connection_handles: dict[int, str] | None = None,
         failed_rows: tuple[FailedRows, ...] = (),
+        artifacts: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(results)
         self._failed_rows = failed_rows
+        self._artifacts: dict[str, Any] = {} if artifacts is None else artifacts
         self._connection_handles = connection_handles or {}
         self._plan = plan
         self._result_items = tuple(result_items or ())
@@ -46,6 +49,11 @@ class RunResult(list[Any]):
     def failed_rows(self) -> tuple[FailedRows, ...]:
         """Rows feature groups reported as valueless in this run; empty when none."""
         return self._failed_rows
+
+    @property
+    def artifacts(self) -> dict[str, Any]:
+        """Artifacts saved by this run; pass them to a later ``run(artifacts=...)``."""
+        return self._artifacts
 
     @property
     def run_id(self) -> str | None:
@@ -151,11 +159,23 @@ class ResultStream(Generator[Any, None, None]):
         *,
         run_id: str | None = None,
         plan_id: str | None = None,
+        runner: "ExecutionOrchestrator | None" = None,
     ) -> None:
         self._stream = stream
         self._plan = plan
         self._run_id = run_id
         self._plan_id = plan_id
+        self._runner = runner
+
+    @property
+    def artifacts(self) -> dict[str, Any]:
+        """Artifacts saved by the steps run so far; complete once the stream is exhausted or closed."""
+        return {} if self._runner is None else self._runner.get_artifacts()
+
+    @property
+    def failed_rows(self) -> tuple[FailedRows, ...]:
+        """Valueless rows reported by the steps run so far; complete once the stream is exhausted or closed."""
+        return () if self._runner is None else self._runner.get_failed_rows()
 
     @property
     def run_id(self) -> str | None:

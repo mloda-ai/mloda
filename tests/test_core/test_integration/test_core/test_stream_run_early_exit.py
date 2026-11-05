@@ -1,19 +1,8 @@
 # mypy: disable-error-code="type-arg"
-"""Integration tests for issue #1232: stream_run loses the runner when the consumer
-exits early.
+"""stream_run exposes artifacts and failed_rows on the stream after an early consumer exit.
 
-Before the fix, ``self.runner`` was assigned *after* the yield loop, so a
-consumer that called ``next()`` once and stopped (or used ``break``) left
-``self.runner`` as ``None``.  That caused ``get_result()`` and
-``get_artifacts()`` to raise "You need to run any run function beforehand."
-even though the ``finally`` teardown had already run successfully.
-
-Fix: assign ``self.runner`` *before* the yield loop.
-
-Definition of done (from the issue):
-- [x] get_result()/get_artifacts() work after early consumer exit from a stream
-- [x] Test breaking out of stream_all after one item
-- [x] tox passes
+Breaking out or stopping after one ``next()`` must leave ``stream.artifacts`` and
+``stream.failed_rows`` readable, as after a full iteration.
 """
 
 from typing import Any
@@ -38,52 +27,41 @@ def _session_with_features(feature_list: list[str]) -> mlodaAPI:
     )
 
 
-class TestStreamRunEarlyExitRunnerAssignment:
-    """stream_run must set session.runner even when the consumer exits early."""
+class TestStreamRunEarlyExitStreamState:
+    """The stream object exposes artifacts and failed_rows even when the consumer exits early."""
 
-    def test_runner_set_after_single_next_call(self) -> None:
-        """session.runner must not be None after a single next() call."""
+    def test_artifacts_after_single_next_call(self) -> None:
         session = _session_with_features(["EngineRunnerTest1"])
-        gen = session.stream_run(parallelization_modes=PARALLELIZATION_MODES)
+        stream = session.stream_run(parallelization_modes=PARALLELIZATION_MODES)
 
-        first = next(gen)  # consume only the first (and only) item
+        first = next(stream)
 
-        assert session.runner is not None, (
-            "session.runner must be set even when the consumer calls next() once "
-            "and does not exhaust the generator (issue #1232)"
-        )
         assert isinstance(first, pa.Table)
+        assert isinstance(stream.artifacts, dict)
+        assert stream.failed_rows == ()
 
-    def test_runner_set_after_break_from_multi_feature_stream(self) -> None:
-        """session.runner must not be None after breaking out of a multi-feature stream."""
+    def test_artifacts_after_break_from_multi_feature_stream(self) -> None:
         session = _session_with_features(["EngineRunnerTest1", "EngineRunnerTest2"])
-        gen = session.stream_run(parallelization_modes=PARALLELIZATION_MODES)
+        stream = session.stream_run(parallelization_modes=PARALLELIZATION_MODES)
 
-        for _result in gen:
-            break  # exit after the very first yielded result
+        for _result in stream:
+            break
 
-        assert session.runner is not None, (
-            "session.runner must be set after breaking out of stream_run early (issue #1232)"
-        )
+        assert isinstance(stream.artifacts, dict)
+        assert stream.failed_rows == ()
 
-    def test_get_artifacts_does_not_raise_after_early_exit(self) -> None:
-        """get_artifacts() must not raise the 'run function beforehand' error after early exit."""
+    def test_artifacts_after_early_exit_then_close(self) -> None:
         session = _session_with_features(["EngineRunnerTest1", "EngineRunnerTest2"])
-        gen = session.stream_run(parallelization_modes=PARALLELIZATION_MODES)
-        next(gen)  # early exit
+        stream = session.stream_run(parallelization_modes=PARALLELIZATION_MODES)
+        next(stream)
 
-        # Should not raise ValueError("You need to run any run function beforehand.")
-        artifacts = session.get_artifacts()
-        assert isinstance(artifacts, dict)
+        stream.close()
 
-    def test_get_artifacts_does_not_raise_after_break_from_stream_all(self) -> None:
-        """Breaking out of stream_all() must not raise when the stream is closed afterward.
+        assert isinstance(stream.artifacts, dict)
+        assert stream.failed_rows == ()
 
-        ResultStream does not expose the underlying session, so get_artifacts() cannot be
-        reached through this API. This instead verifies the concrete guarantee stream_all
-        depends on: closing the stream after an early break must drive the generator's
-        ``finally`` teardown (``_exit_runner_context``) without raising.
-        """
+    def test_stream_all_break_then_close_exposes_state(self) -> None:
+        """Closing a stream_all stream after an early break drives teardown without raising."""
         stream = mlodaAPI.stream_all(
             Features(
                 [
@@ -96,45 +74,30 @@ class TestStreamRunEarlyExitRunnerAssignment:
         )
 
         for _result in stream:
-            break  # exit after one item
+            break
 
-        stream.close()  # drives the generator's finally teardown; must not raise
+        stream.close()
+        assert isinstance(stream.artifacts, dict)
+        assert stream.failed_rows == ()
 
-    def test_runner_set_before_first_yield(self) -> None:
-        """session.runner must be set even before the generator produces its first value.
-
-        This verifies the assignment happens before the loop, not in the finally block.
-        """
+    def test_session_keeps_no_runner_after_early_exit(self) -> None:
         session = _session_with_features(["EngineRunnerTest1"])
-        gen = session.stream_run(parallelization_modes=PARALLELIZATION_MODES)
+        stream = session.stream_run(parallelization_modes=PARALLELIZATION_MODES)
+        next(stream)
+        stream.close()
 
-        # Advance to the point where the first value is about to be yielded.
-        # After next() returns, self.runner must already be set.
-        _first = next(gen)
-
-        # runner is set (no need to exhaust the generator)
-        assert session.runner is not None
-
-        # Clean up the generator properly
-        gen.close()
+        assert not hasattr(session, "runner")
 
 
 class TestStreamRunFullExitStillWorks:
-    """Regression: full iteration must still work after the fix."""
+    """Regression: full iteration must still work."""
 
-    def test_full_iteration_runner_set(self) -> None:
-        """Exhausting the generator fully must still leave session.runner set."""
+    def test_full_iteration_artifacts_work(self) -> None:
         session = _session_with_features(["EngineRunnerTest1"])
-        results = list(session.stream_run(parallelization_modes=PARALLELIZATION_MODES))
+        stream = session.stream_run(parallelization_modes=PARALLELIZATION_MODES)
+        results = list(stream)
 
-        assert session.runner is not None
         assert len(results) == 1
         assert isinstance(results[0], pa.Table)
-
-    def test_full_iteration_get_artifacts_works(self) -> None:
-        """get_artifacts() after full iteration must not raise."""
-        session = _session_with_features(["EngineRunnerTest1"])
-        list(session.stream_run(parallelization_modes=PARALLELIZATION_MODES))
-
-        artifacts = session.get_artifacts()
-        assert isinstance(artifacts, dict)
+        assert isinstance(stream.artifacts, dict)
+        assert stream.failed_rows == ()

@@ -1,4 +1,4 @@
-"""MlodaTestRunner.run_api must populate RunResult.runner with the ExecutionOrchestrator."""
+"""MlodaTestRunner.run_api must populate RunResult.artifacts from the run result."""
 
 from typing import Any
 
@@ -17,7 +17,7 @@ class RunnerFieldRootFeature(DataCreatorFeatureGroup):
         return {cls.get_class_name(): [1]}
 
 
-def test_run_api_populates_runner() -> None:
+def test_run_api_populates_artifacts() -> None:
     features = Features([Feature(name=RunnerFieldRootFeature.get_class_name())])
 
     result = MlodaTestRunner.run_api(
@@ -26,5 +26,5 @@ def test_run_api_populates_runner() -> None:
         plugin_collector=PluginCollector.enabled_feature_groups({RunnerFieldRootFeature}),
     )
 
-    assert result.runner is not None
-    assert result.runner.get_artifacts() is result.artifacts
+    assert result.artifacts == {}
+    assert not hasattr(result, "runner")

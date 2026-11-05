@@ -76,7 +76,7 @@ class TestForecastingArtifactIntegration:
         for suffix in ("0", "1", "2"):
             assert f"{feature_name}~{suffix}" in columns
 
-        artifacts = api.get_artifacts()
+        artifacts = results.artifacts
         assert feature_name in artifacts
 
         feature2 = Feature(feature_name, options=options)
@@ -115,8 +115,7 @@ class TestForecastingArtifactIntegration:
         features: list[Feature | str] = [Feature(base_name, options), Feature(f"{base_name}~1", options)]
 
         api = mloda(features, compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
-        api.run()
-        artifact = api.get_artifacts()[base_name]
+        artifact = api.run().artifacts[base_name]
 
         options2 = Options({DefaultOptionKeys.reference_time: "time_filter"})
         options2.add_to_group(base_name, artifact)
@@ -141,18 +140,18 @@ class TestForecastingArtifactIntegration:
             options.add_to_group(ForecastingFeatureGroup.OUTPUT_CONFIDENCE_INTERVALS, True)
         return options
 
-    def _run(self, name: str, creator: type[ATestDataCreator], options: Options) -> tuple[mloda, set[str]]:
+    def _run(self, name: str, creator: type[ATestDataCreator], options: Options) -> tuple[dict[str, Any], set[str]]:
         api = mloda(
             [Feature(name, options)], compute_frameworks=[PandasDataFrame], plugin_collector=self._collector(creator)
         )
         results = api.run()
-        return api, {c for r in results for c in r.columns}
+        return results.artifacts, {c for r in results for c in r.columns}
 
     def test_part_only_request_saves_nested_artifact_with_only_that_column_and_reloads(self) -> None:
-        api, columns = self._run(f"{self.BASE}~1", ForecastingCategoryTestDataCreator, self._options())
+        artifacts, columns = self._run(f"{self.BASE}~1", ForecastingCategoryTestDataCreator, self._options())
 
         assert columns == {f"{self.BASE}~1"}
-        artifact = api.get_artifacts()[self.BASE]
+        artifact = artifacts[self.BASE]
         assert json.loads(artifact)["columns"].keys() == {"1"}
 
         options2 = self._options()
@@ -234,7 +233,7 @@ class TestForecastingArtifactIntegration:
         results1 = api.run()
 
         # Get the saved artifacts
-        artifacts = api.get_artifacts()
+        artifacts = results1.artifacts
 
         # Verify that an artifact was saved for our feature
         assert feature_name in artifacts, f"No artifact saved for {feature_name}"

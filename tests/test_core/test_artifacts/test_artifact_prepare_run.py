@@ -72,21 +72,8 @@ class VerifiableArtifactFeature(DataCreatorFeatureGroup):
         return {cls.get_class_name(): ["no_artifact", "no_artifact", "no_artifact"]}
 
 
-class CountingArtifactFeature(PrepareRunArtifactFeature):
-    """Counts calculate_feature calls so refusals can be shown to happen before any step."""
-
-    calls: list[int] = []
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        cls.calls.append(1)
-        if features.artifact_to_save:
-            features.save_artifact = "trained_model_v1"
-        return {cls.get_class_name(): [1, 2, 3]}
-
-
-class IdentityArtifactFeature(PrepareRunArtifactFeature):
-    """Records the FeatureSet.features each run's calculate_feature sees."""
+class RecordingArtifactFeature(PrepareRunArtifactFeature):
+    """Records the FeatureSet.features of each calculate_feature call."""
 
     seen: list[Any] = []
 
@@ -104,7 +91,7 @@ class VerifiableArtifactFeatureB(VerifiableArtifactFeature):
 
 _enabled = PluginCollector.enabled_feature_groups({PrepareRunArtifactFeature})
 _enabled_verifiable = PluginCollector.enabled_feature_groups({VerifiableArtifactFeature})
-_enabled_counting = PluginCollector.enabled_feature_groups({CountingArtifactFeature})
+_enabled_recording = PluginCollector.enabled_feature_groups({RecordingArtifactFeature})
 _enabled_two = PluginCollector.enabled_feature_groups({PrepareRunArtifactFeature, VerifiableArtifactFeatureB})
 
 
@@ -351,23 +338,30 @@ class TestArtifactValueAccessibleInCalculateFeature:
         assert len({"no_artifact", expected_saved, expected_other}) == 3
 
 
-def _plan_options_context(session: Any) -> list[tuple[Any, dict[str, Any]]]:
-    """Every plan Feature's Options object paired with a copy of its context."""
-    return [
-        (f.options, dict(f.options.context))
-        for step in session.engine.execution_planner
-        for f in getattr(getattr(step, "features", None), "features", [])
+_PlanState = tuple[list[tuple[Any, dict[str, Any]]], list[tuple[Any, ...]]]
+
+
+def _plan_state(session: Any) -> _PlanState:
+    """Plan Feature Options (identity plus context copy) and per-FeatureSet artifact state."""
+    steps = [getattr(step, "features", None) for step in session.engine.execution_planner]
+    options = [(f.options, dict(f.options.context)) for fs in steps for f in getattr(fs, "features", [])]
+    artifacts = [
+        (fs.artifact_to_load, fs.artifact_to_save, fs.artifact_value, fs.save_artifact)
+        for fs in steps
+        if isinstance(fs, FeatureSet)
     ]
+    return options, artifacts
 
 
 class TestArtifactRunsLeavePlanUntouched:
     """Save, load and save runs on one session, serial or threaded, never write into the plan."""
 
     @staticmethod
-    def _assert_plan_untouched(session: Any, before: list[tuple[Any, dict[str, Any]]]) -> None:
-        after = _plan_options_context(session)
-        assert len(after) == len(before) > 0
-        for (options_before, context_before), (options_after, context_after) in zip(before, after):
+    def _assert_plan_untouched(session: Any, before: _PlanState) -> None:
+        after = _plan_state(session)
+        assert after[1] == before[1]
+        assert len(after[0]) == len(before[0]) > 0
+        for (options_before, context_before), (options_after, context_after) in zip(before[0], after[0]):
             assert options_after is options_before
             assert context_after == context_before
         for step in session.engine.execution_planner:
@@ -376,7 +370,7 @@ class TestArtifactRunsLeavePlanUntouched:
 
     def test_save_load_save_serial(self) -> None:
         session = mloda.prepare(["PrepareRunArtifactFeature"], [PyArrowTable], plugin_collector=_enabled)
-        before = _plan_options_context(session)
+        before = _plan_state(session)
 
         saved = session.run().artifacts
         assert len(session.run(artifacts=saved)) == 1
@@ -387,7 +381,7 @@ class TestArtifactRunsLeavePlanUntouched:
     def test_save_load_save_concurrent(self) -> None:
         session = mloda.prepare(["PrepareRunArtifactFeature"], [PyArrowTable], plugin_collector=_enabled)
         saved = session.run().artifacts
-        before = _plan_options_context(session)
+        before = _plan_state(session)
         barrier = threading.Barrier(6, timeout=5)
 
         def worker(i: int) -> Any:
@@ -400,36 +394,12 @@ class TestArtifactRunsLeavePlanUntouched:
         assert results == [1, saved, 1, saved, 1, saved]
         self._assert_plan_untouched(session, before)
 
-    @staticmethod
-    @staticmethod
-    def _plan_artifact_state(session: Any) -> list[tuple[Any, ...]]:
-        return [
-            (
-                step.features.artifact_to_load,
-                step.features.artifact_to_save,
-                step.features.artifact_value,
-                step.features.save_artifact,
-            )
-            for step in session.engine.execution_planner
-            if isinstance(getattr(step, "features", None), FeatureSet)
-        ]
-
-    def test_plan_feature_set_unchanged_after_save_and_load_runs(self) -> None:
-        session = mloda.prepare(["VerifiableArtifactFeature"], [PyArrowTable], plugin_collector=_enabled_verifiable)
-        before = self._plan_artifact_state(session)
-        assert before
-
-        saved = session.run().artifacts
-        assert self._plan_artifact_state(session) == before
-        session.run(artifacts=saved)
-        assert self._plan_artifact_state(session) == before
-
     def test_calculate_feature_sees_the_plan_feature_objects(self) -> None:
-        IdentityArtifactFeature.seen.clear()
+        RecordingArtifactFeature.seen.clear()
         session = mloda.prepare(
-            ["IdentityArtifactFeature"],
+            ["RecordingArtifactFeature"],
             [PyArrowTable],
-            plugin_collector=PluginCollector.enabled_feature_groups({IdentityArtifactFeature}),
+            plugin_collector=_enabled_recording,
         )
         assert session.engine is not None
         plan_features = [
@@ -438,10 +408,10 @@ class TestArtifactRunsLeavePlanUntouched:
             for f in getattr(getattr(step, "features", None), "features", [])
         ]
         session.run()
-        session.run(artifacts={"IdentityArtifactFeature": "x"})
+        session.run(artifacts={"RecordingArtifactFeature": "x"})
 
-        assert len(IdentityArtifactFeature.seen) == 2
-        for run_features in IdentityArtifactFeature.seen:
+        assert len(RecordingArtifactFeature.seen) == 2
+        for run_features in RecordingArtifactFeature.seen:
             assert all(any(f is p for p in plan_features) for f in run_features)
 
     def test_concurrent_predict_runs_with_different_artifacts(self) -> None:
@@ -507,14 +477,14 @@ class TestRuntimeArtifactSurface:
 
     @pytest.mark.parametrize("how", ["run", "stream_run"])
     def test_unknown_key_raises_at_the_call_before_any_step(self, how: str) -> None:
-        CountingArtifactFeature.calls.clear()
-        session = mloda.prepare(["CountingArtifactFeature"], [PyArrowTable], plugin_collector=_enabled_counting)
+        RecordingArtifactFeature.seen.clear()
+        session = mloda.prepare(["RecordingArtifactFeature"], [PyArrowTable], plugin_collector=_enabled_recording)
 
         with pytest.raises(ValueError, match="not_an_input") as exc_info:
             self._call(session, how, {"not_an_input": "x"})
 
-        assert "CountingArtifactFeature" in str(exc_info.value)
-        assert CountingArtifactFeature.calls == []
+        assert "RecordingArtifactFeature" in str(exc_info.value)
+        assert RecordingArtifactFeature.seen == []
 
     @pytest.mark.parametrize("how", ["run", "stream_run"])
     def test_group_conflict_raises_at_the_call_before_any_step(self, how: str) -> None:

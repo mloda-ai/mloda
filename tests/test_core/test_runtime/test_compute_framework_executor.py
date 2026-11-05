@@ -1362,6 +1362,25 @@ class TestThreadExecuteStep:
         assert _LEAK_MARKER not in exc_info
         assert call_args.kwargs["exception"] is boom
 
+    def test_thread_worker_marks_the_step_done_on_success(self) -> None:
+        step = Mock(spec=FeatureGroupStep)
+        step.uuid = uuid4()
+        done: set[UUID] = set()
+
+        thread_worker(step, Mock(spec=CfwManager), Mock(spec=ComputeFramework), None, mark_done=done.add)
+
+        assert done == {step.uuid}
+
+    def test_thread_worker_does_not_mark_a_failed_step_done(self) -> None:
+        step = Mock(spec=FeatureGroupStep)
+        step.uuid = uuid4()
+        step.execute.side_effect = RuntimeError("boom")
+        done: set[UUID] = set()
+
+        thread_worker(step, Mock(spec=CfwManager), Mock(spec=ComputeFramework), None, mark_done=done.add)
+
+        assert done == set()
+
 
 class TestMultiExecuteStep:
     """Tests for multi_execute_step method."""
@@ -2244,25 +2263,6 @@ class TestGrantOnlyValueIsMaskedInEveryFailureReport:
 
         step.execute.assert_called_once()
         cfw_register.set_error.assert_not_called()
-
-    def test_thread_worker_marks_the_step_done_on_success(self) -> None:
-        step = Mock(spec=FeatureGroupStep)
-        step.uuid = uuid4()
-        done: set[UUID] = set()
-
-        thread_worker(step, Mock(spec=CfwManager), Mock(spec=ComputeFramework), None, mark_done=done.add)
-
-        assert done == {step.uuid}
-
-    def test_thread_worker_does_not_mark_a_failed_step_done(self) -> None:
-        step = Mock(spec=FeatureGroupStep)
-        step.uuid = uuid4()
-        step.execute.side_effect = RuntimeError("boom")
-        done: set[UUID] = set()
-
-        thread_worker(step, Mock(spec=CfwManager), Mock(spec=ComputeFramework), None, mark_done=done.add)
-
-        assert done == set()
 
 
 class TestDisableLogMaskingDispatch:

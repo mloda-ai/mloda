@@ -125,10 +125,7 @@ class TestEngine:
             assert isinstance(engine.execution_planner, ExecutionPlan)
 
     def test_compute_returns_independent_execution_planner_state(self) -> None:
-        """Engine.compute() must return orchestrators with independent execution planner state.
-
-        The plan is shared across runs; done state lives on each orchestrator's worker manager.
-        """
+        """The plan is shared across runs; done state lives on each orchestrator's worker manager."""
         with patch(
             "mloda.core.prepare.accessible_plugins.PreFilterPlugins.resolve_feature_group_compute_framework_limitations"
         ) as mocked_derived_accessible_plugins:

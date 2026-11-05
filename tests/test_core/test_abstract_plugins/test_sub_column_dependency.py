@@ -1742,7 +1742,7 @@ class TestArtifactKeyedByBaseName:
             parallelization_modes={ParallelizationMode.SYNC},
         )
 
-        with pytest.raises(ValueError, match="(?i)artifact") as exc_info:
+        with pytest.raises(ValueError, match="Artifact keyed by the part column") as exc_info:
             api.run(artifacts={"measure~value": "model"})
 
         assert "'measure'" in str(exc_info.value)

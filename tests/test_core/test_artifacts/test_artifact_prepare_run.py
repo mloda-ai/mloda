@@ -127,6 +127,17 @@ class TestArtifactSaveWithStreamRun:
 
         assert stream.artifacts == {"PrepareRunArtifactFeature": "trained_model_v1"}
 
+    def test_stream_load_with_runtime_artifact(self) -> None:
+        session = mloda.prepare(["VerifiableArtifactFeature"], [PyArrowTable], plugin_collector=_enabled_verifiable)
+        value = "model|stream|weights=3"
+        stream = session.stream_run(artifacts={"VerifiableArtifactFeature": value})
+
+        tables = list(stream)
+
+        assert len(tables) == 1
+        assert list(tables[0].to_pandas()["VerifiableArtifactFeature"]) == [_artifact_hash(value)] * 3
+        assert stream.artifacts == {}
+
 
 class TestArtifactLoadViaOptionsWithPrepareRun:
     """Load flow using prepare() with artifact options + run()."""

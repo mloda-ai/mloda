@@ -305,10 +305,9 @@ class mlodaAPI:
         accepted = self.artifact_inputs
         unknown = sorted(key for key in artifacts if key not in accepted)
         if unknown:
-            if self.engine is not None:
-                for step in self._execution_plan():
-                    if isinstance(step, FeatureGroupStep):
-                        step.features.reject_part_keyed_artifacts(unknown)
+            for step in self._execution_plan():
+                if isinstance(step, FeatureGroupStep):
+                    step.features.reject_part_keyed_artifacts(unknown)
             raise ValueError(
                 f"run(artifacts=...) keys {unknown} are not artifact inputs of this plan; accepted: {sorted(accepted)}."
             )

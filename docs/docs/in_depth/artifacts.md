@@ -134,6 +134,10 @@ Runtime keys are validated at run start against `session.artifact_inputs`: an
 unknown key and the `Options.group` conflict are refused before any step runs.
 A feature set without a runtime artifact keeps its prepare-time mode. Produced
 artifacts come back only in `RunResult.artifacts`; the plan is never written.
+Runtime keys must be the feature names the plan lists in `session.artifact_inputs`
+(a custom saver returning a dict keyed by other names cannot be passed back as
+is), and a loaded artifact value is shared by concurrent runs, so treat it as
+read-only in `calculate_feature`.
 
 Provider migration: a custom `custom_loader` reads `features.artifact_value`
 (the prepare-time Options value or this run's `artifacts` value), not Options.

@@ -106,6 +106,11 @@ class ReadDBFG(SourceFeatureGroup):
 
     The base serves table catalogs; QUERY_ROUTE opts in to query text. Third-party groups should run
     mloda._testing.source.read_db_suite (to be re-exported by mloda.testing).
+
+    A subclass whose find_sources returns its own access type (not DBTable/DBQuery) does not need
+    to override _hidden_source, _raw_reason, data_access_identity or columns: those degrade to the
+    match source (identity/hidden source) or None (columns/reason). Override them only when the
+    custom access can name a distinct identity or enumerate columns.
     """
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("credentials", NamePolicy.CHECKED, True),)
@@ -278,6 +283,10 @@ class ReadDBFG(SourceFeatureGroup):
     @classmethod
     def data_access_identity(cls, match: SourceMatch) -> str:
         access = match.access
+        if not isinstance(access, (DBTable, DBQuery)):
+            # A subclass find_sources may return its own access type; fall back to
+            # the match source instead of raising on access.credentials.
+            return match.source
         identity = cls.database_identity(access.credentials)
         if isinstance(access, DBQuery):
             return f"{identity}::query:{sha256(access.query_text.encode()).hexdigest()[:16]}"
@@ -371,7 +380,7 @@ class ReadDBFG(SourceFeatureGroup):
     @classmethod
     def columns(cls, match: SourceMatch) -> Collection[str] | None:
         access = match.access
-        if isinstance(access, DBQuery) or access.table is None:
+        if not isinstance(access, DBTable) or access.table is None:
             return None
         catalog, _ = cls._catalog(access.credentials)
         return None if catalog is None else catalog.get(access.table)
@@ -389,7 +398,7 @@ class ReadDBFG(SourceFeatureGroup):
     @classmethod
     def _raw_reason(cls, match: SourceMatch) -> str | None:
         access = match.access
-        if isinstance(access, DBQuery):
+        if not isinstance(access, DBTable):
             return None
         catalog, reason = cls._catalog(access.credentials)
         if catalog is not None and access.table is not None and access.table not in catalog:
@@ -400,7 +409,9 @@ class ReadDBFG(SourceFeatureGroup):
     def _hidden_source(cls, match: SourceMatch) -> str:
         if isinstance(match.access, DBQuery):
             return cls.data_access_identity(match)
-        return cls.database_identity(match.access.credentials)
+        if isinstance(match.access, DBTable):
+            return cls.database_identity(match.access.credentials)
+        return match.source
 
     @classmethod
     def ambiguity_fix(

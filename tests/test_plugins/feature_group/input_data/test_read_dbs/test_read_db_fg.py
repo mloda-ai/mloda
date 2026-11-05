@@ -850,3 +850,46 @@ class TestEndToEndOnAThirdPartyGroup:
         dac = DataAccessCollection(credentials={"toy_handle": {KEY: "a"}})
         result = IdentifyFeatureGroupClass.evaluate(Feature("ReadDBFG"), {ReadDBFG: {PythonDictFramework}}, None, dac)
         assert ReadDBFG not in result.identified
+
+
+@dataclass(frozen=True)
+class _CustomAccess:
+    handle: str
+
+
+class ToyCustomAccessDB(ReadDBFG):
+    """A group whose find_sources returns its own access type, not DBTable/DBQuery."""
+
+    @classmethod
+    def is_valid_credentials(cls, credentials: Any) -> bool:
+        return True
+
+    @classmethod
+    def database_identity(cls, credentials: Any) -> str:
+        return "toyfmt-custom-db"
+
+    @classmethod
+    def connect(cls, credentials: Any) -> Any:
+        raise NotImplementedError
+
+    @classmethod
+    def list_tables(cls, connection: Any) -> Collection[str]:
+        return []
+
+    @classmethod
+    def table_columns(cls, connection: Any, table: str) -> Collection[str]:
+        return []
+
+    @classmethod
+    def produce_rows(cls, connection: Any, table: str, features: Any) -> Any:
+        raise NotImplementedError
+
+
+def test_custom_access_type_degrades_gracefully() -> None:
+    match = SourceMatch("toyfmt-custom-db::weird", _CustomAccess("h1"))
+
+    assert ToyCustomAccessDB.data_access_identity(match) == "toyfmt-custom-db::weird"
+    assert ToyCustomAccessDB.columns(match) is None
+    assert ToyCustomAccessDB._raw_reason(match) is None
+    assert ToyCustomAccessDB.unknown_columns_reason(match) is None
+    assert ToyCustomAccessDB._hidden_source(match) == "toyfmt-custom-db::weird"

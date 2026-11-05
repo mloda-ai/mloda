@@ -567,6 +567,7 @@ class TestNoRelation(SqlRelationWindowSuite):
         (_WIRING_MODULE, [], "NoFilterFramework", "filter"),
         (_RELATION_WIRING_MODULE, ["-k", "test_from_dict_basic or test_len"], "PythonDictFramework", "sql_relation"),
     ],
+    ids=["filter", "relation"],
 )
 def test_framework_without_the_aspect_fails_with_the_wiring_message(
     pytester: pytest.Pytester, module: str, select: list[str], framework: str, aspect: str

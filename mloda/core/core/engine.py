@@ -108,6 +108,7 @@ class Engine:
         output_framework: type[ComputeFramework] | None = None,
     ) -> None:
         self.output_framework = output_framework
+        self.transformer = ComputeFrameworkTransformer()
         self.framework_positions: Mapping[type[ComputeFramework], int] = framework_preference or {}
         self.filter_ties: list[tuple[UUID, UUID]] = []
         self.connection_dropped: dict[UUID, frozenset[type[ComputeFramework]]] = {}
@@ -265,6 +266,7 @@ class Engine:
             data_access_collection=(
                 self.data_access_collection if data_access_collection is None else data_access_collection
             ),
+            transformer=self.transformer,
         )
         if isinstance(orchestrator, ExecutionOrchestrator):
             return orchestrator

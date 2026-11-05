@@ -10,11 +10,13 @@ import threading
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from types import MappingProxyType
+from unittest.mock import patch
 from typing import Any
 
 import numpy as np
 import pytest
 
+from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.user import mloda, mlodaAPI, Feature, ParallelizationMode, PluginCollector
@@ -551,7 +553,7 @@ class TestStepStateDoesNotLeakBetweenRuns:
     def test_step_state_does_not_leak_between_runs(self) -> None:
         """prepare() once, run() twice with the same data.
         Both runs must succeed and produce identical results.
-        If internal step state (e.g. step_is_done flags) leaked from the first run,
+        If per-run step state leaked from the first run,
         the second run would fail or produce wrong results.
         """
         api_data = {
@@ -582,6 +584,29 @@ class TestStepStateDoesNotLeakBetweenRuns:
         assert df_first["PrepareRunApiFeature"].tolist() == ["5_p", "6_q"]
         assert df_second["PrepareRunApiFeature"].tolist() == ["5_p", "6_q"]
         assert df_first["PrepareRunApiFeature"].tolist() == df_second["PrepareRunApiFeature"].tolist()
+
+    def test_runs_build_no_transformer_registry(self) -> None:
+        """After prepare(), runs converting dict api_data to pandas reuse the plan's one registry."""
+        api_data = {"PrepareExample": {"api_id": [5, 6], "api_value": ["p", "q"]}}
+        session = mloda.prepare(
+            [Feature(name="PrepareRunApiFeature")],
+            compute_frameworks=[PandasDataFrame],
+            api_data=api_data,
+            plugin_collector=_enabled,
+        )
+
+        original_init = ComputeFrameworkTransformer.__init__
+        constructed: list[int] = []
+
+        def _counting_init(self: ComputeFrameworkTransformer) -> None:
+            constructed.append(1)
+            original_init(self)
+
+        with patch.object(ComputeFrameworkTransformer, "__init__", _counting_init):
+            session.run(api_data=api_data)
+            session.run(api_data=api_data)
+
+        assert constructed == []
 
 
 _PFEXT_MARKER = "prepfallback051"

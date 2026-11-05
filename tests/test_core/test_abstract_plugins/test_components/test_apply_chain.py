@@ -160,8 +160,8 @@ class TestApplyChain:
 
 class TestTransformFrameworkStepDelegatesToApplyChain:
     def test_transform_delegates_chain_application_to_apply_chain(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """``TransformFrameworkStep.transform`` hands the resolved chain to
-        ``ComputeFrameworkTransformer.apply_chain`` instead of walking it inline.
+        """``TransformFrameworkStep.transform`` resolves via the destination ``cfw.transformer`` and hands
+        the chain to ``ComputeFrameworkTransformer.apply_chain`` instead of walking it inline.
         """
         fw_a, fw_b, _fw_c, trans_ab, _trans_bc, _transformer = _chain_env()
 
@@ -184,8 +184,6 @@ class TestTransformFrameworkStepDelegatesToApplyChain:
             from_feature_group=FeatureGroup,
             to_feature_group=FeatureGroup,
         )
-        step.transformer.transformer_map = {(fw_a, fw_b): trans_ab, (fw_b, fw_a): trans_ab}
-
         recorded: dict[str, Any] = {}
 
         def _spy(
@@ -202,6 +200,9 @@ class TestTransformFrameworkStepDelegatesToApplyChain:
         monkeypatch.setattr(ComputeFrameworkTransformer, "apply_chain", _spy)
 
         cfw = _CfwTo(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        registry = ComputeFrameworkTransformer()
+        registry.transformer_map = {(fw_a, fw_b): trans_ab, (fw_b, fw_a): trans_ab}
+        cfw.transformer = registry
         result = step.transform(cfw, ["payload"])
 
         assert result == "CHAIN_APPLIED"

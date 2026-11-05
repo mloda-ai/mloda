@@ -13,6 +13,7 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.prepare.execution_plan import ExecutionPlan
@@ -143,6 +144,7 @@ class ExecutionOrchestrator:
         output_framework: type[ComputeFramework] | None = None,
         output_connection: Any = None,
         data_access_collection: DataAccessCollection | None = None,
+        transformer: ComputeFrameworkTransformer | None = None,
     ) -> None:
         """
         Initializes the ExecutionOrchestrator with an execution plan and optional flight server.
@@ -154,6 +156,7 @@ class ExecutionOrchestrator:
         """
         self.execution_planner = execution_planner
         self.data_access_collection = data_access_collection
+        self.transformer = transformer
 
         self.cfw_register: CfwManager
         self.manager: Any = None
@@ -173,6 +176,7 @@ class ExecutionOrchestrator:
             request_feature_order=request_feature_order,
             output_framework=output_framework,
             output_connection=output_connection,
+            transformer=transformer,
         )
 
         self._step_lock = threading.Lock()
@@ -227,6 +231,7 @@ class ExecutionOrchestrator:
             worker_extender_payload=self.worker_extender_payload,
             hook_extenders=self._hook_extenders,
             data_access_collection=self.data_access_collection,
+            transformer=self.transformer,
         )
         self._register_modes = self.cfw_register.get_parallelization_modes()
 

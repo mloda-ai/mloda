@@ -452,3 +452,23 @@ class TestZeroEdgeWarning:
             "the zero-edge warning dedupe must not retain transformer classes for the process "
             "lifetime; BaseTransformer.__subclasses__ is weak, so nothing else pins the class"
         )
+
+
+class TestRegisterAllSwapsTheMap:
+    def test_refresh_does_not_change_a_map_a_reader_is_iterating(self) -> None:
+        """_register_all builds a new map, so a concurrent reader of the old one never sees it resize."""
+        registry = ComputeFrameworkTransformer()
+        full_edges = dict(registry.transformer_map)
+        assert len(full_edges) >= 2
+        dropped = next(iter(full_edges))
+        del registry.transformer_map[dropped]
+        old_map = registry.transformer_map
+        reader = iter(old_map.items())
+        next(reader)
+
+        registry._register_all()
+
+        assert len(list(reader)) == len(full_edges) - 2
+        assert dropped not in old_map
+        assert registry.transformer_map is not old_map
+        assert registry.transformer_map == full_edges

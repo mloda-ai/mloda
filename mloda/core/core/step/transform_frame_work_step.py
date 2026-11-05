@@ -2,9 +2,6 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
-from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
-    ComputeFrameworkTransformer,
-)
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.cfw_manager import CfwManager
@@ -45,7 +42,6 @@ class TransformFrameworkStep(Step):
         # Hops built by add_tfs carry at most one of link_id (join hops; holds the JoinStep token,
         # not the Link uuid) or source_step_uuid (plain hops), never both.
         self.source_step_uuid = source_step_uuid
-        self.transformer = ComputeFrameworkTransformer()
 
         # This variable is only set, if the TFS was requested by a joinstep.
         self.source_framework_uuid: UUID | None = None
@@ -180,14 +176,13 @@ class TransformFrameworkStep(Step):
             return data
 
         # Try to find a transformation chain (direct or through PyArrow)
-        transformation_chain = self.transformer.get_transformation_chain(_from_fw, _to_fw)
+        transformer = cfw.transformer
+        transformation_chain = transformer.get_transformation_chain(_from_fw, _to_fw)
 
         if transformation_chain is None:
             raise KeyError(
                 f"No transformation path found from {_from_fw} to {_to_fw}. "
-                f"Available transformers: {list(self.transformer.transformer_map.keys())}"
+                f"Available transformers: {list(transformer.transformer_map.keys())}"
             )
 
-        return self.transformer.apply_chain(
-            _from_fw, _to_fw, transformation_chain, data, cfw.framework_connection_object
-        )
+        return transformer.apply_chain(_from_fw, _to_fw, transformation_chain, data, cfw.framework_connection_object)

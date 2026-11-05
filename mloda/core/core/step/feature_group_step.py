@@ -59,7 +59,8 @@ class FeatureGroupStep(Step):
         location = cfw_register.get_location()
         runtime_artifacts = cfw_register.get_runtime_artifacts()
         # resolve_artifact_for_runtime writes into Options.context, so only that path pays for a deep copy
-        if runtime_artifacts is not None and self.feature_group.artifact() is not None:
+        resolves_artifact = runtime_artifacts is not None and self.feature_group.artifact() is not None
+        if resolves_artifact:
             features = deepcopy(self.features)
         else:
             features = copy(self.features)
@@ -68,7 +69,7 @@ class FeatureGroupStep(Step):
 
         if runtime_artifacts is not None:
             features.reject_part_keyed_artifacts(runtime_artifacts)
-        if runtime_artifacts is not None and self.feature_group.artifact() is not None:
+        if runtime_artifacts is not None and resolves_artifact:
             features.resolve_artifact_for_runtime(runtime_artifacts)
 
         match = features.input_data_match

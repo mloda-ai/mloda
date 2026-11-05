@@ -54,6 +54,10 @@ def _worker_manager_mock() -> Mock:
     return manager
 
 
+def _ignore_done(_step_uuid: UUID) -> None:
+    """A mark_done callback for thread_worker tests that do not track completion."""
+
+
 class _ContainerLeakError(Exception):
     def __init__(self, message: str = f"failed {_REGISTERED}") -> None:
         super().__init__(message)
@@ -1281,7 +1285,7 @@ class TestThreadExecuteStep:
         boom = error_type("Test error")
         step.execute.side_effect = boom
 
-        thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None)
+        thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None, mark_done=_ignore_done)
 
         cfw_register.set_error.assert_called_once()
         assert cfw_register.set_error.call_args.kwargs["exception"] is boom
@@ -1294,7 +1298,7 @@ class TestThreadExecuteStep:
         boom = RuntimeError(_LEAK_MESSAGE)
         step.execute.side_effect = boom
 
-        thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None)
+        thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None, mark_done=_ignore_done)
 
         cfw_register.set_error.assert_called_once()
         call_args = cfw_register.set_error.call_args
@@ -1316,6 +1320,7 @@ class TestThreadExecuteStep:
             Mock(spec=ComputeFramework),
             None,
             registered_secrets=frozenset({_REGISTERED}),
+            mark_done=_ignore_done,
         )
 
         cfw_register.set_error.assert_called_once()
@@ -1330,6 +1335,7 @@ class TestThreadExecuteStep:
         seen: list[frozenset[str]] = []
         step = Mock(spec=FeatureGroupStep)
         step.own_frame = False
+        step.uuid = uuid4()
         step.execute.side_effect = lambda *a, **k: seen.append(current_identity_secrets())
 
         thread_worker(
@@ -1339,6 +1345,7 @@ class TestThreadExecuteStep:
             None,
             registered_secrets=frozenset({"a-registered-secret-value"}),
             identity_secrets=frozenset({"an-identity-value"}),
+            mark_done=_ignore_done,
         )
 
         assert seen == [frozenset({"an-identity-value"})]
@@ -1353,7 +1360,7 @@ class TestThreadExecuteStep:
         boom.__cause__ = RuntimeError(_LEAK_MESSAGE)
         step.execute.side_effect = boom
 
-        thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None)
+        thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None, mark_done=_ignore_done)
 
         cfw_register.set_error.assert_called_once()
         call_args = cfw_register.set_error.call_args
@@ -1711,6 +1718,19 @@ class TestExecutorSealsTheAttachedFramework:
         cfw_uuid = executor.init_compute_framework(framework_class, ParallelizationMode.SYNC, set())
         return executor.cfw_collection[cfw_uuid]
 
+    def test_framework_carries_the_executors_transformer_registry(self) -> None:
+        from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
+            ComputeFrameworkTransformer,
+        )
+
+        registry = ComputeFrameworkTransformer()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_run_context.return_value = RunContext(run_id="run-1")
+        executor = ComputeFrameworkExecutor(cfw_register, _worker_manager_mock(), transformer=registry)
+        cfw_uuid = executor.init_compute_framework(PythonDictFramework, ParallelizationMode.SYNC, set())
+
+        assert executor.cfw_collection[cfw_uuid].transformer is registry
+
     def test_unpickled_framework_without_function_extender_state_does_not_invent_one(self) -> None:
         restored = pickle.loads(pickle.dumps(self._attached(framework_class=_DropsFunctionExtenderFramework)))  # nosec B301
 
@@ -1873,6 +1893,7 @@ def _grant_collection() -> Any:
 def _grant_step(handles: tuple[str, ...]) -> Mock:
     step = Mock(spec=FeatureGroupStep)
     step.own_frame = False
+    step.uuid = uuid4()
     step.tfs_ids = []
     step.features = Mock()
     step.features.any_uuid = uuid4()
@@ -2189,7 +2210,7 @@ def _run_thread(step: Mock, cfw_register: Mock) -> None:
     from mloda.core.abstract_plugins.components.credential_grant import StaticGrant
 
     grant = StaticGrant({"declared": {"host": _GRANT_HOST, "hmac": _GRANT_HMAC}})
-    thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None, grant=grant)
+    thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None, grant=grant, mark_done=_ignore_done)
 
 
 class _UnwalkedHolder:
@@ -2258,8 +2279,9 @@ class TestGrantOnlyValueIsMaskedInEveryFailureReport:
     def test_thread_worker_without_a_grant_still_works(self) -> None:
         cfw_register = Mock(spec=CfwManager)
         step = Mock(spec=FeatureGroupStep)
+        step.uuid = uuid4()
 
-        thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None)
+        thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None, mark_done=_ignore_done)
 
         step.execute.assert_called_once()
         cfw_register.set_error.assert_not_called()

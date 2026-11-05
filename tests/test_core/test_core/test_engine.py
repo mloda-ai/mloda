@@ -125,7 +125,7 @@ class TestEngine:
             assert isinstance(engine.execution_planner, ExecutionPlan)
 
     def test_compute_returns_independent_execution_planner_state(self) -> None:
-        """The plan is shared across runs; done state lives on each orchestrator's worker manager."""
+        """Done state lives on each orchestrator (real-run no-leak is pinned by TestConcurrentRunsOnOneSession)."""
         with patch(
             "mloda.core.prepare.accessible_plugins.PreFilterPlugins.resolve_feature_group_compute_framework_limitations"
         ) as mocked_derived_accessible_plugins:
@@ -156,6 +156,9 @@ class TestEngine:
             assert isinstance(orchestrator1, ExecutionOrchestrator)
             assert isinstance(orchestrator2, ExecutionOrchestrator)
             assert orchestrator1.execution_planner is orchestrator2.execution_planner
+            for orchestrator in (orchestrator1, orchestrator2):
+                assert orchestrator.data_lifecycle_manager.transformer is engine.transformer
+                assert orchestrator.transformer is engine.transformer
 
             # Mark every step done in orchestrator1's run state only.
             for step in orchestrator1.execution_planner:

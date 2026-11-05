@@ -31,6 +31,7 @@ from mloda_plugins.feature_group.experimental.data_quality.missing_value.base im
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
 from mloda._testing.compute_framework.mask_suite import MaskEngineSuite
+from mloda._testing.compute_framework.output_schema_suite import OutputSchemaSuite
 from mloda._testing.compute_framework.relation_suite import SqlRelationWindowSuite
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_calculate_test_mixin import (
@@ -180,6 +181,16 @@ CONTRACTS: tuple[MixinContract, ...] = (
         ),
         resolver=_framework_of_adapter,
         applies=serves_asof_merge,
+    ),
+    MixinContract(
+        ComputeFramework,
+        OutputSchemaSuite,
+        "adapter_class",
+        (
+            "tests.test_plugins.compute_framework.test_output_schema_hook",
+            f"{_FRAMEWORKS}.spark.test_spark_framework",
+        ),
+        resolver=_framework_of_adapter,
     ),
     MixinContract(
         ComputeFramework,

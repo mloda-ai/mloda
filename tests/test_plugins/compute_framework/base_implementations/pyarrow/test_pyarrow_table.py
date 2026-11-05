@@ -13,9 +13,6 @@ from tests.test_plugins.compute_framework.test_tooling.availability_test_helper 
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
     DataTypeValidatorFrameworkTestMixin,
 )
-from tests.test_plugins.compute_framework.base_implementations.dict_interchange_output_schema_test_mixin import (
-    DictInterchangeOutputSchemaTestMixin,
-)
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
     DuplicateColumnDtypeExtractionTestMixin,
@@ -101,14 +98,6 @@ class TestPyArrowDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeE
     def dtype_duplicate_column_data_reversed(self) -> Any:
         table = pa.table({"dup_col": ["x", "y", "z"]})
         return table.append_column("dup_col", pa.array([1, 2, 3]))
-
-
-class TestPyArrowDictInterchangeOutputSchema(DictInterchangeOutputSchemaTestMixin):
-    """Test PyArrowTable._output_schema on the dict interchange shape using shared mixin."""
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
 
 class TestPyArrowDataTypeValidator(DataTypeValidatorFrameworkTestMixin):

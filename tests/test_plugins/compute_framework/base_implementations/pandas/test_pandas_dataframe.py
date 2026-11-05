@@ -12,9 +12,6 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
     DataTypeValidatorFrameworkTestMixin,
 )
-from tests.test_plugins.compute_framework.base_implementations.dict_interchange_output_schema_test_mixin import (
-    DictInterchangeOutputSchemaTestMixin,
-)
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
     DuplicateColumnDtypeExtractionTestMixin,
@@ -158,15 +155,6 @@ class TestPandasDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeEx
         )
         frame.columns = ["dup_col", "dup_col"]
         return frame
-
-
-@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasDictInterchangeOutputSchema(DictInterchangeOutputSchemaTestMixin):
-    """Test PandasDataFrame._output_schema on the dict interchange shape using shared mixin."""
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

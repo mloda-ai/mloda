@@ -16,9 +16,6 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
     ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
-from tests.test_plugins.compute_framework.base_implementations.dict_interchange_output_schema_test_mixin import (
-    DictInterchangeOutputSchemaTestMixin,
-)
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
@@ -245,18 +242,6 @@ class TestSqliteDtypeExtraction(DtypeExtractionTestMixin):
             "dtype": str(materialized_type),
             "data_type": DataType.INT64,
         }
-
-
-class TestSqliteDictInterchangeOutputSchema(DictInterchangeOutputSchemaTestMixin):
-    """Test SqliteFramework._output_schema on the dict interchange shape using shared mixin.
-
-    SqliteFramework overrides _output_schema for SqliteRelation data; a dict falls through
-    its isinstance(data, SqliteRelation) check to the same base path every other framework uses.
-    """
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
 
 class TestSqliteDataTypeValidator(DataTypeValidatorFrameworkTestMixin):

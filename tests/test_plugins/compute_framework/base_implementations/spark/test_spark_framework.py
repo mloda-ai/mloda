@@ -21,8 +21,11 @@ ensure proper resource management across all test methods.
 """
 
 import os
+from collections.abc import Iterator
 from decimal import Decimal
 from typing import Any
+from mloda._testing.compute_framework.output_schema_suite import OutputSchemaSuite
+from mloda._testing.framework_adapter import FrameworkAdapter, SparkAdapter
 from mloda.user import DataType
 from mloda.user import JoinType
 import pyarrow as pa
@@ -633,3 +636,14 @@ class TestSparkIsMissingColumnErrorAttributeRead:
     def test_attribute_error_on_a_non_frame_is_not_a_missing_column(self) -> None:
         error = _attribute_read_error(object(), "x", "ATTRIBUTE_NOT_SUPPORTED")
         assert SparkFramework.is_missing_column_error(error) is False
+
+
+class TestSparkOutputSchemaSuite(OutputSchemaSuite):
+    adapter_class = SparkAdapter
+
+    @pytest.fixture
+    def adapter(self, spark_session: Any) -> Iterator[FrameworkAdapter]:
+        """SparkAdapter borrows the active session, so spark_session must exist first."""
+        spark_adapter = self.adapter_class()
+        with spark_adapter:
+            yield spark_adapter

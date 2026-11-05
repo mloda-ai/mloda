@@ -52,6 +52,7 @@ class RelationSuite(ComputeFrameworkSuite, suite_base=True):
         return adapter.connection
 
     def raw_projection(self, relation: Any, sql: str) -> Any:
+        """Project raw SQL via `select(_raw_sql=...)`; override for relations that expose it differently."""
         return relation.select(_raw_sql=sql)
 
     # --- Basics ---
@@ -351,7 +352,7 @@ class SqlRelationWindowSuite(RelationSuite, suite_base=True):
         assert "rn" in result.columns
         assert len(result) == 5
         rns = self.column_values(adapter, result, "rn")
-        # DuckDB does not guarantee assignment order with bare OVER (), so test set equality
+        # the engine does not guarantee assignment order with bare OVER (), so test set equality
         assert sorted(rns) == [1, 2, 3, 4, 5]
 
     def test_with_row_number_partition_by_only(self, adapter: FrameworkAdapter, sample_relation: Any) -> None:
@@ -437,7 +438,7 @@ class SqlRelationWindowSuite(RelationSuite, suite_base=True):
             sample_relation.with_row_number("category")
 
     def test_with_row_number_raises_on_case_only_collision(self, connection: Any, relation_class: Any) -> None:
-        """DuckDB identifiers are case-insensitive: alias 'category' must collide with existing 'Category'."""
+        """SQL identifiers are case-insensitive: alias 'category' must collide with existing 'Category'."""
         rel = relation_class.from_dict(
             connection,
             {
@@ -600,7 +601,7 @@ class SqlRelationWindowSuite(RelationSuite, suite_base=True):
             sample_relation.window("COUNT(*)", "age")
 
     def test_window_raises_on_case_only_collision(self, connection: Any, relation_class: Any) -> None:
-        """DuckDB identifiers are case-insensitive: alias 'age' must collide with existing 'Age'."""
+        """SQL identifiers are case-insensitive: alias 'age' must collide with existing 'Age'."""
         rel = relation_class.from_dict(
             connection,
             {
@@ -632,7 +633,7 @@ class SqlRelationWindowSuite(RelationSuite, suite_base=True):
         assert self.column_values(adapter, ordered, "rn") == [2, 2, 1, 1, 1]
 
     def test_window_order_by_nulls_last_runs(self, sample_relation: Any) -> None:
-        """NULLS LAST must render and DuckDB must accept it without error."""
+        """NULLS LAST must render and the engine must accept it without error."""
         result = sample_relation.window("ROW_NUMBER()", "rn", order_by=(OrderBy("age", nulls="last"),))
         assert "rn" in result.columns
         assert len(result) == 5

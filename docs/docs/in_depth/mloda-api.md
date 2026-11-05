@@ -113,7 +113,7 @@ save and load modes across calls; keys must be artifact inputs of the plan (`ses
 One prepared session may be shared by threads. Each `run()` returns its own results, `artifacts` and `failed_rows`
 (`stream.artifacts` and `stream.failed_rows` are complete once the stream is exhausted), and the session keeps no
 per-run state. Extender hooks of concurrent runs may run concurrently. Connection objects in the `DataAccessCollection` are shared by concurrent runs. A run that raises returns nothing, so its
-artifacts are not readable. The prepared plan is shared by every run and frozen once planning ends: its steps, FeatureSets, Features and Options are read-only, and a write from `calculate_feature` raises `FrozenPlanError`; per-run values go through `api_data` or `run(artifacts=...)`. The plan holds its own copies of the requested Features, so with `copy_features=False` planning no longer writes back into the caller's Feature objects.
+artifacts are not readable. The prepared plan is shared by every run and frozen: a write to its steps, FeatureSets, Features or Options from `calculate_feature` raises `FrozenPlanError`; per-run values go through `api_data` or `run(artifacts=...)`. The plan holds its own copies of the requested Features, so planning never writes into the caller's Feature objects.
 
 `run_all()` is equivalent to `prepare()` followed by a single `run()`.
 `stream_all()` is equivalent to `prepare()` followed by a single `stream_run()`.

@@ -473,7 +473,6 @@ class mlodaAPI:
                 sets raises ``SetupConfigurationError``.
             plugin_collector: Plugin collector.
             copy_features: Deep copy features (default True); False shallow-copies each Feature.
-                Either way, nothing is written back into the caller's Feature objects.
             strict_type_enforcement: If True, enforce strict type matching for typed features.
             carrier: Opaque W3C trace-context carrier dict, forwarded to every ``HookContext``.
             child_bootstrap: Picklable, no-argument callable run once in a spawned

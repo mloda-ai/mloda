@@ -19,6 +19,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.runtime.run import ExecutionOrchestrator
 from tests.helpers.bound_credential_cases import bound_case, write_bound_sqlite
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsRawSecretFG, ChsSource, ChsVaultFG
 from tests.test_core.test_tooling.runner_recorder import record_runners
@@ -721,6 +722,16 @@ class TestRunStartRefusals:
             if collection is not None:
                 raw = [value for credential in collection.credentials.values() for value in dict(credential).values()]
                 assert _FRESH["key"] not in raw
+
+    def test_a_stream_closed_before_its_first_item_holds_no_orchestrator_or_collection(self) -> None:
+        session = _vault_session()
+
+        stream = session.stream_run(credentials={"vault-a": Credential(**_FRESH)})
+        stream.close()
+
+        held = list(vars(stream).values())
+        assert not any(isinstance(value, ExecutionOrchestrator) for value in held)
+        assert not any(isinstance(value, DataAccessCollection) for value in held)
 
 
 class TestFreshRunRecord:

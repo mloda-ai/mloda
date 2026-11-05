@@ -8,6 +8,7 @@ Breaking out or stopping after one ``next()`` must leave ``stream.artifacts`` an
 from typing import Any
 
 import pyarrow as pa
+import pytest
 
 # stream_run plans eagerly, so the EngineRunnerTest* feature groups must be
 # registered before prepare() is called.
@@ -27,38 +28,30 @@ def _session_with_features(feature_list: list[str]) -> mlodaAPI:
     )
 
 
-class TestStreamRunEarlyExitStreamState:
-    """The stream object exposes artifacts and failed_rows even when the consumer exits early."""
+class TestStreamRunEarlyExit:
+    """The stream exposes artifacts and failed_rows after any consumer exit style."""
 
-    def test_artifacts_after_single_next_call(self) -> None:
-        session = _session_with_features(["EngineRunnerTest1"])
-        stream = session.stream_run(parallelization_modes=PARALLELIZATION_MODES)
-
-        first = next(stream)
-
-        assert isinstance(first, pa.Table)
-        assert isinstance(stream.artifacts, dict)
-        assert stream.failed_rows == ()
-
-    def test_artifacts_after_break_from_multi_feature_stream(self) -> None:
+    @pytest.mark.parametrize("exit_style", ["single_next", "break", "next_then_close", "full_iteration"])
+    def test_state_readable_and_session_keeps_no_runner(self, exit_style: str) -> None:
         session = _session_with_features(["EngineRunnerTest1", "EngineRunnerTest2"])
         stream = session.stream_run(parallelization_modes=PARALLELIZATION_MODES)
 
-        for _result in stream:
-            break
+        if exit_style == "single_next":
+            assert isinstance(next(stream), pa.Table)
+        elif exit_style == "break":
+            for _result in stream:
+                break
+        elif exit_style == "next_then_close":
+            next(stream)
+            stream.close()
+        else:
+            results = list(stream)
+            assert len(results) == 2
+            assert all(isinstance(r, pa.Table) for r in results)
 
         assert isinstance(stream.artifacts, dict)
         assert stream.failed_rows == ()
-
-    def test_artifacts_after_early_exit_then_close(self) -> None:
-        session = _session_with_features(["EngineRunnerTest1", "EngineRunnerTest2"])
-        stream = session.stream_run(parallelization_modes=PARALLELIZATION_MODES)
-        next(stream)
-
-        stream.close()
-
-        assert isinstance(stream.artifacts, dict)
-        assert stream.failed_rows == ()
+        assert not hasattr(session, "runner")
 
     def test_stream_all_break_then_close_exposes_state(self) -> None:
         """Closing a stream_all stream after an early break drives teardown without raising."""
@@ -77,27 +70,5 @@ class TestStreamRunEarlyExitStreamState:
             break
 
         stream.close()
-        assert isinstance(stream.artifacts, dict)
-        assert stream.failed_rows == ()
-
-    def test_session_keeps_no_runner_after_early_exit(self) -> None:
-        session = _session_with_features(["EngineRunnerTest1"])
-        stream = session.stream_run(parallelization_modes=PARALLELIZATION_MODES)
-        next(stream)
-        stream.close()
-
-        assert not hasattr(session, "runner")
-
-
-class TestStreamRunFullExitStillWorks:
-    """Regression: full iteration must still work."""
-
-    def test_full_iteration_artifacts_work(self) -> None:
-        session = _session_with_features(["EngineRunnerTest1"])
-        stream = session.stream_run(parallelization_modes=PARALLELIZATION_MODES)
-        results = list(stream)
-
-        assert len(results) == 1
-        assert isinstance(results[0], pa.Table)
         assert isinstance(stream.artifacts, dict)
         assert stream.failed_rows == ()

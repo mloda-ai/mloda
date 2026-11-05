@@ -173,23 +173,3 @@ class TestStreamRunPlanReuse:
         assert len(results_second) == 1
         assert results_first[0].to_pydict() == {"EngineRunnerTest1": [1, 2, 3]}
         assert results_second[0].to_pydict() == {"EngineRunnerTest1": [1, 2, 3]}
-
-
-class TestStreamRunStreamState:
-    """stream_run exposes artifacts and failed_rows on the stream, not on the session."""
-
-    def test_stream_state_after_stream_run(self) -> None:
-        features = _get_features(["EngineRunnerTest1"])
-        session = mlodaAPI.prepare(
-            features,
-            compute_frameworks=COMPUTE_FRAMEWORKS,
-        )
-
-        stream = session.stream_run(
-            parallelization_modes=PARALLELIZATION_MODES,
-        )
-        _results = list(stream)
-
-        assert stream.artifacts == {}
-        assert stream.failed_rows == ()
-        assert not hasattr(session, "runner")

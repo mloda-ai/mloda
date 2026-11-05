@@ -126,6 +126,26 @@ class TestRunResultFailedRows:
         assert entry.rows == (1, 3)
         assert all(type(row) is int for row in entry.rows)
 
+    @pytest.mark.parametrize("exit_style", ["exhaust", "next_then_close"])
+    def test_stream_exposes_the_rows_once_exhausted_or_closed(self, mode: ParallelizationMode, exit_style: str) -> None:
+        stream = mloda.stream_all(
+            ["frone_col"],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({FrOne}),
+            parallelization_modes={mode},
+        )
+        assert not stream.failed_rows
+
+        if exit_style == "exhaust":
+            list(stream)
+        else:
+            next(stream)
+            stream.close()
+
+        assert stream.failed_rows == (
+            FailedRows(feature_group="FrOne", column="frone_col", rows=(1, 3), reason="timeout"),
+        )
+
     def test_no_report_is_an_empty_tuple(self, mode: ParallelizationMode) -> None:
         assert _run(FrNone, modes={mode}).failed_rows == ()
 

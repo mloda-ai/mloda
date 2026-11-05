@@ -8,6 +8,8 @@ single prepare() session.
 import hashlib
 from typing import Any
 
+import pytest
+
 from mloda.provider import BaseArtifact, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, mloda, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -84,6 +86,24 @@ class TestArtifactSaveWithPrepareRun:
 
         assert len(result) == 1
         assert result.artifacts == {"PrepareRunArtifactFeature": "trained_model_v1"}
+
+
+class TestArtifactSaveWithStreamRun:
+    """stream_run exposes saved artifacts once the stream is exhausted or closed."""
+
+    @pytest.mark.parametrize("exit_style", ["exhaust", "next_then_close"])
+    def test_stream_artifacts(self, exit_style: str) -> None:
+        session = mloda.prepare(["PrepareRunArtifactFeature"], [PyArrowTable], plugin_collector=_enabled)
+        stream = session.stream_run()
+        assert stream.artifacts == {}
+
+        if exit_style == "exhaust":
+            assert len(list(stream)) == 1
+        else:
+            next(stream)
+            stream.close()
+
+        assert stream.artifacts == {"PrepareRunArtifactFeature": "trained_model_v1"}
 
 
 class TestArtifactLoadViaOptionsWithPrepareRun:

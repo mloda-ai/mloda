@@ -26,7 +26,7 @@ from mloda.core.prepare.resolution_types import (
     ResolutionDiagnosis,
     ResolutionRecord,
 )
-from mloda.core.api.run_result import ResultStream, RunResult
+from mloda.core.api.run_result import ResultStream, RunResult, _StreamOutcome
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda.core.prepare.accessible_plugins import (
     EnvironmentPreconditionError,
@@ -163,7 +163,7 @@ class mlodaAPI:
                     parallelization_modes,
                     output_framework,
                 )
-                self._plan_steps = tuple(self.resolved_plan())
+                self._plan_steps = tuple(self._resolve_plan_steps())
                 if self._extenders:
                     self._stamp_structure_hash()
             except BaseException as error:
@@ -698,6 +698,9 @@ class mlodaAPI:
         Available after ``prepare()`` and unchanged by ``run()``. Steps are in dependency order,
         independent ones sorted by content.
         """
+        return list(self._plan_steps)
+
+    def _resolve_plan_steps(self) -> list[PlanStep]:
         with self._credential_redaction():
             execution_plan = self._execution_plan()
             engine = cast(Engine, self.engine)
@@ -852,7 +855,7 @@ class mlodaAPI:
             items,
             run_id=run_context.run_id,
             plan_id=self.plan_id,
-            connection_handles=self._connection_handles,
+            connection_handles=dict(self._connection_handles),
             failed_rows=runner.get_failed_rows(),
             artifacts=runner.get_artifacts(),
         )
@@ -879,10 +882,11 @@ class mlodaAPI:
             run_dac, names = self._run_collection(credentials)
         run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, names)
         plan = list(self._plan_snapshot())
-        stream, runner = self._start_stream(
-            api_data, parallelization_modes, flight_server, artifacts, run_context, run_dac
+        stream_outcome = _StreamOutcome()
+        stream = self._start_stream(
+            api_data, parallelization_modes, flight_server, artifacts, run_context, run_dac, stream_outcome
         )
-        return ResultStream(stream, plan, run_id=run_context.run_id, plan_id=self.plan_id, runner=runner)
+        return ResultStream(stream, plan, run_id=run_context.run_id, plan_id=self.plan_id, outcome=stream_outcome)
 
     def _start_stream(
         self,
@@ -891,17 +895,18 @@ class mlodaAPI:
         flight_server: Any | None,
         artifacts: dict[str, Any] | None,
         run_context: RunContext,
-        run_dac: DataAccessCollection | None = None,
-    ) -> tuple[Generator[Any, None, None], ExecutionOrchestrator]:
+        run_dac: DataAccessCollection | None,
+        stream_outcome: _StreamOutcome,
+    ) -> Generator[Any, None, None]:
         """Callers build ``run_context`` at call time; no yield here, so a refusal at run start raises at the call."""
         _api_data = api_data if api_data is not None else self.api_data
         self._validate_run_api_data(_api_data)
         stream = self._stream_run_results(
-            flight_server, parallelization_modes, _api_data, artifacts, run_context, run_dac
+            flight_server, parallelization_modes, _api_data, artifacts, run_context, run_dac, stream_outcome
         )
         # Primes the generator so a refusal at run start raises here, not on first iteration.
-        runner = next(stream)
-        return stream, runner
+        next(stream)
+        return stream
 
     def _start_run(self, run_context: RunContext) -> None:
         """Refuse an unguarded identity change, then fire on_run_start."""
@@ -935,7 +940,8 @@ class mlodaAPI:
         api_data: dict[str, dict[str, Any]] | None,
         artifacts: dict[str, Any] | None,
         run_context: RunContext,
-        run_dac: DataAccessCollection | None = None,
+        run_dac: DataAccessCollection | None,
+        stream_outcome: _StreamOutcome,
     ) -> Generator[Any, None, None]:
         """Deferred half of ``stream_run``: the priming yield separates run start from computation."""
         outcome = LifecycleOutcome("succeeded")
@@ -945,7 +951,7 @@ class mlodaAPI:
             with self._credential_redaction(literals, identity):
                 self._start_run(run_context)
                 runner = self._setup_engine_runner(parallelization_modes, flight_server, run_dac)
-            yield runner
+            yield None
             try:
                 with self._credential_redaction(literals, identity):
                     self._enter_runner_context(
@@ -970,6 +976,8 @@ class mlodaAPI:
             finally:
                 with self._credential_redaction(literals, identity):
                     self._exit_runner_context(runner)
+                    stream_outcome.artifacts = runner.get_artifacts()
+                    stream_outcome.failed_rows = runner.get_failed_rows()
         except GeneratorExit:
             outcome = LifecycleOutcome("cancelled")
             raise

@@ -237,7 +237,7 @@ class TestRunResultPlan:
 
 
 class TestRunResultArtifacts:
-    """RunResult.artifacts is the read-only artifacts dict of the run, the same object passed in."""
+    """RunResult.artifacts is the artifacts dict of the run, the same object passed in (the attribute is read-only)."""
 
     def test_artifacts_default_to_an_empty_dict(self) -> None:
         from mloda.user import RunResult
@@ -358,7 +358,7 @@ class TestStreamEarlyClose:
 
 
 class TestResultStreamArtifactsAndFailedRows:
-    """ResultStream.artifacts and failed_rows are read live from the run and complete after the stream ends."""
+    """ResultStream.artifacts and failed_rows are empty until the stream is exhausted or closed."""
 
     def test_defaults_before_consumption_and_after_exhaustion(self) -> None:
         stream = _stream_all()

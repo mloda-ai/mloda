@@ -279,6 +279,8 @@ class TestSessionKeepsNoPerRunState:
             features, compute_frameworks=[PandasDataFrame], api_data=data, plugin_collector=_enabled
         )
 
+        session._connection_handles[0] = "handle"
+
         result = session.run(api_data=data)
 
         for name in ("runner", "get_result", "get_artifacts"):
@@ -286,6 +288,7 @@ class TestSessionKeepsNoPerRunState:
         assert not hasattr(result, "runner")
         assert not any(isinstance(value, ExecutionOrchestrator) for value in vars(result).values())
         assert not any(isinstance(value, ExecutionOrchestrator) for value in vars(session).values())
+        assert result._connection_handles is not session._connection_handles
 
 
 class TestConcurrentRunsOnOneSession:

@@ -96,7 +96,7 @@ class MlodaTestRunner:
             strict_type_enforcement: If True, enforce strict type matching for typed features
 
         Returns:
-            RunResult containing results, and artifacts
+            RunResult containing results and artifacts
         """
         if compute_frameworks is None:
             compute_frameworks = [PyArrowTable]

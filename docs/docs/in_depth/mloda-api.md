@@ -112,7 +112,7 @@ save and load modes across calls. See [Artifacts](artifacts.md#run-time-artifact
 
 One prepared session may be shared by threads. Each `run()` returns its own results, `artifacts` and `failed_rows`
 (`stream.artifacts` and `stream.failed_rows` are complete once the stream is exhausted), and the session keeps no
-per-run state. Extender hooks of concurrent runs may run concurrently. A run that raises returns nothing, so its
+per-run state. Extender hooks of concurrent runs may run concurrently. Connection objects in the `DataAccessCollection` are shared by concurrent runs. A run that raises returns nothing, so its
 artifacts are not readable.
 
 `run_all()` is equivalent to `prepare()` followed by a single `run()`.

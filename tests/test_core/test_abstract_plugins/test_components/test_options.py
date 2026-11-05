@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
-from mloda.core.abstract_plugins.components.plan_freeze import FrozenPlanError
+from mloda.core.abstract_plugins.components.plan_freeze import FrozenPlanError, ReadOnlyDict
 from mloda.provider import SourceFeatureGroup
 from mloda.user import Credential, Feature, Options
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
@@ -885,7 +885,6 @@ class TestOptionsFreeze:
 
 
 def test_stable_text_renders_a_read_only_dict_like_a_plain_dict() -> None:
-    from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlyDict
     from mloda.core.prepare.stable_text import stable_text
 
     data = {"b": 0x1, "a": {"z": 1}}

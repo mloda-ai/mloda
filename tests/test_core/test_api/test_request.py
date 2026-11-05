@@ -68,8 +68,8 @@ class TestmlodaAPI:
             assert api_feature is not original_feature
             assert api_feature.name == original_feature.name
 
-    def test_copy_features_false_no_copy(self) -> None:
-        """Test that copy_features=False does not create a copy."""
+    def test_copy_features_false_shallow_copies_and_shares_option_values(self) -> None:
+        """copy_features=False shallow-copies each Feature; option values stay shared by reference."""
         with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):
             shared_value = object()  # not deep-copied: the reason the flag exists
             original_features: list[Feature | str] = [Feature("test_feature", options={"k": shared_value})]

@@ -844,7 +844,15 @@ class TestOptionWriteInCalculateFeatureIsRefused:
             session.run(api_data=self._data(trigger))
 
         message = str(raised.value)
-        assert isinstance(raised.value, FrozenPlanError) or "FrozenPlanError" in message
+        chain: list[BaseException] = []
+        err: BaseException | None = raised.value
+        while err is not None and err not in chain:
+            chain.append(err)
+            err = err.__cause__ or err.__context__
+        if ParallelizationMode.MULTIPROCESSING in modes:
+            assert any(isinstance(e, FrozenPlanError) for e in chain) or "FrozenPlanError" in message
+        else:
+            assert any(isinstance(e, FrozenPlanError) for e in chain)
         for fragment in (key, "before prepare", "run(api_data=", "run(artifacts="):
             assert fragment in message
 

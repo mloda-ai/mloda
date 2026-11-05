@@ -25,6 +25,7 @@ import pytest
 from mloda.core.abstract_plugins.components import log_masking
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets, registered_secrets_scope
+from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlyDict
 
 _SECRET = "Zk8-secret-Vq3LmRt"  # nosec B105
 _OTHER = "Pw5-other-Hy2NcXs"  # nosec B105
@@ -191,7 +192,6 @@ def test_dict_arg_masks_values_and_keeps_keys(capture: _Capture) -> None:
 
 
 def test_read_only_dict_arg_masks_like_a_plain_dict(capture: _Capture) -> None:
-    from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlyDict
 
     with _scope(_SECRET):
         capture.logger.info("u=%(user)s o=%(other)s", ReadOnlyDict({"user": _SECRET, "other": "x"}, "options"))

@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class AdapterCapabilities:
-    """typed_columns: the frame carries a native type per column (False for PythonDict); sql_relation: serves the SQL relation suites."""
+    """typed_columns: native type per column (False for PythonDict); sql_relation: serves the SQL relation suites."""
 
     typed_columns: bool = True
     sql_relation: bool = False

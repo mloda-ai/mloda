@@ -269,7 +269,7 @@ class RelationSuite(ComputeFrameworkSuite, suite_base=True):
         assert arrow.column("y").to_pylist() == [7, 8]
 
     def test_append_column_raises_when_name_already_exists(self, connection: Any, relation_class: Any) -> None:
-        """append_column must reject ``name`` colliding with an existing column instead of silently corrupting the schema."""
+        """append_column must reject a name colliding with an existing column."""
         rel = relation_class.from_dict(connection, {"a": [1, 2, 3], "b": [4, 5, 6]})
         with pytest.raises(ValueError, match="b"):
             rel.append_column("b", [10, 20, 30])
@@ -432,7 +432,7 @@ class SqlRelationWindowSuite(RelationSuite, suite_base=True):
             sample_relation.with_row_number("rn", (), ("age",))
 
     def test_with_row_number_raises_when_alias_already_exists(self, sample_relation: Any) -> None:
-        """with_row_number must reject an alias colliding with an existing column instead of producing a duplicated name."""
+        """with_row_number must reject an alias colliding with an existing column."""
         with pytest.raises(ValueError, match="category"):
             sample_relation.with_row_number("category")
 
@@ -669,11 +669,7 @@ class SqlRelationWindowSuite(RelationSuite, suite_base=True):
     # --- RANGE frame validation: offset bounds require exactly one ORDER BY column ---
 
     def test_window_range_offset_with_multi_column_order_by_raises(self, sample_relation: Any) -> None:
-        """RANGE frame with a Preceding/Following bound requires exactly one ORDER BY column.
-
-        Multi-column ORDER BY plus a RANGE offset bound is rejected by both DuckDB and SQLite
-        at execute time; the validator must surface a clear Python ValueError instead.
-        """
+        """A RANGE offset bound with multi-column ORDER BY must raise ValueError."""
         with pytest.raises(ValueError) as excinfo:
             sample_relation.window(
                 "SUM(age)",
@@ -701,11 +697,7 @@ class SqlRelationWindowSuite(RelationSuite, suite_base=True):
     def test_window_range_sentinel_only_with_multi_column_order_by_succeeds(
         self, adapter: FrameworkAdapter, sample_relation: Any
     ) -> None:
-        """RANGE with sentinel-only bounds (Unbounded/CurrentRow) must remain legal regardless of ORDER BY count.
-
-        The validation should only fire when at least one bound is Preceding/Following.
-        Counterpart of ``test_window_range_frame_unbounded_to_unbounded`` but with multi-column order_by.
-        """
+        """RANGE with sentinel-only bounds stays legal with multi-column ORDER BY."""
         result = sample_relation.window(
             "SUM(age)",
             "total",

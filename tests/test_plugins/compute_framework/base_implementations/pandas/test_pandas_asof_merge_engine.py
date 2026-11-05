@@ -1,7 +1,7 @@
 """
 Tests for PandasMergeEngine.merge_asof (point-in-time / as-of join).
 
-Consumes the shared AsofMergeEngineTestBase.
+Consumes the shared AsofMergeEngineSuite.
 """
 
 from datetime import timedelta
@@ -9,14 +9,14 @@ from typing import Any
 
 import pytest
 
+from mloda._testing.compute_framework.merge_suite import AsofMergeEngineSuite
+from mloda._testing.framework_adapter import PandasAdapter
 from mloda.provider import FeatureGroup
 from mloda.user import FeatureName
 from mloda.user import Index
 from mloda.user import Options
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig, JoinSpec, Link
-from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_engine import PandasMergeEngine
-from tests.test_plugins.compute_framework.test_tooling.asof.asof_merge_engine_test_base import AsofMergeEngineTestBase
 
 import logging
 
@@ -40,24 +40,10 @@ class _TimedeltaAsofFG(FeatureGroup):
         return [Index(("k",))]
 
 
-@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasAsofMergeEngine(AsofMergeEngineTestBase):
+class TestPandasAsofMergeEngine(AsofMergeEngineSuite):
     """Unit tests for PandasMergeEngine.merge_asof."""
 
-    @classmethod
-    def merge_engine_class(cls) -> type[BaseMergeEngine]:
-        return PandasMergeEngine
-
-    @classmethod
-    def framework_type(cls) -> type[Any]:
-        if pd is None:
-            raise ImportError("Pandas is not installed")
-        # mypy can't infer pd.DataFrame type correctly
-        dataframe_type: type[Any] = pd.DataFrame
-        return dataframe_type
-
-    def get_connection(self) -> Any | None:
-        return None
+    adapter_class = PandasAdapter
 
     def test_timedelta_tolerance_filters_far_match_on_datetime_column(self) -> None:
         """timedelta tolerance must be honored on a real datetime time column (parity with

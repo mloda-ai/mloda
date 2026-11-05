@@ -13,7 +13,7 @@ from mloda.provider import BaseMergeEngine
 from mloda.user import Index, JoinType
 from mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_merge_engine import PolarsLazyMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_engine import PolarsMergeEngine
-from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
+from mloda._testing.compute_framework.merge_suite import make_merge_link
 
 try:
     import polars as pl

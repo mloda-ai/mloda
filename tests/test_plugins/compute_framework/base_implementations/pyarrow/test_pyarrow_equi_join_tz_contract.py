@@ -19,7 +19,7 @@ import pytest
 from mloda.user import Index
 from mloda.user import JoinType
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_merge_engine import PyArrowMergeEngine
-from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
+from mloda._testing.compute_framework.merge_suite import make_merge_link
 
 import logging
 

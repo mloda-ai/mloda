@@ -7,7 +7,6 @@ from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framewor
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from mloda.user import DataType, FeatureName
 from mloda.user import ParallelizationMode
-from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -243,47 +242,6 @@ class TestDuckDBFrameworkSessionTimezone:
             f"Hour floor leaked session timezone {non_utc_zone!r}: "
             f"expected {self.EXPECTED_UTC_HOUR_FLOOR}, got {result}"
         )
-
-
-@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
-class TestDuckDBFrameworkMerge(DataFrameTestBase):
-    """Test DuckDBFramework merge operations using the base test class."""
-
-    @classmethod
-    def framework_class(cls) -> type[Any]:
-        """Return the DuckDBFramework class."""
-        return DuckDBFramework
-
-    def setup_method(self) -> None:
-        """Set up DuckDB connection and test data."""
-        self.conn = duckdb.connect()
-        super().setup_method()
-
-    def create_dataframe(self, data: dict[str, Any]) -> Any:
-        """Create a DuckDB relation from a dictionary."""
-        arrow_table = pa.Table.from_pydict(data)
-        return DuckdbRelation.from_arrow(self.conn, arrow_table)
-
-    def get_connection(self) -> Any | None:
-        """Return DuckDB connection object."""
-        return self.conn
-
-    def _create_test_framework(self) -> Any:
-        """Create a framework instance with sync mode and DuckDB connection."""
-        framework = super()._create_test_framework()
-        framework.set_framework_connection_object(self.conn)
-        return framework
-
-    def _get_merge_engine(self, framework: Any) -> Any:
-        """Get merge engine factory that returns an instance with connection for DuckDB."""
-        merge_engine_class = framework.merge_engine()
-        framework_connection = framework.get_framework_connection_object()
-
-        class MergeEngineFactory:
-            def __call__(self) -> Any:
-                return merge_engine_class(framework_connection)
-
-        return MergeEngineFactory()
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")

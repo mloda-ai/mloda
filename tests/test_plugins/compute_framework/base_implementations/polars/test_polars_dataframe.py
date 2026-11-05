@@ -6,7 +6,6 @@ import pyarrow as pa
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
-from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -98,24 +97,6 @@ class TestPolarsDataFrameComputeFramework:
         pl_dataframe.data = expected_data
         pl_dataframe.set_column_names()
         assert pl_dataframe.column_names == {"column1", "column2"}
-
-
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsDataFrameMerge(DataFrameTestBase):
-    """Test PolarsDataFrame merge operations using the base test class."""
-
-    @classmethod
-    def framework_class(cls) -> type[Any]:
-        """Return the PolarsDataFrame class."""
-        return PolarsDataFrame
-
-    def create_dataframe(self, data: dict[str, Any]) -> Any:
-        """Create a polars DataFrame from a dictionary."""
-        return pl.DataFrame(data)
-
-    def get_connection(self) -> Any | None:
-        """Return connection object (None for polars)."""
-        return None
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")

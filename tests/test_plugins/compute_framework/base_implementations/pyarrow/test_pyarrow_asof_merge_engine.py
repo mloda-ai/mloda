@@ -1,8 +1,7 @@
 """
 Tests for PyArrowMergeEngine.merge_asof (point-in-time / as-of join).
 
-Consumes the shared AsofMergeEngineTestBase. PyArrow is both the framework
-under test and the interchange format used by the DataConverter.
+Consumes the shared AsofMergeEngineSuite.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -11,11 +10,12 @@ from typing import Any
 
 import pytest
 
+from mloda._testing.compute_framework.merge_suite import AsofMergeEngineSuite
+from mloda._testing.declarations import Cause
+from mloda._testing.framework_adapter import FrameworkAdapter, PyArrowAdapter
 from mloda.user import Index
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
-from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_merge_engine import PyArrowMergeEngine
-from tests.test_plugins.compute_framework.test_tooling.asof.asof_merge_engine_test_base import AsofMergeEngineTestBase
 
 import logging
 
@@ -28,23 +28,11 @@ except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
 
-@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
-class TestPyArrowAsofMergeEngine(AsofMergeEngineTestBase):
+class TestPyArrowAsofMergeEngine(AsofMergeEngineSuite):
     """Unit tests for PyArrowMergeEngine.merge_asof."""
 
-    @classmethod
-    def merge_engine_class(cls) -> type[BaseMergeEngine]:
-        return PyArrowMergeEngine
-
-    @classmethod
-    def framework_type(cls) -> type[Any]:
-        if pa is None:
-            raise ImportError("PyArrow is not installed")
-        table_type: type[Any] = pa.Table
-        return table_type
-
-    def get_connection(self) -> Any | None:
-        return None
+    adapter_class = PyArrowAdapter
+    switched_off = {"test_allow_exact_matches_false": Cause.BACKEND}
 
     def test_nearest_direction(self) -> None:
         """Vector F: native PyArrow Acero (Table.join_asof) cannot express 'nearest' -> ValueError.
@@ -60,7 +48,7 @@ class TestPyArrowAsofMergeEngine(AsofMergeEngineTestBase):
         with pytest.raises(ValueError, match="PyArrowMergeEngine"):
             engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
 
-    def test_allow_exact_matches_false(self) -> None:
+    def test_allow_exact_matches_false(self, adapter: FrameworkAdapter, merge_engine: Any) -> None:
         """Override Vector C: Acero's asof match range always includes exact matches.
 
         Native PyArrow ``Table.join_asof`` performs an inclusive tolerance comparison, so

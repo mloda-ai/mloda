@@ -75,6 +75,22 @@ def test_round_trip(adapter: Any) -> None:
         assert adapter.column_values(result, "b") == [True, False, None]
 
 
+def test_rows_reads_the_result_as_a_list_of_dicts(adapter: Any) -> None:
+    with adapter:
+        result = adapter.from_typed(_data())
+
+        assert adapter.rows(result) == [
+            {"i": 1, "d": 1.5, "s": "a", "b": True},
+            {"i": None, "d": 2.5, "s": None, "b": False},
+            {"i": 3, "d": None, "s": "c", "b": None},
+        ]
+
+
+def test_rows_zero_row_result_is_empty_list(adapter: Any) -> None:
+    with adapter:
+        assert adapter.rows(adapter.from_typed(_zero_rows())) == []
+
+
 def test_null_timestamp_reads_back_as_none(adapter: Any) -> None:
     values = [datetime(2024, 1, 1), None]
     with adapter:

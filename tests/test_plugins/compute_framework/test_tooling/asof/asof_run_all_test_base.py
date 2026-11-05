@@ -23,6 +23,7 @@ from typing import Any
 
 import pytest
 
+from mloda._testing.compute_framework.merge_suite import ASOF_SCENARIOS
 from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
@@ -37,7 +38,6 @@ from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import mloda
 
-from tests.test_plugins.compute_framework.test_tooling.asof.asof_scenarios import ASOF_SCENARIOS
 from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import records_from_frame
 
 import logging
@@ -58,12 +58,6 @@ _SCENARIO = ASOF_SCENARIOS["backward_single_key"]
 #   (k=1, t=20) -> right t=18 -> rv=2
 #   (k=2, t=15) -> right t=5  -> rv=3
 _EXPECTED_ENCODED = sorted(["1|10|1", "1|20|2", "2|15|3"])
-
-
-def _columns_to_lists(rows: list[dict[str, Any]]) -> dict[str, list[Any]]:
-    """Convert a list of row dicts into a column-oriented dict for a data creator group."""
-    keys = rows[0].keys()
-    return {key: [row[key] for row in rows] for key in keys}
 
 
 def _encode_records(records: list[dict[str, Any]]) -> list[str]:
@@ -90,7 +84,7 @@ class AsofLeftFeature(DataCreatorFeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _columns_to_lists(_SCENARIO["left"])
+        return _SCENARIO["left"].to_python_dict()
 
 
 class AsofRightFeature(DataCreatorFeatureGroup):
@@ -102,7 +96,7 @@ class AsofRightFeature(DataCreatorFeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _columns_to_lists(_SCENARIO["right"])
+        return _SCENARIO["right"].to_python_dict()
 
 
 class AsofJoinedFeature(FeatureGroup):

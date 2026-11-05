@@ -7,9 +7,8 @@ import pyarrow as pa
 import pytest
 
 from mloda.user import DataType, FeatureName, ParallelizationMode
-from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework, _regexp
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
-from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -206,39 +205,6 @@ class TestSqliteTfsConnectionInit(TfsConnectionInitMixin):
         conn = sqlite3.connect(":memory:")
         yield conn
         conn.close()
-
-
-class TestSqliteFrameworkMerge(DataFrameTestBase):
-    @classmethod
-    def framework_class(cls) -> type[Any]:
-        return SqliteFramework
-
-    def setup_method(self) -> None:
-        self.conn = sqlite3.connect(":memory:")
-        self.conn.create_function("REGEXP", 2, _regexp)
-        super().setup_method()
-
-    def create_dataframe(self, data: dict[str, Any]) -> Any:
-        arrow_table = pa.Table.from_pydict(data)
-        return SqliteRelation.from_arrow(self.conn, arrow_table)
-
-    def get_connection(self) -> Any | None:
-        return self.conn
-
-    def _create_test_framework(self) -> Any:
-        framework = super()._create_test_framework()
-        framework.set_framework_connection_object(self.conn)
-        return framework
-
-    def _get_merge_engine(self, framework: Any) -> Any:
-        merge_engine_class = framework.merge_engine()
-        framework_connection = framework.get_framework_connection_object()
-
-        class MergeEngineFactory:
-            def __call__(self) -> Any:
-                return merge_engine_class(framework_connection)
-
-        return MergeEngineFactory()
 
 
 class TestSqliteDtypeExtraction(DtypeExtractionTestMixin):

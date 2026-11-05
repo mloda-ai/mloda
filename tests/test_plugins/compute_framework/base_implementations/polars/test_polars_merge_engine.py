@@ -1,15 +1,12 @@
 from typing import Any
 import pytest
 
+from mloda._testing.compute_framework.merge_suite import MergeEngineSuite, make_merge_link
+from mloda._testing.framework_adapter import PolarsAdapter
 from mloda.user import JoinType
 from mloda.user import Index
-from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_engine import PolarsMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_merge_engine import PolarsLazyMergeEngine
-from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
-from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
-    MultiIndexMergeEngineTestBase,
-)
 
 import logging
 
@@ -377,20 +374,7 @@ class TestPolarsMergeEngine:
         assert result.equals(expected)
 
 
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
-    """Test PolarsMergeEngine using shared multi-index + conformance scenarios."""
+class TestPolarsMergeEngineMultiIndex(MergeEngineSuite):
+    """Test PolarsMergeEngine using the shared merge suite."""
 
-    @classmethod
-    def merge_engine_class(cls) -> type[BaseMergeEngine]:
-        return PolarsMergeEngine
-
-    @classmethod
-    def framework_type(cls) -> type[Any]:
-        if pl is None:
-            raise ImportError("Polars is not installed")
-        dataframe_type: type[Any] = pl.DataFrame
-        return dataframe_type
-
-    def get_connection(self) -> Any | None:
-        return None
+    adapter_class = PolarsAdapter

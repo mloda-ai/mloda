@@ -13,7 +13,7 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_value_sample import (
     sample_string_values as _real_sample_string_values,
 )
-from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
+from mloda._testing.compute_framework.merge_suite import make_merge_link
 
 logger = logging.getLogger(__name__)
 

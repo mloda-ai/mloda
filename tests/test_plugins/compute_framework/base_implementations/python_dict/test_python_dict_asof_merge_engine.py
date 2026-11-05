@@ -1,21 +1,18 @@
 """
 Tests for PythonDictMergeEngine.merge_asof (point-in-time / as-of join).
 
-Consumes the shared AsofMergeEngineTestBase. PythonDict's native format is a
-columnar dict; the DataConverter routes through PyArrow, so PyArrow must be available.
+Consumes the shared AsofMergeEngineSuite. PythonDict's native format is a columnar dict.
 """
-
-from typing import Any
 
 import pytest
 
+from mloda._testing.compute_framework.merge_suite import AsofMergeEngineSuite
+from mloda._testing.framework_adapter import PythonDictAdapter
 from mloda.user import Index
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
-from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_merge_engine import (
     PythonDictMergeEngine,
 )
-from tests.test_plugins.compute_framework.test_tooling.asof.asof_merge_engine_test_base import AsofMergeEngineTestBase
 
 import logging
 
@@ -28,20 +25,10 @@ except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
 
-@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
-class TestPythonDictAsofMergeEngine(AsofMergeEngineTestBase):
+class TestPythonDictAsofMergeEngine(AsofMergeEngineSuite):
     """Unit tests for PythonDictMergeEngine.merge_asof."""
 
-    @classmethod
-    def merge_engine_class(cls) -> type[BaseMergeEngine]:
-        return PythonDictMergeEngine
-
-    @classmethod
-    def framework_type(cls) -> type[Any]:
-        return dict
-
-    def get_connection(self) -> Any | None:
-        return None
+    adapter_class = PythonDictAdapter
 
     def test_nearest_direction(self) -> None:
         """Vector F: PythonDict supports 'nearest' -> closer right row (t=8, gap 2) matched."""

@@ -122,6 +122,14 @@ def applicable_aspects(cls: type[ComputeFramework]) -> tuple[str, ...]:
     return tuple(aspects)
 
 
+def serves_asof_merge(cls: type[ComputeFramework]) -> bool:
+    """True when the framework serves merge and its merge engine overrides BaseMergeEngine.merge_asof."""
+    if "merge" not in applicable_aspects(cls):
+        return False
+    engine, error = _read_accessor(cls, "merge_engine")
+    return error is None and engine is not _ABSENT and getattr(engine, "merge_asof") is not BaseMergeEngine.merge_asof
+
+
 def check_compute_framework_shape(cls: type[ComputeFramework]) -> CheckResult:
     """Check construction (including uuid=), is_available and, if available, the accessors."""
     failures = _construct_failures(cls)

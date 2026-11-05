@@ -17,7 +17,7 @@ from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda.provider import DefaultOptionKeys
-from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
+from mloda._testing.compute_framework.merge_suite import make_merge_link
 
 
 class AppendMergeTestFeature(DataCreatorFeatureGroup):

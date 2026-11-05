@@ -89,6 +89,12 @@ class FrameworkAdapter(ABC):
     def column_values(self, result: Any, column: str) -> list[Any]:
         """The column as Python values with nulls as None."""
 
+    def rows(self, result: Any) -> list[dict[str, Any]]:
+        """The result as a list of row dicts, nulls as None; one read, so lazy results run once."""
+        names = self.column_names(result)
+        columns = [self.column_values(result, name) for name in names]
+        return [dict(zip(names, values)) for values in zip(*columns)]
+
     @abstractmethod
     def column_type(self, result: Any, column: str) -> Any:
         """The framework's native type object for the column."""
@@ -170,6 +176,9 @@ class _ArrowReadAdapter(FrameworkAdapter):
 
     def column_values(self, result: Any, column: str) -> list[Any]:
         return list(self.to_table(result).column(column).to_pylist())
+
+    def rows(self, result: Any) -> list[dict[str, Any]]:
+        return list(self.to_table(result).to_pylist())
 
     def column_type(self, result: Any, column: str) -> Any:
         return self.to_table(result).schema.field(column).type
@@ -261,6 +270,9 @@ class PolarsAdapter(FrameworkAdapter):
 
     def column_values(self, result: Any, column: str) -> list[Any]:
         return list(self._eager(result)[column].to_list())
+
+    def rows(self, result: Any) -> list[dict[str, Any]]:
+        return list(self._eager(result).to_dicts())
 
     def column_type(self, result: Any, column: str) -> Any:
         return self._eager(result).schema[column]

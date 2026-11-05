@@ -1,21 +1,16 @@
 import datetime
 import sqlite3
-from typing import Any
 
 import pyarrow as pa
 import pytest
 
+from mloda._testing.compute_framework.merge_suite import MergeEngineSuite, make_merge_link
+from mloda._testing.framework_adapter import SqliteAdapter
 from mloda.user import JoinType
 from mloda.user import Index
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
-from mloda.provider import BaseMergeEngine
-from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import _regexp
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine import SqliteMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
-from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
-from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
-    MultiIndexMergeEngineTestBase,
-)
 
 
 @pytest.fixture
@@ -399,20 +394,8 @@ def test_execute_sql_raises_value_error_when_no_connection() -> None:
         engine._execute_sql("SELECT 1")
 
 
-class TestSqliteMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
-    @classmethod
-    def merge_engine_class(cls) -> type[BaseMergeEngine]:
-        return SqliteMergeEngine
-
-    @classmethod
-    def framework_type(cls) -> type[Any]:
-        return SqliteRelation
-
-    def get_connection(self) -> Any | None:
-        if not hasattr(self, "_connection"):
-            self._connection = sqlite3.connect(":memory:")
-            self._connection.create_function("REGEXP", 2, _regexp)
-        return self._connection
+class TestSqliteMergeEngineMultiIndex(MergeEngineSuite):
+    adapter_class = SqliteAdapter
 
 
 class TestSqliteUnionResultTypes:

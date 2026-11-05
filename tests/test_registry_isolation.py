@@ -1023,7 +1023,7 @@ _BUILDER_CASES: list[Any] = [
 
 
 _TD = "tests.test_plugins.compute_framework.test_tooling"
-_TDC = _TD + ".multi_index.test_data_converter"
+_TDC = _TD + ".test_policy_run_all_test_base"
 _PS = "tests.test_project_structure"
 
 _TEST_IMPORT_CASES: list[Any] = [
@@ -1036,11 +1036,11 @@ _TEST_IMPORT_CASES: list[Any] = [
     pytest.param("from tests.test_core import test_tooling\n", "tests", {}, id="package-not-file"),
     pytest.param("from tests.test_core.test_tooling import x\n", "tests", {}, id="package-from-import"),
     pytest.param("from tests.registry_isolation import x\n", "tests", {}, id="non-test-file"),
-    pytest.param("from .test_data_converter import a\n", _TD + ".multi_index", {_TDC: {"a"}}, id="relative-single-dot"),
+    pytest.param("from .test_policy_run_all_test_base import a\n", _TD, {_TDC: {"a"}}, id="relative-single-dot"),
     pytest.param(
-        "from ..multi_index.test_data_converter import a\n", _TD + ".asof", {_TDC: {"a"}}, id="relative-double-dot"
+        "from ..test_policy_run_all_test_base import a\n", _TD + ".asof", {_TDC: {"a"}}, id="relative-double-dot"
     ),
-    pytest.param("from . import test_data_converter\n", _TD + ".multi_index", {_TDC: None}, id="relative-from-dot"),
+    pytest.param("from . import test_policy_run_all_test_base\n", _TD, {_TDC: None}, id="relative-from-dot"),
     pytest.param(f"from {_PS} import a\nimport {_PS}\n", "tests", {_PS: None}, id="name-and-whole-merge-to-none"),
     pytest.param(f"from {_PS} import *  # noqa: F403\n", "tests", {_PS: None}, id="star-import-is-whole-module"),
     pytest.param(

@@ -1,39 +1,8 @@
-from typing import Any
-import pytest
-
-from mloda.provider import BaseMergeEngine
-from mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_merge_engine import PolarsLazyMergeEngine
-from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
-    MultiIndexMergeEngineTestBase,
-)
-
-import logging
-
-logger = logging.getLogger(__name__)
-
-try:
-    import polars as pl
-except ImportError:
-    logger.warning("Polars is not installed. Some tests will be skipped.")
-    pl = None  # type: ignore
+from mloda._testing.compute_framework.merge_suite import MergeEngineSuite
+from mloda._testing.framework_adapter import PolarsLazyAdapter
 
 
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsLazyMergeEngine(MultiIndexMergeEngineTestBase):
-    """Test PolarsLazyMergeEngine using shared multi-index test scenarios."""
+class TestPolarsLazyMergeEngine(MergeEngineSuite):
+    """Test PolarsLazyMergeEngine using the shared merge suite."""
 
-    @classmethod
-    def merge_engine_class(cls) -> type[BaseMergeEngine]:
-        """Return the PolarsLazyMergeEngine class."""
-        return PolarsLazyMergeEngine
-
-    @classmethod
-    def framework_type(cls) -> type[Any]:
-        """Return polars LazyFrame type."""
-        if pl is None:
-            raise ImportError("Polars is not installed")
-        return pl.LazyFrame
-
-    def get_connection(self) -> Any | None:
-        """Polars does not require a connection object."""
-        return None
+    adapter_class = PolarsLazyAdapter

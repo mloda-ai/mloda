@@ -560,14 +560,37 @@ class TestNoRelation(SqlRelationWindowSuite):
 """
 
 
+_MERGE_WIRING_MODULE = """
+from mloda._testing.compute_framework.merge_suite import MergeEngineSuite
+from mloda._testing.framework_adapter import PythonDictAdapter
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+
+
+class NoMergeFramework(ComputeFramework):
+    @classmethod
+    def merge_engine(cls):
+        raise NotImplementedError
+
+
+class NoMergeAdapter(PythonDictAdapter):
+    def compute_framework(self):
+        return NoMergeFramework
+
+
+class TestNoMerge(MergeEngineSuite):
+    adapter_class = NoMergeAdapter
+"""
+
+
 @pytest.mark.timeout(60)
 @pytest.mark.parametrize(
     ("module", "select", "framework", "aspect"),
     [
         (_WIRING_MODULE, [], "NoFilterFramework", "filter"),
         (_RELATION_WIRING_MODULE, ["-k", "test_from_dict_basic or test_len"], "PythonDictFramework", "sql_relation"),
+        (_MERGE_WIRING_MODULE, [], "NoMergeFramework", "merge"),
     ],
-    ids=["filter", "relation"],
+    ids=["filter", "relation", "merge"],
 )
 def test_framework_without_the_aspect_fails_with_the_wiring_message(
     pytester: pytest.Pytester, module: str, select: list[str], framework: str, aspect: str
@@ -591,3 +614,23 @@ def test_adapter_is_fresh_per_test_and_closed_afterwards(pytester: pytest.Pytest
 
     assert result.parseoutcomes().get("failed", 0) == 0
     assert result.ret == 0
+
+
+def test_make_merge_link_uses_feature_group_itself_and_carries_the_settings() -> None:
+    from mloda._testing.compute_framework.merge_suite import make_merge_link
+    from mloda.core.abstract_plugins.components.index.index import Index
+    from mloda.core.abstract_plugins.components.link import AsOfJoinConfig, JoinType
+    from mloda.provider import FeatureGroup
+
+    left, right = Index(("k", "a")), Index(("k", "b"))
+    config = AsOfJoinConfig("lt", "rt", direction="forward")
+
+    link = make_merge_link(JoinType.ASOF, left, right, config)
+
+    assert link.left_feature_group is FeatureGroup
+    assert link.right_feature_group is FeatureGroup
+    assert link.jointype == JoinType.ASOF
+    assert link.left_index == left
+    assert link.right_index == right
+    assert link.asof_config is config
+    assert make_merge_link(JoinType.INNER, left, right).asof_config is None

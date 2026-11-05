@@ -26,7 +26,6 @@ from tests.test_plugins.compute_framework.base_implementations.empty_result_test
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
-from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 
 logger = logging.getLogger(__name__)
 
@@ -118,24 +117,6 @@ class TestPandasTransformList:
         assert len(result) == 2
         assert result["content"].iloc[0] == "first"
         assert result["content"].iloc[1] == "second"
-
-
-@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasDataFrameMerge(DataFrameTestBase):
-    """Test PandasDataFrame merge operations using the base test class."""
-
-    @classmethod
-    def framework_class(cls) -> type[Any]:
-        """Return the PandasDataFrame class."""
-        return PandasDataFrame
-
-    def create_dataframe(self, data: dict[str, Any]) -> Any:
-        """Create a pandas DataFrame from a dictionary."""
-        return pd.DataFrame.from_dict(data)
-
-    def get_connection(self) -> Any | None:
-        """Return connection object (None for pandas)."""
-        return None
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

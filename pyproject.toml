@@ -65,7 +65,7 @@ yaml = ["pyyaml"]
 duckdb = ["duckdb<3", "pyarrow>=14.0.1"]
 sqlite = ["pyarrow>=14.0.1"]
 iceberg = ["pyiceberg", "pyarrow>=14.0.1"]
-spark = ["pyspark>=3.5", "pyarrow>=14.0.1"]
+spark = ["pyspark>=4.0", "pyarrow>=14.0.1"]
 sklearn = [
     "scikit-learn>=1.0.0",
     "joblib>=1.0.0",

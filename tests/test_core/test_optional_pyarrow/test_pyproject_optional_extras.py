@@ -91,6 +91,27 @@ def test_python_dict_framework_has_no_install_hint() -> None:
     assert PythonDictFramework.INSTALL_HINT is None
 
 
+def test_spark_extra_requires_pyspark_4() -> None:
+    """The spark extra must require pyspark>=4.0: toArrow() arrived in 4.0.
+
+    A 3.5 install passes but fails at the first Spark-to-PyArrow transform.
+    The lockfile's spark pyspark specifier must match, and its resolved
+    pyspark version must satisfy the new floor.
+    """
+    optional = _load_optional_deps()
+    spark_deps = optional["spark"]
+    pyspark_dep = next(dep for dep in spark_deps if dep.startswith("pyspark"))
+    req = Requirement(pyspark_dep)
+    assert not req.specifier.contains("3.5"), f"spark extra still allows pyspark 3.5: {pyspark_dep}"
+    assert req.specifier.contains("4.0"), f"spark extra must require pyspark>=4.0: {pyspark_dep}"
+
+    lock = (_PYPROJECT.parent / "uv.lock").read_text()
+    assert "{ name = \"pyspark\", marker = \"extra == 'spark'\", specifier = \">=4.0\" }" in lock
+    resolved = re.search(r'\[\[package\]\]\nname = "pyspark"\nversion = "([^"]+)"', lock)
+    assert resolved is not None, "pyspark package missing from uv.lock"
+    assert req.specifier.contains(resolved.group(1)), f"lock pins pyspark {resolved.group(1)}, outside {req.specifier}"
+
+
 def test_core_dependencies_stay_empty() -> None:
     """Core installs without pyarrow, so project.dependencies must stay empty."""
     assert _load_project()["dependencies"] == []

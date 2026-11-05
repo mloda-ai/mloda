@@ -8,6 +8,7 @@ from mloda.core.abstract_plugins.components.connection_requirement import Connec
 from mloda.core.abstract_plugins.components.credential_handle import declared_credential_handles
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.data_access_collection import (
+    DataAccessCollection,
     credential_handle_of,
     resolve_connection_handle,
 )
@@ -276,7 +277,7 @@ class ExecutionPlan:
             return step.connection_handle
         return next((h for h, c in connections.items() if c is connection), None)
 
-    def _bound_credential_handle(self, step: FeatureGroupStep) -> str | None:
+    def _bound_credential_handle(self, step: FeatureGroupStep, collection: DataAccessCollection | None) -> str | None:
         """The handle of the credential the step's source match binds: `<unnamed>`, `<pointer>`, or its name."""
         match = step.features.input_data_match
         if match is None or not is_nominal_subclass(match[0], SourceFeatureGroup):
@@ -284,11 +285,19 @@ class ExecutionPlan:
         credentials = match[0].match_credentials(match[1])
         if credentials is None:
             return None
-        collection = self.data_access_collection
         handle = credential_handle_of(collection, credentials)
         if handle is None:
             return "<pointer>"
         return "<unnamed>" if collection is not None and handle in collection.auto_handles else handle
+
+    def source_bound_handles(self, collection: DataAccessCollection | None) -> set[str]:
+        """Named handles a source step binds at match time, recomputed from the matches against `collection`."""
+        bound = {
+            self._bound_credential_handle(step, collection)
+            for step in self.execution_plan
+            if isinstance(step, FeatureGroupStep)
+        }
+        return {h for h in bound if h is not None and h not in ("<pointer>", "<unnamed>")}
 
     def _stamp_connection_handles(self, steps: Sequence[Step]) -> None:
         """Stamp connection, declared and bound credential handles on every feature group and join step."""
@@ -303,7 +312,7 @@ class ExecutionPlan:
                 step.credential_handles = declared_credential_handles(
                     step.feature_group, step.features.options or Options()
                 )
-                bound = self._bound_credential_handle(step)
+                bound = self._bound_credential_handle(step, self.data_access_collection)
                 step.features.credential_handles = (
                     step.credential_handles
                     if bound is None or bound in step.credential_handles

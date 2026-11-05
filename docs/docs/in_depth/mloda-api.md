@@ -101,6 +101,10 @@ result_1 = session.run(api_data={"MyKey": {"col": [1.0, 2.0]}})
 result_2 = session.run(api_data={"MyKey": {"col": [3.0, 4.0]}})
 ```
 
+`run()` and `stream_run()` also accept `credentials={handle: Credential | dict}`, a fresh value for a credential handle a
+step declares, used for that run only (not accepted by `run_all()`/`stream_all()`). See
+[Runtime access versus match-time binding](named-data-access-handles.md#runtime-access-versus-match-time-binding).
+
 `run()` also accepts an `artifacts` parameter for switching between artifact
 save and load modes across calls. See [Artifacts](artifacts.md#run-time-artifact-switching-with-preparerun) for details.
 

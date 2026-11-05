@@ -64,6 +64,14 @@ class TestRunContextPlanIdAndStartedAt:
         assert hashed == plain
         assert hash(hashed) == hash(plain)
         assert dataclasses.fields(RunContext)[-1].name == "structure_hash"
+        assert dataclasses.fields(RunContext)[-2].name == "run_credentials"
+
+    def test_run_credentials_defaults_to_empty_and_round_trips(self) -> None:
+        assert RunContext().run_credentials == ()
+
+        restored = pickle.loads(pickle.dumps(RunContext(run_credentials=("vault-a",))))  # nosec B301
+
+        assert restored.run_credentials == ("vault-a",)
 
     def test_plan_id_is_frozen(self) -> None:
         with pytest.raises(dataclasses.FrozenInstanceError):

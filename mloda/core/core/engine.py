@@ -247,7 +247,12 @@ class Engine:
         """Select the extender(s) registered for hook, from the table built at init."""
         return self._hook_extenders.get(hook)
 
-    def compute(self, flight_server: ParallelRunnerFlightServer | None = None) -> ExecutionOrchestrator:
+    def compute(
+        self,
+        flight_server: ParallelRunnerFlightServer | None = None,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> ExecutionOrchestrator:
+        """Build the run's orchestrator; a passed collection overrides the engine's for this run only."""
         execution_plan_copy = deepcopy(self.execution_planner)
         orchestrator = ExecutionOrchestrator(
             execution_plan_copy,
@@ -258,7 +263,9 @@ class Engine:
             run_context=self.run_context,
             output_framework=self.output_framework,
             output_connection=self.output_connection,
-            data_access_collection=self.data_access_collection,
+            data_access_collection=(
+                self.data_access_collection if data_access_collection is None else data_access_collection
+            ),
         )
         if isinstance(orchestrator, ExecutionOrchestrator):
             return orchestrator

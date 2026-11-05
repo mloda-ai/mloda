@@ -24,6 +24,7 @@ class RunContext:
     principal: str | None = None
     # Plan-time owning-distribution version per module. None field: nothing resolved; None value: no owner.
     plugin_versions: Mapping[str, str | None] | None = field(default=None, hash=False)
+    run_credentials: tuple[str, ...] = ()  # handle names passed to this run, never values
     structure_hash: str | None = field(default=None, compare=False)
 
     def __post_init__(self) -> None:

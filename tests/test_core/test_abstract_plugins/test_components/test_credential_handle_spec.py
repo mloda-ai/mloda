@@ -1,5 +1,6 @@
 """credential_handle_spec: plan-time handle validation, plan records and display."""
 
+import inspect
 import re
 import types
 from pathlib import Path
@@ -12,6 +13,7 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.credential_handle import refuse_credential_option_values
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
@@ -541,6 +543,220 @@ class TestPlanTimeRefusals:
 
         assert "vault-default" in message
         assert SECRET not in message
+
+
+_FRESH = {"key": "chs-fresh-secret-4321"}  # nosec B105
+_FRESH_FIELDS = {"chs_user": "chs-fresh-user-1", "chs_pass": "chs-fresh-pass-2"}  # nosec B105
+
+
+class _RunRecorder(Extender):
+    """Records on_run_start (with the RunContext) and every calculate_feature call."""
+
+    def __init__(self) -> None:
+        self.events: list[str] = []
+        self.runs: list[Any] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        self.events.append("calculate")
+        return func(*args, **kwargs)
+
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        self.events.append("run_start")
+        self.runs.append(run)
+
+
+def _vault_session(recorder: _RunRecorder | None = None, dac: DataAccessCollection | None = None) -> Any:
+    dac = _dac(**{"vault-a": {"key": SECRET}, "vault-b": {"key": OTHER_SECRET}}) if dac is None else dac
+    return mloda.prepare(
+        [_vault("vault-a")],
+        compute_frameworks=[PandasDataFrame],
+        data_access_collection=dac,
+        plugin_collector=_plugins(ChsVaultFG),
+        function_extender=None if recorder is None else {recorder},
+    )
+
+
+def _refused_run(session: Any, credentials: Any, recorder: _RunRecorder) -> str:
+    with pytest.raises(ValueError) as exc:
+        session.run(credentials=credentials)
+    assert recorder.events == []
+    return str(exc.value)
+
+
+class TestRunStartRefusals:
+    def test_an_undeclared_handle_names_it_and_the_declared_ones(self) -> None:
+        recorder = _RunRecorder()
+        session = _vault_session(recorder)
+
+        message = _refused_run(session, {"vault-b": _FRESH}, recorder)
+
+        assert "vault-b" in message
+        assert "vault-a" in message
+        assert _FRESH["key"] not in message
+
+    def test_a_session_prepared_without_a_collection_refuses_any_handle(self) -> None:
+        recorder = _RunRecorder()
+        session = mloda.prepare(
+            ["chs_plain_a"],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_plugins(ChsFallbackFG),
+            function_extender={recorder},
+        )
+
+        message = _refused_run(session, {"vault-a": _FRESH}, recorder)
+
+        assert "vault-a" in message
+        assert _FRESH["key"] not in message
+
+    def test_stream_run_refuses_at_the_call_not_on_iteration(self) -> None:
+        recorder = _RunRecorder()
+        session = _vault_session(recorder)
+
+        with pytest.raises(ValueError, match="vault-b"):
+            session.stream_run(credentials={"vault-b": _FRESH})
+
+        assert recorder.events == []
+
+    def test_preparing_never_collects_credentials(self) -> None:
+        with pytest.raises(TypeError):
+            mloda.prepare(  # type: ignore[call-arg]
+                [_vault("vault-a")],
+                compute_frameworks=[PandasDataFrame],
+                credentials={"vault-a": _FRESH},
+            )
+
+    @pytest.mark.parametrize("entry", ["run_all", "stream_all"])
+    def test_the_all_entry_points_have_no_credentials_parameter(self, entry: str) -> None:
+        assert "credentials" not in inspect.signature(getattr(mloda, entry)).parameters
+
+    @pytest.mark.parametrize(
+        ("factory", "credentials", "expected", "forbidden"),
+        [
+            (
+                "fields",
+                {"vault-main": {"chs_user": _FRESH_FIELDS["chs_user"]}},
+                ("vault-main", "chs_pass"),
+                _FRESH_FIELDS["chs_user"],
+            ),
+            ("vault", {"vault-a": {"chs_blob": BYTES_SECRET}}, ("vault-a", "chs_blob"), BYTES_SECRET.decode()),
+            ("vault", {"vault-a": "chs-plain-string-secret"}, (), "chs-plain-string-secret"),
+            ("vault", ["vault-a"], ("list",), "chs-unreachable-sentinel"),
+            ("vault", {7: _FRESH}, ("int",), _FRESH["key"]),
+        ],
+        ids=["missing-field", "bytes-leaf", "mis-wrapped", "non-mapping", "non-str-key"],
+    )
+    def test_a_malformed_fresh_credential_is_refused_without_printing_its_value(
+        self, factory: str, credentials: Any, expected: tuple[str, ...], forbidden: str
+    ) -> None:
+        recorder = _RunRecorder()
+        if factory == "fields":
+            session = mloda.prepare(
+                [Feature("chs_fields_a", options={"chs_fields_handle": "vault-main"})],
+                compute_frameworks=[PandasDataFrame],
+                data_access_collection=_dac(**{"vault-main": dict(_FRESH_FIELDS)}),
+                plugin_collector=_plugins(ChsFieldsFG),
+                function_extender={recorder},
+            )
+        else:
+            session = _vault_session(recorder)
+
+        message = _refused_run(session, credentials, recorder)
+
+        for part in expected:
+            assert part in message
+        assert forbidden not in message
+
+    @pytest.mark.parametrize("declared_too", [False, True], ids=["source-only", "source-and-declared"])
+    def test_a_handle_a_source_step_binds_is_refused_naming_the_handle(
+        self, tmp_path: Path, declared_too: bool
+    ) -> None:
+        recorder = _RunRecorder()
+        dac, _, _ = bound_case(tmp_path, "named")
+        session = mloda.prepare(
+            ["bound_col", _vault("db-main")] if declared_too else ["bound_col"],
+            compute_frameworks=[PyArrowTable, PandasDataFrame] if declared_too else [PyArrowTable],
+            data_access_collection=dac,
+            plugin_collector=_plugins(SqliteFG, ChsVaultFG) if declared_too else _plugins(SqliteFG),
+            function_extender={recorder},
+        )
+
+        message = _refused_run(session, {"db-main": {"sqlite": "chs-other.db"}}, recorder)
+
+        assert "db-main" in message
+        assert "prepare" in message
+        assert "chs-other.db" not in message
+
+    def test_a_successful_fresh_run_leaves_the_session_collection_unchanged(self) -> None:
+        session = _vault_session()
+        before = repr(session.data_access_collection.credentials)
+
+        session.run(credentials={"vault-a": _FRESH})
+
+        assert repr(session.data_access_collection.credentials) == before
+        assert _FRESH["key"] not in repr(session.data_access_collection.credentials)
+
+    @pytest.mark.parametrize("entry", ["run", "stream_run"])
+    def test_the_fresh_value_is_not_reachable_from_the_runner_after_the_run(self, entry: str) -> None:
+        session = _vault_session()
+
+        if entry == "run":
+            session.run(credentials={"vault-a": Credential(**_FRESH)})
+        else:
+            list(session.stream_run(credentials={"vault-a": Credential(**_FRESH)}))
+
+        for holder in (session.runner, session.runner.executor):
+            collection = holder.data_access_collection
+            if collection is not None:
+                raw = [value for credential in collection.credentials.values() for value in dict(credential).values()]
+                assert _FRESH["key"] not in raw
+        if entry == "run":
+            assert session.get_result()
+        assert session.get_artifacts() is not None
+
+
+class TestFreshRunRecord:
+    def test_on_run_start_sees_sorted_handle_names_and_no_value(self) -> None:
+        recorder = _RunRecorder()
+        session = mloda.prepare(
+            [_vault("vault-a"), _vault("vault-b", "chs_vault_b")],
+            compute_frameworks=[PandasDataFrame],
+            data_access_collection=_dac(**{"vault-a": {"key": SECRET}, "vault-b": {"key": OTHER_SECRET}}),
+            plugin_collector=_plugins(ChsVaultFG),
+            function_extender={recorder},
+        )
+
+        session.run(credentials={"vault-b": {"key": "chs-fresh-b-4321"}, "vault-a": _FRESH})
+
+        (run,) = recorder.runs[-1:]
+        assert run.run_credentials == ("vault-a", "vault-b")
+        for value in (_FRESH["key"], "chs-fresh-b-4321"):
+            assert value not in repr(run)
+
+    def test_a_run_without_credentials_records_no_names(self) -> None:
+        recorder = _RunRecorder()
+        session = _vault_session(recorder)
+
+        session.run()
+
+        assert recorder.runs[-1].run_credentials == ()
+
+    def test_the_plan_lock_and_hash_are_unchanged_by_a_fresh_run(self) -> None:
+        session = _vault_session()
+        before = session.resolved_plan()
+        text_before, hash_before = _lock_text(before), plan_content_hash(before)
+
+        session.run(credentials={"vault-a": _FRESH})
+
+        after = session.resolved_plan()
+        assert _lock_text(after) == text_before
+        assert plan_content_hash(after) == hash_before
+        assert _FRESH["key"] not in _lock_text(after)
+        assert _FRESH["key"] not in repr(after)
+        step = next(s for s in after if s.feature_group is ChsVaultFG)
+        assert "vault-a" in step.credential_handles
 
 
 class TestMissingHandleKeyAborts:

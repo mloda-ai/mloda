@@ -206,8 +206,17 @@ class PandasAdapter(FrameworkAdapter):
         pd = require("pandas", "building pandas test frames")
         pa = require("pyarrow", "building pandas test frames")
 
+        def types_mapper(arrow_type: Any) -> Any | None:
+            # Mirror PandasPyArrowTransformer._decimal_types_mapper so test frames
+            # carry the dtypes production frames carry: default string inference
+            # (str with NaN nulls on pandas 3, object on pandas 2) and Arrow-backed
+            # decimals, instead of StringDtype with pd.NA nulls.
+            if pa.types.is_decimal(arrow_type):
+                return pd.ArrowDtype(arrow_type)
+            return None
+
         return table.to_pandas(
-            types_mapper={pa.string(): pd.StringDtype()}.get,
+            types_mapper=types_mapper,
             coerce_temporal_nanoseconds=False,
         )
 

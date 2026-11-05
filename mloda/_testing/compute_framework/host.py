@@ -87,7 +87,7 @@ class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
         return adapter.from_typed(data)
 
     def duplicate_column_table(self, first_type: DataType, second_type: DataType) -> pa.Table:
-        """A one-row Arrow table with columns "a" (first_type) and "b" (second_type)."""
+        """A one-row Arrow table with columns "a" (first_type) and "b" (second_type); only _SAMPLE_VALUES types."""
         pa = require("pyarrow", "building Arrow test tables")
         return pa.table(
             [
@@ -106,7 +106,7 @@ class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
         """Skip the case with the host's declared reason when the backend cannot hold it."""
         entry = self.unsupported_cases.get(case_id)
         if entry is not None:
-            pytest.skip(entry[1])
+            pytest.skip(f"{entry[0].name}: {entry[1]}")
 
     def column_values(self, adapter: FrameworkAdapter, result: Any, column: str) -> list[Any]:
         return adapter.column_values(result, column)
@@ -126,7 +126,13 @@ def _invalid_unsupported_cases(cls: type[ComputeFrameworkSuite]) -> list[str]:
     for case_id, entry in cases.items():
         if case_id not in cls.case_ids:
             problems.append(f"unsupported_cases key '{case_id}' is not a case of this suite")
-        elif not (isinstance(entry, tuple) and len(entry) == 2 and isinstance(entry[0], Cause) and entry[1]):
+        elif not (
+            isinstance(entry, tuple)
+            and len(entry) == 2
+            and isinstance(entry[0], Cause)
+            and isinstance(entry[1], str)
+            and entry[1]
+        ):
             problems.append(f"unsupported_cases['{case_id}'] must be (Cause, reason), got {entry!r}")
     return problems
 

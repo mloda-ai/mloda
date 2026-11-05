@@ -712,8 +712,9 @@ class TestDuckDBOutputSchemaSuite(OutputSchemaSuite):
 
     def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
         """An un-aliased join shape: the relation is built from SQL because Arrow import renames duplicates."""
+        literal = {DataType.INT64: "1::BIGINT", DataType.STRING: "'x'::VARCHAR"}
         conn = adapter.connection
-        return DuckdbRelation(conn, conn.sql("select 1 as a, 2 as b, 3 as a"))
+        return DuckdbRelation(conn, conn.sql(f"select {literal[first_type]} as a, 2 as b, {literal[second_type]} as a"))
 
 
 class _PandasOutputSchemaFeatureGroup(FeatureGroup):
@@ -724,6 +725,12 @@ class _PandasOutputSchemaFeatureGroup(FeatureGroup):
 
 class TestPandasOutputSchemaSuite(OutputSchemaSuite):
     adapter_class = PandasAdapter
+
+    def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
+        """Arrow to_pandas gives duplicate names one shared dtype, so the columns are renamed after conversion."""
+        frame = adapter.from_arrow(self.duplicate_column_table(first_type, second_type))
+        frame.columns = ["a", "a"]
+        return frame
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

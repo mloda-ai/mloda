@@ -244,11 +244,43 @@ def _arrow_frame(suite: Any, name: str, data: TypedTestData) -> Any:
     return to_arrow_table(data, suite.arrow_types(name))
 
 
+_NO_DUPLICATES = "Iceberg schemas cannot carry duplicate column names"
+
+
 class TestIcebergDtypeExtractionSuite(DtypeExtractionSuite):
     adapter_class = IcebergAdapter
+    switched_off = {
+        "test_extract_duplicate_column_dtype_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_data_type_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_dtype_reversed_order_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_column_dtype_consistent_with_output_schema": Cause.BACKEND,
+    }
 
-    def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
-        return super().duplicate_column_frame(PyArrowAdapter(), first_type, second_type)
+    @pytest.mark.skip(reason=_NO_DUPLICATES)
+    def test_extract_duplicate_column_dtype_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason=_NO_DUPLICATES)
+    def test_extract_duplicate_column_data_type_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason=_NO_DUPLICATES)
+    def test_extract_duplicate_column_dtype_reversed_order_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason=_NO_DUPLICATES)
+    def test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason=_NO_DUPLICATES)
+    def test_extract_column_dtype_consistent_with_output_schema(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
 
 class TestIcebergDtypeExtractionPyArrowSuite(DtypeExtractionSuite):
@@ -341,9 +373,23 @@ class TestIcebergAppendColumnsSuite(AppendColumnsSuite):
     """``_append_columns`` only serves the post-transform Arrow shape, so frames are Arrow tables."""
 
     adapter_class = IcebergAdapter
+    switched_off = {
+        "test_single_column_on_unpinned_joined_frame": Cause.NOT_IMPLEMENTED,
+        "test_single_column_on_pinned_frame_appends_aligned": Cause.NOT_IMPLEMENTED,
+    }
 
     def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
         return _arrow_frame(self, name, data)
+
+    @pytest.mark.skip(reason="Iceberg has no single-column type")
+    def test_single_column_on_unpinned_joined_frame(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="Iceberg has no single-column type")
+    def test_single_column_on_pinned_frame_appends_aligned(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
 
 @pytest.mark.skipif(

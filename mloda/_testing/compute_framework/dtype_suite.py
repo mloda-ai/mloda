@@ -46,7 +46,7 @@ _PRECISION_SAMPLE = TypedTestData(
     }
 )
 
-# Case id -> declared type and values; the case id is also the column name.
+# Case id -> expected resolved DataType (not the Arrow physical type) and values; the case id is the column name.
 _CASES: dict[str, tuple[DataType, tuple[Any, ...]]] = {
     "int8_col": (DataType.INT8, (1, 2, 3)),
     "uint8_col": (DataType.UINT8, (1, 2, 3)),
@@ -77,15 +77,12 @@ _ARROW_OVERRIDES: dict[str, Callable[[Any], Any]] = {
 }
 
 
-def _assert_readback(
-    adapter: FrameworkAdapter, frame: Any, data: TypedTestData, skip: frozenset[str] = frozenset()
-) -> None:
+def _assert_readback(adapter: FrameworkAdapter, frame: Any, data: TypedTestData) -> None:
     """Every column of a test frame keeps its declared type (None means the adapter cannot tell)."""
     for column, declared in data.types.items():
-        if column not in skip:
-            assert adapter.has_type(frame, column, declared) is not False, (
-                f"test frame lost the declared type {declared} of column '{column}'"
-            )
+        assert adapter.has_type(frame, column, declared) is not False, (
+            f"test frame lost the declared type {declared} of column '{column}'"
+        )
 
 
 class DtypeExtractionSuite(ComputeFrameworkSuite, suite_base=True):

@@ -1,4 +1,4 @@
-"""Conformance suite for ComputeFramework._output_schema: the dict interchange shape and the empty and duplicate edges."""
+"""Conformance suite for ComputeFramework._output_schema: dict shape, empty and duplicate edges."""
 
 from __future__ import annotations
 
@@ -37,7 +37,9 @@ class OutputSchemaSuite(ComputeFrameworkSuite, suite_base=True):
     def test_duplicate_column_names_collapse_to_one_entry(
         self, adapter: FrameworkAdapter, framework_instance: Any
     ) -> None:
-        frame = self.duplicate_column_frame(adapter, DataType.INT64, DataType.INT64)
+        frame = self.duplicate_column_frame(adapter, DataType.INT64, DataType.STRING)
         result = framework_instance._output_schema(frame)
         assert result is not None
-        assert len([pair for pair in result if pair[0] == "a"]) == 1
+        kept = [pair for pair in result if pair[0] == "a"]
+        assert len(kept) == 1
+        assert kept[0][1] == framework_instance._extract_column_dtype(frame, "a")

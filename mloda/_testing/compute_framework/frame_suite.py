@@ -108,9 +108,19 @@ class AppendColumnsSuite(ComputeFrameworkSuite, suite_base=True):
         """Return the framework's single-column type holding ``values``; None when it has no such branch."""
         return None
 
-    def joined_frame(self, adapter: FrameworkAdapter) -> Any:
-        """Override where the backend holds a lazy plan; the default is the appendable frame."""
-        return self._appendable(adapter)
+    def joined_frame(self, adapter: FrameworkAdapter) -> Any | None:
+        """Override where the backend holds a lazy join plan; None means no separate plan."""
+        return None
+
+    def _joined(self, adapter: FrameworkAdapter) -> Any:
+        joined = self.joined_frame(adapter)
+        return self._appendable(adapter) if joined is None else joined
+
+    def _single_column_or_fail(self, values: list[Any]) -> Any:
+        column = self.single_column(values)
+        if column is None:
+            pytest.fail("implement single_column on this host or switch the test off with a Cause")
+        return column
 
     def foreign_data(self, adapter: FrameworkAdapter) -> Any:
         """Data that is not this framework's frame type."""
@@ -138,7 +148,7 @@ class AppendColumnsSuite(ComputeFrameworkSuite, suite_base=True):
     def test_positional_append_on_joined_data_keeps_key_alignment(
         self, adapter: FrameworkAdapter, framework_instance: Any
     ) -> None:
-        joined = self.joined_frame(adapter)
+        joined = self._joined(adapter)
         rows = self.rows(adapter, joined)
         key = next(iter(rows[0]))
         keys = [row[key] for row in rows]
@@ -160,11 +170,9 @@ class AppendColumnsSuite(ComputeFrameworkSuite, suite_base=True):
         assert [(r[key], r["appended"]) for r in self.rows(adapter, out)] == list(zip(keys, values))
 
     def test_single_column_on_unpinned_joined_frame(self, adapter: FrameworkAdapter, framework_instance: Any) -> None:
-        joined = self.joined_frame(adapter)
+        joined = self._joined(adapter)
         key, keys, values = self._single_column_keys(adapter, joined)
-        column = self.single_column(values)
-        if column is None:
-            return
+        column = self._single_column_or_fail(values)
         framework_instance.data = joined
 
         if self.needs_pinned_frame:
@@ -178,11 +186,9 @@ class AppendColumnsSuite(ComputeFrameworkSuite, suite_base=True):
     def test_single_column_on_pinned_frame_appends_aligned(
         self, adapter: FrameworkAdapter, framework_instance: Any
     ) -> None:
-        joined = self.joined_frame(adapter)
+        joined = self._joined(adapter)
         key, keys, values = self._single_column_keys(adapter, joined)
-        column = self.single_column(values)
-        if column is None:
-            return
+        column = self._single_column_or_fail(values)
         self._pin(adapter, framework_instance, joined)
 
         out = framework_instance.transform(column, ["appended"])
@@ -190,8 +196,8 @@ class AppendColumnsSuite(ComputeFrameworkSuite, suite_base=True):
         assert [(r[key], r["appended"]) for r in self.rows(adapter, out)] == list(zip(keys, values))
 
     def test_set_data_to_other_frame_clears_pin(self, adapter: FrameworkAdapter, framework_instance: Any) -> None:
-        has_joined = type(self).joined_frame is not AppendColumnsSuite.joined_frame
-        other = self.joined_frame(adapter) if has_joined else object()
+        joined = self.joined_frame(adapter)
+        other = object() if joined is None else joined
         framework_instance.data = framework_instance._pinned_frame = self._appendable(adapter)
 
         framework_instance.set_data(other)
@@ -199,7 +205,7 @@ class AppendColumnsSuite(ComputeFrameworkSuite, suite_base=True):
         assert framework_instance._pinned_frame is None
 
     def test_dict_append_on_unpinned_joined_frame(self, adapter: FrameworkAdapter, framework_instance: Any) -> None:
-        joined = self.joined_frame(adapter)
+        joined = self._joined(adapter)
         rows = self.row_count(adapter, joined)
         framework_instance.data = joined
         result = {"new_col": list(range(rows))}
@@ -216,7 +222,7 @@ class AppendColumnsSuite(ComputeFrameworkSuite, suite_base=True):
         self, adapter: FrameworkAdapter, framework_instance: Any, group_name: str, appends: bool
     ) -> None:
         group = _NonRootFeatureGroup if appends else _data_creator_stub()
-        joined = self.joined_frame(adapter)
+        joined = self._joined(adapter)
         rows = self.row_count(adapter, joined)
         framework_instance.data = joined
         framework_instance._pinned_frame = framework_instance.data
@@ -277,9 +283,7 @@ class AppendColumnsSuite(ComputeFrameworkSuite, suite_base=True):
 
         assert framework_instance._append_columns(appendable, {"appended_col": list(range(rows + 1))}) is None
 
-    def test_append_columns_case_folded_collision_returns_none(
-        self, adapter: FrameworkAdapter, framework_instance: Any
-    ) -> None:
+    def test_append_columns_case_differing_name(self, adapter: FrameworkAdapter, framework_instance: Any) -> None:
         """Case-folding frameworks refuse a name differing only in case; the others append it next to the original."""
         appendable = self._appendable(adapter)
         values = list(range(self.row_count(adapter, appendable)))

@@ -675,3 +675,9 @@ def test_unsupported_cases_are_validated_at_class_creation() -> None:
         class _BadCause(DataTypeValidatorSuite):
             adapter_class = PandasAdapter
             unsupported_cases = {"int8_col": ("backend", "reason")}  # type: ignore[dict-item]
+
+    with pytest.raises(SwitchedOffError, match=r"must be \(Cause, reason\)"):
+
+        class _BadReason(DataTypeValidatorSuite):
+            adapter_class = PandasAdapter
+            unsupported_cases = {"int8_col": (Cause.BACKEND, 5)}  # type: ignore[dict-item]

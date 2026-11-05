@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -102,6 +102,49 @@ def test_pandas_string_column_keeps_string_dtype() -> None:
         pytest.skip("Pandas backend unavailable")
 
     assert adapter.lost_type(adapter.from_typed(_data()), "s") is False
+
+
+def test_pandas_adapter_matches_production_arrow_to_pandas_dtypes() -> None:
+    """PandasAdapter.from_arrow must carry the production conversion's dtypes.
+
+    String columns use production nulls (NaN, not pd.NA) and decimal columns
+    stay Arrow-backed, matching PandasPyArrowTransformer.
+    """
+    import math
+    from decimal import Decimal
+
+    pa = pytest.importorskip("pyarrow")
+    pytest.importorskip("pandas")
+    from mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer import (
+        PandasPyArrowTransformer,
+    )
+
+    adapter = _make("Pandas")
+    if not adapter.is_available():
+        pytest.skip("Pandas backend unavailable")
+
+    table = pa.table(
+        {
+            "s": pa.array(["a", None, "c"], type=pa.string()),
+            "d": pa.array([Decimal("1.23"), None, Decimal("4.56")], type=pa.decimal128(10, 2)),
+            "t": pa.array(
+                [
+                    datetime(2024, 1, 1, tzinfo=UTC),
+                    None,
+                    datetime(2024, 1, 3, tzinfo=UTC),
+                ],
+                type=pa.timestamp("us", tz="UTC"),
+            ),
+        }
+    )
+    frame = adapter.from_arrow(table)
+    production = PandasPyArrowTransformer.transform_other_fw_to_fw(table)
+
+    for column in table.column_names:
+        assert str(frame[column].dtype) == str(production[column].dtype)
+
+    assert math.isnan(frame["s"].tolist()[1])
+    assert frame["d"].tolist()[0] == Decimal("1.23")
 
 
 @pytest.mark.parametrize("name", _CONNECTION)

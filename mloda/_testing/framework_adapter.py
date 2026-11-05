@@ -62,6 +62,69 @@ def to_arrow_table(data: TypedTestData, arrow_types: Mapping[str, pa.DataType] |
     return pa.table(arrays, names=list(data.types))
 
 
+def _arrow_has_type(arrow_type: Any, data_type: DataType) -> bool:
+    if data_type in (DataType.TIMESTAMP_MICROS_TZ, DataType.LIST):
+        return bool(DataType.from_arrow_type_safe(arrow_type) == data_type)
+    return bool(arrow_type == DataType.to_arrow_type(data_type))
+
+
+_PANDAS_NUMERIC = {
+    DataType.INT8: ("i", 1),
+    DataType.INT32: ("i", 4),
+    DataType.INT64: ("i", 8),
+    DataType.UINT8: ("u", 1),
+    DataType.UINT64: ("u", 8),
+    DataType.FLOAT: ("f", 4),
+    DataType.DOUBLE: ("f", 8),
+    DataType.BOOLEAN: ("b", 1),
+}
+_PANDAS_OBJECT_VALUE_FIT = (DataType.LIST, DataType.BINARY, DataType.DATE, DataType.DECIMAL)
+
+
+def _pandas_has_type(dtype: Any, data_type: DataType) -> bool | None:
+    pd = require("pandas", "reading pandas test frames")
+
+    if isinstance(dtype, pd.ArrowDtype):
+        return _arrow_has_type(dtype.pyarrow_dtype, data_type)
+    if isinstance(dtype, pd.DatetimeTZDtype):
+        return data_type == DataType.TIMESTAMP_MICROS_TZ
+    if isinstance(dtype, pd.StringDtype):
+        return data_type == DataType.STRING
+    numpy_dtype = getattr(dtype, "numpy_dtype", dtype)
+    if numpy_dtype.kind == "O":
+        return None if data_type in _PANDAS_OBJECT_VALUE_FIT else False
+    if numpy_dtype.kind == "M":
+        unit = str(numpy_dtype).removeprefix("datetime64[").removesuffix("]")
+        return (unit, data_type) in (("ms", DataType.TIMESTAMP_MILLIS), ("us", DataType.TIMESTAMP_MICROS))
+    return _PANDAS_NUMERIC.get(data_type) == (numpy_dtype.kind, numpy_dtype.itemsize)
+
+
+def _polars_has_type(dtype: Any, data_type: DataType) -> bool:
+    pl = require("polars", "reading polars test frames")
+
+    if data_type == DataType.TIMESTAMP_MICROS_TZ:
+        return isinstance(dtype, pl.Datetime) and dtype.time_zone is not None
+    if data_type == DataType.LIST:
+        return isinstance(dtype, (pl.List, pl.Array))
+    exact = {
+        DataType.INT8: pl.Int8(),
+        DataType.INT32: pl.Int32(),
+        DataType.INT64: pl.Int64(),
+        DataType.UINT8: pl.UInt8(),
+        DataType.UINT64: pl.UInt64(),
+        DataType.FLOAT: pl.Float32(),
+        DataType.DOUBLE: pl.Float64(),
+        DataType.BOOLEAN: pl.Boolean(),
+        DataType.STRING: pl.String(),
+        DataType.BINARY: pl.Binary(),
+        DataType.DATE: pl.Date(),
+        DataType.TIMESTAMP_MILLIS: pl.Datetime("ms"),
+        DataType.TIMESTAMP_MICROS: pl.Datetime("us"),
+        DataType.DECIMAL: pl.Decimal(38, 18),
+    }
+    return bool(dtype == exact[data_type])
+
+
 class FrameworkAdapter(ABC):
     """Builds frames for one compute framework from typed data and reads them back."""
 
@@ -102,6 +165,10 @@ class FrameworkAdapter(ABC):
     @abstractmethod
     def lost_type(self, result: Any, column: str) -> bool:
         """True when the column carries no usable type (null, object)."""
+
+    def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
+        """Whether the column's native type is exactly data_type; None when the adapter has no exact type for it."""
+        return None
 
     @property
     def connection(self) -> Any:
@@ -203,6 +270,9 @@ class PyArrowAdapter(_ArrowReadAdapter):
     def to_table(self, result: Any) -> pa.Table:
         return result
 
+    def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
+        return _arrow_has_type(self.column_type(result, column), data_type)
+
 
 class PandasAdapter(FrameworkAdapter):
     capabilities = AdapterCapabilities(typed_columns=True)
@@ -244,6 +314,9 @@ class PandasAdapter(FrameworkAdapter):
     def lost_type(self, result: Any, column: str) -> bool:
         return str(self.column_type(result, column)) == "object"
 
+    def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
+        return _pandas_has_type(self.column_type(result, column), data_type)
+
 
 class PolarsAdapter(FrameworkAdapter):
     capabilities = AdapterCapabilities(typed_columns=True)
@@ -281,6 +354,9 @@ class PolarsAdapter(FrameworkAdapter):
         pl = require("polars", "reading polars test frames")
 
         return bool(self.column_type(result, column) in (pl.Null, pl.Object))
+
+    def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
+        return _polars_has_type(self.column_type(result, column), data_type)
 
 
 class PolarsLazyAdapter(PolarsAdapter):

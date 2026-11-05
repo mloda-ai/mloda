@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from mloda._testing.framework_adapter import PandasAdapter, PyArrowAdapter, PythonDictAdapter
+from mloda._testing.framework_adapter import PandasAdapter, PolarsAdapter, PyArrowAdapter, PythonDictAdapter
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda._testing.feature_group_shape import assert_feature_group_shape, check_feature_group_shape
@@ -56,10 +56,17 @@ def _is_columnar_dict(data: Any) -> bool:
 
 
 def _double_into(data: Any, out: str, src: str) -> Any:
-    """Add out = src * 2 to a dict or Arrow table frame."""
+    """Add out = src * 2 to a dict, pandas, polars or Arrow table frame."""
     if _is_columnar_dict(data):
         data[out] = [v * 2 for v in data[src]]
         return data
+    if hasattr(data, "iloc"):
+        data[out] = data[src] * 2
+        return data
+    if hasattr(data, "with_columns"):
+        import polars as pl
+
+        return data.with_columns((pl.col(src) * 2).alias(out))
     import pyarrow.compute as pc
 
     return data.append_column(out, pc.multiply(data[src], 2))
@@ -79,12 +86,47 @@ def make_run_group(kind: str = "ok") -> type[FeatureGroup]:
 
         @classmethod
         def return_data_type_rule(cls, feature: Feature) -> DataType | None:
+            if kind == "object_date":
+                return DataType.DATE
+            if kind == "tz_out":
+                return DataType.TIMESTAMP_MICROS_TZ
             return DataType.INT64
 
         @classmethod
         def calculate_feature(cls, data: Any, features: Any) -> Any:
             if kind == "drops_output":
                 return data
+            if kind == "narrow_type":
+                if hasattr(data, "iloc"):
+                    data["rg_out"] = (data["rg_src"] * 2).astype("int32")
+                    return data
+                if hasattr(data, "with_columns"):
+                    import polars as pl
+
+                    return data.with_columns((pl.col("rg_src") * 2).cast(pl.Int32).alias("rg_out"))
+                import pyarrow as pa
+                import pyarrow.compute as pc
+
+                return data.append_column("rg_out", pc.cast(pc.multiply(data["rg_src"], 2), pa.int32()))
+            if kind == "int64_on_zero_rows":
+                import pandas as pd
+
+                values = [i * 2 for i in range(len(data))]
+                data["rg_out"] = pd.Series(values, index=data.index, dtype="Int64" if values else "int64")
+                return data
+            if kind == "object_date":
+                import pandas as pd
+                from datetime import date
+
+                data["rg_out"] = pd.Series([date(2024, 1, 1)] * len(data), index=data.index, dtype=object)
+                return data
+            if kind == "tz_out":
+                from datetime import UTC, datetime
+
+                import pyarrow as pa
+
+                stamps = [datetime(2024, 1, 1, tzinfo=UTC)] * data.num_rows
+                return data.append_column("rg_out", pa.array(stamps, type=pa.timestamp("us", tz="UTC")))
             if kind == "overwrites_input":
                 data = _double_into(data, "rg_out", "rg_src")
                 data["rg_src"] = [0 for _ in data["rg_src"]]
@@ -354,14 +396,22 @@ def test_assert_raises_pytest_failure_for_broken_group() -> None:
     assert "foreign:" in str(excinfo.value)
 
 
+def _require_backend(adapter_cls: type[Any]) -> None:
+    if adapter_cls is not PythonDictAdapter:
+        pytest.importorskip("pyarrow")
+    if adapter_cls is PandasAdapter:
+        pytest.importorskip("pandas")
+    if adapter_cls is PolarsAdapter:
+        pytest.importorskip("polars")
+
+
 def _toy_data() -> TypedTestData:
     return TypedTestData({"toy_src": (DataType.INT64, [1, 2, 3])})
 
 
-@pytest.mark.parametrize("adapter_cls", [PythonDictAdapter, PyArrowAdapter])
+@pytest.mark.parametrize("adapter_cls", [PythonDictAdapter, PyArrowAdapter, PandasAdapter, PolarsAdapter])
 def test_toy_group_passes_run_checks(adapter_cls: type[Any]) -> None:
-    if adapter_cls is PyArrowAdapter:
-        pytest.importorskip("pyarrow")
+    _require_backend(adapter_cls)
     result = check_feature_group_shape(make_toy_group(), input_data=_toy_data(), adapter=adapter_cls())
     assert result.failures == ()
 
@@ -375,6 +425,20 @@ def test_pandas_na_output_passes_determinism() -> None:
     pytest.importorskip("pandas")
     pytest.importorskip("pyarrow")
     result = check_feature_group_shape(make_run_group("emits_na"), input_data=_run_data(), adapter=PandasAdapter())
+    assert result.failures == (), result.failures
+
+
+@pytest.mark.parametrize(
+    ("kind", "adapter_cls"),
+    [
+        ("int64_on_zero_rows", PandasAdapter),
+        ("object_date", PandasAdapter),
+        ("tz_out", PyArrowAdapter),
+    ],
+)
+def test_exact_type_run_group_passes(kind: str, adapter_cls: type[Any]) -> None:
+    _require_backend(adapter_cls)
+    result = check_feature_group_shape(make_run_group(kind), input_data=_run_data(), adapter=adapter_cls())
     assert result.failures == (), result.failures
 
 
@@ -433,17 +497,16 @@ def test_requested_name_already_in_input_data_fails_outputs() -> None:
         ("wrong_type", "type:", PythonDictAdapter),
         ("wrong_type", "type:", PyArrowAdapter),
         ("wrong_type", "type:", PandasAdapter),
+        ("narrow_type", "type:", PyArrowAdapter),
+        ("narrow_type", "type:", PandasAdapter),
+        ("narrow_type", "type:", PolarsAdapter),
         ("loses_schema_on_zero_rows", "zero_rows:", PyArrowAdapter),
         ("leaks_cell_in_error", "error_values:", PythonDictAdapter),
         ("nondeterministic", "determinism:", PythonDictAdapter),
     ],
 )
 def test_broken_run_group_fails_only_its_sub_check(kind: str, prefix: str, adapter_cls: type[Any]) -> None:
-    if adapter_cls is PyArrowAdapter:
-        pytest.importorskip("pyarrow")
-    if adapter_cls is PandasAdapter:
-        pytest.importorskip("pandas")
-        pytest.importorskip("pyarrow")
+    _require_backend(adapter_cls)
     result = check_feature_group_shape(make_run_group(kind), input_data=_run_data(), adapter=adapter_cls())
     assert not result.passed
     assert all(f.startswith(prefix) for f in result.failures), result.failures

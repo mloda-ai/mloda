@@ -20,7 +20,9 @@ an idempotent safety net and its collapse ValueError is unreachable from engine-
 
 from __future__ import annotations
 
+import pickle
 import re
+from copy import copy
 from typing import Any, Callable
 from unittest.mock import patch
 from uuid import uuid4
@@ -54,7 +56,6 @@ GRP_DEFAULT = "mdb_grp_val"
 FALSY_DEFAULT = "mdb_nonfalsy"
 EN_DEFAULT = "mdb_en_val"
 SIBLING_DEFAULT = "mdb_sibling_val"
-OTHER_GROUP_SPY_CALLS = 1  # deterministic options_with_defaults calls for one feature on an unstamped group
 
 
 def _make_boundary_probe_fg(feature_name: str) -> type[FeatureGroup]:
@@ -295,7 +296,7 @@ def _stamp_group_scenario(same_group: bool) -> dict[str, Any]:
     options = Options(group={MDB_GRP_KEY: GRP_DEFAULT})
     feature = Feature("mdb_unit_stamp_group", options)
     feature_set = FeatureSet([feature])
-    feature_set.stamp_option_defaults_materialized(stamped_fg)
+    feature_set._stamp_option_defaults_materialized(stamped_fg)
     marker_is_stamped = feature_set._defaults_materialized_for is stamped_fg
     with patch.object(target_fg, "options_with_defaults", wraps=target_fg.options_with_defaults) as spy:
         feature_set.materialize_option_defaults(target_fg)
@@ -320,7 +321,7 @@ def _stamp_noop_scenario(set_level: bool) -> dict[str, Any]:
     features_before = feature_set.features
     set_options_before = feature_set.options
     declared_before = {k: v for k, v in vars(feature_set).items() if k.startswith("declared_input_")}
-    feature_set.stamp_option_defaults_materialized(fg)
+    feature_set._stamp_option_defaults_materialized(fg)
     declared_after = {k: v for k, v in vars(feature_set).items() if k.startswith("declared_input_")}
     nothing_written = (
         [f.options for f in features] == options_before
@@ -338,14 +339,41 @@ def _stamp_noop_scenario(set_level: bool) -> dict[str, Any]:
     return {"marker_is_none": marker_is_none, "nothing_written": nothing_written, "filled_after_materialize": filled}
 
 
-def _stamp_add_scenario() -> dict[str, Any]:
+def _stamp_mutation_scenario(mutation: str) -> dict[str, Any]:
     fg = _make_unit_group_default_fg()
     options = Options(group={MDB_GRP_KEY: GRP_DEFAULT})
-    feature_set = FeatureSet([Feature("mdb_unit_stamp_add_a", options)])
-    feature_set.stamp_option_defaults_materialized(fg)
+    first = Feature("mdb_unit_stamp_add_a", options)
+    second = Feature("mdb_unit_stamp_add_b", options)
+    feature_set = FeatureSet([first, second] if mutation == "remove" else [first])
+    feature_set._stamp_option_defaults_materialized(fg)
     stamped = feature_set._defaults_materialized_for is fg
-    feature_set.add(Feature("mdb_unit_stamp_add_b", options))
+    if mutation == "add":
+        feature_set.add(second)
+    else:
+        feature_set.remove(second)
     return {"stamped": stamped, "cleared": feature_set._defaults_materialized_for is None}
+
+
+def _stale_replacement_scenario() -> dict[str, Any]:
+    """Stamp, replace a feature's options with a fresh Options, materialize again."""
+    fg = _make_unit_group_default_fg()
+    feature = Feature("mdb_unit_stale_feature", Options(group={MDB_GRP_KEY: GRP_DEFAULT}))
+    feature_set = FeatureSet([feature])
+    feature_set._stamp_option_defaults_materialized(fg)
+    stamped = feature_set._defaults_materialized_for is fg
+    feature.options = Options()
+    feature_set.materialize_option_defaults(fg)
+    return {"stamped": stamped, "filled": feature.options.get(MDB_GRP_KEY) == GRP_DEFAULT}
+
+
+def _stamp_copy_scenario() -> dict[str, Any]:
+    fg = _make_unit_group_default_fg()
+    feature_set = FeatureSet([Feature("mdb_unit_stamp_copy", Options(group={MDB_GRP_KEY: GRP_DEFAULT}))])
+    feature_set._stamp_option_defaults_materialized(fg)
+    return {
+        "stamped": feature_set._defaults_materialized_for is fg,
+        "copied": copy(feature_set)._defaults_materialized_for is fg,
+    }
 
 
 class TestRuntimeDefaultMaterializationEndToEnd:
@@ -724,7 +752,7 @@ class TestFeatureSetMaterializeOptionDefaults:
         """A stamped set skips options_with_defaults for its own group but not for another group."""
         observed = _stamp_group_scenario(same_group)
         assert observed["marker_is_stamped"]
-        assert observed["spy_calls"] == (0 if same_group else OTHER_GROUP_SPY_CALLS)
+        assert observed["spy_calls"] == (0 if same_group else 1)
         if same_group:
             assert observed["options_identical"]
 
@@ -737,10 +765,26 @@ class TestFeatureSetMaterializeOptionDefaults:
         if not set_level:
             assert observed["filled_after_materialize"]
 
-    def test_add_after_stamp_clears_marker(self) -> None:
-        observed = _stamp_add_scenario()
+    @pytest.mark.parametrize("mutation", ["add", "remove"])
+    def test_add_or_remove_after_stamp_clears_marker(self, mutation: str) -> None:
+        observed = _stamp_mutation_scenario(mutation)
         assert observed["stamped"]
         assert observed["cleared"]
+
+    def test_replaced_options_after_stamp_are_materialized_again(self) -> None:
+        observed = _stale_replacement_scenario()
+        assert observed["stamped"]
+        assert observed["filled"]
+
+    def test_copy_keeps_marker(self) -> None:
+        observed = _stamp_copy_scenario()
+        assert observed["stamped"]
+        assert observed["copied"]
+
+    def test_pickle_drops_marker(self) -> None:
+        feature_set = FeatureSet([Feature("mdb_unit_pickle", Options())])
+        feature_set._defaults_materialized_for = FeatureGroup
+        assert pickle.loads(pickle.dumps(feature_set))._defaults_materialized_for is None
 
     def test_collapse_of_same_name_twins_raises_actionable_duplicate_message(self) -> None:
         """Filling a context default on one twin of a same-name pair collapses the set: the ValueError

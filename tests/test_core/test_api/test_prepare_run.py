@@ -574,33 +574,44 @@ def _run_twice_under_spies(name_bound: bool) -> dict[str, Any]:
         source = fg
         name = "prskip_default_feature"
         expected = (CTX_DEFAULT,)
-    try:
-        session = mloda.prepare(
-            [Feature(name)],
-            compute_frameworks=[PythonDictFramework],
-            plugin_collector=PluginCollector.enabled_feature_groups({fg, source}),
-        )
-        seen.clear()
-        with (
-            patch.object(FeatureGroup, "options_with_defaults", wraps=FeatureGroup.options_with_defaults) as defaults,
-            patch.object(FeatureGroup, "name_bindings", wraps=FeatureGroup.name_bindings) as bindings,
-            patch.object(Feature, "__hash__", autospec=True, side_effect=Feature.__hash__) as hashes,
-        ):
-            first = session.run()
-            second = session.run()
-        if not name_bound:
-            seen[name] = (_single_row(second[0], name)["ctx"],)
-        return {
-            "defaults": defaults.call_count,
-            "bindings": bindings.call_count,
-            "hashes": hashes.call_count,
-            "seen": seen.get(name),
-            "expected": expected,
-            "result_counts": (len(first), len(second)),
-        }
-    finally:
-        del fg
-        del source
+    session = mloda.prepare(
+        [Feature(name)],
+        compute_frameworks=[PythonDictFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({fg, source}),
+    )
+    seen.clear()
+    with (
+        patch.object(FeatureGroup, "options_with_defaults", wraps=FeatureGroup.options_with_defaults) as defaults,
+        patch.object(FeatureGroup, "name_bindings", wraps=FeatureGroup.name_bindings) as bindings,
+        patch.object(Feature, "__hash__", autospec=True, side_effect=Feature.__hash__) as hashes,
+    ):
+        first = session.run()
+        second = session.run()
+    if not name_bound:
+        seen[name] = (_single_row(second[0], name)["ctx"],)
+    return {
+        "defaults": defaults.call_count,
+        "bindings": bindings.call_count,
+        "hashes": hashes.call_count,
+        "seen": seen.get(name),
+        "expected": expected,
+        "result_counts": (len(first), len(second)),
+    }
+
+
+def _replace_options_between_runs() -> list[Any]:
+    """Prepare with copy_features=False, run, swap the plan feature's options for a fresh Options, run again."""
+    fg = _make_boundary_probe_fg("prskip_replaced_feature")
+    feature = Feature("prskip_replaced_feature")
+    session = mloda.prepare(
+        [feature],
+        compute_frameworks=[PythonDictFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({fg}),
+        copy_features=False,
+    )
+    session.run()
+    feature.options = Options()
+    return list(session.run())
 
 
 class TestStepStateDoesNotLeakBetweenRuns:
@@ -651,6 +662,11 @@ class TestStepStateDoesNotLeakBetweenRuns:
         assert observed["hashes"] == 0
         assert observed["seen"] == observed["expected"]
         assert observed["result_counts"] == (1, 1)
+
+    def test_run_after_options_replacement_still_materializes_defaults(self) -> None:
+        """With copy_features=False, replacing a plan feature's options after prepare() must not lose defaults."""
+        results = _replace_options_between_runs()
+        assert _single_row(results[0], "prskip_replaced_feature")["ctx"] == CTX_DEFAULT
 
     def test_runs_build_no_transformer_registry(self) -> None:
         """After prepare(), runs converting dict api_data to pandas reuse the plan's one registry."""

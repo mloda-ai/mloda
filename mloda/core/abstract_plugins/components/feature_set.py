@@ -80,6 +80,7 @@ class FeatureSet:
         self.link_index_columns: frozenset[str] = frozenset()
         self._load_marker: InputDataLoadMarker | None = current_input_data_load_marker.get()
         self._defaults_materialized_for: type[FeatureGroup] | None = None
+        self._defaults_checked: tuple[tuple[tuple[Feature, Options], ...], Options | None] = ((), None)
 
         if features is not None:
             for feature in features:
@@ -92,7 +93,7 @@ class FeatureSet:
 
     def __getstate__(self) -> dict[str, Any]:
         """Drop the marker when pickling: it holds a class by reference and a worker recomputes it cheaply."""
-        return {**self.__dict__, "_defaults_materialized_for": None}
+        return {**self.__dict__, "_defaults_materialized_for": None, "_defaults_checked": ((), None)}
 
     def filters_reapplied(self, feature_group: type["FeatureGroup"] | None = None) -> bool:
         """Whether the framework applies the filters again after this step's calculation."""
@@ -206,16 +207,24 @@ class FeatureSet:
                 set_options = feature_group.options_with_defaults(set_options, bindings, fill_bindings=False)
         return resolved_features, set_options
 
-    def stamp_option_defaults_materialized(self, feature_group: "type[FeatureGroup]") -> None:
+    def _stamp_option_defaults_materialized(self, feature_group: "type[FeatureGroup]") -> None:
         """Mark defaults as materialized when materializing would change nothing."""
         resolved_features, set_options = self._resolve_option_defaults(feature_group)
         if set_options is self.options and all(new is feature.options for feature, new in resolved_features):
+            checked = tuple((feature, feature.options) for feature in self.features)
             self._defaults_materialized_for = feature_group
+            self._defaults_checked = (checked, self.options)
 
     def materialize_option_defaults(self, feature_group: "type[FeatureGroup]") -> None:
         """Rebind every feature's options through options_with_defaults plus the values its name binds,
         keeping aliased Options aliased. Same-named twins that collapse once a default fills one raise."""
-        if self._defaults_materialized_for is feature_group:
+        checked, set_options = self._defaults_checked
+        if (
+            self._defaults_materialized_for is feature_group
+            and set_options is self.options
+            and len(checked) == len(self.features)
+            and all(feature.options is options for feature, options in checked)
+        ):
             return
         resolved_features, resolved_options = self._resolve_option_defaults(feature_group)
         rebound = False

@@ -18,10 +18,11 @@ class BaseArtifact(ABC):
     1. A FeatureGroup declares its artifact class by overriding ``artifact()``
        to return a BaseArtifact subclass.
 
-    2. When the framework builds a FeatureSet, ``FeatureSet.add_artifact_name()``
-       checks whether a previously saved artifact exists in Options:
-       - Found:  sets ``artifact_to_load`` (feature name key).
+    2. At prepare, ``FeatureSet.add_artifact_name()`` checks Options for an artifact:
+       - Found:  sets ``artifact_to_load`` (feature name key) and ``artifact_value``.
        - Not found: sets ``artifact_to_save`` (feature name key).
+       A ``run(artifacts=...)`` value is bound per run on a step view (``FeatureSet.for_run``),
+       never written into the plan.
 
     3. During ``calculate_feature``, the producer (plugin author) uses the
        artifact class helpers to interact with artifacts:
@@ -40,7 +41,7 @@ class BaseArtifact(ABC):
     Customization
     -------------
     Subclasses override ``custom_loader`` and ``custom_saver`` to control
-    serialization. The default ``custom_loader`` reads from Options; the
+    serialization. The default ``custom_loader`` returns ``features.artifact_value``; the
     default ``custom_saver`` returns the artifact as-is for framework storage.
     For large or non-picklable data, override these to persist to disk (see
     ``SklearnArtifact`` for an example using joblib files).
@@ -78,10 +79,9 @@ class BaseArtifact(ABC):
         However, you can overwrite this method to load the artifact by any means necessary.
         """
 
-        options = cls.get_singular_option_from_options(features)
-        if options is None or features.artifact_to_load is None:
+        if features.artifact_to_load is None:
             return None
-        return options[features.artifact_to_load]
+        return features.artifact_value
 
     @classmethod
     def get_singular_option_from_options(cls, features: FeatureSet) -> Options | None:

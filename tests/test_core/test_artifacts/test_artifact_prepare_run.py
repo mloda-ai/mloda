@@ -12,8 +12,9 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.provider import BaseArtifact, FeatureSet, DataCreatorFeatureGroup
-from mloda.user import Feature, mloda, PluginCollector
+from mloda.user import Feature, Options, mloda, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
@@ -71,8 +72,40 @@ class VerifiableArtifactFeature(DataCreatorFeatureGroup):
         return {cls.get_class_name(): ["no_artifact", "no_artifact", "no_artifact"]}
 
 
+class CountingArtifactFeature(PrepareRunArtifactFeature):
+    """Counts calculate_feature calls so refusals can be shown to happen before any step."""
+
+    calls: list[int] = []
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        cls.calls.append(1)
+        if features.artifact_to_save:
+            features.save_artifact = "trained_model_v1"
+        return {cls.get_class_name(): [1, 2, 3]}
+
+
+class IdentityArtifactFeature(PrepareRunArtifactFeature):
+    """Records the FeatureSet.features each run's calculate_feature sees."""
+
+    seen: list[Any] = []
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        cls.seen.append(features.features)
+        if features.artifact_to_save:
+            features.save_artifact = "trained_model_v1"
+        return {cls.get_class_name(): [1, 2, 3]}
+
+
+class VerifiableArtifactFeatureB(VerifiableArtifactFeature):
+    """Second artifact group in the same request."""
+
+
 _enabled = PluginCollector.enabled_feature_groups({PrepareRunArtifactFeature})
 _enabled_verifiable = PluginCollector.enabled_feature_groups({VerifiableArtifactFeature})
+_enabled_counting = PluginCollector.enabled_feature_groups({CountingArtifactFeature})
+_enabled_two = PluginCollector.enabled_feature_groups({PrepareRunArtifactFeature, VerifiableArtifactFeatureB})
 
 
 class TestArtifactSaveWithPrepareRun:
@@ -366,3 +399,182 @@ class TestArtifactRunsLeavePlanUntouched:
 
         assert results == [1, saved, 1, saved, 1, saved]
         self._assert_plan_untouched(session, before)
+
+    @staticmethod
+    @staticmethod
+    def _plan_artifact_state(session: Any) -> list[tuple[Any, ...]]:
+        return [
+            (
+                step.features.artifact_to_load,
+                step.features.artifact_to_save,
+                step.features.artifact_value,
+                step.features.save_artifact,
+            )
+            for step in session.engine.execution_planner
+            if isinstance(getattr(step, "features", None), FeatureSet)
+        ]
+
+    def test_plan_feature_set_unchanged_after_save_and_load_runs(self) -> None:
+        session = mloda.prepare(["VerifiableArtifactFeature"], [PyArrowTable], plugin_collector=_enabled_verifiable)
+        before = self._plan_artifact_state(session)
+        assert before
+
+        saved = session.run().artifacts
+        assert self._plan_artifact_state(session) == before
+        session.run(artifacts=saved)
+        assert self._plan_artifact_state(session) == before
+
+    def test_calculate_feature_sees_the_plan_feature_objects(self) -> None:
+        IdentityArtifactFeature.seen.clear()
+        session = mloda.prepare(
+            ["IdentityArtifactFeature"],
+            [PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({IdentityArtifactFeature}),
+        )
+        assert session.engine is not None
+        plan_features = [
+            f
+            for step in session.engine.execution_planner
+            for f in getattr(getattr(step, "features", None), "features", [])
+        ]
+        session.run()
+        session.run(artifacts={"IdentityArtifactFeature": "x"})
+
+        assert len(IdentityArtifactFeature.seen) == 2
+        for run_features in IdentityArtifactFeature.seen:
+            assert all(any(f is p for p in plan_features) for f in run_features)
+
+    def test_concurrent_predict_runs_with_different_artifacts(self) -> None:
+        session = mloda.prepare(["VerifiableArtifactFeature"], [PyArrowTable], plugin_collector=_enabled_verifiable)
+        values = [f"model|v{i}|weights={i}" for i in range(6)]
+        barrier = threading.Barrier(6, timeout=5)
+
+        def worker(value: str) -> list[str]:
+            barrier.wait()
+            result = session.run(artifacts={"VerifiableArtifactFeature": value})
+            return list(result[0].to_pandas()["VerifiableArtifactFeature"])
+
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            outputs = [future.result(timeout=8) for future in [pool.submit(worker, v) for v in values]]
+
+        for value, output in zip(values, outputs):
+            assert output == [_artifact_hash(value)] * 3
+
+    def test_train_run_concurrent_with_predict_runs(self) -> None:
+        session = mloda.prepare(["VerifiableArtifactFeature"], [PyArrowTable], plugin_collector=_enabled_verifiable)
+        values = [f"model|v{i}|weights={i}" for i in range(5)]
+        barrier = threading.Barrier(6, timeout=5)
+
+        def predict(value: str) -> list[str]:
+            barrier.wait()
+            result = session.run(artifacts={"VerifiableArtifactFeature": value})
+            return list(result[0].to_pandas()["VerifiableArtifactFeature"])
+
+        def train() -> tuple[list[str], dict[str, Any]]:
+            barrier.wait()
+            result = session.run()
+            return list(result[0].to_pandas()["VerifiableArtifactFeature"]), result.artifacts
+
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            train_future = pool.submit(train)
+            predict_futures = [pool.submit(predict, v) for v in values]
+            outputs = [f.result(timeout=8) for f in predict_futures]
+            trained, trained_artifacts = train_future.result(timeout=8)
+
+        for value, output in zip(values, outputs):
+            assert output == [_artifact_hash(value)] * 3
+        assert trained == ["no_artifact"] * 3
+        assert trained_artifacts == {"VerifiableArtifactFeature": VerifiableArtifactFeature.ARTIFACT_VALUE}
+
+
+class TestRuntimeArtifactSurface:
+    """run(artifacts=...) keys are validated against session.artifact_inputs before any step runs."""
+
+    def test_artifact_inputs_lists_the_artifact_capable_names(self) -> None:
+        session = mloda.prepare(
+            ["PrepareRunArtifactFeature", "VerifiableArtifactFeatureB"],
+            [PyArrowTable],
+            plugin_collector=_enabled_two,
+        )
+        assert session.artifact_inputs == frozenset({"PrepareRunArtifactFeature", "VerifiableArtifactFeatureB"})
+
+    @staticmethod
+    def _call(session: Any, how: str, artifacts: dict[str, Any]) -> None:
+        if how == "run":
+            session.run(artifacts=artifacts)
+        else:
+            session.stream_run(artifacts=artifacts)
+
+    @pytest.mark.parametrize("how", ["run", "stream_run"])
+    def test_unknown_key_raises_at_the_call_before_any_step(self, how: str) -> None:
+        CountingArtifactFeature.calls.clear()
+        session = mloda.prepare(["CountingArtifactFeature"], [PyArrowTable], plugin_collector=_enabled_counting)
+
+        with pytest.raises(ValueError, match="not_an_input") as exc_info:
+            self._call(session, how, {"not_an_input": "x"})
+
+        assert "CountingArtifactFeature" in str(exc_info.value)
+        assert CountingArtifactFeature.calls == []
+
+    @pytest.mark.parametrize("how", ["run", "stream_run"])
+    def test_group_conflict_raises_at_the_call_before_any_step(self, how: str) -> None:
+        feat = Feature("PrepareRunArtifactFeature", options={"PrepareRunArtifactFeature": "trained_model_v1"})
+        session = mloda.prepare([feat], [PyArrowTable], plugin_collector=_enabled)
+
+        with pytest.raises(ValueError, match="already stored in Options.group"):
+            self._call(session, how, {"PrepareRunArtifactFeature": "other"})
+
+    @staticmethod
+    def _columns(result: Any) -> dict[str, list[Any]]:
+        out: dict[str, list[Any]] = {}
+        for table in result:
+            frame = table.to_pandas()
+            for column in frame.columns:
+                out[column] = list(frame[column])
+        return out
+
+    def test_options_loaded_group_keeps_loading_when_other_group_binds_runtime(self) -> None:
+        loaded = Feature("PrepareRunArtifactFeature", options={"PrepareRunArtifactFeature": "trained_model_v1"})
+        session = mloda.prepare([loaded, "VerifiableArtifactFeatureB"], [PyArrowTable], plugin_collector=_enabled_two)
+        value = "model|runtime|weights=7"
+
+        result = session.run(artifacts={"VerifiableArtifactFeatureB": value})
+
+        columns = self._columns(result)
+        assert columns["PrepareRunArtifactFeature"] == [1, 2, 3]
+        assert columns["VerifiableArtifactFeatureB"] == [_artifact_hash(value)] * 3
+        assert result.artifacts == {}
+
+    def test_save_mode_group_still_saves_when_other_group_binds_runtime(self) -> None:
+        session = mloda.prepare(
+            ["PrepareRunArtifactFeature", "VerifiableArtifactFeatureB"], [PyArrowTable], plugin_collector=_enabled_two
+        )
+        value = "model|runtime|weights=7"
+
+        result = session.run(artifacts={"VerifiableArtifactFeatureB": value})
+
+        assert result.artifacts == {"PrepareRunArtifactFeature": "trained_model_v1"}
+        assert self._columns(result)["VerifiableArtifactFeatureB"] == [_artifact_hash(value)] * 3
+
+    def test_runtime_value_wins_over_context_artifact_at_prepare(self) -> None:
+        feat = Feature(
+            "VerifiableArtifactFeature",
+            options=Options(group={}, context={"VerifiableArtifactFeature": "model|prepared|weights=1"}),
+        )
+        session = mloda.prepare([feat], [PyArrowTable], plugin_collector=_enabled_verifiable)
+        value = "model|runtime|weights=2"
+
+        result = session.run(artifacts={"VerifiableArtifactFeature": value})
+
+        assert list(result[0].to_pandas()["VerifiableArtifactFeature"]) == [_artifact_hash(value)] * 3
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING])
+    def test_save_then_load_in_parallel_mode(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        session = mloda.prepare(["VerifiableArtifactFeature"], [PyArrowTable], plugin_collector=_enabled_verifiable)
+        saved = session.run(parallelization_modes={mode}, flight_server=flight_server).artifacts
+        assert saved == {"VerifiableArtifactFeature": VerifiableArtifactFeature.ARTIFACT_VALUE}
+
+        result = session.run(parallelization_modes={mode}, flight_server=flight_server, artifacts=saved)
+
+        expected = _artifact_hash(VerifiableArtifactFeature.ARTIFACT_VALUE)
+        assert list(result[0].to_pandas()["VerifiableArtifactFeature"]) == [expected] * 3

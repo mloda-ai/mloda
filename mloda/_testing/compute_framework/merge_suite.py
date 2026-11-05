@@ -465,7 +465,7 @@ class MergeEngineSuite(ComputeFrameworkSuite, suite_base=True):
 class AsofMergeEngineSuite(ComputeFrameworkSuite, suite_base=True):
     """Contract tests of the host's as-of join; hosts without merge_asof are not served."""
 
-    aspect = "merge"
+    aspect = "asof merge"
 
     def _serves(self, adapter: FrameworkAdapter, framework: type[ComputeFramework]) -> bool:
         return serves_asof_merge(framework)
@@ -479,17 +479,9 @@ class AsofMergeEngineSuite(ComputeFrameworkSuite, suite_base=True):
     def merge_engine(self, adapter: FrameworkAdapter, framework: type[ComputeFramework]) -> Any:
         return framework.merge_engine()(adapter.connection)
 
-    def _normalize_value(self, value: Any) -> Any:
-        """Normalize NaN/NULL to Python None for cross-backend comparison."""
-        if value is None:
-            return None
-        if isinstance(value, float) and math.isnan(value):
-            return None
-        return value
-
     def _normalize_time_value(self, value: Any) -> Any:
         """Normalize None, NaN and NaT (unequal to itself) to None."""
-        normalized = self._normalize_value(value)
+        normalized = _norm(value)
         if normalized is None:
             return None
         if normalized != normalized:
@@ -521,14 +513,14 @@ class AsofMergeEngineSuite(ComputeFrameworkSuite, suite_base=True):
             self._assert_exact_columns(rows, scenario["expected_columns"])
         else:
             self._assert_columns_exist(rows, scenario["expected_columns"])
-        actual_rv = [self._normalize_value(row.get("rv")) for row in rows]
-        normalized_expected = [self._normalize_value(v) for v in scenario["expected_rv"]]
+        actual_rv = [_norm(row.get("rv")) for row in rows]
+        normalized_expected = [_norm(v) for v in scenario["expected_rv"]]
         assert actual_rv == normalized_expected, f"rv mismatch: got {actual_rv}, expected {normalized_expected}"
 
     def _assert_left_rows_preserved(self, left_lv: list[Any], rows: Rows) -> None:
         """ASOF is a LEFT join: the multiset of lv is identical in the left input and the output."""
-        expected = collections.Counter(self._normalize_value(v) for v in left_lv)
-        actual = collections.Counter(self._normalize_value(row.get("lv")) for row in rows)
+        expected = collections.Counter(_norm(v) for v in left_lv)
+        actual = collections.Counter(_norm(row.get("lv")) for row in rows)
         assert actual == expected, (
             f"Left rows not preserved: lv multiset mismatch. expected {dict(expected)}, got {dict(actual)}"
         )
@@ -627,7 +619,7 @@ class AsofMergeEngineSuite(ComputeFrameworkSuite, suite_base=True):
         rows.sort(key=lambda row: row["lv"])
 
         assert [row["lv"] for row in rows] == [1, 2], "Every left row must survive the as-of join"
-        actual_rv = [self._normalize_value(row["rv"]) for row in rows]
+        actual_rv = [_norm(row["rv"]) for row in rows]
         assert actual_rv == [1.0, 2.0], f"rv mismatch after coercion: got {actual_rv}, expected [1.0, 2.0]"
 
     def test_coerce_unparseable_string_raises(self, adapter: FrameworkAdapter, merge_engine: Any) -> None:
@@ -673,5 +665,5 @@ class AsofMergeEngineSuite(ComputeFrameworkSuite, suite_base=True):
         rows = self.rows(adapter, result)
 
         assert len(rows) == 1
-        actual_rv = [self._normalize_value(row["rv"]) for row in rows]
+        actual_rv = [_norm(row["rv"]) for row in rows]
         assert actual_rv == [1.0], f"rv mismatch with no-op coercion flag: got {actual_rv}, expected [1.0]"

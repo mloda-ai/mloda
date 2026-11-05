@@ -582,6 +582,29 @@ class TestNoMerge(MergeEngineSuite):
 """
 
 
+_ASOF_WIRING_MODULE = """
+from mloda._testing.compute_framework.merge_suite import AsofMergeEngineSuite
+from mloda._testing.framework_adapter import PythonDictAdapter
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.provider import BaseMergeEngine
+
+
+class NoAsofFramework(ComputeFramework):
+    @classmethod
+    def merge_engine(cls):
+        return BaseMergeEngine
+
+
+class NoAsofAdapter(PythonDictAdapter):
+    def compute_framework(self):
+        return NoAsofFramework
+
+
+class TestNoAsof(AsofMergeEngineSuite):
+    adapter_class = NoAsofAdapter
+"""
+
+
 @pytest.mark.timeout(60)
 @pytest.mark.parametrize(
     ("module", "select", "framework", "aspect"),
@@ -589,8 +612,9 @@ class TestNoMerge(MergeEngineSuite):
         (_WIRING_MODULE, [], "NoFilterFramework", "filter"),
         (_RELATION_WIRING_MODULE, ["-k", "test_from_dict_basic or test_len"], "PythonDictFramework", "sql_relation"),
         (_MERGE_WIRING_MODULE, [], "NoMergeFramework", "merge"),
+        (_ASOF_WIRING_MODULE, [], "NoAsofFramework", "asof merge"),
     ],
-    ids=["filter", "relation", "merge"],
+    ids=["filter", "relation", "merge", "asof"],
 )
 def test_framework_without_the_aspect_fails_with_the_wiring_message(
     pytester: pytest.Pytester, module: str, select: list[str], framework: str, aspect: str

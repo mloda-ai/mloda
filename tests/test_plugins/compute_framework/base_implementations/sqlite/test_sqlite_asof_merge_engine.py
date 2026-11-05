@@ -12,7 +12,7 @@ import pytest
 
 import pyarrow as pa
 
-from mloda._testing.compute_framework.merge_suite import AsofMergeEngineSuite
+from mloda._testing.compute_framework.merge_suite import AsofMergeEngineSuite, _norm
 from mloda._testing.framework_adapter import FrameworkAdapter, SqliteAdapter
 from mloda.user import Index
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
@@ -95,7 +95,7 @@ class TestSqliteAsofMergeEngine(AsofMergeEngineSuite):
 
         result_dicts = adapter.rows(result)
         assert len(result_dicts) == 1, f"expected 1 row, got {len(result_dicts)}: {result_dicts}"
-        assert self._normalize_value(result_dicts[0]["rv"]) == 100
+        assert _norm(result_dicts[0]["rv"]) == 100
 
     def test_case_only_output_collision_raises(self, adapter: FrameworkAdapter, merge_engine: Any) -> None:
         left = _frame(adapter, [{"id": 1, "ts": 10, "val": 100}])
@@ -139,4 +139,4 @@ class TestSqliteAsofMergeEngine(AsofMergeEngineSuite):
         result = adapter.rows(engine.merge_asof(left, right, Index(("id",)), Index(("id",)), cfg))
         rows = sorted(result, key=lambda r: (r["id"], r["ts"]))
         assert [r[helper] for r in rows] == hv
-        assert [self._normalize_value(r["rv"]) for r in rows] == [100, 200, None]
+        assert [_norm(r["rv"]) for r in rows] == [100, 200, None]

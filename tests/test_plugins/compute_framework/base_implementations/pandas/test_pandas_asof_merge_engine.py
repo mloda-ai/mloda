@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from mloda._testing.compute_framework.merge_suite import AsofMergeEngineSuite
+from mloda._testing.compute_framework.merge_suite import AsofMergeEngineSuite, _norm
 from mloda._testing.framework_adapter import PandasAdapter
 from mloda.provider import FeatureGroup
 from mloda.user import FeatureName
@@ -76,7 +76,7 @@ class TestPandasAsofMergeEngine(AsofMergeEngineSuite):
         )
         result = engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
 
-        rows = {row["t"]: self._normalize_value(row["rv"]) for _, row in result.iterrows()}
+        rows = {row["t"]: _norm(row["rv"]) for _, row in result.iterrows()}
         assert rows[pd.Timestamp("2021-01-01 00:00:10")] == 7
         assert rows[pd.Timestamp("2021-01-01 00:01:42")] is None
 
@@ -165,7 +165,7 @@ class TestPandasAsofMergeEngine(AsofMergeEngineSuite):
         cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="backward")
         result = engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
 
-        rows = {row["lv"]: self._normalize_value(row["rv"]) for _, row in result.iterrows()}
+        rows = {row["lv"]: _norm(row["rv"]) for _, row in result.iterrows()}
         assert rows[1] == 7.0
         assert rows[2] == 7.0
 

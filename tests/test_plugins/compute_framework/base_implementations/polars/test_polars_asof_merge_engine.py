@@ -8,13 +8,22 @@ lazy PolarsLazyMergeEngine (pl.LazyFrame).
 from datetime import UTC, datetime
 from typing import Any
 
-import polars as pl
 import pytest
 
 from mloda._testing.compute_framework.merge_suite import AsofMergeEngineSuite
 from mloda._testing.framework_adapter import FrameworkAdapter, PolarsAdapter, PolarsLazyAdapter
 from mloda.user import Index
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+try:
+    import polars as pl
+except ImportError:
+    logger.warning("Polars is not installed. Some tests will be skipped.")
+    pl = None  # type: ignore
 
 
 def _tz_aware_left_naive_right() -> tuple[Any, Any]:

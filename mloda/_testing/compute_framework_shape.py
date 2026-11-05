@@ -127,7 +127,9 @@ def serves_asof_merge(cls: type[ComputeFramework]) -> bool:
     if "merge" not in applicable_aspects(cls):
         return False
     engine, error = _read_accessor(cls, "merge_engine")
-    return error is None and engine is not _ABSENT and getattr(engine, "merge_asof") is not BaseMergeEngine.merge_asof
+    if error is not None or not isinstance(engine, type):
+        return False
+    return issubclass(engine, BaseMergeEngine) and engine.merge_asof is not BaseMergeEngine.merge_asof
 
 
 def check_compute_framework_shape(cls: type[ComputeFramework]) -> CheckResult:

@@ -90,10 +90,10 @@ class FrameworkAdapter(ABC):
         """The column as Python values with nulls as None."""
 
     def rows(self, result: Any) -> list[dict[str, Any]]:
-        """The result as a list of row dicts, nulls as None; one read, so lazy results run once."""
+        """The result as a list of row dicts, nulls as None; reads per column, so lazy adapters should override."""
         names = self.column_names(result)
         columns = [self.column_values(result, name) for name in names]
-        return [dict(zip(names, values)) for values in zip(*columns)]
+        return [dict(zip(names, values)) for values in zip(*columns, strict=True)]
 
     @abstractmethod
     def column_type(self, result: Any, column: str) -> Any:

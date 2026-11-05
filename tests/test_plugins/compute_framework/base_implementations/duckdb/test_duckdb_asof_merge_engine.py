@@ -10,15 +10,24 @@ from typing import Any
 
 import pytest
 
-import duckdb
-import pyarrow as pa
-
-from mloda._testing.compute_framework.merge_suite import AsofMergeEngineSuite
+from mloda._testing.compute_framework.merge_suite import AsofMergeEngineSuite, _norm
 from mloda._testing.framework_adapter import DuckDBAdapter, FrameworkAdapter
 from mloda.user import Index
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+try:
+    import duckdb
+    import pyarrow as pa
+except ImportError:
+    logger.warning("DuckDB or PyArrow is not installed. Some tests will be skipped.")
+    duckdb = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
 
 
 def _frame(adapter: FrameworkAdapter, rows: list[dict[str, Any]]) -> Any:
@@ -135,7 +144,7 @@ class TestDuckDBAsofMergeEngine(AsofMergeEngineSuite):
         result = adapter.rows(engine.merge_asof(left, right, Index(("id",)), Index(("id",)), cfg))
         rows = sorted(result, key=lambda r: (r["id"], r["ts"]))
         assert [r[helper] for r in rows] == hv
-        assert [self._normalize_value(r["rv"]) for r in rows] == [100, 200, None]
+        assert [_norm(r["rv"]) for r in rows] == [100, 200, None]
 
     def test_left_column_named_like_right_rename_helper_is_safe(
         self, adapter: FrameworkAdapter, merge_engine: Any
@@ -147,4 +156,4 @@ class TestDuckDBAsofMergeEngine(AsofMergeEngineSuite):
         result = adapter.rows(engine.merge_asof(left, right, Index(("id",)), Index(("id",)), cfg))
         rows = sorted(result, key=lambda r: r["ts"])
         assert [r["_mloda_r_val"] for r in rows] == [5, 6]
-        assert [self._normalize_value(r["val"]) for r in rows] == [100, 200]
+        assert [_norm(r["val"]) for r in rows] == [100, 200]

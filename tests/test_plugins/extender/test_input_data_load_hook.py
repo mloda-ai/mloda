@@ -52,6 +52,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
+from tests.helpers.bound_credential_cases import BOUND_KINDS, bound_case, csv_file_source
 from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
 from tests.mixins.neutral_csv_source import neutral_csv_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
@@ -1492,3 +1493,47 @@ class TestInputDataLoadHookCarriesCredentialHandles:
 
         assert len(gate.all_captured) == 1
         assert gate.all_captured[0].credential_handles == ("vault-main",)
+
+
+class TestInputDataLoadHookCarriesBoundCredentialHandle:
+    """The INPUT_DATA_LOAD HookContext of a database source carries the handle its match binds."""
+
+    def _load_contexts(
+        self,
+        dac: DataAccessCollection | None,
+        options: dict[str, Any],
+        group: type[FeatureGroup] = SqliteFG,
+    ) -> list[HookContext]:
+        extender = _InputDataLoadCapturingExtender()
+        mloda.run_all(
+            [Feature("bound_col", options=options)],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=dac,
+            plugin_collector=PluginCollector.enabled_feature_groups({group}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+        return extender.all_captured
+
+    @pytest.mark.parametrize("kind", BOUND_KINDS)
+    def test_the_bound_handle_reaches_the_load_context(self, tmp_path: Path, kind: str) -> None:
+        dac, options, expected = bound_case(tmp_path, kind)
+
+        contexts = self._load_contexts(dac, options)
+
+        assert [c.credential_handles for c in contexts] == [expected]
+
+    def test_a_file_source_keeps_no_handles(self, tmp_path: Path) -> None:
+        contexts = self._load_contexts(csv_file_source(tmp_path), {}, CsvFG)
+
+        assert [c.credential_handles for c in contexts] == [()]
+
+    def test_a_handle_declared_and_bound_is_listed_once(self, tmp_path: Path) -> None:
+        dac, _, _ = bound_case(tmp_path, "named")
+
+        class _BoundHandleSqliteFG(SqliteFG):
+            PROPERTY_MAPPING = {"idl_bound_vault_handle": credential_handle_spec("Vault handle.")}
+
+        contexts = self._load_contexts(dac, {"idl_bound_vault_handle": "db-main"}, _BoundHandleSqliteFG)
+
+        assert [c.credential_handles for c in contexts] == [("db-main",)]

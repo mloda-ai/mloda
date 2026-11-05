@@ -19,11 +19,15 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureGroup
+from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureGroup, credential_handle_spec
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+from tests.helpers.bound_credential_cases import BOUND_KINDS, bound_case, csv_file_source
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsConsumerFG, ChsRawSecretFG
 from tests.mixins.neutral_csv_source import neutral_csv_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
@@ -1033,3 +1037,59 @@ class TestHookContextCredentialHandles:
 
         assert extender.captured is not None
         assert extender.captured.credential_handles == ()
+
+
+class TestHookContextBoundCredentialHandle:
+    """A database source step reports the handle of the credential its match binds."""
+
+    _HOOKS = [
+        ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+        ExtenderHook.VALIDATE_OUTPUT_FEATURE,
+    ]
+
+    def _run(
+        self,
+        hook: ExtenderHook,
+        dac: DataAccessCollection | None,
+        options: dict[str, Any],
+        group: type[FeatureGroup] = SqliteFG,
+    ) -> HookContext | None:
+        extender = _ContextCapturingExtender(hook)
+        mloda.run_all(
+            [Feature("bound_col", options=options)],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=dac,
+            plugin_collector=PluginCollector.enabled_feature_groups({group}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+        return extender.captured
+
+    @pytest.mark.parametrize("hook", _HOOKS)
+    @pytest.mark.parametrize("kind", BOUND_KINDS)
+    def test_the_bound_handle_reaches_the_context(self, tmp_path: Path, hook: ExtenderHook, kind: str) -> None:
+        dac, options, expected = bound_case(tmp_path, kind)
+
+        captured = self._run(hook, dac, options)
+
+        assert captured is not None
+        assert captured.credential_handles == expected
+
+    @pytest.mark.parametrize("hook", _HOOKS)
+    def test_a_file_source_keeps_no_handles(self, tmp_path: Path, hook: ExtenderHook) -> None:
+        captured = self._run(hook, csv_file_source(tmp_path), {}, CsvFG)
+
+        assert captured is not None
+        assert captured.credential_handles == ()
+
+    @pytest.mark.parametrize("hook", _HOOKS)
+    def test_a_handle_declared_and_bound_is_listed_once(self, tmp_path: Path, hook: ExtenderHook) -> None:
+        dac, _, _ = bound_case(tmp_path, "named")
+
+        class _BoundHandleSqliteFG(SqliteFG):
+            PROPERTY_MAPPING = {"bound_vault_handle": credential_handle_spec("Vault handle.")}
+
+        captured = self._run(hook, dac, {"bound_vault_handle": "db-main"}, _BoundHandleSqliteFG)
+
+        assert captured is not None
+        assert captured.credential_handles == ("db-main",)

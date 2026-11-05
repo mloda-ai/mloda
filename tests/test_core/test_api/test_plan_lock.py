@@ -29,6 +29,8 @@ from mloda.core.abstract_plugins.components.credential import RegisteredCredenti
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.provider import BaseFeatureGroupVersion, ComputeFramework, FeatureGroup, Implementation
 from tests.helpers.credential_handle_stubs import ChsTwoHandleFG
+from tests.helpers.bound_credential_cases import bound_case
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 import importlib.metadata
 from collections.abc import Iterator
 
@@ -896,13 +898,45 @@ def test_plan_content_hash_ignores_the_declared_handles() -> None:
     assert plan_structure_hash(with_handles) != plan_structure_hash(without)
 
 
-def test_plan_content_hash_of_a_real_handle_plan_equals_the_hash_with_the_field_cleared() -> None:
-    steps = _explain_two_handles()
+@pytest.mark.parametrize("plan_kind", ["declared", "bound"])
+def test_plan_content_hash_of_a_real_handle_plan_equals_the_hash_with_the_field_cleared(
+    tmp_path: Path, plan_kind: str
+) -> None:
+    steps = _explain_two_handles() if plan_kind == "declared" else _explain_sqlite(tmp_path)
 
     cleared = [dataclasses.replace(s, credential_handles=()) for s in steps]
 
     assert plan_content_hash(steps) == plan_content_hash(cleared)
     assert plan_structure_hash(steps) != plan_structure_hash(cleared)
+
+
+def _explain_sqlite(
+    tmp_path: Path, group: type[SqliteFG] = SqliteFG, options: dict[str, Any] | None = None
+) -> list[PlanStep]:
+    dac, _, _ = bound_case(tmp_path, "named")
+    return list(
+        mloda.explain(
+            [Feature("bound_col", options=options or {})],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=dac,
+            plugin_collector=PluginCollector.enabled_feature_groups({group}),
+        )
+    )
+
+
+@pytest.mark.parametrize("route", ["table", "query"])
+def test_the_lock_of_a_database_source_plan_names_the_bound_handle(tmp_path: Path, route: str) -> None:
+    class _QuerySqliteFG(SqliteFG):
+        CLAIM_ROUTES = (*SqliteFG.CLAIM_ROUTES, SqliteFG.QUERY_ROUTE)
+
+    if route == "query":
+        steps = _explain_sqlite(tmp_path, _QuerySqliteFG, {"query_text": "select bound_col from bound_table"})
+    else:
+        steps = _explain_sqlite(tmp_path)
+
+    (compute,) = [s for s in steps if s.step_kind == "compute"]
+    assert compute.credential_handles == ("db-main",)
+    assert json.loads(_lock_text(steps))["compute"][0]["credential_handles"] == ["db-main"]
 
 
 def test_a_no_handle_plan_renders_the_frozen_lock_text_and_structure_hash() -> None:

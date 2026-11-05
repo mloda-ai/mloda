@@ -308,6 +308,19 @@ feature = Feature("signed_id", options={"hmac_key_handle": "pii-hmac-key"})
 mloda.run_all([feature], data_access_collection=dac)
 ```
 
+To pass a rotated value, prepare once and pass it per run. The value is used for that run only and is never written
+into the session; a later run without `credentials` reads the prepared value again.
+
+```py
+session = mloda.prepare([feature], data_access_collection=dac)
+session.run(credentials={"pii-hmac-key": Credential(key="rotated-hmac-key")})
+```
+
+The same applies to `stream_run()`. A passed handle is refused with a `ValueError` at the call, before any step runs, if
+no step declares it, if its value misses a `required_fields` entry or holds bytes under a non-safe key, or if a source
+step binds it when the session is prepared (prepare a new session to change it). No message holds a value.
+`RunContext.run_credentials` carries the sorted handle names only.
+
 `read_credential` returns a `ResolvedCredential`: a mapping with item access, `get`, iteration and `**` unpacking, a
 fresh copy per read, and the attributes `handle`, `version`, `expires_at` and `store` (the last three are `None` for
 now). A missing field raises `CredentialFieldMissing` (a `KeyError`) naming handle and field. A read outside the window,

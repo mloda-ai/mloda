@@ -155,6 +155,16 @@ class DataAccessCollection:
         duplicate._api_data_types = dict(self._api_data_types)
         return duplicate
 
+    def with_credentials(self, credentials: Mapping[str, Any]) -> "DataAccessCollection":
+        """A copy with the given handles' credentials replaced; this collection is never modified."""
+        duplicate = self.copy()
+        normalized = self._normalize_credentials(dict(credentials))
+        assert isinstance(normalized, dict)  # nosec B101
+        duplicate.credentials.update(normalized)
+        for handle in credentials:
+            duplicate._warn_short_secrets(handle)
+        return duplicate
+
     @property
     def auto_handles(self) -> frozenset[str]:
         """The handles assigned automatically rather than named by the user."""

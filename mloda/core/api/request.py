@@ -52,7 +52,9 @@ from mloda.core.abstract_plugins.function_extender import (
 from mloda.core.abstract_plugins.plan_context import PlanContext, PlanOrigin
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import current_verified_context
+from mloda.core.abstract_plugins.components.credential_handle import validate_credential_handles
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -321,13 +323,15 @@ class mlodaAPI:
                         f"got {type(column_values).__name__}."
                     )
 
-    def _secret_literals(self) -> frozenset[str]:
+    def _secret_literals(self, run_dac: DataAccessCollection | None = None) -> frozenset[str]:
         dac = getattr(self, "data_access_collection", None)
-        return frozenset() if dac is None else dac.secret_literals()
+        prepared = frozenset() if dac is None else dac.secret_literals()
+        return prepared if run_dac is None else prepared | run_dac.secret_literals()
 
-    def _identity_literals(self) -> frozenset[str]:
+    def _identity_literals(self, run_dac: DataAccessCollection | None = None) -> frozenset[str]:
         dac = getattr(self, "data_access_collection", None)
-        return frozenset() if dac is None else dac.identity_literals()
+        prepared = frozenset() if dac is None else dac.identity_literals()
+        return prepared if run_dac is None else prepared | run_dac.identity_literals()
 
     def _credential_redaction(
         self, literals: frozenset[str] | None = None, identity: frozenset[str] | None = None
@@ -740,11 +744,38 @@ class mlodaAPI:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
         return deepcopy(self.engine.resolution_records)
 
+    def _run_collection(self, credentials: Mapping[str, Any] | None) -> DataAccessCollection | None:
+        """Refuse bad per-run credentials, then return a copy of the collection with them applied (None: no change)."""
+        if not credentials:
+            return None
+        plan = self._execution_plan()
+        steps = [s for s in plan if isinstance(s, FeatureGroupStep)]
+        declared = {h for s in steps for h in s.credential_handles}
+        bound = plan.source_bound_handles(self.data_access_collection)
+        for handle in credentials:
+            if handle in bound:
+                raise ValueError(
+                    f"Credential handle '{handle}' is bound by a source step when the session is prepared, so it "
+                    f"cannot take a per-run value. Prepare a new session to change it."
+                )
+            if handle not in declared:
+                raise ValueError(
+                    f"Credential handle '{handle}' is not declared by any step of this session. "
+                    f"Declared handles: {sorted(declared)}."
+                )
+        base = self.data_access_collection or DataAccessCollection()
+        merged = base.with_credentials(credentials)
+        for step in steps:
+            if set(step.credential_handles) & set(credentials):
+                validate_credential_handles(step.feature_group, step.features.options or Options(), merged)
+        return merged
+
     def _build_run_context(
         self,
         carrier: dict[str, str] | None,
         child_bootstrap: Callable[[], None] | None,
         graceful_shutdown_timeout: float = 2.0,
+        run_credentials: tuple[str, ...] = (),
     ) -> RunContext:
         """Derive this run's context from the engine's plan-time base."""
         if self.engine is None:
@@ -760,6 +791,7 @@ class mlodaAPI:
             tenant_id=identity.tenant_id,
             project_id=identity.project_id,
             principal=identity.principal,
+            run_credentials=run_credentials,
             structure_hash=self.plan_context.structure_hash,
         )
 
@@ -772,6 +804,7 @@ class mlodaAPI:
         carrier: dict[str, str] | None = None,
         child_bootstrap: Callable[[], None] | None = None,
         graceful_shutdown_timeout: float = 2.0,
+        credentials: Mapping[str, Any] | None = None,
     ) -> RunResult:
         """Execute the prepared session and return a ``RunResult`` (plan order, with ``run_id``/``plan_id``).
 
@@ -789,12 +822,21 @@ class mlodaAPI:
             graceful_shutdown_timeout: Seconds a MULTIPROCESSING worker gets to run its
                 extenders' ``close()`` before being terminated, shared across every extender in
                 that worker. Also the longest a cancelled THREADING run waits for step threads.
+            credentials: ``{handle: Credential | dict}`` replacing declared handles' values for this run only.
         """
-        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout)
+        run_dac = self._run_collection(credentials)
+        run_context = self._build_run_context(
+            carrier, child_bootstrap, graceful_shutdown_timeout, tuple(sorted(credentials or ()))
+        )
         plan = list(self._plan_snapshot())
-        with self._credential_redaction():
+        with self._credential_redaction(self._secret_literals(run_dac), self._identity_literals(run_dac)):
             runner = self._batch_run(
-                parallelization_modes, flight_server, api_data=api_data, artifacts=artifacts, run_context=run_context
+                parallelization_modes,
+                flight_server,
+                api_data=api_data,
+                artifacts=artifacts,
+                run_context=run_context,
+                run_dac=run_dac,
             )
             items = self._plan_ordered_items(runner, plan)
         return RunResult(
@@ -816,17 +858,21 @@ class mlodaAPI:
         carrier: dict[str, str] | None = None,
         child_bootstrap: Callable[[], None] | None = None,
         graceful_shutdown_timeout: float = 2.0,
+        credentials: Mapping[str, Any] | None = None,
     ) -> ResultStream:
         """Execute the prepared session and stream each feature group's result as it completes.
 
         Returns a ``ResultStream`` carrying the run's ``run_id``/``plan_id``. carrier/child_bootstrap and the
         active verified_context() scope are read here, at call time, not at first iteration: a function whose
         body itself contains ``yield`` only starts executing on first iteration, which would defer that read
-        past the caller's intended scope.
+        past the caller's intended scope. ``credentials`` is as in ``run()`` and is refused at the call.
         """
-        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout)
+        run_dac = self._run_collection(credentials)
+        run_context = self._build_run_context(
+            carrier, child_bootstrap, graceful_shutdown_timeout, tuple(sorted(credentials or ()))
+        )
         plan = list(self._plan_snapshot())
-        stream = self._start_stream(api_data, parallelization_modes, flight_server, artifacts, run_context)
+        stream = self._start_stream(api_data, parallelization_modes, flight_server, artifacts, run_context, run_dac)
         return ResultStream(stream, plan, run_id=run_context.run_id, plan_id=self.plan_id)
 
     def _start_stream(
@@ -836,11 +882,14 @@ class mlodaAPI:
         flight_server: Any | None,
         artifacts: dict[str, Any] | None,
         run_context: RunContext,
+        run_dac: DataAccessCollection | None = None,
     ) -> Generator[Any, None, None]:
         """Callers build ``run_context`` at call time; no yield here, so a refusal at run start raises at the call."""
         _api_data = api_data if api_data is not None else self.api_data
         self._validate_run_api_data(_api_data)
-        stream = self._stream_run_results(flight_server, parallelization_modes, _api_data, artifacts, run_context)
+        stream = self._stream_run_results(
+            flight_server, parallelization_modes, _api_data, artifacts, run_context, run_dac
+        )
         # Primes the generator so a refusal at run start raises here, not on first iteration.
         next(stream)
         return stream
@@ -879,16 +928,17 @@ class mlodaAPI:
         api_data: dict[str, dict[str, Any]] | None,
         artifacts: dict[str, Any] | None,
         run_context: RunContext,
+        run_dac: DataAccessCollection | None = None,
     ) -> Generator[Any, None, None]:
         """Deferred half of ``stream_run``: the priming yield separates run start from computation."""
         outcome = LifecycleOutcome("succeeded")
-        literals = self._secret_literals()
-        identity = self._identity_literals()
+        literals = self._secret_literals(run_dac)
+        identity = self._identity_literals(run_dac)
         try:
             with self._credential_redaction(literals, identity):
                 self.runner = None
                 self._start_run(run_context)
-                runner = self._setup_engine_runner(parallelization_modes, flight_server)
+                runner = self._setup_engine_runner(parallelization_modes, flight_server, run_dac)
                 # Assigned before any yield so get_result()/get_artifacts() work after an early exit.
                 self.runner = runner
             yield None
@@ -934,6 +984,7 @@ class mlodaAPI:
         api_data: dict[str, Any] | None = None,
         artifacts: dict[str, Any] | None = None,
         run_context: RunContext | None = None,
+        run_dac: DataAccessCollection | None = None,
     ) -> ExecutionOrchestrator:
         """Sets up the engine runner and runs the engine computation."""
         # Use stored api_data if not explicitly provided
@@ -945,7 +996,7 @@ class mlodaAPI:
         try:
             self.runner = None
             self._start_run(run_context)
-            runner = self._setup_engine_runner(parallelization_modes, flight_server)
+            runner = self._setup_engine_runner(parallelization_modes, flight_server, run_dac)
             # Assigned before computing so a failed run still exposes its runner, never a prior run's.
             self.runner = runner
             self._run_engine_computation(
@@ -1030,15 +1081,16 @@ class mlodaAPI:
         self,
         parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
         flight_server: Any | None = None,
+        run_dac: DataAccessCollection | None = None,
     ) -> ExecutionOrchestrator:
         """Sets up the engine runner based on parallelization mode."""
         if self.engine is None:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
 
         runner = (
-            self.engine.compute(flight_server)
+            self.engine.compute(flight_server, run_dac)
             if ParallelizationMode.MULTIPROCESSING in parallelization_modes
-            else self.engine.compute()
+            else self.engine.compute(data_access_collection=run_dac)
         )
 
         if not isinstance(runner, ExecutionOrchestrator):

@@ -1700,3 +1700,125 @@ def test_a_plugin_thread_outside_the_run_scope_logs_unmasked(mode: Parallelizati
     result = _grant_run(ChsThreadLoggingFG, "chs_log_thread_a", mode, flight_server)
 
     assert list(result[0]["chs_log_thread_a"]) == [f"from thread {_E2E_HMAC}"]
+
+
+# --------------------------------------------------------------------------- #
+# Fresh credential values per run() on a prepared session
+# --------------------------------------------------------------------------- #
+
+_FRESH_1 = {"host": "fresh-one.internal.example", "hmac": "fresh1-hmac-Zq8Lw3Nd", "key": "fresh1-key-Vb6Hc2Rt"}  # nosec B105
+_FRESH_2 = {"host": "fresh-two.internal.example", "hmac": "fresh2-hmac-Yp7Km4Se9x", "key": "fresh2-key-Uc5Jd8Wq"}  # nosec B105
+
+
+def _row(value: Mapping[str, Any]) -> str:
+    return f"{value['host']}|{len(str(value['hmac']))}"
+
+
+def _prepare_vault(group: Any, name: str, mode: ParallelizationMode, extenders: set[Extender] | None = None) -> Any:
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    return mloda.prepare(
+        [Feature(name, options={HANDLE_KEY: _E2E_HANDLE})],
+        compute_frameworks=[PandasDataFrame],
+        parallelization_modes={mode},
+        data_access_collection=_vault_dac(),
+        plugin_collector=PluginCollector.enabled_feature_groups({group}),
+        function_extender=extenders,
+    )
+
+
+def _stream_rows(stream: Any, column: str) -> list[str]:
+    return [str(row) for frame in stream for row in frame[column]]
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_each_run_on_a_prepared_session_reads_its_own_fresh_credential(
+    mode: ParallelizationMode, flight_server: Any
+) -> None:
+    session = _prepare_vault(ChsRcReadingFG, "chs_rc_a", mode)
+    kwargs: dict[str, Any] = {"parallelization_modes": {mode}, "flight_server": flight_server}
+
+    first = session.run(credentials={_E2E_HANDLE: _FRESH_1}, **kwargs)
+    second = session.run(credentials={_E2E_HANDLE: _FRESH_2}, **kwargs)
+    third = session.run(**kwargs)
+
+    assert list(first[0]["chs_rc_a"]) == [_row(_FRESH_1)]
+    assert list(second[0]["chs_rc_a"]) == [_row(_FRESH_2)]
+    assert list(third[0]["chs_rc_a"]) == [f"{_E2E_HOST}|{len(_E2E_HMAC)}"]
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_a_handle_not_passed_keeps_its_prepared_value_while_the_passed_one_is_fresh(
+    mode: ParallelizationMode, flight_server: Any
+) -> None:
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    session = mloda.prepare(
+        [
+            Feature("chs_rc_a", options={HANDLE_KEY: _VAULT_A}),
+            Feature("chs_rc_b", options={HANDLE_KEY: _VAULT_B}),
+        ],
+        compute_frameworks=[PandasDataFrame],
+        parallelization_modes={mode},
+        data_access_collection=_vault_dac(_TWO_VAULTS),
+        plugin_collector=PluginCollector.enabled_feature_groups({ChsRcReadingFG}),
+    )
+
+    result = session.run(credentials={_VAULT_A: _FRESH_1}, parallelization_modes={mode}, flight_server=flight_server)
+
+    columns = {column: list(frame[column]) for frame in result for column in frame.columns}
+    assert columns["chs_rc_a"] == [_row(_FRESH_1)]
+    assert columns["chs_rc_b"] == [_row(_TWO_VAULTS[_VAULT_B])]
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_stream_run_reads_its_own_fresh_credential(mode: ParallelizationMode, flight_server: Any) -> None:
+    session = _prepare_vault(ChsRcReadingFG, "chs_rc_a", mode)
+    kwargs: dict[str, Any] = {"parallelization_modes": {mode}, "flight_server": flight_server}
+
+    first = _stream_rows(session.stream_run(credentials={_E2E_HANDLE: _FRESH_1}, **kwargs), "chs_rc_a")
+    second = _stream_rows(session.stream_run(credentials={_E2E_HANDLE: _FRESH_2}, **kwargs), "chs_rc_a")
+    third = _stream_rows(session.stream_run(**kwargs), "chs_rc_a")
+
+    assert first == [_row(_FRESH_1)]
+    assert second == [_row(_FRESH_2)]
+    assert third == [f"{_E2E_HOST}|{len(_E2E_HMAC)}"]
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_error_echoing_a_fresh_credential_is_masked_in_every_mode(
+    mode: ParallelizationMode,
+    flight_server: Any,
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: Any,
+) -> None:
+    seen = tmp_path / "seen.txt"
+    session = _prepare_vault(ChsRcFailingFG, "chs_rc_failing_a", mode, {_FileRecordingExtender(str(seen))})
+
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(ValueError) as excinfo:
+            session.run(credentials={_E2E_HANDLE: _FRESH_1}, parallelization_modes={mode}, flight_server=flight_server)
+
+    exc = excinfo.value
+    secrets = (str(_FRESH_1["hmac"]), str(_FRESH_1["key"]))
+    assert str(_FRESH_1["host"]) in str(exc)
+    _assert_token_gone(exc, ChsRcFailingFG, caplog, secrets)
+    for secret in secrets:
+        assert secret not in seen.read_text()
+
+
+@pytest.mark.timeout(15)
+def test_two_interleaved_stream_runs_on_one_session_each_read_their_own_value() -> None:
+    session = _prepare_vault(ChsRcReadingFG, "chs_rc_a", ParallelizationMode.SYNC)
+
+    stream_1 = session.stream_run(credentials={_E2E_HANDLE: _FRESH_1})
+    stream_2 = session.stream_run(credentials={_E2E_HANDLE: _FRESH_2})
+    rows_2 = _stream_rows(stream_2, "chs_rc_a")
+    rows_1 = _stream_rows(stream_1, "chs_rc_a")
+
+    assert rows_1 == [_row(_FRESH_1)]
+    assert rows_2 == [_row(_FRESH_2)]

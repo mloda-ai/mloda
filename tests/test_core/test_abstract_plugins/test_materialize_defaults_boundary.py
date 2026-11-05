@@ -385,6 +385,17 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         assert observed["ctx"] == CTX_DEFAULT, f"context default not materialized at runtime: {observed!r}"
         assert observed["grp"] == GRP_DEFAULT, f"group default not materialized at runtime: {observed!r}"
 
+    def test_engine_path_never_calls_materialize_option_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A prepared (frozen) FeatureSet already carries the defaults, so the compute boundary skips the call."""
+
+        def refuse(self: FeatureSet, feature_group: Any) -> None:
+            raise AssertionError("materialize_option_defaults must not run on the engine path")
+
+        monkeypatch.setattr(FeatureSet, "materialize_option_defaults", refuse)
+        observed = _run_probe(_make_boundary_probe_fg, "mdb_e2e_engine_skip_feature")
+        assert observed["ctx"] == CTX_DEFAULT
+        assert observed["grp"] == GRP_DEFAULT
+
     def test_explicit_and_falsy_values_win_while_absent_key_materializes(self) -> None:
         """Explicit (even falsy) values are never overridden, while the untouched key still gets its default."""
         options = Options(context={MDB_CTX_KEY: "mdb_explicit", MDB_FALSY_KEY: ""})

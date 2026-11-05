@@ -270,11 +270,31 @@ class TestKeepIndex:
         src = _source(kind, [Index((KEY,))])
         der = _derived(kind, "ki_doubled", {Feature("ki_val")})
         f = Feature("ki_doubled", index=Index((KEY,)), keep_index=True)
-        first = _dicts(kind, _run(kind, [f], {src, der}, copy_features=False))
+        first_session = mloda.prepare(
+            [f],
+            compute_frameworks=[_fw(kind)],
+            plugin_collector=PluginCollector.enabled_feature_groups({src, der}),
+            copy_features=False,
+        )
+
+        assert first_session.engine is not None
+        planner = first_session.engine.execution_planner
+
+        def plan_snapshot() -> list[tuple[Any, ...]]:
+            return [
+                (str(x.name), hash(x), x.keep_index)
+                for step in planner
+                for x in getattr(getattr(step, "features", None), "features", ())
+            ]
+
+        before = plan_snapshot()
+        first = _dicts(kind, list(first_session.run()))
         assert KEY in first[0]
         f.keep_index = False
         second = _dicts(kind, _run(kind, [f], {src, der}, copy_features=False))
         assert second == [{"ki_doubled": [10, 12, 14]}]
+        assert plan_snapshot() == before
+        assert KEY in _dicts(kind, list(first_session.run()))[0]
 
 
 def test_column_selective_csv_loads_the_key() -> None:

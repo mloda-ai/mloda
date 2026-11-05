@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from copy import copy
+from copy import copy, deepcopy
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -27,6 +27,7 @@ from mloda.core.abstract_plugins.components.options import (
     reject_reserved_reader_key,
     validate_forwarding_directives,
 )
+from mloda.core.abstract_plugins.components.plan_freeze import attribute_write_error
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 
@@ -54,6 +55,9 @@ def normalize_feature_group_scope(
         f"feature_group must be a FeatureGroup subclass, a class-name string, or None, "
         f"got {type(feature_group).__name__}"
     )
+
+
+_FROZEN_KEYS = ("_frozen", "_frozen_hash")
 
 
 class _ConnectionHolder:
@@ -524,8 +528,42 @@ class Feature:
             and self._input_data_match_key() == other._input_data_match_key()
         )
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        if self.__dict__.get("_frozen"):
+            raise attribute_write_error("Feature", name)
+        object.__setattr__(self, name, value)
+
+    def freeze(self) -> None:
+        """Make options read-only and store the hash; copies stay writable."""
+        self.options.freeze()
+        if self.child_options is not None:
+            self.child_options.freeze()
+        self.__dict__["_frozen_hash"] = self._hash(True)
+        self.__dict__["_frozen"] = True
+
+    def __getstate__(self) -> dict[str, Any]:
+        """The stored hash is not pickled: string hash seeds differ across processes."""
+        return {k: v for k, v in self.__dict__.items() if k != "_frozen_hash"}
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        self.__dict__.update(state)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> Feature:
+        duplicate = self.__class__.__new__(self.__class__)
+        memo[id(self)] = duplicate
+        for key, value in self.__dict__.items():
+            if key not in _FROZEN_KEYS:
+                duplicate.__dict__[key] = deepcopy(value, memo)
+        return duplicate
+
     def __hash__(self) -> int:
-        return self._hash(True)
+        stored = self.__dict__.get("_frozen_hash")
+        if stored is not None:
+            return int(stored)
+        computed = self._hash(True)
+        if self.__dict__.get("_frozen"):
+            self.__dict__["_frozen_hash"] = computed
+        return computed
 
     def hash_ignoring_compute_frameworks(self) -> int:
         return self._hash(False)
@@ -611,6 +649,8 @@ class Feature:
         # documented limitation class of _isolate_forwarded_value.
         duplicate = self.__class__.__new__(self.__class__)
         duplicate.__dict__.update(self.__dict__)
+        for key in _FROZEN_KEYS:
+            duplicate.__dict__.pop(key, None)
         duplicate.options = copy(self.options)
         if self.child_options is not None:
             duplicate.child_options = copy(self.child_options)

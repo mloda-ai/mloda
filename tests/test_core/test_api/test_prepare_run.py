@@ -783,3 +783,182 @@ class TestRunAndStreamRunRejectFunctionExtender:
 
         with pytest.raises(TypeError, match="unexpected keyword argument 'function_extender'"):
             getattr(session, name)(**{"function_extender": {recorder}})
+
+
+class PrepareRunMutatingOptionsFG(FeatureGroup):
+    """Writes feature.options in calculate_feature when the api data asks for it."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature(name="api_id", index=Index(("api_id",))),
+            Feature(name="api_value", index=Index(("api_id",))),
+        }
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        trigger = data["api_value"].tolist()[0]
+        for feature in features.features:
+            if trigger == "set":
+                feature.options.add_to_context("late_ctx_key", 1)
+            elif trigger == "group":
+                feature.options.group["late_group_key"] = 1
+        data["PrepareRunMutatingOptionsFG"] = data["api_id"]
+        return data
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name()}
+
+
+_mutating_enabled = PluginCollector.enabled_feature_groups({ApiDataFG, PrepareRunMutatingOptionsFG})
+
+
+class TestOptionWriteInCalculateFeatureIsRefused:
+    """A plugin writing feature.options in calculate_feature gets a FrozenPlanError naming the key."""
+
+    @staticmethod
+    def _data(trigger: str) -> dict[str, Any]:
+        return {"PrepareExample": {"api_id": [1, 2], "api_value": [trigger, trigger]}}
+
+    @pytest.mark.parametrize(
+        "modes",
+        [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}, {ParallelizationMode.MULTIPROCESSING}],
+        ids=["sync", "threading", "multiprocessing"],
+    )
+    @pytest.mark.parametrize("trigger,key", [("set", "late_ctx_key"), ("group", "late_group_key")])
+    def test_write_raises_then_session_runs_cleanly(
+        self, modes: set[ParallelizationMode], trigger: str, key: str
+    ) -> None:
+        from mloda.provider import FrozenPlanError
+
+        features: list[Feature | str] = [Feature(name="PrepareRunMutatingOptionsFG")]
+        session = mloda.prepare(
+            features,
+            compute_frameworks=[PandasDataFrame],
+            api_data=self._data("ok"),
+            plugin_collector=_mutating_enabled,
+            parallelization_modes=modes,
+        )
+
+        with pytest.raises(Exception) as raised:
+            session.run(api_data=self._data(trigger))
+
+        message = str(raised.value)
+        assert isinstance(raised.value, FrozenPlanError) or "FrozenPlanError" in message
+        for fragment in (key, "before prepare", "run(api_data=", "run(artifacts="):
+            assert fragment in message
+
+        result = session.run(api_data=self._data("ok"))
+        assert result[0]["PrepareRunMutatingOptionsFG"].tolist() == [1, 2]
+
+
+def _plan_snapshot(session: Any) -> list[tuple[Any, ...]]:
+    """Per planned Feature: name, hash, group and context options (copied) and its identity."""
+    return [
+        (str(f.name), hash(f), dict(f.options.group), dict(f.options.context), id(f))
+        for step in session.engine.execution_planner
+        for f in getattr(getattr(step, "features", None), "features", ())
+    ]
+
+
+def _plan_features(session: Any) -> list[Feature]:
+    return [
+        f for step in session.engine.execution_planner for f in getattr(getattr(step, "features", None), "features", ())
+    ]
+
+
+_CACHED_ID = Feature(name="api_id", index=Index(("api_id",)))
+_CACHED_VALUE = Feature(name="api_value", index=Index(("api_id",)))
+
+
+class PrepareRunCachedInputsFG(FeatureGroup):
+    """input_features returns class-level cached Feature objects and one nested in an option value."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        nested = options.get("nested_source")
+        return {_CACHED_ID, nested if nested is not None else _CACHED_VALUE}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data["PrepareRunCachedInputsFG"] = data["api_id"]
+        return data
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name()}
+
+
+_cached_enabled = PluginCollector.enabled_feature_groups({ApiDataFG, PrepareRunCachedInputsFG})
+_API = {"PrepareExample": {"api_id": [1, 2], "api_value": ["a", "b"]}}
+
+
+class TestPreparedPlanIsFrozen:
+    """After prepare, every FeatureGroupStep's FeatureSet, Features and Options raise on write."""
+
+    def test_feature_set_features_and_options_reject_writes(self) -> None:
+        from mloda.core.abstract_plugins.components.plan_freeze import FrozenPlanError
+        from mloda.core.core.step.feature_group_step import FeatureGroupStep
+
+        session = mloda.prepare(
+            [Feature(name="PrepareRunApiFeature", options={"k": 1})],
+            compute_frameworks=[PandasDataFrame],
+            api_data=_API,
+            plugin_collector=_enabled,
+        )
+
+        assert session.engine is not None
+        steps = [s for s in session.engine.execution_planner if isinstance(s, FeatureGroupStep)]
+        assert steps
+        for step in steps:
+            with pytest.raises(FrozenPlanError):
+                step.features.prepared = False
+            with pytest.raises(FrozenPlanError):
+                step.features.features.add(Feature(name="late"))
+            for feature in step.features.features:
+                with pytest.raises(FrozenPlanError):
+                    feature.domain = None
+                with pytest.raises(FrozenPlanError):
+                    feature.options.add_to_context("late", 1)
+                with pytest.raises(FrozenPlanError):
+                    feature.options.group["late"] = 1
+
+
+class TestSecondPrepareLeavesFirstPlanUnchanged:
+    """Intake copies, so later prepares and caller edits never write into an earlier plan."""
+
+    def test_reused_user_features_with_copy_features_false(self) -> None:
+        user_feature = Feature(name="PrepareRunApiFeature", options={"k": 1})
+        kwargs: dict[str, Any] = {
+            "compute_frameworks": [PandasDataFrame],
+            "api_data": _API,
+            "plugin_collector": _enabled,
+            "copy_features": False,
+        }
+        first = mloda.prepare([user_feature], **kwargs)
+        before = _plan_snapshot(first)
+
+        user_feature.options.add_to_context("later", 2)
+        second = mloda.prepare([user_feature], **kwargs)
+
+        assert _plan_snapshot(first) == before
+        assert not any(f is user_feature for f in _plan_features(first) + _plan_features(second))
+        assert first.run(api_data=_API)[0]["PrepareRunApiFeature"].tolist() == ["1_a", "2_b"]
+
+    def test_cached_and_nested_input_features_are_not_shared_between_plans(self) -> None:
+        nested = Feature(name="api_value", index=Index(("api_id",)))
+        kwargs: dict[str, Any] = {
+            "compute_frameworks": [PandasDataFrame],
+            "api_data": _API,
+            "plugin_collector": _cached_enabled,
+        }
+        first = mloda.prepare([Feature(name="PrepareRunCachedInputsFG", options={"nested_source": nested})], **kwargs)
+        before = _plan_snapshot(first)
+        hashes = (hash(_CACHED_ID), hash(nested))
+
+        second = mloda.prepare([Feature(name="PrepareRunCachedInputsFG", options={"tag": 2})], **kwargs)
+
+        assert _plan_snapshot(first) == before
+        assert (hash(_CACHED_ID), hash(nested)) == hashes
+        shared = {id(_CACHED_ID), id(_CACHED_VALUE), id(nested)}
+        assert not shared & {id(f) for f in _plan_features(first) + _plan_features(second)}
+        assert first.run(api_data=_API)[0]["PrepareRunCachedInputsFG"].tolist() == [1, 2]

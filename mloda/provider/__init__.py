@@ -43,6 +43,7 @@ from mloda.core.abstract_plugins.compute_framework import EmptyResultError as Em
 # Utilities
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.plan_freeze import FrozenPlanError
 from mloda.core.abstract_plugins.components.credential_access import (
     CredentialFieldMissing,
     CredentialReadRefused,
@@ -233,6 +234,7 @@ __all__ = [
     "ResolvedCredential",
     "CredentialReadRefused",
     "CredentialFieldMissing",
+    "FrozenPlanError",
     "NO_DEFAULT",
     "PropertyValidationError",
     "validate_property_values",

@@ -71,17 +71,18 @@ class TestmlodaAPI:
     def test_copy_features_false_no_copy(self) -> None:
         """Test that copy_features=False does not create a copy."""
         with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):
-            original_features: list[Feature | str] = [Feature("test_feature")]
+            shared_value = object()  # not deep-copied: the reason the flag exists
+            original_features: list[Feature | str] = [Feature("test_feature", options={"k": shared_value})]
             original_feature = original_features[0]
             assert isinstance(original_feature, Feature)
 
-            # Create mlodaAPI with copy_features=False
             api_request = mlodaAPI(original_features, copy_features=False)
 
-            # Verify the feature in the mlodaAPI is the same object (was NOT copied)
+            # The plan gets a shallow copy (never the caller's object); option values stay shared by reference.
             api_feature = list(api_request.features)[0]
-            assert api_feature is original_feature
+            assert api_feature is not original_feature
             assert api_feature.name == original_feature.name
+            assert api_feature.options.get("k") is shared_value
 
 
 class TestBareStringRejected:

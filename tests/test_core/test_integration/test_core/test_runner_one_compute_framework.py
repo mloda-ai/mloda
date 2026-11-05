@@ -63,7 +63,10 @@ class EngineRunnerTest3(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pc.multiply(data.column(cls.feature_2.name), 3)
+        # The planner no longer renames the cached feature_2 in place; derive the planned input column.
+        config = features.get_options_key("config")
+        column = f"EngineRunnerTest2-{config}" if config else "EngineRunnerTest2"
+        return pc.multiply(data.column(column), 3)
 
 
 class EngineRunnerTest4(DataCreatorFeatureGroup):

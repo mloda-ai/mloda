@@ -12,6 +12,7 @@ from mloda.core.abstract_plugins.components.domain import Domain
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceBase
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.plan_freeze import FrozenPlanError
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 from tests.mixins.reader_feature_groups.lazy_source_group import load_document_group
@@ -538,3 +539,55 @@ def test_features_differing_only_in_connection_are_not_equal() -> None:
     assert len({Feature("x", connection=first), Feature("x", connection=second)}) == 2
     first.close()
     second.close()
+
+
+class TestFeatureFreeze:
+    @staticmethod
+    def _frozen() -> Feature:
+        feature = Feature(name="frozen_f", options={"a": 1})
+        feature.freeze()
+        return feature
+
+    def test_freeze_freezes_options(self) -> None:
+        feature = self._frozen()
+        with pytest.raises(FrozenPlanError, match="newkey"):
+            feature.options.set("newkey", 1)
+
+    def test_hash_is_stored_and_not_recomputed_while_frozen(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        feature = self._frozen()
+        expected = hash(feature)
+        calls: list[bool] = []
+
+        def counting(self: Feature, include: bool) -> int:
+            calls.append(include)
+            return 0
+
+        monkeypatch.setattr(Feature, "_hash", counting)
+        assert hash(feature) == expected
+        assert hash(feature) == expected
+        assert calls == []
+
+    def test_attribute_write_raises_naming_attribute(self) -> None:
+        feature = self._frozen()
+        with pytest.raises(FrozenPlanError, match="compute_frameworks") as exc:
+            feature.compute_frameworks = set()
+        assert "before prepare" in str(exc.value)
+
+    def test_copy_is_writable_and_hash_follows_mutation(self) -> None:
+        feature = self._frozen()
+        for dup in (copy.copy(feature), copy.deepcopy(feature)):
+            before = hash(dup)
+            dup.options.set("added", 1)
+            dup.compute_frameworks = set()
+            assert hash(dup) != before
+        assert "added" not in feature.options.group
+
+    def test_pickle_round_trip_stays_frozen_with_correct_hash(self) -> None:
+        feature = self._frozen()
+        restored: Feature = pickle.loads(pickle.dumps(feature))  # nosec B301
+        assert hash(restored) == hash(feature)
+        assert restored == feature
+        with pytest.raises(FrozenPlanError):
+            restored.compute_frameworks = set()
+        with pytest.raises(FrozenPlanError):
+            restored.options.set("n", 1)

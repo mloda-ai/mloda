@@ -361,9 +361,9 @@ while an explicit group option stays its own feature. `options_with_defaults` re
 pre-materialization contexts (e.g. `resolve_subtype` internals) and for read sites the framework hands
 pre-default options, `input_features` above all.
 
-For an engine-driven request, intake has already filled everything, so the compute-boundary call is a
-no-op. Direct `FeatureSet` use that bypasses the engine gets the fill there, and collapsing twins raise
-instead of merging.
+For an engine-driven request, intake has already filled everything and the plan is frozen, so
+`run_calculate_feature` skips the compute-boundary call for a prepared FeatureSet. Direct `FeatureSet` use
+that bypasses the engine gets the fill there, and collapsing twins raise instead of merging.
 
 A materialized default or bound value is never a declared option, so it never conflicts with a
 name-bound value: the name-agreement check reads the caller's own keys only.

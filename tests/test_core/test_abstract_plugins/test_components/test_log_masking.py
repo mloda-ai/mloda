@@ -190,6 +190,18 @@ def test_dict_arg_masks_values_and_keeps_keys(capture: _Capture) -> None:
     assert set(record.args) == {"user", "other"}
 
 
+def test_read_only_dict_arg_masks_like_a_plain_dict(capture: _Capture) -> None:
+    from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlyDict
+
+    with _scope(_SECRET):
+        capture.logger.info("u=%(user)s o=%(other)s", ReadOnlyDict({"user": _SECRET, "other": "x"}, "options"))
+
+    (record,) = capture.records
+    assert record.getMessage() == "u=*** o=x"
+    assert isinstance(record.args, Mapping)
+    assert set(record.args) == {"user", "other"}
+
+
 @pytest.mark.parametrize("wrap", [MappingProxyType, OrderedDict], ids=["mappingproxy", "ordereddict"])
 def test_non_dict_mapping_arg_holding_a_literal_is_flattened(capture: _Capture, wrap: Any) -> None:
     with _scope(_SECRET):

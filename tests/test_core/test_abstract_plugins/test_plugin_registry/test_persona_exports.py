@@ -36,6 +36,7 @@ _SOURCE_MODULES: dict[str, str] = {
     "verified_context": "mloda.core.abstract_plugins.verified_context",
     "link": "mloda.core.abstract_plugins.components.link",
     "credential_access": "mloda.core.abstract_plugins.components.credential_access",
+    "plan_freeze": "mloda.core.abstract_plugins.components.plan_freeze",
 }
 
 
@@ -73,6 +74,8 @@ EXPORT_MATRIX: list[tuple[str, str, str]] = [
     ("provider", "CredentialReadRefused", "credential_access"),
     ("provider", "CredentialFieldMissing", "credential_access"),
     ("steward", "CredentialReadRefused", "credential_access"),
+    # Raised when a provider writes into the frozen compiled plan.
+    ("provider", "FrozenPlanError", "plan_freeze"),
 ]
 
 _MATRIX_IDS = [f"{namespace}-{symbol}" for namespace, symbol, _source in EXPORT_MATRIX]

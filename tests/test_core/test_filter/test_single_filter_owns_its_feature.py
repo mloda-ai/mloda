@@ -137,12 +137,12 @@ def test_group_key_shared_filter_stays_findable_in_the_global_filter() -> None:
 
 
 def test_group_key_shared_filter_keeps_its_declared_options() -> None:
-    """The filter keeps the options it was declared with, while the caller's feature is still filled
+    """The filter keeps the options it was declared with, and the caller's feature is no longer written back
     (fails pre-fix: both views are the same object, so the run rewrites the filter too)."""
     observed = _run_group_key_default()
     assert observed["stored_group"] == {SFO_GRP_KEY: None}, f"the filter must own its options: {observed!r}"
-    assert observed["caller_group"] == {SFO_GRP_KEY: SFO_GRP_DEFAULT}, (
-        f"intake must still materialize the caller's feature: {observed!r}"
+    assert observed["caller_group"] == {SFO_GRP_KEY: None}, (
+        f"the run must not write into the caller's feature: {observed!r}"
     )
 
 
@@ -242,13 +242,13 @@ def _run_cached_input_feature() -> dict[str, Any]:
         copy_features=False,
     )
 
+    unstamped = cached.child_options is None
+    cached.child_options = consumer.options  # what the engine used to stamp itself
+
     global_filter = GlobalFilter()
     global_filter.add_filter(cached, FilterType.EQUAL, {"value": 1})
     stored = next(iter(global_filter.filters))
-    observed: dict[str, Any] = {
-        "stamped": cached.child_options is consumer.options,
-        "member_before": stored in global_filter.filters,
-    }
+    observed: dict[str, Any] = {"unstamped": unstamped, "member_before": stored in global_filter.filters}
 
     frames = list(
         mloda.run_all(
@@ -275,7 +275,7 @@ def test_cached_input_feature_filter_stays_findable_in_the_global_filter() -> No
     stored feature shares the consumer's Options as child_options, so the in-place strict write
     shifts its hash)."""
     observed = _run_cached_input_feature()
-    assert observed["stamped"] is True, f"the engine must stamp the consumer's live Options: {observed!r}"
+    assert observed["unstamped"] is True, f"the engine must not stamp the plugin's cached feature: {observed!r}"
     assert observed["member_before"] is True, f"the filter must be in its own set before the run: {observed!r}"
     assert observed["member_after"] is True, f"the filter must stay findable in its own set: {observed!r}"
 

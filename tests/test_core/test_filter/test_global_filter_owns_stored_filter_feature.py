@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import copy
 from typing import Any
 from uuid import UUID
 
@@ -86,8 +87,15 @@ def test_a_framework_rewrite_of_the_queue_twin_does_not_strand_the_stored_filter
 
     twins = [feature for feature in queue if feature == stored.filter_feature]
     assert len(twins) == 1, f"exactly one queue Feature must equal the stored filter feature: {twins!r}"
-    # What ResolveComputeFrameworks.links does to every queue Feature it resolves.
-    twins[0].compute_frameworks = {PyArrowTable}
+    # What ResolveComputeFrameworks.links does to every queue Feature it resolves, on a writable copy
+    # because the prepared plan itself is frozen.
+    twin = copy(twins[0])
+    stored_hash = hash(stored.filter_feature)
+    twin_hash = hash(twin)
+    twin.compute_frameworks = {PyArrowTable}
+    assert hash(twin) != twin_hash, "the rewrite must change the twin's hash, else this test is vacuous"
+    assert twin is not stored.filter_feature
+    assert hash(stored.filter_feature) == stored_hash
 
     assert stored in global_filter.collection[_COLLECTION_KEY], (
         "the rewrite must not lose the stored filter from its own collection set"

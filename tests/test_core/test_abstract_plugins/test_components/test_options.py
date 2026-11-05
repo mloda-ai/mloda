@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.plan_freeze import FrozenPlanError
 from mloda.provider import SourceFeatureGroup
 from mloda.user import Credential, Feature, Options
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
@@ -786,3 +787,107 @@ class TestOptionsClassKeyNormalization:
         options = Options({key: {"x": 1}})
 
         assert "SourceFeatureGroup" in options.group
+
+
+class TestOptionsFreeze:
+    @staticmethod
+    def _frozen() -> Options:
+        options = Options(group={"g": 1}, context={"c": 2})
+        options.freeze()
+        return options
+
+    @staticmethod
+    def _assert_message(exc: pytest.ExceptionInfo[Exception], key: str) -> None:
+        message = str(exc.value)
+        assert key in message
+        assert "before prepare" in message
+        assert "run(api_data=" in message
+        assert "run(artifacts=" in message
+
+    @pytest.mark.parametrize(
+        ("write", "key"),
+        [
+            (lambda o: o.set("newkey", 1), "newkey"),
+            (lambda o: o.__setitem__("newkey", 1), "newkey"),
+            (lambda o: o.add_to_group("newkey", 1), "newkey"),
+            (lambda o: o.add_to_context("newkey", 1), "newkey"),
+            (lambda o: o.mark_non_forwarded("newkey"), "newkey"),
+            (lambda o: o.group.__setitem__("newkey", 1), "newkey"),
+            (lambda o: o.context.__setitem__("newkey", 1), "newkey"),
+            (lambda o: o.group.update({"newkey": 1}), "newkey"),
+            (lambda o: o.group.__delitem__("g"), "g"),
+        ],
+        ids=[
+            "set",
+            "setitem",
+            "add_to_group",
+            "add_to_context",
+            "mark_non_forwarded",
+            "group_setitem",
+            "context_setitem",
+            "group_update",
+            "group_delitem",
+        ],
+    )
+    def test_write_paths_raise_naming_key_and_alternatives(self, write: Callable[[Options], Any], key: str) -> None:
+        options = self._frozen()
+        with pytest.raises(FrozenPlanError) as exc:
+            write(options)
+        self._assert_message(exc, key)
+        assert options.group == {"g": 1}
+        assert options.context == {"c": 2}
+
+    def test_inherit_union_lock_and_adopt_raise(self) -> None:
+        options = self._frozen()
+        other = Options(group={"o": 1})
+        with pytest.raises(FrozenPlanError):
+            options.inherit_from(other)
+        with pytest.raises(FrozenPlanError):
+            options.union_own_keys(other)
+        with pytest.raises(FrozenPlanError):
+            options.lock_own_keys()
+        with pytest.raises(FrozenPlanError):
+            options._adopt(other)
+
+    def test_frozen_error_is_a_type_error(self) -> None:
+        with pytest.raises(TypeError):
+            self._frozen().set("x", 1)
+
+    def test_copies_are_writable(self) -> None:
+        options = self._frozen()
+        for dup in (
+            copy.copy(options),
+            deepcopy(options),
+            options.rebuild(dict(options.group), dict(options.context)),
+            options._fork(),
+        ):
+            dup.add_to_group("added", 1)
+            dup.group["direct"] = 2
+            assert dup == Options(group={"g": 1, "added": 1, "direct": 2}, context={"c": 2})
+        assert options.group == {"g": 1}
+
+    def test_dict_of_group_is_plain_and_writable(self) -> None:
+        plain = dict(self._frozen().group)
+        assert type(plain) is dict
+        plain["x"] = 1
+
+    def test_pickle_round_trip_stays_frozen_and_strips_non_forwarded(self) -> None:
+        options = Options(group={"conn": "h", "g": 1})
+        options.mark_non_forwarded("conn")
+        options.freeze()
+        restored: Options = pickle.loads(pickle.dumps(options))  # nosec B301
+        assert "conn" not in restored.group
+        assert restored.group["g"] == 1
+        with pytest.raises(FrozenPlanError):
+            restored.set("n", 1)
+        with pytest.raises(FrozenPlanError):
+            restored.group["n"] = 1
+
+
+def test_stable_text_renders_a_read_only_dict_like_a_plain_dict() -> None:
+    from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlyDict
+    from mloda.core.prepare.stable_text import stable_text
+
+    data = {"b": 0x1, "a": {"z": 1}}
+    assert stable_text(ReadOnlyDict(data, "options")) == stable_text(data)
+    assert stable_text(ReadOnlyDict(data, "options")).startswith("{'a': ")

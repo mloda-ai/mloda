@@ -3,6 +3,7 @@
 import re
 
 from mloda.core.abstract_plugins.components.options import Options, _str_option_dict
+from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlyDict
 
 
 _ADDRESS = re.compile(r" at 0x[0-9a-fA-F]+")
@@ -17,7 +18,7 @@ def stable_text(value: object) -> str:
         if value.cascade_context_keys:
             parts += f", cascade_context_keys={stable_text(value.cascade_context_keys)}"
         return f"Options({parts})"
-    if type(value) is dict:
+    if type(value) is dict or type(value) is ReadOnlyDict:
         items = sorted((stable_text(k), stable_text(v)) for k, v in value.items())
         return "{" + ", ".join(f"{k}: {v}" for k, v in items) + "}"
     if type(value) is list:

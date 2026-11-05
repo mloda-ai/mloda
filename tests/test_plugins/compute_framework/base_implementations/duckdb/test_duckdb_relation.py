@@ -1,51 +1,22 @@
 """Tests for the DuckdbRelation class."""
 
 from typing import Any, cast
-import logging
 
+import pyarrow as pa
 import pytest
 
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import (
     DuckdbRelation,
 )
-from tests.test_plugins.compute_framework.base_implementations.relation_test_mixin import (
-    RelationTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.sql_relation_window_test_mixin import (
-    SqlRelationWindowTestMixin,
-)
-
-logger = logging.getLogger(__name__)
-
-try:
-    import duckdb
-    import pyarrow as pa
-except ImportError:
-    logger.warning("DuckDB or PyArrow is not installed. Some tests will be skipped.")
-    duckdb = None  # type: ignore[assignment]
-    pa = None  # type: ignore[assignment, unused-ignore]
+from mloda._testing.compute_framework.relation_suite import SqlRelationWindowSuite
+from mloda._testing.framework_adapter import DuckDBAdapter, FrameworkAdapter
 
 
-@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed.")
-class TestDuckdbRelation(SqlRelationWindowTestMixin, RelationTestMixin):
-    @pytest.fixture
-    def sample_relation(self, connection: Any) -> "DuckdbRelation":
-        return DuckdbRelation.from_dict(
-            connection,
-            {
-                "id": [1, 2, 3, 4, 5],
-                "age": [25, 30, 35, 40, 45],
-                "name": ["Alice", "Bob", "Charlie", "David", "Eve"],
-                "category": ["A", "B", "A", "C", "B"],
-            },
-        )
+class TestDuckdbRelation(SqlRelationWindowSuite):
+    adapter_class = DuckDBAdapter
 
-    @pytest.fixture
-    def relation_class(self) -> Any:
-        return DuckdbRelation
-
-    def get_column_values(self, result: Any, column: str) -> list[Any]:
-        return result.df()[column].tolist()  # type: ignore[no-any-return]
+    def raw_projection(self, relation: Any, sql: str) -> Any:
+        return relation.project(sql)
 
     def test_types_exposes_relation_types_aligned_with_columns(self, connection: Any) -> None:
         arrow = pa.table(
@@ -117,18 +88,6 @@ class TestDuckdbRelation(SqlRelationWindowTestMixin, RelationTestMixin):
             ("score", "BIGINT"),
         ]
 
-    # --- Select ---
-
-    def test_select_raw_sql_expression(self, sample_relation: "DuckdbRelation") -> None:
-        result = sample_relation.project("*, age * 2 AS doubled_age")
-        assert "doubled_age" in result.columns
-        assert len(result) == 5
-
-    def test_select_raw_sql_window_function(self, sample_relation: "DuckdbRelation") -> None:
-        result = sample_relation.project("*, AVG(age) OVER () AS avg_age")
-        assert "avg_age" in result.columns
-        assert len(result) == 5
-
     # DuckDB-specific tests
 
     def test_stores_connection_and_relation(self, connection: Any) -> None:
@@ -177,20 +136,20 @@ class TestDuckdbRelation(SqlRelationWindowTestMixin, RelationTestMixin):
 
     # --- Order ---
 
-    def test_order_single_column(self, sample_relation: "DuckdbRelation") -> None:
+    def test_order_single_column(self, sample_relation: "DuckdbRelation", adapter: FrameworkAdapter) -> None:
         ordered = sample_relation.order("age")
-        ids = self.get_column_values(ordered, "id")
+        ids = self.column_values(adapter, ordered, "id")
         assert ids == [1, 2, 3, 4, 5]
 
-    def test_order_single_column_desc(self, sample_relation: "DuckdbRelation") -> None:
+    def test_order_single_column_desc(self, sample_relation: "DuckdbRelation", adapter: FrameworkAdapter) -> None:
         ordered = sample_relation.order("age DESC")
-        ids = self.get_column_values(ordered, "id")
+        ids = self.column_values(adapter, ordered, "id")
         assert ids == [5, 4, 3, 2, 1]
 
-    def test_order_multiple_columns(self, sample_relation: "DuckdbRelation") -> None:
+    def test_order_multiple_columns(self, sample_relation: "DuckdbRelation", adapter: FrameworkAdapter) -> None:
         ordered = sample_relation.order("category", "age")
-        categories = self.get_column_values(ordered, "category")
-        ages = self.get_column_values(ordered, "age")
+        categories = self.column_values(adapter, ordered, "category")
+        ages = self.column_values(adapter, ordered, "age")
         assert categories == ["A", "A", "B", "B", "C"]
         assert ages == [25, 35, 30, 45, 40]
 
@@ -202,9 +161,9 @@ class TestDuckdbRelation(SqlRelationWindowTestMixin, RelationTestMixin):
         ordered = sample_relation.order("age")
         assert len(ordered) == 5
 
-    def test_order_does_not_mutate_original(self, sample_relation: "DuckdbRelation") -> None:
+    def test_order_does_not_mutate_original(self, sample_relation: "DuckdbRelation", adapter: FrameworkAdapter) -> None:
         sample_relation.order("age DESC")
-        ids = self.get_column_values(sample_relation, "id")
+        ids = self.column_values(adapter, sample_relation, "id")
         assert ids == [1, 2, 3, 4, 5]
 
     def test_order_returns_duckdb_relation(self, sample_relation: "DuckdbRelation") -> None:
@@ -213,9 +172,9 @@ class TestDuckdbRelation(SqlRelationWindowTestMixin, RelationTestMixin):
 
     # --- Project (public raw projection) ---
 
-    def test_project_basic_expression(self, sample_relation: "DuckdbRelation") -> None:
+    def test_project_basic_expression(self, sample_relation: "DuckdbRelation", adapter: FrameworkAdapter) -> None:
         result = sample_relation.project("id, age * 2 AS double_age")
-        ages = self.get_column_values(result, "double_age")
+        ages = self.column_values(adapter, result, "double_age")
         assert ages == [50, 60, 70, 80, 90]
 
     def test_project_returns_duckdb_relation(self, sample_relation: "DuckdbRelation") -> None:
@@ -228,16 +187,16 @@ class TestDuckdbRelation(SqlRelationWindowTestMixin, RelationTestMixin):
 
     # --- Aggregate ---
 
-    def test_aggregate_with_group_by(self, sample_relation: "DuckdbRelation") -> None:
+    def test_aggregate_with_group_by(self, sample_relation: "DuckdbRelation", adapter: FrameworkAdapter) -> None:
         result = sample_relation.aggregate("category, COUNT(*) AS n", "category").order("category")
-        cats = self.get_column_values(result, "category")
-        counts = self.get_column_values(result, "n")
+        cats = self.column_values(adapter, result, "category")
+        counts = self.column_values(adapter, result, "n")
         assert cats == ["A", "B", "C"]
         assert counts == [2, 2, 1]
 
-    def test_aggregate_without_group_by(self, sample_relation: "DuckdbRelation") -> None:
+    def test_aggregate_without_group_by(self, sample_relation: "DuckdbRelation", adapter: FrameworkAdapter) -> None:
         result = sample_relation.aggregate("COUNT(*) AS total")
-        assert self.get_column_values(result, "total") == [5]
+        assert self.column_values(adapter, result, "total") == [5]
 
     def test_aggregate_returns_duckdb_relation(self, sample_relation: "DuckdbRelation") -> None:
         result = sample_relation.aggregate("COUNT(*) AS total")
@@ -245,9 +204,9 @@ class TestDuckdbRelation(SqlRelationWindowTestMixin, RelationTestMixin):
 
     # --- Query ---
 
-    def test_query_basic(self, sample_relation: "DuckdbRelation") -> None:
+    def test_query_basic(self, sample_relation: "DuckdbRelation", adapter: FrameworkAdapter) -> None:
         result = sample_relation.query("data", "SELECT id, age FROM data WHERE age >= 35 ORDER BY id")
-        ids = self.get_column_values(result, "id")
+        ids = self.column_values(adapter, result, "id")
         assert ids == [3, 4, 5]
 
     def test_query_raises_value_error_when_no_relation_returned(self, connection: Any) -> None:
@@ -261,12 +220,12 @@ class TestDuckdbRelation(SqlRelationWindowTestMixin, RelationTestMixin):
         with pytest.raises(ValueError, match="SELECT"):
             rel.query("data", "SET threads = 1")
 
-    def test_query_with_window_function(self, sample_relation: "DuckdbRelation") -> None:
+    def test_query_with_window_function(self, sample_relation: "DuckdbRelation", adapter: FrameworkAdapter) -> None:
         result = sample_relation.query(
             "data",
             "SELECT id, ROW_NUMBER() OVER (PARTITION BY category ORDER BY age) AS rn FROM data ORDER BY id",
         )
-        rns = self.get_column_values(result, "rn")
+        rns = self.column_values(adapter, result, "rn")
         assert rns == [1, 1, 2, 1, 2]
 
     def test_query_returns_duckdb_relation(self, sample_relation: "DuckdbRelation") -> None:
@@ -275,20 +234,24 @@ class TestDuckdbRelation(SqlRelationWindowTestMixin, RelationTestMixin):
 
     # --- Injection-contract (verbatim passthrough) ---
 
-    def test_project_passes_expression_verbatim(self, sample_relation: "DuckdbRelation") -> None:
+    def test_project_passes_expression_verbatim(
+        self, sample_relation: "DuckdbRelation", adapter: FrameworkAdapter
+    ) -> None:
         """project() must pass the caller's expression unchanged; quoting would turn function calls into string literals."""
         result = sample_relation.project("UPPER(name) AS upper_name")
-        assert self.get_column_values(result, "upper_name") == ["ALICE", "BOB", "CHARLIE", "DAVID", "EVE"]
+        assert self.column_values(adapter, result, "upper_name") == ["ALICE", "BOB", "CHARLIE", "DAVID", "EVE"]
 
-    def test_aggregate_passes_expression_verbatim(self, sample_relation: "DuckdbRelation") -> None:
+    def test_aggregate_passes_expression_verbatim(
+        self, sample_relation: "DuckdbRelation", adapter: FrameworkAdapter
+    ) -> None:
         """aggregate() must pass the caller's SQL fragment unchanged; quoting would break FILTER (WHERE ...) syntax."""
         result = sample_relation.aggregate("COUNT(*) FILTER (WHERE age > 30) AS over_30")
-        assert self.get_column_values(result, "over_30") == [3]
+        assert self.column_values(adapter, result, "over_30") == [3]
 
-    def test_query_passes_sql_verbatim(self, sample_relation: "DuckdbRelation") -> None:
+    def test_query_passes_sql_verbatim(self, sample_relation: "DuckdbRelation", adapter: FrameworkAdapter) -> None:
         """query() must pass the caller's SQL string unchanged; quoting would prevent execution of the SELECT statement."""
         result = sample_relation.query("t", "SELECT UPPER(name) AS upper_name FROM t ORDER BY upper_name")
-        assert self.get_column_values(result, "upper_name") == ["ALICE", "BOB", "CHARLIE", "DAVID", "EVE"]
+        assert self.column_values(adapter, result, "upper_name") == ["ALICE", "BOB", "CHARLIE", "DAVID", "EVE"]
 
     # --- append_column: helper-name collision (issue #405 subtask 2) ---
 

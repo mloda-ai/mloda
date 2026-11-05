@@ -22,9 +22,10 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class AdapterCapabilities:
-    """typed_columns: the frame carries a native type per column (False for PythonDict)."""
+    """typed_columns: native type per column (False for PythonDict); sql_relation: serves the SQL relation suites."""
 
     typed_columns: bool = True
+    sql_relation: bool = False
 
 
 def _module_available(name: str) -> bool:
@@ -290,7 +291,7 @@ class PolarsLazyAdapter(PolarsAdapter):
 
 
 class DuckDBAdapter(_ArrowReadAdapter):
-    capabilities = AdapterCapabilities(typed_columns=True)
+    capabilities = AdapterCapabilities(typed_columns=True, sql_relation=True)
 
     def __init__(self) -> None:
         self._connection: Any = None
@@ -334,7 +335,7 @@ class DuckDBAdapter(_ArrowReadAdapter):
 
 
 class SqliteAdapter(_ArrowReadAdapter):
-    capabilities = AdapterCapabilities(typed_columns=True)
+    capabilities = AdapterCapabilities(typed_columns=True, sql_relation=True)
 
     def __init__(self) -> None:
         self._connection: Any = None

@@ -630,48 +630,52 @@ class TestRunStartRefusals:
 
         assert "credentials" not in inspect.signature(getattr(mloda, entry)).parameters
 
-    def test_a_missing_required_field_names_the_handle_and_the_field(self) -> None:
+    @pytest.mark.parametrize(
+        ("factory", "credentials", "expected", "forbidden"),
+        [
+            (
+                "fields",
+                {"vault-main": {"chs_user": _FRESH_FIELDS["chs_user"]}},
+                ("vault-main", "chs_pass"),
+                _FRESH_FIELDS["chs_user"],
+            ),
+            ("vault", {"vault-a": {"chs_blob": BYTES_SECRET}}, ("vault-a", "chs_blob"), BYTES_SECRET.decode()),
+            ("vault", {"vault-a": "chs-plain-string-secret"}, (), "chs-plain-string-secret"),
+        ],
+        ids=["missing-field", "bytes-leaf", "mis-wrapped"],
+    )
+    def test_a_malformed_fresh_credential_is_refused_without_printing_its_value(
+        self, factory: str, credentials: Any, expected: tuple[str, ...], forbidden: str
+    ) -> None:
         recorder = _RunRecorder()
-        session = mloda.prepare(
-            [Feature("chs_fields_a", options={"chs_fields_handle": "vault-main"})],
-            compute_frameworks=[PandasDataFrame],
-            data_access_collection=_dac(**{"vault-main": dict(_FRESH_FIELDS)}),
-            plugin_collector=_plugins(ChsFieldsFG),
-            function_extender={recorder},
-        )
+        if factory == "fields":
+            session = mloda.prepare(
+                [Feature("chs_fields_a", options={"chs_fields_handle": "vault-main"})],
+                compute_frameworks=[PandasDataFrame],
+                data_access_collection=_dac(**{"vault-main": dict(_FRESH_FIELDS)}),
+                plugin_collector=_plugins(ChsFieldsFG),
+                function_extender={recorder},
+            )
+        else:
+            session = _vault_session(recorder)
 
-        message = _refused_run(session, {"vault-main": {"chs_user": _FRESH_FIELDS["chs_user"]}}, recorder)
+        message = _refused_run(session, credentials, recorder)
 
-        assert "vault-main" in message
-        assert "chs_pass" in message
-        assert _FRESH_FIELDS["chs_user"] not in message
+        for part in expected:
+            assert part in message
+        assert forbidden not in message
 
-    def test_a_bytes_leaf_is_refused_naming_the_handle_and_key_path(self) -> None:
-        recorder = _RunRecorder()
-        session = _vault_session(recorder)
-
-        message = _refused_run(session, {"vault-a": {"chs_blob": BYTES_SECRET}}, recorder)
-
-        assert "vault-a" in message
-        assert "chs_blob" in message
-        assert BYTES_SECRET.decode() not in message
-
-    def test_a_mis_wrapped_value_is_refused_without_printing_it(self) -> None:
-        recorder = _RunRecorder()
-        session = _vault_session(recorder)
-
-        message = _refused_run(session, {"vault-a": "chs-plain-string-secret"}, recorder)
-
-        assert "chs-plain-string-secret" not in message
-
-    def test_a_handle_only_a_source_step_binds_is_refused_naming_the_handle(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("declared_too", [False, True], ids=["source-only", "source-and-declared"])
+    def test_a_handle_a_source_step_binds_is_refused_naming_the_handle(
+        self, tmp_path: Path, declared_too: bool
+    ) -> None:
         recorder = _RunRecorder()
         dac, _, _ = bound_case(tmp_path, "named")
         session = mloda.prepare(
-            ["bound_col"],
-            compute_frameworks=[PyArrowTable],
+            ["bound_col", _vault("db-main")] if declared_too else ["bound_col"],
+            compute_frameworks=[PyArrowTable, PandasDataFrame] if declared_too else [PyArrowTable],
             data_access_collection=dac,
-            plugin_collector=_plugins(SqliteFG),
+            plugin_collector=_plugins(SqliteFG, ChsVaultFG) if declared_too else _plugins(SqliteFG),
             function_extender={recorder},
         )
 
@@ -680,22 +684,6 @@ class TestRunStartRefusals:
         assert "db-main" in message
         assert "prepare" in message
         assert "chs-other.db" not in message
-
-    def test_a_handle_a_source_binds_and_a_compute_step_declares_is_also_refused(self, tmp_path: Path) -> None:
-        recorder = _RunRecorder()
-        dac, _, _ = bound_case(tmp_path, "named")
-        session = mloda.prepare(
-            ["bound_col", _vault("db-main")],
-            compute_frameworks=[PyArrowTable, PandasDataFrame],
-            data_access_collection=dac,
-            plugin_collector=_plugins(SqliteFG, ChsVaultFG),
-            function_extender={recorder},
-        )
-
-        message = _refused_run(session, {"db-main": {"sqlite": "chs-other.db"}}, recorder)
-
-        assert "db-main" in message
-        assert "prepare" in message
 
     def test_a_successful_fresh_run_leaves_the_session_collection_unchanged(self) -> None:
         session = _vault_session()

@@ -780,7 +780,7 @@ def _refused_at_stream_run_call(ext: _LifecycleMatrixExtender, tmp_path: Path, m
 
 
 def _break_engine_setup(mp: pytest.MonkeyPatch) -> None:
-    def broken(self: Any, parallelization_modes: Any, flight_server: Any) -> None:
+    def broken(self: Any, parallelization_modes: Any, flight_server: Any, run_dac: Any = None) -> None:
         raise RuntimeError("engine setup failed")
 
     mp.setattr(mloda, "_setup_engine_runner", broken)

@@ -1731,21 +1731,30 @@ def _stream_rows(stream: Any, column: str) -> list[str]:
     return [str(row) for frame in stream for row in frame[column]]
 
 
+def _run_rows(session: Any, column: str, **kwargs: Any) -> list[str]:
+    return [str(row) for frame in session.run(**kwargs) for row in frame[column]]
+
+
+def _stream_run_rows(session: Any, column: str, **kwargs: Any) -> list[str]:
+    return _stream_rows(session.stream_run(**kwargs), column)
+
+
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("mode", _GRANT_MODES)
+@pytest.mark.parametrize("rows_of", [_run_rows, _stream_run_rows], ids=["run", "stream_run"])
 def test_each_run_on_a_prepared_session_reads_its_own_fresh_credential(
-    mode: ParallelizationMode, flight_server: Any
+    rows_of: Any, mode: ParallelizationMode, flight_server: Any
 ) -> None:
     session = _prepare_vault(ChsRcReadingFG, "chs_rc_a", mode)
     kwargs: dict[str, Any] = {"parallelization_modes": {mode}, "flight_server": flight_server}
 
-    first = session.run(credentials={_E2E_HANDLE: _FRESH_1}, **kwargs)
-    second = session.run(credentials={_E2E_HANDLE: _FRESH_2}, **kwargs)
-    third = session.run(**kwargs)
+    first = rows_of(session, "chs_rc_a", credentials={_E2E_HANDLE: _FRESH_1}, **kwargs)
+    second = rows_of(session, "chs_rc_a", credentials={_E2E_HANDLE: _FRESH_2}, **kwargs)
+    third = rows_of(session, "chs_rc_a", **kwargs)
 
-    assert list(first[0]["chs_rc_a"]) == [_row(_FRESH_1)]
-    assert list(second[0]["chs_rc_a"]) == [_row(_FRESH_2)]
-    assert list(third[0]["chs_rc_a"]) == [f"{_E2E_HOST}|{len(_E2E_HMAC)}"]
+    assert first == [_row(_FRESH_1)]
+    assert second == [_row(_FRESH_2)]
+    assert third == [f"{_E2E_HOST}|{len(_E2E_HMAC)}"]
 
 
 @pytest.mark.timeout(15)
@@ -1771,21 +1780,6 @@ def test_a_handle_not_passed_keeps_its_prepared_value_while_the_passed_one_is_fr
     columns = {column: list(frame[column]) for frame in result for column in frame.columns}
     assert columns["chs_rc_a"] == [_row(_FRESH_1)]
     assert columns["chs_rc_b"] == [_row(_TWO_VAULTS[_VAULT_B])]
-
-
-@pytest.mark.timeout(15)
-@pytest.mark.parametrize("mode", _GRANT_MODES)
-def test_stream_run_reads_its_own_fresh_credential(mode: ParallelizationMode, flight_server: Any) -> None:
-    session = _prepare_vault(ChsRcReadingFG, "chs_rc_a", mode)
-    kwargs: dict[str, Any] = {"parallelization_modes": {mode}, "flight_server": flight_server}
-
-    first = _stream_rows(session.stream_run(credentials={_E2E_HANDLE: _FRESH_1}, **kwargs), "chs_rc_a")
-    second = _stream_rows(session.stream_run(credentials={_E2E_HANDLE: _FRESH_2}, **kwargs), "chs_rc_a")
-    third = _stream_rows(session.stream_run(**kwargs), "chs_rc_a")
-
-    assert first == [_row(_FRESH_1)]
-    assert second == [_row(_FRESH_2)]
-    assert third == [f"{_E2E_HOST}|{len(_E2E_HMAC)}"]
 
 
 @pytest.mark.timeout(15)

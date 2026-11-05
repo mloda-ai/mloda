@@ -37,10 +37,6 @@ class PandasAggregation(Implementation[AggregatedFeatureGroup]):
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
         """Add the result to the DataFrame."""
-        import pandas as pd
-
-        if isinstance(result, pd.Series) and len(result) == 1 and len(data) != 1:
-            result = pd.Series(result.iloc[0], index=data.index, dtype=result.dtype)
         data[feature_name] = result
         return data
 
@@ -124,9 +120,14 @@ class PandasAggregation(Implementation[AggregatedFeatureGroup]):
 
     @staticmethod
     def _typed_scalar(data: Any, value: Any, source_dtype: Any, dtype: Any) -> Any:
-        """Wrap a scalar in a one-element typed Series on nullable sources; numpy sources keep the raw scalar."""
+        """Broadcast a scalar as a typed Series on the frame's index for masked integer/boolean sources only."""
         import pandas as pd
 
-        if not pd.api.types.is_extension_array_dtype(source_dtype):
+        is_masked = isinstance(source_dtype, pd.BooleanDtype) or (
+            pd.api.types.is_extension_array_dtype(source_dtype)
+            and pd.api.types.is_integer_dtype(source_dtype)
+            and not isinstance(source_dtype, pd.ArrowDtype)
+        )
+        if not is_masked:
             return value
-        return pd.Series([value], dtype=dtype)
+        return pd.Series(value, index=data.index, dtype=dtype)

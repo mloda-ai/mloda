@@ -202,6 +202,30 @@ class TestPandasAggregation:
         result = AggregatedFeatureGroup.calculate_feature(sample_dataframe, feature_set_sum)
         assert result["sales__sum_aggr"].iloc[0] == 1500
 
+    @pytest.mark.parametrize(
+        "agg, dtype", [("min", "Int64"), ("max", "Int64"), ("mean", "Float64"), ("median", "Float64")]
+    )
+    def test_one_row_nullable_frame_with_non_zero_index_keeps_value(self, agg: str, dtype: str) -> None:
+        data = pd.DataFrame({"sales": pd.array([5], dtype="Int64")}, index=[7])
+        feature_set = FeatureSet()
+        feature_set.add(Feature(f"sales__{agg}_aggr"))
+        feature_set.implementation = PandasAggregation
+        result = AggregatedFeatureGroup.calculate_feature(data, feature_set)
+        column = result[f"sales__{agg}_aggr"]
+        assert list(result.index) == [7]
+        assert column.iloc[0] == 5
+        assert str(column.dtype) == dtype
+
+    def test_mean_on_tz_aware_datetime_returns_timestamp(self) -> None:
+        data = pd.DataFrame({"sales": pd.to_datetime(["2024-01-01", "2024-01-03"]).tz_localize("UTC")})
+        feature_set = FeatureSet()
+        feature_set.add(Feature("sales__mean_aggr"))
+        feature_set.implementation = PandasAggregation
+        result = AggregatedFeatureGroup.calculate_feature(data, feature_set)
+        column = result["sales__mean_aggr"]
+        assert str(column.dtype) == "datetime64[ns, UTC]" or str(column.dtype).endswith(", UTC]")
+        assert column.iloc[0] == pd.Timestamp("2024-01-02", tz="UTC")
+
 
 class TestPandasAggregatedZeroRow(PandasZeroRowAdapter, AggregatedZeroRowTestMixin):
     feature_group_class = PandasAggregation

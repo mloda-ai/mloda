@@ -168,7 +168,7 @@ def test_nullable_int_and_bool_keep_exact_type(adapter: Any) -> None:
         assert adapter.lost_type(result, "b") is False
 
 
-@pytest.mark.parametrize("name", ["PyArrow", "Polars", "PolarsLazy"])
+@pytest.mark.parametrize("name", ["PyArrow", "Pandas", "Polars", "PolarsLazy"])
 def test_lost_type_true_for_null_typed_column(name: str) -> None:
     pa = pytest.importorskip("pyarrow")
     adapter = _make(name)

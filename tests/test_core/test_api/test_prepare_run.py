@@ -20,13 +20,8 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.user import mloda, mlodaAPI, Feature, ParallelizationMode, PluginCollector
-from mloda.provider import ApiDataFG, ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
+from mloda.provider import ApiDataFG, ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup, PropertySpec
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
-from tests.test_core.test_abstract_plugins.test_materialize_defaults_boundary import (
-    CTX_DEFAULT,
-    _make_boundary_probe_fg,
-    _single_row,
-)
 from mloda.user import Options, FeatureName, Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -35,6 +30,33 @@ from tests.test_plugins.api.test_simplified_api_data import (
     ApiNeutralGenericFG,
     ApiNeutralPandasOnlyFG,
 )
+
+
+CTX_DEFAULT = "prskip_ctx_val"
+CTX_KEY = "prskip_ctx_default"
+
+
+def _make_boundary_probe_fg(feature_name: str) -> type[FeatureGroup]:
+    """Root FeatureGroup whose calculate_feature reads feature.options directly (no options_with_defaults)."""
+
+    class PrSkipBoundaryProbeFeatureGroup(DataCreatorFeatureGroup):
+        PROPERTY_MAPPING = {CTX_KEY: PropertySpec("A context concrete default.", context=True, default=CTX_DEFAULT)}
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {feature_name}
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return {str(f.name): [{"ctx": f.options.get(CTX_KEY)}] for f in features.features}
+
+    return PrSkipBoundaryProbeFeatureGroup
+
+
+def _single_row(frame: Any, column: str) -> Any:
+    values = list(frame[column]) if isinstance(frame, dict) else [row[column] for row in frame]
+    assert len(values) == 1, f"expected exactly one row for {column}, got {values!r}"
+    return values[0]
 
 
 class PrepareRunApiFeature(FeatureGroup):

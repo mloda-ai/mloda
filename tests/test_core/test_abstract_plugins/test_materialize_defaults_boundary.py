@@ -20,7 +20,7 @@ an idempotent safety net and its collapse ValueError is unreachable from engine-
 
 from __future__ import annotations
 
-import pickle
+import pickle  # nosec B403
 import re
 from copy import copy
 from typing import Any, Callable
@@ -784,7 +784,7 @@ class TestFeatureSetMaterializeOptionDefaults:
     def test_pickle_drops_marker(self) -> None:
         feature_set = FeatureSet([Feature("mdb_unit_pickle", Options())])
         feature_set._defaults_materialized_for = FeatureGroup
-        assert pickle.loads(pickle.dumps(feature_set))._defaults_materialized_for is None
+        assert pickle.loads(pickle.dumps(feature_set))._defaults_materialized_for is None  # nosec B301
 
     def test_collapse_of_same_name_twins_raises_actionable_duplicate_message(self) -> None:
         """Filling a context default on one twin of a same-name pair collapses the set: the ValueError

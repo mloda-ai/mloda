@@ -1026,7 +1026,7 @@ class TestRowReducingGroupBatching(_ReducerRunHelpers):
                 seen.append(step)
             if step.feature_group is not RawPlusOne or not made_progress:
                 return False
-            return not any(s.step_is_done for s in seen)
+            return not any(s.uuid in orchestrator.worker_manager.result_uuids_collection for s in seen)
 
         monkeypatch.setattr(ExecutionOrchestrator, "_defer_ready_step", _defer_ready_step)
         frames = self._run(

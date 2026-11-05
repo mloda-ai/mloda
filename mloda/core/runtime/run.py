@@ -13,6 +13,7 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.prepare.execution_plan import ExecutionPlan
@@ -143,6 +144,7 @@ class ExecutionOrchestrator:
         output_framework: type[ComputeFramework] | None = None,
         output_connection: Any = None,
         data_access_collection: DataAccessCollection | None = None,
+        transformer: ComputeFrameworkTransformer | None = None,
     ) -> None:
         """
         Initializes the ExecutionOrchestrator with an execution plan and optional flight server.
@@ -154,6 +156,7 @@ class ExecutionOrchestrator:
         """
         self.execution_planner = execution_planner
         self.data_access_collection = data_access_collection
+        self.transformer = transformer
 
         self.cfw_register: CfwManager
         self.manager: Any = None
@@ -173,6 +176,7 @@ class ExecutionOrchestrator:
             request_feature_order=request_feature_order,
             output_framework=output_framework,
             output_connection=output_connection,
+            transformer=transformer,
         )
 
         self._step_lock = threading.Lock()
@@ -227,6 +231,7 @@ class ExecutionOrchestrator:
             worker_extender_payload=self.worker_extender_payload,
             hook_extenders=self._hook_extenders,
             data_access_collection=self.data_access_collection,
+            transformer=self.transformer,
         )
         self._register_modes = self.cfw_register.get_parallelization_modes()
 
@@ -270,7 +275,7 @@ class ExecutionOrchestrator:
         self, made_progress: bool, finished_ids: set[UUID], currently_running_steps: set[UUID]
     ) -> None:
         """Abort a pass that scheduled nothing, finished nothing and left nothing in flight."""
-        # A dispatched step sits in currently_running_steps while step_is_done is still False,
+        # A dispatched step sits in currently_running_steps while its uuid is not yet in result_uuids_collection,
         # so a pass that only polls it is progress.
         if made_progress or currently_running_steps:
             return
@@ -451,12 +456,9 @@ class ExecutionOrchestrator:
         This method checks if a step is done, then performs specific actions based
         on the step's type, such as adding results to the data collection or dropping data.
         """
-        # set step.is_done from other processes via result queue
+        # collect step completions from other processes via result queue
         self.worker_manager.poll_result_queues()
-        if step.uuid in self.worker_manager.result_uuids_collection:
-            step.step_is_done = True
-
-        if not step.step_is_done:
+        if step.uuid not in self.worker_manager.result_uuids_collection:
             return False
 
         if isinstance(step, TransformFrameworkStep):

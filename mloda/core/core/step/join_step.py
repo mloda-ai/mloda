@@ -62,7 +62,6 @@ class JoinStep(Step):
         self.destination_framework_uuids = destination_framework_uuids
         self.source_framework_uuids = source_framework_uuids
         self.uuid = token if token is not None else uuid4()
-        self.step_is_done = False
 
     def get_uuids(self) -> set[UUID]:
         """Only this step's uuid is a completion token; the link uuid is shared by both orientations."""
@@ -141,12 +140,12 @@ class JoinStep(Step):
                 f"available columns: {sorted(available)}"
             )
 
-    def _upload_data_if_needed(self, cfw: ComputeFramework, cfw_register: CfwManager) -> None:
+    def _upload_data_if_needed(self, cfw: ComputeFramework, cfw_register: CfwManager, location: str | None) -> None:
         """Uploads the merged data to the flight server if a location is configured."""
-        if self.location:
+        if location:
             if cfw_register.get_uuid_flyway_datasets(cfw.uuid):
                 native = cfw.data
-                cfw.upload_finished_data(self.location)
+                cfw.upload_finished_data(location)
                 if cfw.mode is not ParallelizationMode.MULTIPROCESSING:
                     # a same-process consumer or the result collector reads cfw.data next; keep it native
                     cfw.set_data(native)
@@ -158,16 +157,16 @@ class JoinStep(Step):
         from_cfw: ComputeFramework | UUID | None = None,
         data: Any | None = None,
     ) -> Any | None:
-        self.location = cfw_register.get_location()
+        location = cfw_register.get_location()
 
         if from_cfw is None:
             raise ValueError("From_cfw should not be none for join step.")
 
-        if self.location and isinstance(cfw.data, str):
+        if location and isinstance(cfw.data, str):
             # the destination frame's worker already handed its data to the flight server
-            cfw.set_data(cfw.download_frame(self.location, cfw.data))
+            cfw.set_data(cfw.download_frame(location, cfw.data))
 
-        from_cfw_data, from_cfw_uuid = self.get_data(from_cfw, cfw)
+        from_cfw_data, from_cfw_uuid = self.get_data(from_cfw, cfw, location)
 
         self._merge_data(cfw, from_cfw_data)
         cfw.keep_alive |= self.keep_alive
@@ -178,19 +177,19 @@ class JoinStep(Step):
                 from_cfw.keep_alive = set()
             cfw_register.add_to_merge_relation(cfw.uuid, from_cfw_uuid, cls_name=cfw.get_class_name())
 
-        self._upload_data_if_needed(cfw, cfw_register)
+        self._upload_data_if_needed(cfw, cfw_register, location)
 
         return None
 
-    def get_data(self, from_cfw: UUID | ComputeFramework, cfw: ComputeFramework) -> Any:
+    def get_data(self, from_cfw: UUID | ComputeFramework, cfw: ComputeFramework, location: str | None) -> Any:
         """
         This method is used to get the data from the compute framework.
         If we are using multiprocessing, we use flightserver to transport the data.
 
         If we are not using multiprocessing, we just get the data from the compute framework.
         """
-        if self.location and isinstance(from_cfw, UUID):
-            return cfw.download_frame(self.location, from_cfw), from_cfw
+        if location and isinstance(from_cfw, UUID):
+            return cfw.download_frame(location, from_cfw), from_cfw
         if isinstance(from_cfw, UUID):
             raise ValueError("From_cfw is a UUID, but we are not using flightserver.")
         return from_cfw.get_data(), from_cfw.uuid

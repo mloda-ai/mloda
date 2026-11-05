@@ -1,6 +1,6 @@
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
-from copy import copy, deepcopy
+from copy import copy
 from dataclasses import replace
 import logging
 from typing import Any, cast
@@ -108,6 +108,7 @@ class Engine:
         output_framework: type[ComputeFramework] | None = None,
     ) -> None:
         self.output_framework = output_framework
+        self.transformer = ComputeFrameworkTransformer()
         self.framework_positions: Mapping[type[ComputeFramework], int] = framework_preference or {}
         self.filter_ties: list[tuple[UUID, UUID]] = []
         self.connection_dropped: dict[UUID, frozenset[type[ComputeFramework]]] = {}
@@ -253,9 +254,8 @@ class Engine:
         data_access_collection: DataAccessCollection | None = None,
     ) -> ExecutionOrchestrator:
         """Build the run's orchestrator; a passed collection overrides the engine's for this run only."""
-        execution_plan_copy = deepcopy(self.execution_planner)
         orchestrator = ExecutionOrchestrator(
-            execution_plan_copy,
+            self.execution_planner,
             flight_server,
             column_ordering=self.column_ordering,
             request_feature_order=self.request_feature_order,
@@ -266,6 +266,7 @@ class Engine:
             data_access_collection=(
                 self.data_access_collection if data_access_collection is None else data_access_collection
             ),
+            transformer=self.transformer,
         )
         if isinstance(orchestrator, ExecutionOrchestrator):
             return orchestrator

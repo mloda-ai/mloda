@@ -22,6 +22,7 @@ from mloda.core.abstract_plugins.components.credential_leaves import (
     credential_secret_literals,
 )
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery, DBTable
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef
@@ -59,6 +60,7 @@ class ComputeFrameworkExecutor:
         worker_extender_payload: bytes | None = None,
         hook_extenders: dict[ExtenderHook, Extender] | None = None,
         data_access_collection: DataAccessCollection | None = None,
+        transformer: ComputeFrameworkTransformer | None = None,
     ) -> None:
         """
         Initialize the executor with dependencies.
@@ -85,6 +87,7 @@ class ComputeFrameworkExecutor:
         self.worker_extender_payload = worker_extender_payload
         self.hook_extenders = hook_extenders
         self.data_access_collection = data_access_collection
+        self.transformer = transformer
         self._cfw_lock = threading.Lock()
         self.own_frame_sources: dict[UUID, UUID] = {}
 
@@ -134,6 +137,8 @@ class ComputeFrameworkExecutor:
         # replace() re-runs __post_init__, so each framework owns its carrier copy.
         object.__setattr__(new_cfw, "run_context", replace(self.cfw_register.get_run_context()))
         new_cfw._seal_extenders()
+        if self.transformer is not None:
+            new_cfw.transformer = self.transformer
 
         # add to register
         self.cfw_register.add_cfw_to_compute_frameworks(new_cfw.get_uuid(), cf_class.get_class_name(), children_if_root)
@@ -410,7 +415,7 @@ class ComputeFrameworkExecutor:
                 from_cfw = self.prepare_tfs_and_joinstep(step) or None
                 cfw = self.cfw_collection[cfw_uuid]
                 step.execute(self.cfw_register, cfw, from_cfw=from_cfw)
-                step.step_is_done = True
+                self.worker_manager.result_uuids_collection.add(step.uuid)
 
             except Exception as e:
                 redact_exception(e, current_registered_secrets())
@@ -437,6 +442,7 @@ class ComputeFrameworkExecutor:
                 current_registered_secrets(),
                 current_identity_secrets(),
                 self._credential_grant(step),
+                self.worker_manager.result_uuids_collection.add,
             ),
             daemon=True,  # an abandoned step thread must not block interpreter exit
         )

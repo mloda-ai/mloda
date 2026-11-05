@@ -10,14 +10,16 @@ import threading
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from types import MappingProxyType
+from unittest.mock import patch
 from typing import Any
 
 import numpy as np
 import pytest
 
+from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.runtime.run import ExecutionOrchestrator
-from mloda.user import mloda, mlodaAPI, Feature, PluginCollector
+from mloda.user import mloda, mlodaAPI, Feature, ParallelizationMode, PluginCollector
 from mloda.provider import ApiDataFG, ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Options, FeatureName, Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -298,14 +300,39 @@ class TestConcurrentRunsOnOneSession:
     def _data(i: int) -> dict[str, Any]:
         return {"PrepareExample": {"api_id": [i, i + 100], "api_value": [f"v{i}", f"w{i}"]}}
 
+    @staticmethod
+    def _plan_state(session: Any) -> list[tuple[Any, dict[str, Any], dict[str, Any], list[dict[str, Any]], list[Any]]]:
+        """Per step: vars, FeatureSet vars, Feature vars, and (group, context) copies of every Options."""
+        state = []
+        for step in session.engine.execution_planner:
+            fs = getattr(step, "features", None)
+            features = list(fs.features) if fs is not None else []
+            options = [(f.options.group, f.options.context) for f in features]
+            state.append(
+                (
+                    step,
+                    dict(vars(step)),
+                    dict(vars(fs)) if fs is not None else {},
+                    [dict(vars(f)) for f in features],
+                    [(f.options, dict(g), dict(c)) for f, (g, c) in zip(features, options)],
+                )
+            )
+        return state
+
     @pytest.mark.parametrize("path", ["batch", "stream"])
-    def test_threads_get_their_own_results_and_session_is_unchanged(self, path: str) -> None:
+    @pytest.mark.parametrize(
+        "modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}], ids=["sync", "threading"]
+    )
+    def test_threads_get_their_own_results_and_session_is_unchanged(
+        self, path: str, modes: set[ParallelizationMode]
+    ) -> None:
         features: list[Feature | str] = [Feature(name="PrepareRunApiFeature")]
         session = mloda.prepare(
             features,
             compute_frameworks=[PandasDataFrame],
             api_data=self._data(0),
             plugin_collector=_enabled,
+            parallelization_modes=modes,
         )
         expected = {
             i: [f["PrepareRunApiFeature"].tolist() for f in _rerun(session, path, self._data(i))] for i in range(8)
@@ -314,6 +341,9 @@ class TestConcurrentRunsOnOneSession:
         session_before = dict(vars(session))
         engine_before = dict(vars(session.engine))
         plan_before = session.resolved_plan()
+        plan_state_before = self._plan_state(session)
+        for step, step_vars, *_ in plan_state_before:
+            assert "step_is_done" not in step_vars and "location" not in step_vars
         barrier = threading.Barrier(8, timeout=5)
 
         def worker(i: int) -> list[Any]:
@@ -329,6 +359,19 @@ class TestConcurrentRunsOnOneSession:
             assert after.keys() == before.keys()
             assert all(after[key] is before[key] for key in before)
         assert session.resolved_plan() == plan_before
+        plan_state_after = self._plan_state(session)
+        assert len(plan_state_after) == len(plan_state_before)
+        for step_before, step_after in zip(plan_state_before, plan_state_after):
+            assert step_before[0] is step_after[0]
+            for vars_before, vars_after in ((step_before[1], step_after[1]), (step_before[2], step_after[2])):
+                assert vars_after.keys() == vars_before.keys()
+                assert all(vars_after[key] is vars_before[key] for key in vars_before)
+            for feature_before, feature_after in zip(step_before[3], step_after[3]):
+                assert feature_after.keys() == feature_before.keys()
+                assert all(feature_after[key] is feature_before[key] for key in feature_before)
+            for (_, group, context), (_, group_before, context_before) in zip(step_after[4], step_before[4]):
+                assert group == group_before
+                assert context == context_before
 
 
 class _StartCountingExtender(Extender):
@@ -510,7 +553,7 @@ class TestStepStateDoesNotLeakBetweenRuns:
     def test_step_state_does_not_leak_between_runs(self) -> None:
         """prepare() once, run() twice with the same data.
         Both runs must succeed and produce identical results.
-        If internal step state (e.g. step_is_done flags) leaked from the first run,
+        If per-run step state leaked from the first run,
         the second run would fail or produce wrong results.
         """
         api_data = {
@@ -541,6 +584,29 @@ class TestStepStateDoesNotLeakBetweenRuns:
         assert df_first["PrepareRunApiFeature"].tolist() == ["5_p", "6_q"]
         assert df_second["PrepareRunApiFeature"].tolist() == ["5_p", "6_q"]
         assert df_first["PrepareRunApiFeature"].tolist() == df_second["PrepareRunApiFeature"].tolist()
+
+    def test_runs_build_no_transformer_registry(self) -> None:
+        """After prepare(), runs converting dict api_data to pandas reuse the plan's one registry."""
+        api_data = {"PrepareExample": {"api_id": [5, 6], "api_value": ["p", "q"]}}
+        session = mloda.prepare(
+            [Feature(name="PrepareRunApiFeature")],
+            compute_frameworks=[PandasDataFrame],
+            api_data=api_data,
+            plugin_collector=_enabled,
+        )
+
+        original_init = ComputeFrameworkTransformer.__init__
+        constructed: list[int] = []
+
+        def _counting_init(self: ComputeFrameworkTransformer) -> None:
+            constructed.append(1)
+            original_init(self)
+
+        with patch.object(ComputeFrameworkTransformer, "__init__", _counting_init):
+            session.run(api_data=api_data)
+            session.run(api_data=api_data)
+
+        assert constructed == []
 
 
 _PFEXT_MARKER = "prepfallback051"

@@ -6,6 +6,8 @@ single prepare() session.
 """
 
 import hashlib
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import pytest
@@ -314,3 +316,53 @@ class TestArtifactValueAccessibleInCalculateFeature:
 
         # All three outputs must be distinct
         assert len({"no_artifact", expected_saved, expected_other}) == 3
+
+
+def _plan_options_context(session: Any) -> list[tuple[Any, dict[str, Any]]]:
+    """Every plan Feature's Options object paired with a copy of its context."""
+    return [
+        (f.options, dict(f.options.context))
+        for step in session.engine.execution_planner
+        for f in getattr(getattr(step, "features", None), "features", [])
+    ]
+
+
+class TestArtifactRunsLeavePlanUntouched:
+    """Save, load and save runs on one session, serial or threaded, never write into the plan."""
+
+    @staticmethod
+    def _assert_plan_untouched(session: Any, before: list[tuple[Any, dict[str, Any]]]) -> None:
+        after = _plan_options_context(session)
+        assert len(after) == len(before) > 0
+        for (options_before, context_before), (options_after, context_after) in zip(before, after):
+            assert options_after is options_before
+            assert context_after == context_before
+        for step in session.engine.execution_planner:
+            assert "step_is_done" not in vars(step)
+            assert "location" not in vars(step)
+
+    def test_save_load_save_serial(self) -> None:
+        session = mloda.prepare(["PrepareRunArtifactFeature"], [PyArrowTable], plugin_collector=_enabled)
+        before = _plan_options_context(session)
+
+        saved = session.run().artifacts
+        assert len(session.run(artifacts=saved)) == 1
+        assert session.run().artifacts == saved
+
+        self._assert_plan_untouched(session, before)
+
+    def test_save_load_save_concurrent(self) -> None:
+        session = mloda.prepare(["PrepareRunArtifactFeature"], [PyArrowTable], plugin_collector=_enabled)
+        saved = session.run().artifacts
+        before = _plan_options_context(session)
+        barrier = threading.Barrier(6, timeout=5)
+
+        def worker(i: int) -> Any:
+            barrier.wait()
+            return session.run().artifacts if i % 2 else len(session.run(artifacts=saved))
+
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            results = [future.result(timeout=8) for future in [pool.submit(worker, i) for i in range(6)]]
+
+        assert results == [1, saved, 1, saved, 1, saved]
+        self._assert_plan_untouched(session, before)

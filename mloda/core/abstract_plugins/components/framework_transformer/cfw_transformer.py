@@ -58,7 +58,11 @@ class ComputeFrameworkTransformer:
         self._seen_lazy_dirs: frozenset[str] = frozenset()
         self.initilize_transformer()
 
-    def add(self, transformer: type[BaseTransformer]) -> bool:
+    def add(
+        self,
+        transformer: type[BaseTransformer],
+        into: dict[tuple[type[Any], type[Any]], type[BaseTransformer]] | None = None,
+    ) -> bool:
         """
         Add a transformer to the registry.
 
@@ -78,6 +82,7 @@ class ComputeFrameworkTransformer:
         if not transformer.check_imports():
             return False
 
+        edges = self.transformer_map if into is None else into
         left = transformer.framework()
         right = transformer.other_framework()
 
@@ -92,10 +97,10 @@ class ComputeFrameworkTransformer:
 
         registered = False
         if forward_overridden:
-            self._register_edge(left, right, transformer)
+            self._register_edge(left, right, transformer, edges)
             registered = True
         if reverse_overridden:
-            self._register_edge(right, left, transformer)
+            self._register_edge(right, left, transformer, edges)
             registered = True
         if not registered and transformer not in ComputeFrameworkTransformer._warned_zero_edge:
             ComputeFrameworkTransformer._warned_zero_edge.add(transformer)
@@ -104,18 +109,24 @@ class ComputeFrameworkTransformer:
             )
         return registered
 
-    def _register_edge(self, source: type[Any], target: type[Any], transformer: type[BaseTransformer]) -> None:
+    def _register_edge(
+        self,
+        source: type[Any],
+        target: type[Any],
+        transformer: type[BaseTransformer],
+        edges: dict[tuple[type[Any], type[Any]], type[BaseTransformer]],
+    ) -> None:
         """Write one directional edge, rejecting a collision with a different incumbent.
 
         The incumbent is only compared by equality (never introspected), so a non-transformer
         sentinel occupying the pair is handled without calling methods on it.
         """
-        incumbent = self.transformer_map.get((source, target))
+        incumbent = edges.get((source, target))
         if incumbent is not None and incumbent != transformer:
             raise ValueError(
                 f"Transformer {transformer} is already registered for the pair ({source}, {target}), but with a different implementation."
             )
-        self.transformer_map[(source, target)] = transformer
+        edges[(source, target)] = transformer
 
     @staticmethod
     def _underlying(member: Any) -> Any:
@@ -163,9 +174,12 @@ class ComputeFrameworkTransformer:
 
     def _register_all(self) -> None:
         self._seen_lazy_dirs = frozenset(ComputeFrameworkTransformer._lazy_dirs_loaded)
+        # Built aside and swapped once, so a reader iterating the old map never sees it resize.
+        fresh: dict[tuple[type[Any], type[Any]], type[BaseTransformer]] = {}
         # Sorted so map insertion order (the BFS tie-break) is the same in every process.
         for transformer in sorted(get_all_subclasses(BaseTransformer), key=lambda c: (c.__module__, c.__qualname__)):
-            self.add(transformer)
+            self.add(transformer, fresh)
+        self.transformer_map = fresh
 
     def _refresh(self) -> bool:
         """Pick up transformer files whose backend was imported since the last load; True if any were added."""
@@ -204,8 +218,9 @@ class ComputeFrameworkTransformer:
             List of transformers to apply in sequence, or None if no path exists
         """
         # Direct edge always wins
-        if (from_framework, to_framework) in self.transformer_map:
-            return [self.transformer_map[(from_framework, to_framework)]]
+        edges = self.transformer_map
+        if (from_framework, to_framework) in edges:
+            return [edges[(from_framework, to_framework)]]
 
         # BFS over registered edges, expanding neighbors in map insertion order
         queue: deque[type[Any]] = deque([from_framework])
@@ -214,7 +229,7 @@ class ComputeFrameworkTransformer:
 
         while queue:
             current = queue.popleft()
-            for (src, dst), transformer in self.transformer_map.items():
+            for (src, dst), transformer in edges.items():
                 if src != current or dst in visited:
                     continue
                 visited.add(dst)
@@ -256,7 +271,8 @@ class ComputeFrameworkTransformer:
         return data
 
     def _resolve_intermediate_target(self, transformer_cls: type[BaseTransformer], current_fw: type[Any]) -> type[Any]:
-        for (src, dst), trans in self.transformer_map.items():
+        edges = self.transformer_map
+        for (src, dst), trans in edges.items():
             if trans == transformer_cls and src == current_fw:
                 return dst
         raise KeyError(

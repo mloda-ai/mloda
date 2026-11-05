@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from typing import Any
+from unittest.mock import patch
 from uuid import uuid4
 
 import pandas as pd
@@ -22,6 +23,27 @@ class BaseTestComputeFramework2(ComputeFramework):
 
 class BaseTestComputeFramework3(ComputeFramework):
     pass
+
+
+class TestTransformerRegistryIsLazy:
+    """The transformer registry is built on first read of `transformer`, then cached."""
+
+    def test_registry_built_on_first_read_only(self) -> None:
+        with patch("mloda.core.abstract_plugins.compute_framework.ComputeFrameworkTransformer") as registry:
+            fw = BaseTestComputeFramework1(mode=ParallelizationMode.SYNC, children_if_root=frozenset(), uuid=uuid4())
+            registry.assert_not_called()
+
+            first = fw.transformer
+            assert fw.transformer is first
+            registry.assert_called_once_with()
+
+    def test_assigned_transformer_is_kept(self) -> None:
+        fw = BaseTestComputeFramework1(mode=ParallelizationMode.SYNC, children_if_root=frozenset(), uuid=uuid4())
+        sentinel: Any = object()
+
+        fw.transformer = sentinel
+
+        assert fw.transformer is sentinel
 
 
 class TestComputeFrameworkValidationErrors:

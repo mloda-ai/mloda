@@ -125,14 +125,7 @@ class TestEngine:
             assert isinstance(engine.execution_planner, ExecutionPlan)
 
     def test_compute_returns_independent_execution_planner_state(self) -> None:
-        """Engine.compute() must return orchestrators with independent execution planner state.
-
-        Currently Engine.compute() passes self.execution_planner by reference to
-        ExecutionOrchestrator. If step_is_done is set to True on steps during the
-        first compute() call, those mutations leak into subsequent compute() calls
-        because they share the same object. Each call to compute() should get an
-        independent copy of the execution plan so that step_is_done starts as False.
-        """
+        """Done state lives on each orchestrator (real-run no-leak is pinned by TestConcurrentRunsOnOneSession)."""
         with patch(
             "mloda.core.prepare.accessible_plugins.PreFilterPlugins.resolve_feature_group_compute_framework_limitations"
         ) as mocked_derived_accessible_plugins:
@@ -153,36 +146,27 @@ class TestEngine:
 
             engine = Engine(features, compute_framework, links)
 
-            # Verify the execution planner has steps with step_is_done = False
             steps = list(engine.execution_planner)
             assert len(steps) > 0, "Execution plan must have at least one step"
             for step in steps:
-                assert step.step_is_done is False
+                assert not hasattr(step, "step_is_done")
 
-            # First call to compute() - get orchestrator1
             orchestrator1 = engine.compute()
-            assert isinstance(orchestrator1, ExecutionOrchestrator)
-
-            # Simulate what happens during execution: mark all steps as done
-            for step in orchestrator1.execution_planner:
-                step.step_is_done = True
-
-            # Verify the mutation took effect on orchestrator1
-            for step in orchestrator1.execution_planner:
-                assert step.step_is_done is True
-
-            # Second call to compute() - get orchestrator2
             orchestrator2 = engine.compute()
+            assert isinstance(orchestrator1, ExecutionOrchestrator)
             assert isinstance(orchestrator2, ExecutionOrchestrator)
+            assert orchestrator1.execution_planner is orchestrator2.execution_planner
+            for orchestrator in (orchestrator1, orchestrator2):
+                assert orchestrator.data_lifecycle_manager.transformer is engine.transformer
+                assert orchestrator.transformer is engine.transformer
 
-            # The critical assertion: orchestrator2 steps must have step_is_done = False.
-            # Engine.compute() deepcopies self.execution_planner, so orchestrator2
-            # gets independent step state from orchestrator1.
+            # Mark every step done in orchestrator1's run state only.
+            for step in orchestrator1.execution_planner:
+                orchestrator1.worker_manager.result_uuids_collection.add(step.uuid)
+
             for step in orchestrator2.execution_planner:
-                assert step.step_is_done is False, (
-                    f"step_is_done leaked between compute() calls: "
-                    f"step {step} has step_is_done={step.step_is_done}, expected False"
-                )
+                assert step.uuid not in orchestrator2.worker_manager.result_uuids_collection
+                assert not hasattr(step, "step_is_done")
 
     def test_setup_features_recursion_does_not_recreate_prefilter_plugins(self) -> None:
         """PreFilterPlugins should be created once in __init__, not per feature in setup_features_recursion."""

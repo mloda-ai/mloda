@@ -236,8 +236,9 @@ def _make_cached_input_chain() -> tuple[Feature, type[FeatureGroup], type[Featur
 def _run_cached_input_feature() -> dict[str, Any]:
     """Add a filter on the cached input feature between two runs sharing one requested ``Feature``.
 
-    Run one stamps ``cached.child_options`` with the consumer's live ``Options``; run two adds
-    ``strict_type_enforcement`` to that very object in place. Every object referencing the throwaway
+    Run one stamps ``cached.child_options`` with the consumer's live ``Options``; between the runs
+    ``consumer.options`` gets ``strict_type_enforcement`` in place (the plan only holds copies, so the
+    write must hit the caller's object to exercise a stored filter that aliases it). Every object referencing the throwaway
     feature groups is dropped from this frame before returning, so a failing assert in the caller
     cannot pin one into a traceback and trip the no-leak fixture.
     """
@@ -261,6 +262,7 @@ def _run_cached_input_feature() -> dict[str, Any]:
     held = stored.filter_feature.child_options
     assert held is not None and held == consumer.options, "the stored filter must hold the stamp"
     observed: dict[str, Any] = {"unstamped": unstamped, "member_before": stored in global_filter.filters}
+    consumer.options.add_to_group("strict_type_enforcement", True)
 
     frames = list(
         mloda.run_all(

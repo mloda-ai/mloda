@@ -1,6 +1,7 @@
 """FeatureGroupStep execute behavior."""
 
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 
@@ -57,3 +58,15 @@ def test_frozen_step_rejects_attribute_writes_and_freezes_its_feature_set() -> N
         step.features.save_artifact = "x"
     with pytest.raises(FrozenPlanError):
         feature_set.add(Feature("b_col"))
+
+
+def test_frozen_step_sets_reject_in_place_writes() -> None:
+    feature_set = FeatureSet()
+    feature_set.add(Feature("a_col"))
+    step = FeatureGroupStep(MockFeatureGroup, feature_set, {uuid4()}, ComputeFramework)
+    step.tfs_ids.add(uuid4())
+    step.freeze()
+    with pytest.raises(FrozenPlanError):
+        step.required_uuids.add(uuid4())
+    with pytest.raises(FrozenPlanError):
+        step.tfs_ids.add(uuid4())

@@ -3,7 +3,6 @@
 from collections.abc import Callable, Hashable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from copy import copy
 from dataclasses import dataclass, field
 from types import TracebackType
 from typing import Any, TypeVar
@@ -189,12 +188,7 @@ class _InputDeclaration:
 
 
 def _copy_input(feature: Feature, *, fresh_identity: bool = False) -> Feature:
-    fresh = copy(feature)
-    # Feature.__copy__ rebuilds plain Options for intake equality. A provider's declared
-    # input must retain its Options subclass and fields, just as the matcher's fork does.
-    fresh.options = feature.options._fork()
-    if feature.child_options is not None:
-        fresh.child_options = feature.child_options._fork()
+    fresh = feature.copy_for_plan()
     if fresh_identity:
         fresh.uuid = uuid4()
     return fresh

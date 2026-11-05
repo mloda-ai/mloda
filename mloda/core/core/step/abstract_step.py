@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
-from mloda.core.abstract_plugins.components.plan_freeze import attribute_write_error
+from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlySet, attribute_write_error
 
 
 class Step(ABC):
@@ -25,10 +25,16 @@ class Step(ABC):
         duplicate = object.__new__(type(self))
         duplicate.__dict__.update(self.__dict__)
         duplicate.__dict__.pop("_frozen", None)
+        for key, value in self.__dict__.items():
+            if isinstance(value, ReadOnlySet):
+                duplicate.__dict__[key] = set(value)
         return duplicate
 
     def freeze(self) -> None:
         """Make this step's attributes read-only; copies stay writable."""
+        for key, value in list(self.__dict__.items()):
+            if type(value) is set:
+                self.__dict__[key] = ReadOnlySet(value, key)
         self.__dict__["_frozen"] = True
 
     @abstractmethod

@@ -381,9 +381,14 @@ class mlodaAPI:
         """Shallow-copy every Feature in the request, keeping strings and the container type."""
         if isinstance(requested_features, Features):
             features_copy = copy(requested_features)
-            features_copy.collection = [copy(f) for f in requested_features.collection]
+            features_copy.collection = [f.copy_for_plan() for f in requested_features.collection]
+            features_copy.parent_uuids = set(requested_features.parent_uuids)
+            features_copy.input_copies = dict(requested_features.input_copies)
             return features_copy
-        return type(requested_features)(copy(f) if isinstance(f, Feature) else f for f in requested_features)
+        if isinstance(requested_features, str):
+            return requested_features
+        copies = [f.copy_for_plan() if isinstance(f, Feature) else f for f in requested_features]
+        return tuple(copies) if isinstance(requested_features, tuple) else copies
 
     @staticmethod
     def _bind_feature_connections(

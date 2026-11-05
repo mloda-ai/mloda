@@ -27,7 +27,7 @@ from mloda.core.abstract_plugins.components.options import (
     reject_reserved_reader_key,
     validate_forwarding_directives,
 )
-from mloda.core.abstract_plugins.components.plan_freeze import attribute_write_error
+from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlySet, attribute_write_error
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 
@@ -538,8 +538,18 @@ class Feature:
         self.options.freeze()
         if self.child_options is not None:
             self.child_options.freeze()
+        if self.compute_frameworks is not None:
+            self.compute_frameworks = ReadOnlySet(self.compute_frameworks, "compute_frameworks")
         self.__dict__["_frozen_hash"] = self._hash(True)
         self.__dict__["_frozen"] = True
+
+    def copy_for_plan(self) -> Feature:
+        """Copy that keeps the Options subclass (and its fields) of options and child_options."""
+        fresh = copy(self)
+        fresh.options = self.options._fork()
+        if self.child_options is not None:
+            fresh.child_options = self.child_options._fork()
+        return fresh
 
     def __getstate__(self) -> dict[str, Any]:
         """The stored hash is not pickled: string hash seeds differ across processes."""

@@ -970,3 +970,60 @@ class TestSecondPrepareLeavesFirstPlanUnchanged:
         shared = {id(_CACHED_ID), id(_CACHED_VALUE), id(nested)}
         assert not shared & {id(f) for f in _plan_features(first) + _plan_features(second)}
         assert first.run(api_data=_API)[0]["PrepareRunCachedInputsFG"].tolist() == [1, 2]
+
+
+class _TaggedOptions(Options):
+    """Options subclass carrying an extra attribute the plan must keep."""
+
+    def __init__(self, *args: Any, tag: str = "unset", **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.tag = tag
+
+
+class PrepareRunSubclassOptionsFG(FeatureGroup):
+    """input_features returns a Feature whose Options is a subclass with an extra attribute."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(name="api_id", options=_TaggedOptions({"s": 1}, tag="kept"), index=Index(("api_id",)))}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data["PrepareRunSubclassOptionsFG"] = data["api_id"]
+        return data
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name()}
+
+
+class TestIntakeCopiesKeepOptionsSubclass:
+    """The plan's copies of a Feature keep its Options subclass and the subclass attributes."""
+
+    def test_provider_input_feature_keeps_options_subclass(self) -> None:
+        session = mloda.prepare(
+            [Feature(name="PrepareRunSubclassOptionsFG")],
+            compute_frameworks=[PandasDataFrame],
+            api_data=_API,
+            plugin_collector=PluginCollector.enabled_feature_groups({ApiDataFG, PrepareRunSubclassOptionsFG}),
+        )
+        planned = [f for f in _plan_features(session) if str(f.name) == "api_id"]
+        assert planned
+        for feature in planned:
+            assert type(feature.options) is _TaggedOptions
+            assert feature.options.tag == "kept"
+
+    def test_requested_feature_keeps_options_subclass_with_copy_features_false(self) -> None:
+        requested = Feature(name="PrepareRunApiFeature", options=_TaggedOptions({"k": 1}, tag="kept"))
+        session = mloda.prepare(
+            [requested],
+            compute_frameworks=[PandasDataFrame],
+            api_data=_API,
+            plugin_collector=_enabled,
+            copy_features=False,
+        )
+        planned = [f for f in _plan_features(session) if str(f.name) == "PrepareRunApiFeature"]
+        assert planned
+        for feature in planned:
+            assert feature is not requested
+            assert type(feature.options) is _TaggedOptions
+            assert feature.options.tag == "kept"

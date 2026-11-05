@@ -1,5 +1,6 @@
 """plan_freeze primitives: FrozenPlanError, ReadOnlyDict, ReadOnlySet."""
 
+import copy
 import pickle  # nosec B403
 from collections.abc import Callable
 from typing import Any
@@ -96,3 +97,30 @@ def test_read_only_set_pickle_keeps_type_and_equals_plain_set() -> None:
     assert restored == {1, 2}
     with pytest.raises(FrozenPlanError):
         restored.add(3)
+
+
+@pytest.mark.parametrize("duplicate", [copy.copy, copy.deepcopy], ids=["copy", "deepcopy"])
+def test_read_only_dict_copy_module_gives_a_writable_plain_dict(duplicate: Callable[[Any], Any]) -> None:
+    ro = ReadOnlyDict({"k": [1], "j": 2}, "options")
+    plain = duplicate(ro)
+    assert type(plain) is dict
+    assert plain == {"k": [1], "j": 2}
+    plain["x"] = 1
+    assert "x" not in ro
+
+
+def test_read_only_dict_deepcopy_copies_values() -> None:
+    ro = ReadOnlyDict({"k": [1]}, "options")
+    plain = copy.deepcopy(ro)
+    plain["k"].append(2)
+    assert ro["k"] == [1]
+
+
+@pytest.mark.parametrize("duplicate", [copy.copy, copy.deepcopy], ids=["copy", "deepcopy"])
+def test_read_only_set_copy_module_gives_a_writable_plain_set(duplicate: Callable[[Any], Any]) -> None:
+    ro = ReadOnlySet({1, 2})
+    plain = duplicate(ro)
+    assert type(plain) is set
+    assert plain == {1, 2}
+    plain.add(3)
+    assert 3 not in ro

@@ -573,6 +573,15 @@ class TestFeatureFreeze:
             feature.compute_frameworks = set()
         assert "before prepare" in str(exc.value)
 
+    def test_compute_frameworks_set_rejects_in_place_writes(self) -> None:
+        feature = Feature(name="frozen_cf", compute_framework="PandasDataFrame")
+        feature.freeze()
+        stored = hash(feature)
+        with pytest.raises(FrozenPlanError):
+            assert feature.compute_frameworks is not None
+            feature.compute_frameworks.add(ComputeFramework)
+        assert hash(feature) == stored
+
     def test_copy_is_writable_and_hash_follows_mutation(self) -> None:
         feature = self._frozen()
         for dup in (copy.copy(feature), copy.deepcopy(feature)):

@@ -1,6 +1,7 @@
 """Read-only containers and the error raised when a compiled plan is written to."""
 
 from collections.abc import Iterable
+from copy import deepcopy
 from typing import Any, NoReturn
 
 _ALTERNATIVES = (
@@ -55,6 +56,12 @@ class ReadOnlyDict(dict[Any, Any]):
     def __reduce__(self) -> tuple[Any, ...]:
         return (ReadOnlyDict, (dict(self), self.label))
 
+    def __copy__(self) -> dict[Any, Any]:
+        return dict(self)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> dict[Any, Any]:
+        return {deepcopy(k, memo): deepcopy(v, memo) for k, v in self.items()}
+
 
 class ReadOnlySet(set[Any]):
     """A set that raises FrozenPlanError on every write; set(), copy() give plain sets."""
@@ -74,3 +81,9 @@ class ReadOnlySet(set[Any]):
 
     def __reduce__(self) -> tuple[Any, ...]:
         return (ReadOnlySet, (list(self), self.label))
+
+    def __copy__(self) -> set[Any]:
+        return set(self)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> set[Any]:
+        return {deepcopy(v, memo) for v in self}

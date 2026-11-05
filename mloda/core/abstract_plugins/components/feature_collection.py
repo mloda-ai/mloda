@@ -1,6 +1,5 @@
 from __future__ import annotations
 from collections.abc import Sequence
-from copy import copy
 from typing import Generator
 from uuid import UUID
 from mloda.core.abstract_plugins.components.domain import Domain
@@ -63,7 +62,7 @@ class Features:
                 if child_uuid:
                     entry = self.input_copies.get(id(feature))
                     if entry is None:
-                        entry = self.input_copies[id(feature)] = (feature, copy(feature))
+                        entry = self.input_copies[id(feature)] = (feature, feature.copy_for_plan())
                     feature = entry[1]
                 if feature.domain is None and self.parent_domain is not None:
                     feature.domain = Domain(self.parent_domain)

@@ -45,7 +45,7 @@ from mloda.provider import (
     credential_handle_spec,
     read_credential,
 )
-from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
+from mloda.user import Credential, Feature, ParallelizationMode, PluginCollector, mloda
 
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsSource
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
@@ -1809,7 +1809,7 @@ def test_error_echoing_a_fresh_credential_is_masked_in_every_mode(
 def test_two_interleaved_stream_runs_on_one_session_each_read_their_own_value() -> None:
     session = _prepare_vault(ChsRcReadingFG, "chs_rc_a", ParallelizationMode.SYNC)
 
-    stream_1 = session.stream_run(credentials={_E2E_HANDLE: _FRESH_1})
+    stream_1 = session.stream_run(credentials={_E2E_HANDLE: Credential(**_FRESH_1)})
     stream_2 = session.stream_run(credentials={_E2E_HANDLE: _FRESH_2})
     rows_2 = _stream_rows(stream_2, "chs_rc_a")
     rows_1 = _stream_rows(stream_1, "chs_rc_a")

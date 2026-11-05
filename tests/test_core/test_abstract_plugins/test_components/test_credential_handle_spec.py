@@ -1,5 +1,6 @@
 """credential_handle_spec: plan-time handle validation, plan records and display."""
 
+import inspect
 import re
 import types
 from pathlib import Path
@@ -611,10 +612,13 @@ class TestRunStartRefusals:
         assert _FRESH["key"] not in message
 
     def test_stream_run_refuses_at_the_call_not_on_iteration(self) -> None:
-        session = _vault_session()
+        recorder = _RunRecorder()
+        session = _vault_session(recorder)
 
         with pytest.raises(ValueError, match="vault-b"):
             session.stream_run(credentials={"vault-b": _FRESH})
+
+        assert recorder.events == []
 
     def test_preparing_never_collects_credentials(self) -> None:
         with pytest.raises(TypeError):
@@ -626,8 +630,6 @@ class TestRunStartRefusals:
 
     @pytest.mark.parametrize("entry", ["run_all", "stream_all"])
     def test_the_all_entry_points_have_no_credentials_parameter(self, entry: str) -> None:
-        import inspect
-
         assert "credentials" not in inspect.signature(getattr(mloda, entry)).parameters
 
     @pytest.mark.parametrize(
@@ -641,8 +643,10 @@ class TestRunStartRefusals:
             ),
             ("vault", {"vault-a": {"chs_blob": BYTES_SECRET}}, ("vault-a", "chs_blob"), BYTES_SECRET.decode()),
             ("vault", {"vault-a": "chs-plain-string-secret"}, (), "chs-plain-string-secret"),
+            ("vault", ["vault-a"], ("list",), "chs-unreachable-sentinel"),
+            ("vault", {7: _FRESH}, ("int",), _FRESH["key"]),
         ],
-        ids=["missing-field", "bytes-leaf", "mis-wrapped"],
+        ids=["missing-field", "bytes-leaf", "mis-wrapped", "non-mapping", "non-str-key"],
     )
     def test_a_malformed_fresh_credential_is_refused_without_printing_its_value(
         self, factory: str, credentials: Any, expected: tuple[str, ...], forbidden: str
@@ -693,6 +697,24 @@ class TestRunStartRefusals:
 
         assert repr(session.data_access_collection.credentials) == before
         assert _FRESH["key"] not in repr(session.data_access_collection.credentials)
+
+    @pytest.mark.parametrize("entry", ["run", "stream_run"])
+    def test_the_fresh_value_is_not_reachable_from_the_runner_after_the_run(self, entry: str) -> None:
+        session = _vault_session()
+
+        if entry == "run":
+            session.run(credentials={"vault-a": Credential(**_FRESH)})
+        else:
+            list(session.stream_run(credentials={"vault-a": Credential(**_FRESH)}))
+
+        for holder in (session.runner, session.runner.executor):
+            collection = holder.data_access_collection
+            if collection is not None:
+                raw = [value for credential in collection.credentials.values() for value in dict(credential).values()]
+                assert _FRESH["key"] not in raw
+        if entry == "run":
+            assert session.get_result()
+        assert session.get_artifacts() is not None
 
 
 class TestFreshRunRecord:

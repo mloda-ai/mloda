@@ -1,7 +1,7 @@
 import copy as _copy
 import logging
 from collections.abc import Iterable, Mapping
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
 from mloda.core.abstract_plugins.components.credential_leaves import (
@@ -158,8 +158,7 @@ class DataAccessCollection:
     def with_credentials(self, credentials: Mapping[str, Any]) -> "DataAccessCollection":
         """A copy with the given handles' credentials replaced; this collection is never modified."""
         duplicate = self.copy()
-        normalized = self._normalize_credentials(dict(credentials))
-        assert isinstance(normalized, dict)  # nosec B101
+        normalized = cast(dict[str, Any], self._normalize_credentials(dict(credentials)))
         duplicate.credentials.update(normalized)
         for handle in credentials:
             duplicate._warn_short_secrets(handle)

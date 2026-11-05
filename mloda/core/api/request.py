@@ -744,10 +744,19 @@ class mlodaAPI:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
         return deepcopy(self.engine.resolution_records)
 
-    def _run_collection(self, credentials: Mapping[str, Any] | None) -> DataAccessCollection | None:
-        """Refuse bad per-run credentials, then return a copy of the collection with them applied (None: no change)."""
+    def _run_collection(
+        self, credentials: Mapping[str, Any] | None
+    ) -> tuple[DataAccessCollection | None, tuple[str, ...]]:
+        """Refuse bad per-run credentials; return the collection copy with them applied (None: no change) and names."""
+        if credentials is not None and not isinstance(credentials, Mapping):
+            raise ValueError(
+                f"credentials must be a mapping of {{handle: credential}}, got {type(credentials).__name__}."
+            )
+        for handle in credentials or ():
+            if not isinstance(handle, str):
+                raise ValueError(f"credentials keys must be str handle names, got {type(handle).__name__}.")
         if not credentials:
-            return None
+            return None, ()
         plan = self._execution_plan()
         steps = [s for s in plan if isinstance(s, FeatureGroupStep)]
         declared = {h for s in steps for h in s.credential_handles}
@@ -768,7 +777,7 @@ class mlodaAPI:
         for step in steps:
             if set(step.credential_handles) & set(credentials):
                 validate_credential_handles(step.feature_group, step.features.options or Options(), merged)
-        return merged
+        return merged, tuple(sorted(credentials))
 
     def _build_run_context(
         self,
@@ -824,10 +833,9 @@ class mlodaAPI:
                 that worker. Also the longest a cancelled THREADING run waits for step threads.
             credentials: ``{handle: Credential | dict}`` replacing declared handles' values for this run only.
         """
-        run_dac = self._run_collection(credentials)
-        run_context = self._build_run_context(
-            carrier, child_bootstrap, graceful_shutdown_timeout, tuple(sorted(credentials or ()))
-        )
+        with self._credential_redaction():
+            run_dac, names = self._run_collection(credentials)
+        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, names)
         plan = list(self._plan_snapshot())
         with self._credential_redaction(self._secret_literals(run_dac), self._identity_literals(run_dac)):
             runner = self._batch_run(
@@ -867,10 +875,9 @@ class mlodaAPI:
         body itself contains ``yield`` only starts executing on first iteration, which would defer that read
         past the caller's intended scope. ``credentials`` is as in ``run()`` and is refused at the call.
         """
-        run_dac = self._run_collection(credentials)
-        run_context = self._build_run_context(
-            carrier, child_bootstrap, graceful_shutdown_timeout, tuple(sorted(credentials or ()))
-        )
+        with self._credential_redaction():
+            run_dac, names = self._run_collection(credentials)
+        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, names)
         plan = list(self._plan_snapshot())
         stream = self._start_stream(api_data, parallelization_modes, flight_server, artifacts, run_context, run_dac)
         return ResultStream(stream, plan, run_id=run_context.run_id, plan_id=self.plan_id)
@@ -1058,6 +1065,10 @@ class mlodaAPI:
     def _exit_runner_context(self, runner: ExecutionOrchestrator) -> None:
         """Exits the runner context."""
         runner.__exit__(None, None, None)
+        # Drop the per-run collection so a kept runner never holds a fresh credential.
+        runner.data_access_collection = None
+        if hasattr(runner, "executor"):
+            runner.executor.data_access_collection = None
 
     def _create_engine(self) -> Engine:
         engine = Engine(

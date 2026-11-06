@@ -96,7 +96,7 @@ def make_run_group(kind: str = "ok") -> type[FeatureGroup]:
                 return DataType.DATE
             if kind == "tz_out":
                 return DataType.TIMESTAMP_MICROS_TZ
-            if kind in ("object_string", "string_out"):
+            if kind in ("object_string", "iceberg_scan"):
                 return DataType.STRING
             if kind == "list_null_on_zero_rows":
                 return DataType.LIST
@@ -130,7 +130,7 @@ def make_run_group(kind: str = "ok") -> type[FeatureGroup]:
 
                 data["rg_out"] = pd.Series([date(2024, 1, 1)] * len(data), index=data.index, dtype=object)
                 return data
-            if kind == "string_out":
+            if kind == "iceberg_scan":
                 import pyarrow as pa
 
                 table = data.scan().to_arrow()
@@ -462,16 +462,11 @@ def test_pandas_na_output_passes_determinism() -> None:
         ("object_date", PandasAdapter),
         ("object_string", PandasAdapter),
         ("tz_out", PyArrowAdapter),
-        ("string_out", IcebergAdapter),
     ],
 )
 def test_exact_type_run_group_passes(kind: str, adapter_cls: type[Any]) -> None:
     _require_backend(adapter_cls)
-    adapter = adapter_cls()
-    if not adapter.is_available():
-        pytest.skip(f"{adapter_cls.__name__} backend unavailable")
-    with adapter:
-        result = check_feature_group_shape(make_run_group(kind), input_data=_run_data(), adapter=adapter)
+    result = check_feature_group_shape(make_run_group(kind), input_data=_run_data(), adapter=adapter_cls())
     assert result.failures == (), result.failures
 
 
@@ -554,13 +549,18 @@ def test_requested_name_already_in_input_data_fails_outputs() -> None:
         ("narrow_type", "type:", PolarsAdapter),
         ("loses_schema_on_zero_rows", "zero_rows:", PyArrowAdapter),
         ("list_null_on_zero_rows", "zero_rows:", PolarsAdapter),
+        ("iceberg_scan", "zero_rows:", IcebergAdapter),
         ("leaks_cell_in_error", "error_values:", PythonDictAdapter),
         ("nondeterministic", "determinism:", PythonDictAdapter),
     ],
 )
 def test_broken_run_group_fails_only_its_sub_check(kind: str, prefix: str, adapter_cls: type[Any]) -> None:
     _require_backend(adapter_cls)
-    result = check_feature_group_shape(make_run_group(kind), input_data=_run_data(), adapter=adapter_cls())
+    adapter = adapter_cls()
+    if not adapter.is_available():
+        pytest.skip(f"{adapter_cls.__name__} backend unavailable")
+    with adapter:
+        result = check_feature_group_shape(make_run_group(kind), input_data=_run_data(), adapter=adapter)
     assert not result.passed
     assert all(f.startswith(prefix) for f in result.failures), result.failures
 

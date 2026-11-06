@@ -254,19 +254,50 @@ def test_iceberg_has_type_none_without_native_type(
 
 
 @pytest.mark.parametrize(
-    ("own", "neighbor", "value"), [(DataType.STRING, DataType.BINARY, "a"), (DataType.BINARY, DataType.STRING, b"a")]
+    ("own", "neighbor", "value", "arrow_types"),
+    [
+        (DataType.STRING, DataType.BINARY, "a", None),
+        (DataType.BINARY, DataType.STRING, b"a", None),
+        (DataType.LIST, DataType.INT64, [1], {"c": "list_int64"}),
+    ],
 )
 @pytest.mark.parametrize("name", ["Iceberg"])
 def test_iceberg_zero_row_width_artefacts_are_normalized(
-    name: str, adapter: Any, own: DataType, neighbor: DataType, value: Any
+    name: str, adapter: Any, own: DataType, neighbor: DataType, value: Any, arrow_types: Any
 ) -> None:
+    pa = pytest.importorskip("pyarrow")
+    kwargs = {"arrow_types": {"c": pa.list_(pa.int64())}} if arrow_types else {}
     with adapter:
-        full = adapter.from_typed(TypedTestData({"c": (own, [value])}))
-        empty = adapter.from_typed(TypedTestData({"c": (own, [])}))
+        full = adapter.from_typed(TypedTestData({"c": (own, [value])}), **kwargs)
+        empty = adapter.from_typed(TypedTestData({"c": (own, [])}), **kwargs)
 
         assert adapter.has_type(empty, "c", own) is True
         assert adapter.has_type(empty, "c", neighbor) is False
         assert adapter.column_type(empty, "c") == adapter.column_type(full, "c")
+
+
+@pytest.mark.parametrize(
+    ("array", "data_type", "expected"),
+    [
+        ([1], DataType.INT8, True),
+        ([datetime(2024, 1, 1)], DataType.TIMESTAMP_MILLIS, True),
+        (["a"], DataType.STRING, False),
+    ],
+)
+@pytest.mark.parametrize("name", ["Iceberg"])
+def test_iceberg_has_type_on_arrow_table_matches_pyarrow(
+    name: str, adapter: Any, array: list[Any], data_type: DataType, expected: bool
+) -> None:
+    pa = pytest.importorskip("pyarrow")
+    arrow_type = {
+        DataType.INT8: pa.int8(),
+        DataType.TIMESTAMP_MILLIS: pa.timestamp("ms"),
+        DataType.STRING: pa.large_string(),
+    }[data_type]
+    table = pa.table({"c": pa.array(array, type=arrow_type)})
+
+    assert adapter.has_type(table, "c", data_type) is expected
+    assert adapter.column_type(table, "c") == arrow_type
 
 
 @pytest.mark.parametrize("name", _EXACT + ["Iceberg"])
@@ -285,9 +316,7 @@ def test_has_type_list(name: str, adapter: Any, rows: list[Any]) -> None:
     pa = pytest.importorskip("pyarrow")
     data = TypedTestData({"l": (DataType.LIST, rows)})
     with adapter:
-        result = (
-            adapter.from_typed(data, arrow_types={"l": pa.list_(pa.int64())}) if not rows else adapter.from_typed(data)
-        )
+        result = adapter.from_typed(data, arrow_types={"l": pa.list_(pa.int64())})
 
         assert adapter.has_type(result, "l", DataType.LIST) is True
         assert adapter.has_type(result, "l", DataType.INT64) is False

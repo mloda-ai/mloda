@@ -961,17 +961,27 @@ class TestPreparedPlanIsFrozen:
             plugin_collector=_enabled,
         )
         calls: list[int] = []
+        wait_calls: list[int] = []
         original = FeatureGroupStep.get_uuids
+        original_wait = FeatureGroupStep.get_wait_uuids
 
         def counting(self: FeatureGroupStep) -> Any:
             calls.append(1)
             return original(self)
 
-        with patch.object(FeatureGroupStep, "get_uuids", counting):
+        def counting_wait(self: FeatureGroupStep) -> Any:
+            wait_calls.append(1)
+            return original_wait(self)
+
+        with (
+            patch.object(FeatureGroupStep, "get_uuids", counting),
+            patch.object(FeatureGroupStep, "get_wait_uuids", counting_wait),
+        ):
             first = session.run(api_data=_API)
             second = session.run(api_data=_API)
 
         assert calls == []
+        assert wait_calls == []
         assert first[0]["PrepareRunApiFeature"].tolist() == ["1_a", "2_b"]
         assert second[0]["PrepareRunApiFeature"].tolist() == ["1_a", "2_b"]
 

@@ -11,7 +11,7 @@ import logging
 import os
 import threading
 import uuid as uuid_mod
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 from unittest.mock import Mock, patch, MagicMock
 from uuid import UUID
@@ -1549,8 +1549,10 @@ def _chain_step(own: UUID, waits_for: set[UUID]) -> MagicMock:
     return step
 
 
-def _sync_orchestrator(plan: Any) -> ExecutionOrchestrator:
-    orchestrator = ExecutionOrchestrator(plan)
+def _sync_orchestrator(
+    plan: Any, step_schedule: Sequence[tuple[Any, set[UUID], set[UUID]]] | None = None
+) -> ExecutionOrchestrator:
+    orchestrator = ExecutionOrchestrator(plan, step_schedule=step_schedule)
     orchestrator.cfw_register = CfwManager({ParallelizationMode.SYNC})
 
     def fake_execute_step(step: Any) -> None:
@@ -1593,18 +1595,11 @@ class TestPlannerReadsStepUuidsOncePerRun:
 
     def test_prebuilt_schedule_means_no_step_uuid_reads(self) -> None:
         steps = self._reversed_chain()
-        orchestrator = ExecutionOrchestrator(ReiterablePlan(*steps), step_schedule=self._schedule(steps))  # type: ignore[arg-type]
-        orchestrator.cfw_register = CfwManager({ParallelizationMode.SYNC})
-        orchestrator._execute_step = Mock(  # type: ignore[method-assign]
-            side_effect=lambda step: orchestrator.worker_manager.result_uuids_collection.add(step.uuid)
-        )
-        orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
-        orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
-        orchestrator.join = Mock()  # type: ignore[method-assign]
+        orchestrator = _sync_orchestrator(ReiterablePlan(*steps), step_schedule=self._schedule(steps))
 
         orchestrator.compute()
 
-        assert orchestrator._execute_step.call_count == len(steps)
+        assert orchestrator._execute_step.call_count == len(steps)  # type: ignore[attr-defined]
         for step in steps:
             assert step.get_uuids.call_count == 0
             assert step.get_wait_uuids.call_count == 0
@@ -1613,18 +1608,11 @@ class TestPlannerReadsStepUuidsOncePerRun:
         steps = self._reversed_chain()
         schedule = self._schedule(steps)
         for _ in range(2):
-            orchestrator = ExecutionOrchestrator(ReiterablePlan(*steps), step_schedule=schedule)  # type: ignore[arg-type]
-            orchestrator.cfw_register = CfwManager({ParallelizationMode.SYNC})
-            orchestrator._execute_step = Mock(  # type: ignore[method-assign]
-                side_effect=lambda step, o=orchestrator: o.worker_manager.result_uuids_collection.add(step.uuid)
-            )
-            orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
-            orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
-            orchestrator.join = Mock()  # type: ignore[method-assign]
+            orchestrator = _sync_orchestrator(ReiterablePlan(*steps), step_schedule=schedule)
 
             orchestrator.compute()
 
-            assert orchestrator._execute_step.call_count == len(steps)
+            assert orchestrator._execute_step.call_count == len(steps)  # type: ignore[attr-defined]
 
 
 class TestIsStepDoneIsASubsetCheck:

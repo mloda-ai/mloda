@@ -370,7 +370,7 @@ class TestEnterAcceptsRunContext:
         sig = inspect.signature(orchestrator.__enter__)
         assert sig.parameters["run_context"].default is None
 
-    def test_enter_signature_has_exactly_five_parameters_in_order(self) -> None:
+    def test_enter_signature_has_exactly_six_parameters_in_order(self) -> None:
         """No run_id/carrier/child_bootstrap parameters remain."""
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
@@ -383,6 +383,7 @@ class TestEnterAcceptsRunContext:
             "api_data",
             "artifact_bindings",
             "run_context",
+            "run_parameters",
         ]
 
 

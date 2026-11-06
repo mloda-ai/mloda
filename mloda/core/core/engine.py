@@ -71,7 +71,7 @@ from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.property_spec import unforwarded_keys
+from mloda.core.abstract_plugins.components.property_spec import runtime_parameter_keys, unforwarded_keys
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.credential_handle import (
@@ -1052,6 +1052,12 @@ class Engine:
             handle_keys = frozenset(credential_handle_keys(feature_group_class))
             resolved = entry[1]
             refuse_credential_option_values(resolved)
+            for key in runtime_parameter_keys(feature_group_class):
+                if key in resolved.group:
+                    raise ValueError(
+                        f"Option '{key}' is a runtime parameter of {feature_group_class.__name__} and must be a "
+                        f"context option, or passed per run with run(parameters=...), not a group option."
+                    )
             if handle_keys:
                 validate_credential_handles(feature_group_class, resolved, self.data_access_collection)
             if resolved.credential_handle_keys != handle_keys:

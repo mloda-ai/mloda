@@ -18,6 +18,7 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 class FeatureGroupStep(Step):
     source_connection_handle: str | None = None
     credential_handles: tuple[str, ...] = ()
+    runtime_parameters: tuple[str, ...] = ()
     reads_join_result: bool = True
     join_tokens: frozenset[UUID] = frozenset()
     own_frame: bool = False
@@ -61,7 +62,11 @@ class FeatureGroupStep(Step):
     ) -> Any | None:
         location = cfw_register.get_location()
         binding = cfw_register.get_artifact_binding(self.uuid) if self.feature_group.artifact() is not None else None
-        features = self.features.for_run(binding)
+        parameters = None
+        if self.features.runtime_parameters:
+            run_parameters = cfw_register.get_run_parameters()
+            parameters = {k: run_parameters[k] for k in self.features.runtime_parameters if k in run_parameters}
+        features = self.features.for_run(binding, parameters)
         if self.own_frame and data is None:
             data = self._source_data(cfw, from_cfw, location)
 

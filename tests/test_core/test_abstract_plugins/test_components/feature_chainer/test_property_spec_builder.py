@@ -874,3 +874,49 @@ class TestPropertySpecNameConverter:
         not_callable: Any = "not callable"
         with pytest.raises(ValueError, match=r"PropertySpec\('d'\).*name_converter must be callable"):
             property_spec("d", name_converter=not_callable)
+
+
+class TestPropertySpecRuntime:
+    """``runtime=True`` marks a context option a run may replace for that run only."""
+
+    def test_runtime_defaults_to_false_and_is_emitted_through_builder(self) -> None:
+        assert property_spec("d").runtime is False
+        assert property_spec("d", runtime=True).runtime is True
+
+    def test_runtime_spec_equals_direct_construction(self) -> None:
+        assert property_spec("d", runtime=True) == PropertySpec("d", context=True, runtime=True)
+
+    def test_runtime_requires_context(self) -> None:
+        with pytest.raises(ValueError, match=r"PropertySpec\('d'\).*runtime"):
+            property_spec("d", runtime=True, context=False)
+
+    @pytest.mark.parametrize(
+        "refused",
+        [{"match_guard": bool}, {"name_converter": int}, {"required_when": bool}],
+        ids=["match_guard", "name_converter", "required_when"],
+    )
+    def test_runtime_refuses_name_path_machinery(self, refused: dict[str, Any]) -> None:
+        with pytest.raises(ValueError, match=r"PropertySpec\('d'\).*runtime"):
+            property_spec("d", runtime=True, **refused)
+
+    def test_runtime_keys_are_the_runtime_specs_of_the_mapping(self) -> None:
+        from mloda.core.abstract_plugins.components.property_spec import runtime_parameter_keys
+
+        runtime = property_spec("r", runtime=True, default="a")
+
+        class _Group(FeatureGroup):
+            PROPERTY_MAPPING = {
+                "rtspec_plain": property_spec("p", default="x"),
+                "rtspec_runtime": runtime,
+                "rtspec_handle": credential_handle_spec("h"),
+            }
+
+        assert runtime_parameter_keys(_Group) == {"rtspec_runtime": runtime}
+
+    def test_runtime_keys_of_a_group_without_a_mapping_are_empty(self) -> None:
+        from mloda.core.abstract_plugins.components.property_spec import runtime_parameter_keys
+
+        class _Bare(FeatureGroup):
+            pass
+
+        assert runtime_parameter_keys(_Bare) == {}

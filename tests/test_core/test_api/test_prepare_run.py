@@ -18,9 +18,18 @@ import pytest
 
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.api.plan_lock import _lock_text, plan_structure_hash
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.user import mloda, mlodaAPI, Feature, ParallelizationMode, PluginCollector
-from mloda.provider import ApiDataFG, ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup, PropertySpec
+from mloda.provider import (
+    ApiDataFG,
+    ComputeFramework,
+    FeatureGroup,
+    FeatureSet,
+    DataCreatorFeatureGroup,
+    PropertySpec,
+    property_spec,
+)
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
 from mloda.user import Options, FeatureName, Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -1027,3 +1036,228 @@ class TestIntakeCopiesKeepOptionsSubclass:
             assert feature is not requested
             assert type(feature.options) is _TaggedOptions
             assert feature.options.tag == "kept"
+
+
+_RTP_LEVELS = ("low", "mid", "high")
+
+
+class RtpLevelFG(DataCreatorFeatureGroup):
+    """Root group whose runtime parameter 'rtp_level' is read through runtime_parameter."""
+
+    PROPERTY_MAPPING = {
+        "rtp_level": property_spec("A level.", runtime=True, strict=True, allowed_values=_RTP_LEVELS, default="low")
+    }
+    calls = 0
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"rtp_level_col", "rtp_level_col_b"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        cls.calls += 1
+        return {str(f.name): [features.runtime_parameter("rtp_level", f)] for f in features.features}
+
+
+class RtpTightFG(DataCreatorFeatureGroup):
+    """Declares the same runtime key as RtpLevelFG with a narrower value space."""
+
+    PROPERTY_MAPPING = {
+        "rtp_level": property_spec("A level.", runtime=True, strict=True, allowed_values=("low", "mid"), default="low")
+    }
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"rtp_tight_col"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"rtp_tight_col": [features.runtime_parameter("rtp_level")]}
+
+
+@pytest.fixture(autouse=True)
+def _reset_rtp_calls() -> None:
+    RtpLevelFG.calls = 0
+
+
+def _rtp_enabled() -> PluginCollector:
+    return PluginCollector.enabled_feature_groups({RtpLevelFG, RtpTightFG})
+
+
+def _rtp_session(*features: Feature | str, extender: Extender | None = None) -> Any:
+    return mloda.prepare(
+        list(features) or ["rtp_level_col"],
+        compute_frameworks=["PythonDictFramework"],
+        plugin_collector=_rtp_enabled(),
+        function_extender={extender} if extender else None,
+    )
+
+
+def _rtp_values(result: Any) -> dict[str, Any]:
+    return {name: values[0] for frame in result for name, values in frame.items()}
+
+
+def _rtp_feature(name: str, level: str) -> Feature:
+    return Feature(name, options=Options(group={}, context={"rtp_level": level}))
+
+
+class TestRuntimeParametersPerRun:
+    """run(parameters=...) replaces a declared runtime option for that run only."""
+
+    def test_default_is_used_without_parameters(self) -> None:
+        assert _rtp_values(_rtp_session().run()) == {"rtp_level_col": "low"}
+
+    def test_run_override_is_seen_by_the_step_and_the_next_run_sees_the_baseline(self) -> None:
+        session = _rtp_session()
+
+        assert _rtp_values(session.run(parameters={"rtp_level": "high"})) == {"rtp_level_col": "high"}
+        assert _rtp_values(session.run()) == {"rtp_level_col": "low"}
+
+    def test_stream_run_accepts_parameters(self) -> None:
+        session = _rtp_session()
+
+        assert _rtp_values(list(session.stream_run(parameters={"rtp_level": "mid"}))) == {"rtp_level_col": "mid"}
+
+    def test_prepare_time_context_value_is_the_baseline(self) -> None:
+        session = _rtp_session(_rtp_feature("rtp_level_col", "mid"))
+
+        assert _rtp_values(session.run()) == {"rtp_level_col": "mid"}
+        assert _rtp_values(session.run(parameters={"rtp_level": "high"})) == {"rtp_level_col": "high"}
+
+    def test_per_feature_baseline_through_runtime_parameter(self) -> None:
+        session = _rtp_session(_rtp_feature("rtp_level_col", "mid"), _rtp_feature("rtp_level_col_b", "high"))
+
+        assert _rtp_values(session.run()) == {"rtp_level_col": "mid", "rtp_level_col_b": "high"}
+        assert _rtp_values(session.run(parameters={"rtp_level": "low"})) == {
+            "rtp_level_col": "low",
+            "rtp_level_col_b": "low",
+        }
+
+    def test_one_value_applies_to_every_group_declaring_the_key(self) -> None:
+        session = _rtp_session("rtp_level_col", "rtp_tight_col")
+
+        assert _rtp_values(session.run(parameters={"rtp_level": "mid"})) == {
+            "rtp_level_col": "mid",
+            "rtp_tight_col": "mid",
+        }
+
+    def test_runs_with_different_values_keep_plan_identity_and_lock(self) -> None:
+        session = _rtp_session()
+        before = session.resolved_plan()
+        lock_before, hash_before = _lock_text(before), plan_structure_hash(before)
+
+        first = session.run(parameters={"rtp_level": "high"})
+        second = session.run(parameters={"rtp_level": "mid"})
+
+        after = session.resolved_plan()
+        assert first.plan_id == second.plan_id == session.plan_id
+        assert _lock_text(after) == lock_before
+        assert plan_structure_hash(after) == hash_before
+        assert "high" not in lock_before
+        (step,) = [s for s in session.resolved_plan() if s.step_kind == "compute"]
+        assert step.feature_set_options is not None
+        assert "rtp_level" not in step.feature_set_options.group
+        baseline = _rtp_values(session.run())
+        assert baseline == {"rtp_level_col": "low"}
+
+
+class TestRuntimeParametersAreValidatedBeforeTheRun:
+    """A bad parameters mapping is refused at the call, before on_run_start and before any step."""
+
+    @staticmethod
+    def _call(session: Any, how: str, parameters: Any) -> None:
+        if how == "run":
+            session.run(parameters=parameters)
+        else:
+            session.stream_run(parameters=parameters)
+
+    @pytest.mark.parametrize("how", ["run", "stream_run"])
+    @pytest.mark.parametrize(
+        ("parameters", "match"),
+        [
+            ({"rtp_nope": "x"}, "rtp_nope"),
+            ({"rtp_level": "extreme"}, "rtp_level"),
+            ({1: "x"}, "."),
+            (["rtp_level"], "."),
+        ],
+        ids=["unknown-key", "strict-value", "non-str-key", "non-mapping"],
+    )
+    def test_refused_at_the_call_before_on_run_start_and_any_step(self, how: str, parameters: Any, match: str) -> None:
+        extender = _StartCountingExtender()
+        session = _rtp_session(extender=extender)
+        calls_before = RtpLevelFG.calls
+
+        with pytest.raises((ValueError, TypeError), match=match):
+            self._call(session, how, parameters)
+
+        assert extender.starts == 0
+        assert RtpLevelFG.calls == calls_before
+
+    def test_a_refused_value_names_key_and_group(self) -> None:
+        with pytest.raises(ValueError, match="rtp_level") as caught:
+            _rtp_session().run(parameters={"rtp_level": "extreme"})
+
+        assert "RtpLevelFG" in str(caught.value)
+
+    def test_unknown_key_lists_the_declared_keys(self) -> None:
+        with pytest.raises(ValueError, match="rtp_level"):
+            _rtp_session().run(parameters={"rtp_nope": "x"})
+
+    def test_a_value_must_pass_every_declaring_group(self) -> None:
+        session = _rtp_session("rtp_level_col", "rtp_tight_col")
+
+        with pytest.raises(ValueError, match="RtpTightFG"):
+            session.run(parameters={"rtp_level": "high"})
+
+    def test_a_refused_value_is_not_printed_raw_for_a_secret_shaped_key(self) -> None:
+        class RtpSecretFG(DataCreatorFeatureGroup):
+            PROPERTY_MAPPING = {
+                "rtp_api_token": property_spec(
+                    "Token.", runtime=True, strict=True, allowed_values=("ok",), default="ok"
+                )
+            }
+
+            @classmethod
+            def feature_names_supported(cls) -> set[str]:
+                return {"rtp_secret_col"}
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+                return {PythonDictFramework}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return {"rtp_secret_col": [features.runtime_parameter("rtp_api_token")]}
+
+        session = mloda.prepare(
+            ["rtp_secret_col"],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({RtpSecretFG}),
+        )
+        raw = "rtp-raw-secret-value-1234"  # nosec B105
+
+        with pytest.raises(ValueError, match="rtp_api_token") as caught:
+            session.run(parameters={"rtp_api_token": raw})
+
+        assert raw not in str(caught.value)
+
+    def test_group_placement_of_a_runtime_key_is_refused_at_prepare(self) -> None:
+        feature = Feature("rtp_level_col", options={"rtp_level": "mid"})
+
+        with pytest.raises(ValueError, match="rtp_level"):
+            _rtp_session(feature)
+
+    def test_runtime_parameter_of_an_undeclared_key_raises(self) -> None:
+        with pytest.raises(ValueError, match="rtp_level"):
+            FeatureSet().runtime_parameter("rtp_level")
+
+    def test_a_fresh_feature_set_declares_no_runtime_parameters(self) -> None:
+        assert FeatureSet().runtime_parameters == ()

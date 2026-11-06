@@ -62,11 +62,14 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                 record["feature_group_hash"] = step.feature_group_hash
             if step.credential_handles:
                 record["credential_handles"] = list(step.credential_handles)
+            if step.runtime_parameters:
+                record["runtime_parameters"] = list(step.runtime_parameters)
             lock["compute"].append(record)
             wide_record: dict[str, Any] = {
                 key: value
                 for key, value in record.items()
-                if key not in ("compute_framework_reason", "leaves_connection", "credential_handles")
+                if key
+                not in ("compute_framework_reason", "leaves_connection", "credential_handles", "runtime_parameters")
             }
             options = step.content_options
             wide_record["options"] = None if options is None else stable_text(_masked_group(options.group, step))

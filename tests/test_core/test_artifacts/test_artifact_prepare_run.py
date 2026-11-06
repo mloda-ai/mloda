@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
-from mloda.provider import BaseArtifact, FeatureSet, DataCreatorFeatureGroup
+from mloda.provider import BaseArtifact, FeatureSet, DataCreatorFeatureGroup, property_spec
 from mloda.user import Feature, Options, mloda, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -89,6 +89,17 @@ class VerifiableArtifactFeatureB(VerifiableArtifactFeature):
     """Second artifact group in the same request."""
 
 
+class RuntimeParameterParallelFeature(DataCreatorFeatureGroup):
+    """Reads its runtime parameter in calculate_feature."""
+
+    PROPERTY_MAPPING = {"rtpar_level": property_spec("A level.", runtime=True, default="low")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): [features.runtime_parameter("rtpar_level")] * 3}
+
+
+_enabled_runtime_parameter = PluginCollector.enabled_feature_groups({RuntimeParameterParallelFeature})
 _enabled = PluginCollector.enabled_feature_groups({PrepareRunArtifactFeature})
 _enabled_verifiable = PluginCollector.enabled_feature_groups({VerifiableArtifactFeature})
 _enabled_recording = PluginCollector.enabled_feature_groups({RecordingArtifactFeature})
@@ -559,3 +570,17 @@ class TestRuntimeArtifactSurface:
 
         expected = _artifact_hash(VerifiableArtifactFeature.ARTIFACT_VALUE)
         assert list(result[0].to_pandas()["VerifiableArtifactFeature"]) == [expected] * 3
+
+
+@pytest.mark.parametrize("mode", [ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING])
+def test_runtime_parameter_reaches_the_step_and_the_next_run_sees_the_baseline(
+    mode: ParallelizationMode, flight_server: Any
+) -> None:
+    name = "RuntimeParameterParallelFeature"
+    session = mloda.prepare([name], [PyArrowTable], plugin_collector=_enabled_runtime_parameter)
+
+    result = session.run(parallelization_modes={mode}, flight_server=flight_server, parameters={"rtpar_level": "high"})
+    baseline = session.run(parallelization_modes={mode}, flight_server=flight_server)
+
+    assert list(result[0].to_pandas()[name]) == ["high"] * 3
+    assert list(baseline[0].to_pandas()[name]) == ["low"] * 3

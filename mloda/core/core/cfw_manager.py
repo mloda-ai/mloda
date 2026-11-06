@@ -4,7 +4,7 @@ import os
 import sys
 import threading
 import weakref
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from multiprocessing.managers import BaseManager
 from typing import Any
 from uuid import UUID
@@ -110,6 +110,7 @@ class CfwManager:
         self.failed_rows: list[FailedRows] = []
 
         self.artifact_bindings: dict[UUID, ArtifactBinding] = {}
+        self.run_parameters: Mapping[str, Any] = {}
 
         self.api_data: dict[str, Any] | None = None
 
@@ -457,6 +458,14 @@ class CfwManager:
     def get_artifact_binding(self, step_uuid: UUID) -> ArtifactBinding | None:
         """Retrieves the artifact binding of a step, or None."""
         return self.artifact_bindings.get(step_uuid)
+
+    def set_run_parameters(self, parameters: Mapping[str, Any]) -> None:
+        """Sets the validated run(parameters=...) mapping."""
+        self.run_parameters = parameters
+
+    def get_run_parameters(self) -> Mapping[str, Any]:
+        """Retrieves the run parameters."""
+        return self.run_parameters
 
     def set_api_data(self, api_data: dict[str, Any]) -> None:
         """Sets the API data."""

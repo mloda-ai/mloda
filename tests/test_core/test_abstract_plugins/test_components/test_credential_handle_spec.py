@@ -1,5 +1,6 @@
 """credential_handle_spec: plan-time handle validation, plan records and display."""
 
+import dataclasses
 import inspect
 import re
 import types
@@ -774,6 +775,11 @@ class TestFreshRunRecord:
         assert _FRESH["key"] not in repr(after)
         step = next(s for s in after if s.feature_group is ChsVaultFG)
         assert "vault-a" in step.credential_handles
+
+
+def test_a_credential_handle_spec_can_never_be_a_runtime_parameter() -> None:
+    with pytest.raises(ValueError, match="runtime"):
+        dataclasses.replace(credential_handle_spec("Handle."), runtime=True)
 
 
 class TestMissingHandleKeyAborts:

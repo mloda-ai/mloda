@@ -99,6 +99,8 @@ class PropertySpec:
     # False keeps a group option on the feature that declares it; input features never inherit it
     # unless an explicit forward_group allowlist names it.
     forward_to_inputs: bool = True
+    # A context option a run may replace for that run only; the prepare-time value stays the baseline.
+    runtime: bool = False
 
     def __post_init__(self) -> None:
         prefix = f"PropertySpec({self.explanation!r})"
@@ -143,6 +145,16 @@ class PropertySpec:
             raise ValueError(
                 f"{prefix}: forward_to_inputs must be a bool, got {type(self.forward_to_inputs).__name__}."
             )
+
+        if not isinstance(self.runtime, bool):
+            raise ValueError(f"{prefix}: runtime must be a bool, got {type(self.runtime).__name__}.")
+
+        if self.runtime:
+            if not self.context:
+                raise ValueError(f"{prefix}: runtime=True requires context=True.")
+            for name in ("match_guard", "name_converter", "required_when"):
+                if getattr(self, name) is not None:
+                    raise ValueError(f"{prefix}: runtime=True cannot be combined with {name}.")
 
         if self.element_validator is not None and not callable(self.element_validator):
             raise ValueError(f"{prefix}: element_validator must be callable.")
@@ -261,6 +273,7 @@ def property_spec(
     name_converter: Callable[[str], Any] | None = None,
     caller_settable: bool = True,
     forward_to_inputs: bool = True,
+    runtime: bool = False,
 ) -> PropertySpec:
     """Build a ``PropertySpec``; the ``strict=`` keyword sets the ``strict_validation`` field."""
     return PropertySpec(
@@ -278,6 +291,7 @@ def property_spec(
         name_converter=name_converter,
         caller_settable=caller_settable,
         forward_to_inputs=forward_to_inputs,
+        runtime=runtime,
     )
 
 
@@ -288,3 +302,9 @@ def unforwarded_keys(mapping: Any) -> frozenset[str]:
     return frozenset(
         key for key, spec in mapping.items() if isinstance(spec, PropertySpec) and not spec.forward_to_inputs
     )
+
+
+def runtime_parameter_keys(feature_group: Any) -> dict[str, PropertySpec]:
+    """The group's declared runtime parameter keys."""
+    mapping = getattr(feature_group, "PROPERTY_MAPPING", None) or {}
+    return {key: spec for key, spec in mapping.items() if isinstance(spec, PropertySpec) and spec.runtime}

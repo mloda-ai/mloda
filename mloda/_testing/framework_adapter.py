@@ -643,11 +643,9 @@ class IcebergAdapter(_ArrowReadAdapter):
 
 
 class SparkAdapter(_ArrowReadAdapter):
-    """Borrows the caller's active SparkSession, never starts or stops one; Spark rejects unsigned integer types.
+    """Borrows the caller's active SparkSession, never starts or stops one; Spark rejects unsigned integer types."""
 
-    has_type stays None: column_type is a Spark-native type and an exact mapping is not implemented yet.
-    """
-
+    # has_type stays None: column_type is a Spark-native type with no exact mapping.
     capabilities = AdapterCapabilities(typed_columns=True)
 
     def __init__(self) -> None:

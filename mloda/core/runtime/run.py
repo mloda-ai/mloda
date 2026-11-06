@@ -156,6 +156,7 @@ class ExecutionOrchestrator:
             run_context: The default run context used when __enter__ is called without one.
         """
         self.execution_planner = execution_planner
+        self._plan_steps: list[tuple[Any, set[UUID], set[UUID]]] = []
         self.data_access_collection = data_access_collection
         self.transformer = transformer
 
@@ -194,7 +195,7 @@ class ExecutionOrchestrator:
         """
         Checks if all steps identified by the given UUIDs have already been finished.
         """
-        return all(uuid in finished_ids for uuid in step_uuids)
+        return step_uuids <= finished_ids
 
     def _drop_data_for_finished_cfws(self, finished_ids: set[UUID]) -> None:
         """
@@ -238,6 +239,12 @@ class ExecutionOrchestrator:
 
         finished_ids: set[UUID] = set()
         to_finish_ids: set[UUID] = set()
+        # Step uuids are fixed at prepare time, so a run reads them once.
+        self._plan_steps = [
+            (step, set(step.get_uuids()), set(step.get_wait_uuids())) for step in self.execution_planner
+        ]
+        for _, uuids, _ in self._plan_steps:
+            to_finish_ids.update(uuids)
         currently_running_steps: set[UUID] = set()
         return finished_ids, to_finish_ids, currently_running_steps
 
@@ -247,25 +254,21 @@ class ExecutionOrchestrator:
         """Run one pass over the plan. Returns True if a step was executed or marked finished."""
         made_progress = False
 
-        for step in self.execution_planner:
-            to_finish_ids.update(step.get_uuids())
-
-            if isinstance(step, FeatureGroupStep):
+        for step, uuids, wait_uuids in self._plan_steps:
+            if isinstance(step, FeatureGroupStep) and self.data_lifecycle_manager.track_data_to_drop:
                 self._drop_data_for_finished_cfws(finished_ids)
 
-            if self._is_step_done(step.get_uuids(), finished_ids):
+            if self._is_step_done(uuids, finished_ids):
                 continue
 
             # check if step is currently running
-            if self.currently_running_step(step.get_uuids(), currently_running_steps):
+            if self.currently_running_step(uuids, currently_running_steps):
                 if self._process_step_result(step):
-                    self._mark_step_as_finished(step.get_uuids(), finished_ids, currently_running_steps)
+                    self._mark_step_as_finished(uuids, finished_ids, currently_running_steps)
                     made_progress = True
                 continue
 
-            if not self._can_run_step(
-                step.get_wait_uuids(), step.get_uuids(), finished_ids, currently_running_steps, step, made_progress
-            ):
+            if not self._can_run_step(wait_uuids, uuids, finished_ids, currently_running_steps, step, made_progress):
                 continue
             self._execute_step(step)
             made_progress = True

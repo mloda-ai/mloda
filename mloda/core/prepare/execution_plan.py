@@ -318,8 +318,7 @@ class ExecutionPlan:
                 step.credential_handles = declared_credential_handles(
                     step.feature_group, step.features.options or Options()
                 )
-                step.runtime_parameters = tuple(sorted(runtime_parameter_keys(step.feature_group)))
-                step.features.runtime_parameters = step.runtime_parameters
+                step.features.runtime_parameters = tuple(sorted(runtime_parameter_keys(step.feature_group)))
                 bound = self._bound_credential_handle(step, self.data_access_collection)
                 step.features.credential_handles = (
                     step.credential_handles

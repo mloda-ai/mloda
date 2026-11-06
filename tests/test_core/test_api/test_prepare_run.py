@@ -1087,6 +1087,40 @@ class RtpTightFG(DataCreatorFeatureGroup):
         return {"rtp_tight_col": [features.runtime_parameter("rtp_level")]}
 
 
+_RTP_EDGE_KEYS = ("rtp_coll", "rtp_none_no", "rtp_none_ok", "rtp_zero")
+
+
+class RtpEdgeFG(DataCreatorFeatureGroup):
+    """Runtime keys for collection, explicit-None and falsy run values."""
+
+    PROPERTY_MAPPING = {
+        "rtp_coll": property_spec("Coll.", runtime=True, strict=True, allowed_values=("a", "b"), default="a"),
+        "rtp_none_no": property_spec("No None.", runtime=True, default="base"),
+        "rtp_none_ok": property_spec("None ok.", runtime=True, default="base", allow_explicit_none=True),
+        "rtp_zero": property_spec("Falsy.", runtime=True, default="base"),
+    }
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"rtp_edge_col"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"rtp_edge_col": [{k: features.runtime_parameter(k) for k in _RTP_EDGE_KEYS}]}
+
+
+def _edge_session(*names: str) -> Any:
+    return mloda.prepare(
+        list(names) or ["rtp_edge_col"],
+        compute_frameworks=["PythonDictFramework"],
+        plugin_collector=PluginCollector.enabled_feature_groups({RtpLevelFG, RtpTightFG, RtpEdgeFG}),
+    )
+
+
 @pytest.fixture(autouse=True)
 def _reset_rtp_calls() -> None:
     RtpLevelFG.calls = 0
@@ -1166,11 +1200,40 @@ class TestRuntimeParametersPerRun:
         assert _lock_text(after) == lock_before
         assert plan_structure_hash(after) == hash_before
         assert "high" not in lock_before
+        assert "high" not in _lock_text(after)
         (step,) = [s for s in session.resolved_plan() if s.step_kind == "compute"]
         assert step.feature_set_options is not None
         assert "rtp_level" not in step.feature_set_options.group
         baseline = _rtp_values(session.run())
         assert baseline == {"rtp_level_col": "low"}
+
+    def test_a_list_run_value_is_checked_per_element_like_prepare(self) -> None:
+        session = _edge_session()
+
+        assert _rtp_values(session.run(parameters={"rtp_coll": ["a", "b"]}))["rtp_edge_col"]["rtp_coll"] == ["a", "b"]
+        with pytest.raises(ValueError, match="rtp_coll"):
+            session.run(parameters={"rtp_coll": ["a", "x"]})
+
+    def test_none_is_refused_unless_the_spec_allows_it(self) -> None:
+        session = _edge_session()
+
+        with pytest.raises(ValueError, match="rtp_none_no"):
+            session.run(parameters={"rtp_none_no": None})
+        seen = _rtp_values(session.run(parameters={"rtp_none_ok": None}))["rtp_edge_col"]
+        assert seen["rtp_none_ok"] is None
+
+    @pytest.mark.parametrize("falsy", [0, "", False], ids=["zero", "empty", "false"])
+    def test_falsy_run_values_replace_a_non_falsy_baseline(self, falsy: Any) -> None:
+        seen = _rtp_values(_edge_session().run(parameters={"rtp_zero": falsy}))["rtp_edge_col"]
+
+        assert seen["rtp_zero"] == falsy
+        assert type(seen["rtp_zero"]) is type(falsy)
+
+    def test_a_key_declared_only_outside_the_plan_is_unknown(self) -> None:
+        session = _edge_session("rtp_level_col")
+
+        with pytest.raises(ValueError, match="rtp_coll"):
+            session.run(parameters={"rtp_coll": "a"})
 
 
 class TestRuntimeParametersAreValidatedBeforeTheRun:
@@ -1245,6 +1308,15 @@ class TestRuntimeParametersAreValidatedBeforeTheRun:
             session.run(parameters={"rtp_api_token": raw})
 
         assert raw not in str(caught.value)
+
+    def test_a_refused_credential_shaped_value_is_not_printed_under_a_plain_key(self) -> None:
+        session = _rtp_session()
+
+        with pytest.raises(ValueError, match="rtp_level") as caught:
+            session.run(parameters={"rtp_level": "postgres://u:pw@h/db"})
+
+        assert "pw" not in str(caught.value)
+        assert "RtpLevelFG" in str(caught.value)
 
     def test_group_placement_of_a_runtime_key_is_refused_at_prepare(self) -> None:
         feature = Feature("rtp_level_col", options={"rtp_level": "mid"})
@@ -1385,3 +1457,27 @@ class TestRunInputsOnRunStart:
         assert record.parameters["rtp_config"]["plain"] == 2
         with pytest.raises(TypeError):
             record.parameters["x"] = 1
+
+    def test_credential_shaped_value_under_a_plain_key_is_masked_in_the_stored_record(self) -> None:
+        recorder = _StartCountingExtender()
+        session = _record_session(recorder, rtp=True)
+
+        session.run(parameters={"rtp_plain": "postgres://u:pw@h/db"})
+
+        assert "pw" not in str(recorder.runs[-1].run_inputs.parameters["rtp_plain"])
+
+    def test_scalars_stay_raw_and_non_scalars_are_stored_as_text(self) -> None:
+        recorder = _StartCountingExtender()
+        session = _record_session(recorder, rtp=True)
+        caller_list = ["x", "y"]
+
+        session.run(parameters={"rtp_plain": caller_list})
+        listed = recorder.runs[-1].run_inputs.parameters["rtp_plain"]
+        caller_list.append("z")
+        assert isinstance(listed, str)
+        assert "z" not in listed
+
+        session.run(parameters={"rtp_plain": 7})
+        assert recorder.runs[-1].run_inputs.parameters["rtp_plain"] == 7
+        session.run(parameters={"rtp_plain": "mine"})
+        assert recorder.runs[-1].run_inputs.parameters["rtp_plain"] == "mine"

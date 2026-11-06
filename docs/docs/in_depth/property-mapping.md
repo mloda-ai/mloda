@@ -731,6 +731,7 @@ or `required_when`. A runtime key is never a group key: placing it in `Options.g
 - The baseline is the prepare-time context value, else the declared default. `NO_DEFAULT` keeps the key required at prepare.
 - Read it with `features.runtime_parameter(key, feature)` (run value, else baseline); `options.get(key)` returns the baseline only.
 - `session.run_surface.parameters` lists the declared keys.
+- When several groups declare the key, the value must pass every declaring spec; `None` is refused unless `allow_explicit_none`.
 
 ## Context propagation
 

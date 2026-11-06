@@ -18,7 +18,6 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 class FeatureGroupStep(Step):
     source_connection_handle: str | None = None
     credential_handles: tuple[str, ...] = ()
-    runtime_parameters: tuple[str, ...] = ()
     reads_join_result: bool = True
     join_tokens: frozenset[UUID] = frozenset()
     own_frame: bool = False

@@ -1,13 +1,22 @@
 import contextlib
 import contextvars
+import logging
 from copy import copy, deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime
 from collections.abc import Mapping, Sequence
-from typing import Any, Callable, Generator, cast
+from typing import Any, Callable, Generator, NoReturn, cast
 from uuid import UUID
 
-from mloda.core.abstract_plugins.components.credential_scrub import redact_exception, registered_secrets_scope
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    _SECRET_KEY,
+    _mask_secret_keys,
+    redact_exception,
+    registered_secrets_scope,
+    scrub_credentials,
+)
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, safe_value_text
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourcePointerError
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 
@@ -56,7 +65,7 @@ from mloda.core.abstract_plugins.run_context import RunContext, RunInputs
 from mloda.core.abstract_plugins.verified_context import current_verified_context
 from mloda.core.abstract_plugins.components.credential_handle import validate_credential_handles
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.options import Options, _display_option_value
+from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, element_admitted, runtime_parameter_keys
 from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -79,6 +88,44 @@ def _plan_origin(origin: PlanOrigin | None) -> Generator[None, None, None]:
         yield
     finally:
         _PLAN_ORIGIN.reset(token)
+
+
+def _log_run_value_raise(key: str) -> Callable[[Exception], None]:
+    def log(exc: Exception) -> None:
+        logger.log(
+            contained_raise_log_level(exc),
+            "value check for '%s' raised %s; treating as rejected.",
+            key,
+            type(exc).__name__,
+        )
+
+    return log
+
+
+def _scrub_leaves(value: Any) -> Any:
+    if isinstance(value, str):
+        return scrub_credentials(value)
+    if isinstance(value, Mapping):
+        return {k: _scrub_leaves(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_scrub_leaves(v) for v in value]
+    return value
+
+
+def _record_value(key: str, value: Any) -> Any:
+    """Masked form of a run value for the stored record: scalars raw, mappings masked, others as text."""
+    if _SECRET_KEY.fullmatch(key):
+        return "***"
+    if isinstance(value, str):
+        return scrub_credentials(value)
+    if value is None or type(value) in (int, float, bool):
+        return value
+    if isinstance(value, Mapping):
+        return _frozen_dict(_scrub_leaves(_mask_secret_keys(value)))
+    return safe_value_text(value)
+
+
+logger = logging.getLogger(__name__)
 
 
 class _CredentialRedaction:
@@ -326,19 +373,32 @@ class mlodaAPI:
                 bindings[step_uuid] = binding
         return bindings
 
+    def _declared_runtime_parameters(self) -> dict[str, list[tuple[type[FeatureGroup], PropertySpec]]]:
+        """Runtime keys mapped to their declaring (group, spec) pairs, built once (the plan is frozen)."""
+        cached = getattr(self, "_declared_runtime_cache", None)
+        if cached is None:
+            cached = {}
+            for step in self._execution_plan():
+                if isinstance(step, FeatureGroupStep):
+                    for key, spec in runtime_parameter_keys(step.feature_group).items():
+                        entry = (step.feature_group, spec)
+                        if entry not in cached.setdefault(key, []):
+                            cached[key].append(entry)
+            self._declared_runtime_cache = cached
+        return cached
+
+    @staticmethod
+    def _refuse_run_value(key: str, value: Any, group: type[FeatureGroup]) -> NoReturn:
+        shown = "***" if _SECRET_KEY.fullmatch(key) else safe_value_text(value)
+        raise ValueError(f"run(parameters=...) value {shown} for '{key}' is rejected by {group.__name__}.")
+
     def _run_parameters(self, parameters: Mapping[str, Any] | None) -> Mapping[str, Any]:
         """Refuse unknown keys and values a declaring group rejects; return one read-only mapping."""
         if parameters is None:
             return cast(Mapping[str, Any], _frozen_dict({}))
         if not isinstance(parameters, Mapping):
             raise TypeError(f"run(parameters=...) must be a mapping, got {type(parameters).__name__}.")
-        declared: dict[str, list[tuple[type[FeatureGroup], PropertySpec]]] = {}
-        for step in self._execution_plan():
-            if isinstance(step, FeatureGroupStep):
-                for key, spec in runtime_parameter_keys(step.feature_group).items():
-                    entry = (step.feature_group, spec)
-                    if entry not in declared.setdefault(key, []):
-                        declared[key].append(entry)
+        declared = self._declared_runtime_parameters()
         for key, value in parameters.items():
             if not isinstance(key, str):
                 raise TypeError(f"run(parameters=...) keys must be str, got {type(key).__name__}.")
@@ -348,11 +408,12 @@ class mlodaAPI:
                     f"declared: {sorted(declared)}."
                 )
             for group, spec in declared[key]:
-                if spec.strict_validation and not element_admitted(spec, value, lambda _: None):
-                    shown = _display_option_value(key, value, ())
-                    raise ValueError(
-                        f"run(parameters=...) value {shown!r} for '{key}' is rejected by {group.__name__}."
-                    )
+                if value is None and not spec.allow_explicit_none:
+                    self._refuse_run_value(key, value, group)
+                if spec.strict_validation and value is not None:
+                    for element in FeatureChainParser._unpack_property_value(value):
+                        if not element_admitted(spec, element, _log_run_value_raise(key)):
+                            self._refuse_run_value(key, value, group)
         return cast(Mapping[str, Any], _frozen_dict(dict(parameters)))
 
     def _validate_run_api_data(self, api_data: dict[str, Any] | None) -> None:
@@ -842,11 +903,11 @@ class mlodaAPI:
     @property
     def run_surface(self) -> RunSurface:
         """What ``run()`` accepts: api_data columns, artifact inputs, runtime parameters and credential handles."""
-        steps, declared, bound = self._credential_handle_scope()
-        groups: dict[str, set[str]] = {}
-        for step in steps:
-            for key in runtime_parameter_keys(step.feature_group):
-                groups.setdefault(key, set()).add(step.feature_group.__name__)
+        _, declared, bound = self._credential_handle_scope()
+        groups = {
+            key: {group.__name__ for group, _ in entries}
+            for key, entries in self._declared_runtime_parameters().items()
+        }
         return RunSurface(
             api_data={name: tuple(sorted(columns)) for name, columns in self._api_data_columns.items()},
             artifacts=self.artifact_inputs,
@@ -898,7 +959,7 @@ class mlodaAPI:
         return RunInputs(
             api_data=tuple(sorted(map(str, effective or ()))),
             artifacts=tuple(sorted(artifacts or ())),
-            parameters={key: _display_option_value(key, value, ()) for key, value in run_parameters.items()},
+            parameters={key: _record_value(key, value) for key, value in run_parameters.items()},
             credentials=credentials,
         )
 

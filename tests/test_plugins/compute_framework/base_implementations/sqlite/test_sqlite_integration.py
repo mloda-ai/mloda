@@ -18,7 +18,7 @@ from mloda.user import DataAccessCollection
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework, _regexp
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import records_from_frame
+from tests.helpers.frame_records import records_from_frame
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 

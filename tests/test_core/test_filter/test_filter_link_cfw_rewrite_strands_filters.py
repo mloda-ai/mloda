@@ -25,7 +25,7 @@ from mloda.user import (
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_core.test_tooling import MlodaTestRunner
-from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks import SecondCfw
+from tests.helpers.shared_compute_frameworks import SecondCfw
 
 
 class CfwStrandLeftSrc(DataCreatorFeatureGroup):

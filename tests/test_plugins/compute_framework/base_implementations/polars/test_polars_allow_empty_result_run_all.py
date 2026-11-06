@@ -1,49 +1,32 @@
-"""End-to-end ``allow_empty_result`` policy tests for polars.
+"""End-to-end empty-result policy tests for polars (eager and lazy) on the shipped RunAllSuite.
 
-Two classes: one for the eager PolarsDataFrame, one for the lazy PolarsLazyDataFrame.
-Both consume the shared EmptyResultRunAllTestBase.
-
-Both a zero-row eager ``pl.DataFrame`` and a lazy ``pl.LazyFrame`` still carry their schema
-(columns), so an empty schema-bearing result is valid (state C -> success). The subclasses
-below exercise the end-to-end behavior through ``run_all`` (they do not assert a native
-representation).
+Both a zero-row eager ``pl.DataFrame`` and a lazy ``pl.LazyFrame`` still carry their schema (columns), so an empty
+schema-bearing result is valid.
 """
 
+import logging
 import traceback
+from collections.abc import Mapping
 from typing import Any
 
-import pytest
-
-from mloda.provider import DataCreatorFeatureGroup
-from mloda.provider import FeatureGroup
-from mloda.provider import FeatureSet
-from mloda.user import Feature
-from mloda.user import GlobalFilter
-from mloda.user import Options
-from mloda.user import ParallelizationMode
-from mloda.user import PluginCollector
-from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import (
-    PolicyRaises,
-    PolicyRunAllTestBase,
-    PolicySuccess,
-    records_from_frame,
-)
-from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
-    AttributeReadConsumer,
-    MissingColumnConsumer,
-    MissingColumnRunAllTestBase,
+from mloda._testing.compute_framework.run_all_suite import (
     UNDECLARED_COLUMN,
+    EmptyResultRunAllSuite,
+    MissingColumnRunAllSuite,
+    PolicyRaises,
+    PolicySuccess,
+    RunAllSuite,
+    SiblingDictRunAllSuite,
+    CauseType,
+    UndeclaredRead,
+    attribute_read,
 )
-from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
-    SiblingDictRoot,
-    SiblingDictRunAllTestBase,
-)
-from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
-    EmptyResultRunAllTestBase,
-)
-
-import logging
+from mloda._testing.framework_adapter import FrameworkAdapter, PolarsAdapter, PolarsLazyAdapter
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.provider import DataCreatorFeatureGroup, FeatureGroup, FeatureSet
+from mloda.user import Feature, GlobalFilter, Options, ParallelizationMode, PluginCollector
+from tests.helpers.frame_records import records_from_frame
+from tests.helpers.lost_input_feature_groups import SiblingDictRoot
 
 logger = logging.getLogger(__name__)
 
@@ -54,78 +37,66 @@ except ImportError:
     pl = None  # type: ignore[assignment]
 
 
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
-    """Drives the allow_empty_result policy end-to-end through run_all on eager polars."""
+class TestPolarsAllowEmptyResultRunAll(EmptyResultRunAllSuite):
+    """Drives the empty-result policy end-to-end through run_all on eager polars."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PolarsDataFrame"
+    adapter_class = PolarsAdapter
 
 
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsLazyAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
-    """Drives the allow_empty_result policy end-to-end through run_all on lazy polars."""
+class TestPolarsLazyAllowEmptyResultRunAll(EmptyResultRunAllSuite):
+    """Drives the empty-result policy end-to-end through run_all on lazy polars."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PolarsLazyDataFrame"
+    adapter_class = PolarsLazyAdapter
 
 
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsSiblingDictRunAll(SiblingDictRunAllTestBase):
+class TestPolarsSiblingDictRunAll(SiblingDictRunAllSuite):
     """Dict-returning sibling consumers end-to-end through run_all."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PolarsDataFrame"
+    adapter_class = PolarsAdapter
 
 
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsLazySiblingDictRunAll(SiblingDictRunAllTestBase):
+class TestPolarsLazySiblingDictRunAll(SiblingDictRunAllSuite):
     """Dict-returning sibling consumers end-to-end through run_all on lazy polars."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PolarsLazyDataFrame"
+    adapter_class = PolarsLazyAdapter
 
 
-class PolarsWithColumnsReadConsumer(MissingColumnConsumer):
-    @classmethod
-    def read_undeclared(cls, data: Any) -> Any:
-        return data.with_columns(pl.col(UNDECLARED_COLUMN))
-
-    @classmethod
-    def cause_type(cls) -> Any:
-        return pl.exceptions.ColumnNotFoundError
+def _with_columns_read(data: Any) -> Any:
+    return data.with_columns(pl.col(UNDECLARED_COLUMN))
 
 
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsMissingColumnRunAll(MissingColumnRunAllTestBase):
+def _column_not_found() -> type[BaseException]:
+    import polars as pl
+
+    return pl.exceptions.ColumnNotFoundError
+
+
+class TestPolarsMissingColumnRunAll(MissingColumnRunAllSuite):
     """Undeclared column reads on eager polars raise an explanatory error."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PolarsDataFrame"
+    adapter_class = PolarsAdapter
 
     @classmethod
-    def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
-        return [PolarsWithColumnsReadConsumer, AttributeReadConsumer]
+    def undeclared_reads(cls) -> Mapping[str, tuple[UndeclaredRead, CauseType]]:
+        return {
+            "PolarsWithColumnsReadConsumer": (_with_columns_read, _column_not_found),
+            "AttributeReadConsumer": (attribute_read, lambda: AttributeError),
+        }
 
 
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 class TestPolarsLazyMissingColumnRunAll(TestPolarsMissingColumnRunAll):
     """Undeclared column reads on lazy polars raise an explanatory error."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PolarsLazyDataFrame"
+    adapter_class = PolarsLazyAdapter
 
-    def test_undeclared_column_read_with_global_filter_raises_explanatory_error(self, flight_server: Any) -> None:
+    def test_undeclared_column_read_with_global_filter_raises_explanatory_error(
+        self, adapter: FrameworkAdapter, flight_server: Any
+    ) -> None:
+        case = "PolarsWithColumnsReadConsumer"
         global_filter = GlobalFilter()
-        global_filter.add_filter(PolarsWithColumnsReadConsumer.get_class_name(), "min", {"mc_declared": 0})
+        global_filter.add_filter(case, "min", {"mc_declared": 0})
         error = self.assert_undeclared_read_raises(
-            PolarsWithColumnsReadConsumer, ParallelizationMode.SYNC, flight_server, global_filter
+            adapter, case, ParallelizationMode.SYNC, flight_server, global_filter
         )
         cause = error.__cause__
         assert cause is not None
@@ -201,20 +172,18 @@ _SINGLE_COLUMN_COLLECTOR = PluginCollector.enabled_feature_groups(
 )
 
 
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsLazySingleColumnRunAll(PolicyRunAllTestBase):
+class TestPolarsLazySingleColumnRunAll(RunAllSuite):
     """A single returned column needs a frame mloda built; a feature group's own native frame is not one."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PolarsLazyDataFrame"
+    adapter_class = PolarsLazyAdapter
 
-    def test_series_on_dict_root_frame_succeeds_aligned(self, flight_server: Any) -> None:
+    def test_series_on_dict_root_frame_succeeds_aligned(self, adapter: FrameworkAdapter, flight_server: Any) -> None:
         def check(result: Any) -> None:
             rows = [row for frame in result for row in records_from_frame(frame)]
             assert [row["SingleSeriesOnRoot"] for row in rows] == [2, 4, 6]
 
         self.assert_policy_case(
+            adapter,
             feature_name="SingleSeriesOnRoot",
             plugin_collector=_SINGLE_COLUMN_COLLECTOR,
             expectation=PolicySuccess(assert_result=check),
@@ -222,12 +191,15 @@ class TestPolarsLazySingleColumnRunAll(PolicyRunAllTestBase):
             flight_server=flight_server,
         )
 
-    def test_series_on_converted_dataframe_root_succeeds_aligned(self, flight_server: Any) -> None:
+    def test_series_on_converted_dataframe_root_succeeds_aligned(
+        self, adapter: FrameworkAdapter, flight_server: Any
+    ) -> None:
         def check(result: Any) -> None:
             rows = [row for frame in result for row in records_from_frame(frame)]
             assert [row["SingleSeriesOnConvertedRoot"] for row in rows] == [2, 4, 6]
 
         self.assert_policy_case(
+            adapter,
             feature_name="SingleSeriesOnConvertedRoot",
             plugin_collector=_SINGLE_COLUMN_COLLECTOR,
             expectation=PolicySuccess(assert_result=check),
@@ -235,8 +207,11 @@ class TestPolarsLazySingleColumnRunAll(PolicyRunAllTestBase):
             flight_server=flight_server,
         )
 
-    def test_series_on_native_frame_of_a_feature_group_raises(self, flight_server: Any) -> None:
+    def test_series_on_native_frame_of_a_feature_group_raises(
+        self, adapter: FrameworkAdapter, flight_server: Any
+    ) -> None:
         self.assert_policy_case(
+            adapter,
             feature_name="SingleSeriesOnNativeFrame",
             plugin_collector=_SINGLE_COLUMN_COLLECTOR,
             expectation=PolicyRaises("SingleSeriesOnNativeFrame"),

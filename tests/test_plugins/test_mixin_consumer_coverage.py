@@ -13,29 +13,35 @@ from typing import Any
 
 import pytest
 
-from mloda._testing.compute_framework.merge_suite import AsofMergeEngineSuite, MergeEngineSuite
-from mloda._testing.compute_framework_shape import applicable_aspects, serves_asof_merge
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
-from mloda.core.abstract_plugins.implementation import loaded_implementations
-from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
-from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin
-from mloda._testing.source.read_db_suite import ReadDBFGTestMixin
-from mloda._testing.source.read_document_suite import ReadDocumentFGTestMixin
-from mloda._testing.source.read_file_suite import ReadFileFGTestMixin
-from mloda.provider import ReadDBFG, ReadDocumentFG, ReadFileFG
-from mloda.provider import SourceFeatureGroup
-from mloda.user import PluginLoader
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda._testing.compute_framework.connection_suite import ConnectionEndToEndSuite, ConnectionPickSuite
 from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
 from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
 from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
 from mloda._testing.compute_framework.mask_suite import MaskEngineSuite
+from mloda._testing.compute_framework.merge_suite import AsofMergeEngineSuite, MergeEngineSuite
 from mloda._testing.compute_framework.output_schema_suite import OutputSchemaSuite
 from mloda._testing.compute_framework.relation_suite import SqlRelationWindowSuite
+from mloda._testing.compute_framework.run_all_suite import (
+    AsofRunAllSuite,
+    EmptyResultRunAllSuite,
+    MissingColumnRunAllSuite,
+    SiblingDictRunAllSuite,
+)
+from mloda._testing.compute_framework_shape import applicable_aspects, serves_asof_merge, serves_connection
+from mloda._testing.source.read_db_suite import ReadDBFGTestMixin
+from mloda._testing.source.read_document_suite import ReadDocumentFGTestMixin
+from mloda._testing.source.read_file_suite import ReadFileFGTestMixin
+from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.implementation import loaded_implementations
+from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
+from mloda.provider import ReadDBFG, ReadDocumentFG, ReadFileFG, SourceFeatureGroup
+from mloda.user import PluginLoader
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_calculate_test_mixin import (
     AggregatedCalculateTestMixin,
 )
@@ -52,6 +58,16 @@ from tests.test_plugins.feature_group.experimental.test_time_window_feature_grou
 _INPUT_DATA = "tests.test_plugins.feature_group.input_data"
 _EXPERIMENTAL = "tests.test_plugins.feature_group.experimental"
 _FRAMEWORKS = "tests.test_plugins.compute_framework.base_implementations"
+_RUN_ALL_HOST_MODULES = (
+    f"{_FRAMEWORKS}.duckdb.test_duckdb_allow_empty_result_run_all",
+    f"{_FRAMEWORKS}.iceberg.test_iceberg_allow_empty_result_run_all",
+    f"{_FRAMEWORKS}.pandas.test_pandas_allow_empty_result_run_all",
+    f"{_FRAMEWORKS}.polars.test_polars_allow_empty_result_run_all",
+    f"{_FRAMEWORKS}.pyarrow.test_pyarrow_allow_empty_result_run_all",
+    f"{_FRAMEWORKS}.python_dict.test_python_dict_allow_empty_result_run_all",
+    f"{_FRAMEWORKS}.spark.test_spark_allow_empty_result_run_all",
+    f"{_FRAMEWORKS}.sqlite.test_sqlite_allow_empty_result_run_all",
+)
 
 
 _AGGREGATED_CONSUMERS = (
@@ -261,6 +277,69 @@ CONTRACTS: tuple[MixinContract, ...] = (
             f"{_FRAMEWORKS}.sqlite.test_sqlite_framework",
         ),
         resolver=_framework_of_adapter,
+    ),
+    MixinContract(
+        ComputeFramework,
+        EmptyResultRunAllSuite,
+        "adapter_class",
+        _RUN_ALL_HOST_MODULES,
+        resolver=_framework_of_adapter,
+    ),
+    MixinContract(
+        ComputeFramework,
+        SiblingDictRunAllSuite,
+        "adapter_class",
+        _RUN_ALL_HOST_MODULES,
+        resolver=_framework_of_adapter,
+    ),
+    MixinContract(
+        ComputeFramework,
+        AsofRunAllSuite,
+        "adapter_class",
+        (
+            f"{_FRAMEWORKS}.duckdb.test_duckdb_asof_run_all",
+            f"{_FRAMEWORKS}.pandas.test_pandas_asof_run_all",
+            f"{_FRAMEWORKS}.polars.test_polars_asof_run_all",
+            f"{_FRAMEWORKS}.pyarrow.test_pyarrow_asof_run_all",
+            f"{_FRAMEWORKS}.python_dict.test_python_dict_asof_run_all",
+            f"{_FRAMEWORKS}.spark.test_spark_asof_run_all",
+            f"{_FRAMEWORKS}.sqlite.test_sqlite_asof_run_all",
+        ),
+        resolver=_framework_of_adapter,
+        applies=serves_asof_merge,
+    ),
+    MixinContract(
+        ComputeFramework,
+        MissingColumnRunAllSuite,
+        "adapter_class",
+        _RUN_ALL_HOST_MODULES,
+        resolver=_framework_of_adapter,
+    ),
+    MixinContract(
+        ComputeFramework,
+        ConnectionPickSuite,
+        "adapter_class",
+        (
+            f"{_FRAMEWORKS}.duckdb.test_duckdb_framework",
+            f"{_FRAMEWORKS}.iceberg.test_iceberg_framework",
+            f"{_FRAMEWORKS}.spark.test_spark_framework",
+            f"{_FRAMEWORKS}.sqlite.test_sqlite_framework",
+        ),
+        resolver=_framework_of_adapter,
+        applies=serves_connection,
+    ),
+    MixinContract(
+        ComputeFramework,
+        ConnectionEndToEndSuite,
+        "adapter_class",
+        (
+            f"{_FRAMEWORKS}.duckdb.test_duckdb_tfs_connection",
+            f"{_FRAMEWORKS}.iceberg.test_iceberg_tfs_connection",
+            f"{_FRAMEWORKS}.spark.test_spark_tfs_connection",
+            f"{_FRAMEWORKS}.sqlite.test_sqlite_tfs_connection",
+        ),
+        resolver=_framework_of_adapter,
+        applies=serves_connection,
     ),
     MixinContract(
         ComputeFramework,

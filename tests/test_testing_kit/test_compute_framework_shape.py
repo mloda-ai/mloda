@@ -14,6 +14,7 @@ from mloda._testing.compute_framework_shape import (
     assert_compute_framework_shape,
     check_compute_framework_shape,
     serves_asof_merge,
+    serves_connection,
 )
 from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -177,6 +178,43 @@ def test_built_in_framework_passes(module: str, name: str, dependency: str | Non
         pytest.skip(f"{name} is not available")
     assert check_compute_framework_shape(cls).failures == ()
     assert applicable_aspects(cls) == aspects
+
+
+SERVES_CONNECTION = [
+    ("mloda.user.python_dict", "PythonDictFramework", None, False),
+    ("mloda.user.pyarrow", "PyArrowTable", "pyarrow", False),
+    ("mloda.user.pandas", "PandasDataFrame", "pandas", False),
+    ("mloda.user.polars", "PolarsDataFrame", "polars", False),
+    ("mloda.user.polars", "PolarsLazyDataFrame", "polars", False),
+    ("mloda.user.duckdb", "DuckDBFramework", "duckdb", True),
+    ("mloda.user.sqlite", "SqliteFramework", "pyarrow", True),
+    ("mloda.user.spark", "SparkFramework", "pyspark", True),
+    ("mloda.user.iceberg", "IcebergFramework", "pyiceberg", True),
+]
+
+
+@pytest.mark.parametrize(
+    ("module", "name", "dependency", "expected"), SERVES_CONNECTION, ids=[b[1] for b in SERVES_CONNECTION]
+)
+def test_serves_connection_pins_the_built_in_frameworks(
+    module: str, name: str, dependency: str | None, expected: bool
+) -> None:
+    if dependency is not None:
+        pytest.importorskip(dependency)
+    assert serves_connection(getattr(importlib.import_module(module), name)) is expected
+
+
+def test_serves_connection_requires_an_overridden_connection_matches() -> None:
+    class CfConnectionPlain(ComputeFramework):
+        pass
+
+    class CfConnectionOwn(ComputeFramework):
+        @classmethod
+        def _connection_matches(cls, conn: Any) -> bool:
+            return True
+
+    assert serves_connection(CfConnectionPlain) is False
+    assert serves_connection(CfConnectionOwn) is True
 
 
 @pytest.mark.parametrize(

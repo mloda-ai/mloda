@@ -29,10 +29,11 @@ from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet
 from mloda.user import FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.mixins.compute_frameworks.tfs_connection_e2e_mixin import (
-    TfsConnectionEndToEndMixin,
-    TfsRawValPyArrowSource,
-)
+from mloda._testing.compute_framework.connection_suite import ConnectionEndToEndSuite
+from mloda._testing.declarations import Cause
+from mloda._testing.framework_adapter import IcebergAdapter
+from tests.helpers.tfs_source_feature_groups import TfsRawValPyArrowSource
+
 
 _observed_catalogs: list[Any] = []
 
@@ -89,17 +90,30 @@ class TfsHandleDoubledIcebergFG(FeatureGroup):
         return {"tfs_handle_doubled"}
 
 
-@pytest.mark.skipif(pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed.")
-class TestIcebergTfsConnectionE2E(TfsConnectionEndToEndMixin):
-    destination_framework_class = ConnectionRecordingIcebergFramework
+class TestIcebergTfsConnectionE2E(ConnectionEndToEndSuite):
+    adapter_class = IcebergAdapter
     destination_fg_class = TfsDoubledIcebergFG
+    switched_off = {
+        "test_a_root_runs_on_the_one_dac_connection_without_a_class_name_option": Cause.BACKEND,
+        "test_a_connection_on_the_feature_needs_no_data_access_collection": Cause.BACKEND,
+    }
 
-    def test_a_root_runs_on_the_one_dac_connection_without_a_class_name_option(self, live_connection: Any) -> None:
-        pytest.skip("Iceberg is read-only (no root conversion on a bound relation) and has no .connection on data")
+    def destination_framework_class(self, framework: type[ComputeFramework]) -> type[ComputeFramework]:
+        return ConnectionRecordingIcebergFramework
 
-    def test_a_connection_on_the_feature_needs_no_data_access_collection(self, live_connection: Any) -> None:
-        pytest.skip("Iceberg is read-only (no root conversion on a bound relation) and has no .connection on data")
+    @pytest.fixture(autouse=True)
+    def _clear_observed_catalogs(self) -> None:
+        _observed_catalogs.clear()
 
+    @pytest.mark.skip(reason="Iceberg is read-only (no root conversion on a bound relation) and has no .connection")
+    def test_a_root_runs_on_the_one_dac_connection_without_a_class_name_option(
+        self, *args: Any, **kwargs: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="Iceberg is read-only (no root conversion on a bound relation) and has no .connection")
+    def test_a_connection_on_the_feature_needs_no_data_access_collection(self, *args: Any, **kwargs: Any) -> None: ...
+
+    @pytest.mark.skipif(not IcebergAdapter().is_available(), reason="PyIceberg or PyArrow is not installed.")
     def test_a_hop_into_iceberg_with_a_foreign_handle_runs_without_a_connection(self) -> None:
         with contextlib.closing(sqlite3.connect(":memory:")) as foreign:
             result = mloda.run_all(
@@ -113,6 +127,7 @@ class TestIcebergTfsConnectionE2E(TfsConnectionEndToEndMixin):
 
         assert result[0].column("tfs_handle_doubled").to_pylist() == [2, 4, 6]
 
+    @pytest.mark.skipif(not IcebergAdapter().is_available(), reason="PyIceberg or PyArrow is not installed.")
     def test_a_hop_into_iceberg_with_two_catalogs_and_no_handle_is_ambiguous(self) -> None:
         catalogs = {"c1": Mock(spec=Catalog), "c2": Mock(spec=Catalog)}
         for catalog in catalogs.values():
@@ -128,13 +143,6 @@ class TestIcebergTfsConnectionE2E(TfsConnectionEndToEndMixin):
                 data_access_collection=DataAccessCollection(catalogs),
             )
         assert "IcebergFramework: Ambiguous resolve" in str(exc.value)
-
-    @pytest.fixture
-    def live_connection(self) -> Any:
-        _observed_catalogs.clear()
-        mock_catalog = Mock(spec=Catalog)
-        mock_catalog.load_table = Mock()
-        return mock_catalog
 
     def extract_doubled(self, final: Any) -> list[int]:
         assert _observed_catalogs, "Setup-time precompute did not bind a catalog on the destination CFW"

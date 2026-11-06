@@ -14,7 +14,7 @@ from mloda._testing.framework_adapter import FrameworkAdapter, PandasAdapter
 from mloda._testing.typed_data import TypedTestData
 from mloda.user import DataType, FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
+from tests.helpers.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
 

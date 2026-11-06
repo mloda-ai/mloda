@@ -54,7 +54,7 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_s
     toy_token_request,
 )
 
-from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
+from tests.helpers.lost_input_feature_groups import (
     SiblingDictAggregate,
     SiblingDictLostInputConsumer,
     SiblingDictRoot,

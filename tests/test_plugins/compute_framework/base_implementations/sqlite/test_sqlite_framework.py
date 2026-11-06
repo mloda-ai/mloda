@@ -13,7 +13,7 @@ from mloda._testing.framework_adapter import FrameworkAdapter, SqliteAdapter
 from mloda.user import DataType, FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
-from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
+from tests.helpers.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
 
@@ -170,30 +170,15 @@ class TestSqliteFrameworkBasics:
             SqliteRelation.from_dict(connection, {"a": [1, 2, 3], "b": [4, 5]})
 
 
-from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402
+from mloda._testing.compute_framework.connection_suite import ConnectionPickSuite  # noqa: E402
 
 
-class TestSqliteTfsConnectionInit(TfsConnectionInitMixin):
+class TestSqliteTfsConnectionInit(ConnectionPickSuite):
+    adapter_class = SqliteAdapter
     missing_connection_prefix = r"sqlite3\.Connection object is required"
 
-    def data_on_connection(self, connection: Any) -> Any:
-        return SqliteRelation.from_dict(connection, {"a": [1]})
-
-    @pytest.fixture
-    def framework_class(self) -> Any:
-        return SqliteFramework
-
-    @pytest.fixture
-    def valid_connection(self) -> Any:
-        conn = sqlite3.connect(":memory:")
-        yield conn
-        conn.close()
-
-    @pytest.fixture
-    def second_valid_connection(self) -> Any:
-        conn = sqlite3.connect(":memory:")
-        yield conn
-        conn.close()
+    def data_on_connection(self, adapter: FrameworkAdapter) -> Any:
+        return SqliteRelation.from_dict(adapter.connection, {"a": [1]})
 
 
 class TestSqliteDtypeExtractionSuite(DtypeExtractionSuite):

@@ -46,9 +46,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
-from tests.mixins.compute_frameworks.tfs_connection_e2e_mixin import (
-    TfsRawValPyArrowSource,
-)
+from tests.helpers.tfs_source_feature_groups import TfsRawValPyArrowSource
 from tests.test_core.test_runtime.scheduling_jitter import run_under_scheduling_jitter
 
 

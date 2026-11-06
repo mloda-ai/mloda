@@ -32,7 +32,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 # Import the transformer so the pandas/pyarrow hop is registered.
 import mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer  # noqa: F401
 
-from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks import SecondCfw, ThirdCfw
+from tests.helpers.shared_compute_frameworks import SecondCfw, ThirdCfw
 from tests.test_core.test_tooling.runner_recorder import record_runners
 
 

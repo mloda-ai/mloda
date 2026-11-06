@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
 from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
 from mloda._testing.declarations import Cause
-from mloda._testing.framework_adapter import FrameworkAdapter, IcebergAdapter, PyArrowAdapter, to_arrow_table
+from mloda._testing.framework_adapter import FrameworkAdapter, IcebergAdapter, to_arrow_table
 from mloda._testing.typed_data import TypedTestData
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 from mloda.user import DataType
@@ -290,9 +290,6 @@ class TestIcebergDtypeExtractionPyArrowSuite(DtypeExtractionSuite):
 
     def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
         return _arrow_frame(self, name, data)
-
-    def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
-        return super().duplicate_column_frame(PyArrowAdapter(), first_type, second_type)
 
 
 _NO_UNSIGNED = (Cause.BACKEND, "Iceberg has no unsigned integer types")

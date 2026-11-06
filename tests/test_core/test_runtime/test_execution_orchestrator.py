@@ -1520,3 +1520,74 @@ class TestRequestNotifiesExtendersOfRunCompletion:
         ]
         assert len(errors) == 1
         assert "ValueError" in errors[0]
+
+
+def _chain_step(own: UUID, waits_for: set[UUID]) -> MagicMock:
+    step = _single_step_mock()
+    step.uuid = own
+    step.get_uuids.return_value = {own}
+    step.get_wait_uuids.return_value = waits_for
+    return step
+
+
+def _sync_orchestrator(plan: Any) -> ExecutionOrchestrator:
+    orchestrator = ExecutionOrchestrator(plan)
+    orchestrator.cfw_register = CfwManager({ParallelizationMode.SYNC})
+
+    def fake_execute_step(step: Any) -> None:
+        orchestrator.worker_manager.result_uuids_collection.add(step.uuid)
+
+    orchestrator._execute_step = Mock(side_effect=fake_execute_step)  # type: ignore[method-assign]
+    orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
+    orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
+    orchestrator.join = Mock()  # type: ignore[method-assign]
+    return orchestrator
+
+
+class TestPlannerReadsStepUuidsOncePerRun:
+    @staticmethod
+    def _reversed_chain() -> list[MagicMock]:
+        a, b, c = uuid_mod.uuid4(), uuid_mod.uuid4(), uuid_mod.uuid4()
+        # Plan order is the reverse of dependency order, so the run needs several passes.
+        return [_chain_step(c, {b}), _chain_step(b, {a}), _chain_step(a, set())]
+
+    def test_each_step_reads_uuids_and_wait_uuids_once(self) -> None:
+        steps = self._reversed_chain()
+
+        _sync_orchestrator(ReiterablePlan(*steps)).compute()
+
+        for step in steps:
+            assert step.get_uuids.call_count == 1
+            assert step.get_wait_uuids.call_count == 1
+
+
+class TestIsStepDoneIsASubsetCheck:
+    @pytest.mark.parametrize(
+        "step_count, finished_count, expected",
+        [(0, 0, True), (2, 3, True), (2, 1, False)],
+        ids=["empty", "subset", "partial"],
+    )
+    def test_is_step_done(self, step_count: int, finished_count: int, expected: bool) -> None:
+        ids = [uuid_mod.uuid4() for _ in range(3)]
+        orchestrator = ExecutionOrchestrator(Mock(spec=ExecutionPlan))
+
+        assert orchestrator._is_step_done(set(ids[:step_count]), set(ids[:finished_count])) is expected
+
+
+class TestDropBeforeFeatureGroupStepOnlyWhenTracked:
+    @pytest.mark.parametrize("tracked", [False, True], ids=["empty", "non_empty"])
+    def test_drop_called_only_with_tracked_data(self, tracked: bool) -> None:
+        step_uuid = uuid_mod.uuid4()
+        step = Mock(spec=FeatureGroupStep)
+        step.uuid = step_uuid
+        step.get_uuids.return_value = {step_uuid}
+        step.get_wait_uuids.return_value = set()
+        orchestrator = _sync_orchestrator(ReiterablePlan(step))
+        orchestrator._can_run_step = Mock(return_value=False)  # type: ignore[method-assign]
+        if tracked:
+            orchestrator.data_lifecycle_manager.track_data_to_drop[uuid_mod.uuid4()] = {uuid_mod.uuid4()}
+        finished_ids, _, running = orchestrator._init_run()
+
+        orchestrator._run_planner_pass(finished_ids, running)
+
+        assert orchestrator._drop_data_for_finished_cfws.called is tracked  # type: ignore[attr-defined]

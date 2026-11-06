@@ -1169,4 +1169,4 @@ class mlodaAPI:
 
     def _plan_ordered_items(self, runner: Any) -> list[tuple[UUID, Any]]:
         position = self._plan_position
-        return sorted(runner.get_result_items(), key=lambda item: position.get(item[0], len(position)))
+        return sorted(runner.get_result_items(), key=lambda item: position.get(item[0], len(self._plan_steps)))

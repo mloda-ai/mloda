@@ -951,6 +951,11 @@ class TestPreparedPlanIsFrozen:
             with pytest.raises(FrozenPlanError):
                 wait_uuids.add(uuid_mod.uuid4())
 
+        step_position: Any = session.engine.step_position
+        assert dict(step_position) == {entry[0].uuid: index for index, entry in enumerate(schedule)}
+        with pytest.raises(TypeError):
+            step_position[uuid_mod.uuid4()] = 0
+
     def test_runs_of_a_prepared_session_do_not_read_step_uuids(self) -> None:
         from mloda.core.core.step.feature_group_step import FeatureGroupStep
 

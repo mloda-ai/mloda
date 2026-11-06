@@ -1614,6 +1614,10 @@ class TestPlannerReadsStepUuidsOncePerRun:
 
             assert orchestrator._execute_step.call_count == len(steps)  # type: ignore[attr-defined]
 
+        for step in steps:
+            assert step.get_uuids.call_count == 0
+            assert step.get_wait_uuids.call_count == 0
+
 
 class TestIsStepDoneIsASubsetCheck:
     @pytest.mark.parametrize(

@@ -3,6 +3,7 @@ from collections.abc import Iterable, Mapping
 from copy import copy
 from dataclasses import replace
 import logging
+from types import MappingProxyType
 from typing import Any, cast
 from uuid import UUID
 import uuid
@@ -181,7 +182,9 @@ class Engine:
             (step, ReadOnlySet(step.get_uuids(), "step uuids"), ReadOnlySet(step.get_wait_uuids(), "step wait uuids"))
             for step in self.execution_planner
         )
-        self.step_position = {step.uuid: index for index, (step, _, _) in enumerate(self.step_schedule)}
+        self.step_position: Mapping[UUID, int] = MappingProxyType(
+            {step.uuid: index for index, (step, _, _) in enumerate(self.step_schedule)}
+        )
 
     def _resolve_plugin_versions(self) -> dict[str, str | None] | None:
         """Resolves each planned feature group module's owning-distribution version at plan time, so hooks only read it."""

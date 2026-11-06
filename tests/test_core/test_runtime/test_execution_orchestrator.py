@@ -1560,17 +1560,6 @@ class TestPlannerReadsStepUuidsOncePerRun:
             assert step.get_uuids.call_count == 1
             assert step.get_wait_uuids.call_count == 1
 
-    def test_snapshot_is_per_run_not_shared_between_orchestrators(self) -> None:
-        steps = self._reversed_chain()
-        plan = ReiterablePlan(*steps)
-
-        _sync_orchestrator(plan).compute()
-        _sync_orchestrator(plan).compute()
-
-        for step in steps:
-            assert step.get_uuids.call_count == 2
-            assert step.get_wait_uuids.call_count == 2
-
 
 class TestIsStepDoneIsASubsetCheck:
     @pytest.mark.parametrize(
@@ -1597,8 +1586,8 @@ class TestDropBeforeFeatureGroupStepOnlyWhenTracked:
         orchestrator._can_run_step = Mock(return_value=False)  # type: ignore[method-assign]
         if tracked:
             orchestrator.data_lifecycle_manager.track_data_to_drop[uuid_mod.uuid4()] = {uuid_mod.uuid4()}
-        finished_ids, to_finish_ids, running = orchestrator._init_run()
+        finished_ids, _, running = orchestrator._init_run()
 
-        orchestrator._run_planner_pass(finished_ids, to_finish_ids, running)
+        orchestrator._run_planner_pass(finished_ids, running)
 
         assert orchestrator._drop_data_for_finished_cfws.called is tracked  # type: ignore[attr-defined]

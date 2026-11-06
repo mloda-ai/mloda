@@ -248,9 +248,7 @@ class ExecutionOrchestrator:
         currently_running_steps: set[UUID] = set()
         return finished_ids, to_finish_ids, currently_running_steps
 
-    def _run_planner_pass(
-        self, finished_ids: set[UUID], to_finish_ids: set[UUID], currently_running_steps: set[UUID]
-    ) -> bool:
+    def _run_planner_pass(self, finished_ids: set[UUID], currently_running_steps: set[UUID]) -> bool:
         """Run one pass over the plan. Returns True if a step was executed or marked finished."""
         made_progress = False
 
@@ -398,7 +396,7 @@ class ExecutionOrchestrator:
                 if self._check_for_error():
                     break
 
-                made_progress = self._run_planner_pass(finished_ids, to_finish_ids, currently_running_steps)
+                made_progress = self._run_planner_pass(finished_ids, currently_running_steps)
 
                 if len(to_finish_ids) == 0:
                     break
@@ -433,7 +431,7 @@ class ExecutionOrchestrator:
                 if self._check_for_error():
                     break
 
-                made_progress = self._run_planner_pass(finished_ids, to_finish_ids, currently_running_steps)
+                made_progress = self._run_planner_pass(finished_ids, currently_running_steps)
 
                 yield from self.data_lifecycle_manager.pop_result_data_collection()
 

@@ -166,11 +166,13 @@ class mlodaAPI:
                     output_framework,
                 )
                 self._plan_steps = tuple(self._resolve_plan_steps())
-                self._artifact_steps = tuple(
-                    (step.uuid, step.features)
-                    for step in self._execution_plan()
-                    if isinstance(step, FeatureGroupStep) and step.feature_group.artifact() is not None
-                )
+                artifact_steps = []
+                for step in self._execution_plan():
+                    if isinstance(step, FeatureGroupStep):
+                        step.features._stamp_option_defaults_materialized(step.feature_group)
+                        if step.feature_group.artifact() is not None:
+                            artifact_steps.append((step.uuid, step.features))
+                self._artifact_steps = tuple(artifact_steps)
                 if self._extenders:
                     self._stamp_structure_hash()
             except BaseException as error:

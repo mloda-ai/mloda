@@ -79,10 +79,21 @@ class FeatureSet:
         # Columns a Link reads from this step's data, stamped by the planner.
         self.link_index_columns: frozenset[str] = frozenset()
         self._load_marker: InputDataLoadMarker | None = current_input_data_load_marker.get()
+        self._defaults_materialized_for: type[FeatureGroup] | None = None
+        self._defaults_checked: tuple[tuple[tuple[Feature, Options], ...], Options | None] = ((), None)
 
         if features is not None:
             for feature in features:
                 self.add(feature)
+
+    def __copy__(self) -> "FeatureSet":
+        clone = object.__new__(type(self))
+        clone.__dict__.update(self.__dict__)
+        return clone
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Drop the marker when pickling: it holds a class by reference and a worker recomputes it cheaply."""
+        return {**self.__dict__, "_defaults_materialized_for": None, "_defaults_checked": ((), None)}
 
     def filters_reapplied(self, feature_group: type["FeatureGroup"] | None = None) -> bool:
         """Whether the framework applies the filters again after this step's calculation."""
@@ -154,6 +165,7 @@ class FeatureSet:
         return next((f.input_data_match for f in self.features if f.input_data_match is not None), None)
 
     def add(self, feature: Feature) -> None:
+        self._defaults_materialized_for = None
         self.features.add(feature)
         if self.name_of_one_feature is None or feature.name < self.name_of_one_feature:
             self.name_of_one_feature = feature.name
@@ -163,15 +175,17 @@ class FeatureSet:
             self.any_uuid = feature.uuid
 
     def remove(self, feature: Feature) -> None:
+        self._defaults_materialized_for = None
         self.features.discard(feature)
 
-    def materialize_option_defaults(self, feature_group: "type[FeatureGroup]") -> None:
-        """Rebind every feature's options through options_with_defaults plus the values its name binds,
-        keeping aliased Options aliased. Same-named twins that collapse once a default fills one raise."""
+    def _resolve_option_defaults(
+        self, feature_group: "type[FeatureGroup]"
+    ) -> tuple[list[tuple[Feature, Options]], Options | None]:
+        """Resolve each feature's options and the set-level options with defaults, writing nothing."""
         # The memo holds a strong reference to each source Options so its id cannot be recycled mid-loop.
         memo: dict[tuple[int, Any], tuple[Options, Options]] = {}
         entries_by_source: dict[int, list[Options]] = {}
-        rebound = False
+        resolved_features: list[tuple[Feature, Options]] = []
         for feature in self.features:
             source = feature.options
             bindings = feature_group.name_bindings(feature.name)
@@ -181,8 +195,42 @@ class FeatureSet:
                 entry = (source, feature_group.options_with_defaults(source, bindings))
                 memo[key] = entry
             entries_by_source.setdefault(id(source), []).append(entry[1])
-            if entry[1] is not source:
-                feature.options = entry[1]
+            resolved_features.append((feature, entry[1]))
+        set_options = self.options
+        if set_options is not None:
+            resolved = entries_by_source.get(id(set_options))
+            if resolved is not None and all(entry is resolved[0] for entry in resolved):
+                set_options = resolved[0]
+            else:
+                # Aliasing features disagree: fill defaults only, never a default for a bound key.
+                bindings = feature_group.name_bindings(self.name_of_one_feature) if self.name_of_one_feature else {}
+                set_options = feature_group.options_with_defaults(set_options, bindings, fill_bindings=False)
+        return resolved_features, set_options
+
+    def _stamp_option_defaults_materialized(self, feature_group: "type[FeatureGroup]") -> None:
+        """Mark defaults as materialized when materializing would change nothing."""
+        resolved_features, set_options = self._resolve_option_defaults(feature_group)
+        if set_options is self.options and all(new is feature.options for feature, new in resolved_features):
+            checked = tuple((feature, feature.options) for feature in self.features)
+            self._defaults_materialized_for = feature_group
+            self._defaults_checked = (checked, self.options)
+
+    def materialize_option_defaults(self, feature_group: "type[FeatureGroup]") -> None:
+        """Rebind every feature's options through options_with_defaults plus the values its name binds,
+        keeping aliased Options aliased. Same-named twins that collapse once a default fills one raise."""
+        checked, set_options = self._defaults_checked
+        if (
+            self._defaults_materialized_for is feature_group
+            and set_options is self.options
+            and len(checked) == len(self.features)
+            and all(feature.options is options for feature, options in checked)
+        ):
+            return
+        resolved_features, resolved_options = self._resolve_option_defaults(feature_group)
+        rebound = False
+        for feature, new_options in resolved_features:
+            if new_options is not feature.options:
+                feature.options = new_options
                 rebound = True
         if rebound:
             # Only GROUP fills change Feature hashes (Options.__hash__ is group-only); a comprehension rehashes,
@@ -198,17 +246,10 @@ class FeatureSet:
                     f"Deduplicate the request or set the key explicitly on all twins. Affected: {names}"
                 )
             self.features = rebuilt
-        options_before = self.options
-        if self.options is not None:
-            resolved = entries_by_source.get(id(self.options))
-            if resolved is not None and all(entry is resolved[0] for entry in resolved):
-                self.options = resolved[0]
-            else:
-                # Aliasing features disagree: fill defaults only, never a default for a bound key.
-                bindings = feature_group.name_bindings(self.name_of_one_feature) if self.name_of_one_feature else {}
-                self.options = feature_group.options_with_defaults(self.options, bindings, fill_bindings=False)
+        options_changed = resolved_options is not self.options
+        self.options = resolved_options
 
-        if rebound or self.options is not options_before:
+        if rebound or options_changed:
             self.declared_input_features_resolved = False
             self.declared_input_feature_names = None
             self.declared_input_feature_edges = None

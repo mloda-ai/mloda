@@ -20,7 +20,8 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.user import mloda, mlodaAPI, Feature, ParallelizationMode, PluginCollector
-from mloda.provider import ApiDataFG, ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
+from mloda.provider import ApiDataFG, ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup, PropertySpec
+from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
 from mloda.user import Options, FeatureName, Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -29,6 +30,33 @@ from tests.test_plugins.api.test_simplified_api_data import (
     ApiNeutralGenericFG,
     ApiNeutralPandasOnlyFG,
 )
+
+
+CTX_DEFAULT = "prskip_ctx_val"
+CTX_KEY = "prskip_ctx_default"
+
+
+def _make_boundary_probe_fg(feature_name: str) -> type[FeatureGroup]:
+    """Root FeatureGroup whose calculate_feature reads feature.options directly (no options_with_defaults)."""
+
+    class PrSkipBoundaryProbeFeatureGroup(DataCreatorFeatureGroup):
+        PROPERTY_MAPPING = {CTX_KEY: PropertySpec("A context concrete default.", context=True, default=CTX_DEFAULT)}
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {feature_name}
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return {str(f.name): [{"ctx": f.options.get(CTX_KEY)}] for f in features.features}
+
+    return PrSkipBoundaryProbeFeatureGroup
+
+
+def _single_row(frame: Any, column: str) -> Any:
+    values = list(frame[column]) if isinstance(frame, dict) else [row[column] for row in frame]
+    assert len(values) == 1, f"expected exactly one row for {column}, got {values!r}"
+    return values[0]
 
 
 class PrepareRunApiFeature(FeatureGroup):
@@ -547,6 +575,67 @@ class TestRunRefusesShapeThatDiffersFromDefaultPrepare:
         assert extender.starts == 1
 
 
+def _run_twice_under_spies(name_bound: bool) -> dict[str, Any]:
+    """Prepare, then run twice under spies; throwaway groups never outlive this frame."""
+    seen: dict[str, Any] = {}
+    if name_bound:
+        fg = make_name_bound_fg(
+            "PrSkip",
+            __name__,
+            "prskipop",
+            ("prskip_first", "prskip_second"),
+            defaults={"prskip_first": "a", "prskip_second": "a"},
+            seen=seen,
+            input_column="prskip_src",
+        )
+        source = make_root_fg("PrSkipRoot", __name__, "prskip_src", [1, 2])
+        name = "prskip_src__prskipop_q_b"
+        expected: tuple[Any, ...] = ("q", "b")
+    else:
+        fg = _make_boundary_probe_fg("prskip_default_feature")
+        source = fg
+        name = "prskip_default_feature"
+        expected = (CTX_DEFAULT,)
+    session = mloda.prepare(
+        [Feature(name)],
+        compute_frameworks=[PythonDictFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({fg, source}),
+    )
+    seen.clear()
+    with (
+        patch.object(FeatureGroup, "options_with_defaults", wraps=FeatureGroup.options_with_defaults) as defaults,
+        patch.object(FeatureGroup, "name_bindings", wraps=FeatureGroup.name_bindings) as bindings,
+        patch.object(Feature, "__hash__", autospec=True, side_effect=Feature.__hash__) as hashes,
+    ):
+        first = session.run()
+        second = session.run()
+    if not name_bound:
+        seen[name] = (_single_row(second[0], name)["ctx"],)
+    return {
+        "defaults": defaults.call_count,
+        "bindings": bindings.call_count,
+        "hashes": hashes.call_count,
+        "seen": seen.get(name),
+        "expected": expected,
+        "result_counts": (len(first), len(second)),
+    }
+
+
+def _replace_options_between_runs() -> list[Any]:
+    """Prepare with copy_features=False, run, swap the plan feature's options for a fresh Options, run again."""
+    fg = _make_boundary_probe_fg("prskip_replaced_feature")
+    feature = Feature("prskip_replaced_feature")
+    session = mloda.prepare(
+        [feature],
+        compute_frameworks=[PythonDictFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({fg}),
+        copy_features=False,
+    )
+    session.run()
+    feature.options = Options()
+    return list(session.run())
+
+
 class TestStepStateDoesNotLeakBetweenRuns:
     """Test 5: Internal step state does not leak between runs."""
 
@@ -584,6 +673,22 @@ class TestStepStateDoesNotLeakBetweenRuns:
         assert df_first["PrepareRunApiFeature"].tolist() == ["5_p", "6_q"]
         assert df_second["PrepareRunApiFeature"].tolist() == ["5_p", "6_q"]
         assert df_first["PrepareRunApiFeature"].tolist() == df_second["PrepareRunApiFeature"].tolist()
+
+    @pytest.mark.parametrize("name_bound", [False, True], ids=["declared_defaults", "name_bound_chain"])
+    def test_runs_skip_default_materialization_recompute(self, name_bound: bool) -> None:
+        """After prepare(), run() neither recomputes defaults/name bindings nor hashes features."""
+        observed = _run_twice_under_spies(name_bound)
+
+        assert observed["defaults"] == 0
+        assert observed["bindings"] == 0
+        assert observed["hashes"] == 0
+        assert observed["seen"] == observed["expected"]
+        assert observed["result_counts"] == (1, 1)
+
+    def test_run_after_options_replacement_still_materializes_defaults(self) -> None:
+        """With copy_features=False, replacing a plan feature's options after prepare() must not lose defaults."""
+        results = _replace_options_between_runs()
+        assert _single_row(results[0], "prskip_replaced_feature")["ctx"] == CTX_DEFAULT
 
     def test_runs_build_no_transformer_registry(self) -> None:
         """After prepare(), runs converting dict api_data to pandas reuse the plan's one registry."""

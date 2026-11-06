@@ -4,7 +4,7 @@ import os
 import pickle  # nosec B403
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Generator
 from uuid import UUID
 import logging
@@ -146,6 +146,8 @@ class ExecutionOrchestrator:
         output_connection: Any = None,
         data_access_collection: DataAccessCollection | None = None,
         transformer: ComputeFrameworkTransformer | None = None,
+        step_schedule: Sequence[tuple[Any, set[UUID], set[UUID]]] | None = None,
+        step_position: Mapping[UUID, int] | None = None,
     ) -> None:
         """
         Initializes the ExecutionOrchestrator with an execution plan and optional flight server.
@@ -156,7 +158,9 @@ class ExecutionOrchestrator:
             run_context: The default run context used when __enter__ is called without one.
         """
         self.execution_planner = execution_planner
-        self._plan_steps: list[tuple[Any, set[UUID], set[UUID]]] = []
+        self._plan_steps: Sequence[tuple[Any, set[UUID], set[UUID]]] = []
+        self._step_schedule = step_schedule
+        self._step_position = step_position
         self.data_access_collection = data_access_collection
         self.transformer = transformer
 
@@ -240,9 +244,12 @@ class ExecutionOrchestrator:
         finished_ids: set[UUID] = set()
         to_finish_ids: set[UUID] = set()
         # Step uuids are fixed at prepare time, so a run reads them once.
-        self._plan_steps = [
-            (step, set(step.get_uuids()), set(step.get_wait_uuids())) for step in self.execution_planner
-        ]
+        if self._step_schedule is not None:
+            self._plan_steps = self._step_schedule
+        else:
+            self._plan_steps = [
+                (step, set(step.get_uuids()), set(step.get_wait_uuids())) for step in self.execution_planner
+            ]
         for _, uuids, _ in self._plan_steps:
             to_finish_ids.update(uuids)
         currently_running_steps: set[UUID] = set()
@@ -779,6 +786,8 @@ class ExecutionOrchestrator:
         Gets the results with their step uuids, ordered by position in the resolved execution
         plan. A uuid absent from the plan sorts last.
         """
-        plan_position = {step.uuid: index for index, step in enumerate(self.execution_planner)}
+        plan_position = self._step_position
+        if plan_position is None:
+            plan_position = {step.uuid: index for index, step in enumerate(self.execution_planner)}
         items = self.data_lifecycle_manager.get_result_items()
         return sorted(items, key=lambda item: plan_position.get(item[0], len(plan_position)))

@@ -1055,6 +1055,25 @@ class TestGetResultItemsPlanOrder:
         assert items[:3] == [(uuid_a, "result_a"), (uuid_b, "result_b"), (uuid_c, "result_c")]
         assert items[3] == (uuid_unplanned, "result_unplanned")
 
+    def test_step_position_overrides_plan_iteration_order(self) -> None:
+        uuid_a, uuid_b, uuid_c = uuid_mod.uuid4(), uuid_mod.uuid4(), uuid_mod.uuid4()
+        planner = ExecutionPlan()
+        planner.execution_plan = [self._make_step(uuid_a), self._make_step(uuid_b), self._make_step(uuid_c)]
+        orchestrator = ExecutionOrchestrator(
+            planner,
+            step_position={uuid_c: 0, uuid_b: 1, uuid_a: 2},
+        )
+        collection = orchestrator.data_lifecycle_manager.result_data_collection
+        collection[uuid_a] = "result_a"
+        collection[uuid_b] = "result_b"
+        collection[uuid_c] = "result_c"
+
+        assert orchestrator.get_result_items() == [
+            (uuid_c, "result_c"),
+            (uuid_b, "result_b"),
+            (uuid_a, "result_a"),
+        ]
+
 
 class _DropTfsSourceFromFG(FeatureGroup):
     """Marker feature group, only used as a type reference on the transform hop."""
@@ -1559,6 +1578,53 @@ class TestPlannerReadsStepUuidsOncePerRun:
         for step in steps:
             assert step.get_uuids.call_count == 1
             assert step.get_wait_uuids.call_count == 1
+
+    @staticmethod
+    def _schedule(steps: list[MagicMock]) -> tuple[tuple[Any, set[UUID], set[UUID]], ...]:
+        from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlySet
+
+        schedule = tuple(
+            (s, ReadOnlySet(s.get_uuids(), "uuids"), ReadOnlySet(s.get_wait_uuids(), "wait uuids")) for s in steps
+        )
+        for s in steps:
+            s.get_uuids.reset_mock()
+            s.get_wait_uuids.reset_mock()
+        return schedule
+
+    def test_prebuilt_schedule_means_no_step_uuid_reads(self) -> None:
+        steps = self._reversed_chain()
+        orchestrator = ExecutionOrchestrator(ReiterablePlan(*steps), step_schedule=self._schedule(steps))  # type: ignore[arg-type]
+        orchestrator.cfw_register = CfwManager({ParallelizationMode.SYNC})
+        orchestrator._execute_step = Mock(  # type: ignore[method-assign]
+            side_effect=lambda step: orchestrator.worker_manager.result_uuids_collection.add(step.uuid)
+        )
+        orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
+        orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
+        orchestrator.join = Mock()  # type: ignore[method-assign]
+
+        orchestrator.compute()
+
+        assert orchestrator._execute_step.call_count == len(steps)
+        for step in steps:
+            assert step.get_uuids.call_count == 0
+            assert step.get_wait_uuids.call_count == 0
+
+    def test_shared_schedule_survives_two_orchestrators(self) -> None:
+        steps = self._reversed_chain()
+        schedule = self._schedule(steps)
+        for _ in range(2):
+            orchestrator = ExecutionOrchestrator(ReiterablePlan(*steps), step_schedule=schedule)  # type: ignore[arg-type]
+            orchestrator.cfw_register = CfwManager({ParallelizationMode.SYNC})
+            orchestrator._execute_step = Mock(  # type: ignore[method-assign]
+                side_effect=lambda step, o=orchestrator: o.worker_manager.result_uuids_collection.add(step.uuid)
+            )
+            orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
+            orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
+            orchestrator.join = Mock()  # type: ignore[method-assign]
+
+            orchestrator.compute()
+
+            assert orchestrator._execute_step.call_count == len(steps)
 
 
 class TestIsStepDoneIsASubsetCheck:

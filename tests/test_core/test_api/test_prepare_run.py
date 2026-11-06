@@ -7,6 +7,7 @@ These tests define the contract for a two-phase execution model:
 """
 
 import threading
+import uuid as uuid_mod
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from types import MappingProxyType
@@ -929,6 +930,50 @@ class TestPreparedPlanIsFrozen:
                     feature.options.add_to_context("late", 1)
                 with pytest.raises(FrozenPlanError):
                     feature.options.group["late"] = 1
+
+    def test_step_schedule_is_prebuilt_and_read_only(self) -> None:
+        from mloda.core.abstract_plugins.components.plan_freeze import FrozenPlanError
+
+        session = mloda.prepare(
+            [Feature(name="PrepareRunApiFeature", options={"k": 1})],
+            compute_frameworks=[PandasDataFrame],
+            api_data=_API,
+            plugin_collector=_enabled,
+        )
+
+        assert session.engine is not None
+        plan_steps = list(session.engine.execution_planner)
+        schedule = session.engine.step_schedule
+        assert [entry[0] for entry in schedule] == plan_steps
+        for _, uuids, wait_uuids in schedule:
+            with pytest.raises(FrozenPlanError):
+                uuids.add(uuid_mod.uuid4())
+            with pytest.raises(FrozenPlanError):
+                wait_uuids.add(uuid_mod.uuid4())
+
+    def test_runs_of_a_prepared_session_do_not_read_step_uuids(self) -> None:
+        from mloda.core.core.step.feature_group_step import FeatureGroupStep
+
+        session = mloda.prepare(
+            [Feature(name="PrepareRunApiFeature", options={"k": 1})],
+            compute_frameworks=[PandasDataFrame],
+            api_data=_API,
+            plugin_collector=_enabled,
+        )
+        calls: list[int] = []
+        original = FeatureGroupStep.get_uuids
+
+        def counting(self: FeatureGroupStep) -> Any:
+            calls.append(1)
+            return original(self)
+
+        with patch.object(FeatureGroupStep, "get_uuids", counting):
+            first = session.run(api_data=_API)
+            second = session.run(api_data=_API)
+
+        assert calls == []
+        assert first[0]["PrepareRunApiFeature"].tolist() == ["1_a", "2_b"]
+        assert second[0]["PrepareRunApiFeature"].tolist() == ["1_a", "2_b"]
 
 
 class TestSecondPrepareLeavesFirstPlanUnchanged:

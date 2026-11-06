@@ -19,6 +19,7 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.prepare.accessible_plugins import EnvironmentPreconditionError, PreFilterPlugins
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlySet
 from mloda.core.abstract_plugins.components.data_access_collection import (
     DataAccessCollection,
     resolve_connection_handle,
@@ -175,6 +176,12 @@ class Engine:
         self.connections = self._resolve_connections()
         self.output_connection = self._resolve_output_connection()
         self.execution_planner.freeze()
+        # The plan is frozen, so its schedule is built once per session.
+        self.step_schedule = tuple(
+            (step, ReadOnlySet(step.get_uuids(), "step uuids"), ReadOnlySet(step.get_wait_uuids(), "step wait uuids"))
+            for step in self.execution_planner
+        )
+        self.step_position = {step.uuid: index for index, (step, _, _) in enumerate(self.step_schedule)}
 
     def _resolve_plugin_versions(self) -> dict[str, str | None] | None:
         """Resolves each planned feature group module's owning-distribution version at plan time, so hooks only read it."""
@@ -270,6 +277,8 @@ class Engine:
                 self.data_access_collection if data_access_collection is None else data_access_collection
             ),
             transformer=self.transformer,
+            step_schedule=self.step_schedule,
+            step_position=self.step_position,
         )
         if isinstance(orchestrator, ExecutionOrchestrator):
             return orchestrator

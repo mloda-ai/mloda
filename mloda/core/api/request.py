@@ -136,6 +136,7 @@ class mlodaAPI:
         self._extenders: set[Extender] = set(filtered) if filtered is not None else set()
         reject_old_run_complete_signature(self._extenders)
         self._plan_steps: tuple[PlanStep, ...] = ()
+        self._plan_position: dict[UUID, int] = {}
         self._artifact_steps: tuple[tuple[UUID, FeatureSet], ...] = ()
         verified = current_verified_context()
         self.plan_context = PlanContext(
@@ -166,6 +167,9 @@ class mlodaAPI:
                     output_framework,
                 )
                 self._plan_steps = tuple(self._resolve_plan_steps())
+                self._plan_position = {
+                    step.step_uuid: index for index, step in enumerate(self._plan_steps) if step.step_uuid is not None
+                }
                 # A prepared FeatureSet skips the compute-boundary defaults fill, so no materialized stamp is needed.
                 self._artifact_steps = tuple(
                     (step.uuid, step.features)
@@ -898,7 +902,7 @@ class mlodaAPI:
                 run_context=run_context,
                 run_dac=run_dac,
             )
-            items = self._plan_ordered_items(runner, plan)
+            items = self._plan_ordered_items(runner)
         return RunResult(
             [r for _, r in items],
             plan,
@@ -1163,6 +1167,6 @@ class mlodaAPI:
 
         return runner
 
-    def _plan_ordered_items(self, runner: Any, plan: list[PlanStep]) -> list[tuple[UUID, Any]]:
-        position = {step.step_uuid: index for index, step in enumerate(plan)}
+    def _plan_ordered_items(self, runner: Any) -> list[tuple[UUID, Any]]:
+        position = self._plan_position
         return sorted(runner.get_result_items(), key=lambda item: position.get(item[0], len(position)))

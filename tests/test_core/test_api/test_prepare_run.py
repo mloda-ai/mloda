@@ -6,6 +6,7 @@ These tests define the contract for a two-phase execution model:
   2. run() - instance method that executes with fresh api_data, reusing the cached plan
 """
 
+import dataclasses
 import threading
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
@@ -31,7 +32,9 @@ from mloda.provider import (
     property_spec,
 )
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
+from mloda.steward import RunSurface
 from mloda.user import Options, FeatureName, Index
+from tests.test_core.test_artifacts.test_artifact_prepare_run import PrepareRunArtifactFeature
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_plugins.api.test_simplified_api_data import (
@@ -1261,3 +1264,165 @@ class TestRuntimeParametersAreValidatedBeforeTheRun:
 
     def test_a_fresh_feature_set_declares_no_runtime_parameters(self) -> None:
         assert FeatureSet().runtime_parameters == ()
+
+
+class RtpRecordFG(DataCreatorFeatureGroup):
+    """Declares plain, secret-shaped and nested runtime parameters for run-record tests."""
+
+    PROPERTY_MAPPING = {
+        "rtp_plain": property_spec("Plain.", runtime=True, default="base"),
+        "api_token": property_spec("Token.", runtime=True, default="base-token"),  # nosec B106
+        "rtp_config": property_spec("Nested.", runtime=True, default={"password": "base-pw", "plain": 1}),
+    }
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"rtp_record_col"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"rtp_record_col": [1]}
+
+
+class _RunRecordExtender(Extender):
+    """Records the RunContext handed to on_run_start."""
+
+    def __init__(self) -> None:
+        self.runs: list[Any] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        self.runs.append(run)
+
+
+def _record_session(extender: Extender, *, api: bool = False, artifact: bool = False, rtp: bool = False) -> Any:
+    groups: set[type[FeatureGroup]] = {ApiDataFG, PrepareRunApiFeature, PrepareRunArtifactFeature, RtpRecordFG}
+    features: list[Feature | str] = []
+    if api:
+        features.append("PrepareRunApiFeature")
+    if artifact:
+        features.append("PrepareRunArtifactFeature")
+    if rtp:
+        features.append("rtp_record_col")
+    return mloda.prepare(
+        features,
+        compute_frameworks=[PandasDataFrame, PythonDictFramework, "PyArrowTable"],
+        api_data=_API if api else None,
+        plugin_collector=PluginCollector.enabled_feature_groups(groups),
+        function_extender={extender},
+    )
+
+
+class TestRunSurface:
+    """session.run_surface lists what run() accepts."""
+
+    def test_api_data_columns_per_set_are_sorted(self) -> None:
+        session = _record_session(_RunRecordExtender(), api=True)
+
+        surface = session.run_surface
+        assert isinstance(surface, RunSurface)
+        assert surface.api_data == {"PrepareExample": ("api_id", "api_value")}
+
+    def test_artifacts_equal_the_artifact_inputs(self) -> None:
+        session = _record_session(_RunRecordExtender(), artifact=True)
+
+        assert session.run_surface.artifacts == session.artifact_inputs
+        assert session.run_surface.artifacts == frozenset({"PrepareRunArtifactFeature"})
+
+    def test_parameters_map_each_key_to_the_sorted_declaring_groups(self) -> None:
+        session = _rtp_session("rtp_level_col", "rtp_tight_col")
+
+        assert session.run_surface.parameters == {"rtp_level": ("RtpLevelFG", "RtpTightFG")}
+
+    def test_a_plan_without_inputs_has_an_empty_surface(self) -> None:
+        surface = _record_session(_RunRecordExtender(), rtp=False, artifact=False).run_surface
+
+        assert (dict(surface.api_data), surface.artifacts, dict(surface.parameters), surface.credentials) == (
+            {},
+            frozenset(),
+            {},
+            (),
+        )
+
+    def test_parameters_accepted_by_the_surface_run(self) -> None:
+        session = _rtp_session()
+
+        assert _rtp_values(session.run(parameters={k: "mid" for k in session.run_surface.parameters})) == {
+            "rtp_level_col": "mid"
+        }
+
+    def test_mappings_are_read_only_and_the_surface_is_frozen(self) -> None:
+        surface = _record_session(_RunRecordExtender(), api=True, rtp=True).run_surface
+
+        with pytest.raises(TypeError):
+            surface.api_data["x"] = ("c",)
+        with pytest.raises(TypeError):
+            surface.parameters["x"] = ("G",)
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            surface.credentials = ("x",)
+
+
+class TestRunInputsOnRunStart:
+    """on_run_start sees the names and masked values this run was given."""
+
+    def test_api_data_names_come_from_the_run_argument(self) -> None:
+        recorder = _RunRecordExtender()
+        session = _record_session(recorder, api=True)
+
+        session.run(api_data=_API)
+
+        assert recorder.runs[-1].run_inputs.api_data == ("PrepareExample",)
+
+    def test_api_data_names_fall_back_to_the_prepared_sets(self) -> None:
+        recorder = _RunRecordExtender()
+        session = _record_session(recorder, api=True)
+
+        session.run()
+
+        assert recorder.runs[-1].run_inputs.api_data == ("PrepareExample",)
+
+    def test_a_plan_without_api_data_records_none(self) -> None:
+        recorder = _RunRecordExtender()
+        _record_session(recorder, rtp=True).run()
+
+        assert recorder.runs[-1].run_inputs.api_data == ()
+
+    def test_artifact_names_are_recorded_sorted(self) -> None:
+        recorder = _RunRecordExtender()
+        session = _record_session(recorder, artifact=True)
+
+        session.run(artifacts={"PrepareRunArtifactFeature": "trained_model_v1"})
+        assert recorder.runs[-1].run_inputs.artifacts == ("PrepareRunArtifactFeature",)
+
+        session.run()
+        assert recorder.runs[-1].run_inputs.artifacts == ()
+
+    def test_secret_shaped_parameter_values_are_masked_in_the_stored_record(self) -> None:
+        recorder = _RunRecordExtender()
+        session = _record_session(recorder, rtp=True)
+        raw = "rtp-raw-token-1234"  # nosec B105
+
+        session.run(parameters={"api_token": raw, "rtp_plain": "mine", "rtp_config": {"password": raw, "plain": 2}})
+
+        record = recorder.runs[-1].run_inputs
+        assert record.parameters["api_token"] == "***"
+        assert record.parameters["rtp_plain"] == "mine"
+        assert record.parameters["rtp_config"]["password"] == "***"
+        assert record.parameters["rtp_config"]["plain"] == 2
+        with pytest.raises(TypeError):
+            record.parameters["x"] = 1
+
+    def test_a_run_without_parameters_records_none(self) -> None:
+        recorder = _RunRecordExtender()
+        _record_session(recorder, rtp=True).run()
+
+        assert dict(recorder.runs[-1].run_inputs.parameters) == {}

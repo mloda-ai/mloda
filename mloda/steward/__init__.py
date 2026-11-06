@@ -6,6 +6,7 @@ from mloda.core.api.plugin_info import FeatureGroupInfo, ComputeFrameworkInfo, E
 
 # Resolved execution plan
 from mloda.core.api.plan_info import PlanStep
+from mloda.core.api.run_surface import RunSurface
 
 # Plan lock file
 from mloda.core.api.plan_lock import (
@@ -34,7 +35,7 @@ from mloda.core.abstract_plugins.function_extender import (
     LifecycleOutcome,
 )
 from mloda.core.abstract_plugins.plan_context import PlanContext
-from mloda.core.abstract_plugins.run_context import RunContext
+from mloda.core.abstract_plugins.run_context import RunContext, RunInputs
 from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema
 from mloda.core.abstract_plugins.components.failed_rows import collect_failed_rows
 from mloda.core.abstract_plugins.close_context import CloseContext
@@ -112,6 +113,8 @@ __all__ = [
     "LifecycleOutcome",
     "PlanContext",
     "RunContext",
+    "RunInputs",
+    "RunSurface",
     "CloseContext",
     "AsOfJoinConfig",
     # Server-verified tenant/project/principal context seam

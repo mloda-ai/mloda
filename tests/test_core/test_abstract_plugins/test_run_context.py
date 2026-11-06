@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.plan_context import PlanContext
 import mloda.provider as provider
 import mloda.steward as steward
 import mloda.user as user
-from mloda.core.abstract_plugins.run_context import RunContext
+from mloda.core.abstract_plugins.run_context import RunContext, RunInputs
 
 
 def _module_level_bootstrap() -> None:
@@ -64,14 +64,42 @@ class TestRunContextPlanIdAndStartedAt:
         assert hashed == plain
         assert hash(hashed) == hash(plain)
         assert dataclasses.fields(RunContext)[-1].name == "structure_hash"
-        assert dataclasses.fields(RunContext)[-2].name == "run_credentials"
+        assert dataclasses.fields(RunContext)[-2].name == "run_inputs"
 
-    def test_run_credentials_defaults_to_empty_and_round_trips(self) -> None:
-        assert RunContext().run_credentials == ()
+    def test_run_inputs_defaults_to_empty_and_round_trips(self) -> None:
+        assert RunContext().run_inputs == RunInputs()
+        assert RunContext().run_inputs.credentials == ()
 
-        restored = pickle.loads(pickle.dumps(RunContext(run_credentials=("vault-a",))))  # nosec B301
+        restored = pickle.loads(pickle.dumps(RunContext(run_inputs=RunInputs(credentials=("vault-a",)))))  # nosec B301
 
-        assert restored.run_credentials == ("vault-a",)
+        assert restored.run_inputs.credentials == ("vault-a",)
+
+    def test_run_inputs_round_trips_every_field_with_read_only_parameters(self) -> None:
+        inputs = RunInputs(api_data=("a",), artifacts=("m",), parameters={"k": "v"}, credentials=("c",))
+
+        restored = pickle.loads(pickle.dumps(RunContext(run_inputs=inputs))).run_inputs  # nosec B301
+
+        assert restored == inputs
+        assert (restored.api_data, restored.artifacts, restored.credentials) == (("a",), ("m",), ("c",))
+        assert restored.parameters == {"k": "v"}
+        with pytest.raises(TypeError):
+            restored.parameters["x"] = 1
+
+    def test_run_inputs_defaults_are_empty_and_parameters_are_read_only(self) -> None:
+        inputs = RunInputs()
+
+        assert (inputs.api_data, inputs.artifacts, inputs.credentials) == ((), (), ())
+        assert dict(inputs.parameters) == {}
+        with pytest.raises(TypeError):
+            inputs.parameters["x"] = 1  # type: ignore[index]
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            inputs.api_data = ("x",)  # type: ignore[misc]
+
+    def test_a_context_with_run_inputs_parameters_hashes(self) -> None:
+        ctx = RunContext(run_inputs=RunInputs(parameters={"k": {"n": 1}}, credentials=("c",)))
+
+        assert isinstance(hash(ctx), int)
+        assert ctx == RunContext(run_inputs=RunInputs(parameters={"k": {"n": 1}}, credentials=("c",)))
 
     def test_plan_id_is_frozen(self) -> None:
         with pytest.raises(dataclasses.FrozenInstanceError):
@@ -350,3 +378,9 @@ class TestRunContextIsInternal:
 
         assert "RunContext" not in user.__all__
         assert not hasattr(user, "RunContext")
+
+    def test_run_inputs_is_exported_from_the_steward_facade_only(self) -> None:
+        assert "RunInputs" in steward.__all__
+        assert steward.RunInputs is RunInputs
+        assert not hasattr(provider, "RunInputs")
+        assert not hasattr(user, "RunInputs")

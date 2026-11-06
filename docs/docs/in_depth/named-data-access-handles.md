@@ -319,7 +319,7 @@ session.run(credentials={"pii-hmac-key": Credential(key="rotated-hmac-key")})
 The same applies to `stream_run()`. A passed handle is refused with a `ValueError` at the call, before any step runs, if
 no step declares it, if its value misses a `required_fields` entry or holds bytes under a non-safe key, or if a source
 step binds it when the session is prepared (prepare a new session to change it). No message holds a value.
-`RunContext.run_credentials` carries the sorted handle names only.
+`RunContext.run_inputs.credentials` carries the sorted handle names only.
 
 `read_credential` returns a `ResolvedCredential`: a mapping with item access, `get`, iteration and `**` unpacking, a
 fresh copy per read, and the attributes `handle`, `version`, `expires_at` and `store` (the last three are `None` for

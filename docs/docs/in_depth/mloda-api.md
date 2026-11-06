@@ -105,6 +105,11 @@ result_2 = session.run(api_data={"MyKey": {"col": [3.0, 4.0]}})
 step declares, used for that run only (not accepted by `run_all()`/`stream_all()`). See
 [Runtime access versus match-time binding](named-data-access-handles.md#runtime-access-versus-match-time-binding).
 
+`run()` and `stream_run()` accept `parameters={key: value}` for the runtime parameters feature groups declare
+(see [Runtime parameters](property-mapping.md#runtime-parameters)). `session.run_surface` lists what `run()` accepts:
+`api_data` columns per set, `artifacts`, `parameters` (key to declaring feature groups) and `credentials`.
+`on_run_start` receives the names and masked parameter values of a run in `RunContext.run_inputs`.
+
 `run()` also accepts an `artifacts` parameter for switching between artifact
 save and load modes across calls; keys must be artifact inputs of the plan (`session.artifact_inputs`). See [Artifacts](artifacts.md#run-time-artifact-switching-with-preparerun) for details.
 

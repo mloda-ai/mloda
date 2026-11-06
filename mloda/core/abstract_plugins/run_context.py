@@ -7,6 +7,24 @@ from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 
 
 @dataclass(frozen=True)
+class RunInputs:
+    """Names and masked values a run was given, never credential values."""
+
+    api_data: tuple[str, ...] = ()
+    artifacts: tuple[str, ...] = ()
+    parameters: Mapping[str, Any] = field(default_factory=lambda: _frozen_dict({}), hash=False)
+    credentials: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "parameters", _frozen_dict(dict(self.parameters)))
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        for name, value in state.items():
+            object.__setattr__(self, name, value)
+        object.__setattr__(self, "parameters", _frozen_dict(dict(self.parameters)))
+
+
+@dataclass(frozen=True)
 class RunContext:
     """Per-run values every ComputeFramework carries into hooks and worker processes; keep it picklable.
 
@@ -24,7 +42,7 @@ class RunContext:
     principal: str | None = None
     # Plan-time owning-distribution version per module. None field: nothing resolved; None value: no owner.
     plugin_versions: Mapping[str, str | None] | None = field(default=None, hash=False)
-    run_credentials: tuple[str, ...] = ()  # handle names passed to this run, never values
+    run_inputs: RunInputs = field(default_factory=RunInputs)
     structure_hash: str | None = field(default=None, compare=False)
 
     def __post_init__(self) -> None:

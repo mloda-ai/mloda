@@ -27,6 +27,7 @@ from mloda.core.prepare.resolution_types import (
     ResolutionDiagnosis,
     ResolutionRecord,
 )
+from mloda.core.api.run_surface import RunSurface
 from mloda.core.api.run_result import ResultStream, RunResult, _StreamOutcome
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda.core.prepare.accessible_plugins import (
@@ -51,7 +52,7 @@ from mloda.core.abstract_plugins.function_extender import (
     reject_old_run_complete_signature,
 )
 from mloda.core.abstract_plugins.plan_context import PlanContext, PlanOrigin
-from mloda.core.abstract_plugins.run_context import RunContext
+from mloda.core.abstract_plugins.run_context import RunContext, RunInputs
 from mloda.core.abstract_plugins.verified_context import current_verified_context
 from mloda.core.abstract_plugins.components.credential_handle import validate_credential_handles
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -828,6 +829,31 @@ class mlodaAPI:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
         return deepcopy(self.engine.resolution_records)
 
+    def _credential_handle_scope(self) -> tuple[list[FeatureGroupStep], set[str], set[str]]:
+        """The plan's steps, the handles they declare and the handles a source step binds at prepare."""
+        plan = self._execution_plan()
+        steps = [s for s in plan if isinstance(s, FeatureGroupStep)]
+        return (
+            steps,
+            {h for s in steps for h in s.credential_handles},
+            set(plan.source_bound_handles(self.data_access_collection)),
+        )
+
+    @property
+    def run_surface(self) -> RunSurface:
+        """What ``run()`` accepts: api_data columns, artifact inputs, runtime parameters and credential handles."""
+        steps, declared, bound = self._credential_handle_scope()
+        groups: dict[str, set[str]] = {}
+        for step in steps:
+            for key in runtime_parameter_keys(step.feature_group):
+                groups.setdefault(key, set()).add(step.feature_group.__name__)
+        return RunSurface(
+            api_data={name: tuple(sorted(columns)) for name, columns in self._api_data_columns.items()},
+            artifacts=self.artifact_inputs,
+            parameters={key: tuple(sorted(names)) for key, names in groups.items()},
+            credentials=tuple(sorted(declared - bound)),
+        )
+
     def _run_collection(
         self, credentials: Mapping[str, Any] | None
     ) -> tuple[DataAccessCollection | None, tuple[str, ...]]:
@@ -841,10 +867,7 @@ class mlodaAPI:
                 raise ValueError(f"credentials keys must be str handle names, got {type(handle).__name__}.")
         if not credentials:
             return None, ()
-        plan = self._execution_plan()
-        steps = [s for s in plan if isinstance(s, FeatureGroupStep)]
-        declared = {h for s in steps for h in s.credential_handles}
-        bound = plan.source_bound_handles(self.data_access_collection)
+        steps, declared, bound = self._credential_handle_scope()
         for handle in credentials:
             if handle in bound:
                 raise ValueError(
@@ -863,12 +886,28 @@ class mlodaAPI:
                 validate_credential_handles(step.feature_group, step.features.options or Options(), merged)
         return merged, tuple(sorted(credentials))
 
+    def _run_inputs(
+        self,
+        api_data: dict[str, dict[str, Any]] | None,
+        artifacts: Mapping[str, Any] | None,
+        run_parameters: Mapping[str, Any],
+        credentials: tuple[str, ...],
+    ) -> RunInputs:
+        """Names and masked parameter values of this run's inputs."""
+        effective = api_data if api_data is not None else self.api_data
+        return RunInputs(
+            api_data=tuple(sorted(map(str, effective or ()))),
+            artifacts=tuple(sorted(artifacts or ())),
+            parameters={key: _display_option_value(key, value, ()) for key, value in run_parameters.items()},
+            credentials=credentials,
+        )
+
     def _build_run_context(
         self,
         carrier: dict[str, str] | None,
         child_bootstrap: Callable[[], None] | None,
         graceful_shutdown_timeout: float = 2.0,
-        run_credentials: tuple[str, ...] = (),
+        run_inputs: RunInputs | None = None,
     ) -> RunContext:
         """Derive this run's context from the engine's plan-time base."""
         if self.engine is None:
@@ -884,7 +923,7 @@ class mlodaAPI:
             tenant_id=identity.tenant_id,
             project_id=identity.project_id,
             principal=identity.principal,
-            run_credentials=run_credentials,
+            run_inputs=run_inputs or RunInputs(),
             structure_hash=self.plan_context.structure_hash,
         )
 
@@ -922,7 +961,8 @@ class mlodaAPI:
         with self._credential_redaction():
             run_dac, names = self._run_collection(credentials)
         run_parameters = self._run_parameters(parameters)
-        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, names)
+        run_inputs = self._run_inputs(api_data, artifacts, run_parameters, names)
+        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
         plan = list(self._plan_snapshot())
         with self._credential_redaction(self._secret_literals(run_dac), self._identity_literals(run_dac)):
             runner = self._batch_run(
@@ -968,7 +1008,8 @@ class mlodaAPI:
         with self._credential_redaction():
             run_dac, names = self._run_collection(credentials)
         run_parameters = self._run_parameters(parameters)
-        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, names)
+        run_inputs = self._run_inputs(api_data, artifacts, run_parameters, names)
+        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
         plan = list(self._plan_snapshot())
         stream_outcome = _StreamOutcome()
         stream = self._start_stream(

@@ -252,6 +252,7 @@ class _RecordingRunner:
         api_data: dict[str, Any] | None = None,
         artifacts: dict[str, Any] | None = None,
         run_context: RunContext | None = None,
+        run_parameters: dict[str, Any] | None = None,
     ) -> None:
         self.received_extenders = function_extender
 

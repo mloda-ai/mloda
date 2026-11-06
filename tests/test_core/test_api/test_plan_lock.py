@@ -27,7 +27,15 @@ from mloda.steward import (
 )
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.provider import BaseFeatureGroupVersion, ComputeFramework, FeatureGroup, Implementation
+from mloda.provider import (
+    BaseFeatureGroupVersion,
+    ComputeFramework,
+    DataCreatorFeatureGroup,
+    FeatureGroup,
+    FeatureSet,
+    Implementation,
+    property_spec,
+)
 from tests.helpers.credential_handle_stubs import ChsTwoHandleFG
 from tests.helpers.bound_credential_cases import bound_case
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
@@ -954,15 +962,106 @@ def test_a_pre_field_lock_still_passes_for_a_no_handle_plan(tmp_path: Path) -> N
     check_plan_lock([_compute_step()], lock)
 
 
-def test_a_pre_field_lock_fails_for_a_handle_plan_with_a_diff_naming_only_the_handles(tmp_path: Path) -> None:
+_RUNTIME = ("rtlock_a", "rtlock_z")
+
+
+class RtLockFG(DataCreatorFeatureGroup):
+    """Declares two runtime parameters, in reverse key order; matches only 'rtlock_col'."""
+
+    PROPERTY_MAPPING = {
+        "rtlock_z": property_spec("Z.", runtime=True, default="z"),
+        "rtlock_a": property_spec("A.", runtime=True, default="a"),
+    }
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"rtlock_col"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"rtlock_col": [1]}
+
+
+def _runtime_inputs() -> dict[str, Any]:
+    return {
+        "features": ["rtlock_col"],
+        "compute_frameworks": [PythonDictFramework],
+        "plugin_collector": PluginCollector.enabled_feature_groups({RtLockFG}),
+    }
+
+
+def test_explain_shows_the_declared_runtime_parameters_sorted_and_the_lock_records_them() -> None:
+    steps = list(mloda.explain(**_runtime_inputs()))
+
+    (compute,) = [s for s in steps if s.step_kind == "compute"]
+    assert compute.runtime_parameters == _RUNTIME
+    assert json.loads(_lock_text(steps))["compute"][0]["runtime_parameters"] == list(_RUNTIME)
+
+
+def test_a_session_resolved_plan_shows_the_declared_runtime_parameters() -> None:
+    session = mloda.prepare(**_runtime_inputs())
+
+    assert [s.runtime_parameters for s in session.resolved_plan() if s.step_kind == "compute"] == [_RUNTIME]
+
+
+def test_steps_without_runtime_parameters_default_to_empty_and_the_lock_has_no_key() -> None:
+    plan = _plan()
+
+    assert [s.runtime_parameters for s in plan] == [(), (), ()]
+    assert all("runtime_parameters" not in record for record in json.loads(_lock_text(plan))["compute"])
+
+
+def test_a_no_runtime_plan_still_renders_the_frozen_lock_text_and_structure_hash() -> None:
+    plan = [_compute_step()]
+
+    assert _lock_text(plan) == _NO_HANDLE_LOCK
+    assert plan_structure_hash(plan) == _NO_HANDLE_STRUCTURE_HASH
+
+
+def test_the_runtime_key_is_written_only_in_the_compute_record() -> None:
+    content = json.loads(_lock_text([_compute_step(runtime_parameters=_RUNTIME), _join_step(), _transform_step()]))
+
+    assert content["compute"][0]["runtime_parameters"] == list(_RUNTIME)
+    assert all("runtime_parameters" not in r for r in content["joins"] + content["transforms"])
+
+
+def test_plan_content_hash_ignores_the_declared_runtime_parameters() -> None:
+    with_runtime = [_compute_step(runtime_parameters=_RUNTIME)]
+    without = [_compute_step()]
+
+    assert plan_content_hash(with_runtime) == plan_content_hash(without)
+    assert plan_structure_hash(with_runtime) != plan_structure_hash(without)
+
+
+@pytest.mark.parametrize(
+    ("step_inputs", "expected"),
+    [
+        (
+            {"credential_handles": _HANDLES},
+            {'"credential_handles": [', '"vault-a",', '"vault-b"', "],"},
+        ),
+        (
+            {"runtime_parameters": _RUNTIME},
+            {'"runtime_parameters": [', '"rtlock_a",', '"rtlock_z"', "],"},
+        ),
+    ],
+    ids=["handles", "runtime-keys"],
+)
+def test_a_pre_field_lock_fails_for_a_new_field_plan_with_a_diff_naming_only_that_field(
+    tmp_path: Path, step_inputs: dict[str, Any], expected: set[str]
+) -> None:
     lock = tmp_path / "plan.lock"
     lock.write_text(_NO_HANDLE_LOCK, encoding="utf-8")
 
     with pytest.raises(PlanLockMismatchError) as caught:
-        check_plan_lock([_compute_step(credential_handles=_HANDLES)], lock)
+        check_plan_lock([_compute_step(**step_inputs)], lock)
 
     lines = str(caught.value).splitlines()
     changed = [ln for ln in lines if ln[:1] in "+-" and not ln.startswith(("+++", "---"))]
     assert changed
     assert all(ln.startswith("+") for ln in changed)
-    assert {ln[1:].strip() for ln in changed} == {'"credential_handles": [', '"vault-a",', '"vault-b"', "],"}
+    assert {ln[1:].strip() for ln in changed} == expected

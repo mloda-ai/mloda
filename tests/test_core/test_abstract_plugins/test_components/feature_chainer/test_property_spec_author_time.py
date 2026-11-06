@@ -35,6 +35,10 @@ class TestAuthorTimeTypeErrors:
         with pytest.raises(ValueError):
             PropertySpec("x", allowed_values="add")  # type: ignore[arg-type]
 
+    def test_non_bool_runtime_is_a_type_error_and_rejected_at_runtime(self) -> None:
+        with pytest.raises(ValueError, match="runtime must be a bool"):
+            PropertySpec("x", runtime="yes")  # type: ignore[arg-type]
+
 
 class TestAuthorTimeTypeErrorsThroughTheBuilder:
     """The same four mistakes through ``property_spec``, whose parameters mirror the fields."""
@@ -54,3 +58,7 @@ class TestAuthorTimeTypeErrorsThroughTheBuilder:
     def test_str_allowed_values_is_a_type_error_and_rejected_at_runtime(self) -> None:
         with pytest.raises(ValueError):
             property_spec("x", allowed_values="add")  # type: ignore[arg-type]
+
+    def test_non_bool_runtime_is_a_type_error_and_rejected_at_runtime(self) -> None:
+        with pytest.raises(ValueError, match="runtime must be a bool"):
+            property_spec("x", runtime="yes")  # type: ignore[arg-type]

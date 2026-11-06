@@ -1,13 +1,22 @@
 import contextlib
 import contextvars
+import logging
 from copy import copy, deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime
 from collections.abc import Mapping, Sequence
-from typing import Any, Callable, Generator, cast
+from typing import Any, Callable, Generator, NoReturn, cast
 from uuid import UUID
 
-from mloda.core.abstract_plugins.components.credential_scrub import redact_exception, registered_secrets_scope
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    _SECRET_KEY,
+    _mask_secret_keys,
+    redact_exception,
+    registered_secrets_scope,
+    scrub_credentials,
+)
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, safe_value_text
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourcePointerError
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 
@@ -27,6 +36,7 @@ from mloda.core.prepare.resolution_types import (
     ResolutionDiagnosis,
     ResolutionRecord,
 )
+from mloda.core.api.run_surface import RunSurface
 from mloda.core.api.run_result import ResultStream, RunResult, _StreamOutcome
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda.core.prepare.accessible_plugins import (
@@ -51,11 +61,14 @@ from mloda.core.abstract_plugins.function_extender import (
     reject_old_run_complete_signature,
 )
 from mloda.core.abstract_plugins.plan_context import PlanContext, PlanOrigin
-from mloda.core.abstract_plugins.run_context import RunContext
+from mloda.core.abstract_plugins.run_context import RunContext, RunInputs
 from mloda.core.abstract_plugins.verified_context import current_verified_context
 from mloda.core.abstract_plugins.components.credential_handle import validate_credential_handles
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec, element_admitted, runtime_parameter_keys
+from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -75,6 +88,44 @@ def _plan_origin(origin: PlanOrigin | None) -> Generator[None, None, None]:
         yield
     finally:
         _PLAN_ORIGIN.reset(token)
+
+
+def _log_run_value_raise(key: str) -> Callable[[Exception], None]:
+    def log(exc: Exception) -> None:
+        logger.log(
+            contained_raise_log_level(exc),
+            "value check for '%s' raised %s; treating as rejected.",
+            key,
+            type(exc).__name__,
+        )
+
+    return log
+
+
+def _scrub_leaves(value: Any) -> Any:
+    if isinstance(value, str):
+        return scrub_credentials(value)
+    if isinstance(value, Mapping):
+        return {k: _scrub_leaves(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_scrub_leaves(v) for v in value]
+    return value
+
+
+def _record_value(key: str, value: Any) -> Any:
+    """Masked form of a run value for the stored record: scalars raw, mappings masked, others as text."""
+    if _SECRET_KEY.fullmatch(key):
+        return "***"
+    if isinstance(value, str):
+        return scrub_credentials(value)
+    if value is None or type(value) in (int, float, bool):
+        return value
+    if isinstance(value, Mapping):
+        return _frozen_dict(_scrub_leaves(_mask_secret_keys(value)))
+    return safe_value_text(value)
+
+
+logger = logging.getLogger(__name__)
 
 
 class _CredentialRedaction:
@@ -321,6 +372,49 @@ class mlodaAPI:
             if binding is not None:
                 bindings[step_uuid] = binding
         return bindings
+
+    def _declared_runtime_parameters(self) -> dict[str, list[tuple[type[FeatureGroup], PropertySpec]]]:
+        """Runtime keys mapped to their declaring (group, spec) pairs, built once (the plan is frozen)."""
+        cached = getattr(self, "_declared_runtime_cache", None)
+        if cached is None:
+            cached = {}
+            for step in self._execution_plan():
+                if isinstance(step, FeatureGroupStep):
+                    for key, spec in runtime_parameter_keys(step.feature_group).items():
+                        entry = (step.feature_group, spec)
+                        if entry not in cached.setdefault(key, []):
+                            cached[key].append(entry)
+            self._declared_runtime_cache = cached
+        return cached
+
+    @staticmethod
+    def _refuse_run_value(key: str, value: Any, group: type[FeatureGroup]) -> NoReturn:
+        shown = "***" if _SECRET_KEY.fullmatch(key) else safe_value_text(value)
+        raise ValueError(f"run(parameters=...) value {shown} for '{key}' is rejected by {group.__name__}.")
+
+    def _run_parameters(self, parameters: Mapping[str, Any] | None) -> Mapping[str, Any]:
+        """Refuse unknown keys and values a declaring group rejects; return one read-only mapping."""
+        if parameters is None:
+            return cast(Mapping[str, Any], _frozen_dict({}))
+        if not isinstance(parameters, Mapping):
+            raise TypeError(f"run(parameters=...) must be a mapping, got {type(parameters).__name__}.")
+        declared = self._declared_runtime_parameters()
+        for key, value in parameters.items():
+            if not isinstance(key, str):
+                raise TypeError(f"run(parameters=...) keys must be str, got {type(key).__name__}.")
+            if key not in declared:
+                raise ValueError(
+                    f"run(parameters=...) key '{key}' is not a runtime parameter of this plan; "
+                    f"declared: {sorted(declared)}."
+                )
+            for group, spec in declared[key]:
+                if value is None and not spec.allow_explicit_none:
+                    self._refuse_run_value(key, value, group)
+                if spec.strict_validation and value is not None:
+                    for element in FeatureChainParser._unpack_property_value(value):
+                        if not element_admitted(spec, element, _log_run_value_raise(key)):
+                            self._refuse_run_value(key, value, group)
+        return cast(Mapping[str, Any], _frozen_dict(dict(parameters)))
 
     def _validate_run_api_data(self, api_data: dict[str, Any] | None) -> None:
         """Refuse run data whose sets or column names differ from the ones prepared."""
@@ -796,6 +890,31 @@ class mlodaAPI:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
         return deepcopy(self.engine.resolution_records)
 
+    def _credential_handle_scope(self) -> tuple[list[FeatureGroupStep], set[str], set[str]]:
+        """The plan's steps, the handles they declare and the handles a source step binds at prepare."""
+        plan = self._execution_plan()
+        steps = [s for s in plan if isinstance(s, FeatureGroupStep)]
+        return (
+            steps,
+            {h for s in steps for h in s.credential_handles},
+            set(plan.source_bound_handles(self.data_access_collection)),
+        )
+
+    @property
+    def run_surface(self) -> RunSurface:
+        """What ``run()`` accepts: api_data columns, artifact inputs, runtime parameters and credential handles."""
+        _, declared, bound = self._credential_handle_scope()
+        groups = {
+            key: {group.__name__ for group, _ in entries}
+            for key, entries in self._declared_runtime_parameters().items()
+        }
+        return RunSurface(
+            api_data={name: tuple(sorted(columns)) for name, columns in self._api_data_columns.items()},
+            artifacts=self.artifact_inputs,
+            parameters={key: tuple(sorted(names)) for key, names in groups.items()},
+            credentials=tuple(sorted(declared - bound)),
+        )
+
     def _run_collection(
         self, credentials: Mapping[str, Any] | None
     ) -> tuple[DataAccessCollection | None, tuple[str, ...]]:
@@ -809,10 +928,7 @@ class mlodaAPI:
                 raise ValueError(f"credentials keys must be str handle names, got {type(handle).__name__}.")
         if not credentials:
             return None, ()
-        plan = self._execution_plan()
-        steps = [s for s in plan if isinstance(s, FeatureGroupStep)]
-        declared = {h for s in steps for h in s.credential_handles}
-        bound = plan.source_bound_handles(self.data_access_collection)
+        steps, declared, bound = self._credential_handle_scope()
         for handle in credentials:
             if handle in bound:
                 raise ValueError(
@@ -831,12 +947,28 @@ class mlodaAPI:
                 validate_credential_handles(step.feature_group, step.features.options or Options(), merged)
         return merged, tuple(sorted(credentials))
 
+    def _run_inputs(
+        self,
+        api_data: dict[str, dict[str, Any]] | None,
+        artifacts: Mapping[str, Any] | None,
+        run_parameters: Mapping[str, Any],
+        credentials: tuple[str, ...],
+    ) -> RunInputs:
+        """Names and masked parameter values of this run's inputs."""
+        effective = api_data if api_data is not None else self.api_data
+        return RunInputs(
+            api_data=tuple(sorted(map(str, effective or ()))),
+            artifacts=tuple(sorted(artifacts or ())),
+            parameters={key: _record_value(key, value) for key, value in run_parameters.items()},
+            credentials=credentials,
+        )
+
     def _build_run_context(
         self,
         carrier: dict[str, str] | None,
         child_bootstrap: Callable[[], None] | None,
         graceful_shutdown_timeout: float = 2.0,
-        run_credentials: tuple[str, ...] = (),
+        run_inputs: RunInputs | None = None,
     ) -> RunContext:
         """Derive this run's context from the engine's plan-time base."""
         if self.engine is None:
@@ -852,7 +984,7 @@ class mlodaAPI:
             tenant_id=identity.tenant_id,
             project_id=identity.project_id,
             principal=identity.principal,
-            run_credentials=run_credentials,
+            run_inputs=run_inputs or RunInputs(),
             structure_hash=self.plan_context.structure_hash,
         )
 
@@ -866,6 +998,7 @@ class mlodaAPI:
         child_bootstrap: Callable[[], None] | None = None,
         graceful_shutdown_timeout: float = 2.0,
         credentials: Mapping[str, Any] | None = None,
+        parameters: Mapping[str, Any] | None = None,
     ) -> RunResult:
         """Execute the prepared session and return a ``RunResult`` (plan order, with ``run_id``/``plan_id``).
 
@@ -884,10 +1017,13 @@ class mlodaAPI:
                 extenders' ``close()`` before being terminated, shared across every extender in
                 that worker. Also the longest a cancelled THREADING run waits for step threads.
             credentials: ``{handle: Credential | dict}`` replacing declared handles' values for this run only.
+            parameters: ``{key: value}`` replacing declared runtime parameters for this run only.
         """
         with self._credential_redaction():
             run_dac, names = self._run_collection(credentials)
-        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, names)
+        run_parameters = self._run_parameters(parameters)
+        run_inputs = self._run_inputs(api_data, artifacts, run_parameters, names)
+        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
         plan = list(self._plan_snapshot())
         with self._credential_redaction(self._secret_literals(run_dac), self._identity_literals(run_dac)):
             runner = self._batch_run(
@@ -897,6 +1033,7 @@ class mlodaAPI:
                 artifacts=artifacts,
                 run_context=run_context,
                 run_dac=run_dac,
+                run_parameters=run_parameters,
             )
             items = self._plan_ordered_items(runner, plan)
         return RunResult(
@@ -920,21 +1057,31 @@ class mlodaAPI:
         child_bootstrap: Callable[[], None] | None = None,
         graceful_shutdown_timeout: float = 2.0,
         credentials: Mapping[str, Any] | None = None,
+        parameters: Mapping[str, Any] | None = None,
     ) -> ResultStream:
         """Execute the prepared session and stream each feature group's result as it completes.
 
         Returns a ``ResultStream`` carrying the run's ``run_id``/``plan_id``. carrier/child_bootstrap and the
         active verified_context() scope are read here, at call time, not at first iteration: a function whose
         body itself contains ``yield`` only starts executing on first iteration, which would defer that read
-        past the caller's intended scope. ``credentials`` is as in ``run()`` and is refused at the call.
+        past the caller's intended scope. ``credentials`` and ``parameters`` are as in ``run()`` and are refused at the call.
         """
         with self._credential_redaction():
             run_dac, names = self._run_collection(credentials)
-        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, names)
+        run_parameters = self._run_parameters(parameters)
+        run_inputs = self._run_inputs(api_data, artifacts, run_parameters, names)
+        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
         plan = list(self._plan_snapshot())
         stream_outcome = _StreamOutcome()
         stream = self._start_stream(
-            api_data, parallelization_modes, flight_server, artifacts, run_context, run_dac, stream_outcome
+            api_data,
+            parallelization_modes,
+            flight_server,
+            artifacts,
+            run_context,
+            run_dac,
+            stream_outcome,
+            run_parameters,
         )
         return ResultStream(stream, plan, run_id=run_context.run_id, plan_id=self.plan_id, outcome=stream_outcome)
 
@@ -947,13 +1094,21 @@ class mlodaAPI:
         run_context: RunContext,
         run_dac: DataAccessCollection | None,
         stream_outcome: _StreamOutcome,
+        run_parameters: Mapping[str, Any],
     ) -> Generator[Any, None, None]:
         """Callers build ``run_context`` at call time; no yield here, so a refusal at run start raises at the call."""
         _api_data = api_data if api_data is not None else self.api_data
         self._validate_run_api_data(_api_data)
         artifact_bindings = self._artifact_bindings(artifacts)
         stream = self._stream_run_results(
-            flight_server, parallelization_modes, _api_data, artifact_bindings, run_context, run_dac, stream_outcome
+            flight_server,
+            parallelization_modes,
+            _api_data,
+            artifact_bindings,
+            run_context,
+            run_dac,
+            stream_outcome,
+            run_parameters,
         )
         # Primes the generator so a refusal at run start raises here, not on first iteration.
         next(stream)
@@ -993,6 +1148,7 @@ class mlodaAPI:
         run_context: RunContext,
         run_dac: DataAccessCollection | None,
         stream_outcome: _StreamOutcome,
+        run_parameters: Mapping[str, Any],
     ) -> Generator[Any, None, None]:
         """Deferred half of ``stream_run``: the priming yield separates run start from computation."""
         outcome = LifecycleOutcome("succeeded")
@@ -1011,6 +1167,7 @@ class mlodaAPI:
                         api_data,
                         artifact_bindings=artifact_bindings,
                         run_context=run_context,
+                        run_parameters=run_parameters,
                     )
                 stream = runner.compute_stream()
                 try:
@@ -1048,6 +1205,7 @@ class mlodaAPI:
         artifacts: dict[str, Any] | None = None,
         run_context: RunContext | None = None,
         run_dac: DataAccessCollection | None = None,
+        run_parameters: Mapping[str, Any] | None = None,
     ) -> ExecutionOrchestrator:
         """Sets up the engine runner and runs the engine computation."""
         # Use stored api_data if not explicitly provided
@@ -1066,6 +1224,7 @@ class mlodaAPI:
                 _api_data,
                 artifact_bindings=artifact_bindings,
                 run_context=run_context,
+                run_parameters=run_parameters,
             )
             return runner
         except BaseException as error:
@@ -1083,6 +1242,7 @@ class mlodaAPI:
         api_data: dict[str, Any] | None = None,
         artifact_bindings: dict[UUID, ArtifactBinding] | None = None,
         run_context: RunContext | None = None,
+        run_parameters: Mapping[str, Any] | None = None,
     ) -> None:
         """Runs the engine computation within a context manager."""
         if not isinstance(runner, ExecutionOrchestrator):
@@ -1095,6 +1255,7 @@ class mlodaAPI:
                 api_data,
                 artifact_bindings=artifact_bindings,
                 run_context=run_context,
+                run_parameters=run_parameters,
             )
             runner.compute()
         finally:
@@ -1107,6 +1268,7 @@ class mlodaAPI:
         api_data: dict[str, Any] | None,
         artifact_bindings: dict[UUID, ArtifactBinding] | None = None,
         run_context: RunContext | None = None,
+        run_parameters: Mapping[str, Any] | None = None,
     ) -> None:
         """Passes the runner the engine's prepare-time extender set."""
         if self.engine is None:
@@ -1114,7 +1276,9 @@ class mlodaAPI:
         function_extender = self.engine.function_extender or None
         if run_context is None:
             run_context = self._build_run_context(None, None)
-        runner.__enter__(parallelization_modes, function_extender, api_data, artifact_bindings, run_context)
+        runner.__enter__(
+            parallelization_modes, function_extender, api_data, artifact_bindings, run_context, run_parameters
+        )
 
     def _exit_runner_context(self, runner: ExecutionOrchestrator) -> None:
         """Exits the runner context."""

@@ -25,6 +25,7 @@ def test_execute_does_not_upload_finished_data_twice() -> None:
     features = MagicMock(spec=FeatureSet)
     features.features = set()
     features.artifact_to_save = None
+    features.runtime_parameters = ()
     step = FeatureGroupStep(MockFeatureGroup, features, set(), ComputeFramework)
     step.need_to_upload = True
 

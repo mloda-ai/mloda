@@ -1,5 +1,6 @@
 """credential_handle_spec: plan-time handle validation, plan records and display."""
 
+import dataclasses
 import inspect
 import re
 import types
@@ -748,7 +749,7 @@ class TestFreshRunRecord:
         session.run(credentials={"vault-b": {"key": "chs-fresh-b-4321"}, "vault-a": _FRESH})
 
         (run,) = recorder.runs[-1:]
-        assert run.run_credentials == ("vault-a", "vault-b")
+        assert run.run_inputs.credentials == ("vault-a", "vault-b")
         for value in (_FRESH["key"], "chs-fresh-b-4321"):
             assert value not in repr(run)
 
@@ -758,7 +759,7 @@ class TestFreshRunRecord:
 
         session.run()
 
-        assert recorder.runs[-1].run_credentials == ()
+        assert recorder.runs[-1].run_inputs.credentials == ()
 
     def test_the_plan_lock_and_hash_are_unchanged_by_a_fresh_run(self) -> None:
         session = _vault_session()
@@ -774,6 +775,31 @@ class TestFreshRunRecord:
         assert _FRESH["key"] not in repr(after)
         step = next(s for s in after if s.feature_group is ChsVaultFG)
         assert "vault-a" in step.credential_handles
+
+
+class TestRunSurfaceCredentials:
+    def test_lists_the_declared_handles_run_accepts(self) -> None:
+        session = _vault_session()
+
+        assert session.run_surface.credentials == ("vault-a",)
+        session.run(credentials={name: _FRESH for name in session.run_surface.credentials})
+
+    @pytest.mark.parametrize("declared_too", [False, True], ids=["source-only", "source-and-declared"])
+    def test_a_source_bound_handle_is_not_listed(self, tmp_path: Path, declared_too: bool) -> None:
+        dac, _, _ = bound_case(tmp_path, "named")
+        session = mloda.prepare(
+            ["bound_col", _vault("db-main")] if declared_too else ["bound_col"],
+            compute_frameworks=[PyArrowTable, PandasDataFrame] if declared_too else [PyArrowTable],
+            data_access_collection=dac,
+            plugin_collector=_plugins(SqliteFG, ChsVaultFG) if declared_too else _plugins(SqliteFG),
+        )
+
+        assert session.run_surface.credentials == ()
+
+
+def test_a_credential_handle_spec_can_never_be_a_runtime_parameter() -> None:
+    with pytest.raises(ValueError, match="runtime"):
+        dataclasses.replace(credential_handle_spec("Handle."), runtime=True)
 
 
 class TestMissingHandleKeyAborts:

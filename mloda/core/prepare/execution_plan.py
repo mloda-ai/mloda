@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.credential_handle import declared_credential_handles
+from mloda.core.abstract_plugins.components.property_spec import runtime_parameter_keys
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.data_access_collection import (
     DataAccessCollection,
@@ -317,6 +318,7 @@ class ExecutionPlan:
                 step.credential_handles = declared_credential_handles(
                     step.feature_group, step.features.options or Options()
                 )
+                step.features.runtime_parameters = tuple(sorted(runtime_parameter_keys(step.feature_group)))
                 bound = self._bound_credential_handle(step, self.data_access_collection)
                 step.features.credential_handles = (
                     step.credential_handles

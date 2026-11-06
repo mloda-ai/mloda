@@ -62,6 +62,8 @@ class FeatureSet:
         self.any_uuid: UUID | None = None
         self.step_uuid: UUID | None = None
         self.credential_handles: tuple[str, ...] = ()
+        self.runtime_parameters: tuple[str, ...] = ()
+        self.run_parameters: Mapping[str, Any] = {}
         self.filters: set[SingleFilter] | None = None
         self.name_of_one_feature: FeatureName | None = None
         self.artifact_to_save: str | None = None
@@ -172,15 +174,28 @@ class FeatureSet:
                 return ArtifactBinding(feature_name, artifacts[feature_name])
         return None
 
-    def for_run(self, binding: ArtifactBinding | None) -> "FeatureSet":
-        """Per-run step view: a shallow copy carrying this run's artifact binding; the plan is never written."""
+    def for_run(self, binding: ArtifactBinding | None, parameters: Mapping[str, Any] | None = None) -> "FeatureSet":
+        """Per-run step view: a shallow copy carrying this run's artifact binding and parameters."""
         view = copy(self)
+        if parameters:
+            view.run_parameters = parameters
         if binding is not None:
             view.artifact_to_load = binding.name
             view.artifact_to_save = None
             view.artifact_value = binding.value
         view.save_artifact = None
         return view
+
+    def runtime_parameter(self, key: str, feature: Feature | None = None) -> Any:
+        """This run's value of a declared runtime parameter, else the baseline of the feature or the set."""
+        if key not in self.runtime_parameters:
+            raise ValueError(
+                f"'{key}' is not a declared runtime parameter of this step: {list(self.runtime_parameters)}."
+            )
+        if key in self.run_parameters:
+            return self.run_parameters[key]
+        options = self.options if feature is None else feature.options
+        return None if options is None else options.get(key)
 
     @property
     def input_data_match(self) -> "tuple[DataAccessReader, Any] | None":

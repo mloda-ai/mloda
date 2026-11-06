@@ -4,7 +4,7 @@ import os
 import pickle  # nosec B403
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Generator
 from uuid import UUID
 import logging
@@ -603,6 +603,7 @@ class ExecutionOrchestrator:
         api_data: dict[str, Any] | None = None,
         artifact_bindings: dict[UUID, ArtifactBinding] | None = None,
         run_context: RunContext | None = None,
+        run_parameters: Mapping[str, Any] | None = None,
     ) -> None:
         """
         Enters the context of the ExecutionOrchestrator.
@@ -660,6 +661,9 @@ class ExecutionOrchestrator:
 
         if artifact_bindings:
             self.cfw_register.set_artifact_bindings(artifact_bindings)
+
+        if run_parameters:
+            self.cfw_register.set_run_parameters(run_parameters)
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """

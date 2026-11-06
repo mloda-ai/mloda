@@ -721,6 +721,18 @@ if it really is a whole-value check.
 | The missing-`in_features` definition-time diagnostic and its zero-source rejection | `tests/.../feature_chainer/test_missing_in_features_declaration.py` (the diagnostic), `tests/.../feature_chainer/test_in_feature_count_gate_name_sources.py` (the option-path zero-source non-match records no rejection) |
 | `expected` reports a `match_guard` rejection on a non-strict spec, with the capped value echo | `tests/test_core/test_prepare/test_first_pass_rejection_recording.py` |
 
+## Runtime parameters
+
+`property_spec(..., runtime=True)` declares a context option whose value a run may replace for that run only, with
+`session.run(parameters={key: value})`. It needs `context=True` and cannot combine with `match_guard`, `name_converter`
+or `required_when`. A runtime key is never a group key: placing it in `Options.group` raises a `ValueError`.
+
+- A strict spec validates each run's value; an unknown key is refused before any step runs.
+- The baseline is the prepare-time context value, else the declared default. `NO_DEFAULT` keeps the key required at prepare.
+- Read it with `features.runtime_parameter(key, feature)` (run value, else baseline); `options.get(key)` returns the baseline only.
+- `session.run_surface.parameters` lists the declared keys.
+- When several groups declare the key, the value must pass every declaring spec; `None` is refused unless `allow_explicit_none`.
+
 ## Context propagation
 
 By default context parameters are local: they do not flow through dependency chains,

@@ -166,13 +166,12 @@ class mlodaAPI:
                     output_framework,
                 )
                 self._plan_steps = tuple(self._resolve_plan_steps())
-                artifact_steps = []
-                for step in self._execution_plan():
-                    if isinstance(step, FeatureGroupStep):
-                        step.features._stamp_option_defaults_materialized(step.feature_group)
-                        if step.feature_group.artifact() is not None:
-                            artifact_steps.append((step.uuid, step.features))
-                self._artifact_steps = tuple(artifact_steps)
+                # A prepared FeatureSet skips the compute-boundary defaults fill, so no materialized stamp is needed.
+                self._artifact_steps = tuple(
+                    (step.uuid, step.features)
+                    for step in self._execution_plan()
+                    if isinstance(step, FeatureGroupStep) and step.feature_group.artifact() is not None
+                )
                 if self._extenders:
                     self._stamp_structure_hash()
             except BaseException as error:
@@ -216,7 +215,10 @@ class mlodaAPI:
             self.column_ordering = column_ordering
             # The features object is potentially changed during the run, so we need to deepcopy it by default, so that follow up runs with the same object are not affected.
             # Set copy_features=False to disable deep copying for use cases where features contain non-copyable objects.
-            _requested_features = deepcopy(requested_features) if copy_features else requested_features
+            # Feature objects are then shallow-copied, so the plan never writes into the caller's Features.
+            _requested_features = (
+                deepcopy(requested_features) if copy_features else self._shallow_copy_features(requested_features)
+            )
 
             data_access_collection, self._connection_handles = self._bind_feature_connections(
                 _requested_features, data_access_collection
@@ -375,6 +377,20 @@ class mlodaAPI:
         )
 
     @staticmethod
+    def _shallow_copy_features(requested_features: Any) -> Any:
+        """Shallow-copy every Feature in the request, keeping strings and the container type."""
+        if isinstance(requested_features, Features):
+            features_copy = copy(requested_features)
+            features_copy.collection = [f.copy_for_plan() for f in requested_features.collection]
+            features_copy.parent_uuids = set(requested_features.parent_uuids)
+            features_copy.input_copies = dict(requested_features.input_copies)
+            return features_copy
+        if isinstance(requested_features, str):
+            return requested_features
+        copies = [f.copy_for_plan() if isinstance(f, Feature) else f for f in requested_features]
+        return tuple(copies) if isinstance(requested_features, tuple) else copies
+
+    @staticmethod
     def _bind_feature_connections(
         requested_features: Features | Sequence[Feature | str],
         data_access_collection: DataAccessCollection | None,
@@ -461,7 +477,7 @@ class mlodaAPI:
                 result frame (order not guaranteed); a column name shared by two
                 sets raises ``SetupConfigurationError``.
             plugin_collector: Plugin collector.
-            copy_features: Whether to deep copy features (default True).
+            copy_features: Deep copy features (default True); False shallow-copies each Feature.
             strict_type_enforcement: If True, enforce strict type matching for typed features.
             carrier: Opaque W3C trace-context carrier dict, forwarded to every ``HookContext``.
             child_bootstrap: Picklable, no-argument callable run once in a spawned

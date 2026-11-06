@@ -9,9 +9,12 @@ These pin the NEW API:
 
 import itertools
 
+import pytest
+
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.plan_freeze import FrozenPlanError
 
 
 class TestGetAllNamesSortedTuple:
@@ -207,3 +210,43 @@ class TestGetNameOfOneFeatureEmptyNameNotTreatedAsUnset:
 
         assert features.name_of_one_feature == FeatureName("")
         assert features.get_name_of_one_feature() == FeatureName("")
+
+
+class TestFeatureSetFreeze:
+    @staticmethod
+    def _frozen() -> FeatureSet:
+        features = FeatureSet()
+        features.add(Feature("a_col", options={"k": 1}))
+        features.freeze()
+        return features
+
+    def test_attribute_write_and_features_add_raise(self) -> None:
+        features = self._frozen()
+        with pytest.raises(FrozenPlanError, match="save_artifact"):
+            features.save_artifact = "x"
+        with pytest.raises(FrozenPlanError):
+            features.add(Feature("b_col"))
+        with pytest.raises(FrozenPlanError):
+            features.features.add(Feature("b_col"))
+        assert features.prepared is True
+
+    def test_freeze_freezes_features_and_options(self) -> None:
+        features = self._frozen()
+        (feature,) = features.features
+        with pytest.raises(FrozenPlanError):
+            feature.options.set("n", 1)
+        assert features.options is not None
+        with pytest.raises(FrozenPlanError):
+            features.options.set("n", 1)
+
+    def test_for_run_view_is_writable_not_frozen_and_prepared(self) -> None:
+        view = self._frozen().for_run(None)
+        view.save_artifact = "x"
+        assert view.save_artifact == "x"
+        assert view.prepared is True
+        assert view.__dict__.get("_frozen", False) is False
+
+    def test_never_frozen_feature_set_is_not_prepared(self) -> None:
+        features = FeatureSet()
+        features.add(Feature("a_col"))
+        assert features.prepared is False

@@ -1,9 +1,13 @@
 """FeatureGroupStep execute behavior."""
 
 from unittest.mock import MagicMock
+from uuid import uuid4
+
+import pytest
 
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.plan_freeze import FrozenPlanError
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -41,3 +45,28 @@ def test_execute_does_not_upload_finished_data_twice() -> None:
     step.execute(cfw_register, cfw)
 
     cfw.upload_finished_data.assert_called_once_with("flight-location")
+
+
+def test_frozen_step_rejects_attribute_writes_and_freezes_its_feature_set() -> None:
+    feature_set = FeatureSet()
+    feature_set.add(Feature("a_col"))
+    step = FeatureGroupStep(MockFeatureGroup, feature_set, set(), ComputeFramework)
+    step.freeze()
+    with pytest.raises(FrozenPlanError, match="need_to_upload"):
+        step.need_to_upload = True
+    with pytest.raises(FrozenPlanError):
+        step.features.save_artifact = "x"
+    with pytest.raises(FrozenPlanError):
+        feature_set.add(Feature("b_col"))
+
+
+def test_frozen_step_sets_reject_in_place_writes() -> None:
+    feature_set = FeatureSet()
+    feature_set.add(Feature("a_col"))
+    step = FeatureGroupStep(MockFeatureGroup, feature_set, {uuid4()}, ComputeFramework)
+    step.tfs_ids.add(uuid4())
+    step.freeze()
+    with pytest.raises(FrozenPlanError):
+        step.required_uuids.add(uuid4())
+    with pytest.raises(FrozenPlanError):
+        step.tfs_ids.add(uuid4())

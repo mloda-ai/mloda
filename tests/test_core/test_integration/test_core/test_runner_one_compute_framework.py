@@ -63,7 +63,9 @@ class EngineRunnerTest3(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pc.multiply(data.column(cls.feature_2.name), 3)
+        # The planner no longer renames the cached feature_2 in place; read the planned input name from the plan.
+        (column,) = [n for n in features.declared_input_feature_names or () if n in data.column_names]
+        return pc.multiply(data.column(column), 3)
 
 
 class EngineRunnerTest4(DataCreatorFeatureGroup):
@@ -219,6 +221,7 @@ class TestEngineRunnerOneComputeFramework:
         result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
         res = result[0].to_pydict()
         assert res == {"EngineRunnerTest3": [12, 24, 36]}
+        assert str(EngineRunnerTest3.feature_2.name) == "EngineRunnerTest2"
 
     def test_runner_features_4_multiple_colums_from_one_source(
         self, modes: set[ParallelizationMode], flight_server: Any

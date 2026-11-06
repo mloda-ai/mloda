@@ -5,8 +5,11 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
+import pytest
+
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.plan_freeze import FrozenPlanError
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.filter.single_filter import SingleFilter
 from mloda.provider import DataCreatorFeatureGroup
@@ -86,8 +89,15 @@ def test_a_framework_rewrite_of_the_queue_twin_does_not_strand_the_stored_filter
 
     twins = [feature for feature in queue if feature == stored.filter_feature]
     assert len(twins) == 1, f"exactly one queue Feature must equal the stored filter feature: {twins!r}"
-    # What ResolveComputeFrameworks.links does to every queue Feature it resolves.
-    twins[0].compute_frameworks = {PyArrowTable}
+    # What ResolveComputeFrameworks.links does to a queue Feature; the planned twin is frozen, so it must refuse.
+    twin = twins[0]
+    stored_hash = hash(stored.filter_feature)
+    twin_hash = hash(twin)
+    with pytest.raises(FrozenPlanError):
+        twin.compute_frameworks = {PyArrowTable}
+    assert hash(twin) == twin_hash
+    assert twin is not stored.filter_feature
+    assert hash(stored.filter_feature) == stored_hash
 
     assert stored in global_filter.collection[_COLLECTION_KEY], (
         "the rewrite must not lose the stored filter from its own collection set"

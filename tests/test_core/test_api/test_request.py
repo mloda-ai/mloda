@@ -68,20 +68,32 @@ class TestmlodaAPI:
             assert api_feature is not original_feature
             assert api_feature.name == original_feature.name
 
-    def test_copy_features_false_no_copy(self) -> None:
-        """Test that copy_features=False does not create a copy."""
+    def test_copy_features_false_shallow_copies_and_shares_option_values(self) -> None:
+        """copy_features=False shallow-copies each Feature; option values stay shared by reference."""
         with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):
-            original_features: list[Feature | str] = [Feature("test_feature")]
+            shared_value = object()  # not deep-copied: the reason the flag exists
+            original_features: list[Feature | str] = [Feature("test_feature", options={"k": shared_value})]
             original_feature = original_features[0]
             assert isinstance(original_feature, Feature)
 
-            # Create mlodaAPI with copy_features=False
             api_request = mlodaAPI(original_features, copy_features=False)
 
-            # Verify the feature in the mlodaAPI is the same object (was NOT copied)
+            # The plan gets a shallow copy (never the caller's object); option values stay shared by reference.
             api_feature = list(api_request.features)[0]
-            assert api_feature is original_feature
+            assert api_feature is not original_feature
             assert api_feature.name == original_feature.name
+            assert api_feature.options.get("k") is shared_value
+
+    def test_copy_features_false_accepts_a_generator_of_features(self) -> None:
+        with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):
+            api_request = mlodaAPI((Feature(f"gen_{i}") for i in range(2)), copy_features=False)  # type: ignore[arg-type]
+            assert [str(f.name) for f in api_request.features] == ["gen_0", "gen_1"]
+
+    def test_copy_features_false_features_object_does_not_share_bookkeeping(self) -> None:
+        original = Features([Feature("bk_feature")])
+        copied = mlodaAPI._shallow_copy_features(original)
+        assert copied.parent_uuids is not original.parent_uuids
+        assert copied.input_copies is not original.input_copies
 
 
 class TestBareStringRejected:
@@ -90,6 +102,13 @@ class TestBareStringRejected:
             mlodaAPI.prepare("abc")
         with pytest.raises(SetupConfigurationError):
             mlodaAPI.run_all("abc")
+
+    def test_bare_string_is_rejected_with_copy_features_false_like_with_true(self) -> None:
+        with pytest.raises(SetupConfigurationError, match="wrap a single name in a list") as expected:
+            mlodaAPI.prepare("abc", copy_features=True)
+        with pytest.raises(SetupConfigurationError, match="wrap a single name in a list") as actual:
+            mlodaAPI.prepare("abc", copy_features=False)
+        assert str(actual.value) == str(expected.value)
 
 
 class _ReadOnlyArgsError(Exception):

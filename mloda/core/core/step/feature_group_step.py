@@ -45,6 +45,10 @@ class FeatureGroupStep(Step):
 
         self.tfs_ids: set[UUID] = set()
 
+    def freeze(self) -> None:
+        self.features.freeze()
+        super().freeze()
+
     def get_uuids(self) -> set[UUID]:
         return {feature.uuid for feature in self.features.features}
 

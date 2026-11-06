@@ -12,6 +12,8 @@ import threading
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlyDict
+
 from mloda.core.abstract_plugins.components.credential_scrub import (
     _mask_item,
     current_registered_secrets,
@@ -63,7 +65,7 @@ def _holds_literal(text: str, literals: frozenset[str]) -> bool:
 
 def _mask_args(args: Any, literals: frozenset[str]) -> Any:
     """Masked args; a non-dict mapping is kept as is, the leak check on its rendering decides."""
-    return args if isinstance(args, Mapping) and type(args) is not dict else _mask_item(args, literals)
+    return args if isinstance(args, Mapping) and type(args) not in (dict, ReadOnlyDict) else _mask_item(args, literals)
 
 
 def _mask_extras(record: logging.LogRecord, literals: frozenset[str]) -> None:

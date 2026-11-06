@@ -81,7 +81,7 @@ def _observe(shared: Feature, twin: Feature, feature_group: type[FeatureGroup], 
         "aliases_caller": stored.filter_feature is shared,
         "member_before": stored in global_filter.filters,
     }
-    results = mloda.run_all(
+    session = mloda.prepare(
         [shared],
         compute_frameworks=[PythonDictFramework],
         plugin_collector=PluginCollector.enabled_feature_groups({feature_group}),
@@ -89,7 +89,14 @@ def _observe(shared: Feature, twin: Feature, feature_group: type[FeatureGroup], 
         copy_features=False,
         strict_type_enforcement=strict,
     )
+    results = session.run()
     frames = list(results)
+    assert session.engine is not None
+    observed["planned_groups"] = [
+        dict(f.options.group)
+        for step in session.engine.execution_planner
+        for f in getattr(getattr(step, "features", None), "features", ())
+    ]
 
     observed["member_after"] = stored in global_filter.filters
     observed["stored_group"] = dict(stored.filter_feature.options.group)
@@ -101,7 +108,7 @@ def _observe(shared: Feature, twin: Feature, feature_group: type[FeatureGroup], 
     observed["collected"] = {str(name): len(entries) for (_group, name), entries in global_filter.collection.items()}
     observed["delivered"] = [frame[column][0] for frame in frames if column in frame]
 
-    del shared, twin, feature_group, global_filter, stored, results, frames
+    del shared, twin, feature_group, global_filter, stored, session, results, frames
     return observed
 
 
@@ -137,12 +144,15 @@ def test_group_key_shared_filter_stays_findable_in_the_global_filter() -> None:
 
 
 def test_group_key_shared_filter_keeps_its_declared_options() -> None:
-    """The filter keeps the options it was declared with, while the caller's feature is still filled
+    """The filter keeps the options it was declared with, and the caller's feature is no longer written back
     (fails pre-fix: both views are the same object, so the run rewrites the filter too)."""
     observed = _run_group_key_default()
     assert observed["stored_group"] == {SFO_GRP_KEY: None}, f"the filter must own its options: {observed!r}"
-    assert observed["caller_group"] == {SFO_GRP_KEY: SFO_GRP_DEFAULT}, (
-        f"intake must still materialize the caller's feature: {observed!r}"
+    assert observed["caller_group"] == {SFO_GRP_KEY: None}, (
+        f"the run must not write into the caller's feature: {observed!r}"
+    )
+    assert {SFO_GRP_KEY: SFO_GRP_DEFAULT} in observed["planned_groups"], (
+        f"the plan's own feature must carry the declared default: {observed!r}"
     )
 
 
@@ -226,8 +236,9 @@ def _make_cached_input_chain() -> tuple[Feature, type[FeatureGroup], type[Featur
 def _run_cached_input_feature() -> dict[str, Any]:
     """Add a filter on the cached input feature between two runs sharing one requested ``Feature``.
 
-    Run one stamps ``cached.child_options`` with the consumer's live ``Options``; run two adds
-    ``strict_type_enforcement`` to that very object in place. Every object referencing the throwaway
+    Run one stamps ``cached.child_options`` with the consumer's live ``Options``; between the runs
+    ``consumer.options`` gets ``strict_type_enforcement`` in place (the plan only holds copies, so the
+    write must hit the caller's object to exercise a stored filter that aliases it). Every object referencing the throwaway
     feature groups is dropped from this frame before returning, so a failing assert in the caller
     cannot pin one into a traceback and trip the no-leak fixture.
     """
@@ -242,13 +253,16 @@ def _run_cached_input_feature() -> dict[str, Any]:
         copy_features=False,
     )
 
+    unstamped = cached.child_options is None
+    cached.child_options = consumer.options  # what the engine used to stamp itself
+
     global_filter = GlobalFilter()
     global_filter.add_filter(cached, FilterType.EQUAL, {"value": 1})
     stored = next(iter(global_filter.filters))
-    observed: dict[str, Any] = {
-        "stamped": cached.child_options is consumer.options,
-        "member_before": stored in global_filter.filters,
-    }
+    held = stored.filter_feature.child_options
+    assert held is not None and held == consumer.options, "the stored filter must hold the stamp"
+    observed: dict[str, Any] = {"unstamped": unstamped, "member_before": stored in global_filter.filters}
+    consumer.options.add_to_group("strict_type_enforcement", True)
 
     frames = list(
         mloda.run_all(
@@ -275,7 +289,7 @@ def test_cached_input_feature_filter_stays_findable_in_the_global_filter() -> No
     stored feature shares the consumer's Options as child_options, so the in-place strict write
     shifts its hash)."""
     observed = _run_cached_input_feature()
-    assert observed["stamped"] is True, f"the engine must stamp the consumer's live Options: {observed!r}"
+    assert observed["unstamped"] is True, f"the engine must not stamp the plugin's cached feature: {observed!r}"
     assert observed["member_before"] is True, f"the filter must be in its own set before the run: {observed!r}"
     assert observed["member_after"] is True, f"the filter must stay findable in its own set: {observed!r}"
 

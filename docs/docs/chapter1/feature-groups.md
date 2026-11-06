@@ -85,6 +85,8 @@ A group whose result has other rows than its input (an aggregation, a resample) 
 
 A group that could not compute a value for some rows can say so with `report_failed_rows(column, rows, reason)` (import from `mloda.provider`) inside `calculate_feature`. `reason` is a short code, never row data; `rows` are positions in the group's own output. Entries reach `RunResult.failed_rows` of `run()` and `run_all()`; `stream_run` and `stream_all` expose them on `stream.failed_rows` once the stream is exhausted or closed.
 
+Options are read-only inside `calculate_feature`: `mloda.prepare` freezes the compiled plan, so writing an option raises `FrozenPlanError`. Set the option before `prepare`, or pass per-run values with `run(api_data=...)` or `run(artifacts=...)`. Values nested inside an option (a list, a dict) are not frozen, so do not mutate them either. A `Feature` object returned from `input_features` is copied into the plan, so planning never renames or rewrites the group's own object; read planned names from the `FeatureSet` in `calculate_feature`.
+
 #### 6. Advanced Feature Group Topics
 
 For more in-depth information about feature groups, check out these advanced topics:

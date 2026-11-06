@@ -8,6 +8,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlySet, attribute_write_error
 from mloda.core.abstract_plugins.components.validators.feature_set_validator import FeatureSetValidator
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import InputCheck
 from mloda.core.abstract_plugins.input_data_load_marker import InputDataLoadMarker, current_input_data_load_marker
@@ -54,6 +55,7 @@ class ArtifactBinding:
 
 class FeatureSet:
     def __init__(self, features: Iterable[Feature] | None = None) -> None:
+        self.prepared: bool = False
         self.features: set[Feature] = set()
         self.options: Options | None = None
         # This is just one uuid for easier access
@@ -86,14 +88,34 @@ class FeatureSet:
             for feature in features:
                 self.add(feature)
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        if self.__dict__.get("_frozen"):
+            raise attribute_write_error("FeatureSet", name)
+        object.__setattr__(self, name, value)
+
     def __copy__(self) -> "FeatureSet":
-        clone = object.__new__(type(self))
-        clone.__dict__.update(self.__dict__)
-        return clone
+        duplicate = object.__new__(type(self))
+        duplicate.__dict__.update(self.__dict__)
+        duplicate.__dict__.pop("_frozen", None)
+        return duplicate
 
     def __getstate__(self) -> dict[str, Any]:
         """Drop the marker when pickling: it holds a class by reference and a worker recomputes it cheaply."""
         return {**self.__dict__, "_defaults_materialized_for": None, "_defaults_checked": ((), None)}
+
+    def freeze(self) -> None:
+        """Freeze features, options and filters, mark the set prepared; copies and run views stay writable."""
+        if self.__dict__.get("_frozen"):
+            return
+        for feature in self.features:
+            feature.freeze()
+        if self.options is not None:
+            self.options.freeze()
+        self.features = ReadOnlySet(self.features)
+        if self.filters is not None:
+            self.filters = ReadOnlySet(self.filters, "filters")
+        self.prepared = True
+        self.__dict__["_frozen"] = True
 
     def filters_reapplied(self, feature_group: type["FeatureGroup"] | None = None) -> bool:
         """Whether the framework applies the filters again after this step's calculation."""

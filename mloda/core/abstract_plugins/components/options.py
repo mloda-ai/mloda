@@ -10,6 +10,11 @@ from mloda.core.abstract_plugins.components.credential_scrub import _SECRET_KEY,
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable, register_deep_node
 from mloda.core.abstract_plugins.components.validators.options_validator import OptionsValidator
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.plan_freeze import (
+    ReadOnlyDict,
+    attribute_write_error,
+    check_options_writable,
+)
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature import Feature
@@ -235,6 +240,21 @@ class Options:
             self.cascade_context_keys, self.context, "cascade_context_keys"
         )
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        if self.__dict__.get("_frozen"):
+            raise attribute_write_error("Options", name)
+        object.__setattr__(self, name, value)
+
+    def freeze(self) -> None:
+        """Make group and context read-only; copies stay writable."""
+        if self.__dict__.get("_frozen"):
+            return
+        self.group = ReadOnlyDict(self.group, "options")
+        self.context = ReadOnlyDict(self.context, "options")
+        self.__dict__["_frozen"] = True
+
+    _check_writable = check_options_writable
+
     @property
     def own_group_keys(self) -> frozenset[str]:
         """Group keys declared on this feature before mloda started resolving it, still present."""
@@ -256,17 +276,20 @@ class Options:
         Feature requests from different consumers merge into one, so the merged feature's own-key answer
         is consumer-order independent. inherited_* provenance stays the receiver's. Only ever called on
         Options that are already equal (same group and context values), so no value copying is needed."""
+        self._check_writable()
         self._own_group_keys = self._own_group_keys | other._own_group_keys
         self._own_context_keys = self._own_context_keys | other._own_context_keys
         self._own_keys_locked = self._own_keys_locked or other._own_keys_locked
 
     def lock_own_keys(self) -> None:
         """Stop later set/add_to_group/add_to_context calls from extending own keys. Idempotent."""
+        self._check_writable()
         self._own_keys_locked = True
 
     def add_to_group(self, key: str, value: Any, forward: bool = True) -> None:
         """Add parameter to group (affects Feature Group resolution/splitting); ``forward=False`` also calls
         ``mark_non_forwarded`` (stripped from pickled snapshots, still forwarded to input features)."""
+        self._check_writable(key)
         OptionsValidator.validate_can_add_to_group(key, value, self.group, self.context)
         self.group[key] = value
         if not self._own_keys_locked:
@@ -280,10 +303,12 @@ class Options:
         The key is still forwarded by ``inherit_from``, and its mark follows it there and through copies (unlike
         ``NON_FORWARDED_KEYS``, which are never forwarded). Keep a key off input features with
         ``PropertySpec.forward_to_inputs=False`` or ``forward_group``/``forward_group_exclude``."""
+        self._check_writable(key)
         self.non_forwarded_group_keys = self.non_forwarded_group_keys | frozenset({key})
 
     def add_to_context(self, key: str, value: Any) -> None:
         """Add parameter to context (metadata only, doesn't affect splitting)."""
+        self._check_writable(key)
         OptionsValidator.validate_can_add_to_context(key, value, self.group, self.context)
         self.context[key] = value
         if not self._own_keys_locked:
@@ -357,6 +382,7 @@ class Options:
         If the key already exists, update it in its current location.
         If the key is new, add it to group by default.
         """
+        self._check_writable(key)
         if key in self.group:
             self.group[key] = value
         elif key in self.context:
@@ -441,7 +467,8 @@ class Options:
         if not self.non_forwarded_group_keys:
             return self.__dict__
         state = dict(self.__dict__)
-        state["group"] = {k: v for k, v in self.group.items() if k not in self.non_forwarded_group_keys}
+        kept = {k: v for k, v in self.group.items() if k not in self.non_forwarded_group_keys}
+        state["group"] = ReadOnlyDict(kept, "options") if state.get("_frozen") else kept
         return state
 
     def __copy__(self) -> "Options":
@@ -455,15 +482,18 @@ class Options:
         """Shallow copy owning its group/context dicts; values and subclass attributes are shared by reference."""
         forked = object.__new__(type(self))
         forked.__dict__.update(self.__dict__)
+        forked.__dict__.pop("_frozen", None)
         forked.group = dict(self.group)
         forked.context = dict(self.context)
         return forked
 
     def _adopt(self, other: "Options") -> None:
         """Takes other's values and bookkeeping in place; this object and its two dicts keep their identity."""
+        self._check_writable()
         group = self.group
         context = self.context
         self.__dict__.update(other.__dict__)
+        self.__dict__.pop("_frozen", None)
         self.group = group
         self.context = context
         group.clear()
@@ -557,6 +587,7 @@ class Options:
                         cross-conflict),
                         or forward_group=False is combined with a non-empty forward_group_exclude.
         """
+        self._check_writable()
         if consumer is self:
             # A child sharing the consumer's own Options has nothing to forward: no-op. Return
             # frozenset() without touching last_forwarded_group_keys, so a shared instance is never

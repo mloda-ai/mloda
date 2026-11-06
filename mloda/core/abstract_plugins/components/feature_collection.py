@@ -27,6 +27,7 @@ class Features:
         child_uuid: UUID | None = None,
         parent_domain: str | None = None,
         consumer_local_keys: frozenset[str] = frozenset(),
+        input_copies: dict[int, tuple[Feature, Feature]] | None = None,
     ) -> None:
         if isinstance(features, str):
             raise ValueError(
@@ -37,6 +38,8 @@ class Features:
         self.child_uuid: UUID | None = child_uuid
         self.parent_domain: str | None = parent_domain
         self.consumer_local_keys: frozenset[str] = consumer_local_keys
+        # Per plan: id(original) -> (original, plan-owned feature), so one returned object stays one object.
+        self.input_copies: dict[int, tuple[Feature, Feature]] = {} if input_copies is None else input_copies
 
         self.parent_uuids: set[UUID] = set()
 
@@ -56,6 +59,11 @@ class Features:
             if isinstance(feature, str):
                 feature = Feature(name=feature, options=Options({}), domain=self.parent_domain)
             else:
+                if child_uuid:
+                    entry = self.input_copies.get(id(feature))
+                    if entry is None:
+                        entry = self.input_copies[id(feature)] = (feature, feature.copy_for_plan())
+                    feature = entry[1]
                 if feature.domain is None and self.parent_domain is not None:
                     feature.domain = Domain(self.parent_domain)
             if child_uuid:

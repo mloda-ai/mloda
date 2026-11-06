@@ -186,6 +186,11 @@ class ExecutionPlan:
     def __len__(self) -> int:
         return len(self.execution_plan)
 
+    def freeze(self) -> None:
+        """Freeze every step, including those held only in tfs_collection."""
+        for step in (*self.execution_plan, *self.tfs_collection.values()):
+            step.freeze()
+
     def create_execution_plan(
         self,
         queue: "PlannedQueue",

@@ -2989,7 +2989,12 @@ class TestBuildPlanStepsInputFeatureNames:
     def _source_compute_step() -> Any:
         """The root source's raw FeatureGroupStep, from a session nobody else shares."""
         compute_steps = _raw_steps_by_kind(_prepare_chained_session())["compute"]
-        return next(step for step in compute_steps if step.feature_group is PlanInfoPandasSource)
+        planned = next(step for step in compute_steps if step.feature_group is PlanInfoPandasSource)
+        # The prepared plan is frozen; tests mutate a writable copy of the step, its FeatureSet and Features.
+        step = copy.copy(planned)
+        step.features = copy.copy(planned.features)
+        step.features.features = {copy.copy(feature) for feature in planned.features.features}
+        return step
 
     def test_declared_input_names_are_reported_sorted(self) -> None:
         step = self._source_compute_step()

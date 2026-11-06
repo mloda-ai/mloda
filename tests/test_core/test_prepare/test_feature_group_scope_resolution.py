@@ -1074,7 +1074,7 @@ def test_resolved_reader_feature_holds_its_pair_on_input_data_match_not_in_optio
     csv_path, parquet_path = _reader_files(tmp_path)
     feature = Feature(READER_COL, feature_group="CsvFG")
 
-    mloda.run_all(
+    session = mloda.prepare(
         [feature],
         compute_frameworks=[PyArrowTable],
         data_access_collection=DataAccessCollection(files={csv_path, parquet_path}),
@@ -1082,9 +1082,21 @@ def test_resolved_reader_feature_holds_its_pair_on_input_data_match_not_in_optio
         copy_features=False,
     )
 
-    assert feature.input_data_match == (CsvFG, SourceMatch(source=csv_path, access=csv_path))
+    assert session.engine is not None
+    plan_features = [
+        f
+        for step in session.engine.execution_planner
+        for f in getattr(getattr(step, "features", None), "features", ())
+        if str(f.name) == READER_COL
+    ]
+    assert len(plan_features) == 1
+    plan_feature = plan_features[0]
+    assert plan_feature.input_data_match == (CsvFG, SourceMatch(source=csv_path, access=csv_path))
+    assert RESERVED_READER_OPTION_KEY not in plan_feature.options.group
+    assert RESERVED_READER_OPTION_KEY not in plan_feature.options.context
     assert RESERVED_READER_OPTION_KEY not in feature.options.group
     assert RESERVED_READER_OPTION_KEY not in feature.options.context
+    assert session.run()[0].to_pydict() == {READER_COL: [1, 2, 3]}
 
 
 def test_multiple_message_never_contains_a_credential_secret(tmp_path: Path) -> None:

@@ -1229,7 +1229,7 @@ class ComputeFramework(ABC):
         from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 
         # Tests pass non-FeatureSet stand-ins for features; only a real FeatureSet is materialized (#796).
-        if isinstance(features, FeatureSet):
+        if isinstance(features, FeatureSet) and not features.prepared:
             features.materialize_option_defaults(feature_group)
 
         try:

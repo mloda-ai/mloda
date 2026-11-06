@@ -727,10 +727,10 @@ if it really is a whole-value check.
 `session.run(parameters={key: value})`. It needs `context=True` and cannot combine with `match_guard`, `name_converter`
 or `required_when`. A runtime key is never a group key: placing it in `Options.group` raises a `ValueError`.
 
-- Each run validates the passed values strictly against the declaring spec and refuses an unknown key before any step runs.
+- A strict spec validates each run's value; an unknown key is refused before any step runs.
 - The baseline is the prepare-time context value, else the declared default. `NO_DEFAULT` keeps the key required at prepare.
-- Read it with `features.runtime_parameter(key, feature)`: the run value, else the baseline. `options.get(key)` returns the baseline only.
-- Runs with different values share one `plan_id` and plan lock. `session.run_surface.parameters` lists the declared keys.
+- Read it with `features.runtime_parameter(key, feature)` (run value, else baseline); `options.get(key)` returns the baseline only.
+- `session.run_surface.parameters` lists the declared keys.
 
 ## Context propagation
 

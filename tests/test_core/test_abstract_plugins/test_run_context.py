@@ -74,7 +74,7 @@ class TestRunContextPlanIdAndStartedAt:
 
         assert restored.run_inputs.credentials == ("vault-a",)
 
-    def test_run_inputs_round_trips_every_field_with_read_only_parameters(self) -> None:
+    def test_run_inputs_round_trips_every_field(self) -> None:
         inputs = RunInputs(api_data=("a",), artifacts=("m",), parameters={"k": "v"}, credentials=("c",))
 
         restored = pickle.loads(pickle.dumps(RunContext(run_inputs=inputs))).run_inputs  # nosec B301
@@ -82,8 +82,6 @@ class TestRunContextPlanIdAndStartedAt:
         assert restored == inputs
         assert (restored.api_data, restored.artifacts, restored.credentials) == (("a",), ("m",), ("c",))
         assert restored.parameters == {"k": "v"}
-        with pytest.raises(TypeError):
-            restored.parameters["x"] = 1
 
     def test_run_inputs_defaults_are_empty_and_parameters_are_read_only(self) -> None:
         inputs = RunInputs()

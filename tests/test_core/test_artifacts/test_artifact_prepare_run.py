@@ -14,6 +14,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.provider import BaseArtifact, FeatureSet, DataCreatorFeatureGroup, property_spec
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.user import Feature, Options, mloda, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -584,3 +585,41 @@ def test_runtime_parameter_reaches_the_step_and_the_next_run_sees_the_baseline(
 
     assert list(result[0].to_pandas()[name]) == ["high"] * 3
     assert list(baseline[0].to_pandas()[name]) == ["low"] * 3
+
+
+class _RunRecorder(Extender):
+    """Keeps the RunContexts handed to on_run_start."""
+
+    def __init__(self) -> None:
+        self.runs: list[Any] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        self.runs.append(run)
+
+
+class TestArtifactNamesOnTheRunSurfaceAndRecord:
+    """The run surface and on_run_start record name the artifact inputs."""
+
+    def test_surface_artifacts_equal_the_artifact_inputs(self) -> None:
+        session = mloda.prepare(["PrepareRunArtifactFeature"], [PyArrowTable], plugin_collector=_enabled)
+
+        assert session.run_surface.artifacts == session.artifact_inputs
+        assert session.run_surface.artifacts == frozenset({"PrepareRunArtifactFeature"})
+
+    def test_artifact_names_are_recorded_sorted(self) -> None:
+        recorder = _RunRecorder()
+        session = mloda.prepare(
+            ["PrepareRunArtifactFeature"], [PyArrowTable], plugin_collector=_enabled, function_extender={recorder}
+        )
+
+        session.run(artifacts={"PrepareRunArtifactFeature": "trained_model_v1"})
+        assert recorder.runs[-1].run_inputs.artifacts == ("PrepareRunArtifactFeature",)
+
+        session.run()
+        assert recorder.runs[-1].run_inputs.artifacts == ()

@@ -962,20 +962,6 @@ def test_a_pre_field_lock_still_passes_for_a_no_handle_plan(tmp_path: Path) -> N
     check_plan_lock([_compute_step()], lock)
 
 
-def test_a_pre_field_lock_fails_for_a_handle_plan_with_a_diff_naming_only_the_handles(tmp_path: Path) -> None:
-    lock = tmp_path / "plan.lock"
-    lock.write_text(_NO_HANDLE_LOCK, encoding="utf-8")
-
-    with pytest.raises(PlanLockMismatchError) as caught:
-        check_plan_lock([_compute_step(credential_handles=_HANDLES)], lock)
-
-    lines = str(caught.value).splitlines()
-    changed = [ln for ln in lines if ln[:1] in "+-" and not ln.startswith(("+++", "---"))]
-    assert changed
-    assert all(ln.startswith("+") for ln in changed)
-    assert {ln[1:].strip() for ln in changed} == {'"credential_handles": [', '"vault-a",', '"vault-b"', "],"}
-
-
 _RUNTIME = ("rtlock_a", "rtlock_z")
 
 
@@ -1051,14 +1037,31 @@ def test_plan_content_hash_ignores_the_declared_runtime_parameters() -> None:
     assert plan_structure_hash(with_runtime) != plan_structure_hash(without)
 
 
-def test_a_pre_field_lock_fails_for_a_runtime_plan_with_a_diff_naming_only_the_keys(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("step_inputs", "expected"),
+    [
+        (
+            {"credential_handles": _HANDLES},
+            {'"credential_handles": [', '"vault-a",', '"vault-b"', "],"},
+        ),
+        (
+            {"runtime_parameters": _RUNTIME},
+            {'"runtime_parameters": [', '"rtlock_a",', '"rtlock_z"', "],"},
+        ),
+    ],
+    ids=["handles", "runtime-keys"],
+)
+def test_a_pre_field_lock_fails_for_a_new_field_plan_with_a_diff_naming_only_that_field(
+    tmp_path: Path, step_inputs: dict[str, Any], expected: set[str]
+) -> None:
     lock = tmp_path / "plan.lock"
     lock.write_text(_NO_HANDLE_LOCK, encoding="utf-8")
 
     with pytest.raises(PlanLockMismatchError) as caught:
-        check_plan_lock([_compute_step(runtime_parameters=_RUNTIME)], lock)
+        check_plan_lock([_compute_step(**step_inputs)], lock)
 
-    changed = [ln for ln in str(caught.value).splitlines() if ln[:1] in "+-" and not ln.startswith(("+++", "---"))]
+    lines = str(caught.value).splitlines()
+    changed = [ln for ln in lines if ln[:1] in "+-" and not ln.startswith(("+++", "---"))]
     assert changed
     assert all(ln.startswith("+") for ln in changed)
-    assert {ln[1:].strip() for ln in changed} == {'"runtime_parameters": [', '"rtlock_a",', '"rtlock_z"', "],"}
+    assert {ln[1:].strip() for ln in changed} == expected

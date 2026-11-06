@@ -175,7 +175,7 @@ class FeatureSet:
         return None
 
     def for_run(self, binding: ArtifactBinding | None, parameters: Mapping[str, Any] | None = None) -> "FeatureSet":
-        """Per-run step view: a shallow copy carrying this run's artifact binding and parameters; the plan is never written."""
+        """Per-run step view: a shallow copy carrying this run's artifact binding and parameters."""
         view = copy(self)
         if parameters:
             view.run_parameters = parameters

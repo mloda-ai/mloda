@@ -80,3 +80,13 @@ tests/
 ```
 
 Test dependencies are declared in the `test` extra in `pyproject.toml`.
+
+## Throwaway plugin classes in tests
+
+When writing tests that define throwaway `FeatureGroup` (or other plugin) subclasses:
+
+- Keep builders local to the test module that uses them.
+- If a builder is shared across multiple test modules, place it under `tests/mixins/`, or explicitly set `__module__` on the created class to the caller's module.
+- Build throwaway plugin classes inside a helper and return plain values; a failing assert can keep a throwaway class alive through its traceback and leak into subsequent tests.
+
+This convention ensures the autouse leak fixture in `tests/conftest.py` can attribute and reclaim classes, enforced by `tests/test_registry_isolation.py::TestSharedSubclassBuildersLiveUnderMixins`.

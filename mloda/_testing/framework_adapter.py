@@ -178,7 +178,10 @@ class FrameworkAdapter(ABC):
         return NotImplementedError(f"{self.compute_framework().__name__} cannot hold {shape}")
 
     def duplicate_column_frame(self, first_type: DataType, second_type: DataType) -> Any:
-        """Two columns both named "a", typed in order; a backend that cannot hold it raises NotImplementedError."""
+        """Two columns both named "a", typed in order.
+
+        A backend that cannot hold it raises NotImplementedError or returns its post-transform shape.
+        """
         return self.from_arrow(_duplicate_column_table(first_type, second_type).rename_columns(["a", "a"]))
 
     def zero_column_frame(self) -> Any:

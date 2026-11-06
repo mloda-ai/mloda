@@ -23,7 +23,6 @@ from mloda._testing.framework_adapter import (
     PythonDictAdapter,
     SqliteAdapter,
 )
-from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
@@ -134,6 +133,12 @@ class TestPythonDictRowWiseOutputSchemaSinglePass:
 
 class TestPythonDictOutputSchemaSuite(OutputSchemaSuite):
     adapter_class = PythonDictAdapter
+    switched_off = {"test_duplicate_column_names_collapse_to_one_entry": Cause.BACKEND}
+
+    @pytest.mark.skip(reason="A Python dict cannot hold duplicate column names")
+    def test_duplicate_column_names_collapse_to_one_entry(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
 
 class TestPyArrowOutputSchemaSuite(OutputSchemaSuite):
@@ -212,10 +217,6 @@ class TestSparkOutputSchema:
 
 class TestIcebergOutputSchemaSuite(OutputSchemaSuite):
     adapter_class = IcebergAdapter
-
-    def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
-        """Native Iceberg schemas cannot carry duplicate names; the post-transform PyArrow shape can."""
-        return super().duplicate_column_frame(PyArrowAdapter(), first_type, second_type)
 
 
 @pytest.mark.skipif(IcebergSchema is None or pa is None, reason="PyIceberg or PyArrow is not installed.")
@@ -710,12 +711,6 @@ class TestDuckDBOutputSchemaSuite(OutputSchemaSuite):
     @pytest.mark.skip(reason="DuckDB cannot import a zero-column Arrow table and a relation needs a column")
     def test_empty_schema_yields_none(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
 
-    def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
-        """An un-aliased join shape: the relation is built from SQL because Arrow import renames duplicates."""
-        literal = {DataType.INT64: "1::BIGINT", DataType.STRING: "'x'::VARCHAR"}
-        conn = adapter.connection
-        return DuckdbRelation(conn, conn.sql(f"select {literal[first_type]} as a, 2 as b, {literal[second_type]} as a"))
-
 
 class _PandasOutputSchemaFeatureGroup(FeatureGroup):
     @classmethod
@@ -725,12 +720,6 @@ class _PandasOutputSchemaFeatureGroup(FeatureGroup):
 
 class TestPandasOutputSchemaSuite(OutputSchemaSuite):
     adapter_class = PandasAdapter
-
-    def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
-        """Arrow to_pandas gives duplicate names one shared dtype, so the columns are renamed after conversion."""
-        frame = adapter.from_arrow(self.duplicate_column_table(first_type, second_type))
-        frame.columns = ["a", "a"]
-        return frame
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

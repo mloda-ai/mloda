@@ -15,18 +15,10 @@ from mloda._testing.suite import ConformanceSuite, HookError, SwitchedOffError
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.optional_dependency import require
 from mloda.user import ParallelizationMode
 
 if TYPE_CHECKING:
     import pyarrow as pa
-
-_SAMPLE_VALUES: dict[DataType, Any] = {
-    DataType.INT64: 1,
-    DataType.STRING: "x",
-    DataType.DOUBLE: 1.5,
-    DataType.BOOLEAN: True,
-}
 
 
 class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
@@ -86,21 +78,9 @@ class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
             return adapter.from_typed(data, self.arrow_types(name))
         return adapter.from_typed(data)
 
-    def duplicate_column_table(self, first_type: DataType, second_type: DataType) -> pa.Table:
-        """A one-row Arrow table with columns "a" (first_type) and "b" (second_type); only _SAMPLE_VALUES types."""
-        pa = require("pyarrow", "building Arrow test tables")
-        return pa.table(
-            [
-                pa.array([_SAMPLE_VALUES[first_type]], type=DataType.to_arrow_type(first_type)),
-                pa.array([_SAMPLE_VALUES[second_type]], type=DataType.to_arrow_type(second_type)),
-            ],
-            names=["a", "b"],
-        )
-
     def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
         """A frame whose two columns are both named "a", typed first_type then second_type."""
-        table = self.duplicate_column_table(first_type, second_type)
-        return adapter.from_arrow(table.rename_columns(["a", "a"]))
+        return adapter.duplicate_column_frame(first_type, second_type)
 
     def skip_unsupported_case(self, case_id: str) -> None:
         """Skip the case with the host's declared reason when the backend cannot hold it."""

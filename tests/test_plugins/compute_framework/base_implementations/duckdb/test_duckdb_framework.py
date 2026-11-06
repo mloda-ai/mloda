@@ -235,12 +235,6 @@ class TestDuckDBFrameworkSessionTimezone:
 class TestDuckDBDtypeExtractionSuite(DtypeExtractionSuite):
     adapter_class = DuckDBAdapter
 
-    def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
-        """An un-aliased join shape: the relation is built from SQL because Arrow import renames duplicates."""
-        literal = {DataType.INT64: "1::BIGINT", DataType.STRING: "'x'::VARCHAR"}
-        conn = adapter.connection
-        return DuckdbRelation(conn, conn.sql(f"select {literal[first_type]} as a, {literal[second_type]} as a"))
-
 
 class TestDuckDBDataTypeValidatorSuite(DataTypeValidatorSuite):
     adapter_class = DuckDBAdapter

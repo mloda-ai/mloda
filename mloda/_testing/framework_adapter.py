@@ -62,6 +62,26 @@ def to_arrow_table(data: TypedTestData, arrow_types: Mapping[str, pa.DataType] |
     return pa.table(arrays, names=list(data.types))
 
 
+_SAMPLE_VALUES: dict[DataType, Any] = {
+    DataType.INT64: 1,
+    DataType.STRING: "x",
+    DataType.DOUBLE: 1.5,
+    DataType.BOOLEAN: True,
+}
+
+
+def _duplicate_column_table(first_type: DataType, second_type: DataType) -> pa.Table:
+    """A one-row Arrow table with columns "a" (first_type) and "b" (second_type); only _SAMPLE_VALUES types."""
+    pa = require("pyarrow", "building Arrow test tables")
+    return pa.table(
+        [
+            pa.array([_SAMPLE_VALUES[first_type]], type=DataType.to_arrow_type(first_type)),
+            pa.array([_SAMPLE_VALUES[second_type]], type=DataType.to_arrow_type(second_type)),
+        ],
+        names=["a", "b"],
+    )
+
+
 def _arrow_has_type(arrow_type: Any, data_type: DataType) -> bool:
     if data_type in (DataType.TIMESTAMP_MICROS_TZ, DataType.LIST):
         return bool(DataType.from_arrow_type_safe(arrow_type) == data_type)
@@ -154,6 +174,21 @@ class FrameworkAdapter(ABC):
     def column_values(self, result: Any, column: str) -> list[Any]:
         """The column as Python values with nulls as None."""
 
+    def _cannot_hold(self, shape: str) -> NotImplementedError:
+        return NotImplementedError(f"{self.compute_framework().__name__} cannot hold {shape}")
+
+    def duplicate_column_frame(self, first_type: DataType, second_type: DataType) -> Any:
+        """Two columns both named "a", typed in order.
+
+        A backend that cannot hold it raises NotImplementedError or returns its post-transform shape.
+        """
+        return self.from_arrow(_duplicate_column_table(first_type, second_type).rename_columns(["a", "a"]))
+
+    def zero_column_frame(self) -> Any:
+        """A frame with no columns."""
+        pa = require("pyarrow", "building Arrow test tables")
+        return self.from_arrow(pa.table({}))
+
     def rows(self, result: Any) -> list[dict[str, Any]]:
         """The result as a list of row dicts, nulls as None; reads per column, so lazy adapters should override."""
         names = self.column_names(result)
@@ -207,6 +242,9 @@ class PythonDictAdapter(FrameworkAdapter):
 
     def from_arrow(self, table: pa.Table) -> Any:
         return table.to_pydict()
+
+    def duplicate_column_frame(self, first_type: DataType, second_type: DataType) -> Any:
+        raise self._cannot_hold("a frame with duplicate column names")
 
     def from_typed(self, data: TypedTestData, arrow_types: Mapping[str, pa.DataType] | None = None) -> Any:
         """arrow_types does not apply to Python dicts."""
@@ -305,6 +343,11 @@ class PandasAdapter(FrameworkAdapter):
             coerce_temporal_nanoseconds=False,
         )
 
+    def duplicate_column_frame(self, first_type: DataType, second_type: DataType) -> Any:
+        frame = self.from_arrow(_duplicate_column_table(first_type, second_type))
+        frame.columns = ["a", "a"]
+        return frame
+
     def column_names(self, result: Any) -> list[str]:
         return [str(c) for c in result.columns]
 
@@ -345,6 +388,9 @@ class PolarsAdapter(FrameworkAdapter):
         require("pyarrow", "building polars test frames")
 
         return pl.from_arrow(table)
+
+    def duplicate_column_frame(self, first_type: DataType, second_type: DataType) -> Any:
+        raise self._cannot_hold("a frame with duplicate column names")
 
     def _eager(self, result: Any) -> Any:
         return result
@@ -432,6 +478,12 @@ class DuckDBAdapter(_ArrowReadAdapter):
 
         return DuckdbRelation.from_arrow(self._connection, table)
 
+    def duplicate_column_frame(self, first_type: DataType, second_type: DataType) -> Any:
+        return self.from_arrow(_duplicate_column_table(first_type, second_type)).project('"a", "b" AS "a"')
+
+    def zero_column_frame(self) -> Any:
+        raise self._cannot_hold("a frame with no columns")
+
     def to_table(self, result: Any) -> pa.Table:
         return result.to_arrow_table()
 
@@ -476,6 +528,12 @@ class SqliteAdapter(_ArrowReadAdapter):
         from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 
         return SqliteRelation.from_arrow(self._connection, table)
+
+    def duplicate_column_frame(self, first_type: DataType, second_type: DataType) -> Any:
+        raise self._cannot_hold("a frame with duplicate column names")
+
+    def zero_column_frame(self) -> Any:
+        raise self._cannot_hold("a frame with no columns")
 
     def to_table(self, result: Any) -> pa.Table:
         return result.to_arrow_table()
@@ -543,6 +601,10 @@ class IcebergAdapter(_ArrowReadAdapter):
         iceberg_table = self._catalog.create_table(f"{self.namespace}.t{uuid.uuid4().hex}", schema=table.schema)
         iceberg_table.append(table)
         return iceberg_table
+
+    def duplicate_column_frame(self, first_type: DataType, second_type: DataType) -> Any:
+        """Native Iceberg schemas cannot carry duplicate names, so this is the post-transform PyArrow shape."""
+        return _duplicate_column_table(first_type, second_type).rename_columns(["a", "a"])
 
     def to_table(self, result: Any) -> pa.Table:
         pa = require("pyarrow", "reading Iceberg test tables")

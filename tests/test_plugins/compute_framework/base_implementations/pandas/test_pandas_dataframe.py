@@ -120,12 +120,6 @@ class TestPandasDtypeExtractionSuite(DtypeExtractionSuite):
             return pd.DataFrame({"d": pd.Series(values, dtype=pd.ArrowDtype(pa.decimal128(10, 2)))})
         return super().frame(adapter, name, data)
 
-    def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
-        """Arrow to_pandas gives duplicate names one shared dtype, so the columns are renamed after conversion."""
-        frame = adapter.from_arrow(self.duplicate_column_table(first_type, second_type))
-        frame.columns = ["a", "a"]
-        return frame
-
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
 class TestPandasDtypeExtraction:

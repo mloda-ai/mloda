@@ -414,3 +414,57 @@ def test_pandas_sparse_column_has_type_does_not_raise() -> None:
     frame = pd.DataFrame({"c": pd.arrays.SparseArray([1, 0, 2], dtype="int64")})
 
     assert _pandas().has_type(frame, "c", DataType.INT64) in (True, False, None)
+
+
+def _column_types(name: str, frame: Any) -> list[str]:
+    if name == "Pandas":
+        return [str(frame.dtypes.iloc[i]) for i in range(2)]
+    if name == "DuckDB":
+        return [str(t) for t in frame.types]
+    return [str(t) for t in frame.schema.types]
+
+
+_DUP_TYPES = {
+    "PyArrow": {DataType.INT64: "int64", DataType.STRING: "string"},
+    "Pandas": {DataType.INT64: "Int64", DataType.STRING: "string"},
+    "DuckDB": {DataType.INT64: "BIGINT", DataType.STRING: "VARCHAR"},
+    "Iceberg": {DataType.INT64: "int64", DataType.STRING: "string"},
+}
+
+
+@pytest.mark.parametrize("name", ["PyArrow", "Pandas", "DuckDB", "Iceberg"])
+@pytest.mark.parametrize("pair", [(DataType.INT64, DataType.STRING), (DataType.STRING, DataType.INT64)])
+def test_duplicate_column_frame_keeps_names_and_types(name: str, adapter: Any, pair: tuple[DataType, DataType]) -> None:
+    with adapter:
+        frame = adapter.duplicate_column_frame(*pair)
+
+        assert adapter.column_names(frame) == ["a", "a"]
+        assert _column_types(name, frame) == [_DUP_TYPES[name][pair[0]], _DUP_TYPES[name][pair[1]]]
+
+
+def test_iceberg_duplicate_column_frame_is_plain_arrow() -> None:
+    import pyarrow as pa
+
+    adapter = _iceberg()
+    with adapter:
+        assert isinstance(adapter.duplicate_column_frame(DataType.INT64, DataType.STRING), pa.Table)
+
+
+@pytest.mark.parametrize("name", ["PythonDict", "Polars", "PolarsLazy", "Sqlite"])
+def test_duplicate_column_frame_cannot_hold(adapter: Any) -> None:
+    with adapter:
+        with pytest.raises(NotImplementedError, match="cannot hold"):
+            adapter.duplicate_column_frame(DataType.INT64, DataType.STRING)
+
+
+@pytest.mark.parametrize("name", ["PythonDict", "PyArrow", "Pandas", "Polars", "PolarsLazy", "Iceberg"])
+def test_zero_column_frame_has_no_columns(adapter: Any) -> None:
+    with adapter:
+        assert adapter.column_names(adapter.zero_column_frame()) == []
+
+
+@pytest.mark.parametrize("name", ["DuckDB", "Sqlite"])
+def test_zero_column_frame_cannot_hold(adapter: Any) -> None:
+    with adapter:
+        with pytest.raises(NotImplementedError, match="cannot hold"):
+            adapter.zero_column_frame()

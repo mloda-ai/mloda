@@ -8,7 +8,6 @@ from mloda._testing.compute_framework.host import ComputeFrameworkSuite
 from mloda._testing.framework_adapter import FrameworkAdapter
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.optional_dependency import require
 
 
 class OutputSchemaSuite(ComputeFrameworkSuite, suite_base=True):
@@ -20,9 +19,8 @@ class OutputSchemaSuite(ComputeFrameworkSuite, suite_base=True):
         return True
 
     def empty_schema_frame(self, adapter: FrameworkAdapter) -> Any:
-        """A frame with no columns; the default goes through a zero-column Arrow table."""
-        pa = require("pyarrow", "building Arrow test tables")
-        return adapter.from_arrow(pa.table({}))
+        """A frame with no columns."""
+        return adapter.zero_column_frame()
 
     def test_reads_dict_sorted_with_python_type_names(self, framework_instance: Any) -> None:
         assert framework_instance._output_schema({"b": ["x"], "a": [1], "c": [1.5]}) == (

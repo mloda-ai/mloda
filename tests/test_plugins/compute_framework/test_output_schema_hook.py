@@ -10,6 +10,20 @@ from unittest.mock import Mock
 
 import pytest
 
+from mloda._testing.compute_framework.output_schema_suite import OutputSchemaSuite
+from mloda._testing.declarations import Cause
+from mloda._testing.framework_adapter import (
+    DuckDBAdapter,
+    FrameworkAdapter,
+    IcebergAdapter,
+    PandasAdapter,
+    PolarsAdapter,
+    PolarsLazyAdapter,
+    PyArrowAdapter,
+    PythonDictAdapter,
+    SqliteAdapter,
+)
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
@@ -17,13 +31,6 @@ from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.provider import FeatureGroup
 from mloda.user import Feature, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.test_plugins.compute_framework.base_implementations.dict_interchange_output_schema_test_mixin import (
-    DictInterchangeOutputSchemaTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.output_schema_edge_case_test_mixin import (
-    DuplicateColumnOutputSchemaTestMixin,
-    EmptySchemaOutputSchemaTestMixin,
-)
 
 try:
     import duckdb
@@ -125,24 +132,16 @@ class TestPythonDictRowWiseOutputSchemaSinglePass:
         assert PythonDictFramework()._output_schema([{1: "x", "a": 2}]) == (("1", "str"), ("a", "int"))
 
 
+class TestPythonDictOutputSchemaSuite(OutputSchemaSuite):
+    adapter_class = PythonDictAdapter
+
+
+class TestPyArrowOutputSchemaSuite(OutputSchemaSuite):
+    adapter_class = PyArrowAdapter
+
+
 @pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
-class TestPyArrowOutputSchema(
-    DictInterchangeOutputSchemaTestMixin,
-    EmptySchemaOutputSchemaTestMixin,
-    DuplicateColumnOutputSchemaTestMixin,
-):
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PyArrowTable()
-
-    @pytest.fixture
-    def empty_schema_data(self) -> Any:
-        return pa.table({})
-
-    @pytest.fixture
-    def duplicate_column_data(self) -> Any:
-        return pa.table({"a": [1], "b": [2]}).rename_columns(["a", "a"])
-
+class TestPyArrowOutputSchema:
     def test_sorted_columns_with_arrow_dtypes(self) -> None:
         table = pa.table({"b": ["x"], "a": [1]})
         assert PyArrowTable()._output_schema(table) == (("a", "int64"), ("b", "string"))
@@ -178,26 +177,9 @@ class TestPyArrowOutputSchema(
 
 
 @pytest.mark.skipif(StructType is None, reason="PySpark is not installed. Skipping this test.")
-class TestSparkOutputSchema(
-    DictInterchangeOutputSchemaTestMixin,
-    EmptySchemaOutputSchemaTestMixin,
-    DuplicateColumnOutputSchemaTestMixin,
-):
+class TestSparkOutputSchema:
     """SparkFramework._output_schema reads schema.fields once; a real SparkSession/JVM is not
     needed since StructType/StructField construct without one."""
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return SparkFramework()
-
-    @pytest.fixture
-    def empty_schema_data(self) -> Any:
-        return types.SimpleNamespace(schema=StructType([]))
-
-    @pytest.fixture
-    def duplicate_column_data(self) -> Any:
-        struct = StructType([StructField("a", SparkIntegerType()), StructField("a", SparkStringType())])
-        return types.SimpleNamespace(schema=struct)
 
     def test_sorted_columns_with_spark_dtypes(self) -> None:
         struct = StructType([StructField("b", SparkStringType()), StructField("a", SparkIntegerType())])
@@ -228,12 +210,16 @@ class TestSparkOutputSchema(
         )
 
 
+class TestIcebergOutputSchemaSuite(OutputSchemaSuite):
+    adapter_class = IcebergAdapter
+
+    def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
+        """Native Iceberg schemas cannot carry duplicate names; the post-transform PyArrow shape can."""
+        return super().duplicate_column_frame(PyArrowAdapter(), first_type, second_type)
+
+
 @pytest.mark.skipif(IcebergSchema is None or pa is None, reason="PyIceberg or PyArrow is not installed.")
-class TestIcebergOutputSchema(
-    DictInterchangeOutputSchemaTestMixin,
-    EmptySchemaOutputSchemaTestMixin,
-    DuplicateColumnOutputSchemaTestMixin,
-):
+class TestIcebergOutputSchema:
     """IcebergFramework._output_schema reads schema.column_names once (nested fields included,
     e.g. "b.c") for a native IcebergTable, then schema.find_field(name) per name (a cached O(1)
     lookup, not a rebuild); or delegates to arrow_schema_output_schema for the PyArrow interchange
@@ -244,20 +230,6 @@ class TestIcebergOutputSchema(
         mock_table = Mock(spec=PyIcebergTable)
         mock_table.schema.return_value = schema
         return mock_table
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return IcebergFramework()
-
-    @pytest.fixture
-    def empty_schema_data(self) -> Any:
-        return self._mock_table(IcebergSchema())
-
-    @pytest.fixture
-    def duplicate_column_data(self) -> Any:
-        """Duplicate columns collapse on the PyArrow interchange shape (reached after transform());
-        native Iceberg schemas cannot carry duplicate field names."""
-        return pa.table({"a": [1], "b": [2]}).rename_columns(["a", "a"])
 
     def test_sorted_columns_with_iceberg_types(self) -> None:
         schema = IcebergSchema(NestedField(1, "b", IcebergStringType()), NestedField(2, "a", IcebergLongType()))
@@ -326,16 +298,18 @@ class TestIcebergOutputSchema(
         assert call_count == 1
 
 
+class TestPolarsEagerOutputSchemaSuite(OutputSchemaSuite):
+    adapter_class = PolarsAdapter
+    switched_off = {"test_duplicate_column_names_collapse_to_one_entry": Cause.BACKEND}
+
+    @pytest.mark.skip(reason="Polars frames cannot hold duplicate column names")
+    def test_duplicate_column_names_collapse_to_one_entry(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsEagerOutputSchema(DictInterchangeOutputSchemaTestMixin, EmptySchemaOutputSchemaTestMixin):
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PolarsDataFrame()
-
-    @pytest.fixture
-    def empty_schema_data(self) -> Any:
-        return pl.DataFrame()
-
+class TestPolarsEagerOutputSchema:
     def test_sorted_columns_with_polars_dtypes(self) -> None:
         df = pl.DataFrame({"b": ["x"], "a": [1]})
         assert PolarsDataFrame()._output_schema(df) == (("a", "Int64"), ("b", "String"))
@@ -369,13 +343,19 @@ class TestPolarsEagerOutputSchema(DictInterchangeOutputSchemaTestMixin, EmptySch
         assert call_count == 1
 
 
-class TestBareComputeFrameworkDictInterchangeOutputSchema(DictInterchangeOutputSchemaTestMixin):
-    """Shared mixin plus the dict-interchange edge cases, covered once here since that path is
-    framework-agnostic (pandas/pyarrow/duckdb each cover the shared smoke test in their own file)."""
+class TestBareComputeFrameworkDictInterchangeOutputSchema:
+    """The dict-interchange edge cases, covered once here since that path is framework-agnostic."""
 
     @pytest.fixture
     def framework_instance(self) -> Any:
         return ComputeFramework()
+
+    def test_reads_dict_sorted_with_python_type_names(self, framework_instance: Any) -> None:
+        assert framework_instance._output_schema({"b": ["x"], "a": [1], "c": [1.5]}) == (
+            ("a", "int"),
+            ("b", "str"),
+            ("c", "float"),
+        )
 
     def test_empty_dict_yields_none(self, framework_instance: Any) -> None:
         assert framework_instance._output_schema({}) is None
@@ -616,13 +596,14 @@ class TestPolarsLazyOutputSchemaStaysLazy:
         assert call_count == 1
 
 
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsLazyDictInterchangeOutputSchema(DictInterchangeOutputSchemaTestMixin):
-    """Test PolarsLazyDataFrame._output_schema on the dict interchange shape using shared mixin."""
+class TestPolarsLazyOutputSchemaSuite(OutputSchemaSuite):
+    adapter_class = PolarsLazyAdapter
+    switched_off = {"test_duplicate_column_names_collapse_to_one_entry": Cause.BACKEND}
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PolarsLazyDataFrame()
+    @pytest.mark.skip(reason="Polars frames cannot hold duplicate column names")
+    def test_duplicate_column_names_collapse_to_one_entry(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
 
 class _IndexForbiddenList(list[str]):
@@ -722,18 +703,18 @@ class TestDuckDBOutputSchemaStaysLazy:
         assert captured.output_schema == (("a", "BIGINT"), ("b", "VARCHAR"))
 
 
-@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB/PyArrow is not installed.")
-class TestDuckDBOutputSchemaDuplicateColumns(DuplicateColumnOutputSchemaTestMixin):
-    """Duplicate column names (e.g. an un-aliased join) collapse to one entry, first occurrence wins."""
+class TestDuckDBOutputSchemaSuite(OutputSchemaSuite):
+    adapter_class = DuckDBAdapter
+    switched_off = {"test_empty_schema_yields_none": Cause.BACKEND}
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return DuckDBFramework()
+    @pytest.mark.skip(reason="DuckDB cannot import a zero-column Arrow table and a relation needs a column")
+    def test_empty_schema_yields_none(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
 
-    @pytest.fixture
-    def duplicate_column_data(self) -> Any:
-        conn = duckdb.connect()
-        return DuckdbRelation(conn, conn.sql("select 1 as a, 2 as b, 3 as a"))
+    def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
+        """An un-aliased join shape: the relation is built from SQL because Arrow import renames duplicates."""
+        literal = {DataType.INT64: "1::BIGINT", DataType.STRING: "'x'::VARCHAR"}
+        conn = adapter.connection
+        return DuckdbRelation(conn, conn.sql(f"select {literal[first_type]} as a, 2 as b, {literal[second_type]} as a"))
 
 
 class _PandasOutputSchemaFeatureGroup(FeatureGroup):
@@ -742,20 +723,18 @@ class _PandasOutputSchemaFeatureGroup(FeatureGroup):
         return {"a": [1]}
 
 
+class TestPandasOutputSchemaSuite(OutputSchemaSuite):
+    adapter_class = PandasAdapter
+
+    def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
+        """Arrow to_pandas gives duplicate names one shared dtype, so the columns are renamed after conversion."""
+        frame = adapter.from_arrow(self.duplicate_column_table(first_type, second_type))
+        frame.columns = ["a", "a"]
+        return frame
+
+
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasOutputSchema(EmptySchemaOutputSchemaTestMixin, DuplicateColumnOutputSchemaTestMixin):
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PandasDataFrame()
-
-    @pytest.fixture
-    def duplicate_column_data(self) -> Any:
-        return pd.DataFrame([[1, 2, 3]], columns=["a", "b", "a"])
-
-    @pytest.fixture
-    def empty_schema_data(self) -> Any:
-        return pd.DataFrame()
-
+class TestPandasOutputSchema:
     def test_sorted_columns_with_pandas_dtypes(self) -> None:
         df = pd.DataFrame({"b": [1.5], "a": [1]})
         assert PandasDataFrame()._output_schema(df) == (("a", "int64"), ("b", "float64"))
@@ -809,6 +788,22 @@ class TestOutputSchemaCalculateVsValidateOutput:
         validate_output_captured = validate_output_extender.captured
         assert validate_output_captured is not None
         assert validate_output_captured.output_schema == (("a", "int64"),)
+
+
+class TestSqliteOutputSchemaSuite(OutputSchemaSuite):
+    adapter_class = SqliteAdapter
+    switched_off = {
+        "test_empty_schema_yields_none": Cause.BACKEND,
+        "test_duplicate_column_names_collapse_to_one_entry": Cause.BACKEND,
+    }
+
+    @pytest.mark.skip(reason="SQLite cannot create a table with no columns")
+    def test_empty_schema_yields_none(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
+
+    @pytest.mark.skip(reason="SqliteRelation rejects duplicate column names, so no frame can carry them")
+    def test_duplicate_column_names_collapse_to_one_entry(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
 
 @pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")

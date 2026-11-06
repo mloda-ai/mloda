@@ -658,3 +658,26 @@ def test_make_merge_link_uses_feature_group_itself_and_carries_the_settings() ->
     assert link.right_index == right
     assert link.asof_config is config
     assert make_merge_link(JoinType.INNER, left, right).asof_config is None
+
+
+def test_unsupported_cases_are_validated_at_class_creation() -> None:
+    from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite
+    from mloda._testing.framework_adapter import PandasAdapter
+
+    with pytest.raises(SwitchedOffError, match="'nope' is not a case"):
+
+        class _UnknownCase(DataTypeValidatorSuite):
+            adapter_class = PandasAdapter
+            unsupported_cases = {"nope": (Cause.BACKEND, "reason")}
+
+    with pytest.raises(SwitchedOffError, match=r"must be \(Cause, reason\)"):
+
+        class _BadCause(DataTypeValidatorSuite):
+            adapter_class = PandasAdapter
+            unsupported_cases = {"int8_col": ("backend", "reason")}  # type: ignore[dict-item]
+
+    with pytest.raises(SwitchedOffError, match=r"must be \(Cause, reason\)"):
+
+        class _BadReason(DataTypeValidatorSuite):
+            adapter_class = PandasAdapter
+            unsupported_cases = {"int8_col": (Cause.BACKEND, 5)}  # type: ignore[dict-item]

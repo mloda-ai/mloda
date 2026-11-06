@@ -1,30 +1,21 @@
-from decimal import Decimal
 from typing import Any
 
 import pytest
 from unittest.mock import Mock, patch
+from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
+from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
+from mloda._testing.declarations import Cause
+from mloda._testing.framework_adapter import FrameworkAdapter, IcebergAdapter, PyArrowAdapter, to_arrow_table
+from mloda._testing.typed_data import TypedTestData
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
-from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
-    ColumnSpec,
-    DataTypeValidatorFrameworkTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DtypeExtractionTestMixin,
-    DuplicateColumnDtypeExtractionTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
-    AppendColumnsFrameworkTestMixin,
-    EmptyResultFrameworkTestMixin,
-)
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
 
 import logging
-import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +26,6 @@ try:
     from pyiceberg.catalog import Catalog
     from pyiceberg.schema import Schema
     from pyiceberg.types import (
-        DecimalType,
         DoubleType,
         FloatType,
         IntegerType,
@@ -64,26 +54,6 @@ except ImportError:
     TimestamptzType = None  # type: ignore
     ListType = None  # type: ignore
     StructType = None  # type: ignore
-
-
-def _table_from_schema(adapter: Any, schema: Any) -> Any:
-    """Create a real, empty Iceberg table (no append) from a hand-built pyiceberg Schema."""
-    catalog = adapter.connection
-    return catalog.create_table(f"{adapter.namespace}.t_{uuid.uuid4().hex}", schema=schema)
-
-
-_ICEBERG_TYPE_MAP: dict[DataType, Any] = (
-    {
-        DataType.INT32: IntegerType(),
-        DataType.INT64: LongType(),
-        DataType.FLOAT: FloatType(),
-        DataType.DOUBLE: DoubleType(),
-        DataType.STRING: StringType(),
-        DataType.TIMESTAMP_MICROS: TimestampType(),
-    }
-    if pyiceberg is not None
-    else {}
-)
 
 
 def test_real_iceberg_table_without_fixture_raises() -> None:
@@ -269,149 +239,99 @@ class TestIcebergFrameworkUnavailable:
                 framework.set_framework_connection_object(Mock())
 
 
-@pytest.mark.skipif(
-    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
-)
-class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
-    """Test DataTypeValidator enforcement on IcebergFramework using shared mixin.
+def _arrow_frame(suite: Any, name: str, data: TypedTestData) -> Any:
+    """The post-transform shape: a PyArrow table, as IcebergFramework.transform emits for dict input."""
+    return to_arrow_table(data, suite.arrow_types(name))
 
-    Each fixture creates a real, empty Iceberg table in the adapter's catalog from a
-    hand-built ``pyiceberg.schema.Schema`` (real ``IntegerType``/``LongType``/... field types).
 
-    Iceberg has only one TimestampType (microsecond precision per spec), so the
-    millisecond-precision tests are skipped on this subclass.
-    """
+_NO_DUPLICATES = "Iceberg schemas cannot carry duplicate column names"
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    EXTENDED_SKIPS = {
-        "int8_col": "Iceberg has no 8-bit integer type",
-        "uint8_col": "Iceberg has no unsigned integer types",
-        "uint64_col": "Iceberg has no unsigned integer types",
-        "int16_col": "Iceberg has no 16-bit integer type",
-        "uint16_col": "Iceberg has no unsigned integer types",
-        "uint32_col": "Iceberg has no unsigned integer types",
+class TestIcebergDtypeExtractionSuite(DtypeExtractionSuite):
+    adapter_class = IcebergAdapter
+    switched_off = {
+        "test_extract_duplicate_column_dtype_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_data_type_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_dtype_reversed_order_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_column_dtype_consistent_with_output_schema": Cause.BACKEND,
     }
 
-    @pytest.fixture
-    def extended_sample_data(self, spec: ColumnSpec, iceberg_adapter: Any) -> Any:
-        self._skip_if_unsupported(spec)
-        return self._build_iceberg(iceberg_adapter, (spec,))
+    @pytest.mark.skip(reason=_NO_DUPLICATES)
+    def test_extract_duplicate_column_dtype_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
-    @pytest.fixture
-    def validator_sample_data(self, iceberg_adapter: Any) -> Any:
-        return self._build_iceberg(iceberg_adapter, self.VALIDATOR_COLUMNS)
+    @pytest.mark.skip(reason=_NO_DUPLICATES)
+    def test_extract_duplicate_column_data_type_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
-    @pytest.fixture
-    def precision_sample_data(self, iceberg_adapter: Any) -> Any:
-        return self._build_iceberg(iceberg_adapter, self.PRECISION_COLUMNS)
+    @pytest.mark.skip(reason=_NO_DUPLICATES)
+    def test_extract_duplicate_column_dtype_reversed_order_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
-    @staticmethod
-    def _iceberg_type(spec: ColumnSpec) -> Any:
-        # Extended columns derive their Iceberg type from the explicit Arrow type (ListType needs an element type).
-        if spec.data_type == DataType.TIMESTAMP_MICROS_TZ:
-            return TimestamptzType()
-        if spec.data_type == DataType.LIST:
-            element = spec.arrow_type.value_type  # type: ignore[union-attr]
-            if element == pa.string():
-                return ListType(100, StringType(), element_required=False)
-            if element == pa.int64():
-                return ListType(100, LongType(), element_required=False)
-            struct = StructType(NestedField(101, "x", LongType(), required=False))
-            return ListType(100, struct, element_required=False)
-        return _ICEBERG_TYPE_MAP[spec.data_type]
+    @pytest.mark.skip(reason=_NO_DUPLICATES)
+    def test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
-    def _build_iceberg(self, adapter: Any, columns: tuple[ColumnSpec, ...]) -> Any:
-        # Iceberg needs explicit NestedField/IcebergType per column; the schema carries no
-        # values. _ICEBERG_TYPE_MAP omits TIMESTAMP_MILLIS, so unsupported columns are
-        # filtered out (the MILLIS test methods skip explicitly).
-        fields = [
-            NestedField(i + 1, c.name, self._iceberg_type(c))
-            for i, c in enumerate(columns)
-            if c.arrow_type is not None or c.data_type in _ICEBERG_TYPE_MAP
-        ]
-        return _table_from_schema(adapter, Schema(*fields))
-
-    def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
-        pytest.skip("Iceberg has only one TimestampType (microseconds per spec); millisecond cannot be expressed")
-
-    def test_timestamp_us_column_strict_ms_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
-        pytest.skip("Iceberg has only one TimestampType (microseconds per spec); millisecond cannot be expressed")
+    @pytest.mark.skip(reason=_NO_DUPLICATES)
+    def test_extract_column_dtype_consistent_with_output_schema(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
 
-@pytest.mark.skipif(
-    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
-)
-class TestIcebergDtypeExtraction(DtypeExtractionTestMixin):
-    """Test IcebergFramework._extract_column_dtype using shared mixin.
+class TestIcebergDtypeExtractionPyArrowSuite(DtypeExtractionSuite):
+    """Pin dtype extraction for the post-transform PyArrow shape, not just a native IcebergTable."""
 
-    Each fixture builds a real
-    ``pyiceberg.schema.Schema`` (carrying real ``LongType``/``StringType``/``DoubleType``
-    field types) in a real, empty Iceberg table created through the adapter.
-    """
+    adapter_class = IcebergAdapter
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
+        return _arrow_frame(self, name, data)
 
-    @pytest.fixture
-    def dtype_sample_data(self, iceberg_adapter: Any) -> Any:
-        schema = Schema(
-            NestedField(1, "int_col", LongType()),
-            NestedField(2, "str_col", StringType()),
-            NestedField(3, "float_col", DoubleType()),
-        )
-        return _table_from_schema(iceberg_adapter, schema)
-
-    @pytest.fixture
-    def decimal_sample_data(self, iceberg_adapter: Any) -> Any:
-        return _table_from_schema(iceberg_adapter, Schema(NestedField(1, "d", DecimalType(10, 2))))
+    def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
+        return super().duplicate_column_frame(PyArrowAdapter(), first_type, second_type)
 
 
-@pytest.mark.skipif(
-    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
-)
-class TestIcebergDtypeExtractionPyArrow(DtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
-    """Pin _extract_column_dtype for the post-transform PyArrow shape, not just a native IcebergTable."""
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    @pytest.fixture
-    def dtype_sample_data(self) -> Any:
-        return pa.table({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
-
-    @pytest.fixture
-    def decimal_sample_data(self) -> Any:
-        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
-        return pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})
-
-    @pytest.fixture
-    def dtype_duplicate_column_data(self) -> Any:
-        table = pa.table({"dup_col": [1, 2, 3]})
-        return table.append_column("dup_col", pa.array(["x", "y", "z"]))
-
-    @pytest.fixture
-    def dtype_duplicate_column_data_reversed(self) -> Any:
-        table = pa.table({"dup_col": ["x", "y", "z"]})
-        return table.append_column("dup_col", pa.array([1, 2, 3]))
+_NO_UNSIGNED = (Cause.BACKEND, "Iceberg has no unsigned integer types")
+_NO_SMALL_INT = (Cause.BACKEND, "Iceberg has no 8-bit or 16-bit integer type")
+_NO_NS = (Cause.BACKEND, "Iceberg does not support nanosecond timestamp precision")
+_ONE_TIMESTAMP = "Iceberg has only one TimestampType (microseconds per spec); millisecond cannot be expressed"
 
 
-@pytest.mark.skipif(
-    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
-)
-class TestIcebergDataTypeValidatorPyArrow(DataTypeValidatorFrameworkTestMixin):
-    """Pin DataTypeValidator enforcement for the post-transform PyArrow shape, where from_arrow is the identity."""
+class TestIcebergDataTypeValidatorSuite(DataTypeValidatorSuite):
+    adapter_class = IcebergAdapter
+    unsupported_cases = {
+        "int8_col": _NO_SMALL_INT,
+        "uint8_col": _NO_UNSIGNED,
+        "uint64_col": _NO_UNSIGNED,
+        "int16_col": _NO_SMALL_INT,
+        "uint16_col": _NO_UNSIGNED,
+        "uint32_col": _NO_UNSIGNED,
+        "timestamp_ns_col": _NO_NS,
+        "timestamp_ns_tz_col": _NO_NS,
+    }
+    switched_off = {
+        "test_timestamp_ms_column_strict_ms_passes": Cause.BACKEND,
+        "test_timestamp_us_column_strict_ms_raises": Cause.BACKEND,
+    }
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    @pytest.mark.skip(reason=_ONE_TIMESTAMP)
+    def test_timestamp_ms_column_strict_ms_passes(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
 
-    def from_arrow(self, table: Any) -> Any:
-        return table
+    @pytest.mark.skip(reason=_ONE_TIMESTAMP)
+    def test_timestamp_us_column_strict_ms_raises(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
+
+
+class TestIcebergDataTypeValidatorPyArrowSuite(DataTypeValidatorSuite):
+    """Pin DataTypeValidator enforcement for the post-transform PyArrow shape."""
+
+    adapter_class = IcebergAdapter
+
+    def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
+        return _arrow_frame(self, name, data)
 
 
 @pytest.mark.skipif(
@@ -438,41 +358,48 @@ def test_extract_column_data_type_pyarrow_table_returns_int64() -> None:
     assert framework._extract_column_data_type(pa.table({"a": [1]}), "a") is DataType.INT64
 
 
+class TestIcebergEmptyResultSuite(EmptyResultSuite):
+    """Both ``extract_column_names`` branches: zero-row and appended data are post-transform Arrow tables, non_empty is native."""
+
+    adapter_class = IcebergAdapter
+
+    def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
+        if name == "non_empty":
+            return super().frame(adapter, name, data)
+        return _arrow_frame(self, name, data)
+
+
+class TestIcebergAppendColumnsSuite(AppendColumnsSuite):
+    """``_append_columns`` only serves the post-transform Arrow shape, so frames are Arrow tables."""
+
+    adapter_class = IcebergAdapter
+    switched_off = {
+        "test_single_column_on_unpinned_joined_frame": Cause.NOT_IMPLEMENTED,
+        "test_single_column_on_pinned_frame_appends_aligned": Cause.NOT_IMPLEMENTED,
+    }
+
+    def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
+        return _arrow_frame(self, name, data)
+
+    @pytest.mark.skip(reason="Iceberg has no single-column type")
+    def test_single_column_on_unpinned_joined_frame(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="Iceberg has no single-column type")
+    def test_single_column_on_pinned_frame_appends_aligned(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+
 @pytest.mark.skipif(
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
-class TestIcebergEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFrameworkTestMixin):
-    """Test IcebergFramework schema detection via shared mixin, covering both branches.
-
-    ``IcebergFramework.extract_column_names`` has two branches and the fixtures exercise
-    one each:
-
-    - ``empty_data`` is a real zero-row PyArrow table. ``IcebergFramework.transform`` emits
-      a pa.Table for dict input, so post-transform working data takes the pa.Table branch
-      (``set(data.schema.names)``); this pins that a zero-row pa.Table still exposes its
-      schema (state C).
-    - ``non_empty_data`` is a real native IcebergTable built through the adapter, pinning
-      the native-table branch's access pattern.
-    """
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    @pytest.fixture
-    def empty_data(self) -> Any:
-        return pa.table({"a": pa.array([], pa.int64())})
-
-    @pytest.fixture
-    def non_empty_data(self, iceberg_adapter: Any) -> Any:
-        return iceberg_adapter.from_arrow(pa.table({"a": [1, 2]}))
-
-    @pytest.fixture
-    def appendable_data(self) -> Any:
-        return pa.table({"a": [1, 2]})
-
-    def test_append_columns_on_iceberg_table_returns_none(self, framework_instance: Any, non_empty_data: Any) -> None:
-        assert framework_instance._append_columns(non_empty_data, {"appended_col": [1]}) is None
+class TestIcebergEmptyResult:
+    def test_append_columns_on_iceberg_table_returns_none(self, iceberg_adapter: Any) -> None:
+        framework = IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        table = iceberg_adapter.from_arrow(pa.table({"a": [1, 2]}))
+        assert framework._append_columns(table, {"appended_col": [1]}) is None
 
 
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402

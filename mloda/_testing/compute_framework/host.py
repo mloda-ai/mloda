@@ -3,18 +3,30 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import pytest
 
 from mloda._testing.compute_framework_shape import applicable_aspects
+from mloda._testing.declarations import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter
-from mloda._testing.suite import ConformanceSuite, HookError
+from mloda._testing.suite import ConformanceSuite, HookError, SwitchedOffError
 from mloda._testing.typed_data import TypedTestData
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.optional_dependency import require
+from mloda.user import ParallelizationMode
 
 if TYPE_CHECKING:
     import pyarrow as pa
+
+_SAMPLE_VALUES: dict[DataType, Any] = {
+    DataType.INT64: 1,
+    DataType.STRING: "x",
+    DataType.DOUBLE: 1.5,
+    DataType.BOOLEAN: True,
+}
 
 
 class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
@@ -23,6 +35,8 @@ class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
     adapter_class: ClassVar[type[FrameworkAdapter]]
     aspect: ClassVar[str]
     required_hooks: ClassVar[tuple[str, ...]] = ()
+    case_ids: ClassVar[frozenset[str]] = frozenset()
+    unsupported_cases: ClassVar[Mapping[str, tuple[Cause, str]]] = MappingProxyType({})
 
     def __init_subclass__(cls, suite_base: bool = False, **kwargs: Any) -> None:
         if not suite_base:
@@ -34,6 +48,9 @@ class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
                 problems.append(f"a host must override: {', '.join(missing)}")
             if problems:
                 raise HookError(f"{cls.__name__}: " + "; ".join(problems))
+            invalid = _invalid_unsupported_cases(cls)
+            if invalid:
+                raise SwitchedOffError(f"{cls.__name__}: " + "; ".join(invalid))
         super().__init_subclass__(suite_base=suite_base, **kwargs)
 
     @pytest.fixture
@@ -43,6 +60,13 @@ class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
             pytest.skip(f"{instance.compute_framework().__name__} is not available")
         with instance:
             yield instance
+
+    @pytest.fixture
+    def framework_instance(self, adapter: FrameworkAdapter, framework: type[ComputeFramework]) -> ComputeFramework:
+        instance = framework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        if adapter.connection is not None:
+            instance.set_framework_connection_object(adapter.connection)
+        return instance
 
     @pytest.fixture
     def framework(self, adapter: FrameworkAdapter) -> type[ComputeFramework]:
@@ -62,6 +86,28 @@ class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
             return adapter.from_typed(data, self.arrow_types(name))
         return adapter.from_typed(data)
 
+    def duplicate_column_table(self, first_type: DataType, second_type: DataType) -> pa.Table:
+        """A one-row Arrow table with columns "a" (first_type) and "b" (second_type); only _SAMPLE_VALUES types."""
+        pa = require("pyarrow", "building Arrow test tables")
+        return pa.table(
+            [
+                pa.array([_SAMPLE_VALUES[first_type]], type=DataType.to_arrow_type(first_type)),
+                pa.array([_SAMPLE_VALUES[second_type]], type=DataType.to_arrow_type(second_type)),
+            ],
+            names=["a", "b"],
+        )
+
+    def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
+        """A frame whose two columns are both named "a", typed first_type then second_type."""
+        table = self.duplicate_column_table(first_type, second_type)
+        return adapter.from_arrow(table.rename_columns(["a", "a"]))
+
+    def skip_unsupported_case(self, case_id: str) -> None:
+        """Skip the case with the host's declared reason when the backend cannot hold it."""
+        entry = self.unsupported_cases.get(case_id)
+        if entry is not None:
+            pytest.skip(f"{entry[0].name}: {entry[1]}")
+
     def column_values(self, adapter: FrameworkAdapter, result: Any, column: str) -> list[Any]:
         return adapter.column_values(result, column)
 
@@ -70,6 +116,25 @@ class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
 
     def row_count(self, adapter: FrameworkAdapter, result: Any) -> int:
         return adapter.row_count(result)
+
+
+def _invalid_unsupported_cases(cls: type[ComputeFrameworkSuite]) -> list[str]:
+    cases = cls.unsupported_cases
+    if not isinstance(cases, Mapping):
+        return [f"unsupported_cases must be a mapping of case id to (Cause, reason), got {cases!r}"]
+    problems = []
+    for case_id, entry in cases.items():
+        if case_id not in cls.case_ids:
+            problems.append(f"unsupported_cases key '{case_id}' is not a case of this suite")
+        elif not (
+            isinstance(entry, tuple)
+            and len(entry) == 2
+            and isinstance(entry[0], Cause)
+            and isinstance(entry[1], str)
+            and entry[1]
+        ):
+            problems.append(f"unsupported_cases['{case_id}'] must be (Cause, reason), got {entry!r}")
+    return problems
 
 
 def _is_unset(cls: type, name: str) -> bool:

@@ -1,26 +1,18 @@
-from decimal import Decimal
 from typing import Any
 
 from mloda.user import JoinType
-import pyarrow as pa
 import pytest
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from mloda.user import Index
+from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
+from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
 from mloda._testing.compute_framework.merge_suite import make_merge_link
+from mloda._testing.declarations import Cause
+from mloda._testing.framework_adapter import FrameworkAdapter, PolarsLazyAdapter
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
-)
-from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
-    DataTypeValidatorFrameworkTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DtypeExtractionTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
-    AppendColumnsFrameworkTestMixin,
-    EmptyResultFrameworkTestMixin,
 )
 
 import logging
@@ -221,68 +213,64 @@ class TestLazyExecutionTiming:
         assert isinstance(result, pl.LazyFrame)
 
 
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsLazyDtypeExtraction(DtypeExtractionTestMixin):
-    """Test PolarsLazyDataFrame._extract_column_dtype using shared mixin."""
+class TestPolarsLazyDtypeExtractionSuite(DtypeExtractionSuite):
+    adapter_class = PolarsLazyAdapter
+    switched_off = {
+        "test_extract_duplicate_column_dtype_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_data_type_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_dtype_reversed_order_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_column_dtype_consistent_with_output_schema": Cause.BACKEND,
+    }
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    @pytest.mark.skip(reason="Polars frames cannot hold duplicate column names")
+    def test_extract_duplicate_column_dtype_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
-    @pytest.fixture
-    def dtype_sample_data(self) -> Any:
-        return pl.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}).lazy()
+    @pytest.mark.skip(reason="Polars frames cannot hold duplicate column names")
+    def test_extract_duplicate_column_data_type_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
-    @pytest.fixture
-    def decimal_sample_data(self) -> Any:
-        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
-        return pl.DataFrame({"d": values}, schema={"d": pl.Decimal(10, 2)}).lazy()
+    @pytest.mark.skip(reason="Polars frames cannot hold duplicate column names")
+    def test_extract_duplicate_column_dtype_reversed_order_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="Polars frames cannot hold duplicate column names")
+    def test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="Polars frames cannot hold duplicate column names")
+    def test_extract_column_dtype_consistent_with_output_schema(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
 
 
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsLazyEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFrameworkTestMixin):
-    """Test PolarsLazyDataFrame schema detection via shared mixin.
+class TestPolarsLazyEmptyResultSuite(EmptyResultSuite):
+    adapter_class = PolarsLazyAdapter
 
-    Pins that ``_extract_column_names`` (``data.collect_schema().names()``) does not
-    materialize the lazy frame and still sees the columns on a zero-row LazyFrame
-    (state C: schema present at zero rows).
-    """
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    @pytest.fixture
-    def empty_data(self) -> Any:
-        return pl.LazyFrame({"a": []})
-
-    @pytest.fixture
-    def non_empty_data(self) -> Any:
-        return pl.DataFrame({"a": [1]}).lazy()
-
+class TestPolarsLazyAppendColumnsSuite(AppendColumnsSuite):
+    adapter_class = PolarsLazyAdapter
     needs_pinned_frame = True
 
     def single_column(self, values: list[Any]) -> Any | None:
         return pl.Series(values)
 
-    @pytest.fixture
-    def joined_data(self) -> Any:
+    def joined_frame(self, adapter: FrameworkAdapter) -> Any:
         left = pl.LazyFrame({"a": [1, 2, 3]})
         # maintain_order keeps repeated collects of this unpinned join plan in one row order under polars 2.
         return left.join(pl.LazyFrame({"a": [3, 1, 2], "b": [30, 10, 20]}), on="a", maintain_order="left")
 
 
-@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsLazyDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
-    """Test DataTypeValidator enforcement on PolarsLazyDataFrame using shared mixin."""
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    EXTENDED_SKIPS = {
-        "timestamp_s_col": "Polars has no second-precision datetime; it widens to ms (TIMESTAMP_MILLIS)",
+class TestPolarsLazyDataTypeValidatorSuite(DataTypeValidatorSuite):
+    adapter_class = PolarsLazyAdapter
+    unsupported_cases = {
+        "timestamp_s_col": (
+            Cause.BACKEND,
+            "Polars has no second-precision datetime; it widens to ms (TIMESTAMP_MILLIS)",
+        ),
     }
-
-    def from_arrow(self, table: pa.Table) -> Any:
-        return pl.from_arrow(table).lazy()  # type: ignore[union-attr]

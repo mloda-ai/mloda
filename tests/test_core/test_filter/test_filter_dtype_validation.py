@@ -2,7 +2,7 @@
 
 Tests the dtype classification, filter value extraction, and base class
 defaults added to ComputeFramework (issue #371). Framework-specific
-_extract_column_dtype tests live in the DtypeExtractionTestMixin.
+_extract_column_dtype tests live in the DtypeExtractionSuite.
 """
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework

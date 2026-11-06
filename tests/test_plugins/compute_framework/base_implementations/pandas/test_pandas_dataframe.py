@@ -7,22 +7,13 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
+from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
+from mloda._testing.declarations import Cause
+from mloda._testing.framework_adapter import FrameworkAdapter, PandasAdapter
+from mloda._testing.typed_data import TypedTestData
 from mloda.user import DataType, FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
-    DataTypeValidatorFrameworkTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.dict_interchange_output_schema_test_mixin import (
-    DictInterchangeOutputSchemaTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DtypeExtractionTestMixin,
-    DuplicateColumnDtypeExtractionTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
-    AppendColumnsFrameworkTestMixin,
-    EmptyResultFrameworkTestMixin,
-)
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -119,70 +110,49 @@ class TestPandasTransformList:
         assert result["content"].iloc[1] == "second"
 
 
-@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
-    """Test PandasDataFrame._extract_column_dtype using shared mixin."""
+class TestPandasDtypeExtractionSuite(DtypeExtractionSuite):
+    adapter_class = PandasAdapter
 
+    def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
+        """PandasAdapter has no decimal mapping, so the decimal frame is built as an Arrow-backed column."""
+        if name == "decimal":
+            values = data.to_python_dict()["d"]
+            return pd.DataFrame({"d": pd.Series(values, dtype=pd.ArrowDtype(pa.decimal128(10, 2)))})
+        return super().frame(adapter, name, data)
+
+    def duplicate_column_frame(self, adapter: FrameworkAdapter, first_type: DataType, second_type: DataType) -> Any:
+        """Arrow to_pandas gives duplicate names one shared dtype, so the columns are renamed after conversion."""
+        frame = adapter.from_arrow(self.duplicate_column_table(first_type, second_type))
+        frame.columns = ["a", "a"]
+        return frame
+
+
+@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
+class TestPandasDtypeExtraction:
     @pytest.fixture
     def framework_instance(self) -> Any:
         return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    @pytest.fixture
-    def dtype_sample_data(self) -> Any:
-        return pd.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
-
-    @pytest.fixture
-    def decimal_sample_data(self) -> Any:
-        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
-        return pd.DataFrame({"d": pd.Series(values, dtype=pd.ArrowDtype(pa.decimal128(10, 2)))})
 
     def test_extract_object_decimal_column_data_type_is_none(self, framework_instance: Any) -> None:
         values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
         data = pd.DataFrame({"d": pd.Series(values)})
         assert framework_instance._extract_column_data_type(data, "d") is None
 
-    # Dtypes are declared explicitly because pandas 2.x infers `object` where pandas 3.x infers `str`,
-    # which would make the first-occurrence assertions depend on the installed pandas version.
-    @pytest.fixture
-    def dtype_duplicate_column_data(self) -> Any:
-        frame = pd.DataFrame(
-            {"first": pd.Series([1, 2, 3], dtype="int64"), "second": pd.Series(["x", "y", "z"], dtype="string")}
-        )
-        frame.columns = ["dup_col", "dup_col"]
-        return frame
 
-    @pytest.fixture
-    def dtype_duplicate_column_data_reversed(self) -> Any:
-        frame = pd.DataFrame(
-            {"first": pd.Series(["x", "y", "z"], dtype="string"), "second": pd.Series([1, 2, 3], dtype="int64")}
-        )
-        frame.columns = ["dup_col", "dup_col"]
-        return frame
+_NO_LIST_ELEMENT_TYPE = (Cause.BACKEND, "to_pandas yields object columns for lists, which carry no element type")
 
 
-@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasDictInterchangeOutputSchema(DictInterchangeOutputSchemaTestMixin):
-    """Test PandasDataFrame._output_schema on the dict interchange shape using shared mixin."""
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-
-@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
-    """Test DataTypeValidator enforcement on PandasDataFrame using shared mixin.
-
-    str_col uses explicit ``pd.StringDtype()`` (via the type map) so the resolver returns
-    STRING; plain object dtype would be ambiguous and resolve to None.
-    """
-
-    EXTENDED_SKIPS = {
-        "list_str_col": "to_pandas yields object columns for lists, which carry no element type",
-        "list_struct_col": "to_pandas yields object columns for lists, which carry no element type",
-        "list_fixed_col": "to_pandas yields object columns for lists, which carry no element type",
+class TestPandasDataTypeValidatorSuite(DataTypeValidatorSuite):
+    adapter_class = PandasAdapter
+    unsupported_cases = {
+        "list_str_col": _NO_LIST_ELEMENT_TYPE,
+        "list_struct_col": _NO_LIST_ELEMENT_TYPE,
+        "list_fixed_col": _NO_LIST_ELEMENT_TYPE,
     }
 
+
+@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
+class TestPandasDataTypeValidator:
     @pytest.fixture
     def framework_instance(self) -> Any:
         return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
@@ -202,33 +172,16 @@ class TestPandasDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
         df = pd.DataFrame({"c": pd.Series(values, dtype=pd.ArrowDtype(arrow_type))})
         assert framework_instance._extract_column_data_type(df, "c") == expected
 
-    def from_arrow(self, table: pa.Table) -> Any:
-        # Option A: arrow -> pandas via to_pandas. types_mapper preserves pd.StringDtype()
-        # for STRING columns; coerce_temporal_nanoseconds=False keeps ms/us timestamp units.
-        return table.to_pandas(
-            types_mapper={pa.string(): pd.StringDtype()}.get,
-            coerce_temporal_nanoseconds=False,
-        )
+
+class TestPandasEmptyResultSuite(EmptyResultSuite):
+    adapter_class = PandasAdapter
 
 
-@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFrameworkTestMixin):
-    """Test PandasDataFrame schema detection via shared mixin (zero-row frame keeps columns)."""
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    @pytest.fixture
-    def empty_data(self) -> Any:
-        return pd.DataFrame({"a": pd.Series([], dtype="int64")})
+class TestPandasAppendColumnsSuite(AppendColumnsSuite):
+    adapter_class = PandasAdapter
 
     def single_column(self, values: list[Any]) -> Any | None:
         return pd.Series(values)
-
-    @pytest.fixture
-    def non_empty_data(self) -> Any:
-        return pd.DataFrame({"a": [1]})
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

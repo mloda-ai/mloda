@@ -6,26 +6,15 @@ from typing import Any
 import pyarrow as pa
 import pytest
 
+from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
+from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
+from mloda._testing.declarations import Cause
+from mloda._testing.framework_adapter import FrameworkAdapter, SqliteAdapter
 from mloda.user import DataType, FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
-)
-from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
-    ColumnSpec,
-    DataTypeValidatorFrameworkTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.dict_interchange_output_schema_test_mixin import (
-    DictInterchangeOutputSchemaTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DtypeExtractionTestMixin,
-)
-from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
-    AppendColumnsFrameworkTestMixin,
-    AppendColumnsCaseFoldTestMixin,
-    EmptyResultFrameworkTestMixin,
 )
 
 
@@ -207,22 +196,50 @@ class TestSqliteTfsConnectionInit(TfsConnectionInitMixin):
         conn.close()
 
 
-class TestSqliteDtypeExtraction(DtypeExtractionTestMixin):
-    """Test SqliteFramework._extract_column_dtype using shared mixin."""
+class TestSqliteDtypeExtractionSuite(DtypeExtractionSuite):
+    adapter_class = SqliteAdapter
+    switched_off = {
+        "test_extract_decimal_column_data_type": Cause.BACKEND,
+        "test_extract_duplicate_column_dtype_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_data_type_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_dtype_reversed_order_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence": Cause.BACKEND,
+        "test_extract_column_dtype_consistent_with_output_schema": Cause.BACKEND,
+    }
 
+    @pytest.mark.skip(reason="SqliteRelation rejects duplicate column names, so no frame can carry them")
+    def test_extract_duplicate_column_dtype_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="SqliteRelation rejects duplicate column names, so no frame can carry them")
+    def test_extract_duplicate_column_data_type_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="SqliteRelation rejects duplicate column names, so no frame can carry them")
+    def test_extract_duplicate_column_dtype_reversed_order_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="SqliteRelation rejects duplicate column names, so no frame can carry them")
+    def test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="SqliteRelation rejects duplicate column names, so no frame can carry them")
+    def test_extract_column_dtype_consistent_with_output_schema(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
+    def test_extract_decimal_column_data_type(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
+
+
+class TestSqliteDtypeExtraction:
     @pytest.fixture
     def framework_instance(self) -> Any:
         return SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    @pytest.fixture
-    def dtype_sample_data(self, connection: sqlite3.Connection) -> Any:
-        arrow_table = pa.Table.from_pydict(
-            {"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}
-        )
-        return SqliteRelation.from_arrow(connection, arrow_table)
-
-    @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
-    def test_extract_decimal_column_data_type(self, framework_instance: Any, decimal_sample_data: Any) -> None: ...
 
     def test_relation_from_decimal_column_raises(self, connection: sqlite3.Connection) -> None:
         values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
@@ -247,100 +264,63 @@ class TestSqliteDtypeExtraction(DtypeExtractionTestMixin):
         }
 
 
-class TestSqliteDictInterchangeOutputSchema(DictInterchangeOutputSchemaTestMixin):
-    """Test SqliteFramework._output_schema on the dict interchange shape using shared mixin.
-
-    SqliteFramework overrides _output_schema for SqliteRelation data; a dict falls through
-    its isinstance(data, SqliteRelation) check to the same base path every other framework uses.
-    """
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+_NO_LIST_STORAGE = (Cause.BACKEND, "SQLite has no list storage")
+_NO_NS_BIND = (Cause.BACKEND, "nanosecond timestamps convert to pandas Timestamp, which sqlite3 cannot bind")
 
 
-class TestSqliteDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
-    """Test DataTypeValidator enforcement on SqliteFramework using shared mixin.
+class TestSqliteDataTypeValidatorSuite(DataTypeValidatorSuite):
+    """SQLite uses type affinity: int widths, float widths and timestamps (TEXT) cannot be told apart from PRAGMA."""
 
-    SQLite uses type affinity, not strict types: INTEGER covers all int widths,
-    REAL covers all float widths, and timestamps are stored as TEXT. Precision-
-    narrowing tests that rely on per-width distinctions are skipped because they
-    are statically un-enforceable from PRAGMA table_info.
-    """
-
-    EXTENDED_SKIPS = {
-        "list_str_col": "SQLite has no list storage",
-        "list_struct_col": "SQLite has no list storage",
-        "list_fixed_col": "SQLite has no list storage",
-        "timestamp_ns_col": "nanosecond timestamps convert to pandas Timestamp, which sqlite3 cannot bind",
-        "timestamp_ns_tz_col": "nanosecond timestamps convert to pandas Timestamp, which sqlite3 cannot bind",
+    adapter_class = SqliteAdapter
+    unsupported_cases = {
+        "list_str_col": _NO_LIST_STORAGE,
+        "list_struct_col": _NO_LIST_STORAGE,
+        "list_fixed_col": _NO_LIST_STORAGE,
+        "timestamp_ns_col": _NO_NS_BIND,
+        "timestamp_ns_tz_col": _NO_NS_BIND,
+    }
+    switched_off = {
+        "test_int32_column_strict_int32_passes": Cause.BACKEND,
+        "test_int64_column_strict_int32_raises": Cause.BACKEND,
+        "test_float32_column_strict_float_passes": Cause.BACKEND,
+        "test_float64_column_strict_float_raises": Cause.BACKEND,
+        "test_timestamp_ms_column_strict_ms_passes": Cause.BACKEND,
+        "test_timestamp_us_column_strict_ms_raises": Cause.BACKEND,
     }
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    @pytest.mark.skip(reason="SQLite collapses INTEGER affinity; the int32 column reports INT64, not INT32")
+    def test_int32_column_strict_int32_passes(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
 
-    @pytest.fixture
-    def extended_sample_data(self, spec: ColumnSpec, connection: sqlite3.Connection) -> Any:
-        self._skip_if_unsupported(spec)
-        return SqliteRelation.from_arrow(connection, self._arrow_table((spec,)))
+    @pytest.mark.skip(reason="SQLite collapses INTEGER affinity; INT32 vs INT64 cannot be distinguished from PRAGMA")
+    def test_int64_column_strict_int32_raises(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
 
-    @pytest.fixture
-    def validator_sample_data(self, connection: sqlite3.Connection) -> Any:
-        return SqliteRelation.from_arrow(connection, self._arrow_table(self.VALIDATOR_COLUMNS))
+    @pytest.mark.skip(reason="SQLite collapses REAL affinity; the float32 column reports DOUBLE, not FLOAT")
+    def test_float32_column_strict_float_passes(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
 
-    @pytest.fixture
-    def precision_sample_data(self, connection: sqlite3.Connection) -> Any:
-        return SqliteRelation.from_arrow(connection, self._arrow_table(self.PRECISION_COLUMNS))
+    @pytest.mark.skip(reason="SQLite collapses REAL affinity; FLOAT vs DOUBLE cannot be distinguished from PRAGMA")
+    def test_float64_column_strict_float_raises(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
 
-    def test_int32_column_strict_int32_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
-        pytest.skip("SQLite collapses INTEGER affinity; the int32 column reports INT64, not INT32")
+    @pytest.mark.skip(reason="SQLite stores timestamps as TEXT; TIMESTAMP_MILLIS cannot be expressed in PRAGMA")
+    def test_timestamp_ms_column_strict_ms_passes(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
 
-    def test_int64_column_strict_int32_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
-        pytest.skip("SQLite collapses INTEGER affinity; INT32 vs INT64 cannot be distinguished from PRAGMA")
-
-    def test_float32_column_strict_float_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
-        pytest.skip("SQLite collapses REAL affinity; the float32 column reports DOUBLE, not FLOAT")
-
-    def test_float64_column_strict_float_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
-        pytest.skip("SQLite collapses REAL affinity; FLOAT vs DOUBLE cannot be distinguished from PRAGMA")
-
-    def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
-        pytest.skip("SQLite stores timestamps as TEXT; TIMESTAMP_MILLIS cannot be expressed in PRAGMA")
-
-    def test_timestamp_us_column_strict_ms_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
-        pytest.skip("SQLite stores timestamps as TEXT; TIMESTAMP precision cannot be distinguished")
+    @pytest.mark.skip(reason="SQLite stores timestamps as TEXT; TIMESTAMP precision cannot be distinguished")
+    def test_timestamp_us_column_strict_ms_raises(self, adapter: FrameworkAdapter, framework_instance: Any) -> None: ...
 
 
-class TestSqliteEmptyResult(
-    AppendColumnsFrameworkTestMixin, AppendColumnsCaseFoldTestMixin, EmptyResultFrameworkTestMixin
-):
-    """Test SqliteFramework schema detection via shared mixin.
+class TestSqliteEmptyResultSuite(EmptyResultSuite):
+    adapter_class = SqliteAdapter
 
-    SQLite data is a relation, so the data fixtures are built via ``from_arrow`` and pull in
-    the shared ``connection`` fixture, mirroring the DataTypeValidator consumer. A zero-row
-    relation still carries its columns (state C).
-    """
 
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-
-    @pytest.fixture
-    def empty_data(self, connection: sqlite3.Connection) -> Any:
-        return SqliteRelation.from_arrow(connection, pa.table({"a": pa.array([], pa.int64())}))
+class TestSqliteAppendColumnsSuite(AppendColumnsSuite):
+    adapter_class = SqliteAdapter
+    case_folds_names = True
 
     def single_column(self, values: list[Any]) -> Any | None:
         return values
 
-    @pytest.fixture
-    def non_empty_data(self, connection: sqlite3.Connection) -> Any:
-        return SqliteRelation.from_arrow(connection, pa.table({"a": [1]}))
-
-    @pytest.fixture
-    def joined_data(self, connection: sqlite3.Connection) -> Any:
-        left = SqliteRelation.from_arrow(connection, pa.table({"a": [1, 2, 3]})).set_alias("l")
-        right = SqliteRelation.from_arrow(connection, pa.table({"a": [3, 1, 2], "b": [30, 10, 20]})).set_alias("r")
+    def joined_frame(self, adapter: FrameworkAdapter) -> Any:
+        left = adapter.from_arrow(pa.table({"a": [1, 2, 3]})).set_alias("l")
+        right = adapter.from_arrow(pa.table({"a": [3, 1, 2], "b": [30, 10, 20]})).set_alias("r")
         return left.join(right, "a")
 
 

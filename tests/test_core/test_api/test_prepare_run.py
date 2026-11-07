@@ -7,19 +7,28 @@ These tests define the contract for a two-phase execution model:
 """
 
 import dataclasses
+import importlib.util
+import subprocess  # nosec B404
+import sys
 import threading
 from collections import OrderedDict
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from types import MappingProxyType
 from unittest.mock import patch
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.api.plan_lock import _lock_text, plan_structure_hash
+from mloda.core.core.step.join_step import JoinStep
+from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
+from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.user import mloda, mlodaAPI, Feature, ParallelizationMode, PluginCollector
 from mloda.provider import (
@@ -33,8 +42,9 @@ from mloda.provider import (
 )
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
 from mloda.steward import RunSurface
-from mloda.user import Options, FeatureName, Index
+from mloda.user import Options, FeatureName, Index, JoinSpec, Link
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_plugins.api.test_simplified_api_data import (
     ApiNeutralBoundedFG,
@@ -257,10 +267,18 @@ class _RefuseSecondRunStartExtender(Extender):
             raise RuntimeError("refuse second run")
 
 
-def _rerun(session: Any, path: str, api_data: dict[str, Any]) -> list[Any]:
+def _rerun(
+    session: Any,
+    path: str,
+    api_data: dict[str, Any],
+    modes: set[ParallelizationMode] | None = None,
+    flight_server: Any = None,
+) -> list[Any]:
+    if modes is None:
+        modes = {ParallelizationMode.SYNC}
     if path == "batch":
-        return list(session.run(api_data=api_data))
-    return list(session.stream_run(api_data=api_data))
+        return list(session.run(api_data=api_data, parallelization_modes=modes, flight_server=flight_server))
+    return list(session.stream_run(api_data=api_data, parallelization_modes=modes, flight_server=flight_server))
 
 
 class TestFailedRerunDoesNotExposeStaleResults:
@@ -332,6 +350,46 @@ class TestSessionKeepsNoPerRunState:
         assert result._connection_handles is not session._connection_handles
 
 
+class PrepareRunJoinLookup(DataCreatorFeatureGroup):
+    """Lookup rows deliberately differ from the API rows in order and cardinality."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"prepare_join_id", "prepare_join_value"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        keys = [999, *reversed(range(8)), *reversed(range(100, 108))]
+        return pd.DataFrame({"prepare_join_id": keys, "prepare_join_value": [f"r{i}" for i in keys]})
+
+
+class PrepareRunJoinedApiFeature(FeatureGroup):
+    """Join a converted API frame with a pandas lookup."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature("api_value", compute_framework="PyArrowTable", index=Index(("api_id",))),
+            Feature("prepare_join_value", index=Index(("prepare_join_id",))),
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name()}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data[cls.get_class_name()] = data["api_value"] + "_" + data["prepare_join_value"]
+        return data
+
+
 class TestConcurrentRunsOnOneSession:
     """One prepared session serves concurrent runs without sharing per-run state."""
 
@@ -358,42 +416,44 @@ class TestConcurrentRunsOnOneSession:
             )
         return state
 
-    @pytest.mark.parametrize("path", ["batch", "stream"])
-    @pytest.mark.parametrize(
-        "modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}], ids=["sync", "threading"]
-    )
-    def test_threads_get_their_own_results_and_session_is_unchanged(
-        self, path: str, modes: set[ParallelizationMode]
-    ) -> None:
-        features: list[Feature | str] = [Feature(name="PrepareRunApiFeature")]
+    def _prepare(
+        self, modes: set[ParallelizationMode], joined: bool, api_group: type[ApiDataFG] = ApiDataFG
+    ) -> mlodaAPI:
+        column = "PrepareRunJoinedApiFeature" if joined else "PrepareRunApiFeature"
         session = mloda.prepare(
-            features,
-            compute_frameworks=[PandasDataFrame],
+            [Feature(column)],
+            compute_frameworks=[PandasDataFrame, PyArrowTable] if joined else [PandasDataFrame],
             api_data=self._data(0),
-            plugin_collector=_enabled,
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {api_group, PrepareRunJoinLookup, PrepareRunJoinedApiFeature}
+            )
+            if joined
+            else _enabled,
+            links={Link.inner(JoinSpec(api_group, "api_id"), JoinSpec(PrepareRunJoinLookup, "prepare_join_id"))}
+            if joined
+            else None,
             parallelization_modes=modes,
         )
-        expected = {
-            i: [f["PrepareRunApiFeature"].tolist() for f in _rerun(session, path, self._data(i))] for i in range(8)
-        }
+        if joined:
+            assert session.engine is not None
+            steps = list(session.engine.execution_planner)
+            assert any(
+                isinstance(step, TransformFrameworkStep) and step.from_framework is not step.to_framework
+                for step in steps
+            )
+            assert any(isinstance(step, JoinStep) for step in steps)
+        return session
 
+    @contextmanager
+    def _unchanged_plan(self, session: mlodaAPI) -> Iterator[None]:
+        assert session.engine is not None
         session_before = dict(vars(session))
         engine_before = dict(vars(session.engine))
         plan_before = session.resolved_plan()
         plan_state_before = self._plan_state(session)
         for step, step_vars, *_ in plan_state_before:
             assert "step_is_done" not in step_vars and "location" not in step_vars
-        barrier = threading.Barrier(8, timeout=5)
-
-        def worker(i: int) -> list[Any]:
-            barrier.wait()
-            return [f["PrepareRunApiFeature"].tolist() for f in _rerun(session, path, self._data(i))]
-
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            futures = [pool.submit(worker, i) for i in range(8)]
-            got = {i: future.result(timeout=8) for i, future in enumerate(futures)}
-
-        assert got == expected
+        yield
         for before, after in ((session_before, vars(session)), (engine_before, vars(session.engine))):
             assert after.keys() == before.keys()
             assert all(after[key] is before[key] for key in before)
@@ -411,6 +471,67 @@ class TestConcurrentRunsOnOneSession:
             for (_, group, context), (_, group_before, context_before) in zip(step_after[4], step_before[4]):
                 assert group == group_before
                 assert context == context_before
+
+    @staticmethod
+    def _expected(i: int, joined: bool) -> list[list[str]]:
+        return [[f"v{i}_r{i}", f"w{i}_r{i + 100}"]] if joined else [[f"{i}_v{i}", f"{i + 100}_w{i}"]]
+
+    def _concurrent_results(
+        self, session: mlodaAPI, path: str, joined: bool, modes: set[ParallelizationMode], readers: int = 8
+    ) -> dict[int, list[Any]]:
+        column = "PrepareRunJoinedApiFeature" if joined else "PrepareRunApiFeature"
+        barrier = threading.Barrier(readers, timeout=5)
+
+        def worker(i: int) -> list[Any]:
+            barrier.wait()
+            return [f[column].tolist() for f in _rerun(session, path, self._data(i), modes)]
+
+        with ThreadPoolExecutor(max_workers=readers) as pool:
+            futures = [pool.submit(worker, i) for i in range(readers)]
+            return {i: future.result(timeout=8) for i, future in enumerate(futures)}
+
+    @pytest.mark.parametrize("joined", [False, True], ids=["single_framework", "transform_join"])
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    @pytest.mark.parametrize(
+        "modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}], ids=["sync", "threading"]
+    )
+    def test_threads_get_their_own_results_and_session_is_unchanged(
+        self, path: str, modes: set[ParallelizationMode], joined: bool
+    ) -> None:
+        session = self._prepare(modes, joined)
+        with self._unchanged_plan(session):
+            got = self._concurrent_results(session, path, joined, modes)
+            assert got == {i: self._expected(i, joined) for i in range(8)}
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_repeated_multiprocessing_runs_leave_transform_join_plan_unchanged(
+        self, path: str, flight_server: Any
+    ) -> None:
+        session = self._prepare({ParallelizationMode.MULTIPROCESSING}, joined=True)
+        assert session.engine is not None
+        with self._unchanged_plan(session):
+            for i in (1, 4):
+                with patch.object(
+                    ComputeFrameworkExecutor,
+                    "multi_execute_step",
+                    autospec=True,
+                    side_effect=ComputeFrameworkExecutor.multi_execute_step,
+                ) as execute:
+                    frames = _rerun(session, path, self._data(i), {ParallelizationMode.MULTIPROCESSING}, flight_server)
+                assert execute.call_count == len(list(session.engine.execution_planner))
+                assert [f["PrepareRunJoinedApiFeature"].tolist() for f in frames] == self._expected(i, joined=True)
+
+    @pytest.mark.parametrize("mode", ["SYNC", "THREADING"])
+    @pytest.mark.skipif(importlib.util.find_spec("polars") is None, reason="Polars is not installed")
+    def test_backend_imported_after_prepare_refreshes_shared_registry(self, mode: str) -> None:
+        result = subprocess.run(  # nosec B603
+            [sys.executable, "-m", "tests.test_core.test_api.prepare_run_late_backend_probe", mode],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
 
 
 class _StartCountingExtender(Extender):

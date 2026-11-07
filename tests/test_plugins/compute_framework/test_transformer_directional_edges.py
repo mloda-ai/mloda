@@ -455,6 +455,49 @@ class TestZeroEdgeWarning:
 
 
 class TestRegisterAllSwapsTheMap:
+    @pytest.mark.parametrize("chain", [False, True], ids=["direct", "chain"])
+    def test_missed_lookup_retries_map_published_by_another_reader(
+        self, monkeypatch: pytest.MonkeyPatch, chain: bool
+    ) -> None:
+        def lookup_during_publication() -> tuple[bool, list[bool], bool, bool]:
+            registry = _empty_registry()
+            source = type("_RefreshSource", (), {})
+            intermediate = type("_RefreshIntermediate", (), {})
+            target = type("_RefreshTarget", (), {})
+            first = _make_forward_only_transformer("_RefreshFirst", source, intermediate)
+            second = _make_forward_only_transformer("_RefreshSecond", intermediate, target)
+            if chain:
+                registry.add(first)
+            old_map = registry.transformer_map
+            refresh = registry._refresh
+            refresh_results: list[bool] = []
+
+            def another_reader_publishes_before_refresh() -> bool:
+                registry._register_all()
+                changed = refresh()
+                refresh_results.append(changed)
+                return changed
+
+            with monkeypatch.context() as scoped:
+                scoped.setattr(registry, "_refresh", another_reader_publishes_before_refresh)
+                if chain:
+                    result = registry.get_transformation_chain(source, target)
+                else:
+                    direct = registry.direct_transformer(source, intermediate)
+                    result = None if direct is None else [direct]
+            return (
+                result == ([first, second] if chain else [first]),
+                refresh_results,
+                registry.transformer_map is not old_map,
+                (intermediate, target) not in old_map,
+            )
+
+        found_expected_transformers, refresh_results, replaced, old_map_unchanged = lookup_during_publication()
+        assert found_expected_transformers
+        assert refresh_results == [False]
+        assert replaced
+        assert old_map_unchanged
+
     def test_refresh_does_not_change_a_map_a_reader_is_iterating(self) -> None:
         """_register_all builds a new map, so a concurrent reader of the old one never sees it resize."""
         registry = ComputeFrameworkTransformer()

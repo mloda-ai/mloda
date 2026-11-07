@@ -183,16 +183,18 @@ class ComputeFrameworkTransformer:
 
     def _refresh(self) -> bool:
         """Pick up transformer files whose backend was imported since the last load; True if any were added."""
-        self._load_available()
-        if frozenset(ComputeFrameworkTransformer._lazy_dirs_loaded) == self._seen_lazy_dirs:
-            return False
-        self._register_all()
-        return True
+        with self._load_lock:
+            self._load_available()
+            if frozenset(ComputeFrameworkTransformer._lazy_dirs_loaded) == self._seen_lazy_dirs:
+                return False
+            self._register_all()
+            return True
 
     def direct_transformer(self, source: type[Any], target: type[Any]) -> type[BaseTransformer] | None:
         """Direct transformer for a pair, refreshing the registry once on a miss."""
         found = self.transformer_map.get((source, target))
-        if found is None and self._refresh():
+        if found is None:
+            self._refresh()
             found = self.transformer_map.get((source, target))
         return found
 
@@ -244,7 +246,7 @@ class ComputeFrameworkTransformer:
                     return chain
                 queue.append(dst)
 
-        if self._refresh():
+        if self._refresh() or self.transformer_map is not edges:
             return self.get_transformation_chain(from_framework, to_framework)
         return None
 

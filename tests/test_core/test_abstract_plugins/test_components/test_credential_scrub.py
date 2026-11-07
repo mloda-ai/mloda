@@ -736,7 +736,7 @@ def test_scrub_credentials_is_idempotent(text: str) -> None:
 
 
 def _assert_scrubs_linearly(build: Callable[[int], str], n: int, what: str) -> str:
-    """Fail on super-linear scaling: CPU time at n must stay under 8x the time at n // 4 (linear ~4x, quadratic ~16x)."""
+    """Fail if CPU time at n reaches 8x the time at n // 4 (linear is ~4x, quadratic ~16x)."""
     small, large = build(n // 4), build(n)
     min_small = min_large = float("inf")
     result = ""

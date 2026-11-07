@@ -5,6 +5,9 @@ from typing import Any
 from mloda.core.abstract_plugins.components.mask.null_or_nan import is_null_or_nan, split_null_or_nan
 from mloda.user import SingleFilter
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
+from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_pyarrow_transformer import (
+    normalize_arrow_types,
+)
 
 try:
     from pyiceberg.table import Table as IcebergTable
@@ -43,7 +46,7 @@ def scan_columns(table: Any, names: Sequence[str], row_filter: Any = None) -> An
     kwargs: dict[str, Any] = {"selected_fields": tuple(names)}
     if row_filter is not None:
         kwargs["row_filter"] = row_filter
-    scanned = table.scan(**kwargs).to_arrow()
+    scanned = normalize_arrow_types(table.scan(**kwargs).to_arrow())
 
     for name in names:
         if "." in name and name not in scanned.column_names:

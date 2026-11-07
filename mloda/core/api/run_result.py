@@ -1,7 +1,8 @@
 """Run results that carry the resolved plan of the run that produced them."""
 
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from dataclasses import dataclass, field
+from itertools import islice
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -11,6 +12,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import redact_optio
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
 from mloda.core.abstract_plugins.components.credential_handle import credential_handle_keys
 from mloda.core.api.plan_info import PlanStep, _key_id, match_digests, snapshot_group
+from mloda.core.api.text_summary import plan_detail, result_and_plan, step_lines, table_lines
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature import Feature
@@ -139,6 +141,41 @@ class RunResult(list[Any]):
             f"Feature name '{name}' is ambiguous, {len(pairs)} frames match: {'; '.join(matches)}. "
             "Pass a Feature with the group options of the one you want."
         )
+
+    def summary(self, max_rows: int = 20) -> str:
+        """The frames as aligned text tables, then the resolved plan, in the layout ``mloda demo`` uses."""
+        if max_rows < 1:
+            raise ValueError(f"max_rows must be at least 1, got {max_rows}")
+        tables = [_frame_text(frame, max_rows) for frame in self]
+        steps = step_lines((n, _step_label(step), _step_detail(step)) for n, step in enumerate(self._plan, 1))
+        return result_and_plan(tables, steps)
+
+
+def _frame_text(frame: Any, max_rows: int) -> str:
+    if not isinstance(frame, Mapping):
+        return str(frame)
+    total = len(next(iter(frame.values()), ()))
+    shown = list(islice(zip(*frame.values()), max_rows))
+    return "\n".join(table_lines([str(name) for name in frame], shown, total - len(shown)))
+
+
+def _step_label(step: PlanStep) -> str:
+    name = step.feature_group_name if step.step_kind == "compute" else None
+    return name or step.step_kind
+
+
+def _step_detail(step: PlanStep) -> str:
+    identity = step.data_access_identity or ""
+    source = identity.removeprefix("api_data:") if identity.startswith("api_data:") else None
+    return plan_detail(
+        step.step_kind,
+        step.feature_group_name,
+        step.source_feature_group_name,
+        step.join_type,
+        sorted(step.feature_names),
+        source,
+        sorted(step.input_feature_names),
+    )
 
 
 def _group_of(step: PlanStep) -> Any:

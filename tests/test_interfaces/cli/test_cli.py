@@ -992,7 +992,7 @@ step 1  ApiDataFG               age, customer_id, income  (source SampleData)
 step 2  AggregatedFeatureGroup  age__avg_aggr, income__sum_aggr  (from age, income)
 
 Next
-Edit the README example: https://github.com/mloda-ai/mloda#30-second-example
+Edit the README example: https://github.com/mloda-ai/mloda#run-it
 DataFrames: pip install "mloda[pandas]"
 """
 

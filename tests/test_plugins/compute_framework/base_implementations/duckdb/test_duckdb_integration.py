@@ -14,7 +14,7 @@ from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
-from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import records_from_frame
+from tests.helpers.frame_records import records_from_frame
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 from mloda.user import DataAccessCollection
 

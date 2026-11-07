@@ -67,8 +67,7 @@ tests/
 └── test_plugins/                   # Tests for plugin implementations
     ├── api/                        # Tests for plugin-facing API
     ├── compute_framework/          # Tests for compute framework plugins
-    │   ├── base_implementations/   # Tests per framework (pandas, polars, pyarrow, ...)
-    │   └── test_tooling/           # Shared compute framework test tooling
+    │   └── base_implementations/   # Tests per framework (pandas, polars, pyarrow, ...)
     ├── extender/                   # Tests for extender plugins
     ├── feature_group/              # Tests for feature group plugins
     │   ├── experimental/           # Tests for experimental feature groups

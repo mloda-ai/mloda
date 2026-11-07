@@ -1,85 +1,96 @@
 """End-to-end empty-result policy test for PythonDict.
 
-Consumes the shared EmptyResultRunAllTestBase. PythonDict is selected by name; no
-connection is required. The shared empty-producing FeatureGroups emit a columnar dict
-with one empty column. Under the columnar model ``PythonDictFramework.transform`` keeps
-``{"col": []}`` (schema-bearing zero rows), so the default FG SUCCEEDS like every other
-backend. A zero-column ``{}`` result raises ``EmptyResultError`` (the ``allow_empty_result``
-opt-in is retired).
+Consumes the shipped EmptyResultRunAllSuite. A zero-row column-bearing result succeeds on every backend; a
+zero-column ``{}`` result raises ``EmptyResultError``. THREADING and MULTIPROCESSING get module tests below.
 """
 
+from collections.abc import Iterator, Mapping
 from typing import Any
 
 import pytest
 
-from mloda.provider import DataCreatorFeatureGroup
-from mloda.provider import FeatureSet
-from mloda.user import Feature
-from mloda.user import ParallelizationMode
-from mloda.user import PluginCollector
-from mloda.user import mloda
-from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
-    KeyReadConsumer,
-    MissingColumnConsumer,
-    MissingColumnRunAllTestBase,
+from mloda._testing.compute_framework.run_all_suite import (
+    EmptyResultRunAllSuite,
+    MissingColumnRunAllSuite,
+    SiblingDictRunAllSuite,
+    CauseType,
+    UndeclaredRead,
+    key_read,
 )
-from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
-    SiblingDictRunAllTestBase,
-)
-from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
-    _ENABLED_ALLOWED,
-    _ENABLED_DEFAULT,
-    EmptyResultRunAllTestBase,
-)
-from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import records_from_frame
+from mloda._testing.framework_adapter import PythonDictAdapter
+from mloda._testing.source import reclaim
+from mloda.provider import DataCreatorFeatureGroup, FeatureSet
+from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 
 
-class TestPythonDictAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
+class TestPythonDictAllowEmptyResultRunAll(EmptyResultRunAllSuite):
     """Drives the empty-result policy end-to-end through run_all on PythonDict."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PythonDictFramework"
+    adapter_class = PythonDictAdapter
 
 
+@pytest.fixture
+def _built_classes() -> Iterator[None]:
+    yield from reclaim.reclaimed_scope()
+
+
+def _zero_row_collector(feature_name: str) -> PluginCollector:
+    class _ZeroRowFeatureGroup(DataCreatorFeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {feature_name}
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return {feature_name: []}
+
+    return PluginCollector.enabled_feature_groups({reclaim.track(_ZeroRowFeatureGroup)})
+
+
+def _row_count(frame: Any) -> int:
+    """Tolerant of the wire format: a PyArrow table or a columnar dict."""
+    return int(frame.num_rows) if hasattr(frame, "num_rows") else len(next(iter(frame.values()), []))
+
+
+@pytest.mark.usefixtures("_built_classes")
 def test_empty_result_default_succeeds_threading(flight_server: Any) -> None:
-    """A schema-bearing zero-row default result survives the THREADING worker channel.
-
-    Mirrors the base's default test (state C succeeds under the columnar model) but runs
-    with ``ParallelizationMode.THREADING`` instead of SYNC, pinning that the zero-row
-    columnar result propagates out of the thread worker as one result with zero rows.
-    """
+    """A schema-bearing zero-row default result survives the THREADING worker channel."""
     result = mloda.run_all(
         [Feature(name="empty_result_default_col")],
         compute_frameworks=["PythonDictFramework"],
-        plugin_collector=_ENABLED_DEFAULT,
+        plugin_collector=_zero_row_collector("empty_result_default_col"),
         parallelization_modes={ParallelizationMode.THREADING},
         flight_server=flight_server,
     )
 
     assert len(result) == 1
-    assert len(records_from_frame(result[0])) == 0
+    assert _row_count(result[0]) == 0
+
+
+class _ZeroRowAllowedFeatureGroup(DataCreatorFeatureGroup):
+    """Module level: multiprocessing must pickle the class by path."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"empty_result_allowed_col"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"empty_result_allowed_col": []}
 
 
 def test_empty_result_allowed_succeeds_multiprocessing(flight_server: Any) -> None:
-    """The empty success path survives the flight-server upload in MULTIPROCESSING.
-
-    Mirrors the base's ``test_empty_result_allowed_succeeds`` (schema-bearing zero-row
-    result succeeds) but runs with ``ParallelizationMode.MULTIPROCESSING``: the zero-row
-    result must round-trip through the flight server upload from the process worker and
-    come back as one result with zero rows. ``records_from_frame`` keeps the row-count
-    assertion tolerant of the wire format (PyArrow table or columnar dict).
-    """
+    """The empty success path survives the flight-server upload in MULTIPROCESSING."""
     result = mloda.run_all(
         [Feature(name="empty_result_allowed_col")],
         compute_frameworks=["PythonDictFramework"],
-        plugin_collector=_ENABLED_ALLOWED,
+        plugin_collector=PluginCollector.enabled_feature_groups({_ZeroRowAllowedFeatureGroup}),
         parallelization_modes={ParallelizationMode.MULTIPROCESSING},
         flight_server=flight_server,
     )
 
     assert len(result) == 1
-    assert len(records_from_frame(result[0])) == 0
+    assert _row_count(result[0]) == 0
 
 
 class EmptyResultNoneAllowedFeatureGroup(DataCreatorFeatureGroup):
@@ -124,21 +135,17 @@ def test_empty_result_none_raises_python_dict(flight_server: Any) -> None:
         )
 
 
-class TestPythonDictSiblingDictRunAll(SiblingDictRunAllTestBase):
+class TestPythonDictSiblingDictRunAll(SiblingDictRunAllSuite):
     """Dict-returning sibling consumers end-to-end through run_all."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PythonDictFramework"
+    adapter_class = PythonDictAdapter
 
 
-class TestPythonDictMissingColumnRunAll(MissingColumnRunAllTestBase):
+class TestPythonDictMissingColumnRunAll(MissingColumnRunAllSuite):
     """Undeclared column reads on PythonDict raise an explanatory error."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PythonDictFramework"
+    adapter_class = PythonDictAdapter
 
     @classmethod
-    def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
-        return [KeyReadConsumer]
+    def undeclared_reads(cls) -> Mapping[str, tuple[UndeclaredRead, CauseType]]:
+        return {"KeyReadConsumer": (key_read, lambda: KeyError)}

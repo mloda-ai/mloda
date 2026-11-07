@@ -34,7 +34,7 @@ from mloda_plugins.compute_framework.base_implementations.spark.spark_framework 
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from mloda.user import Index
-from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
+from tests.helpers.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
 
@@ -414,39 +414,38 @@ class TestSparkAppendColumnsSuite(AppendColumnsSuite):
         return left.join(right, on="a")
 
 
-from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402
+from mloda._testing.compute_framework.connection_suite import ConnectionPickSuite  # noqa: E402
+from tests.test_plugins.compute_framework.base_implementations.spark.spark_session_adapter import (  # noqa: E402
+    SparkSessionAdapter,
+)
+
+_NO_PER_DATA_CONNECTION = "Spark data does not carry its own connection; no per-data connection check"
 
 
-@pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
-class TestSparkTfsConnectionInit(TfsConnectionInitMixin):
-    _SKIP = "Spark data does not carry its own connection; no per-data connection check"
+class TestSparkTfsConnectionInit(SparkSessionAdapter, ConnectionPickSuite):
+    switched_off = {
+        "test_adopt_connection_rejects_data_on_another_connection_than_the_bound_one": Cause.BACKEND,
+        "test_adopt_connection_accepts_the_bound_connection_and_adopts_when_unbound": Cause.BACKEND,
+        "test_missing_connection_error_names_the_dac_and_connection_handle": Cause.BACKEND,
+    }
 
-    def test_adopt_connection_rejects_data_on_another_connection_than_the_bound_one(
-        self, framework_class: Any, valid_connection: Any, second_valid_connection: Any
-    ) -> None:
-        pytest.skip(self._SKIP)
-
-    def test_adopt_connection_accepts_the_bound_connection_and_adopts_when_unbound(
-        self, framework_class: Any, valid_connection: Any
-    ) -> None:
-        pytest.skip(self._SKIP)
-
-    def test_missing_connection_error_names_the_dac_and_connection_handle(self, framework_class: Any) -> None:
-        pytest.skip(self._SKIP)
-
-    @pytest.fixture
-    def framework_class(self) -> Any:
-        return SparkFramework
-
-    @pytest.fixture
-    def valid_connection(self, spark_session: Any) -> Any:
-        return spark_session
-
-    @pytest.fixture
-    def second_valid_connection(self) -> Any:
+    def second_connection(self, second_adapter: FrameworkAdapter) -> Any:
         from unittest.mock import Mock
 
         return Mock(spec=SparkSession)
+
+    @pytest.mark.skip(reason=_NO_PER_DATA_CONNECTION)
+    def test_adopt_connection_rejects_data_on_another_connection_than_the_bound_one(
+        self, *args: Any, **kwargs: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason=_NO_PER_DATA_CONNECTION)
+    def test_adopt_connection_accepts_the_bound_connection_and_adopts_when_unbound(
+        self, *args: Any, **kwargs: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason=_NO_PER_DATA_CONNECTION)
+    def test_missing_connection_error_names_the_dac_and_connection_handle(self, *args: Any, **kwargs: Any) -> None: ...
 
 
 class _Spark35AnalysisException(Exception):

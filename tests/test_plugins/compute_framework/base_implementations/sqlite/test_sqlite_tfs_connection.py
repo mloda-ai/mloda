@@ -1,11 +1,9 @@
 """End-to-end TFS connection-propagation test for SQLite."""
 
 import gc
-import sqlite3
 import weakref
 from typing import Any
 
-import pytest
 
 try:
     import pyarrow as pa
@@ -16,10 +14,8 @@ from mloda.user import Feature
 from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet
 from mloda.user import FeatureName, Options
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
-from tests.mixins.compute_frameworks.tfs_connection_e2e_mixin import (
-    TfsConnectionEndToEndMixin,
-    root_binding_groups,
-)
+from mloda._testing.compute_framework.connection_suite import ConnectionEndToEndSuite, root_binding_groups
+from mloda._testing.framework_adapter import SqliteAdapter
 
 
 class TfsDoubledSqliteFG(FeatureGroup):
@@ -41,20 +37,13 @@ class TfsDoubledSqliteFG(FeatureGroup):
         return {"tfs_doubled"}
 
 
-@pytest.mark.skipif(pa is None, reason="PyArrow not installed (needed for the source FG).")
-class TestSqliteTfsConnectionE2E(TfsConnectionEndToEndMixin):
-    destination_framework_class = SqliteFramework
+class TestSqliteTfsConnectionE2E(ConnectionEndToEndSuite):
+    adapter_class = SqliteAdapter
     destination_fg_class = TfsDoubledSqliteFG
 
     @staticmethod
     def double_relation(data: Any, src: str, dst: str) -> Any:
         return data.select(_raw_sql=f"*, {src} * 2 AS {dst}")
-
-    @pytest.fixture
-    def live_connection(self) -> Any:
-        conn = sqlite3.connect(":memory:")
-        yield conn
-        conn.close()
 
     def extract_doubled(self, final: Any) -> list[int]:
         assert isinstance(final, pa.Table)

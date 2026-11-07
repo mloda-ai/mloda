@@ -1,89 +1,49 @@
-"""End-to-end ``allow_empty_result`` policy test for PyArrow.
+"""End-to-end empty-result policy test for PyArrow.
 
-Consumes the shared EmptyResultRunAllTestBase. PyArrow is selected by name; no
-connection is required.
+Consumes the shipped EmptyResultRunAllSuite. No connection is required.
 """
 
-from typing import Any
+from collections.abc import Mapping
 
-import pytest
-
-from mloda.core.abstract_plugins.compute_framework import EmptyResultError
-from mloda.user import Feature
-from mloda.user import ParallelizationMode
-from mloda.user import mloda
-from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
-    MissingColumnConsumer,
-    MissingColumnRunAllTestBase,
-    PyArrowFilterReadConsumer,
-    PyArrowKeyReadConsumer,
+from mloda._testing.compute_framework.run_all_suite import (
+    EmptyResultRunAllSuite,
+    MissingColumnRunAllSuite,
+    SiblingDictRunAllSuite,
+    CauseType,
+    UndeclaredRead,
+    pyarrow_filter_read,
+    pyarrow_key_read,
 )
-from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
-    SiblingDictRunAllTestBase,
-)
-from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
-    EmptyResultRunAllTestBase,
-    _ENABLED_SCHEMALESS_ALLOWED,
-)
+from mloda._testing.framework_adapter import PyArrowAdapter
 
-import logging
 
-logger = logging.getLogger(__name__)
-
-try:
+def _arrow_invalid() -> type[BaseException]:
     import pyarrow as pa
-except ImportError:
-    logger.warning("PyArrow is not installed. Some tests will be skipped.")
-    pa = None  # type: ignore[assignment, unused-ignore]
+
+    cause: type[BaseException] = pa.ArrowInvalid
+    return cause
 
 
-@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
-class TestPyArrowAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
-    """Drives the allow_empty_result policy end-to-end through run_all on PyArrow."""
+class TestPyArrowAllowEmptyResultRunAll(EmptyResultRunAllSuite):
+    """Drives the empty-result policy end-to-end through run_all on PyArrow."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PyArrowTable"
+    adapter_class = PyArrowAdapter
 
 
-@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
-def test_zero_column_raises_pyarrow(flight_server: Any) -> None:
-    """A FG returning ``{}`` (zero columns) raises ``EmptyResultError`` end-to-end on PyArrow.
-
-    With ``allow_empty_result`` retired, a schema-less result is never legitimate: the
-    output guard raises for the zero-column table. ``run_all`` re-wraps the framework error,
-    so the assertion targets the type NAME in the wrapped message.
-    """
-    feature = Feature(name="empty_result_schemaless_col")
-
-    with pytest.raises(Exception) as excinfo:
-        mloda.run_all(
-            [feature],
-            compute_frameworks=["PyArrowTable"],
-            plugin_collector=_ENABLED_SCHEMALESS_ALLOWED,
-            parallelization_modes={ParallelizationMode.SYNC},
-            flight_server=flight_server,
-        )
-    assert isinstance(excinfo.value, EmptyResultError)
-
-
-@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
-class TestPyArrowSiblingDictRunAll(SiblingDictRunAllTestBase):
+class TestPyArrowSiblingDictRunAll(SiblingDictRunAllSuite):
     """Dict-returning sibling consumers end-to-end through run_all."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PyArrowTable"
+    adapter_class = PyArrowAdapter
 
 
-@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
-class TestPyArrowMissingColumnRunAll(MissingColumnRunAllTestBase):
+class TestPyArrowMissingColumnRunAll(MissingColumnRunAllSuite):
     """Undeclared column reads on PyArrow raise an explanatory error."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PyArrowTable"
+    adapter_class = PyArrowAdapter
 
     @classmethod
-    def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
-        return [PyArrowKeyReadConsumer, PyArrowFilterReadConsumer]
+    def undeclared_reads(cls) -> Mapping[str, tuple[UndeclaredRead, CauseType]]:
+        return {
+            "PyArrowKeyReadConsumer": (pyarrow_key_read, lambda: KeyError),
+            "PyArrowFilterReadConsumer": (pyarrow_filter_read, _arrow_invalid),
+        }

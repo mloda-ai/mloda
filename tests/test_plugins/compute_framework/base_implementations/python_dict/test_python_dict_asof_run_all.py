@@ -1,16 +1,10 @@
-"""End-to-end ASOF (point-in-time) join integration test for PythonDict.
+"""End-to-end ASOF (point-in-time) join integration test for PythonDict, on the shipped AsofRunAllSuite."""
 
-Consumes the shared AsofRunAllTestBase. PythonDictFramework is a guaranteed
-dependency and supports SYNC + THREADING, so the subclass is hooks-only and
-inherits the base SYNC+THREADING parametrization.
-"""
-
-from tests.test_plugins.compute_framework.test_tooling.asof.asof_run_all_test_base import AsofRunAllTestBase
+from mloda._testing.compute_framework.run_all_suite import AsofRunAllSuite
+from mloda._testing.framework_adapter import PythonDictAdapter
 
 
-class TestPythonDictAsofRunAll(AsofRunAllTestBase):
+class TestPythonDictAsofRunAll(AsofRunAllSuite):
     """Drives a backward, single-by-key ASOF join end-to-end through run_all on PythonDict."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PythonDictFramework"
+    adapter_class = PythonDictAdapter

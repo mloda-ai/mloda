@@ -11,7 +11,7 @@ This file owns two facts per backend: the module imports and exports its classes
 blocked, and core discovery then includes or excludes those classes. It does NOT own
 ``is_available()`` per framework: that contract belongs to each framework's own test through
 ``assert_unavailable_when_import_blocked``
-(``tests/test_plugins/compute_framework/test_tooling/availability_test_helper.py``), so do not
+(``tests/helpers/availability_test_helper.py``), so do not
 re-add is_available() assertions here.
 
 The test lives next to the other mloda.user backend-module contracts (``test_compute_framework_exports``)

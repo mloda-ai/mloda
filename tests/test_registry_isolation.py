@@ -36,7 +36,8 @@ from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dyna
 
 from tests import registry_isolation, registry_isolation_probe
 from tests.mixins.neutral_csv_source import neutral_csv_group
-from tests.mixins.compute_frameworks.tfs_connection_e2e_mixin import root_binding_groups
+from mloda._testing.compute_framework.connection_suite import root_binding_groups
+from mloda._testing.source import reclaim
 from tests.helpers.subclass_walks import count_root_walks
 from tests.registry_isolation import (
     FEATURE_GROUPS,
@@ -284,11 +285,6 @@ class TestReclaimLeakedFeatureGroups:
                 id="mixin_module",
             ),
             pytest.param(
-                lambda tmp_path: root_binding_groups(PyArrowTable, lambda *args: None)[:2],
-                registry_isolation.SHARED_TEST_MODULE_PREFIX,
-                id="root_binding_groups",
-            ),
-            pytest.param(
                 lambda tmp_path: (neutral_csv_group(tmp_path / "n.csv"),),
                 registry_isolation.SHARED_TEST_MODULE_PREFIX,
                 id="neutral_csv_group",
@@ -314,6 +310,18 @@ class TestReclaimLeakedFeatureGroups:
         assert reported == expected, f"a strongly held subclass must be reported, got {reported}"
         survivors = {c.__name__ for c in FEATURE_GROUPS.live_since(mark)}
         assert not survivors & set(expected), "the deliberate leak must not outlive this test"
+
+
+def test_shipped_root_binding_groups_are_reclaim_tracked_not_module_reported() -> None:
+    """The shipped helper lives outside the tests tree: its classes are caught by reclaim.track, not by module."""
+    mark = FEATURE_GROUPS.mark()
+    position = reclaim.mark()
+    held = root_binding_groups(PyArrowTable, lambda *args: None)[:2]
+    assert not any(c.__module__.startswith("tests.") for c in held)
+    assert reclaim_leaked_feature_groups(mark, __name__) == []
+    assert sorted(reclaim.reclaim_since(position)) == sorted(c.__name__ for c in held)
+    del held
+    assert reclaim.reclaim_since(position) == []
 
 
 def _build_type_built_subclass_and_promote(name: str) -> None:
@@ -1022,8 +1030,8 @@ _BUILDER_CASES: list[Any] = [
 ]
 
 
-_TD = "tests.test_plugins.compute_framework.test_tooling"
-_TDC = _TD + ".test_policy_run_all_test_base"
+_TD = "tests.test_plugins.compute_framework"
+_TDC = _TD + ".test_output_schema_hook"
 _PS = "tests.test_project_structure"
 
 _TEST_IMPORT_CASES: list[Any] = [
@@ -1036,11 +1044,14 @@ _TEST_IMPORT_CASES: list[Any] = [
     pytest.param("from tests.test_core import test_tooling\n", "tests", {}, id="package-not-file"),
     pytest.param("from tests.test_core.test_tooling import x\n", "tests", {}, id="package-from-import"),
     pytest.param("from tests.registry_isolation import x\n", "tests", {}, id="non-test-file"),
-    pytest.param("from .test_policy_run_all_test_base import a\n", _TD, {_TDC: {"a"}}, id="relative-single-dot"),
+    pytest.param("from .test_output_schema_hook import a\n", _TD, {_TDC: {"a"}}, id="relative-single-dot"),
     pytest.param(
-        "from ..test_policy_run_all_test_base import a\n", _TD + ".asof", {_TDC: {"a"}}, id="relative-double-dot"
+        "from ..test_output_schema_hook import a\n",
+        _TD + ".base_implementations",
+        {_TDC: {"a"}},
+        id="relative-double-dot",
     ),
-    pytest.param("from . import test_policy_run_all_test_base\n", _TD, {_TDC: None}, id="relative-from-dot"),
+    pytest.param("from . import test_output_schema_hook\n", _TD, {_TDC: None}, id="relative-from-dot"),
     pytest.param(f"from {_PS} import a\nimport {_PS}\n", "tests", {_PS: None}, id="name-and-whole-merge-to-none"),
     pytest.param(f"from {_PS} import *  # noqa: F403\n", "tests", {_PS: None}, id="star-import-is-whole-module"),
     pytest.param(

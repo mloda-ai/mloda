@@ -10,7 +10,7 @@ from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framewor
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from mloda.user import DataType, FeatureName
 from mloda.user import ParallelizationMode
-from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
+from tests.helpers.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
 
@@ -272,39 +272,21 @@ class TestDuckDBAppendColumnsSuite(AppendColumnsSuite):
         return left.join(right, "a")
 
 
-from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402
+from mloda._testing.compute_framework.connection_suite import ConnectionPickSuite  # noqa: E402
 from unittest.mock import patch  # noqa: E402
 from mloda.user import DataAccessCollection  # noqa: E402
 import mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework as duckdb_framework_module  # noqa: E402
 
 
-@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed.")
-class TestDuckDBTfsConnectionInit(TfsConnectionInitMixin):
-    def data_on_connection(self, connection: Any) -> Any:
-        return DuckdbRelation.from_arrow(connection, pa.Table.from_pydict({"a": [1]}))
+class TestDuckDBTfsConnectionInit(ConnectionPickSuite):
+    adapter_class = DuckDBAdapter
 
-    @pytest.fixture
-    def framework_class(self) -> Any:
-        return DuckDBFramework
-
-    @pytest.fixture
-    def valid_connection(self) -> Any:
-        conn = duckdb.connect()
-        yield conn
-        conn.close()
-
-    @pytest.fixture
-    def second_valid_connection(self) -> Any:
-        conn = duckdb.connect()
-        yield conn
-        conn.close()
-
-    def test_returns_none_when_duckdb_module_missing(self, framework_class: Any) -> None:
+    def test_returns_none_when_duckdb_module_missing(self, framework: Any) -> None:
         """When the duckdb module symbol is None (optional dep missing), the classmethod
         must return None without raising AttributeError, matching Spark/Iceberg."""
         dac = DataAccessCollection(connections={object()})
         with patch.object(duckdb_framework_module, "duckdb", None):
-            assert framework_class.pick_connection_from_dac(dac) is None
+            assert framework.pick_connection_from_dac(dac) is None
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")

@@ -1,148 +1,72 @@
-"""End-to-end ``allow_empty_result`` policy test for DuckDB.
+"""End-to-end empty-result policy test for DuckDB.
 
-Consumes the shared EmptyResultRunAllTestBase. A live DuckDB connection is threaded
-through ``Feature.options`` + a ``DataAccessCollection`` by the base.
+Consumes the shipped EmptyResultRunAllSuite. The adapter owns the live DuckDB connection.
 """
 
+import logging
+from collections.abc import Mapping
 from typing import Any
 
-import pytest
-
-from mloda.user import ParallelizationMode
-
-from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
-    MissingColumnConsumer,
-    MissingColumnRunAllTestBase,
-    SelectReadConsumer,
+from mloda._testing.compute_framework.run_all_suite import (
     UNDECLARED_COLUMN,
+    EmptyResultRunAllSuite,
+    MissingColumnRunAllSuite,
+    PolicyRaises,
+    SiblingDictRunAllSuite,
+    CauseType,
+    UndeclaredRead,
+    select_read,
 )
-from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
-    SiblingDictRunAllTestBase,
-)
-from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
-    EmptyResultRunAllTestBase,
-)
-
-import logging
+from mloda._testing.framework_adapter import DuckDBAdapter
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import MissingRelationColumnError
 
 logger = logging.getLogger(__name__)
 
 try:
     import duckdb
-    import pyarrow as pa
 except ImportError:
-    logger.warning("DuckDB or PyArrow is not installed. Some tests will be skipped.")
+    logger.warning("DuckDB is not installed. Some tests will be skipped.")
     duckdb = None  # type: ignore[assignment]
-    pa = None  # type: ignore[assignment, unused-ignore]
 
 
-@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
-class TestDuckDBAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
-    """Drives the allow_empty_result policy end-to-end through run_all on DuckDB."""
+class TestDuckDBAllowEmptyResultRunAll(EmptyResultRunAllSuite):
+    """Drives the empty-result policy end-to-end through run_all on DuckDB."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "DuckDBFramework"
+    adapter_class = DuckDBAdapter
 
-    def get_connection(self) -> Any | None:
-        """DuckDB requires a connection object."""
-        if not hasattr(self, "_connection"):
-            self._connection = duckdb.connect()
-        return self._connection
-
-    def teardown_method(self) -> None:
-        """Close the DuckDB connection opened by get_connection, if any."""
-        if hasattr(self, "_connection"):
-            self._connection.close()
-
-    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
-    def test_empty_result_default(self, mode: ParallelizationMode, flight_server: Any) -> None:
-        """DuckDBFramework only supports SYNC; run the inherited default case SYNC only."""
-        self._run_default_case(mode, flight_server)
-
-    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
-    def test_empty_result_allowed_succeeds(self, mode: ParallelizationMode, flight_server: Any) -> None:
-        """DuckDBFramework only supports SYNC; run the inherited allowed case SYNC only."""
-        self._run_allowed_case(mode, flight_server)
+    def zero_column_expectation(self) -> PolicyRaises:
+        return PolicyRaises(match_substring="must have at least one column", error_type=duckdb.InvalidInputException)
 
 
-@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
-class TestDuckDBSiblingDictRunAll(SiblingDictRunAllTestBase):
+class TestDuckDBSiblingDictRunAll(SiblingDictRunAllSuite):
     """Dict-returning sibling consumers end-to-end through run_all (SYNC only)."""
 
-    compute_framework_name = TestDuckDBAllowEmptyResultRunAll.compute_framework_name
-    get_connection = TestDuckDBAllowEmptyResultRunAll.get_connection
-    teardown_method = TestDuckDBAllowEmptyResultRunAll.teardown_method
-
-    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
-    def test_sibling_dict_consumers_return_both_outputs(self, mode: ParallelizationMode, flight_server: Any) -> None:
-        self._run_siblings_together(mode, flight_server)
-
-    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
-    def test_overlapping_dict_still_replaces_frame(self, mode: ParallelizationMode, flight_server: Any) -> None:
-        self._run_overlap(mode, flight_server)
-
-    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
-    def test_consumer_whose_declared_input_was_replaced_raises(
-        self, mode: ParallelizationMode, flight_server: Any
-    ) -> None:
-        self._run_declared_input_lost_at_runtime(mode, flight_server)
-
-    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
-    def test_different_row_count_dict_still_replaces_frame(self, mode: ParallelizationMode, flight_server: Any) -> None:
-        self._run_aggregate(mode, flight_server)
-
-    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
-    def test_case_differing_dict_key_succeeds(self, mode: ParallelizationMode, flight_server: Any) -> None:
-        self._run_case_fold(mode, flight_server)
-
-    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
-    def test_sibling_dict_consumers_return_both_outputs_under_final_filter(
-        self, mode: ParallelizationMode, flight_server: Any
-    ) -> None:
-        self._run_siblings_with_final_filter(mode, flight_server)
-
-    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
-    def test_group_missing_a_requested_feature_raises(self, mode: ParallelizationMode, flight_server: Any) -> None:
-        self._run_partial_result(mode, flight_server)
-
-    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
-    def test_intermediate_group_missing_a_feature_raises(self, mode: ParallelizationMode, flight_server: Any) -> None:
-        self._run_intermediate_partial_result(mode, flight_server)
-
-    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
-    def test_source_group_missing_a_feature_raises(self, mode: ParallelizationMode, flight_server: Any) -> None:
-        self._run_source_partial_result(mode, flight_server)
+    adapter_class = DuckDBAdapter
 
 
-class DuckDBProjectReadConsumer(MissingColumnConsumer):
-    @classmethod
-    def read_undeclared(cls, data: Any) -> Any:
-        return data.project(f"{UNDECLARED_COLUMN} * 2 AS mc_doubled")
-
-    @classmethod
-    def cause_type(cls) -> Any:
-        return duckdb.BinderException
+def _project_read(data: Any) -> Any:
+    return data.project(f"{UNDECLARED_COLUMN} * 2 AS mc_doubled")
 
 
-class DuckDBFilterReadConsumer(MissingColumnConsumer):
-    @classmethod
-    def read_undeclared(cls, data: Any) -> Any:
-        return data.filter(f"{UNDECLARED_COLUMN} > 0")
-
-    @classmethod
-    def cause_type(cls) -> Any:
-        return duckdb.BinderException
+def _filter_read(data: Any) -> Any:
+    return data.filter(f"{UNDECLARED_COLUMN} > 0")
 
 
-@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
-class TestDuckDBMissingColumnRunAll(MissingColumnRunAllTestBase):
+def _binder_exception() -> type[BaseException]:
+    import duckdb
+
+    return duckdb.BinderException
+
+
+class TestDuckDBMissingColumnRunAll(MissingColumnRunAllSuite):
     """Undeclared column reads on DuckDB raise an explanatory error (SYNC only)."""
 
-    compute_framework_name = TestDuckDBAllowEmptyResultRunAll.compute_framework_name
-    get_connection = TestDuckDBAllowEmptyResultRunAll.get_connection
-    teardown_method = TestDuckDBAllowEmptyResultRunAll.teardown_method
+    adapter_class = DuckDBAdapter
 
     @classmethod
-    def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
-        return [SelectReadConsumer, DuckDBProjectReadConsumer, DuckDBFilterReadConsumer]
+    def undeclared_reads(cls) -> Mapping[str, tuple[UndeclaredRead, CauseType]]:
+        return {
+            "SelectReadConsumer": (select_read, lambda: MissingRelationColumnError),
+            "DuckDBProjectReadConsumer": (_project_read, _binder_exception),
+            "DuckDBFilterReadConsumer": (_filter_read, _binder_exception),
+        }

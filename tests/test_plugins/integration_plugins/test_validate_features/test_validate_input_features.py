@@ -17,7 +17,7 @@ from mloda.user import ParallelizationMode
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
 from mloda.steward import ExtenderHook, Extender
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
-from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
+from tests.helpers.lost_input_feature_groups import (
     SiblingDictAggregate,
     SiblingDictLostInputConsumer,
     SiblingDictRoot,

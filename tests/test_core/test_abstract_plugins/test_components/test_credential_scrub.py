@@ -736,7 +736,7 @@ def test_scrub_credentials_is_idempotent(text: str) -> None:
 
 
 def _assert_scrubs_linearly(build: Callable[[int], str], n: int, what: str) -> str:
-    """Fail if CPU time at n reaches 8x the time at n // 4 (linear is ~4x, quadratic ~16x)."""
+    """Fail if min CPU time at n reaches 8x that at n // 4 (small floored at 2 ms) or 2 s; linear is ~4x, quadratic ~16x."""
     small, large = build(n // 4), build(n)
     min_small = min_large = float("inf")
     result = ""
@@ -748,13 +748,14 @@ def _assert_scrubs_linearly(build: Callable[[int], str], n: int, what: str) -> s
         start = time.process_time()
         result = scrub_credentials(large)
         min_large = min(min_large, time.process_time() - start)
-        ratio = min_large / max(min_small, 5e-3)
+        ratio = min_large / max(min_small, 2e-3)
         if ratio < 8.0:
-            return result
+            break
     assert ratio < 8.0, (
         f"scrub_credentials scales super-linearly on {what}: "
         f"min small {min_small:.4f}s, min large {min_large:.4f}s, ratio {ratio:.1f}"
     )
+    assert min_large < 2.0, f"scrub_credentials is too slow on {what}: min large {min_large:.4f}s"
     return result
 
 

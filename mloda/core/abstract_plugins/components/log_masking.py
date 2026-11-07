@@ -73,7 +73,7 @@ def enable_process_wide_log_masking() -> None:
 
 
 def _track_scope_literals(literals: frozenset[str]) -> bool:
-    """Count a scope's literals into the union when process-wide masking is on; True when tracked."""
+    """Count literals into the union if process-wide masking is on; True when tracked."""
     global _union
     with _lock:
         if not _process_wide:

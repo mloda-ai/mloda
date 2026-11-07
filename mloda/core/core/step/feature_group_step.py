@@ -78,6 +78,8 @@ class FeatureGroupStep(Step):
                     data = self.run_calculate_feature(cfw, features, location, data)
             else:
                 data = self.run_calculate_feature(cfw, features, location, data)
+        if cfw._calculation_duration is not None:
+            cfw_register.set_feature_group_duration(self.uuid, cfw._calculation_duration)
         if collector.entries:
             cfw_register.add_failed_rows(collector.entries)
         with readable_credentials():

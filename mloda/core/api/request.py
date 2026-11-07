@@ -1045,6 +1045,7 @@ class mlodaAPI:
             connection_handles=dict(self._connection_handles),
             failed_rows=runner.get_failed_rows(),
             artifacts=runner.get_artifacts(),
+            feature_group_durations=runner.get_feature_group_durations(),
         )
 
     def stream_run(

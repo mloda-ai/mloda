@@ -96,6 +96,21 @@ result = mloda.run_all(
 assert "sales__sum_aggr" in result[0].columns
 ```
 
+#### Level-3 calculation budget
+
+A level-3 regression test can check a plugin's output and its calculation time using the public run result:
+
+```python
+step = next(step for step in result.plan if "sales__sum_aggr" in step.requested_feature_names)
+assert step.step_uuid is not None
+assert result.feature_group_durations[step.step_uuid] < 1.0
+```
+
+The value is wall-clock seconds spent in `calculate_feature`, excluding planning, validation and framework
+conversion. Choose an input size and budget suitable for your plugin. The runnable
+[`test_level_3_plugin_calculation_budget`](https://github.com/mloda-ai/mloda/blob/main/tests/test_core/test_api/test_feature_group_durations.py)
+checks all output values and the timing budget for 10,000 rows.
+
 ### 6. Testing with Mock Input Data
 
 When testing a FeatureGroup that depends on another FeatureGroup, you can inject mock data by combining `disabled_feature_groups` with `api_data`:

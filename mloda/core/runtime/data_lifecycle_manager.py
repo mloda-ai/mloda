@@ -37,6 +37,7 @@ class DataLifecycleManager:
         self.track_data_to_drop: dict[UUID, set[UUID]] = {}
         self.artifacts: dict[str, Any] = {}
         self.failed_rows: tuple[FailedRows, ...] = ()
+        self.feature_group_durations: dict[UUID, float] = {}
         self._transformer = transformer
         self.column_ordering = column_ordering
         self.request_feature_order = request_feature_order
@@ -265,6 +266,14 @@ class DataLifecycleManager:
     def get_failed_rows(self) -> tuple[FailedRows, ...]:
         """Returns the failed-row entries the run reported."""
         return self.failed_rows
+
+    def set_feature_group_durations(self, durations: dict[UUID, float]) -> None:
+        """Stores the run's calculation durations before its register is released."""
+        self.feature_group_durations = durations
+
+    def get_feature_group_durations(self) -> dict[UUID, float]:
+        """Returns the run's calculation durations by compute step uuid."""
+        return self.feature_group_durations
 
     def get_artifacts(self) -> dict[str, Any]:
         """

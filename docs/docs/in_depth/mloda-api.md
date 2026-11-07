@@ -172,6 +172,13 @@ for step in results.plan:
 
 `RunResult.frames()` pairs each result frame with the compute `PlanStep` that produced it, by `step_uuid`; the list itself is in plan order, one element per step that produced requested output.
 
+`RunResult.feature_group_durations` is a `dict[UUID, float]` of `calculate_feature` wall-clock seconds, keyed by
+compute `PlanStep.step_uuid`, including dependencies and separate entries for groups with different options.
+It is collected with or without extenders in sync, threading and multiprocessing modes, independently for each
+`run_all()` or prepared `run()`. With a calculation extender, the value is its `HookContext.duration_seconds`.
+Timing excludes planning, validation, framework conversion and the calculation extender's own overhead; lazy
+frameworks measure the call, not later materialization. See the [level-3 timing example](feature-group-testing.md#level-3-calculation-budget).
+
 `RunResult.frame_for(feature)` returns the frame that holds a requested feature, matched by name, or by a `Feature` whose group options (and pinned compute framework) are a subset of the step's; the closest step wins. It raises `ValueError` if none or several match (the error notes a feature that was computed but not requested).
 
 `run_id` and `plan_id` on `RunResult` and `ResultStream` (from `run_all`, `stream_all`, `run()` and `stream_run()`) are the run's `HookContext.run_id` and `plan_id`, so a result can be matched to the records extenders wrote for its run; a `ResultStream` has them before its first element.

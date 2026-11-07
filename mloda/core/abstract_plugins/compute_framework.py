@@ -1,5 +1,6 @@
 import contextlib
 import pickle  # nosec B403
+import time
 from abc import ABC
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
@@ -148,6 +149,7 @@ class ComputeFramework(ABC):
     _pending_extender_payload: bytes | None = None
     _hook_extenders: dict[ExtenderHook, Extender] | None = None
     _pinned_frame: Any = None
+    _calculation_duration: float | None = None
 
     def __init__(
         self,
@@ -883,6 +885,7 @@ class ComputeFramework(ABC):
                     features,
                 )
 
+        self._calculation_duration = None
         fetch_extender = self.get_function_extender(ExtenderHook.INPUT_DATA_LOAD)
         gated = fetch_extender is not None and fetch_extender.never_fall_back
         marker = InputDataLoadMarker(fetch_extender is not None, gated)
@@ -898,23 +901,25 @@ class ComputeFramework(ABC):
         token = current_input_data_load_marker.set(marker)
         try:
             if extender is None and fetch_extender is None:
-                return method(self.data, features)
+                start = time.perf_counter()
+                result = method(self.data, features)
+                self._calculation_duration = time.perf_counter() - start
+                return result
 
             context = self._build_hook_context(hook, feature_group, features)
             marker.active = (self, context)
+            timed_method = instrument(context, method, row_count=self._row_count, output_schema=self._output_schema)
             with (
                 self.activate(),
                 context.activate(),
                 input_data_load_gate_scope() if gated else contextlib.nullcontext(),
             ):
                 if extender is None:
-                    return method(self.data, features)
-                return _invoke_extender(
-                    extender,
-                    instrument(context, method, row_count=self._row_count, output_schema=self._output_schema),
-                    self.data,
-                    features,
-                )
+                    result = timed_method(self.data, features)
+                else:
+                    result = _invoke_extender(extender, timed_method, self.data, features)
+                self._calculation_duration = context.duration_seconds
+                return result
         finally:
             marker.active = None
             marker.framework = None

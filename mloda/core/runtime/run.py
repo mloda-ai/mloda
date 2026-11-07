@@ -318,6 +318,7 @@ class ExecutionOrchestrator:
             if not in_other_process:
                 self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
                 self.data_lifecycle_manager.set_failed_rows(self.cfw_register.get_failed_rows())
+                self.data_lifecycle_manager.set_feature_group_durations(self.cfw_register.get_feature_group_durations())
         finally:
             self.join(abandon_threads=cancelled)
         if not in_other_process:
@@ -697,6 +698,10 @@ class ExecutionOrchestrator:
     def get_failed_rows(self) -> tuple[FailedRows, ...]:
         """Gets the rows feature groups reported as valueless."""
         return self.data_lifecycle_manager.get_failed_rows()
+
+    def get_feature_group_durations(self) -> dict[UUID, float]:
+        """Gets the run's calculate_feature durations by compute step uuid."""
+        return self.data_lifecycle_manager.get_feature_group_durations()
 
     def _cfw_to_occupy(self, step: Any) -> UUID | None:
         """Resolve the cfw a step needs exclusively, without creating one."""

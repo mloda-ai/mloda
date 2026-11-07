@@ -108,6 +108,7 @@ class CfwManager:
         self.artifact_to_save: dict[str, Any] = {}
 
         self.failed_rows: list[FailedRows] = []
+        self.feature_group_durations: dict[UUID, float] = {}
 
         self.artifact_bindings: dict[UUID, ArtifactBinding] = {}
         self.run_parameters: Mapping[str, Any] = {}
@@ -450,6 +451,14 @@ class CfwManager:
     def get_failed_rows(self) -> list[FailedRows]:
         """Retrieves every reported failed-row entry."""
         return self.failed_rows
+
+    def set_feature_group_duration(self, step_uuid: UUID, seconds: float) -> None:
+        """Records one step's calculate_feature duration in seconds."""
+        self.feature_group_durations[step_uuid] = seconds
+
+    def get_feature_group_durations(self) -> dict[UUID, float]:
+        """Retrieves the run's calculation durations by compute step uuid."""
+        return self.feature_group_durations.copy()
 
     def set_artifact_bindings(self, bindings: dict[UUID, ArtifactBinding]) -> None:
         """Sets the per-step artifact bindings resolved from run(artifacts=...)."""

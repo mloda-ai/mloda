@@ -35,10 +35,12 @@ class RunResult(list[Any]):
         connection_handles: dict[int, str] | None = None,
         failed_rows: tuple[FailedRows, ...] = (),
         artifacts: dict[str, Any] | None = None,
+        feature_group_durations: dict[UUID, float] | None = None,
     ) -> None:
         super().__init__(results)
         self._failed_rows = failed_rows
         self._artifacts: dict[str, Any] = {} if artifacts is None else artifacts
+        self._feature_group_durations = {} if feature_group_durations is None else feature_group_durations
         self._connection_handles = connection_handles or {}
         self._plan = plan
         self._result_items = tuple(result_items or ())
@@ -54,6 +56,11 @@ class RunResult(list[Any]):
     def artifacts(self) -> dict[str, Any]:
         """Artifacts saved by this run; pass them to a later ``run(artifacts=...)``."""
         return self._artifacts
+
+    @property
+    def feature_group_durations(self) -> dict[UUID, float]:
+        """Wall seconds spent in calculate_feature, keyed by compute PlanStep.step_uuid, including dependencies."""
+        return self._feature_group_durations
 
     @property
     def run_id(self) -> str | None:

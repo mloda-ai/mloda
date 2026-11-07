@@ -86,9 +86,11 @@ class grant_scope:  # noqa: N801
     def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
         lookup, secrets, redaction, token = self._frames.pop()
         _GRANT_HOLDER.reset(token)
-        lookup.close()
-        redaction.__exit__(exc_type, exc, tb)
-        secrets.__exit__(exc_type, exc, tb)
+        try:
+            lookup.close()
+            redaction.__exit__(exc_type, exc, tb)
+        finally:
+            secrets.__exit__(exc_type, exc, tb)
 
 
 def _read_granted(handle: str) -> Any:

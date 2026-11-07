@@ -2287,12 +2287,12 @@ class TestGrantOnlyValueIsMaskedInEveryFailureReport:
         cfw_register.set_error.assert_not_called()
 
 
-class TestDisableLogMaskingDispatch:
-    """A disabled process sends the worker the disable command right before the step."""
+class TestLogMaskingCommandDispatch:
+    """The worker gets the disable or enable-process-wide command for the parent state right before the step."""
 
     @pytest.mark.parametrize("enabled", [False, True], ids=["not_enabled", "enabled"])
     @pytest.mark.parametrize("disabled", [True, False])
-    def test_the_disable_command_is_sent_only_when_masking_is_disabled(
+    def test_the_worker_gets_the_log_masking_command_for_the_parent_state(
         self, monkeypatch: pytest.MonkeyPatch, disabled: bool, enabled: bool
     ) -> None:
         from mloda.core.abstract_plugins.components import log_masking
@@ -2308,7 +2308,7 @@ class TestDisableLogMaskingDispatch:
         disable_command: tuple[Any, Any] = (cfw_uuid, log_masking.DISABLE_LOG_MASKING_COMMAND)
         enable_command: tuple[Any, Any] = (
             cfw_uuid,
-            getattr(log_masking, "ENABLE_PROCESS_WIDE_LOG_MASKING_COMMAND", "ENABLE_PROCESS_WIDE_LOG_MASKING"),
+            log_masking.ENABLE_PROCESS_WIDE_LOG_MASKING_COMMAND,
         )
         expected: list[tuple[Any, Any]] = []
         if disabled:

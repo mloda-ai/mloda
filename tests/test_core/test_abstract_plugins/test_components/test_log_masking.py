@@ -6,6 +6,7 @@ Process-global changes that cannot be undone in-process run in a subprocess.
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import re
@@ -24,7 +25,11 @@ import pytest
 
 from mloda.core.abstract_plugins.components import log_masking
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
-from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets, registered_secrets_scope
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    current_registered_secrets,
+    registered_secrets_scope,
+    scrub_credentials,
+)
 from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlyDict
 
 _SECRET = "Zk8-secret-Vq3LmRt"  # nosec B105
@@ -38,6 +43,7 @@ _STATE: tuple[tuple[str, Any], ...] = (
     ("_previous_make_record", None),
     ("_process_wide", False),
     ("_union", frozenset()),
+    ("_fork_generation", 0),
 )
 
 
@@ -65,9 +71,10 @@ def _plain_make_record(
 def _pristine_logging() -> Iterator[None]:
     saved_factory = logging.getLogRecordFactory()
     saved_make_record = logging.Logger.makeRecord
-    saved_state = {name: getattr(log_masking, name, default) for name, default in _STATE}
-    saved_counts = getattr(log_masking, "_union_counts", {})
-    setattr(log_masking, "_union_counts", {})
+    saved_state = {name: getattr(log_masking, name) for name, _default in _STATE}
+    saved_counts = log_masking._union_counts
+    saved_lock = log_masking._lock
+    log_masking._union_counts = {}
     saved_probe = dict(log_masking._probe_seen)
     logging.setLogRecordFactory(logging.LogRecord)
     setattr(logging.Logger, "makeRecord", _plain_make_record)
@@ -79,7 +86,8 @@ def _pristine_logging() -> Iterator[None]:
     setattr(logging.Logger, "makeRecord", saved_make_record)
     for name, value in saved_state.items():
         setattr(log_masking, name, value)
-    setattr(log_masking, "_union_counts", saved_counts)
+    log_masking._union_counts = saved_counts
+    log_masking._lock = saved_lock
     log_masking._probe_seen.clear()
     log_masking._probe_seen.update(saved_probe)
 
@@ -438,7 +446,9 @@ def _outside(action: Callable[[], Any]) -> Any:
 
 
 @pytest.mark.parametrize("enabled", [False, True], ids=["not_enabled", "enabled"])
-def test_record_from_a_thread_outside_any_scope_is_untouched(capture: _Capture, enabled: bool) -> None:
+def test_record_from_a_thread_outside_any_scope_is_untouched_unless_process_wide(
+    capture: _Capture, enabled: bool
+) -> None:
     if enabled:
         log_masking.enable_process_wide_log_masking()
     with _HeldScope(_SECRET):
@@ -470,14 +480,54 @@ def test_enable_is_a_no_op_after_disable() -> None:
     assert log_masking.process_wide_log_masking_enabled() is False
 
 
-def test_a_run_context_uses_its_own_set_not_the_union(capture: _Capture) -> None:
+def test_a_run_context_also_masks_other_runs_literals_when_enabled(capture: _Capture) -> None:
     log_masking.enable_process_wide_log_masking()
     with _HeldScope(_OTHER):
         with _scope(_SECRET):
             capture.logger.info("a %s b %s", _SECRET, _OTHER)
 
     (record,) = capture.records
+    assert record.getMessage() == "a *** b ***"
+
+
+def test_a_run_context_uses_only_its_own_set_when_not_enabled(capture: _Capture) -> None:
+    with _HeldScope(_OTHER):
+        with _scope(_SECRET):
+            capture.logger.info("a %s b %s", _SECRET, _OTHER)
+
+    (record,) = capture.records
     assert record.getMessage() == f"a *** b {_OTHER}"
+
+
+def test_one_scope_object_entered_twice_keeps_its_literal_until_the_last_exit() -> None:
+    log_masking.enable_process_wide_log_masking()
+    scope = _scope(_SECRET)
+    scope.__enter__()
+    scope.__enter__()
+    scope.__exit__(None, None, None)
+    assert _SECRET in log_masking._union
+    scope.__exit__(None, None, None)
+    assert log_masking._union == frozenset()
+    assert log_masking._union_counts == {}
+
+
+def test_a_scope_inherited_across_a_fork_does_not_release_the_child_counts() -> None:
+    contextvars.copy_context().run(_inherited_scope_scenario)
+
+
+def _inherited_scope_scenario() -> None:
+    log_masking.enable_process_wide_log_masking()
+    inherited = _scope(_SECRET)
+    inherited.__enter__()
+    log_masking._renew_lock_after_fork()
+    assert log_masking._union == frozenset()
+    child = _scope(_SECRET)
+    child.__enter__()
+    inherited.__exit__(None, None, None)
+    assert _SECRET in log_masking._union
+    child.__exit__(None, None, None)
+    assert log_masking._union == frozenset()
+    assert log_masking._union_counts == {}
 
 
 def test_a_shared_literal_stays_in_the_union_until_the_last_scope_exits(capture: _Capture) -> None:
@@ -521,8 +571,6 @@ def test_the_union_does_not_leak_into_scrubbing_or_the_registered_set() -> None:
     log_masking.enable_process_wide_log_masking()
     with _HeldScope(_SECRET):
         assert _outside(current_registered_secrets) == frozenset()
-        from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
-
         assert _outside(lambda: scrub_credentials(_SECRET)) == _SECRET
 
 

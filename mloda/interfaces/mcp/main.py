@@ -31,8 +31,8 @@ def serve(
     port: int = 8000,
 ) -> int:
     """Build the services for ``settings`` and serve them over stdio, or over local http, until stopped."""
-    enable_process_wide_log_masking()
     require("mcp", "the mloda MCP server")
+    enable_process_wide_log_masking()
     settings = replace(settings, trusted_caller=False)
     from mloda.interfaces.mcp import server
 

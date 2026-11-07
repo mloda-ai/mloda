@@ -291,7 +291,6 @@ class TestServe:
             runs.append((self, transport))
 
         monkeypatch.setattr(mcpserver.MCPServer, "run", fake_run)
-        monkeypatch.setattr(log_masking, "_process_wide", False)
         registry = shipped_feature_group_registry()
         monkeypatch.setattr("mloda.core.api.plugin_docs.feature_group_subclasses", registry)
         settings = load_settings(_config(tmp_path), ENV)
@@ -306,7 +305,6 @@ class TestServe:
     def test_serve_enables_process_wide_log_masking(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         mcpserver = pytest.importorskip("mcp.server.mcpserver")
         monkeypatch.setattr(mcpserver.MCPServer, "run", lambda self, transport="stdio", **kwargs: None)
-        monkeypatch.setattr(log_masking, "_process_wide", False)
         registry = shipped_feature_group_registry()
         monkeypatch.setattr("mloda.core.api.plugin_docs.feature_group_subclasses", registry)
 
@@ -497,7 +495,6 @@ class TestHttpTransport:
 
     def test_serve_http_runs_the_created_app(self, monkeypatch: pytest.MonkeyPatch) -> None:
         runs = _fake_uvicorn(monkeypatch)
-        monkeypatch.setattr(log_masking, "_process_wide", False)
 
         code = mcp_main.serve(load_settings(None, ENV), env=ENV, transport="http", host="127.0.0.1", port=8123)
 

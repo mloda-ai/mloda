@@ -845,9 +845,6 @@ class TestServeTrustedCaller:
 
         monkeypatch.setattr("mloda.interfaces.cli.main.build_services", fake_services)
         monkeypatch.setattr("mloda.interfaces.mcp.server.build_server", lambda *services: _Stub())
-        from mloda.core.abstract_plugins.components import log_masking
-
-        monkeypatch.setattr(log_masking, "_process_wide", False)
 
         mcp_main.serve(dataclasses.replace(_settings(tmp_path), trusted_caller=True), env=ENV)
 

@@ -2,6 +2,7 @@
 
 Installed lazily on the first non-empty registered_secrets_scope: a LogRecord factory wrapper and a
 Logger.makeRecord wrapper. Both pass through when nothing is registered or masking is disabled.
+Opt-in process-wide mode also masks records made outside a run against all active scopes' literals.
 """
 
 from __future__ import annotations
@@ -43,10 +44,12 @@ _probe_seen = {"factory": False, "make_record": False}
 _process_wide = False
 _union_counts: dict[str, int] = {}
 _union: frozenset[str] = frozenset()
+_fork_generation = 0
 
 
 def _renew_lock_after_fork() -> None:
-    global _lock, _union_counts, _union
+    global _lock, _union_counts, _union, _fork_generation
+    _fork_generation += 1
     _lock = threading.Lock()
     _union_counts = {}
     _union = frozenset()
@@ -72,16 +75,18 @@ def enable_process_wide_log_masking() -> None:
             _process_wide = True
 
 
-def _track_scope_literals(literals: frozenset[str]) -> bool:
-    """Count literals into the union if process-wide masking is on; True when tracked."""
+def _track_scope_literals(literals: frozenset[str]) -> int | None:
+    """Count literals into the union if process-wide masking is on; the fork generation tracked in, else None."""
     global _union
+    if not _process_wide or not literals:
+        return None
     with _lock:
         if not _process_wide:
-            return False
+            return None
         for literal in literals:
             _union_counts[literal] = _union_counts.get(literal, 0) + 1
         _union = frozenset(_union_counts)
-    return True
+        return _fork_generation
 
 
 def _release_scope_literals(literals: frozenset[str]) -> None:
@@ -98,7 +103,7 @@ def _release_scope_literals(literals: frozenset[str]) -> None:
 
 def _active_literals() -> frozenset[str]:
     own = current_registered_secrets()
-    return own or _union if _process_wide else own
+    return own | _union if _process_wide else own
 
 
 def _with_escaped(literals: frozenset[str]) -> frozenset[str]:

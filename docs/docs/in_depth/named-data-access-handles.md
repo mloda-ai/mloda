@@ -365,7 +365,7 @@ Inside a run with registered secrets, every log record created in that context, 
 Limits:
 
 - A `threading.Thread` started by a plugin has no scope and logs raw unless process-wide masking is on; join it inside the step with `contextvars.copy_context().run`.
-- With process-wide masking on, a thread that outlives every scope holding a literal logs it raw, and a record inside a run context is masked only against that context's set, not other runs'.
+- With process-wide masking on, a thread that outlives every scope holding a literal logs it raw. An app embedding `server.create_app(...)` itself must call `enable_process_wide_log_masking()` (mloda-mcp and `mloda mcp serve` do).
 - A process worker masks only the step's own secrets; logs from worker bootstrap and extender `close()` run outside the scope.
 - A logger class that overrides `makeRecord` without calling `super()` skips the `extra` masking.
 - A record factory set mid-run that does not chain to the previous one is wrapped again at the next outermost scope entry (one entered from an empty context), not before.
@@ -377,7 +377,7 @@ Limits:
 
 `disable_log_masking()` from `mloda.steward` turns the masking off for the process and for the process workers of its later runs; plugin log lines are then the provider's duty (`scrub_credentials`).
 
-`enable_process_wide_log_masking()` from `mloda.steward` also masks records created outside any run context against the union of the literals of every scope active in the process. Call it in a process you own (a batch job, an Airflow task, a worker service); `mloda-mcp` calls it at startup. Unrelated threads are over-masked while a run is active, and a `logger.exception` exception is masked in place. Process workers of later runs follow the parent, `disable_log_masking()` wins, and it must be called before runs start (a scope entered earlier is not tracked). The union never feeds `scrub_credentials` or the exception redaction of a failing run.
+`enable_process_wide_log_masking()` from `mloda.steward` also masks every record, inside or outside a run context, against the union of the literals of every scope active in the process. Call it in a process you own (a batch job, an Airflow task, a worker service); `mloda-mcp` calls it at startup. Unrelated threads are over-masked while a run is active, and a `logger.exception` exception is masked in place. Process workers of later runs follow the parent, `disable_log_masking()` wins, and it must be called before runs start (a scope entered earlier is not tracked). The union never feeds `scrub_credentials` or the exception redaction of a failing run.
 
 ### Process-global changes
 

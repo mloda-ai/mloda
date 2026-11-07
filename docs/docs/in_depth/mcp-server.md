@@ -182,7 +182,8 @@ The server is at `/mcp`. Bound to loopback, it accepts only loopback `Host` and 
 There is no authentication: a non-loopback host exposes the server to the network (the CLI warns). All clients share one
 principal (the OS user) and one set of plan ids.
 
-To embed it, call `mloda.interfaces.mcp.server.create_app(settings, env=env, host=...)`, which returns a Starlette app.
+To embed it, call `mloda.interfaces.mcp.server.create_app(settings, env=env, host=...)`, which returns a
+Starlette app; call `enable_process_wide_log_masking()` yourself first, as `mloda mcp serve` does.
 Pass `data_access_collection=` to add connections and credentials built in code; a handle that duplicates one of the
 `[mcp.credentials]` table is refused. A mounted sub-app's lifespan does not run, so run the returned app's lifespan or
 serve it directly.

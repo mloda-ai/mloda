@@ -118,8 +118,6 @@ class TestSparkMergeEngine:
 class TestSparkMergeEngineSuite(MergeEngineSuite):
     adapter_class = SparkAdapter
     switched_off = {
-        "test_merge_append": Cause.NOT_IMPLEMENTED,
-        "test_merge_union": Cause.NOT_IMPLEMENTED,
         "test_merge_inner_with_multi_index": Cause.NOT_IMPLEMENTED,
         "test_merge_left_with_multi_index": Cause.NOT_IMPLEMENTED,
         "test_merge_full_outer_with_multi_index": Cause.NOT_IMPLEMENTED,
@@ -131,16 +129,6 @@ class TestSparkMergeEngineSuite(MergeEngineSuite):
         spark_adapter = self.adapter_class()
         with spark_adapter:
             yield spark_adapter
-
-    @pytest.mark.skip(
-        reason="SparkMergeEngine unions by position rather than by name, so differently named columns do not align"
-    )
-    def test_merge_append(self, adapter: FrameworkAdapter, merge_engine: Any) -> None: ...
-
-    @pytest.mark.skip(
-        reason="SparkMergeEngine unions by position rather than by name, so differently named columns do not align"
-    )
-    def test_merge_union(self, adapter: FrameworkAdapter, merge_engine: Any) -> None: ...
 
     @pytest.mark.skip(reason="SparkMergeEngine rejects multi-column indexes, see test_multi_index_not_supported")
     def test_merge_inner_with_multi_index(self, adapter: FrameworkAdapter, merge_engine: Any) -> None: ...

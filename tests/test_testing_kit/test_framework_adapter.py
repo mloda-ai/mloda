@@ -157,7 +157,7 @@ def test_lost_type_false_for_numeric_columns(adapter: Any) -> None:
         assert adapter.lost_type(zero, "d") is False
 
 
-@pytest.mark.parametrize("name", ["PyArrow", "Pandas", "Polars", "PolarsLazy"])
+@pytest.mark.parametrize("name", ["PyArrow", "Pandas", "Polars", "PolarsLazy", "DuckDB", "Iceberg"])
 def test_nullable_int_and_bool_keep_exact_type(adapter: Any) -> None:
     with adapter:
         result = adapter.from_typed(_data())
@@ -201,7 +201,7 @@ def test_int32_keeps_native_width(name: str) -> None:
         assert _INT32_CHECKS[name](adapter.column_type(result, "c"))
 
 
-_EXACT = ["PyArrow", "Pandas", "Polars", "PolarsLazy"]
+_EXACT = ["PyArrow", "Pandas", "Polars", "PolarsLazy", "DuckDB"]
 _NEIGHBORS = [
     (DataType.INT32, DataType.INT64, [1, 2]),
     (DataType.FLOAT, DataType.DOUBLE, [1.5, 2.5]),
@@ -210,8 +210,13 @@ _NEIGHBORS = [
 _UTC = datetime(2024, 1, 1, tzinfo=UTC)
 
 
-@pytest.mark.parametrize("name", _EXACT)
-@pytest.mark.parametrize(("own", "neighbor", "values"), _NEIGHBORS)
+# Iceberg skips TIMESTAMP_MILLIS: it has no millisecond timestamp.
+_EXACT_CASES = [(n, *case) for n in _EXACT for case in _NEIGHBORS] + [
+    ("Iceberg", *case) for case in _NEIGHBORS if case[0] is not DataType.TIMESTAMP_MILLIS
+]
+
+
+@pytest.mark.parametrize(("name", "own", "neighbor", "values"), _EXACT_CASES)
 def test_has_type_is_exact(adapter: Any, own: DataType, neighbor: DataType, values: list[Any]) -> None:
     with adapter:
         result = adapter.from_typed(TypedTestData({"c": (own, values)}))
@@ -220,7 +225,7 @@ def test_has_type_is_exact(adapter: Any, own: DataType, neighbor: DataType, valu
         assert adapter.has_type(result, "c", neighbor) is False
 
 
-@pytest.mark.parametrize("name", ["PythonDict", "DuckDB", "Sqlite", "Iceberg"])
+@pytest.mark.parametrize("name", ["PythonDict", "Sqlite"])
 def test_has_type_is_none_without_exact_native_type(name: str, adapter: Any) -> None:
     with adapter:
         result = adapter.from_typed(TypedTestData({"c": (DataType.INT64, [1, 2])}))
@@ -228,7 +233,74 @@ def test_has_type_is_none_without_exact_native_type(name: str, adapter: Any) -> 
         assert adapter.has_type(result, "c", DataType.INT64) is None
 
 
-@pytest.mark.parametrize("name", _EXACT)
+@pytest.mark.parametrize("rows", [True, False])
+@pytest.mark.parametrize(
+    ("data_type", "sample"),
+    [
+        (DataType.INT8, 1),
+        (DataType.UINT8, 1),
+        (DataType.UINT64, 1),
+        (DataType.TIMESTAMP_MILLIS, datetime(2024, 1, 1)),
+    ],
+)
+@pytest.mark.parametrize("name", ["Iceberg"])
+def test_iceberg_has_type_none_without_native_type(
+    name: str, adapter: Any, data_type: DataType, sample: Any, rows: bool
+) -> None:
+    with adapter:
+        result = adapter.from_typed(TypedTestData({"c": (data_type, [sample] if rows else [])}))
+
+        assert adapter.has_type(result, "c", data_type) is None
+
+
+@pytest.mark.parametrize(
+    ("own", "neighbor", "value", "arrow_types"),
+    [
+        (DataType.STRING, DataType.BINARY, "a", None),
+        (DataType.BINARY, DataType.STRING, b"a", None),
+        (DataType.LIST, DataType.INT64, [1], {"c": "list_int64"}),
+    ],
+)
+@pytest.mark.parametrize("name", ["Iceberg"])
+def test_iceberg_zero_row_width_artefacts_are_normalized(
+    name: str, adapter: Any, own: DataType, neighbor: DataType, value: Any, arrow_types: Any
+) -> None:
+    pa = pytest.importorskip("pyarrow")
+    kwargs = {"arrow_types": {"c": pa.list_(pa.int64())}} if arrow_types else {}
+    with adapter:
+        full = adapter.from_typed(TypedTestData({"c": (own, [value])}), **kwargs)
+        empty = adapter.from_typed(TypedTestData({"c": (own, [])}), **kwargs)
+
+        assert adapter.has_type(empty, "c", own) is True
+        assert adapter.has_type(empty, "c", neighbor) is False
+        assert adapter.column_type(empty, "c") == adapter.column_type(full, "c")
+
+
+@pytest.mark.parametrize(
+    ("array", "data_type", "expected"),
+    [
+        ([1], DataType.INT8, True),
+        ([datetime(2024, 1, 1)], DataType.TIMESTAMP_MILLIS, True),
+        (["a"], DataType.STRING, False),
+    ],
+)
+@pytest.mark.parametrize("name", ["Iceberg"])
+def test_iceberg_has_type_on_arrow_table_matches_pyarrow(
+    name: str, adapter: Any, array: list[Any], data_type: DataType, expected: bool
+) -> None:
+    pa = pytest.importorskip("pyarrow")
+    arrow_type = {
+        DataType.INT8: pa.int8(),
+        DataType.TIMESTAMP_MILLIS: pa.timestamp("ms"),
+        DataType.STRING: pa.large_string(),
+    }[data_type]
+    table = pa.table({"c": pa.array(array, type=arrow_type)})
+
+    assert adapter.has_type(table, "c", data_type) is expected
+    assert adapter.column_type(table, "c") == arrow_type
+
+
+@pytest.mark.parametrize("name", _EXACT + ["Iceberg"])
 def test_has_type_timezone_aware_vs_naive(name: str, adapter: Any) -> None:
     with adapter:
         aware = adapter.from_typed(TypedTestData({"t": (DataType.TIMESTAMP_MICROS_TZ, [_UTC])}))
@@ -238,10 +310,13 @@ def test_has_type_timezone_aware_vs_naive(name: str, adapter: Any) -> None:
         assert adapter.has_type(naive, "t", DataType.TIMESTAMP_MICROS_TZ) is False
 
 
-@pytest.mark.parametrize("name", ["PyArrow", "Polars", "PolarsLazy"])
-def test_has_type_list(name: str, adapter: Any) -> None:
+@pytest.mark.parametrize("rows", [[[1, 2], [3]], []])
+@pytest.mark.parametrize("name", ["PyArrow", "Polars", "PolarsLazy", "DuckDB", "Iceberg"])
+def test_has_type_list(name: str, adapter: Any, rows: list[Any]) -> None:
+    pa = pytest.importorskip("pyarrow")
+    data = TypedTestData({"l": (DataType.LIST, rows)})
     with adapter:
-        result = adapter.from_typed(TypedTestData({"l": (DataType.LIST, [[1, 2], [3]])}))
+        result = adapter.from_typed(data, arrow_types={"l": pa.list_(pa.int64())})
 
         assert adapter.has_type(result, "l", DataType.LIST) is True
         assert adapter.has_type(result, "l", DataType.INT64) is False

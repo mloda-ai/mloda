@@ -7,7 +7,13 @@ from typing import Any
 
 import pytest
 
-from mloda._testing.framework_adapter import PandasAdapter, PolarsAdapter, PyArrowAdapter, PythonDictAdapter
+from mloda._testing.framework_adapter import (
+    IcebergAdapter,
+    PandasAdapter,
+    PolarsAdapter,
+    PyArrowAdapter,
+    PythonDictAdapter,
+)
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda._testing.feature_group_shape import assert_feature_group_shape, check_feature_group_shape
@@ -90,7 +96,7 @@ def make_run_group(kind: str = "ok") -> type[FeatureGroup]:
                 return DataType.DATE
             if kind == "tz_out":
                 return DataType.TIMESTAMP_MICROS_TZ
-            if kind == "object_string":
+            if kind in ("object_string", "iceberg_scan"):
                 return DataType.STRING
             if kind == "list_null_on_zero_rows":
                 return DataType.LIST
@@ -124,6 +130,11 @@ def make_run_group(kind: str = "ok") -> type[FeatureGroup]:
 
                 data["rg_out"] = pd.Series([date(2024, 1, 1)] * len(data), index=data.index, dtype=object)
                 return data
+            if kind == "iceberg_scan":
+                import pyarrow as pa
+
+                table = data.scan().to_arrow()
+                return table.append_column("rg_out", pa.array(["x"] * table.num_rows, type=pa.string()))
             if kind == "object_string":
                 import pandas as pd
 
@@ -413,6 +424,8 @@ def test_assert_raises_pytest_failure_for_broken_group() -> None:
 def _require_backend(adapter_cls: type[Any]) -> None:
     if adapter_cls is not PythonDictAdapter:
         pytest.importorskip("pyarrow")
+    if adapter_cls is IcebergAdapter:
+        pytest.importorskip("pyiceberg")
     if adapter_cls is PandasAdapter:
         pytest.importorskip("pandas")
     if adapter_cls is PolarsAdapter:
@@ -536,13 +549,18 @@ def test_requested_name_already_in_input_data_fails_outputs() -> None:
         ("narrow_type", "type:", PolarsAdapter),
         ("loses_schema_on_zero_rows", "zero_rows:", PyArrowAdapter),
         ("list_null_on_zero_rows", "zero_rows:", PolarsAdapter),
+        ("iceberg_scan", "zero_rows:", IcebergAdapter),
         ("leaks_cell_in_error", "error_values:", PythonDictAdapter),
         ("nondeterministic", "determinism:", PythonDictAdapter),
     ],
 )
 def test_broken_run_group_fails_only_its_sub_check(kind: str, prefix: str, adapter_cls: type[Any]) -> None:
     _require_backend(adapter_cls)
-    result = check_feature_group_shape(make_run_group(kind), input_data=_run_data(), adapter=adapter_cls())
+    adapter = adapter_cls()
+    if not adapter.is_available():
+        pytest.skip(f"{adapter_cls.__name__} backend unavailable")
+    with adapter:
+        result = check_feature_group_shape(make_run_group(kind), input_data=_run_data(), adapter=adapter)
     assert not result.passed
     assert all(f.startswith(prefix) for f in result.failures), result.failures
 

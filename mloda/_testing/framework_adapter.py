@@ -88,6 +88,23 @@ def _arrow_has_type(arrow_type: Any, data_type: DataType) -> bool:
     return bool(arrow_type == DataType.to_arrow_type(data_type))
 
 
+_ICEBERG_NO_NATIVE_TYPE = (DataType.INT8, DataType.UINT8, DataType.UINT64, DataType.TIMESTAMP_MILLIS)
+
+
+def _plain_iceberg_type(arrow_type: Any) -> Any:
+    # Iceberg string/binary/list have no width; large variants are a zero-row scan artefact of stored tables.
+    pa = require("pyarrow", "reading Iceberg test tables")
+
+    if pa.types.is_large_string(arrow_type):
+        return pa.string()
+    if pa.types.is_large_binary(arrow_type):
+        return pa.binary()
+    if pa.types.is_large_list(arrow_type):
+        field = arrow_type.value_field
+        return pa.list_(field.with_type(_plain_iceberg_type(field.type)))
+    return arrow_type
+
+
 _PANDAS_NUMERIC = {
     DataType.INT8: ("i", 1),
     DataType.INT32: ("i", 4),
@@ -487,8 +504,12 @@ class DuckDBAdapter(_ArrowReadAdapter):
     def to_table(self, result: Any) -> pa.Table:
         return result.to_arrow_table()
 
+    def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
+        return _arrow_has_type(self.column_type(result, column), data_type)
+
 
 class SqliteAdapter(_ArrowReadAdapter):
+    # has_type stays None: readback types are replayed from the source Arrow schema or inferred from values.
     capabilities = AdapterCapabilities(typed_columns=True, sql_relation=True)
 
     def __init__(self) -> None:
@@ -612,10 +633,24 @@ class IcebergAdapter(_ArrowReadAdapter):
             return result
         return result.scan().to_arrow()
 
+    def column_type(self, result: Any, column: str) -> Any:
+        raw = super().column_type(result, column)
+        if isinstance(result, require("pyarrow", "reading Iceberg test tables").Table):
+            return raw
+        return _plain_iceberg_type(raw)
+
+    def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
+        if data_type in _ICEBERG_NO_NATIVE_TYPE and not isinstance(
+            result, require("pyarrow", "reading Iceberg test tables").Table
+        ):
+            return None
+        return _arrow_has_type(self.column_type(result, column), data_type)
+
 
 class SparkAdapter(_ArrowReadAdapter):
     """Borrows the caller's active SparkSession, never starts or stops one; Spark rejects unsigned integer types."""
 
+    # has_type stays None: a Spark-type mapping is not implemented (no unsigned or millisecond types in Spark).
     capabilities = AdapterCapabilities(typed_columns=True)
 
     def __init__(self) -> None:

@@ -735,181 +735,153 @@ def test_scrub_credentials_is_idempotent(text: str) -> None:
     assert once == twice
 
 
+def _assert_scrubs_linearly(build: Callable[[int], str], n: int, what: str) -> str:
+    """Fail on super-linear scaling: CPU time at n must stay under 8x the time at n // 4 (linear ~4x, quadratic ~16x)."""
+    small, large = build(n // 4), build(n)
+    min_small = min_large = float("inf")
+    result = ""
+    ratio = float("inf")
+    for _ in range(3):
+        start = time.process_time()
+        scrub_credentials(small)
+        min_small = min(min_small, time.process_time() - start)
+        start = time.process_time()
+        result = scrub_credentials(large)
+        min_large = min(min_large, time.process_time() - start)
+        ratio = min_large / max(min_small, 5e-3)
+        if ratio < 8.0:
+            return result
+    assert ratio < 8.0, (
+        f"scrub_credentials scales super-linearly on {what}: "
+        f"min small {min_small:.4f}s, min large {min_large:.4f}s, ratio {ratio:.1f}"
+    )
+    return result
+
+
 def test_long_alphanumeric_run_scrubs_fast() -> None:
-    text = "a" * 50_000
-    start = time.perf_counter()
-    result = scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a long alphanumeric run"
-    assert result == text
+    result = _assert_scrubs_linearly(lambda k: "a" * k, 50_000, "a long alphanumeric run")
+    assert result == "a" * 50_000
 
 
 @pytest.mark.parametrize(
-    ("text", "leaked"),
+    ("build", "n", "leaked"),
     [
-        pytest.param("Bearer " + "a" * 50_000, "a" * 100, id="long_run_after_bearer"),
-        pytest.param("Authorization: " + "a" * 50_000, None, id="long_run_after_authorization"),
-        pytest.param("Bearer " * 20_000, None, id="repeated_bearer_prefix"),
-        pytest.param("x_" * 50_000 + "authorization", None, id="long_prefix_run_before_authorization"),
+        pytest.param(lambda k: "Bearer " + "a" * k, 50_000, "a" * 100, id="long_run_after_bearer"),
+        pytest.param(lambda k: "Authorization: " + "a" * k, 50_000, None, id="long_run_after_authorization"),
+        pytest.param(lambda k: "Bearer " * k, 20_000, None, id="repeated_bearer_prefix"),
+        pytest.param(lambda k: "x_" * k + "authorization", 50_000, None, id="long_prefix_run_before_authorization"),
     ],
 )
-def test_bearer_and_authorization_inputs_scrub_fast(text: str, leaked: str | None) -> None:
-    start = time.perf_counter()
-    result = scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s"
+def test_bearer_and_authorization_inputs_scrub_fast(build: Callable[[int], str], n: int, leaked: str | None) -> None:
+    result = _assert_scrubs_linearly(build, n, "a bearer or authorization input")
     if leaked is not None:
         assert leaked not in result
 
 
 def test_long_alphanumeric_run_followed_by_url_scrubs_fast() -> None:
-    text = ("a" * 50_000) + " https://u:pw@host/db?sig=SECRET"
-    start = time.perf_counter()
-    result = scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a long run followed by a url"
+    result = _assert_scrubs_linearly(
+        lambda k: ("a" * k) + " https://u:pw@host/db?sig=SECRET", 50_000, "a long run followed by a url"
+    )
     assert "SECRET" not in result
     assert "pw" not in result
 
 
 def test_repeated_scheme_prefix_scrubs_fast() -> None:
-    text = "x://" * 20_000
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated scheme prefix"
-
-
-@pytest.mark.parametrize("text", ["jdbc:x://" * 20_000, "jdbc:x:" * 20_000, "jdbc:" * 20_000])
-def test_repeated_jdbc_scheme_prefix_scrubs_fast(text: str) -> None:
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated jdbc scheme prefix"
+    _assert_scrubs_linearly(lambda k: "x://" * k, 20_000, "a repeated scheme prefix")
 
 
 @pytest.mark.parametrize(
-    "text",
+    ("build", "n"),
     [
-        "a~" * 20_000,
-        "a:" * 20_000 + "://h",
-        "https://" + "a/b@" * 20_000,
-        "(a:" * 20_000,
-        "[x" * 20_000,
-        "k:v," * 20_000,
-        "a:b," * 20_000,
-        "k=a:b;" * 20_000,
-        "tags=" + ";".join(f"env{i}:prod" for i in range(6000)),
+        pytest.param(lambda k: "jdbc:x://" * k, 20_000, id="jdbc_x_slashes"),
+        pytest.param(lambda k: "jdbc:x:" * k, 20_000, id="jdbc_x_colon"),
+        pytest.param(lambda k: "jdbc:" * k, 20_000, id="jdbc_only"),
     ],
 )
-def test_repeated_userinfo_shaped_prefix_scrubs_fast(text: str) -> None:
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated userinfo-shaped prefix"
+def test_repeated_jdbc_scheme_prefix_scrubs_fast(build: Callable[[int], str], n: int) -> None:
+    _assert_scrubs_linearly(build, n, "a repeated jdbc scheme prefix")
+
+
+@pytest.mark.parametrize(
+    ("build", "n"),
+    [
+        pytest.param(lambda k: "a~" * k, 20_000, id="tilde"),
+        pytest.param(lambda k: "a:" * k + "://h", 20_000, id="colon_then_scheme"),
+        pytest.param(lambda k: "https://" + "a/b@" * k, 20_000, id="slash_at"),
+        pytest.param(lambda k: "(a:" * k, 20_000, id="paren"),
+        pytest.param(lambda k: "[x" * k, 20_000, id="bracket"),
+        pytest.param(lambda k: "k:v," * k, 20_000, id="kv_comma"),
+        pytest.param(lambda k: "a:b," * k, 20_000, id="ab_comma"),
+        pytest.param(lambda k: "k=a:b;" * k, 20_000, id="kv_semicolon"),
+        pytest.param(lambda k: "tags=" + ";".join(f"env{i}:prod" for i in range(k)), 6000, id="tags"),
+    ],
+)
+def test_repeated_userinfo_shaped_prefix_scrubs_fast(build: Callable[[int], str], n: int) -> None:
+    _assert_scrubs_linearly(build, n, "a repeated userinfo-shaped prefix")
 
 
 def test_repeated_password_keyword_with_registered_literals_scrubs_fast() -> None:
     from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
 
-    text = "password=x " * 20_000
     with registered_secrets_scope(frozenset({"Zq81Lm5Vx0Rb7Ye3Hw29", "password"})):
-        start = time.perf_counter()
-        scrub_credentials(text)
-        elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated password keyword with literals"
+        _assert_scrubs_linearly(lambda k: "password=x " * k, 20_000, "a repeated password keyword with literals")
 
 
 def test_repeated_ipv6_bracket_prefix_scrubs_fast() -> None:
-    text = "https://[" * 10_000
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated ipv6 bracket prefix"
+    _assert_scrubs_linearly(lambda k: "https://[" * k, 10_000, "a repeated ipv6 bracket prefix")
 
 
 def test_compact_json_url_list_scrubs_fast() -> None:
-    urls = ",".join(f'"https://h{i}.example.com/p?sig=SECRET"' for i in range(5000))
-    text = f"[{urls}]"
-    start = time.perf_counter()
-    result = scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a compact json url list"
+    def build(k: int) -> str:
+        urls = ",".join(f'"https://h{i}.example.com/p?sig=SECRET"' for i in range(k))
+        return f"[{urls}]"
+
+    result = _assert_scrubs_linearly(build, 5000, "a compact json url list")
     assert "SECRET" not in result
 
 
 def test_long_word_followed_by_password_keyword_scrubs_fast() -> None:
-    text = ("a" * 50_000) + " password=SECRET"
-    start = time.perf_counter()
-    result = scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a long word followed by password="
+    result = _assert_scrubs_linearly(
+        lambda k: ("a" * k) + " password=SECRET", 50_000, "a long word followed by password="
+    )
     assert "SECRET" not in result
 
 
 def test_dash_run_scrubs_fast() -> None:
-    text = "a-" * 25_000
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated dash run"
+    _assert_scrubs_linearly(lambda k: "a-" * k, 25_000, "a repeated dash run")
 
 
 def test_quoted_api_key_repeat_scrubs_fast() -> None:
-    text = "'" + "api-key" * 7000
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a quoted api-key repeat"
+    _assert_scrubs_linearly(lambda k: "'" + "api-key" * k, 7000, "a quoted api-key repeat")
 
 
 def test_quoted_char_repeat_with_trailing_colon_value_scrubs_fast() -> None:
-    text = "'a'" * 20_000 + ": x"
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a quoted char repeat with trailing colon value"
+    _assert_scrubs_linearly(lambda k: "'a'" * k + ": x", 20_000, "a quoted char repeat with trailing colon value")
 
 
 def test_slash_run_scrubs_fast() -> None:
-    text = "a/" * 25_000
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated slash run"
+    _assert_scrubs_linearly(lambda k: "a/" * k, 25_000, "a repeated slash run")
 
 
 def test_slash_at_repeat_scrubs_fast() -> None:
-    text = "a/" + "b@" * 25_000
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a slash followed by repeated at run"
+    _assert_scrubs_linearly(lambda k: "a/" + "b@" * k, 25_000, "a slash followed by repeated at run")
 
 
 def test_slash_password_host_repeat_scrubs_fast() -> None:
-    text = "s/p@" + "h" * 50_000
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a slash-dsn prefix followed by a long host run"
+    _assert_scrubs_linearly(lambda k: "s/p@" + "h" * k, 50_000, "a slash-dsn prefix followed by a long host run")
 
 
 def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
-    text = "token={ " * 6000
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated unterminated token brace"
+    _assert_scrubs_linearly(lambda k: "token={ " * k, 6000, "a repeated unterminated token brace")
 
 
 @pytest.mark.parametrize(
-    "text, what",
+    "build, n, what",
     [
-        ("password={ " * 4400, "a repeated unterminated password brace"),
-        ("{'password': ((" + ",'password': ((x" * 5000, "repeated unterminated nested containers"),
-        ("{'password': " + "((a)," * 5000 + ")}", "many balanced nested containers"),
-        ("{'password': " + "((((((a," * 5000, "repeated over-depth unterminated containers"),
+        (lambda k: "password={ " * k, 4400, "a repeated unterminated password brace"),
+        (lambda k: "{'password': ((" + ",'password': ((x" * k, 5000, "repeated unterminated nested containers"),
+        (lambda k: "{'password': " + "((a)," * k + ")}", 5000, "many balanced nested containers"),
+        (lambda k: "{'password': " + "((((((a," * k, 5000, "repeated over-depth unterminated containers"),
     ],
     ids=[
         "unterminated_password_brace",
@@ -918,11 +890,8 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
         "over_depth_unterminated_containers",
     ],
 )
-def test_repeated_unterminated_password_brace_scrubs_fast(text: str, what: str) -> None:
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on {what}"
+def test_repeated_unterminated_password_brace_scrubs_fast(build: Callable[[int], str], n: int, what: str) -> None:
+    _assert_scrubs_linearly(build, n, what)
 
 
 def test_unterminated_password_brace_masks_to_end_of_line() -> None:
@@ -1349,10 +1318,9 @@ class TestScrubUriProjection:
         assert scrub_credentials(value) == value
 
     def test_long_uri_with_a_trailing_invalid_character_returns_quickly(self) -> None:
-        value = "a://" + "a@" * 20000 + "/" + "a" * 20000 + "!"
-        started = time.monotonic()
-        scrub_credentials(value)
-        assert time.monotonic() - started < 5
+        _assert_scrubs_linearly(
+            lambda k: "a://" + "a@" * k + "/" + "a" * k + "!", 20000, "a long uri with a trailing invalid character"
+        )
 
 
 class TestScrubUriFailClosed:

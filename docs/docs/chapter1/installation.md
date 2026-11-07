@@ -56,12 +56,31 @@ result = mloda.run_all(
         "income": [50000, 75000, None, 60000, 85000],
     }},
 )
-print(result)
+print(result.summary())
 ```
 
 ```text
-[{'customer_id': ['C001', 'C002', 'C003', 'C004', 'C005'], 'income': [50000, 75000, None, 60000, 85000]}, {'age__avg_aggr': [37.5, 37.5, 37.5, 37.5, 37.5], 'income__sum_aggr': [270000, 270000, 270000, 270000, 270000]}]
+Result
+customer_id  income
+C001         50000
+C002         75000
+C003         None
+C004         60000
+C005         85000
+
+age__avg_aggr  income__sum_aggr
+37.5           270000
+37.5           270000
+37.5           270000
+37.5           270000
+37.5           270000
+
+Plan
+step 1  ApiDataFG               age, customer_id, income  (source SampleData)
+step 2  AggregatedFeatureGroup  age__avg_aggr, income__sum_aggr  (from age, income)
 ```
+
+`result` is a list with one frame per step that produced requested output; `result.summary()` renders the frames and the resolved plan as text.
 
 Prefer DataFrames? Install a backend extra:
 

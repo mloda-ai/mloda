@@ -50,12 +50,12 @@ class SparkMergeEngine(BaseMergeEngine):
         return self._join_logic("outer", left_data, right_data, left_index, right_index)
 
     def merge_append(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        """Append (union all) two DataFrames."""
-        return left_data.unionAll(right_data)
+        """Append (union all) two DataFrames, aligning columns by name."""
+        return left_data.unionByName(right_data, allowMissingColumns=True)
 
     def merge_union(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        """Union two DataFrames (removes duplicates)."""
-        return left_data.union(right_data).distinct()
+        """Union two DataFrames (removes duplicates), aligning columns by name."""
+        return left_data.unionByName(right_data, allowMissingColumns=True).distinct()
 
     def merge_asof(
         self,

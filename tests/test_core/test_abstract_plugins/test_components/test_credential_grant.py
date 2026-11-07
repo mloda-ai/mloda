@@ -236,3 +236,32 @@ class TestGrantKeyPolicy:
         restored = pickle.loads(pickle.dumps(grant))  # nosec B301
 
         assert restored.open().policy == self._policy({"zzgrantpublickey"}, {"host"})
+
+
+class _ClosingFails(CredentialLookup):
+    def close(self) -> None:
+        raise RuntimeError("close failed")
+
+
+class _FailingCloseGrant:
+    def open(self) -> CredentialLookup:
+        return _ClosingFails({"h": _credential()})
+
+
+class TestGrantScopeExitWhenCloseRaises:
+    @pytest.mark.parametrize("process_wide", [False, True], ids=["not_enabled", "enabled"])
+    def test_the_registered_secrets_are_still_reset(self, monkeypatch: pytest.MonkeyPatch, process_wide: bool) -> None:
+        from mloda.core.abstract_plugins.components import log_masking
+
+        monkeypatch.setattr(log_masking, "_process_wide", process_wide)
+        monkeypatch.setattr(log_masking, "_union", frozenset())
+        monkeypatch.setattr(log_masking, "_union_counts", {})
+        before = current_registered_secrets()
+
+        with pytest.raises(RuntimeError, match="close failed"):
+            with grant_scope(_FailingCloseGrant()):
+                pass
+
+        assert current_registered_secrets() == before
+        assert log_masking._union == frozenset()
+        assert log_masking._union_counts == {}

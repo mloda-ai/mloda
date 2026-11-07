@@ -17,7 +17,12 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
     redact_exception,
     registered_secrets_scope,
 )
-from mloda.core.abstract_plugins.components.log_masking import DISABLE_LOG_MASKING_COMMAND, disable_log_masking_quietly
+from mloda.core.abstract_plugins.components.log_masking import (
+    DISABLE_LOG_MASKING_COMMAND,
+    ENABLE_PROCESS_WIDE_LOG_MASKING_COMMAND,
+    disable_log_masking_quietly,
+    enable_process_wide_log_masking,
+)
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -214,6 +219,10 @@ def worker(
 
             if command == DISABLE_LOG_MASKING_COMMAND:
                 disable_log_masking_quietly()
+                continue
+
+            if command == ENABLE_PROCESS_WIDE_LOG_MASKING_COMMAND:
+                enable_process_wide_log_masking()
                 continue
 
             if isinstance(command, set):

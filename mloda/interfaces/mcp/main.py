@@ -9,6 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Literal, TextIO
 
+from mloda.core.abstract_plugins.components.log_masking import enable_process_wide_log_masking
 from mloda.core.optional_dependency import require
 from mloda.interfaces.cli import main as cli_main
 from mloda.interfaces.service.config import Settings
@@ -30,6 +31,7 @@ def serve(
     port: int = 8000,
 ) -> int:
     """Build the services for ``settings`` and serve them over stdio, or over local http, until stopped."""
+    enable_process_wide_log_masking()
     require("mcp", "the mloda MCP server")
     settings = replace(settings, trusted_caller=False)
     from mloda.interfaces.mcp import server

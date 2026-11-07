@@ -29,13 +29,15 @@ from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlyDict
 
 _SECRET = "Zk8-secret-Vq3LmRt"  # nosec B105
 _OTHER = "Pw5-other-Hy2NcXs"  # nosec B105
-_STATE = (
+_STATE: tuple[tuple[str, Any], ...] = (
     ("_disabled", False),
     ("_warned", False),
     ("_installed_factory", None),
     ("_installed_make_record", None),
     ("_previous_factory", None),
     ("_previous_make_record", None),
+    ("_process_wide", False),
+    ("_union", frozenset()),
 )
 
 
@@ -63,7 +65,9 @@ def _plain_make_record(
 def _pristine_logging() -> Iterator[None]:
     saved_factory = logging.getLogRecordFactory()
     saved_make_record = logging.Logger.makeRecord
-    saved_state = {name: getattr(log_masking, name) for name, _ in _STATE}
+    saved_state = {name: getattr(log_masking, name, default) for name, default in _STATE}
+    saved_counts = getattr(log_masking, "_union_counts", {})
+    setattr(log_masking, "_union_counts", {})
     saved_probe = dict(log_masking._probe_seen)
     logging.setLogRecordFactory(logging.LogRecord)
     setattr(logging.Logger, "makeRecord", _plain_make_record)
@@ -75,6 +79,7 @@ def _pristine_logging() -> Iterator[None]:
     setattr(logging.Logger, "makeRecord", saved_make_record)
     for name, value in saved_state.items():
         setattr(log_masking, name, value)
+    setattr(log_masking, "_union_counts", saved_counts)
     log_masking._probe_seen.clear()
     log_masking._probe_seen.update(saved_probe)
 
@@ -397,25 +402,146 @@ def test_first_non_empty_scope_installs_and_ensure_is_idempotent() -> None:
     assert logging.Logger.makeRecord is make_record
 
 
-def test_record_from_a_thread_outside_any_scope_is_untouched(capture: _Capture) -> None:
-    entered, release = threading.Event(), threading.Event()
+class _HeldScope:
+    """A registered_secrets_scope held open on another thread until released."""
 
-    def hold_scope() -> None:
+    def __init__(self, *literals: str) -> None:
+        self._entered, self._release = threading.Event(), threading.Event()
+        self._literals = literals
+        self._thread = threading.Thread(target=self._hold)
+
+    def _hold(self) -> None:
+        with _scope(*self._literals):
+            self._entered.set()
+            self._release.wait(5)
+
+    def __enter__(self) -> _HeldScope:
+        self._thread.start()
+        assert self._entered.wait(5)
+        return self
+
+    def release(self) -> None:
+        self._release.set()
+        self._thread.join(5)
+
+    def __exit__(self, *exc: object) -> None:
+        self.release()
+
+
+def _outside(action: Callable[[], Any]) -> Any:
+    """Run action on a fresh thread with no scope and return its result."""
+    result: list[Any] = []
+    thread = threading.Thread(target=lambda: result.append(action()))
+    thread.start()
+    thread.join(5)
+    return result[0]
+
+
+@pytest.mark.parametrize("enabled", [False, True], ids=["not_enabled", "enabled"])
+def test_record_from_a_thread_outside_any_scope_is_untouched(capture: _Capture, enabled: bool) -> None:
+    if enabled:
+        log_masking.enable_process_wide_log_masking()
+    with _HeldScope(_SECRET):
+        _outside(lambda: capture.logger.info("raw %s", _SECRET))
+
+    (record,) = capture.records
+    assert record.getMessage() == ("raw ***" if enabled else f"raw {_SECRET}")
+
+
+def test_enable_is_idempotent_and_reported() -> None:
+    assert log_masking.process_wide_log_masking_enabled() is False
+    log_masking.enable_process_wide_log_masking()
+    log_masking.enable_process_wide_log_masking()
+    assert log_masking.process_wide_log_masking_enabled() is True
+
+
+def test_enable_masks_extra_values_from_an_outside_thread(capture: _Capture) -> None:
+    log_masking.enable_process_wide_log_masking()
+    with _HeldScope(_SECRET):
+        _outside(lambda: capture.logger.info("m", extra={"tag": _SECRET}))
+
+    (record,) = capture.records
+    assert getattr(record, "tag") == "***"
+
+
+def test_enable_is_a_no_op_after_disable() -> None:
+    log_masking.disable_log_masking_quietly()
+    log_masking.enable_process_wide_log_masking()
+    assert log_masking.process_wide_log_masking_enabled() is False
+
+
+def test_a_run_context_uses_its_own_set_not_the_union(capture: _Capture) -> None:
+    log_masking.enable_process_wide_log_masking()
+    with _HeldScope(_OTHER):
         with _scope(_SECRET):
-            entered.set()
-            release.wait(5)
+            capture.logger.info("a %s b %s", _SECRET, _OTHER)
 
-    holder = threading.Thread(target=hold_scope)
-    holder.start()
-    assert entered.wait(5)
-    outside = threading.Thread(target=lambda: capture.logger.info("raw %s", _SECRET))
-    outside.start()
-    outside.join(5)
-    release.set()
-    holder.join(5)
+    (record,) = capture.records
+    assert record.getMessage() == f"a *** b {_OTHER}"
+
+
+def test_a_shared_literal_stays_in_the_union_until_the_last_scope_exits(capture: _Capture) -> None:
+    log_masking.enable_process_wide_log_masking()
+    first, second = _HeldScope(_SECRET), _HeldScope(_SECRET)
+    with first, second:
+        first.release()
+        _outside(lambda: capture.logger.info("one %s", _SECRET))
+        second.release()
+        _outside(lambda: capture.logger.info("two %s", _SECRET))
+
+    one, two = capture.records
+    assert one.getMessage() == "one ***"
+    assert two.getMessage() == f"two {_SECRET}"
+    assert log_masking._union == frozenset()
+    assert log_masking._union_counts == {}
+
+
+def test_union_and_counts_are_empty_after_nested_scopes_exit() -> None:
+    log_masking.enable_process_wide_log_masking()
+    with _scope(_SECRET):
+        with _scope(_SECRET, _OTHER):
+            assert log_masking._union == frozenset({_SECRET, _OTHER})
+    assert log_masking._union == frozenset()
+    assert log_masking._union_counts == {}
+
+
+def test_a_scope_entered_before_enable_is_not_tracked_and_exits_cleanly(capture: _Capture) -> None:
+    with _HeldScope(_SECRET) as held:
+        log_masking.enable_process_wide_log_masking()
+        _outside(lambda: capture.logger.info("raw %s", _SECRET))
+        held.release()
 
     (record,) = capture.records
     assert record.getMessage() == f"raw {_SECRET}"
+    assert log_masking._union == frozenset()
+    assert log_masking._union_counts == {}
+
+
+def test_the_union_does_not_leak_into_scrubbing_or_the_registered_set() -> None:
+    log_masking.enable_process_wide_log_masking()
+    with _HeldScope(_SECRET):
+        assert _outside(current_registered_secrets) == frozenset()
+        from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+
+        assert _outside(lambda: scrub_credentials(_SECRET)) == _SECRET
+
+
+def test_a_union_masked_logger_exception_masks_the_exception_text(capture: _Capture) -> None:
+    log_masking.enable_process_wide_log_masking()
+
+    def log_failure() -> None:
+        try:
+            raise ValueError(f"bad {_SECRET}")
+        except ValueError:
+            capture.logger.exception("failed")
+
+    with _HeldScope(_SECRET):
+        _outside(log_failure)
+
+    (record,) = capture.records
+    assert record.exc_info is not None
+    assert _SECRET not in str(record.exc_info[1])
+    assert _SECRET not in logging.Formatter().format(record)
 
 
 def _frames_below(marker: str) -> int | None:
@@ -636,6 +762,18 @@ def test_no_registered_literal_reaches_the_regex_cache(capture: _Capture) -> Non
     assert not any(literal in repr(key) for key in keys)
 
 
+def test_no_union_masked_literal_reaches_the_regex_cache(capture: _Capture) -> None:
+    literal = f"lit-{uuid4().hex}"
+    log_masking.enable_process_wide_log_masking()
+    with _HeldScope(literal):
+        _outside(lambda: capture.logger.info("x %s", literal))
+        _outside(lambda: capture.logger.info(f"pre {literal}"))
+
+    assert all(literal not in record.getMessage() for record in capture.records)
+    keys = list(getattr(re, "_cache", {})) + list(getattr(re, "_cache2", {}))
+    assert not any(literal in repr(key) for key in keys)
+
+
 def _run_python(script: str, *flags: str) -> Any:
     done = subprocess.run(  # nosec B603
         [sys.executable, *flags, "-c", script], capture_output=True, text=True, timeout=8, check=False
@@ -692,7 +830,7 @@ def test_importing_mloda_changes_no_logging_global() -> None:
 
 _DISABLE_SCRIPT = f"""
 import json, logging
-from mloda.steward import disable_log_masking
+from mloda.steward import disable_log_masking, enable_process_wide_log_masking
 from mloda.core.abstract_plugins.components import log_masking
 from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
 
@@ -715,6 +853,7 @@ logging.getLogger().addHandler(Warned())
 child = logging.getLogger("dis.child")
 child.setLevel(logging.DEBUG)
 child.addHandler(Seen())
+enable_process_wide_log_masking()
 with registered_secrets_scope(frozenset([secret])):
     pass
 disable_log_masking()
@@ -723,7 +862,8 @@ before = (logging.getLogRecordFactory(), logging.Logger.makeRecord)
 with registered_secrets_scope(frozenset([secret])):
     child.info("v %s", secret, extra={{"tag": secret}})
 after = (logging.getLogRecordFactory(), logging.Logger.makeRecord)
-print(json.dumps({{"disabled": log_masking.log_masking_disabled(), "seen": seen,
+print(json.dumps({{"disabled": log_masking.log_masking_disabled(),
+                  "process_wide": log_masking.process_wide_log_masking_enabled(), "seen": seen,
                   "same": before == after, "warnings": len(warnings)}}))
 """
 
@@ -732,6 +872,7 @@ def test_disable_leaves_records_untouched_does_not_reinstall_and_warns_once() ->
     result = _run_python(_DISABLE_SCRIPT)
 
     assert result["disabled"] is True
+    assert result["process_wide"] is False
     assert result["seen"] == [[f"v {_SECRET}", _SECRET]]
     assert result["same"] is True
     assert result["warnings"] == 1

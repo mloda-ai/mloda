@@ -1695,11 +1695,18 @@ def test_plugin_log_lines_are_masked_in_every_mode_but_the_host_stays(
 
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("mode", _GRANT_MODES)
-def test_a_plugin_thread_outside_the_run_scope_logs_unmasked(mode: ParallelizationMode, flight_server: Any) -> None:
-    """Documented limit: a thread the plugin starts has no scope."""
+@pytest.mark.parametrize("enabled", [False, True], ids=["not_enabled", "enabled"])
+def test_a_plugin_thread_outside_the_run_scope_logs_unmasked_unless_process_wide_masking_is_on(
+    mode: ParallelizationMode, enabled: bool, flight_server: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A thread the plugin starts has no scope: raw by default, masked against the union when enabled."""
+    from mloda.core.abstract_plugins.components import log_masking
+
+    monkeypatch.setattr(log_masking, "_process_wide", enabled)
     result = _grant_run(ChsThreadLoggingFG, "chs_log_thread_a", mode, flight_server)
 
-    assert list(result[0]["chs_log_thread_a"]) == [f"from thread {_E2E_HMAC}"]
+    expected = "from thread ***" if enabled else f"from thread {_E2E_HMAC}"
+    assert list(result[0]["chs_log_thread_a"]) == [expected]
 
 
 # --------------------------------------------------------------------------- #

@@ -265,6 +265,7 @@ def test_import_steward_governance() -> None:
         # Credential scrubbing
         scrub_credentials,
         disable_log_masking,
+        enable_process_wide_log_masking,
         # Plan/run lifecycle
         LifecycleOutcome,
         PlanContext,
@@ -306,6 +307,8 @@ def test_import_steward_governance() -> None:
     assert "scrub_credentials" in steward_module.__all__
     assert callable(disable_log_masking)
     assert "disable_log_masking" in steward_module.__all__
+    assert callable(enable_process_wide_log_masking)
+    assert "enable_process_wide_log_masking" in steward_module.__all__
     # Plan/run lifecycle
     for lifecycle_name, lifecycle_type in (
         ("LifecycleOutcome", LifecycleOutcome),

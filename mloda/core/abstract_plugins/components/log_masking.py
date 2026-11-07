@@ -22,6 +22,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
 )
 
 DISABLE_LOG_MASKING_COMMAND = "DISABLE_LOG_MASKING"
+ENABLE_PROCESS_WIDE_LOG_MASKING_COMMAND = "ENABLE_PROCESS_WIDE_LOG_MASKING"
 
 _UNFORMATTABLE = "<log record masked: unformattable>"
 
@@ -39,11 +40,16 @@ _installed_make_record: Callable[..., logging.LogRecord] | None = None
 _previous_factory: Callable[..., logging.LogRecord] | None = None
 _previous_make_record: Callable[..., logging.LogRecord] | None = None
 _probe_seen = {"factory": False, "make_record": False}
+_process_wide = False
+_union_counts: dict[str, int] = {}
+_union: frozenset[str] = frozenset()
 
 
 def _renew_lock_after_fork() -> None:
-    global _lock
+    global _lock, _union_counts, _union
     _lock = threading.Lock()
+    _union_counts = {}
+    _union = frozenset()
 
 
 if hasattr(os, "register_at_fork"):
@@ -52,6 +58,47 @@ if hasattr(os, "register_at_fork"):
 
 def log_masking_disabled() -> bool:
     return _disabled
+
+
+def process_wide_log_masking_enabled() -> bool:
+    return _process_wide
+
+
+def enable_process_wide_log_masking() -> None:
+    """Also mask records made outside any run context against the literals of all active scopes; no-op if disabled."""
+    global _process_wide
+    with _lock:
+        if not _disabled:
+            _process_wide = True
+
+
+def _track_scope_literals(literals: frozenset[str]) -> bool:
+    """Count a scope's literals into the union when process-wide masking is on; True when tracked."""
+    global _union
+    with _lock:
+        if not _process_wide:
+            return False
+        for literal in literals:
+            _union_counts[literal] = _union_counts.get(literal, 0) + 1
+        _union = frozenset(_union_counts)
+    return True
+
+
+def _release_scope_literals(literals: frozenset[str]) -> None:
+    global _union
+    with _lock:
+        for literal in literals:
+            remaining = _union_counts.get(literal, 0) - 1
+            if remaining > 0:
+                _union_counts[literal] = remaining
+            else:
+                _union_counts.pop(literal, None)
+        _union = frozenset(_union_counts)
+
+
+def _active_literals() -> frozenset[str]:
+    own = current_registered_secrets()
+    return own or _union if _process_wide else own
 
 
 def _with_escaped(literals: frozenset[str]) -> frozenset[str]:
@@ -150,7 +197,7 @@ def _wrap_factory(previous: Callable[..., logging.LogRecord]) -> Callable[..., l
             _probe_seen["factory"] = True
             return record
         if not _disabled:
-            literals = current_registered_secrets()
+            literals = _active_literals()
             if literals:
                 _mask_record(record, literals)
         return record
@@ -177,7 +224,7 @@ def _wrap_make_record(previous: Callable[..., logging.LogRecord]) -> Callable[..
             _probe_seen["make_record"] = True
             return record
         if extra and not _disabled:
-            literals = current_registered_secrets()
+            literals = _active_literals()
             if literals:
                 for key in extra:
                     value = record.__dict__[key] if key in record.__dict__ else None
@@ -237,10 +284,11 @@ def ensure_log_masking() -> None:
 
 def _switch_off() -> bool:
     """Disable masking and unwind our wrappers when outermost; return True on the first call."""
-    global _disabled, _installed_factory, _installed_make_record
+    global _disabled, _process_wide, _installed_factory, _installed_make_record
     with _lock:
         first = not _disabled
         _disabled = True
+        _process_wide = False
         if _installed_factory is not None and logging.getLogRecordFactory() is _installed_factory:
             logging.setLogRecordFactory(_previous_factory or logging.LogRecord)
             _installed_factory = None

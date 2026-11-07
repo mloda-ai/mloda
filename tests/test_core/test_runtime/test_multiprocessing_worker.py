@@ -1189,3 +1189,35 @@ class TestWorkerHonoursTheDisableLogMaskingCommand:
         assert len(_SEEN_BY_STEPS) == 1
         assert not [r for r in caplog.records if "scrub_credentials" in r.getMessage()]
         cfw_register.set_error.assert_not_called()
+
+
+class TestWorkerHonoursTheEnableProcessWideLogMaskingCommand:
+    """The enable command turns process-wide masking on in the worker and the loop carries on."""
+
+    @pytest.mark.parametrize("disable_first", [False, True], ids=["enable_only", "disable_then_enable"])
+    def test_the_command_sets_the_flag_unless_disabled_and_the_next_step_still_runs(
+        self, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest, disable_first: bool
+    ) -> None:
+        from mloda.core.abstract_plugins.components import log_masking
+
+        monkeypatch.setattr(log_masking, "_disabled", False)
+        monkeypatch.setattr(log_masking, "_process_wide", False)
+        for name in ("_installed_factory", "_installed_make_record", "_previous_factory", "_previous_make_record"):
+            monkeypatch.setattr(log_masking, name, getattr(log_masking, name))
+        saved_factory = logging.getLogRecordFactory()
+        request.addfinalizer(lambda: logging.setLogRecordFactory(saved_factory))
+        monkeypatch.setattr(logging.Logger, "makeRecord", logging.Logger.makeRecord)
+        _SEEN_BY_STEPS.clear()
+        command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
+        if disable_first:
+            command_queue.put(log_masking.DISABLE_LOG_MASKING_COMMAND)
+        command_queue.put(log_masking.ENABLE_PROCESS_WIDE_LOG_MASKING_COMMAND)
+        command_queue.put((_SecretsRecordingCommand(), None, frozenset(), frozenset()))
+        command_queue.put("STOP")
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        assert log_masking.process_wide_log_masking_enabled() is (not disable_first)
+        assert log_masking.log_masking_disabled() is disable_first
+        assert len(_SEEN_BY_STEPS) == 1
+        cfw_register.set_error.assert_not_called()

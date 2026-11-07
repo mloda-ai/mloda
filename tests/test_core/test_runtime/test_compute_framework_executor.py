@@ -2290,13 +2290,15 @@ class TestGrantOnlyValueIsMaskedInEveryFailureReport:
 class TestDisableLogMaskingDispatch:
     """A disabled process sends the worker the disable command right before the step."""
 
+    @pytest.mark.parametrize("enabled", [False, True], ids=["not_enabled", "enabled"])
     @pytest.mark.parametrize("disabled", [True, False])
     def test_the_disable_command_is_sent_only_when_masking_is_disabled(
-        self, monkeypatch: pytest.MonkeyPatch, disabled: bool
+        self, monkeypatch: pytest.MonkeyPatch, disabled: bool, enabled: bool
     ) -> None:
         from mloda.core.abstract_plugins.components import log_masking
 
         monkeypatch.setattr(log_masking, "_disabled", disabled)
+        monkeypatch.setattr(log_masking, "_process_wide", enabled)
         step = _grant_step(())
         executor, _, worker_manager, cfw_uuid = _grant_executor(step, _grant_collection())
 
@@ -2304,5 +2306,14 @@ class TestDisableLogMaskingDispatch:
 
         step_command: tuple[Any, Any] = (cfw_uuid, (step, None, frozenset(), frozenset()))
         disable_command: tuple[Any, Any] = (cfw_uuid, log_masking.DISABLE_LOG_MASKING_COMMAND)
-        expected = [disable_command, step_command] if disabled else [step_command]
+        enable_command: tuple[Any, Any] = (
+            cfw_uuid,
+            getattr(log_masking, "ENABLE_PROCESS_WIDE_LOG_MASKING_COMMAND", "ENABLE_PROCESS_WIDE_LOG_MASKING"),
+        )
+        expected: list[tuple[Any, Any]] = []
+        if disabled:
+            expected.append(disable_command)
+        elif enabled:
+            expected.append(enable_command)
+        expected.append(step_command)
         assert [call.args for call in worker_manager.send_command.call_args_list] == expected

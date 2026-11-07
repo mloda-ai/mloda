@@ -343,7 +343,7 @@ with credentials_scope({"pii-hmac-key": {"key": "test-hmac-key"}}):
 
 Limits:
 
-- A plugin-started thread has no scope; run its work with `contextvars.copy_context().run` and join inside the step. A copied context used after the step fails closed.
+- A plugin-started thread has no scope and logs raw unless process-wide log masking is on; run its work with `contextvars.copy_context().run` and join inside the step. A copied context used after the step fails closed.
 - An awaited asyncio task and `asyncio.to_thread` carry the scope; `run_in_executor` does not.
 - A value captured in a serialized UDF closure is outside every mask; read on the driver, never capture.
 - Cached or transformed values are outside the masks.
@@ -364,7 +364,8 @@ Inside a run with registered secrets, every log record created in that context, 
 
 Limits:
 
-- A `threading.Thread` started by a plugin has no scope and logs raw; join it inside the step with `contextvars.copy_context().run`.
+- A `threading.Thread` started by a plugin has no scope and logs raw unless process-wide masking is on; join it inside the step with `contextvars.copy_context().run`.
+- With process-wide masking on, a thread that outlives every scope holding a literal logs it raw, and a record inside a run context is masked only against that context's set, not other runs'.
 - A process worker masks only the step's own secrets; logs from worker bootstrap and extender `close()` run outside the scope.
 - A logger class that overrides `makeRecord` without calling `super()` skips the `extra` masking.
 - A record factory set mid-run that does not chain to the previous one is wrapped again at the next outermost scope entry (one entered from an empty context), not before.
@@ -376,11 +377,14 @@ Limits:
 
 `disable_log_masking()` from `mloda.steward` turns the masking off for the process and for the process workers of its later runs; plugin log lines are then the provider's duty (`scrub_credentials`).
 
+`enable_process_wide_log_masking()` from `mloda.steward` also masks records created outside any run context against the union of the literals of every scope active in the process. Call it in a process you own (a batch job, an Airflow task, a worker service); `mloda-mcp` calls it at startup. Unrelated threads are over-masked while a run is active, and a `logger.exception` exception is masked in place. Process workers of later runs follow the parent, `disable_log_masking()` wins, and it must be called before runs start (a scope entered earlier is not tracked). The union never feeds `scrub_credentials` or the exception redaction of a failing run.
+
 ### Process-global changes
 
 mloda changes these process-wide settings:
 
-- The log record factory and `logging.Logger.makeRecord` wrappers (and a fork hook that renews their lock).
+- The log record factory and `logging.Logger.makeRecord` wrappers (and a fork hook that renews their lock and clears the process-wide literal union).
+- The process-wide masking flag, set by `enable_process_wide_log_masking()`.
 - Fork hooks in `mp_context.py` and `cfw_manager.py`.
 - The gRPC message-size environment variables `flight_server.py` sets.
 - The `SyntaxWarning` filter `code_closure.py` installs.

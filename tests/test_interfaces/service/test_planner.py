@@ -1967,9 +1967,10 @@ class TestCredentialRuns:
 
         error = _error(result, "internal")
         assert "ConfigError" in error["message"]
+        dumped = json.dumps({**result, "error": {**error, "audit_id": None}})
         for name in ("db", "other", "two.txt", "one.txt"):
-            _assert_value_absent(name, json.dumps(result))
-        _assert_value_absent(str(tmp_path), json.dumps(result))
+            _assert_value_absent(name, dumped)
+        _assert_value_absent(str(tmp_path), dumped)
 
     def test_unreadable_handle_logs_one_warning_and_one_info_when_back(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture

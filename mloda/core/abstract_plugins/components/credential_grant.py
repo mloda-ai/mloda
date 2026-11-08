@@ -19,6 +19,8 @@ class CredentialLookup:
         self._data: dict[str, Any] = dict(values)
         self.policy = policy
         self._closed = False
+        self._reads: dict[str, int] = {}
+        self._counter = 0
 
     @property
     def closed(self) -> bool:
@@ -30,6 +32,16 @@ class CredentialLookup:
         if handle not in self._data:
             raise KeyError(f"Credential '{handle}' was not declared by this step.")
         return self._data[handle]
+
+    def record_read(self, handle: str) -> None:
+        self._counter += 1
+        self._reads[handle] = self._counter
+
+    def read_mark(self) -> int:
+        return self._counter
+
+    def read_since(self, mark: int) -> tuple[str, ...]:
+        return tuple(sorted(handle for handle, seq in self._reads.items() if seq > mark))
 
     def declared(self) -> tuple[str, ...]:
         return tuple(sorted(self._data))
@@ -91,6 +103,16 @@ class grant_scope:  # noqa: N801
             redaction.__exit__(exc_type, exc, tb)
         finally:
             secrets.__exit__(exc_type, exc, tb)
+
+
+def credential_read_mark() -> int:
+    lookup = _GRANT_HOLDER.get()
+    return 0 if lookup is None else lookup.read_mark()
+
+
+def credentials_read_since(mark: int) -> tuple[str, ...]:
+    lookup = _GRANT_HOLDER.get()
+    return () if lookup is None else lookup.read_since(mark)
 
 
 def _read_granted(handle: str) -> Any:

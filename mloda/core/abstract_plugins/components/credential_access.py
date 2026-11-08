@@ -160,4 +160,6 @@ def read_credential(handle: str) -> ResolvedCredential:
     if handle not in declared:
         names = ", ".join(repr(name) for name in declared)
         raise CredentialReadRefused(f"Credential '{handle}' was not declared by this step; declared: {names}.")
-    return ResolvedCredential(handle, lookup.credential(handle))
+    resolved = ResolvedCredential(handle, lookup.credential(handle))
+    lookup.record_read(handle)
+    return resolved

@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import errno
+import json
 import logging
 import threading
 from collections.abc import Mapping
@@ -47,7 +48,7 @@ from mloda.provider import (
 )
 from mloda.user import Credential, Feature, ParallelizationMode, PluginCollector, mloda
 
-from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsSource
+from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsSource, ChsTwoHandleFG
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     TOY_TOKEN,
     ToySourceFG,
@@ -878,11 +879,15 @@ _E2E_KEY = "e2e-key-Mq3Wc7Vh2"  # nosec B105
 _GRANT_MODES = [ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING]
 
 
+def _vault_values() -> dict[str, Any]:
+    return {"host": _E2E_HOST, "hmac": _E2E_HMAC, "key": _E2E_KEY}
+
+
 def _vault_dac(credentials: dict[str, dict[str, Any]] | None = None) -> Any:
     from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 
     if credentials is None:
-        credentials = {_E2E_HANDLE: {"host": _E2E_HOST, "hmac": _E2E_HMAC, "key": _E2E_KEY}}
+        credentials = {_E2E_HANDLE: _vault_values()}
     return DataAccessCollection(credentials=credentials)
 
 
@@ -911,15 +916,22 @@ def _grant_run(
 class _FileRecordingExtender(Extender):
     """Appends the text of every exception the wrapped call raises to a file, so a spawned worker's view is readable."""
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, record_success: bool = False) -> None:
         self.path = path
+        self.record_success = record_success
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         try:
-            return func(*args, **kwargs)
+            result = func(*args, **kwargs)
+            if self.record_success:
+                context = HookContext.current()
+                assert context is not None
+                with open(self.path, "a") as handle:
+                    handle.write(json.dumps([list(context.credential_handles), list(context.credentials_read)]) + "\n")
+            return result
         except Exception as exc:
             with open(self.path, "a") as handle:
                 handle.write(f"{exc} {exc.args!r}\n")
@@ -1279,6 +1291,7 @@ class _ReadProbeExtender(Extender):
     def __init__(self, hooks: set[ExtenderHook]) -> None:
         self.hooks = hooks
         self.contexts: list[tuple[str, str | None, str]] = []
+        self.kept: list[HookContext] = []
 
     def wraps(self) -> set[ExtenderHook]:
         return set(self.hooks)
@@ -1286,6 +1299,7 @@ class _ReadProbeExtender(Extender):
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         context = HookContext.current()
         assert context is not None
+        self.kept.append(context)
         key = f"ext:{context.hook.value}"
         self.contexts.append((context.hook.value, context.feature_group_class, repr(context)))
         try:
@@ -1343,6 +1357,44 @@ def test_two_features_with_different_handles_each_read_their_own_credential(
     rows = {column: list(frame[column]) for frame in result for column in frame.columns}
     assert rows["chs_rc_a"] == [f"{_HOST_A}|{len('a-hmac-Gp8Tn5Rz4')}"]
     assert rows["chs_rc_b"] == [f"{_HOST_B}|{len('b-hmac-Xs2Kd9Lf6x')}"]
+
+
+class ChsRcOneOfTwoFG(ChsTwoHandleFG):
+    """Declares two handles and reads only the first."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_one_of_two"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        row = _read_host(features.get_options_key("chs_two_a_handle"))
+        return pd.DataFrame({name: [row] for name in features.get_all_names()})
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_a_step_declaring_two_handles_and_reading_one_reports_one_read_in_every_mode(
+    mode: ParallelizationMode, flight_server: Any, tmp_path: Any
+) -> None:
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    seen = tmp_path / "seen.txt"
+    mloda.run_all(
+        [Feature("chs_rc_one_of_two", options={"chs_two_a_handle": _VAULT_A, "chs_two_z_handle": _VAULT_B})],
+        compute_frameworks=[PandasDataFrame],
+        parallelization_modes={mode},
+        flight_server=flight_server,
+        data_access_collection=_vault_dac(_TWO_VAULTS),
+        plugin_collector=PluginCollector.enabled_feature_groups({ChsRcOneOfTwoFG}),
+        function_extender={_FileRecordingExtender(str(seen), record_success=True)},
+    )
+
+    text = seen.read_text()
+    assert [json.loads(line) for line in text.splitlines()] == [[[_VAULT_A, _VAULT_B], [_VAULT_A]]]
+    for vault in _TWO_VAULTS.values():
+        for value in (vault["hmac"], vault["key"]):
+            assert value not in text
 
 
 class ChsRcIsolationFG(ChsSource):
@@ -1424,6 +1476,70 @@ def test_read_credential_works_in_custom_saver_in_every_mode(mode: Parallelizati
     assert results.artifacts == {"chs_rc_artifact_a": {"saved_host": _E2E_HOST}}
 
 
+class ChsRcSplitArtifact(BaseArtifact):
+    @classmethod
+    def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
+        return {"saved_host": _read_host(features.get_options_key("chs_two_z_handle"))}
+
+
+class ChsRcCalcAndSaverFG(ChsTwoHandleFG):
+    """Calculate reads the first handle, the artifact saver reads the second."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_split_a"}
+
+    @staticmethod
+    def artifact() -> type[BaseArtifact] | None:
+        return ChsRcSplitArtifact
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        _read_host(features.get_options_key("chs_two_a_handle"))
+        if features.artifact_to_save:
+            features.save_artifact = "chs-rc-split"
+        return pd.DataFrame({name: [1] for name in features.get_all_names()})
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+@pytest.mark.parametrize(
+    ("group", "name", "options", "expected"),
+    [
+        pytest.param(ChsRcArtifactFG, "chs_rc_artifact_a", {HANDLE_KEY: _E2E_HANDLE}, (_E2E_HANDLE,), id="saver_only"),
+        pytest.param(
+            ChsRcCalcAndSaverFG,
+            "chs_rc_split_a",
+            {"chs_two_a_handle": _VAULT_A, "chs_two_z_handle": _VAULT_B},
+            (_VAULT_A, _VAULT_B),
+            id="calculate_and_saver",
+        ),
+    ],
+)
+def test_a_saver_read_shows_on_the_calculate_context_after_the_run(
+    mode: ParallelizationMode,
+    flight_server: Any,
+    group: type[ChsSource],
+    name: str,
+    options: dict[str, Any],
+    expected: tuple[str, ...],
+) -> None:
+    from mloda.user import mloda as mloda_api
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    probe = _ReadProbeExtender({ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE})
+    api = mloda_api(
+        [Feature(name, options=options)],
+        [PandasDataFrame],
+        data_access_collection=_vault_dac({**_TWO_VAULTS, _E2E_HANDLE: _vault_values()}),
+        plugin_collector=PluginCollector.enabled_feature_groups({group}),
+        function_extender={probe},
+    )
+    api.run(parallelization_modes={mode}, flight_server=flight_server)
+
+    assert [context.credentials_read for context in probe.kept] == [expected]
+
+
 @pytest.mark.timeout(15)
 def test_read_credential_raises_after_save_artifact_returns(flight_server: Any) -> None:
     from mloda.user import mloda as mloda_api
@@ -1482,6 +1598,7 @@ def test_an_extender_wrapping_the_step_sees_the_refusal_as_the_error(flight_serv
         _grant_run(ChsRcUndeclaredFG, "chs_rc_undeclared_a", ParallelizationMode.SYNC, flight_server, {probe})
 
     assert _events("ext:feature_group_calculate_feature") == ["refused", "raised:CredentialReadRefused"]
+    assert [context.credentials_read for context in probe.kept] == [()]
 
 
 _WINDOW_SHAPES = [
@@ -1556,6 +1673,9 @@ def test_read_credential_is_open_in_calculate_an_awaited_task_and_the_load_but_n
     for hook in hooks:
         assert _events(f"ext:{hook.value}") == ["refused"]
     assert {name for name, _ in _WINDOW_EVENTS if name.startswith("ext:")} == {f"ext:{h.value}" for h in hooks}
+    assert {context.hook for context in probe.kept} == hooks
+    for context in probe.kept:
+        assert context.credentials_read == (_E2E_HANDLE,)
 
 
 @pytest.mark.timeout(15)
@@ -1570,6 +1690,8 @@ def test_validate_hooks_cannot_read_while_the_grant_is_held(flight_server: Any) 
     assert "refused" in _events("ext:validate_input_feature")
     assert "refused" in _events("ext:validate_output_feature")
     assert "readable" not in _events("ext:validate_input_feature") + _events("ext:validate_output_feature")
+    assert probe.kept
+    assert all(context.credentials_read == () for context in probe.kept)
 
 
 @pytest.mark.timeout(15)
@@ -1592,6 +1714,15 @@ def test_no_hook_context_carries_a_credential_value(flight_server: Any) -> None:
     for _, _, rendered in probe.contexts:
         assert _E2E_HMAC not in rendered
         assert _E2E_KEY not in rendered
+    for context in probe.kept:
+        assert _E2E_HMAC not in repr(context)
+        assert _E2E_KEY not in repr(context)
+        if context.hook is ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE and "Consumer" in str(
+            context.feature_group_class
+        ):
+            assert context.credentials_read == (_E2E_HANDLE,)
+        if context.hook in {ExtenderHook.VALIDATE_INPUT_FEATURE, ExtenderHook.VALIDATE_OUTPUT_FEATURE}:
+            assert context.credentials_read == ()
 
 
 @pytest.mark.timeout(15)

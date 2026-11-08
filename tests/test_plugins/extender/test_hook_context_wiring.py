@@ -1019,6 +1019,7 @@ class TestHookContextCredentialHandles:
 
         assert extender.captured is not None
         assert extender.captured.credential_handles == ("vault-main",)
+        assert extender.captured.credentials_read == ()
 
     def test_a_hand_built_context_defaults_to_no_handles(self) -> None:
         context = HookContext(
@@ -1074,6 +1075,7 @@ class TestHookContextBoundCredentialHandle:
 
         assert captured is not None
         assert captured.credential_handles == expected
+        assert captured.credentials_read == ()
 
     @pytest.mark.parametrize("hook", _HOOKS)
     def test_a_file_source_keeps_no_handles(self, tmp_path: Path, hook: ExtenderHook) -> None:

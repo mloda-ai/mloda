@@ -65,6 +65,7 @@ class TestRunContextPlanIdAndStartedAt:
         assert hash(hashed) == hash(plain)
         assert dataclasses.fields(RunContext)[-1].name == "structure_hash"
         assert dataclasses.fields(RunContext)[-2].name == "run_inputs"
+        assert "credentials_read" not in {f.name for f in dataclasses.fields(RunContext)}
 
     def test_run_inputs_defaults_to_empty_and_round_trips(self) -> None:
         assert RunContext().run_inputs == RunInputs()

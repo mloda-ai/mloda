@@ -242,7 +242,7 @@ What keeps a subclass out:
 
 To test that a subclass takes over only for its own option, call `check_subclass_scope(Sub, Parent, selecting)` (or `assert_subclass_scope`) from `mloda._testing.subclass_scope`. A pattern-matching parent needs `requests=`, and values are not compared. It reports a subclass that steals plain requests or misses its own.
 
-For an operation group, `check_operation_group_shape` (or `assert_operation_group_shape`) from `mloda._testing.operation_group_shape` checks that each Implementation declares valid `supported` and `divergent` subtypes and declines the rest; pass `alias_pairs=` for aliased subtypes and `probe=` for groups that resolve subtypes without an option key.
+For an operation group, `check_operation_group_shape` (or `assert_operation_group_shape`) from `mloda._testing.operation_group_shape` checks that each Implementation declares valid `supported` subtypes and `divergences` records and declines the rest; pass `alias_pairs=` for aliased subtypes and `probe=` for groups that resolve subtypes without an option key.
 
 For a source group, inherit `SourceFeatureGroupTestMixin` from `mloda._testing.source.source_suite` (pytest required) to run the shared claim, decline and abort contract (switching off an inherited contract test, by a skip mark or an override, needs a declared `switched_off` cause); `NO_POINTER` marks a group that takes no pointer. File, database and document groups use `read_file_suite`, `read_db_suite` and `read_document_suite` in the same package.
 

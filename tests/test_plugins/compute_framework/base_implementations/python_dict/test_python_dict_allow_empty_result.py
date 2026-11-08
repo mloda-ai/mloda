@@ -33,7 +33,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.single_filter import SingleFilter
 from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
-from mloda._testing.declarations import Cause
+from mloda.provider import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter
 
 

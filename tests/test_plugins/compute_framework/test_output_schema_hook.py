@@ -11,7 +11,7 @@ from unittest.mock import Mock
 import pytest
 
 from mloda._testing.compute_framework.output_schema_suite import OutputSchemaSuite
-from mloda._testing.declarations import Cause
+from mloda.provider import Cause
 from mloda._testing.framework_adapter import (
     DuckDBAdapter,
     FrameworkAdapter,

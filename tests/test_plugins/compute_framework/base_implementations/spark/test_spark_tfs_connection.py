@@ -17,7 +17,7 @@ from tests.test_plugins.compute_framework.base_implementations.spark.conftest im
     PYSPARK_AVAILABLE,
 )
 from mloda._testing.compute_framework.connection_suite import ConnectionEndToEndSuite
-from mloda._testing.declarations import Cause
+from mloda.provider import Cause
 from tests.test_plugins.compute_framework.base_implementations.spark.spark_session_adapter import SparkSessionAdapter
 
 if PYSPARK_AVAILABLE:

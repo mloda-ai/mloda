@@ -25,7 +25,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import Source
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
-from mloda.provider import FeatureSet
+from mloda.provider import Cause, Divergence, DivergenceKind, FeatureSet
 from mloda.provider import OperationFeatureGroup, SubtypeDeclaration, property_spec
 from mloda.core.prepare import choose_compute_frameworks
 from mloda.core.prepare.choose_compute_frameworks import ChooseComputeFrameworks
@@ -139,7 +139,9 @@ class ChooserOpFG(OperationFeatureGroup):
 class ChooserOpPandas(Implementation[ChooserOpFG]):
     feature_group = ChooserOpFG
     compute_framework = PandasDataFrame
-    divergent = {"sum": SUM_DIFFERS}
+    divergences = (
+        Divergence(kind=DivergenceKind.VALUE, cause=Cause.BACKEND, subtypes=frozenset({"sum"}), reason=SUM_DIFFERS),
+    )
 
     @classmethod
     def calculate(
@@ -1094,6 +1096,117 @@ def _op(net: _Net, name: str, allowed: set[type[ComputeFramework]], kind: str = 
     return net.add(ChooserOpFG, name, allowed, Options(context={OP_KEY: kind}), **kwargs)
 
 
+def _fresh_op(
+    pandas_records: tuple[Divergence, ...], group_records: tuple[Divergence, ...] = ()
+) -> tuple[type[OperationFeatureGroup], list[type[Implementation[Any]]]]:
+    """A fresh toy group per call so registry leaks stay parallel-safe."""
+
+    class FreshDivFG(OperationFeatureGroup):
+        SUBTYPES = SubtypeDeclaration(key=OP_KEY)
+        PROPERTY_MAPPING = {
+            OP_KEY: property_spec("Toy kind.", strict=True, allowed_values={"sum": "Sum", "median": "Median"}),
+        }
+        DIVERGENCES = group_records
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> bool:
+            return str(feature_name).startswith("chooser_div_")
+
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+            return None
+
+    def calculate(cls: Any, group: Any, data: Any, features: Any, framework: Any) -> Any:
+        return data
+
+    pandas_impl = type(
+        "FreshDivPandas",
+        (Implementation,),
+        {
+            "feature_group": FreshDivFG,
+            "compute_framework": PandasDataFrame,
+            "divergences": pandas_records,
+            "calculate": classmethod(calculate),
+        },
+    )
+    arrow_impl = type(
+        "FreshDivPyArrow",
+        (Implementation,),
+        {"feature_group": FreshDivFG, "compute_framework": PyArrowTable, "calculate": classmethod(calculate)},
+    )
+    return FreshDivFG, [pandas_impl, arrow_impl]
+
+
+def _fresh_div_net(
+    net: _Net,
+    pandas_records: tuple[Divergence, ...],
+    allowed: set[type[ComputeFramework]],
+    group_records: tuple[Divergence, ...] = (),
+) -> list[Feature]:
+    group, impls = _fresh_op(pandas_records, group_records)
+    net.implementations = impls
+    return [net.add(group, "chooser_div_feature", allowed, Options(context={OP_KEY: "sum"}))]
+
+
+def _record(kind: DivergenceKind = DivergenceKind.VALUE, reason: str = SUM_DIFFERS, **kwargs: Any) -> Divergence:
+    return Divergence(kind=kind, cause=kwargs.pop("cause", Cause.BACKEND), reason=reason, **kwargs)
+
+
+def _reason_gap_record_does_not_penalize(net: _Net) -> list[Feature]:
+    return _fresh_div_net(net, (_record(DivergenceKind.GAP, "no sum on pandas", subtypes=frozenset({"sum"})),), {P, A})
+
+
+def _reason_whole_plugin_record_penalizes(net: _Net) -> list[Feature]:
+    return _fresh_div_net(net, (_record(),), {P})
+
+
+def _reason_outputs_record_penalizes_a_whole_feature_request(net: _Net) -> list[Feature]:
+    return _fresh_div_net(net, (_record(outputs=frozenset({"a"})),), {P})
+
+
+def _reason_outputs_record_skips_a_request_for_another_part(net: _Net) -> list[Feature]:
+    features = _fresh_div_net(net, (_record(outputs=frozenset({"a"})),), {P})
+    features[0].record_part("b")
+    return features
+
+
+def _reason_outputs_record_penalizes_a_request_for_its_part(net: _Net) -> list[Feature]:
+    features = _fresh_div_net(net, (_record(outputs=frozenset({"a"})),), {P})
+    features[0].record_part("a")
+    return features
+
+
+def _reason_whole_plugin_record_prefers_the_matching_version(net: _Net) -> list[Feature]:
+    return _fresh_div_net(net, (_record(),), {P, A})
+
+
+def _reason_group_divergences_do_not_change_the_choice(net: _Net) -> list[Feature]:
+    return _fresh_div_net(net, (), {P, A}, group_records=(_record(subtypes=frozenset({"sum"})),))
+
+
+def _reason_group_divergences_add_no_tag(net: _Net) -> list[Feature]:
+    return _fresh_div_net(net, (), {P}, group_records=(_record(),))
+
+
+def _reason_reasonless_not_implemented(net: _Net) -> list[Feature]:
+    record = Divergence(kind=DivergenceKind.GAP, cause=Cause.NOT_IMPLEMENTED)
+    other = Divergence(kind=DivergenceKind.VALUE, cause=Cause.NOT_IMPLEMENTED)
+    return _fresh_div_net(net, (record, other), {P})
+
+
+def _reason_equal_texts_render_once(net: _Net) -> list[Feature]:
+    records = (_record(subtypes=frozenset({"sum"})), _record(DivergenceKind.TYPE))
+    return _fresh_div_net(net, records, {P})
+
+
+def _reason_credential_reason_is_scrubbed(net: _Net) -> list[Feature]:
+    return _fresh_div_net(net, (_record(reason="uses password=hunter2 here"),), {P})
+
+
 def _reason_prefers_matching(net: _Net) -> list[Feature]:
     return [_op(net, "chooser_op_free", {P, A})]
 
@@ -1279,6 +1392,29 @@ def _reason_neutral_without_native_moved_by_a_connection_home(net: _Net) -> list
         (_reason_rules_force_divergent, None, None, [RULES + SUM_TAG], [P]),
         (_reason_mixed_members_only_divergent, None, None, [ONLY_ALLOWED + SUM_TAG] * 2, [P, P]),
         (_reason_mixed_members_prefer_matching, None, None, [PREFERS_MATCHING] * 2, [A, A]),
+        (_reason_gap_record_does_not_penalize, None, None, [DEFAULT_ORDER], [P]),
+        (_reason_whole_plugin_record_penalizes, None, None, [ONLY_ALLOWED + SUM_TAG], [P]),
+        (_reason_outputs_record_penalizes_a_whole_feature_request, None, None, [ONLY_ALLOWED + SUM_TAG], [P]),
+        (_reason_outputs_record_skips_a_request_for_another_part, None, None, [ONLY_ALLOWED], [P]),
+        (_reason_outputs_record_penalizes_a_request_for_its_part, None, None, [ONLY_ALLOWED + SUM_TAG], [P]),
+        (_reason_whole_plugin_record_prefers_the_matching_version, None, None, [PREFERS_MATCHING], [A]),
+        (_reason_group_divergences_do_not_change_the_choice, None, None, [DEFAULT_ORDER], [P]),
+        (_reason_group_divergences_add_no_tag, None, None, [ONLY_ALLOWED], [P]),
+        (
+            _reason_reasonless_not_implemented,
+            None,
+            None,
+            [ONLY_ALLOWED + "; runs a version that differs: not implemented"],
+            [P],
+        ),
+        (_reason_equal_texts_render_once, None, None, [ONLY_ALLOWED + SUM_TAG], [P]),
+        (
+            _reason_credential_reason_is_scrubbed,
+            None,
+            None,
+            [ONLY_ALLOWED + "; runs a version that differs: uses password=*** here"],
+            [P],
+        ),
         (_reason_home_requested_directly, {A: 0, H: 1}, None, [READS_IN_PLACE], [H]),
         (_reason_home_feeds_a_matching_consumer, {A: 0, H: 1}, None, [READS_IN_PLACE], [H]),
         (_reason_home_with_one_off_home_consumer, {A: 0, H: 1}, None, [READS_IN_PLACE], [H]),
@@ -1324,6 +1460,17 @@ def _reason_neutral_without_native_moved_by_a_connection_home(net: _Net) -> list
         "rules_force_divergent",
         "mixed_members_only_divergent",
         "mixed_members_prefer_matching",
+        "gap_record_does_not_penalize",
+        "whole_plugin_record_penalizes",
+        "outputs_record_penalizes_a_whole_feature_request",
+        "outputs_record_skips_a_request_for_another_part",
+        "outputs_record_penalizes_a_request_for_its_part",
+        "whole_plugin_record_prefers_the_matching_version",
+        "group_divergences_do_not_change_the_choice",
+        "group_divergences_add_no_tag",
+        "reasonless_not_implemented",
+        "equal_texts_render_once",
+        "credential_reason_is_scrubbed",
         "home_requested_directly",
         "home_feeds_a_matching_consumer",
         "home_with_one_off_home_consumer",

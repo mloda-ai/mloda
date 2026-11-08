@@ -10,7 +10,7 @@ import pytest
 
 import mloda._testing
 from mloda._testing.result import CheckResult
-from mloda._testing.declarations import Cause
+from mloda.provider import Cause
 from mloda._testing.suite import ConformanceSuite, HookError, SwitchedOffError, assert_passed, check_hooks
 from mloda.user.python_dict import PythonDictFramework
 

@@ -16,7 +16,7 @@ import pytest
 
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.core.abstract_plugins.implementation import Implementation
-from mloda.provider import FeatureSet, SubtypeDeclaration
+from mloda.provider import Divergence, FeatureSet, SubtypeDeclaration
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_plugins.feature_group.experimental.reference_contract import same, same_on_pandas
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
@@ -412,9 +412,9 @@ _INF = float("inf")
 _DAY = datetime.timedelta(days=1)
 _START = datetime.datetime(2024, 1, 1)
 
-_DIVERGENT_DECLARATIONS: dict[type[Implementation[Any]], dict[str, str]] = {
-    PandasTimeWindow: {},
-    PyArrowTimeWindow: {},
+_DIVERGENT_DECLARATIONS: dict[type[Implementation[Any]], tuple[Divergence, ...]] = {
+    PandasTimeWindow: (),
+    PyArrowTimeWindow: (),
 }
 
 # (columns, span in days): NaN, null and inf inside windows; NaN next to values; windows and rows with no value.
@@ -522,7 +522,7 @@ class TestImplementationsConformToTheReferenceContract:
     def test_result_differs_from_the_reference_exactly_when_declared(
         self, implementation: type[Implementation[Any]], window_function: str
     ) -> None:
-        assert dict(implementation.divergent) == _DIVERGENT_DECLARATIONS[implementation]
+        assert implementation.divergences == _DIVERGENT_DECLARATIONS[implementation]
         equal = same_on_pandas if implementation is PandasTimeWindow else same
         differing: list[str] = []
         for shape, (columns, span_days) in _SHAPES.items():
@@ -531,4 +531,9 @@ class TestImplementationsConformToTheReferenceContract:
             assert len(actual) == len(expected), f"{shape}: {actual} vs {expected}"
             if not all(equal(a, e) for a, e in zip(actual, expected)):
                 differing.append(f"{shape}: {actual} != reference {expected}")
-        assert bool(differing) == (window_function in implementation.divergent), differing
+        declared = implementation.divergences_for(
+            implementation.feature_group,
+            f"x__{window_function}_3_day_window",
+            Options({TimeWindowFeatureGroup.WINDOW_FUNCTION: window_function}),
+        )
+        assert bool(differing) == bool(declared), differing

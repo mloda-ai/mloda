@@ -31,6 +31,12 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
+from mloda.core.abstract_plugins.components.divergence import (
+    Divergence,
+    DivergenceSource,
+    stamped,
+    validate_divergences,
+)
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, record_match_rejection
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
@@ -128,8 +134,13 @@ class FeatureGroup(ABC):
     """Declarative subtype dimension of the family; ``None`` means no subtype dimension.
     The derived accessors below are ``@final`` (type-checker enforced) and derived from SUBTYPES."""
 
+    DIVERGENCES: ClassVar[tuple[Divergence, ...]] = ()
+    """Declared differences of this group from its reference contract; not used when choosing implementations."""
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
+        if "divergences" in cls.__dict__:
+            raise TypeError(f"{cls.__name__} declares 'divergences'; a FeatureGroup spells it DIVERGENCES.")
         FeatureChainParser.validate_property_mapping_defaults(cls.__name__, cls.PROPERTY_MAPPING)
         public_key_names(cls.__name__, cls.PUBLIC_CREDENTIAL_KEYS)
         validate_name_binding(cls)
@@ -137,7 +148,13 @@ class FeatureGroup(ABC):
         install_name_path_presence_guard(cls)
         install_required_when_guard(cls)
         cls._validate_subtype_declaration()
+        validate_divergences(cls.__name__, cls.DIVERGENCES, cls.subtype_universe, cls.OUTPUT_PARTS)
         _registry.add(cls)
+
+    @classmethod
+    def divergence_records(cls) -> tuple[Divergence, ...]:
+        """The declared DIVERGENCES, stamped with the feature group source."""
+        return tuple(stamped(r, DivergenceSource.FEATURE_GROUP, None) for r in cls.DIVERGENCES)
 
     @classmethod
     def _overrides(cls, method_name: str) -> bool:

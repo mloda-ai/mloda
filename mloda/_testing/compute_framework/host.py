@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import pytest
 
 from mloda._testing.compute_framework_shape import applicable_aspects
-from mloda._testing.declarations import Cause
+from mloda.core.abstract_plugins.components.divergence import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter
 from mloda._testing.suite import ConformanceSuite, HookError, SwitchedOffError
 from mloda._testing.typed_data import TypedTestData

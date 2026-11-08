@@ -10,11 +10,15 @@ import pytest
 from mloda._testing.operation_group_shape import assert_operation_group_shape, check_operation_group_shape
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.implementation import Implementation
-from mloda.provider import OperationFeatureGroup, SubtypeDeclaration, property_spec
+from mloda.provider import Cause, Divergence, DivergenceKind, OperationFeatureGroup, SubtypeDeclaration, property_spec
 from mloda.user.python_dict import PythonDictFramework
 
 KEY = "opshape_kind"
 SHAPE_B_KEY = "opshape_b_kind"
+SUM_SKIPS_NAN = Divergence(
+    kind=DivergenceKind.VALUE, cause=Cause.BACKEND, subtypes=frozenset({"sum"}), reason="skips NaN"
+)
+WHOLE_PLUGIN = Divergence(kind=DivergenceKind.TYPE, cause=Cause.BACKEND, reason="returns floats")
 Factory = Callable[[], tuple[type[OperationFeatureGroup], dict[str, Any]]]
 
 
@@ -43,7 +47,7 @@ def make_conforming() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
     impl = _make_impl(
         group,
         supported=frozenset({"sum", "median", "rolling"}),
-        divergent={"sum": "skips NaN"},
+        divergences=(SUM_SKIPS_NAN,),
     )
     return group, {"impl": impl}
 
@@ -53,19 +57,34 @@ def make_supported_outside_universe() -> tuple[type[OperationFeatureGroup], dict
     return group, {"impl": _make_impl(group, supported=frozenset({"sum", "bogus"}))}
 
 
-def make_divergent_outside_universe() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
+def make_divergence_outside_universe() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
     group = _make_group_a()
-    return group, {"impl": _make_impl(group, divergent={"bogus": "reason"})}
+    impl = _make_impl(group)
+    bogus = Divergence(kind=DivergenceKind.VALUE, cause=Cause.BACKEND, subtypes=frozenset({"bogus"}), reason="reason")
+    setattr(impl, "divergences", (bogus,))
+    return group, {"impl": impl}
 
 
 def make_empty_reason() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
     group = _make_group_a()
-    return group, {"impl": _make_impl(group, divergent={"sum": ""})}
+    impl = _make_impl(group)
+    smuggled = Divergence(kind=DivergenceKind.VALUE, cause=Cause.BACKEND, subtypes=frozenset({"sum"}), reason="x")
+    object.__setattr__(smuggled, "reason", "")
+    setattr(impl, "divergences", (smuggled,))
+    return group, {"impl": impl}
+
+
+def make_group_divergence_outside_universe() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
+    group = _make_group_a()
+    impl = _make_impl(group)
+    bogus = Divergence(kind=DivergenceKind.VALUE, cause=Cause.BACKEND, subtypes=frozenset({"bogus"}), reason="reason")
+    setattr(group, "DIVERGENCES", (bogus,))
+    return group, {"impl": impl}
 
 
 def make_one_sided_alias() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
     group = _make_group_a()
-    impl = _make_impl(group, divergent={"sum": "skips NaN"})
+    impl = _make_impl(group, divergences=(SUM_SKIPS_NAN,))
     return group, {"impl": impl, "alias_pairs": (("sum", "mean"),)}
 
 
@@ -146,9 +165,10 @@ def test_shape_b_group_without_probe_fails_only_declines() -> None:
     ("make", "prefix", "message"),
     [
         (make_supported_outside_universe, "supported:", "outside the subtype universe"),
-        (make_divergent_outside_universe, "divergent:", "outside the subtype universe"),
-        (make_empty_reason, "divergent:", "no reason"),
-        (make_one_sided_alias, "aliases:", "diverges for only one"),
+        (make_divergence_outside_universe, "divergences:", "outside the subtype universe"),
+        (make_group_divergence_outside_universe, "divergences:", "outside the subtype universe"),
+        (make_empty_reason, "divergences:", "no reason"),
+        (make_one_sided_alias, "aliases:", "declares different divergences for 'sum' and 'mean'"),
         (make_alias_outside_universe, "aliases:", "outside the subtype universe"),
         (make_unsupported_not_declining, "declines:", "does not decline"),
         (make_probe_never_accepted, "declines:", "probe not accepted"),
@@ -162,6 +182,29 @@ def test_broken_group_fails_only_its_check(make: Factory, prefix: str, message: 
     assert not result.passed
     assert all(f.startswith(prefix) for f in result.failures), result.failures
     assert any(message in f for f in result.failures), result.failures
+
+
+def test_alias_with_a_whole_plugin_divergence_passes() -> None:
+    group = _make_group_a()
+    _keep = _make_impl(group, divergences=(WHOLE_PLUGIN,))
+    assert check_operation_group_shape(group, alias_pairs=(("sum", "mean"),)).failures == ()
+
+
+def test_alias_with_records_of_different_kinds_reports_instead_of_raising() -> None:
+    group = _make_group_a()
+    value = Divergence(kind=DivergenceKind.VALUE, cause=Cause.BACKEND, subtypes=frozenset({"sum"}), reason="skips NaN")
+    _keep = _make_impl(group, divergences=(value, WHOLE_PLUGIN))
+    result = check_operation_group_shape(group, alias_pairs=(("sum", "mean"),))
+    assert any(
+        f.startswith("aliases:") and "declares different divergences for 'sum' and 'mean'" in f for f in result.failures
+    ), result.failures
+
+
+def test_alias_with_a_gap_record_on_one_side_passes() -> None:
+    group = _make_group_a()
+    gap = Divergence(kind=DivergenceKind.GAP, cause=Cause.NOT_IMPLEMENTED, subtypes=frozenset({"sum"}))
+    _keep = _make_impl(group, divergences=(gap,))
+    assert check_operation_group_shape(group, alias_pairs=(("sum", "mean"),)).failures == ()
 
 
 def test_assert_passes_silently_for_conforming_group() -> None:

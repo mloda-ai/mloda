@@ -11,7 +11,7 @@ from typing import Any, cast
 import pyarrow as pa
 import pytest
 
-from mloda._testing.declarations import Cause
+from mloda.provider import Cause
 from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin
 from mloda._testing.source_applicability import NO_POINTER
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY

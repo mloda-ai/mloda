@@ -11,6 +11,7 @@ from typing import Any, NamedTuple, get_origin
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
@@ -308,9 +309,15 @@ class ChooseComputeFrameworks:
             impl = serving_implementation(block.fg, framework, self.implementations)
             if impl is None:
                 continue
-            found = {impl.divergence(block.fg, str(f.name), f.options) for f in block.features} - {None}
+            found = {
+                scrub_credentials(r.describe())
+                for f in block.features
+                for r in impl.divergences_for(
+                    block.fg, str(f.name), f.options, parts=f.requested_parts if f.parts_only else None
+                )
+            }
             if found:
-                result[framework] = tuple(sorted(r for r in found if r is not None))
+                result[framework] = tuple(sorted(found))
         return result
 
     def _block_home(self, block: _Block) -> tuple[frozenset[Framework] | None, str | None]:

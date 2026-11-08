@@ -1,8 +1,12 @@
 """Run-all driven policy suites: pipeline result policies exercised end-to-end through ``mloda.run_all``.
 
-A new pipeline result policy ships a suite on ``RunAllSuite`` that covers every framework in SYNC and a worker mode,
-each case a ``PolicySuccess`` or a ``PolicyRaises``. Hosts only set ``adapter_class``.
-Driving the policy through the whole pipeline is mandatory: unit tests of single enforcement surfaces miss defects.
+A pipeline result policy is a rule or FeatureGroup-level flag that changes how the pipeline treats a result.
+It ships a suite on ``RunAllSuite`` covering every built-in framework in SYNC plus THREADING (a framework without
+THREADING declares ``sync_only_reason`` on its adapter), each case a ``PolicySuccess`` or a ``PolicyRaises``.
+Hosts only set ``adapter_class``; ``EmptyResultRunAllSuite`` is the worked example.
+Why: the retired ``allow_empty_result()`` flag had three enforcement surfaces; the third,
+``DataLifecycleManager.get_result_data``, shipped broken while unit tests of the other two passed, and only
+``run_all`` on every framework and mode caught it.
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ from mloda._testing.compute_framework.merge_suite import ASOF_SCENARIOS
 from mloda._testing.compute_framework_shape import serves_asof_merge
 from mloda._testing.framework_adapter import FrameworkAdapter
 from mloda._testing.source import reclaim
+from mloda._testing.suite import HookError
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, EmptyResultError
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.optional_dependency import require
@@ -61,6 +66,25 @@ PolicyExpectation = PolicySuccess | PolicyRaises
 _WORKER_MODES: set[ParallelizationMode] = {ParallelizationMode.SYNC, ParallelizationMode.THREADING}
 
 
+def run_all_modes(adapter_class: type[FrameworkAdapter]) -> list[ParallelizationMode]:
+    """The worker modes the adapter's framework serves; a SYNC-only framework must declare sync_only_reason."""
+    adapter = adapter_class()
+    framework = adapter.compute_framework()
+    modes = [mode for mode in _WORKER_MODES if mode in framework.supported_parallelization_modes()]
+    serves_threading = ParallelizationMode.THREADING in modes
+    if not serves_threading and adapter_class.sync_only_reason is None:
+        raise HookError(
+            f"{adapter_class.__name__}: {framework.__name__} serves no THREADING; "
+            "set sync_only_reason on the adapter if that is intended"
+        )
+    if serves_threading and adapter_class.sync_only_reason is not None:
+        raise HookError(
+            f"{adapter_class.__name__}: the sync_only_reason declaration is stale, "
+            f"{framework.__name__} serves THREADING"
+        )
+    return sorted(modes, key=str)
+
+
 class RunAllSuite(ComputeFrameworkSuite, suite_base=True):
     """Drives a FeatureGroup-level policy end-to-end through ``run_all`` on the host's framework."""
 
@@ -89,11 +113,8 @@ class RunAllSuite(ComputeFrameworkSuite, suite_base=True):
         if "mode" not in metafunc.fixturenames:
             return
         adapter_class = getattr(metafunc.cls, "adapter_class", None)
-        modes: set[ParallelizationMode] = set(_WORKER_MODES)
-        if adapter_class is not None:
-            supported = adapter_class().compute_framework().supported_parallelization_modes()
-            modes = {mode for mode in _WORKER_MODES if mode in supported}
-        metafunc.parametrize("mode", sorted(modes, key=str))
+        modes = sorted(_WORKER_MODES, key=str) if adapter_class is None else run_all_modes(adapter_class)
+        metafunc.parametrize("mode", modes)
 
     def run_all_connection(self, adapter: FrameworkAdapter) -> Any | None:
         """The connection travelling in the DataAccessCollection; None runs without one."""
@@ -187,7 +208,7 @@ class EmptyResultRunAllSuite(RunAllSuite, suite_base=True):
     def _assert_single_empty_result(self, adapter: FrameworkAdapter) -> PolicySuccess:
         def check(result: RunResult) -> None:
             assert len(result) == 1
-            assert self._result_row_count(adapter, result[0]) == 0
+            assert self.row_count(adapter, result[0]) == 0
             for step, frame in result.frames():
                 assert step.result_framework is not None
                 assert isinstance(frame, step.result_framework.expected_data_framework())
@@ -318,7 +339,7 @@ class SiblingDictRunAllSuite(RunAllSuite, suite_base=True):
         def check(result: RunResult) -> None:
             columns: dict[str, list[Any]] = {}
             for frame in result:
-                for row in self._result_rows(adapter, frame):
+                for row in self.rows(adapter, frame):
                     for key, value in row.items():
                         columns.setdefault(key, []).append(value)
             for name, values in expected.items():
@@ -637,7 +658,7 @@ class AsofRunAllSuite(RunAllSuite, suite_base=True):
 
         def check(result: RunResult) -> None:
             assert len(result) == 1
-            rows = self._result_rows(adapter, result[0])
+            rows = self.rows(adapter, result[0])
             assert sorted(str(r["AsofJoinedFeature"]) for r in rows) == ["1|10|1", "1|20|2", "2|15|3"]
 
         self.assert_policy_case(

@@ -244,7 +244,7 @@ class ConnectionEndToEndSuite(ComputeFrameworkSuite, suite_base=True):
             data_access_collection=DataAccessCollection({adapter.connection}),
             parallelization_modes={ParallelizationMode.SYNC},
         )
-        assert sorted(row[dst] for row in self._result_rows(adapter, result[0])) == [2, 4, 6]
+        assert sorted(row[dst] for row in self.rows(adapter, result[0])) == [2, 4, 6]
         assert seen[dst] is adapter.connection
 
     def test_tfs_connection_reaches_destination_framework(
@@ -276,5 +276,5 @@ class ConnectionEndToEndSuite(ComputeFrameworkSuite, suite_base=True):
             plugin_collector=PluginCollector.enabled_feature_groups({root, sink}),
             parallelization_modes={ParallelizationMode.SYNC},
         )
-        assert sorted(row[dst] for row in self._result_rows(adapter, result[0])) == [2, 4, 6]
+        assert sorted(row[dst] for row in self.rows(adapter, result[0])) == [2, 4, 6]
         assert seen[dst] is adapter.connection

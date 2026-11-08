@@ -4,7 +4,6 @@ See ``docs/docs/in_depth/named-data-access-handles.md`` for the user-facing guid
 """
 
 import logging
-import time
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +15,7 @@ from mloda.core.abstract_plugins.components.input_data.read_db_fg import ReadDBF
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
 from mloda.user import Feature
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.helpers.cpu_scaling import assert_scales_linearly
 from tests.mixins.reader_feature_groups.lazy_source_group import load_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import TOY_TOKEN
 
@@ -768,18 +768,19 @@ class TestRedact:
         assert "swordfishlong" not in redacted2
         assert self._REGISTERED_VALUE in redacted2
 
-    def test_large_text_with_secrets_redacts_well_under_one_second(self) -> None:
+    def test_large_text_with_secrets_redacts_linearly(self) -> None:
         dac = DataAccessCollection(
             credentials={
                 "a": {"password": self._REGISTERED_VALUE},
                 "b": {"password": "swordfishlong"},  # nosec B105 B106
             }
         )
-        text = ("filler text " * 20_000) + f"{self._REGISTERED_VALUE} swordfishlong"
-        start = time.perf_counter()
-        redacted = dac.redact(text)
-        elapsed = time.perf_counter() - start
-        assert elapsed < 1.0, f"redact took {elapsed:.3f}s on 200k chars"
+        redacted = assert_scales_linearly(
+            dac.redact,
+            lambda n: ("filler text " * n) + f"{self._REGISTERED_VALUE} swordfishlong",
+            20_000,
+            "dac.redact with registered secrets",
+        )
         assert self._REGISTERED_VALUE not in redacted
         assert "swordfishlong" not in redacted
 

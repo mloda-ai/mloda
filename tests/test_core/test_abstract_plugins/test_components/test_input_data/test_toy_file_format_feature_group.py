@@ -5,7 +5,6 @@ from __future__ import annotations
 import inspect
 import itertools
 import os
-import time
 from collections.abc import Collection
 from pathlib import Path
 from typing import Any, cast
@@ -32,6 +31,7 @@ from mloda.core.prepare.identify_feature_group import (
 from mloda.user import DataAccessCollection, Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.helpers.cpu_scaling import assert_scales_linearly
 from tests.mixins.reader_feature_groups.lazy_source_group import load_document_group
 from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     FileLoadsIntoFrameworkMixin,
@@ -451,13 +451,13 @@ class TestFileSourceUriProjection:
         second = source(f"s3://u:hunter2@bucket/a%2Fc{TOY_SUFFIX}").source  # nosec B105
         assert first != second
 
-    def test_long_encoded_head_cuts_quickly(self) -> None:
-        uri = "s3://b/" + "%25" * 8000 + ";x/x" + TOY_SUFFIX
-        started = time.monotonic()
-        match = ToyFileFormatFG._source(uri)
-        assert time.monotonic() - started < 5
+    def test_long_encoded_head_cuts_linearly(self) -> None:
+        def build(n: int) -> str:
+            return "s3://b/" + "%25" * n + ";x/x" + TOY_SUFFIX
+
+        match = assert_scales_linearly(ToyFileFormatFG._source, build, 8000, "source projection of a long encoded head")
         assert match.source == "s3://b/" + "%25" * 8000 + ";***/x" + TOY_SUFFIX
-        assert match.access == uri
+        assert match.access == build(8000)
 
     @pytest.mark.parametrize(
         "template,expected",

@@ -114,7 +114,6 @@ class Divergence:
 
 
 def stamped(record: Divergence, source: DivergenceSource, framework: str | None) -> Divergence:
-    """A copy of the record with its source and framework set."""
     result = copy.copy(record)
     object.__setattr__(result, "source", source)
     object.__setattr__(result, "framework", framework)

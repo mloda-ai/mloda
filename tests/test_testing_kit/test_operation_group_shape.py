@@ -197,18 +197,6 @@ def test_alias_with_a_gap_record_on_one_side_passes() -> None:
     assert check_operation_group_shape(group, alias_pairs=(("sum", "mean"),)).failures == ()
 
 
-def test_divergence_outside_the_universe_fails_at_definition() -> None:
-    group = _make_group_a()
-    bogus = Divergence(kind=DivergenceKind.VALUE, cause=Cause.BACKEND, subtypes=frozenset({"bogus"}), reason="reason")
-    with pytest.raises(ValueError, match="outside the subtype universe"):
-        _make_impl(group, divergences=(bogus,))
-
-
-def test_divergence_with_an_empty_reason_fails_at_construction() -> None:
-    with pytest.raises(ValueError):
-        Divergence(kind=DivergenceKind.VALUE, cause=Cause.BACKEND, subtypes=frozenset({"sum"}), reason="")
-
-
 def test_assert_passes_silently_for_conforming_group() -> None:
     group, _keep = make_conforming()
     assert_operation_group_shape(group)

@@ -105,7 +105,12 @@ class FeatureSet:
 
     def __getstate__(self) -> dict[str, Any]:
         """Drop the marker when pickling: it holds a class by reference and a worker recomputes it cheaply."""
-        return {**self.__dict__, "_defaults_materialized_for": None, "_defaults_checked": ((), None)}
+        return {
+            **self.__dict__,
+            "_defaults_materialized_for": None,
+            "_defaults_checked": ((), None),
+            "_calculate_context": None,
+        }
 
     def freeze(self) -> None:
         """Freeze features, options and filters, mark the set prepared; copies and run views stay writable."""

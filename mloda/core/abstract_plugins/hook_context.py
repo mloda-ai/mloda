@@ -14,7 +14,7 @@ from dataclasses import FrozenInstanceError, dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from mloda.core.abstract_plugins.components.credential_grant import credential_read_mark, credentials_read_since
+from mloda.core.abstract_plugins.components.credential_grant import read_recorder
 from mloda.core.abstract_plugins.components.credential_scrub import redact_escaping_exception
 from mloda.core.abstract_plugins.components.declared_attributes import scalar_attributes
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows, current_failed_rows_collector
@@ -203,22 +203,22 @@ def instrument(
         object.__setattr__(context, "result_attributes", None)
         object.__setattr__(context, "failed_rows", ())
         object.__setattr__(context, "credentials_read", ())
-        read_mark = credential_read_mark()
         collector = current_failed_rows_collector()
         seen = 0 if collector is None else len(collector.entries)
         succeeded = False
         start = time.perf_counter()
-        try:
-            # Mask here, the innermost wrap, so no extender sees a registered credential in the exception.
-            with redact_escaping_exception():
-                result = func(*args, **kwargs)
-            succeeded = True
-        finally:
-            context.duration_seconds = time.perf_counter() - start
-            context.status = "success" if succeeded else "error"
-            object.__setattr__(context, "credentials_read", credentials_read_since(read_mark))
-            if collector is not None:
-                object.__setattr__(context, "failed_rows", tuple(collector.entries[seen:]))
+        with read_recorder() as reads:
+            try:
+                # Mask here, the innermost wrap, so no extender sees a registered credential in the exception.
+                with redact_escaping_exception():
+                    result = func(*args, **kwargs)
+                succeeded = True
+            finally:
+                context.duration_seconds = time.perf_counter() - start
+                context.status = "success" if succeeded else "error"
+                object.__setattr__(context, "credentials_read", tuple(sorted(set(reads))))
+                if collector is not None:
+                    object.__setattr__(context, "failed_rows", tuple(collector.entries[seen:]))
         context.rows_out = safe_field(lambda: row_count(result), None)
         context.output_schema = safe_field(lambda: output_schema(result), None)
         return result

@@ -1540,6 +1540,44 @@ def test_a_saver_read_shows_on_the_calculate_context_after_the_run(
     assert [context.credentials_read for context in probe.kept] == [expected]
 
 
+class ChsRcRaisingArtifact(BaseArtifact):
+    @classmethod
+    def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
+        _read_host(features.get_options_key("chs_two_z_handle"))
+        raise RuntimeError("saver failed")
+
+
+class ChsRcRaisingSaverFG(ChsRcCalcAndSaverFG):
+    """Calculate reads the first handle, the saver reads the second and then raises."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_raising_saver_a"}
+
+    @staticmethod
+    def artifact() -> type[BaseArtifact] | None:
+        return ChsRcRaisingArtifact
+
+
+@pytest.mark.timeout(15)
+def test_a_saver_that_reads_then_raises_still_shows_the_read_on_the_calculate_context(flight_server: Any) -> None:
+    from mloda.user import mloda as mloda_api
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    probe = _ReadProbeExtender({ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE})
+    api = mloda_api(
+        [Feature("chs_rc_raising_saver_a", options={"chs_two_a_handle": _VAULT_A, "chs_two_z_handle": _VAULT_B})],
+        [PandasDataFrame],
+        data_access_collection=_vault_dac(_TWO_VAULTS),
+        plugin_collector=PluginCollector.enabled_feature_groups({ChsRcRaisingSaverFG}),
+        function_extender={probe},
+    )
+    with pytest.raises(RuntimeError, match="saver failed"):
+        api.run(parallelization_modes={ParallelizationMode.SYNC}, flight_server=flight_server)
+
+    assert [context.credentials_read for context in probe.kept] == [(_VAULT_A, _VAULT_B)]
+
+
 @pytest.mark.timeout(15)
 def test_read_credential_raises_after_save_artifact_returns(flight_server: Any) -> None:
     from mloda.user import mloda as mloda_api
@@ -1717,12 +1755,17 @@ def test_no_hook_context_carries_a_credential_value(flight_server: Any) -> None:
     for context in probe.kept:
         assert _E2E_HMAC not in repr(context)
         assert _E2E_KEY not in repr(context)
-        if context.hook is ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE and "Consumer" in str(
-            context.feature_group_class
+        if (
+            context.hook is ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE
+            and context.feature_group_class == f"{ChsWinConsumerFG.__module__}.{ChsWinConsumerFG.__qualname__}"
         ):
             assert context.credentials_read == (_E2E_HANDLE,)
         if context.hook in {ExtenderHook.VALIDATE_INPUT_FEATURE, ExtenderHook.VALIDATE_OUTPUT_FEATURE}:
             assert context.credentials_read == ()
+    load_reads = [c.credentials_read for c in probe.kept if c.hook is ExtenderHook.INPUT_DATA_LOAD]
+    assert load_reads
+    assert all(reads in ((), (_E2E_HANDLE,)) for reads in load_reads)
+    assert (_E2E_HANDLE,) in load_reads
 
 
 @pytest.mark.timeout(15)

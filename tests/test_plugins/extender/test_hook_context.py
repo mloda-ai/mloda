@@ -4,10 +4,13 @@ Pins construction, the ambient current()/activate() scope (including nested
 restore), row_count's __len__ gating, and instrument's timing/status bookkeeping.
 """
 
+import contextvars
 import copy
 import dataclasses
 import json
 import pickle  # nosec B403
+import threading
+from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
@@ -694,6 +697,31 @@ class TestHookContextResultAttributes:
 
         assert inner.credentials_read == ("b",)
         assert outer.credentials_read == ("a", "b")
+
+    def test_concurrent_sibling_calls_in_copied_contexts_keep_their_reads_apart(self) -> None:
+        context_a = _make_context()
+        context_b = _make_context()
+        barrier = threading.Barrier(2, timeout=5)
+
+        def reader(handle: str) -> Callable[[], None]:
+            def raw() -> None:
+                read_credential(handle)
+                barrier.wait()
+
+            return raw
+
+        with credentials_scope({"a": {"k": "v"}, "b": {"k": "v"}}):
+            run_a = contextvars.copy_context()
+            run_b = contextvars.copy_context()
+            thread_a = threading.Thread(target=run_a.run, args=(instrument(context_a, reader("a")),))
+            thread_b = threading.Thread(target=run_b.run, args=(instrument(context_b, reader("b")),))
+            thread_a.start()
+            thread_b.start()
+            thread_a.join(timeout=10)
+            thread_b.join(timeout=10)
+
+        assert context_a.credentials_read == ("a",)
+        assert context_b.credentials_read == ("b",)
 
     def test_instrument_error_path_publishes_reads_before_raising(self) -> None:
         context = _make_context()

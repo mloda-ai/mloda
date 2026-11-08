@@ -7,6 +7,7 @@ from contextvars import ContextVar, Token
 from typing import Any, NoReturn
 
 from mloda.core.abstract_plugins.components.credential_grant import (
+    record_credential_read,
     _GRANT_HOLDER,
     CredentialLookup,
     StaticGrant,
@@ -161,5 +162,5 @@ def read_credential(handle: str) -> ResolvedCredential:
         names = ", ".join(repr(name) for name in declared)
         raise CredentialReadRefused(f"Credential '{handle}' was not declared by this step; declared: {names}.")
     resolved = ResolvedCredential(handle, lookup.credential(handle))
-    lookup.record_read(handle)
+    record_credential_read(handle)
     return resolved

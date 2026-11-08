@@ -1,6 +1,7 @@
 """Hold the credentials a step declared for the duration of its execution, masked in errors and logs."""
 
-from collections.abc import Mapping
+from collections.abc import Generator, Mapping
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from typing import Any, Protocol
 
@@ -19,8 +20,6 @@ class CredentialLookup:
         self._data: dict[str, Any] = dict(values)
         self.policy = policy
         self._closed = False
-        self._reads: dict[str, int] = {}
-        self._counter = 0
 
     @property
     def closed(self) -> bool:
@@ -32,16 +31,6 @@ class CredentialLookup:
         if handle not in self._data:
             raise KeyError(f"Credential '{handle}' was not declared by this step.")
         return self._data[handle]
-
-    def record_read(self, handle: str) -> None:
-        self._counter += 1
-        self._reads[handle] = self._counter
-
-    def read_mark(self) -> int:
-        return self._counter
-
-    def read_since(self, mark: int) -> tuple[str, ...]:
-        return tuple(sorted(handle for handle, seq in self._reads.items() if seq > mark))
 
     def declared(self) -> tuple[str, ...]:
         return tuple(sorted(self._data))
@@ -105,14 +94,23 @@ class grant_scope:  # noqa: N801
             secrets.__exit__(exc_type, exc, tb)
 
 
-def credential_read_mark() -> int:
-    lookup = _GRANT_HOLDER.get()
-    return 0 if lookup is None else lookup.read_mark()
+_READ_RECORDERS: ContextVar[tuple[set[str], ...]] = ContextVar("mloda_credential_read_recorders", default=())
 
 
-def credentials_read_since(mark: int) -> tuple[str, ...]:
-    lookup = _GRANT_HOLDER.get()
-    return () if lookup is None else lookup.read_since(mark)
+@contextmanager
+def read_recorder() -> Generator[set[str], None, None]:
+    """Collect the handles read inside the block, alongside any enclosing recorders."""
+    recorder: set[str] = set()
+    token = _READ_RECORDERS.set((*_READ_RECORDERS.get(), recorder))
+    try:
+        yield recorder
+    finally:
+        _READ_RECORDERS.reset(token)
+
+
+def record_credential_read(handle: str) -> None:
+    for recorder in _READ_RECORDERS.get():
+        recorder.add(handle)
 
 
 def _read_granted(handle: str) -> Any:

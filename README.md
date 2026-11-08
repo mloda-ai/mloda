@@ -19,7 +19,9 @@ Needs [uv](https://docs.astral.sh/uv/). Nothing is added to your project: `uvx` 
 uvx mloda@latest demo
 ```
 
-It runs the example below and prints the result, then the two steps mloda chose: read the data, then aggregate. You named the features; mloda found the steps.
+![mloda demo: the result tables and the two-step plan mloda resolved](https://raw.githubusercontent.com/mloda-ai/mloda/main/docs/assets/mloda-demo.gif)
+
+It prints the result, then the plan: the two steps mloda chose to make the features you named.
 
 ## Run it
 

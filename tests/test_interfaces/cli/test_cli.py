@@ -7,9 +7,11 @@ import ast
 import base64
 import csv
 import getpass
+import hashlib
 import io
 import json
 import logging
+import re
 import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -1053,6 +1055,24 @@ class TestDemo:
         assert outcome.code == 0, outcome.err
         assert outcome.out == DEMO_STDOUT
         assert outcome.err == ""
+
+    def test_readme_embeds_the_recorded_demo_gif_matching_the_demo_output(self) -> None:
+        fix = "re-record with: uv run --with pillow==13.0.0 python docs/record_demo_gif.py"
+        url = "https://raw.githubusercontent.com/mloda-ai/mloda/main/docs/assets/mloda-demo.gif"
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        parts = re.split(r"^(## .+)$", readme, flags=re.MULTILINE)
+        sections = dict(zip(parts[1::2], parts[2::2]))
+        gif = REPO_ROOT / "docs" / "assets" / "mloda-demo.gif"
+
+        assert "## See it" in sections, "README.md must have a '## See it' section"
+        assert re.search(rf"!\[[^\]]+\]\({re.escape(url)}\)", sections["## See it"]), (
+            f"README '## See it' must embed ![alt]({url})"
+        )
+        assert gif.is_file(), f"{gif} is missing; {fix}"
+        data = gif.read_bytes()
+        assert data.startswith(b"GIF89a"), f"{gif} is not a GIF; {fix}"
+        digest = hashlib.sha256(("$ uvx mloda@latest demo\n" + DEMO_STDOUT).encode("utf-8")).hexdigest()
+        assert digest.encode("ascii") in data, f"{gif} does not match the demo output; {fix}"
 
 
 class TestPackaging:

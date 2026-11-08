@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import SO
 from mloda.core.abstract_plugins.components.credential_access import run_boundary
 from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
 from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, feature_group_subclasses
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
@@ -129,11 +130,13 @@ def _divergence_records(
 ) -> list[Divergence]:
     """The group's stamped records plus those of each distinct serving implementation."""
 
+    stop_after = "load_neutral" if is_nominal_subclass(fg_class, SourceFeatureGroup) else None
+
     def read() -> list[Divergence]:
         serving = {
             impl
             for cfw in fg_class.compute_framework_definition()
-            if (impl := serving_implementation(fg_class, cfw, implementations)) is not None
+            if (impl := serving_implementation(fg_class, cfw, implementations, stop_after=stop_after)) is not None
         }
         records = list(fg_class.divergence_records())
         for impl in sorted(serving, key=lambda i: f"{i.__module__}:{i.__qualname__}"):

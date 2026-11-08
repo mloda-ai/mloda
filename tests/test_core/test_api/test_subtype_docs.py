@@ -12,7 +12,19 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.provider import FeatureChainParserMixin, FeatureGroup, SubtypeDeclaration, property_spec
+from mloda.provider import (
+    Cause,
+    Divergence,
+    DivergenceKind,
+    FeatureChainParserMixin,
+    FeatureGroup,
+    SubtypeDeclaration,
+    property_spec,
+)
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation import ToyWorkerFG
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation_impl import (
+    ToyWorkerPythonDict,
+)
 from mloda.steward import FeatureGroupInfo, ResolvedFeature, get_feature_group_docs, resolve_feature
 from mloda.user import PluginCollector, PluginLoader
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -300,6 +312,38 @@ class TestSubDeclDocContractAFeatureGroupInfoFields:
         assert second.parametric_subtypes == []
         assert second.subtype_support == {}
         assert second.divergences == []
+
+
+class SubDeclDocWorkerSubFG(ToyWorkerFG):
+    """Source subclass that keeps the parent's load_neutral."""
+
+
+class SubDeclDocWorkerNeutralFG(ToyWorkerFG):
+    """Source subclass that overrides load_neutral, so the planner stops before the parent's Implementation."""
+
+    @classmethod
+    def load_neutral(cls, match: Any, features: Any) -> Any:
+        return {}
+
+
+class TestSourceSubclassDivergenceDocs:
+    """Docs list a parent Implementation's records only for a subclass the planner would let it serve."""
+
+    @staticmethod
+    def _reasons(group: type[FeatureGroup], monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        record = Divergence(kind=DivergenceKind.VALUE, cause=Cause.BACKEND, reason="worker differs")
+        monkeypatch.setattr(ToyWorkerPythonDict, "divergences", (record,))
+        docs = get_feature_group_docs(plugin_collector=PluginCollector.enabled_feature_groups({group}))
+        assert [d.name for d in docs] == [group.__name__]
+        return [r.reason for r in docs[0].divergences]
+
+    def test_a_subclass_without_its_own_load_neutral_lists_the_parent_records(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        assert self._reasons(SubDeclDocWorkerSubFG, monkeypatch) == ["worker differs"]
+
+    def test_a_subclass_overriding_load_neutral_does_not(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        assert self._reasons(SubDeclDocWorkerNeutralFG, monkeypatch) == []
 
 
 class TestFeatureGroupInfoContractVersionAndDivergences:

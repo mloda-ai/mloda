@@ -11,8 +11,7 @@ from typing import Any
 
 from mloda.core.abstract_plugins.components.credential_handle import credential_handle_keys
 from mloda.core.abstract_plugins.components.credential_scrub import _mask_secret_keys
-from mloda.core.abstract_plugins.components.divergence import Divergence
-from mloda.core.abstract_plugins.implementation import divergence_order
+from mloda.core.abstract_plugins.components.divergence import Divergence, divergence_order
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.prepare.stable_text import stable_text
 
@@ -202,6 +201,11 @@ def _without_contract_version(content: dict[str, Any]) -> dict[str, Any]:
     return {**content, "compute": _sorted_records(records)}
 
 
+def _compute_is_records(content: Any) -> bool:
+    compute = content.get("compute") if isinstance(content, dict) else None
+    return isinstance(compute, list) and all(isinstance(r, dict) for r in compute)
+
+
 def _contract_version_only(locked: dict[str, Any], resolved: dict[str, Any]) -> bool:
     return _without_contract_version(locked) == _without_contract_version(resolved)
 
@@ -223,7 +227,7 @@ def _contract_version_message(locked: dict[str, Any], resolved: dict[str, Any]) 
 
 
 def check_plan_lock(plan: Sequence[PlanStep], path: str | os.PathLike[str]) -> None:
-    """Raise PlanLockMismatchError unless the plan matches the lock file; never writes."""
+    """Raise PlanLockMismatchError unless the plan matches the lock; a contract-version-only change warns."""
     target = Path(path)
     resolved = _lock_text(plan)
     if not target.exists():
@@ -235,7 +239,11 @@ def check_plan_lock(plan: Sequence[PlanStep], path: str | os.PathLike[str]) -> N
     resolved_content = json.loads(resolved)
     if locked == resolved_content:
         return
-    if _contract_version_only(locked, resolved_content):
+    if (
+        _compute_is_records(locked)
+        and _compute_is_records(resolved_content)
+        and _contract_version_only(locked, resolved_content)
+    ):
         warnings.warn(_contract_version_message(locked, resolved_content), PlanLockContractVersionWarning, stacklevel=2)
         return
     diff = difflib.unified_diff(

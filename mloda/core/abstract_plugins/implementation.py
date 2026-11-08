@@ -14,10 +14,10 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import (
     ThirdPartyVersionMode,
 )
 from mloda.core.abstract_plugins.components.divergence import (
-    Cause,
     Divergence,
     DivergenceKind,
     DivergenceSource,
+    divergence_order,
     stamped,
     validate_divergences,
 )
@@ -190,14 +190,11 @@ class Implementation(ABC, Generic[G]):
         options: Options,
         *,
         parts: frozenset[str] | None = None,
-        include_gaps: bool = False,
     ) -> tuple[Divergence, ...]:
-        """The stamped records that apply to the feature, GAP only on request; parts is None for the whole feature."""
+        """The stamped non-GAP records that apply to the feature; parts is None for the whole feature."""
         subtype = _canonical_subtype(group, feature_name, options)
         return tuple(
-            r
-            for r in cls.divergence_records()
-            if (include_gaps or r.kind is not DivergenceKind.GAP) and r.applies_to(subtype, parts)
+            r for r in cls.divergence_records() if r.kind is not DivergenceKind.GAP and r.applies_to(subtype, parts)
         )
 
     @classmethod
@@ -206,23 +203,13 @@ class Implementation(ABC, Generic[G]):
         """Compute the features; data is the input frame for an operation group, the SourceMatch for a source group."""
 
 
-def divergence_order(r: Divergence) -> tuple[Any, ...]:
-    return (
-        list(DivergenceSource).index(r.source) if r.source else -1,
-        r.framework or "",
-        list(DivergenceKind).index(r.kind),
-        list(Cause).index(r.cause),
-        sorted(r.subtypes),
-        sorted(r.outputs),
-        r.reason,
-    )
-
-
 def step_divergences(
     group: type[FeatureGroup], implementation: type[Implementation[Any]] | None, features: FeatureSet
 ) -> tuple[Divergence, ...]:
     """Stamped group and implementation records applying to any feature of the set, GAP included, sorted."""
     records = group.divergence_records() + (implementation.divergence_records() if implementation else ())
+    if not records:
+        return ()
     found: set[Divergence] = set()
     for feature in features.features:
         subtype = _canonical_subtype(group, str(feature.name), feature.options)

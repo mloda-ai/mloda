@@ -555,20 +555,6 @@ class TestDivergencesFor:
         assert impl.divergences_for(group, "divtest_x", options, parts=frozenset({"b"})) == ()
         assert len(impl.divergences_for(group, "divtest_x", options)) == 1
 
-    def test_include_gaps_adds_exactly_the_gap_records(self) -> None:
-        group = _make_group()
-        gap = _record(kind=DivergenceKind.GAP, subtypes={"sum"}, reason="no sum")
-        other_gap = _record(kind=DivergenceKind.GAP, subtypes={"mean"}, reason="no mean")
-        impl = _make_impl(group, divergences=(_record(subtypes={"sum"}), gap, other_gap))
-        options = Options({KEY: "sum"})
-
-        default = impl.divergences_for(group, "divtest_x", options)
-        with_gaps = impl.divergences_for(group, "divtest_x", options, include_gaps=True)
-
-        assert [r.reason for r in default] == ["skips NaN"]
-        assert [r.reason for r in with_gaps] == ["skips NaN", "no sum"]
-        assert [r for r in with_gaps if r not in default] == [r for r in with_gaps if r.kind is DivergenceKind.GAP]
-
 
 class TestStepDivergences:
     """The step-level union of group and serving-implementation records over a FeatureSet."""
@@ -655,3 +641,19 @@ class TestStepDivergences:
         assert first == self._call(group, impl, features)
         assert [r.source for r in first] == [DivergenceSource.FEATURE_GROUP] * 3 + [DivergenceSource.IMPLEMENTATION]
         assert [r.reason for r in first[:3]] == ["a", "b", "z"]
+
+    def test_ties_on_everything_but_variant_or_docs_order_by_variant_then_docs(self) -> None:
+        from mloda.core.abstract_plugins.components.divergence import divergence_order
+
+        variants = [_record(kind=DivergenceKind.VARIANT, variant=v, reason="same") for v in ("b", "a", "c")]
+        docs = [_record(cause=Cause.OTHER, docs=d, reason="same") for d in ("y", "x")]
+        group = _make_group(DIVERGENCES=(*variants, *docs))
+
+        found = self._call(group, None, _feature_set(_feature()))
+
+        assert [r.variant for r in found if r.kind is DivergenceKind.VARIANT] == ["a", "b", "c"]
+        assert [r.docs for r in found if r.cause is Cause.OTHER] == ["x", "y"]
+        assert list(found) == sorted(found, key=divergence_order)
+        assert divergence_order(stamped(variants[1], DivergenceSource.FEATURE_GROUP, None)) < divergence_order(
+            stamped(variants[0], DivergenceSource.FEATURE_GROUP, None)
+        )

@@ -118,6 +118,7 @@ class SbfixDocBogusSupportedFG(FeatureGroup):
 class SbfixRaisingRecordsFG(SbfixDocBogusSupportedFG):
     """Group whose divergence records cannot be read."""
 
+    CONTRACT_VERSION = 2
     SUBTYPES = None  # type: ignore[assignment]
     PROPERTY_MAPPING = {}
 
@@ -175,8 +176,8 @@ class TestSbfixBogusSupportedSurfacedInDocs:
         assert SBFIX_BOGUS_FRAMEWORK in doc.subtype_error
         assert "SbfixDocBogusSupportedFG" in doc.subtype_error
 
-    def test_a_raising_divergence_read_degrades_to_no_records_and_no_contract_version(self) -> None:
+    def test_a_raising_divergence_read_degrades_to_no_records_and_keeps_the_contract_version(self) -> None:
         doc = _sbfix_doc_for(SbfixRaisingRecordsFG)
 
         assert doc.divergences == []
-        assert doc.contract_version is None
+        assert doc.contract_version == 2

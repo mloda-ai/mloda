@@ -11,7 +11,7 @@ from typing import Any, NamedTuple, get_origin
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
-from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+from mloda.core.abstract_plugins.components.divergence import DivergenceKind
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
@@ -309,13 +309,12 @@ class ChooseComputeFrameworks:
             impl = serving_implementation(block.fg, framework, self.implementations)
             if impl is None:
                 continue
-            found = {
-                scrub_credentials(r.describe())
-                for f in block.features
-                for r in impl.divergences_for(
-                    block.fg, str(f.name), f.options, parts=f.requested_parts if f.parts_only else None
-                )
-            }
+            records = [r for r in impl.divergence_records() if r.kind is not DivergenceKind.GAP]
+            found: set[str] = set()
+            for f in block.features:
+                subtype = impl.canonical_subtype(block.fg, str(f.name), f.options)
+                parts = f.requested_parts if f.parts_only else None
+                found.update(r.describe() for r in records if r.applies_to(subtype, parts))
             if found:
                 result[framework] = tuple(sorted(found))
         return result

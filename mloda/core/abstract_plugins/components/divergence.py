@@ -6,6 +6,7 @@ import copy
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 
@@ -184,3 +185,18 @@ def validate_divergences(
     problems = divergence_problems(owner, records, universe() if needs_universe(records) else frozenset(), output_parts)
     if problems:
         raise ValueError("; ".join(problems))
+
+
+def divergence_order(r: Divergence) -> tuple[Any, ...]:
+    """Total deterministic sort key for stamped records."""
+    return (
+        list(DivergenceSource).index(r.source) if r.source else -1,
+        r.framework or "",
+        list(DivergenceKind).index(r.kind),
+        list(Cause).index(r.cause),
+        sorted(r.subtypes),
+        sorted(r.outputs),
+        r.reason,
+        r.variant or "",
+        r.docs or "",
+    )

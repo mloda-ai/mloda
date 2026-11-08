@@ -1206,6 +1206,52 @@ def test_a_steward_can_turn_the_contract_version_warning_into_a_failure(tmp_path
             check_plan_lock([_compute_step(contract_version=2)], lock)
 
 
+def test_lock_divergences_with_a_variant_or_docs_tie_are_written_in_a_fixed_order() -> None:
+    def record(**kwargs: Any) -> Any:
+        base: dict[str, Any] = {"kind": DivergenceKind.VARIANT, "cause": Cause.OTHER, "reason": "same", "docs": "d"}
+        return stamped(Divergence(**{**base, **kwargs}), DivergenceSource.FEATURE_GROUP, None)
+
+    records = (
+        record(variant="b"),
+        record(variant="a"),
+        record(kind=DivergenceKind.TYPE, docs="y"),
+        record(kind=DivergenceKind.TYPE, docs="x"),
+    )
+    for ordered in (records, records[::-1]):
+        written = json.loads(_lock_text([_compute_step(divergences=ordered)]))["compute"][0]["divergences"]
+        assert [(r["variant"], r["docs"]) for r in written] == [(None, "x"), (None, "y"), ("a", "d"), ("b", "d")]
+
+
+@pytest.mark.parametrize("compute", ["x", [1]], ids=["not_a_list", "not_dicts"])
+def test_a_hand_edited_lock_with_a_malformed_compute_raises_a_mismatch(tmp_path: Path, compute: Any) -> None:
+    lock, plan = _lock_with_contract_version(tmp_path, 1)
+    _edit_lock(lock, lambda c: c.update(compute=compute))
+
+    with pytest.raises(PlanLockMismatchError):
+        check_plan_lock(plan, lock)
+
+
+def test_two_groups_differing_only_in_contract_version_warn_once_naming_both(tmp_path: Path) -> None:
+    def plan(version: int) -> list[PlanStep]:
+        return [
+            _compute_step(contract_version=version),
+            _compute_step(feature_group=ToyWorkerFG, feature_names=("lock_io_other",), contract_version=version),
+        ]
+
+    lock = tmp_path / "plan.lock"
+    write_plan_lock(plan(1), lock)
+
+    with pytest.warns(PlanLockContractVersionWarning) as caught:
+        check_plan_lock(plan(2), lock)
+
+    assert len(caught) == 1
+    message = str(caught[0].message)
+    assert "AggregatedFeatureGroup" in message
+    assert "ToyWorkerFG" in message
+    assert message.count("locked [1]") == 2
+    assert message.count("resolved [2]") == 2
+
+
 def test_the_contract_version_warning_is_a_user_warning() -> None:
     assert issubclass(PlanLockContractVersionWarning, UserWarning)
     assert not issubclass(PlanLockContractVersionWarning, PlanLockMismatchError)

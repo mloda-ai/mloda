@@ -329,7 +329,7 @@ or of a handle the step did not declare, raises `CredentialReadRefused` (not a `
 A handle a source step binds at match time is reported in the plan, the lock and the hooks but grants no `read_credential`; a credential not registered in the collection renders `<pointer>`.
 
 The window is open only inside `calculate_feature` (and what it awaits) and inside an artifact saver. It is closed in
-validate hooks, in extenders, between the two, and after the step. The stewards see the handle name in `explain()` and
+validate hooks, in extenders, between the two, and after the step. A mloda run started inside `calculate_feature` starts with the window closed and records its reads on its own steps only. The stewards see the handle name in `explain()` and
 the plan lock, never a value; a refused read shows as the error of the step in any extender that wraps it.
 Extenders see which declared handles a step read in `HookContext.credentials_read` (see [Extender](../chapter1/extender.md)).
 

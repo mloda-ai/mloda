@@ -16,6 +16,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
     scrub_credentials,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda.core.abstract_plugins.components.credential_access import run_boundary
 from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, safe_value_text
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourcePointerError
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
@@ -129,20 +130,23 @@ logger = logging.getLogger(__name__)
 
 
 class _CredentialRedaction:
-    """Mask secret literals in logs and in any exception escaping the block (a class: see registered_secrets_scope)."""
+    """Mask secret literals, close the credential read window (a class: see registered_secrets_scope)."""
 
     def __init__(self, literals: frozenset[str], identity: frozenset[str] | None = None) -> None:
         self._literals = literals
         self._scope = registered_secrets_scope(literals, identity)
+        self._boundary = run_boundary()
 
     def __enter__(self) -> None:
         self._scope.__enter__()
+        self._boundary.__enter__()
 
     def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
         try:
             if exc is not None:
                 redact_exception(exc, self._literals)
         finally:
+            self._boundary.__exit__(exc_type, exc, tb)
             self._scope.__exit__(exc_type, exc, tb)
 
 
@@ -199,7 +203,7 @@ class mlodaAPI:
         )
         self.plan_id = self.plan_context.plan_id
 
-        with _plan_origin(None):
+        with run_boundary(), _plan_origin(None):
             call_contained_hook(self._extenders, "on_plan_start", self.plan_context)
             plan_outcome = LifecycleOutcome("succeeded")
             try:
@@ -1019,11 +1023,12 @@ class mlodaAPI:
             credentials: ``{handle: Credential | dict}`` replacing declared handles' values for this run only.
             parameters: ``{key: value}`` replacing declared runtime parameters for this run only.
         """
-        with self._credential_redaction():
-            run_dac, names = self._run_collection(credentials)
-        run_parameters = self._run_parameters(parameters)
-        run_inputs = self._run_inputs(api_data, artifacts, run_parameters, names)
-        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
+        with run_boundary():
+            with self._credential_redaction():
+                run_dac, names = self._run_collection(credentials)
+            run_parameters = self._run_parameters(parameters)
+            run_inputs = self._run_inputs(api_data, artifacts, run_parameters, names)
+            run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
         plan = list(self._plan_snapshot())
         with self._credential_redaction(self._secret_literals(run_dac), self._identity_literals(run_dac)):
             runner = self._batch_run(
@@ -1066,23 +1071,24 @@ class mlodaAPI:
         body itself contains ``yield`` only starts executing on first iteration, which would defer that read
         past the caller's intended scope. ``credentials`` and ``parameters`` are as in ``run()`` and are refused at the call.
         """
-        with self._credential_redaction():
-            run_dac, names = self._run_collection(credentials)
-        run_parameters = self._run_parameters(parameters)
-        run_inputs = self._run_inputs(api_data, artifacts, run_parameters, names)
-        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
-        plan = list(self._plan_snapshot())
-        stream_outcome = _StreamOutcome()
-        stream = self._start_stream(
-            api_data,
-            parallelization_modes,
-            flight_server,
-            artifacts,
-            run_context,
-            run_dac,
-            stream_outcome,
-            run_parameters,
-        )
+        with run_boundary():
+            with self._credential_redaction():
+                run_dac, names = self._run_collection(credentials)
+            run_parameters = self._run_parameters(parameters)
+            run_inputs = self._run_inputs(api_data, artifacts, run_parameters, names)
+            run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
+            plan = list(self._plan_snapshot())
+            stream_outcome = _StreamOutcome()
+            stream = self._start_stream(
+                api_data,
+                parallelization_modes,
+                flight_server,
+                artifacts,
+                run_context,
+                run_dac,
+                stream_outcome,
+                run_parameters,
+            )
         return ResultStream(stream, plan, run_id=run_context.run_id, plan_id=self.plan_id, outcome=stream_outcome)
 
     def _start_stream(
@@ -1195,7 +1201,8 @@ class mlodaAPI:
                 note_mloda_id(error, "run_id", run_context.run_id)
             raise
         finally:
-            self._complete_run(run_context, outcome)
+            with run_boundary():
+                self._complete_run(run_context, outcome)
 
     def _batch_run(
         self,

@@ -23,7 +23,7 @@ from mloda._testing.compute_framework.merge_suite import ASOF_SCENARIOS
 from mloda._testing.compute_framework_shape import serves_asof_merge
 from mloda._testing.framework_adapter import FrameworkAdapter
 from mloda._testing.source import reclaim
-from mloda._testing.suite import HookError
+from mloda._testing.suite import SwitchedOffError
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, EmptyResultError
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.optional_dependency import require
@@ -71,14 +71,16 @@ def run_all_modes(adapter_class: type[FrameworkAdapter]) -> list[Parallelization
     adapter = adapter_class()
     framework = adapter.compute_framework()
     modes = [mode for mode in _WORKER_MODES if mode in framework.supported_parallelization_modes()]
+    if ParallelizationMode.SYNC not in modes:
+        raise SwitchedOffError(f"{adapter_class.__name__}: {framework.__name__} does not serve SYNC")
     serves_threading = ParallelizationMode.THREADING in modes
-    if not serves_threading and adapter_class.sync_only_reason is None:
-        raise HookError(
+    if not serves_threading and not adapter_class.sync_only_reason:
+        raise SwitchedOffError(
             f"{adapter_class.__name__}: {framework.__name__} serves no THREADING; "
             "set sync_only_reason on the adapter if that is intended"
         )
-    if serves_threading and adapter_class.sync_only_reason is not None:
-        raise HookError(
+    if serves_threading and adapter_class.sync_only_reason:
+        raise SwitchedOffError(
             f"{adapter_class.__name__}: the sync_only_reason declaration is stale, "
             f"{framework.__name__} serves THREADING"
         )

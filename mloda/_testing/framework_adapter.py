@@ -88,6 +88,7 @@ def _arrow_has_type(arrow_type: Any, data_type: DataType) -> bool:
     return bool(arrow_type == DataType.to_arrow_type(data_type))
 
 
+_SYNC_ONLY_REASON = "the framework serves SYNC only, so its steps stay in the parent process"
 _ICEBERG_NO_NATIVE_TYPE = (DataType.INT8, DataType.UINT8, DataType.UINT64, DataType.TIMESTAMP_MILLIS)
 
 
@@ -467,7 +468,7 @@ class PolarsLazyAdapter(PolarsAdapter):
 
 class DuckDBAdapter(_ArrowReadAdapter):
     capabilities = AdapterCapabilities(typed_columns=True, sql_relation=True)
-    sync_only_reason: ClassVar[str | None] = "the framework serves SYNC only, so its steps stay in the parent process"
+    sync_only_reason: ClassVar[str | None] = _SYNC_ONLY_REASON
 
     def __init__(self) -> None:
         self._connection: Any = None
@@ -522,7 +523,7 @@ class DuckDBAdapter(_ArrowReadAdapter):
 class SqliteAdapter(_ArrowReadAdapter):
     # has_type stays None: readback types are replayed from the source Arrow schema or inferred from values.
     capabilities = AdapterCapabilities(typed_columns=True, sql_relation=True)
-    sync_only_reason: ClassVar[str | None] = "the framework serves SYNC only, so its steps stay in the parent process"
+    sync_only_reason: ClassVar[str | None] = _SYNC_ONLY_REASON
 
     def __init__(self) -> None:
         self._connection: Any = None

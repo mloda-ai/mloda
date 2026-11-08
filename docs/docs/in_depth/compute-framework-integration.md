@@ -438,6 +438,6 @@ Use `assert_compute_framework_shape` (or `check_compute_framework_shape`) from `
 
 ### Pipeline result policies
 
-A pipeline result policy is a rule or FeatureGroup-level flag that changes how the pipeline treats a result. It ships a suite on `RunAllSuite` from `mloda._testing.compute_framework.run_all_suite`, covering every built-in framework in SYNC plus THREADING; a framework without THREADING declares `sync_only_reason` on its adapter. `EmptyResultRunAllSuite` is the worked example, and a host only sets `adapter_class`.
+A pipeline result policy is a rule or FeatureGroup-level flag that changes how the pipeline treats a result. It ships a suite on `RunAllSuite` from `mloda._testing.compute_framework.run_all_suite`, covering every built-in framework in SYNC plus THREADING; a framework without THREADING declares `sync_only_reason` on its adapter. Each case is a `PolicySuccess` or a `PolicyRaises`. `EmptyResultRunAllSuite` is the worked example, and a host only sets `adapter_class`.
 
-Drive the policy through `run_all` rather than testing one enforcement surface: the retired `allow_empty_result()` flag had three, and the one in `DataLifecycleManager.get_result_data` shipped broken while unit tests of the other two passed. A framework adapter's `rows` / `row_count` must read the frame its framework's `run_all` returns.
+Drive the policy through `run_all` rather than testing one enforcement surface: the retired `allow_empty_result()` flag had three, and the one in `DataLifecycleManager.get_result_data` shipped broken while unit tests of the other two passed, and only the full `run_all` on every framework and mode caught it. A framework adapter's `rows` / `row_count` must read the frame its framework's `run_all` returns.

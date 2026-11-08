@@ -122,6 +122,8 @@ def test_adapter_reads_a_run_all_result(adapter: Any, _reclaimed: None) -> None:
         assert adapter.rows(result[0]) == [{"adapter_run_all_col": 1}, {"adapter_run_all_col": 2}]
         assert adapter.row_count(result[0]) == 2
         assert adapter.column_values(result[0], "adapter_run_all_col") == [1, 2]
+        assert adapter.column_names(result[0]) == ["adapter_run_all_col"]
+        assert adapter.lost_type(result[0], "adapter_run_all_col") is False
 
 
 def test_rows_zero_row_result_is_empty_list(adapter: Any) -> None:

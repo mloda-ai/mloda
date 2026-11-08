@@ -6,11 +6,13 @@ the success and raises expectations, in SYNC and in a worker-based (THREADING) m
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Iterator
 from typing import Any
 
 import pytest
 
+from mloda._testing import framework_adapter as framework_adapter_module
 from mloda._testing.compute_framework.run_all_suite import PolicyRaises, PolicySuccess, RunAllSuite, run_all_modes
 from mloda._testing.framework_adapter import (
     DuckDBAdapter,
@@ -25,8 +27,9 @@ from mloda._testing.framework_adapter import (
     SqliteAdapter,
 )
 from mloda._testing.source import reclaim
-from mloda._testing.suite import HookError
+from mloda._testing.suite import SwitchedOffError
 from mloda.core.abstract_plugins.compute_framework import EmptyResultError
+from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda.provider import DataCreatorFeatureGroup, FeatureSet
 from mloda.user import ParallelizationMode, PluginCollector
 
@@ -190,20 +193,42 @@ def test_run_all_modes_follow_the_framework(adapter_class: type[FrameworkAdapter
     assert run_all_modes(adapter_class) == expected
 
 
-def test_run_all_modes_rejects_undeclared_sync_only() -> None:
-    class _UndeclaredDuckDB(DuckDBAdapter):
-        sync_only_reason = None
+@pytest.mark.parametrize("reason", [None, ""])
+def test_run_all_modes_rejects_undeclared_sync_only(reason: str | None) -> None:
+    undeclared = type("_UndeclaredDuckDB", (DuckDBAdapter,), {"sync_only_reason": reason})
 
-    with pytest.raises(HookError, match="THREADING") as raised:
-        run_all_modes(_UndeclaredDuckDB)
+    with pytest.raises(SwitchedOffError, match="THREADING") as raised:
+        run_all_modes(undeclared)
     assert "_UndeclaredDuckDB" in str(raised.value)
+
+
+def test_run_all_modes_rejects_a_framework_without_sync(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        PolarsDataFrame, "supported_parallelization_modes", classmethod(lambda cls: {ParallelizationMode.THREADING})
+    )
+
+    with pytest.raises(SwitchedOffError, match="SYNC"):
+        run_all_modes(PolarsAdapter)
+
+
+def test_adapter_classes_list_covers_every_concrete_adapter() -> None:
+    concrete = {
+        obj
+        for obj in vars(framework_adapter_module).values()
+        if inspect.isclass(obj)
+        and obj.__module__ == framework_adapter_module.__name__
+        and issubclass(obj, FrameworkAdapter)
+        and not inspect.isabstract(obj)
+    }
+
+    assert set(_ADAPTER_CLASSES) == concrete
 
 
 def test_run_all_modes_rejects_declared_sync_only_that_serves_threading() -> None:
     class _DeclaredPolars(PolarsAdapter):
         sync_only_reason = "x"
 
-    with pytest.raises(HookError, match="sync_only_reason") as raised:
+    with pytest.raises(SwitchedOffError, match="sync_only_reason") as raised:
         run_all_modes(_DeclaredPolars)
     assert "_DeclaredPolars" in str(raised.value)
 

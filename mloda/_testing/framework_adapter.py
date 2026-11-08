@@ -88,6 +88,7 @@ def _arrow_has_type(arrow_type: Any, data_type: DataType) -> bool:
     return bool(arrow_type == DataType.to_arrow_type(data_type))
 
 
+_SYNC_ONLY_REASON = "the framework serves SYNC only, so its steps stay in the parent process"
 _ICEBERG_NO_NATIVE_TYPE = (DataType.INT8, DataType.UINT8, DataType.UINT64, DataType.TIMESTAMP_MILLIS)
 
 
@@ -168,6 +169,8 @@ class FrameworkAdapter(ABC):
     """Builds frames for one compute framework from typed data and reads them back."""
 
     capabilities: ClassVar[AdapterCapabilities]
+    # Set when the framework serves no THREADING, so run-all suites run it in SYNC only; the value is the reason.
+    sync_only_reason: ClassVar[str | None] = None
 
     @abstractmethod
     def compute_framework(self) -> type[ComputeFramework]: ...
@@ -185,7 +188,8 @@ class FrameworkAdapter(ABC):
     def column_names(self, result: Any) -> list[str]: ...
 
     @abstractmethod
-    def row_count(self, result: Any) -> int: ...
+    def row_count(self, result: Any) -> int:
+        """The row count; also reads the frame run_all returns."""
 
     @abstractmethod
     def column_values(self, result: Any, column: str) -> list[Any]:
@@ -207,7 +211,7 @@ class FrameworkAdapter(ABC):
         return self.from_arrow(pa.table({}))
 
     def rows(self, result: Any) -> list[dict[str, Any]]:
-        """The result as a list of row dicts, nulls as None; reads per column, so lazy adapters should override."""
+        """Row dicts, nulls as None, also for run_all frames; reads per column, so lazy adapters override."""
         names = self.column_names(result)
         columns = [self.column_values(result, name) for name in names]
         return [dict(zip(names, values)) for values in zip(*columns, strict=True)]
@@ -292,20 +296,26 @@ class _ArrowReadAdapter(FrameworkAdapter):
     @abstractmethod
     def to_table(self, result: Any) -> pa.Table: ...
 
+    def _table(self, result: Any) -> pa.Table:
+        pa = require("pyarrow", "reading Arrow test tables")
+        if isinstance(result, pa.Table):
+            return result
+        return self.to_table(result)
+
     def column_names(self, result: Any) -> list[str]:
-        return list(self.to_table(result).column_names)
+        return list(self._table(result).column_names)
 
     def row_count(self, result: Any) -> int:
-        return int(self.to_table(result).num_rows)
+        return int(self._table(result).num_rows)
 
     def column_values(self, result: Any, column: str) -> list[Any]:
-        return list(self.to_table(result).column(column).to_pylist())
+        return list(self._table(result).column(column).to_pylist())
 
     def rows(self, result: Any) -> list[dict[str, Any]]:
-        return list(self.to_table(result).to_pylist())
+        return list(self._table(result).to_pylist())
 
     def column_type(self, result: Any, column: str) -> Any:
-        return self.to_table(result).schema.field(column).type
+        return self._table(result).schema.field(column).type
 
     def lost_type(self, result: Any, column: str) -> bool:
         pa = require("pyarrow", "reading Arrow test tables")
@@ -446,7 +456,8 @@ class PolarsLazyAdapter(PolarsAdapter):
         return super().from_arrow(table).lazy()
 
     def _eager(self, result: Any) -> Any:
-        return result.collect()
+        pl = require("polars", "reading polars test frames")
+        return result.collect() if isinstance(result, pl.LazyFrame) else result
 
     def column_names(self, result: Any) -> list[str]:
         return list(result.collect_schema().names())
@@ -457,6 +468,7 @@ class PolarsLazyAdapter(PolarsAdapter):
 
 class DuckDBAdapter(_ArrowReadAdapter):
     capabilities = AdapterCapabilities(typed_columns=True, sql_relation=True)
+    sync_only_reason: ClassVar[str | None] = _SYNC_ONLY_REASON
 
     def __init__(self) -> None:
         self._connection: Any = None
@@ -511,6 +523,7 @@ class DuckDBAdapter(_ArrowReadAdapter):
 class SqliteAdapter(_ArrowReadAdapter):
     # has_type stays None: readback types are replayed from the source Arrow schema or inferred from values.
     capabilities = AdapterCapabilities(typed_columns=True, sql_relation=True)
+    sync_only_reason: ClassVar[str | None] = _SYNC_ONLY_REASON
 
     def __init__(self) -> None:
         self._connection: Any = None

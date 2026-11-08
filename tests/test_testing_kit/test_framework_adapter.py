@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
 
+from mloda._testing.source import reclaim
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.provider import DataCreatorFeatureGroup, FeatureSet
+from mloda.user import DataAccessCollection, Feature, ParallelizationMode, PluginCollector, mloda
 
 _NAMES = ["PythonDict", "PyArrow", "Pandas", "Polars", "PolarsLazy", "DuckDB", "Sqlite", "Iceberg"]
 _TYPED = {
@@ -84,6 +87,43 @@ def test_rows_reads_the_result_as_a_list_of_dicts(adapter: Any) -> None:
             {"i": None, "d": 2.5, "s": None, "b": False},
             {"i": 3, "d": None, "s": "c", "b": None},
         ]
+
+
+@pytest.fixture
+def _reclaimed() -> Iterator[None]:
+    yield from reclaim.reclaimed_scope()
+
+
+def test_adapter_reads_a_run_all_result(adapter: Any, _reclaimed: None) -> None:
+    class _RootFeatureGroup(DataCreatorFeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {"adapter_run_all_col"}
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return {"adapter_run_all_col": [1, 2]}
+
+        @classmethod
+        def compute_framework_rule(cls) -> Any:
+            return {adapter.compute_framework()}
+
+    with adapter:
+        result = mloda.run_all(
+            [Feature("adapter_run_all_col")],
+            compute_frameworks=[adapter.compute_framework()],
+            plugin_collector=PluginCollector.enabled_feature_groups({reclaim.track(_RootFeatureGroup)}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            data_access_collection=(
+                None if adapter.connection is None else DataAccessCollection(connections={adapter.connection})
+            ),
+        )
+
+        assert adapter.rows(result[0]) == [{"adapter_run_all_col": 1}, {"adapter_run_all_col": 2}]
+        assert adapter.row_count(result[0]) == 2
+        assert adapter.column_values(result[0], "adapter_run_all_col") == [1, 2]
+        assert adapter.column_names(result[0]) == ["adapter_run_all_col"]
+        assert adapter.lost_type(result[0], "adapter_run_all_col") is False
 
 
 def test_rows_zero_row_result_is_empty_list(adapter: Any) -> None:

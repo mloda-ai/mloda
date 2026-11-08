@@ -6,15 +6,30 @@ the success and raises expectations, in SYNC and in a worker-based (THREADING) m
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Iterator
 from typing import Any
 
 import pytest
 
-from mloda._testing.compute_framework.run_all_suite import PolicyRaises, PolicySuccess, RunAllSuite
-from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter
+from mloda._testing import framework_adapter as framework_adapter_module
+from mloda._testing.compute_framework.run_all_suite import PolicyRaises, PolicySuccess, RunAllSuite, run_all_modes
+from mloda._testing.framework_adapter import (
+    DuckDBAdapter,
+    FrameworkAdapter,
+    IcebergAdapter,
+    PandasAdapter,
+    PolarsAdapter,
+    PolarsLazyAdapter,
+    PyArrowAdapter,
+    PythonDictAdapter,
+    SparkAdapter,
+    SqliteAdapter,
+)
 from mloda._testing.source import reclaim
+from mloda._testing.suite import SwitchedOffError
 from mloda.core.abstract_plugins.compute_framework import EmptyResultError
+from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda.provider import DataCreatorFeatureGroup, FeatureSet
 from mloda.user import ParallelizationMode, PluginCollector
 
@@ -155,6 +170,92 @@ from mloda._testing.framework_adapter import PythonDictAdapter
 class TestConftestFreeHost(EmptyResultRunAllSuite):
     adapter_class = PythonDictAdapter
 """
+
+
+_ADAPTER_CLASSES = [
+    PythonDictAdapter,
+    PyArrowAdapter,
+    PandasAdapter,
+    PolarsAdapter,
+    PolarsLazyAdapter,
+    DuckDBAdapter,
+    SqliteAdapter,
+    IcebergAdapter,
+    SparkAdapter,
+]
+
+
+@pytest.mark.parametrize("adapter_class", _ADAPTER_CLASSES, ids=lambda cls: cls.__name__)
+def test_run_all_modes_follow_the_framework(adapter_class: type[FrameworkAdapter]) -> None:
+    sync_only = adapter_class in (DuckDBAdapter, SqliteAdapter)
+    expected = [ParallelizationMode.SYNC] if sync_only else [ParallelizationMode.SYNC, ParallelizationMode.THREADING]
+
+    assert run_all_modes(adapter_class) == expected
+
+
+@pytest.mark.parametrize("reason", [None, ""])
+def test_run_all_modes_rejects_undeclared_sync_only(reason: str | None) -> None:
+    undeclared = type("_UndeclaredDuckDB", (DuckDBAdapter,), {"sync_only_reason": reason})
+
+    with pytest.raises(SwitchedOffError, match="THREADING") as raised:
+        run_all_modes(undeclared)
+    assert "_UndeclaredDuckDB" in str(raised.value)
+
+
+def test_run_all_modes_rejects_a_framework_without_sync(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        PolarsDataFrame, "supported_parallelization_modes", classmethod(lambda cls: {ParallelizationMode.THREADING})
+    )
+
+    with pytest.raises(SwitchedOffError, match="SYNC"):
+        run_all_modes(PolarsAdapter)
+
+
+def test_adapter_classes_list_covers_every_concrete_adapter() -> None:
+    concrete = {
+        obj
+        for obj in vars(framework_adapter_module).values()
+        if inspect.isclass(obj)
+        and obj.__module__ == framework_adapter_module.__name__
+        and issubclass(obj, FrameworkAdapter)
+        and not inspect.isabstract(obj)
+    }
+
+    assert set(_ADAPTER_CLASSES) == concrete
+
+
+def test_run_all_modes_rejects_declared_sync_only_that_serves_threading() -> None:
+    class _DeclaredPolars(PolarsAdapter):
+        sync_only_reason = "x"
+
+    with pytest.raises(SwitchedOffError, match="sync_only_reason") as raised:
+        run_all_modes(_DeclaredPolars)
+    assert "_DeclaredPolars" in str(raised.value)
+
+
+MISDECLARED_HOST = """
+from mloda._testing.compute_framework.run_all_suite import EmptyResultRunAllSuite
+from mloda._testing.framework_adapter import DuckDBAdapter
+
+
+class _UndeclaredDuckDB(DuckDBAdapter):
+    sync_only_reason = None
+
+
+class TestMisdeclaredHost(EmptyResultRunAllSuite):
+    adapter_class = _UndeclaredDuckDB
+"""
+
+
+def test_a_misdeclared_host_fails_at_collection(pytester: pytest.Pytester) -> None:
+    pytester.makepyfile(test_inner=MISDECLARED_HOST)
+
+    result = pytester.runpytest_inprocess("-p", "no:cacheprovider", "-p", "no:randomly")
+
+    outcomes = result.parseoutcomes()
+    assert outcomes.get("errors", 0) + outcomes.get("error", 0) >= 1
+    assert "passed" not in outcomes
+    result.stdout.fnmatch_lines(["*THREADING*"])
 
 
 def test_a_host_without_a_conftest_uses_the_suites_own_flight_server(pytester: pytest.Pytester) -> None:

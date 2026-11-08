@@ -22,7 +22,7 @@ import mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarro
 import mloda_plugins.compute_framework.base_implementations.polars.polars_pyarrow_transformer  # noqa: F401
 import mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_pyarrow_transformer  # noqa: F401
 
-from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks import (
+from tests.helpers.shared_compute_frameworks import (
     SecondCfw,
     ThirdCfw,
     FourthCfw,

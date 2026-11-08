@@ -11,7 +11,7 @@ from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framew
 from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
-from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
+from tests.helpers.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
 
@@ -399,43 +399,31 @@ class TestIcebergEmptyResult:
         assert framework._append_columns(table, {"appended_col": [1]}) is None
 
 
-from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402
+from mloda._testing.compute_framework.connection_suite import ConnectionPickSuite  # noqa: E402
+
+_NO_PER_DATA_CONNECTION = "Iceberg data does not carry its own connection; no per-data connection check"
 
 
-@pytest.mark.skipif(
-    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
-)
-class TestIcebergTfsConnectionInit(TfsConnectionInitMixin):
-    _SKIP = "Iceberg data does not carry its own connection; no per-data connection check"
+class TestIcebergTfsConnectionInit(ConnectionPickSuite):
+    adapter_class = IcebergAdapter
+    switched_off = {
+        "test_adopt_connection_rejects_data_on_another_connection_than_the_bound_one": Cause.BACKEND,
+        "test_adopt_connection_accepts_the_bound_connection_and_adopts_when_unbound": Cause.BACKEND,
+        "test_missing_connection_error_names_the_dac_and_connection_handle": Cause.BACKEND,
+    }
 
+    @pytest.mark.skip(reason=_NO_PER_DATA_CONNECTION)
     def test_adopt_connection_rejects_data_on_another_connection_than_the_bound_one(
-        self, framework_class: Any, valid_connection: Any, second_valid_connection: Any
-    ) -> None:
-        pytest.skip(self._SKIP)
+        self, *args: Any, **kwargs: Any
+    ) -> None: ...
 
+    @pytest.mark.skip(reason=_NO_PER_DATA_CONNECTION)
     def test_adopt_connection_accepts_the_bound_connection_and_adopts_when_unbound(
-        self, framework_class: Any, valid_connection: Any
-    ) -> None:
-        pytest.skip(self._SKIP)
+        self, *args: Any, **kwargs: Any
+    ) -> None: ...
 
-    def test_missing_connection_error_names_the_dac_and_connection_handle(self, framework_class: Any) -> None:
-        pytest.skip(self._SKIP)
-
-    @pytest.fixture
-    def framework_class(self) -> Any:
-        return IcebergFramework
-
-    @pytest.fixture
-    def valid_connection(self) -> Any:
-        mock_catalog = Mock(spec=Catalog)
-        mock_catalog.load_table = Mock()
-        return mock_catalog
-
-    @pytest.fixture
-    def second_valid_connection(self) -> Any:
-        mock_catalog = Mock(spec=Catalog)
-        mock_catalog.load_table = Mock()
-        return mock_catalog
+    @pytest.mark.skip(reason=_NO_PER_DATA_CONNECTION)
+    def test_missing_connection_error_names_the_dac_and_connection_handle(self, *args: Any, **kwargs: Any) -> None: ...
 
 
 @pytest.mark.skipif(pyiceberg is None, reason="PyIceberg is not installed. Skipping this test.")

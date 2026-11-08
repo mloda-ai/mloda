@@ -13,7 +13,7 @@ from mloda.user import Feature
 from mloda.user import Features
 from mloda.provider import FeatureSet
 from mloda.user import Options
-from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks import (
+from tests.helpers.shared_compute_frameworks import (
     SecondCfw,
     ThirdCfw,
 )

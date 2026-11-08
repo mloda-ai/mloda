@@ -19,7 +19,7 @@ from mloda.provider import (
 )
 from mloda.user import DataAccessCollection, Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import records_from_frame
+from tests.helpers.frame_records import records_from_frame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     DocumentLoadsIntoFrameworkMixin,

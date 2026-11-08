@@ -8,7 +8,7 @@ from mloda._testing.framework_adapter import FrameworkAdapter, PolarsAdapter
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
-from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
+from tests.helpers.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
 

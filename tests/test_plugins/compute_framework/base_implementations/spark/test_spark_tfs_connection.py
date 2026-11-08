@@ -15,11 +15,10 @@ from mloda.user import FeatureName, Options
 from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
 from tests.test_plugins.compute_framework.base_implementations.spark.conftest import (
     PYSPARK_AVAILABLE,
-    SKIP_REASON,
 )
-from tests.mixins.compute_frameworks.tfs_connection_e2e_mixin import (
-    TfsConnectionEndToEndMixin,
-)
+from mloda._testing.compute_framework.connection_suite import ConnectionEndToEndSuite
+from mloda._testing.declarations import Cause
+from tests.test_plugins.compute_framework.base_implementations.spark.spark_session_adapter import SparkSessionAdapter
 
 if PYSPARK_AVAILABLE:
     from pyspark.sql import SparkSession
@@ -46,20 +45,20 @@ class TfsDoubledSparkFG(FeatureGroup):
         return {"tfs_doubled"}
 
 
-@pytest.mark.skipif(not PYSPARK_AVAILABLE or pa is None, reason=SKIP_REASON or "PySpark/PyArrow not available")
-class TestSparkTfsConnectionE2E(TfsConnectionEndToEndMixin):
-    destination_framework_class = SparkFramework
+class TestSparkTfsConnectionE2E(SparkSessionAdapter, ConnectionEndToEndSuite):
     destination_fg_class = TfsDoubledSparkFG
+    switched_off = {
+        "test_a_root_runs_on_the_one_dac_connection_without_a_class_name_option": Cause.BACKEND,
+        "test_a_connection_on_the_feature_needs_no_data_access_collection": Cause.BACKEND,
+    }
 
-    def test_a_root_runs_on_the_one_dac_connection_without_a_class_name_option(self, live_connection: Any) -> None:
-        pytest.skip("Spark data does not expose .connection and the result is not a pa.Table")
+    @pytest.mark.skip(reason="Spark data does not expose .connection and the result is not a pa.Table")
+    def test_a_root_runs_on_the_one_dac_connection_without_a_class_name_option(
+        self, *args: Any, **kwargs: Any
+    ) -> None: ...
 
-    def test_a_connection_on_the_feature_needs_no_data_access_collection(self, live_connection: Any) -> None:
-        pytest.skip("Spark data does not expose .connection and the result is not a pa.Table")
-
-    @pytest.fixture
-    def live_connection(self, spark_session: Any) -> Any:
-        return spark_session
+    @pytest.mark.skip(reason="Spark data does not expose .connection and the result is not a pa.Table")
+    def test_a_connection_on_the_feature_needs_no_data_access_collection(self, *args: Any, **kwargs: Any) -> None: ...
 
     def extract_doubled(self, final: Any) -> list[int]:
         rows = final.select("tfs_doubled").collect()

@@ -1,114 +1,94 @@
-"""End-to-end ``allow_empty_result`` policy test for pandas.
+"""End-to-end empty-result policy test for pandas.
 
-Consumes the shared EmptyResultRunAllTestBase. Pandas is a guaranteed dependency,
-so no import guard is needed; the subclass only selects the framework by name.
+Consumes the shipped EmptyResultRunAllSuite. Pandas is a guaranteed dependency, so no import guard is needed.
 """
 
+from collections.abc import Iterator, Mapping
 from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.compute_framework import EmptyResultError
-from mloda.user import Feature
-from mloda.user import ParallelizationMode
-from mloda.user import mloda
-
-from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
-    AttributeReadConsumer,
-    KeyReadConsumer,
-    MissingColumnConsumer,
-    MissingColumnRunAllTestBase,
+from mloda._testing.compute_framework.run_all_suite import (
     UNDECLARED_COLUMN,
+    EmptyResultRunAllSuite,
+    MissingColumnRunAllSuite,
+    SiblingDictRunAllSuite,
+    CauseType,
+    UndeclaredRead,
+    attribute_read,
+    key_read,
 )
-from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
-    SiblingDictRunAllTestBase,
-)
-from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
-    EmptyResultRunAllTestBase,
-    _ENABLED_NONE,
-    _ENABLED_SCHEMALESS_ALLOWED,
-)
+from mloda._testing.framework_adapter import PandasAdapter
+from mloda._testing.source import reclaim
+from mloda.provider import DataCreatorFeatureGroup, FeatureSet
+from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 
 
-class TestPandasAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
-    """Drives the allow_empty_result policy end-to-end through run_all on pandas."""
+def _undefined_variable_error() -> type[BaseException]:
+    from pandas.errors import UndefinedVariableError
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PandasDataFrame"
+    cause: type[BaseException] = UndefinedVariableError
+    return cause
 
 
+class TestPandasAllowEmptyResultRunAll(EmptyResultRunAllSuite):
+    """Drives the empty-result policy end-to-end through run_all on pandas."""
+
+    adapter_class = PandasAdapter
+
+
+@pytest.fixture
+def _none_collector() -> Iterator[None]:
+    yield from reclaim.reclaimed_scope()
+
+
+def _none_result_collector() -> PluginCollector:
+    class _NoneFeatureGroup(DataCreatorFeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {"empty_result_none_col"}
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return None
+
+    return PluginCollector.enabled_feature_groups({reclaim.track(_NoneFeatureGroup)})
+
+
+@pytest.mark.usefixtures("_none_collector")
 def test_empty_result_none_raises_pandas(flight_server: Any) -> None:
-    """State A live test: a FG whose ``calculate_feature`` returns ``None`` raises end-to-end.
-
-    Driven through the pandas compute framework, which needs no connection. Requested as a
-    FINAL feature with the default (not-allowed) policy. Pandas rejects the ``None`` result
-    upstream (``transform`` raises ``ValueError: Data <class 'NoneType'> is not supported by
-    PandasDataFrame``) before the empty-result guard runs; ``run_all`` re-wraps the framework
-    error as a plain ``Exception`` whose message embeds that text (repr-escaped, so the inner
-    quotes around ``NoneType`` carry backslashes), which the ``match`` below pins. Kept as a
-    module-level function (not a method on ``EmptyResultRunAllTestBase``) so connection-backed
-    frameworks don't inherit and run it without a connection.
-    """
+    """A FG whose ``calculate_feature`` returns ``None`` raises end-to-end on pandas."""
     feature = Feature(name="empty_result_none_col")
 
     with pytest.raises(Exception, match=r"Data <class \\?'NoneType\\?'> is not supported by PandasDataFrame"):
         mloda.run_all(
             [feature],
             compute_frameworks=["PandasDataFrame"],
-            plugin_collector=_ENABLED_NONE,
+            plugin_collector=_none_result_collector(),
             parallelization_modes={ParallelizationMode.SYNC},
             flight_server=flight_server,
         )
 
 
-def test_zero_column_raises_pandas(flight_server: Any) -> None:
-    """A FG returning ``{}`` (zero columns) raises ``EmptyResultError`` end-to-end on pandas.
-
-    With ``allow_empty_result`` retired, a schema-less result is never legitimate: the
-    output guard raises for the zero-column frame. ``run_all`` re-wraps the framework error,
-    so the assertion targets the type NAME in the wrapped message.
-    """
-    feature = Feature(name="empty_result_schemaless_col")
-
-    with pytest.raises(Exception) as excinfo:
-        mloda.run_all(
-            [feature],
-            compute_frameworks=["PandasDataFrame"],
-            plugin_collector=_ENABLED_SCHEMALESS_ALLOWED,
-            parallelization_modes={ParallelizationMode.SYNC},
-            flight_server=flight_server,
-        )
-    assert isinstance(excinfo.value, EmptyResultError)
-
-
-class TestPandasSiblingDictRunAll(SiblingDictRunAllTestBase):
+class TestPandasSiblingDictRunAll(SiblingDictRunAllSuite):
     """Dict-returning sibling consumers end-to-end through run_all."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PandasDataFrame"
+    adapter_class = PandasAdapter
 
 
-class PandasQueryReadConsumer(MissingColumnConsumer):
-    @classmethod
-    def read_undeclared(cls, data: Any) -> Any:
-        return data.query(f"{UNDECLARED_COLUMN} > 0")
-
-    @classmethod
-    def cause_type(cls) -> Any:
-        from pandas.errors import UndefinedVariableError
-
-        return UndefinedVariableError
+def _query_read(data: Any) -> Any:
+    return data.query(f"{UNDECLARED_COLUMN} > 0")
 
 
-class TestPandasMissingColumnRunAll(MissingColumnRunAllTestBase):
+class TestPandasMissingColumnRunAll(MissingColumnRunAllSuite):
     """Undeclared column reads on pandas raise an explanatory error."""
 
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "PandasDataFrame"
+    adapter_class = PandasAdapter
 
     @classmethod
-    def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
-        return [KeyReadConsumer, PandasQueryReadConsumer, AttributeReadConsumer]
+    def undeclared_reads(cls) -> Mapping[str, tuple[UndeclaredRead, CauseType]]:
+        return {
+            "KeyReadConsumer": (key_read, lambda: KeyError),
+            "PandasQueryReadConsumer": (_query_read, _undefined_variable_error),
+            "AttributeReadConsumer": (attribute_read, lambda: AttributeError),
+        }

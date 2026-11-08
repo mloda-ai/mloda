@@ -1,81 +1,51 @@
-"""End-to-end ``allow_empty_result`` policy test for Spark.
+"""End-to-end empty-result policy test for Spark.
 
-Consumes the shared EmptyResultRunAllTestBase. The session-scoped ``spark_session`` fixture
-is captured into the instance via an autouse fixture, so the base's ``get_connection`` can
-thread it through ``Feature.options`` + a ``DataAccessCollection``, mirroring how the Spark
-integration tests pass the SparkSession to ``run_all``.
+Consumes the shipped EmptyResultRunAllSuite. The session-scoped ``spark_session`` fixture must exist before the
+adapter borrows the active session.
 """
 
+from collections.abc import Mapping
 from typing import Any
 
-import pytest
-
-from tests.test_plugins.compute_framework.base_implementations.spark.conftest import (
-    PYSPARK_AVAILABLE,
-    SKIP_REASON,
-)
-from tests.test_plugins.compute_framework.test_tooling.missing_column_run_all_test_base import (
-    AttributeReadConsumer,
-    MissingColumnConsumer,
-    MissingColumnRunAllTestBase,
+from mloda._testing.compute_framework.run_all_suite import (
     UNDECLARED_COLUMN,
+    EmptyResultRunAllSuite,
+    MissingColumnRunAllSuite,
+    SiblingDictRunAllSuite,
+    CauseType,
+    UndeclaredRead,
+    attribute_read,
 )
-from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
-    SiblingDictRunAllTestBase,
-)
-from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
-    EmptyResultRunAllTestBase,
-)
+from tests.test_plugins.compute_framework.base_implementations.spark.spark_session_adapter import SparkSessionAdapter
 
 
-@pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
-class TestSparkAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
-    """Drives the allow_empty_result policy end-to-end through run_all on Spark."""
-
-    @pytest.fixture(autouse=True)
-    def _bind_spark_session(self, spark_session: Any) -> None:
-        self._spark_session = spark_session
-
-    @classmethod
-    def compute_framework_name(cls) -> str:
-        return "SparkFramework"
-
-    def get_connection(self) -> Any | None:
-        """Spark requires the shared SparkSession as its connection object."""
-        return self._spark_session
+class TestSparkAllowEmptyResultRunAll(SparkSessionAdapter, EmptyResultRunAllSuite):
+    """Drives the empty-result policy end-to-end through run_all on Spark."""
 
 
-@pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
-class TestSparkSiblingDictRunAll(SiblingDictRunAllTestBase):
+class TestSparkSiblingDictRunAll(SparkSessionAdapter, SiblingDictRunAllSuite):
     """Dict-returning sibling consumers end-to-end through run_all on Spark."""
 
-    _bind_spark_session = TestSparkAllowEmptyResultRunAll._bind_spark_session
-    compute_framework_name = TestSparkAllowEmptyResultRunAll.compute_framework_name
-    get_connection = TestSparkAllowEmptyResultRunAll.get_connection
+
+def _col_read(data: Any) -> Any:
+    from pyspark.sql import functions as F
+
+    return data.select(F.col(UNDECLARED_COLUMN))
 
 
-class SparkColReadConsumer(MissingColumnConsumer):
-    @classmethod
-    def read_undeclared(cls, data: Any) -> Any:
-        from pyspark.sql import functions as F
+def _analysis_exception() -> type[BaseException]:
+    from pyspark.errors import AnalysisException
 
-        return data.select(F.col(UNDECLARED_COLUMN))
-
-    @classmethod
-    def cause_type(cls) -> Any:
-        from pyspark.errors import AnalysisException
-
-        return AnalysisException
+    cause: type[BaseException] = AnalysisException
+    return cause
 
 
-@pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
-class TestSparkMissingColumnRunAll(MissingColumnRunAllTestBase):
+class TestSparkMissingColumnRunAll(SparkSessionAdapter, MissingColumnRunAllSuite):
     """Undeclared column reads on Spark raise an explanatory error."""
 
-    _bind_spark_session = TestSparkAllowEmptyResultRunAll._bind_spark_session
-    compute_framework_name = TestSparkAllowEmptyResultRunAll.compute_framework_name
-    get_connection = TestSparkAllowEmptyResultRunAll.get_connection
-
     @classmethod
-    def consumer_fgs(cls) -> list[type[MissingColumnConsumer]]:
-        return [SparkColReadConsumer, AttributeReadConsumer]
+    def undeclared_reads(cls) -> Mapping[str, tuple[UndeclaredRead, CauseType]]:
+        return {
+            "SparkColReadConsumer": (_col_read, _analysis_exception),
+            "AttributeReadConsumer": (attribute_read, lambda: AttributeError),
+        }

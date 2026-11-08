@@ -25,7 +25,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
     PythonDictFramework,
 )
 from tests.test_core.test_prepare.join_plan_helpers import feature, trek
-from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks import SecondCfw, ThirdCfw
+from tests.helpers.shared_compute_frameworks import SecondCfw, ThirdCfw
 
 
 SHARED_INDEX = Index(("orphan_source_idx",))

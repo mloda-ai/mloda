@@ -101,7 +101,7 @@ def test_csv_pointer_runs_under_duckdb_with_a_dac_connection(csv_path: str) -> N
     importlib.import_module("mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework")
     from mloda.user import Feature, PluginCollector
     from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
-    from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import records_from_frame
+    from tests.helpers.frame_records import records_from_frame
 
     conn = duckdb.connect()
     try:

@@ -62,6 +62,10 @@ class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
 
     @pytest.fixture
     def framework(self, adapter: FrameworkAdapter) -> type[ComputeFramework]:
+        return self.served_framework(adapter)
+
+    def served_framework(self, adapter: FrameworkAdapter) -> type[ComputeFramework]:
+        """The adapter's framework; fails the test when the host's framework does not serve the aspect."""
         framework = adapter.compute_framework()
         if not self._serves(adapter, framework):
             pytest.fail(f"{framework.__name__} does not serve the '{self.aspect}' aspect; this host is mis-wired")
@@ -96,6 +100,21 @@ class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
 
     def row_count(self, adapter: FrameworkAdapter, result: Any) -> int:
         return adapter.row_count(result)
+
+    def _result_rows(self, adapter: FrameworkAdapter, frame: Any) -> list[dict[str, Any]]:
+        """run_all hands relation and lazy results back as Arrow tables or eager frames, which adapters cannot read."""
+        if hasattr(frame, "to_pylist"):
+            return list(frame.to_pylist())
+        if hasattr(frame, "to_dicts"):
+            return list(frame.to_dicts())
+        return self.rows(adapter, frame)
+
+    def _result_row_count(self, adapter: FrameworkAdapter, frame: Any) -> int:
+        if hasattr(frame, "num_rows"):
+            return int(frame.num_rows)
+        if hasattr(frame, "height"):
+            return int(frame.height)
+        return self.row_count(adapter, frame)
 
 
 def _invalid_unsupported_cases(cls: type[ComputeFrameworkSuite]) -> list[str]:

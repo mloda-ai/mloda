@@ -25,12 +25,20 @@ from mloda.provider import DataCreatorFeatureGroup
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
-from tests.mixins.compute_frameworks.tfs_connection_e2e_mixin import (
-    TfsConnectionEndToEndMixin,
-    TfsRawValPyArrowSource,
-    _ROOT_SEEN,
-    root_binding_groups,
-)
+from mloda._testing.compute_framework.connection_suite import ConnectionEndToEndSuite, root_binding_groups
+from mloda._testing.framework_adapter import DuckDBAdapter
+from tests.helpers.tfs_source_feature_groups import TfsRawValPyArrowSource
+
+
+_ROOT_SEEN: dict[str, Any] = {}
+
+
+def _recording(double: Any, dst: str) -> Any:
+    def record(data: Any, src: str, out: str) -> Any:
+        _ROOT_SEEN[dst] = data.connection
+        return double(data, src, out)
+
+    return record
 
 
 class TfsDoubledDuckDBFG(FeatureGroup):
@@ -150,7 +158,10 @@ def _run(features: list[Feature], groups: set[Any], frameworks: list[Any], dac: 
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow not installed.")
 class TestDuckDBRootConnectionBinding:
     def test_an_explicit_handle_binds_the_root_to_that_connection_among_two(self) -> None:
-        root, sink, dst = root_binding_groups(DuckDBFramework, TestDuckDBTfsConnectionE2E.double_relation)
+        dst = f"tfs_root_out_{DuckDBFramework.__name__}"
+        root, sink, dst = root_binding_groups(
+            DuckDBFramework, _recording(TestDuckDBTfsConnectionE2E.double_relation, dst)
+        )
         a, b = duckdb.connect(), duckdb.connect()
         dac = DataAccessCollection({"a": a, "b": b})
         result = _run([Feature(dst, options=_handle("b"))], {root, sink}, [DuckDBFramework], dac)
@@ -240,20 +251,13 @@ class TestDuckDBRootConnectionBinding:
         assert _SEEN["dc_arrow_b"] is b
 
 
-@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow not installed.")
-class TestDuckDBTfsConnectionE2E(TfsConnectionEndToEndMixin):
-    destination_framework_class = DuckDBFramework
+class TestDuckDBTfsConnectionE2E(ConnectionEndToEndSuite):
+    adapter_class = DuckDBAdapter
     destination_fg_class = TfsDoubledDuckDBFG
 
     @staticmethod
     def double_relation(data: Any, src: str, dst: str) -> Any:
         return data.project(f"{src} * 2 AS {dst}")
-
-    @pytest.fixture
-    def live_connection(self) -> Any:
-        conn = duckdb.connect()
-        yield conn
-        conn.close()
 
     def extract_doubled(self, final: Any) -> list[int]:
         assert isinstance(final, pa.Table)

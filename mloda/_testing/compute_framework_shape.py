@@ -132,6 +132,11 @@ def serves_asof_merge(cls: type[ComputeFramework]) -> bool:
     return is_nominal_subclass(engine, BaseMergeEngine) and engine.merge_asof is not BaseMergeEngine.merge_asof
 
 
+def serves_connection(cls: type[ComputeFramework]) -> bool:
+    """True when the framework overrides ComputeFramework._connection_matches."""
+    return cls._connection_matches.__func__ is not ComputeFramework._connection_matches.__func__  # type: ignore[attr-defined]
+
+
 def check_compute_framework_shape(cls: type[ComputeFramework]) -> CheckResult:
     """Check construction (including uuid=), is_available and, if available, the accessors."""
     failures = _construct_failures(cls)

@@ -11,7 +11,7 @@ from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, Emp
 from mloda._testing.compute_framework.merge_suite import make_merge_link
 from mloda._testing.declarations import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter, PolarsLazyAdapter
-from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
+from tests.helpers.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
 

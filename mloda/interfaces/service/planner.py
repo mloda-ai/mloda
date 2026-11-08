@@ -205,9 +205,13 @@ class Planner:
         self._base = plugin_collector
         self._clock = clock
         self._env: Mapping[str, str] = {} if env is None else env
-        self._credentials = service_credentials or ServiceCredentials(
-            settings.credentials, self._env, data_access_collection
-        )
+        shared = catalog.service_credentials
+        if service_credentials is not None:
+            self._credentials = service_credentials
+        elif shared.base is data_access_collection:
+            self._credentials = shared
+        else:
+            self._credentials = ServiceCredentials(settings.credentials, self._env, data_access_collection)
 
     @property
     def settings(self) -> Settings:
@@ -281,7 +285,7 @@ class Planner:
             or any(step.credential_handles for step in steps)
         ):
             refusal = ConfigError(next(iter(missing.values())))
-            refusal.__cause__ = failure
+            refusal.__context__ = failure
             return failure_result("Planning", refusal)
         if diagnosis is not None and not diagnosis.complete:
             return self._unresolved(diagnosis, request_names, sources)

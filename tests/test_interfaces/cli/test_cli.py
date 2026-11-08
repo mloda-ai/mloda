@@ -684,7 +684,8 @@ class TestShortCredentialWarning:
 
     @staticmethod
     def _short_warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
-        return [r.getMessage() for r in caplog.records if "shorter than" in r.getMessage()]
+        logger = "mloda.core.abstract_plugins.components.data_access_collection"
+        return [r.getMessage() for r in caplog.records if r.name == logger and "shorter than" in r.getMessage()]
 
     def _services(self, tmp_path: Path, text: str, env: dict[str, str]) -> Planner:
         settings = load_settings(_config(tmp_path, text), env)

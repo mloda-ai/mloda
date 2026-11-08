@@ -47,8 +47,12 @@ def _credential_value(handle: str, name: str, ref: CredentialRef, env: Mapping[s
     if isinstance(ref, FileRef):
         if not os.path.isfile(ref.path) or not os.access(ref.path, os.R_OK):
             raise ConfigError(f"{where}: file {ref.path} is missing or not readable")
-        with open(ref.path, "rb") as stream:
-            raw = stream.read()
+        # The file can vanish between the check and the read.
+        try:
+            with open(ref.path, "rb") as stream:
+                raw = stream.read()
+        except OSError:
+            raise ConfigError(f"{where}: file {ref.path} is missing or not readable") from None
         # Decoding errors carry the offending bytes, so they are replaced by a message naming only the file.
         try:
             text = raw.decode("utf-8")
@@ -102,9 +106,18 @@ class ServiceCredentials:
     ) -> None:
         self._credentials = credentials
         self._env = env
-        self._layer = DataAccessCollection() if base is None else base.copy()
+        taken = _taken_handle(credentials, base)
+        if taken:
+            raise ConfigError(taken)
+        self._base = base
+        self._layer = DataAccessCollection()
         self._registered: dict[str, Credential] = {}
         self._unreadable: set[str] = set()
+
+    @property
+    def base(self) -> DataAccessCollection | None:
+        """The live base collection, never a snapshot."""
+        return self._base
 
     def collection(self, sources: Mapping[str, SourceConfig]) -> tuple[DataAccessCollection, dict[str, str]]:
         """A fresh collection of ``sources`` and the readable credentials, with the problems of the others."""
@@ -117,7 +130,9 @@ class ServiceCredentials:
             if self._registered.get(handle) != credential:
                 self._layer = self._layer.with_credentials({handle: credential})
                 self._registered[handle] = credential
-        return data_access_collection(sources, None, self._layer), problems
+        merged = DataAccessCollection() if self._base is None else self._base.copy()
+        merged.credentials.update(self._layer.credentials)
+        return data_access_collection(sources, None, merged), problems
 
     def _log_transitions(self, problems: Mapping[str, str]) -> None:
         for handle, problem in problems.items():
@@ -137,7 +152,11 @@ def check_credentials(
         credential_values(settings.credentials, env)
     except ConfigError as error:
         return str(error)
-    taken = sorted(set(settings.credentials) & set(base.handles() if base is not None else ()))
+    return _taken_handle(settings.credentials, base)
+
+
+def _taken_handle(credentials: Mapping[str, object], base: DataAccessCollection | None) -> str | None:
+    taken = sorted(set(credentials) & set(base.handles() if base is not None else ()))
     if taken:
         return f"[mcp.credentials.{taken[0]}]: the handle is already registered in the given collection"
     return None

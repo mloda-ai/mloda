@@ -24,7 +24,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plan_info import PlanStep
 from mloda.interfaces.service.catalog import Catalog
-from mloda.interfaces.service.config import Settings, SourceConfig, load_settings
+from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig, load_settings
 from mloda.interfaces.service.errors import ERROR_CODES, is_error
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.runner import Runner
@@ -42,6 +42,7 @@ from mloda.provider import (
     DataCreatorFeatureGroup,
     FeatureChainParserMixin,
     FeatureSet,
+    MissingInputFeatureError,
     ResolutionDiagnosis,
     SourceMatch,
     property_spec,
@@ -252,6 +253,33 @@ class PlannerNameBoundMcp4(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {str(feature.name): list(data["income"]) for feature in features.features}
+
+
+PLAN_MISSING = "mcp_plan_missing_input"
+
+
+class PlannerMissingInputMcp9(FeatureGroup):
+    """Fails while planning because a declared input is absent."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == PLAN_MISSING
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        raise MissingInputFeatureError("PlannerMissingInputMcp9", PLAN_MISSING, ("absent",), ("income",))
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
 
 
 def _base() -> PluginCollector:
@@ -1627,9 +1655,12 @@ def _cred_settings(tmp_path: Path, credentials: str = 'token = "TOK_VAR"', **ove
 
 
 def _cred_services(
-    settings: Settings, env: Mapping[str, str], base: DataAccessCollection | None = None
+    settings: Settings,
+    env: Mapping[str, str],
+    base: DataAccessCollection | None = None,
+    extra_groups: frozenset[type[FeatureGroup]] = frozenset(),
 ) -> tuple[Planner, Runner]:
-    plugins = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, SqliteFG, CredentialReadMcp8})
+    plugins = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, SqliteFG, CredentialReadMcp8, *extra_groups})
     catalog = Catalog.build(settings, plugins, env=env, data_access_collection=base)
     planner = Planner(
         settings,
@@ -1642,6 +1673,20 @@ def _cred_services(
         data_access_collection=base,
     )
     return planner, Runner(planner, clock=lambda: CLOCK_START)
+
+
+def _file_cred_services(tmp_path: Path, **overrides: Any) -> tuple[Planner, Runner, Path]:
+    secret_file = tmp_path / "pii"
+    secret_file.write_text(TOKEN + "\n")
+    settings = _cred_settings(
+        tmp_path, 'token = { file = "pii" }', options={CRED_KEY: "db"}, default_classification="public", **overrides
+    )
+    planner, runner = _cred_services(settings, {})
+    return planner, runner, secret_file
+
+
+def _is_db_record(record: logging.LogRecord, quoted: str) -> bool:
+    return record.name == "mloda.interfaces.service.sources" and quoted in record.getMessage()
 
 
 def _run(planner: Planner, runner: Runner, request: Any) -> dict[str, Any]:
@@ -1838,10 +1883,7 @@ class TestCredentialRuns:
         assert _has_detail(error, path=f"/features/0/options/{CRED_KEY}", problem="option_not_caller_settable")
 
     def test_rotated_secret_file_is_used_by_the_next_run(self, tmp_path: Path) -> None:
-        secret_file = tmp_path / "pii"
-        secret_file.write_text(TOKEN + "\n")
-        settings = _cred_settings(tmp_path, 'token = { file = "pii" }', options={CRED_KEY: "db"})
-        planner, runner = _cred_services(settings, {})
+        planner, runner, secret_file = _file_cred_services(tmp_path)
         request = {"features": [CRED_FEATURE]}
 
         first = _run(planner, runner, request)
@@ -1861,15 +1903,19 @@ class TestCredentialRuns:
 
         assert _preview_rows(_run(planner, runner, request))[0] == {CRED_FEATURE: cred_digest(ROTATED)}
 
-    def test_credential_gone_after_startup_is_an_internal_error_naming_no_handle(self, tmp_path: Path) -> None:
-        secret_file = tmp_path / "pii"
-        secret_file.write_text(TOKEN)
-        settings = _cred_settings(tmp_path, 'token = { file = "pii" }', options={CRED_KEY: "db"})
-        planner, runner = _cred_services(settings, {})
-        explained = _success(planner.explain({"features": [CRED_FEATURE]}))
-        secret_file.unlink()
-
-        result = runner.run(explained["plan_id"])
+    @pytest.mark.parametrize("entry", ["explain", "run"])
+    def test_credential_gone_after_startup_is_an_internal_error_naming_no_handle(
+        self, tmp_path: Path, entry: str
+    ) -> None:
+        planner, runner, secret_file = _file_cred_services(tmp_path)
+        request = {"features": [CRED_FEATURE]}
+        if entry == "explain":
+            secret_file.unlink()
+            result = planner.explain(request)
+        else:
+            explained = _success(planner.explain(request))
+            secret_file.unlink()
+            result = runner.run(explained["plan_id"])
 
         error = _error(result, "internal")
         dumped = json.dumps(result)
@@ -1888,18 +1934,6 @@ class TestCredentialRuns:
 
         assert _preview_rows(result)[0] == {CRED_FEATURE: cred_digest(ROTATED)}
 
-
-def _file_cred_services(tmp_path: Path, **overrides: Any) -> tuple[Planner, Runner, Path]:
-    secret_file = tmp_path / "pii"
-    secret_file.write_text(TOKEN + "\n")
-    settings = _cred_settings(
-        tmp_path, 'token = { file = "pii" }', options={CRED_KEY: "db"}, default_classification="public", **overrides
-    )
-    planner, runner = _cred_services(settings, {})
-    return planner, runner, secret_file
-
-
-class TestMissingCredentialTolerance:
     def test_missing_secret_file_spares_requests_that_read_no_credential(self, tmp_path: Path) -> None:
         planner, runner, secret_file = _file_cred_services(tmp_path)
         secret_file.unlink()
@@ -1907,19 +1941,6 @@ class TestMissingCredentialTolerance:
         rows = _preview_rows(_run(planner, runner, {"features": ["income"]}))
 
         assert [row["income"] for row in rows] == [10, 20, 30, 40, 50]
-
-    def test_credential_reading_explain_fails_naming_no_handle_or_path(self, tmp_path: Path) -> None:
-        planner, _, secret_file = _file_cred_services(tmp_path)
-        secret_file.unlink()
-
-        result = planner.explain({"features": [CRED_FEATURE]})
-
-        error = _error(result, "internal")
-        dumped = json.dumps(result)
-        assert "ConfigError" in error["message"]
-        assert "db" not in error["message"]
-        _assert_value_absent("pii", dumped)
-        _assert_value_absent(TOKEN, dumped)
 
     def test_restoring_the_secret_file_makes_the_credential_request_succeed_again(self, tmp_path: Path) -> None:
         planner, runner, secret_file = _file_cred_services(tmp_path)
@@ -1942,9 +1963,13 @@ class TestMissingCredentialTolerance:
         planner, _ = _cred_services(_cred_settings(tmp_path, credentials), {})
         (tmp_path / "two.txt").unlink()
 
-        error = _error(planner.explain({"features": ["sq_amount"]}), "internal")
+        result = planner.explain({"features": ["sq_amount"]})
 
+        error = _error(result, "internal")
         assert "ConfigError" in error["message"]
+        for name in ("db", "other", "two.txt", "one.txt"):
+            _assert_value_absent(name, json.dumps(result))
+        _assert_value_absent(str(tmp_path), json.dumps(result))
 
     def test_unreadable_handle_logs_one_warning_and_one_info_when_back(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
@@ -1956,14 +1981,122 @@ class TestMissingCredentialTolerance:
         with caplog.at_level(logging.INFO):
             for _ in range(3):
                 planner.explain({"features": ["income"]})
-            warnings = [r for r in caplog.records if r.levelno == logging.WARNING and "db" in r.getMessage()]
+            warnings = [
+                r for r in caplog.records if r.levelno == logging.WARNING and _is_db_record(r, "[mcp.credentials.db]")
+            ]
             secret_file.write_text(TOKEN + "\n")
             _success(planner.explain({"features": ["income"]}))
-            infos = [r for r in caplog.records if r.levelno == logging.INFO and "db" in r.getMessage()]
+            infos = [r for r in caplog.records if r.levelno == logging.INFO and _is_db_record(r, "'db'")]
 
         assert len(warnings) == 1
         assert len(infos) == 1
         _assert_value_absent(TOKEN, caplog.text)
+
+    def test_secret_file_vanishing_after_the_existence_check_is_treated_as_missing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        planner, runner, _ = _file_cred_services(tmp_path)
+
+        def vanished(*args: Any, **kwargs: Any) -> Any:
+            raise FileNotFoundError("gone")
+
+        monkeypatch.setattr(service_sources, "open", vanished, raising=False)
+
+        rows = _preview_rows(_run(planner, runner, {"features": ["income"]}))
+        problem = service_sources.check_credentials(planner.settings, {})
+
+        assert [row["income"] for row in rows] == [10, 20, 30, 40, 50]
+        assert problem is not None
+        assert "db" in problem
+        assert "token" in problem
+        with pytest.raises(ConfigError, match="token"):
+            service_sources.credential_values(planner.settings.credentials, {})
+
+    @pytest.mark.parametrize("kind", ["file", "folder"])
+    def test_source_added_to_the_base_after_construction_is_seen_by_explain(self, tmp_path: Path, kind: str) -> None:
+        base = DataAccessCollection()
+        settings = _cred_settings(tmp_path, default_classification="public")
+        planner, _ = _cred_services(settings, {"TOK_VAR": TOKEN}, base)
+        extra = tmp_path / "extra"
+        extra.mkdir()
+        orders = _write_orders(extra)
+
+        if kind == "file":
+            base.add_file(str(orders))
+        else:
+            base.add_folder(str(extra))
+
+        assert _success(planner.explain({"features": ["amount"]}))["steps"]
+
+    @pytest.mark.parametrize("kind", ["file", "folder"])
+    def test_source_added_to_the_base_after_construction_is_seen_by_describe(self, tmp_path: Path, kind: str) -> None:
+        base = DataAccessCollection()
+        settings = _cred_settings(tmp_path, default_classification="public")
+        plugins = PluginCollector.enabled_feature_groups(set(FILE_SOURCE_GROUPS))
+        catalog = Catalog.build(settings, plugins, env={"TOK_VAR": TOKEN}, data_access_collection=base)
+        extra = tmp_path / "extra"
+        extra.mkdir()
+        orders = _write_orders(extra)
+
+        if kind == "file":
+            base.add_file(str(orders))
+        else:
+            base.add_folder(str(extra))
+
+        assert catalog.describe("amount")["feature_group"] == "CsvFG"
+
+    @pytest.mark.parametrize("target", ["planner", "catalog"])
+    def test_configured_handle_equal_to_a_base_handle_is_refused_when_built_directly(
+        self, tmp_path: Path, target: str
+    ) -> None:
+        settings = _cred_settings(tmp_path)
+        plugins = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, CredentialReadMcp8})
+        base = DataAccessCollection()
+        base.add_credentials("db", Credential(token="other-value-123"))
+        env = {"TOK_VAR": TOKEN}
+
+        with pytest.raises(ConfigError, match="db"):
+            if target == "catalog":
+                Catalog.build(settings, plugins, env=env, data_access_collection=base)
+            else:
+                plain = Catalog.build(settings, plugins, env=env)
+                Planner(settings, plain, plugin_collector=plugins, env=env, data_access_collection=base)
+
+    def test_planner_built_without_credentials_shares_its_catalogs_instance(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        credentials = 'token = "TOK_VAR"\n\n[mcp.credentials.other]\ntoken = { file = "gone.txt" }'
+        settings = _cred_settings(tmp_path, credentials, default_classification="public")
+        env = {"TOK_VAR": "short1"}
+        plugins = PluginCollector.enabled_feature_groups(set(FILE_SOURCE_GROUPS))
+        catalog = Catalog.build(settings, plugins, env=env)
+        planner = Planner(settings, catalog, signing_key=KEY, plugin_collector=plugins, env=env)
+
+        with caplog.at_level(logging.INFO):
+            catalog.describe("income")
+            _success(planner.explain({"features": ["income"]}))
+
+        short = [r for r in caplog.records if "shorter than" in r.getMessage()]
+        unreadable = [
+            r for r in caplog.records if r.levelno == logging.WARNING and r.name == "mloda.interfaces.service.sources"
+        ]
+        assert len(short) == 1
+        assert len(unreadable) == 1
+
+    def test_planning_failure_with_an_unreadable_credential_is_reported_as_the_credential_failure(
+        self, tmp_path: Path
+    ) -> None:
+        secret_file = tmp_path / "pii"
+        secret_file.write_text(TOKEN)
+        settings = _cred_settings(tmp_path, 'token = { file = "pii" }', default_classification="public")
+        planner, _ = _cred_services(settings, {}, extra_groups=frozenset({PlannerMissingInputMcp9}))
+        request = {"features": [PLAN_MISSING]}
+        _error(planner.explain(request), "missing_input_feature")
+        secret_file.unlink()
+
+        error = _error(planner.explain(request), "internal")
+
+        assert "ConfigError" in error["message"]
 
     @pytest.mark.parametrize("command", ["explain", "run"])
     def test_one_resolve_per_request(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str) -> None:

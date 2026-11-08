@@ -190,6 +190,11 @@ class Catalog:
         self._by_name = {entry.name: entry for entry in self._entries}
         self._known_names = sorted({name for entry in self._entries for name in entry.supported_names})
 
+    @property
+    def service_credentials(self) -> ServiceCredentials:
+        """The credentials this catalog resolves with."""
+        return self._credentials
+
     @classmethod
     def build(
         cls,

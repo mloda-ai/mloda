@@ -61,6 +61,9 @@ class _NamedFeatureGroup(OperationFeatureGroup):
 class OpToyFG(_NamedFeatureGroup):
     """Operation group with a Pandas and a PyArrow implementation."""
 
+    CONTRACT_VERSION = 3
+    DIVERGENCES = (Divergence(kind=DivergenceKind.TYPE, cause=Cause.BACKEND, reason="group returns floats"),)
+
 
 class OpToyChildFG(OpToyFG):
     """Subclass group with no implementation of its own."""

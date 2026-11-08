@@ -79,8 +79,11 @@ from mloda.core.api.plan_lock import _lock_text
 from mloda.core.prepare.resolved_join import ResolvedJoinPlan
 from mloda.provider import (
     BaseFeatureGroupVersion,
+    Cause,
     ClaimRoute,
     ComputeFramework,
+    Divergence,
+    DivergenceKind,
     FeatureGroup,
     FeatureSet,
     DataCreatorFeatureGroup,
@@ -651,6 +654,8 @@ class TestPlanStepDataclass:
             "leaves_connection",
             "credential_handles",
             "runtime_parameters",
+            "divergences",
+            "contract_version",
         ]
 
     def test_join_keys_defaults_to_none(self) -> None:
@@ -909,6 +914,57 @@ class TestPlanStepImplementation:
         assert step.implementation_path == _class_path(impl)
         assert step.implementation_version == impl.version()
         assert step.implementation is impl
+
+    @pytest.mark.parametrize(
+        "framework_name, expected",
+        [
+            (
+                "PandasDataFrame",
+                [
+                    ("feature_group", None, "group returns floats"),
+                    ("implementation", "PandasDataFrame", "skips NaN in sum"),
+                ],
+            ),
+            ("PyArrowTable", [("feature_group", None, "group returns floats")]),
+        ],
+    )
+    def test_an_operation_step_carries_its_divergence_records_and_contract_version(
+        self, framework_name: str, expected: list[tuple[str, str | None, str]]
+    ) -> None:
+        toy = importlib.import_module(
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+        )
+        steps = mloda.explain(
+            [Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"}, compute_framework=framework_name)],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyFG}),
+        )
+        step = next(s for s in steps if s.step_kind == "compute")
+
+        assert step.contract_version == 3
+        found = sorted((r.source.value if r.source else None, r.framework, r.reason) for r in step.divergences)
+        assert found == sorted(expected)
+        assert all(r.kind.value in ("type", "value") and r.cause.value == "backend" for r in step.divergences)
+
+    def test_a_plain_group_step_has_no_records_and_no_contract_version(self) -> None:
+        step = _explain_toy_group(ToyWorkerFG)
+
+        assert step.divergences == ()
+        assert step.contract_version is None
+
+    def test_divergences_and_contract_version_are_compared(self) -> None:
+        step = _explain_toy_group(ToyWorkerFG)
+        record = Divergence(kind=DivergenceKind.VALUE, cause=Cause.BACKEND, reason="r")
+
+        assert dataclasses.replace(step, divergences=(record,)) != step
+        assert dataclasses.replace(step, contract_version=2) != step
+
+    def test_join_and_transform_steps_carry_the_defaults(self) -> None:
+        others = [s for s in _prepare_cross_framework_join_session().resolved_plan() if s.step_kind != "compute"]
+        assert others
+        for step in others:
+            assert step.divergences == ()
+            assert step.contract_version is None
 
     @staticmethod
     def _explain_op_toy_child() -> tuple[Any, PlanStep]:

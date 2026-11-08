@@ -294,6 +294,21 @@ def test_operation_group_shape_check_passes(group: type[Any]) -> None:
     assert check_operation_group_shape(group).failures == ()
 
 
+@pytest.mark.parametrize(
+    "group",
+    [
+        AggregatedFeatureGroup,
+        TimeWindowFeatureGroup,
+        MissingValueFeatureGroup,
+        TextCleaningFeatureGroup,
+        GeoDistanceFeatureGroup,
+    ],
+    ids=lambda group: group.__name__,
+)
+def test_core_operation_bases_pin_contract_version_one(group: type[Any]) -> None:
+    assert group.CONTRACT_VERSION == 1
+
+
 @pytest.mark.parametrize(("name", "impl"), IMPLEMENTATION_CASES)
 def test_divergence_subtypes_are_subtypes_of_the_group(name: str, impl: type[Any]) -> None:
     group = OPERATION_FAMILIES[name][0]

@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from mloda.core.abstract_plugins.components.divergence import Divergence
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute
 
 if TYPE_CHECKING:
@@ -30,6 +31,10 @@ class FeatureGroupInfo:
     claim_routes: list[ClaimRoute] = field(default_factory=list)
     # Sorted, deduplicated suffixes a file or document group owns by default; empty for every other group.
     suffixes: tuple[str, ...] = ()
+    # CONTRACT_VERSION of the group, None when it declares none.
+    contract_version: int | None = None
+    # Stamped records of the group and of each serving implementation, group first.
+    divergences: list[Divergence] = field(default_factory=list)
 
 
 @dataclass

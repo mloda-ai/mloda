@@ -83,6 +83,8 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     - For euclidean/manhattan distance, coordinates should be in (x, y) format
     """
 
+    CONTRACT_VERSION = 1
+
     # Option keys for distance type
     DISTANCE_TYPE = "distance_type"
 

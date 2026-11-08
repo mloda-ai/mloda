@@ -10,6 +10,7 @@ from mloda.core.api.run_surface import RunSurface
 
 # Plan lock file
 from mloda.core.api.plan_lock import (
+    PlanLockContractVersionWarning,
     PlanLockMismatchError,
     check_plan_lock,
     plan_content_hash,
@@ -95,6 +96,7 @@ __all__ = [
     "check_plan_lock",
     "plan_content_hash",
     "plan_structure_hash",
+    "PlanLockContractVersionWarning",
     "PlanLockMismatchError",
     # Documentation
     "get_feature_group_docs",

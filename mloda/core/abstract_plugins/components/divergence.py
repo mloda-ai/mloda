@@ -7,6 +7,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+
 MAX_REASON_LENGTH = 200
 MAX_DOCS_LENGTH = 500
 ANY_OUTPUT_PART = "*"  # mirrors ANY_OUTPUT_PART in feature_chain_parser
@@ -124,6 +126,11 @@ class Divergence:
 
 def stamped(record: Divergence, source: DivergenceSource, framework: str | None) -> Divergence:
     result = copy.copy(record)
+    object.__setattr__(result, "reason", scrub_credentials(record.reason))
+    if record.variant is not None:
+        object.__setattr__(result, "variant", scrub_credentials(record.variant))
+    if record.docs is not None:
+        object.__setattr__(result, "docs", scrub_credentials(record.docs))
     object.__setattr__(result, "source", source)
     object.__setattr__(result, "framework", framework)
     return result

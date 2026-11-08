@@ -157,6 +157,8 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     - For constant imputation, a constant_value must be provided
     """
 
+    CONTRACT_VERSION = 1
+
     IMPUTATION_METHOD = "imputation_method"
     # Define supported imputation methods
     IMPUTATION_METHODS = {

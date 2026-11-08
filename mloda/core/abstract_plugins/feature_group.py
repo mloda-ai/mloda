@@ -137,8 +137,19 @@ class FeatureGroup(ABC):
     DIVERGENCES: ClassVar[tuple[Divergence, ...]] = ()
     """Declared differences of this group from its reference contract; not used when choosing implementations."""
 
+    CONTRACT_VERSION: ClassVar[int | None] = None
+    """Version of the reference contract this group follows; None when it declares none."""
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
+        if "contract_version" in cls.__dict__:
+            raise TypeError(f"{cls.__name__} declares 'contract_version'; a FeatureGroup spells it CONTRACT_VERSION.")
+        version = cls.CONTRACT_VERSION
+        if version is not None:
+            if isinstance(version, bool) or not isinstance(version, int):
+                raise TypeError(f"{cls.__name__}.CONTRACT_VERSION must be None or an int, got {version!r}")
+            if version < 1:
+                raise ValueError(f"{cls.__name__}.CONTRACT_VERSION must be at least 1, got {version}")
         if "divergences" in cls.__dict__:
             raise TypeError(f"{cls.__name__} declares 'divergences'; a FeatureGroup spells it DIVERGENCES.")
         FeatureChainParser.validate_property_mapping_defaults(cls.__name__, cls.PROPERTY_MAPPING)

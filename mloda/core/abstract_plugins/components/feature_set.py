@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Iterable, Mapping
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.divergence import Divergence
+
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
@@ -80,6 +82,7 @@ class FeatureSet:
         self.input_check: InputCheck | None = None
         self.specialized_from: tuple[str, ...] = ()
         self.implementation: type[Implementation[Any]] | None = None
+        self.divergences: tuple[Divergence, ...] = ()
         self.option_split_hint: tuple[str, frozenset[Any]] | None = None
         # Columns a Link reads from this step's data, stamped by the planner.
         self.link_index_columns: frozenset[str] = frozenset()

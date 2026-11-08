@@ -4,16 +4,23 @@ import difflib
 import hashlib
 import json
 import os
+import warnings
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 from mloda.core.abstract_plugins.components.credential_handle import credential_handle_keys
 from mloda.core.abstract_plugins.components.credential_scrub import _mask_secret_keys
+from mloda.core.abstract_plugins.components.divergence import Divergence
+from mloda.core.abstract_plugins.implementation import divergence_order
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.prepare.stable_text import stable_text
 
-PLAN_LOCK_FORMAT = 8
+PLAN_LOCK_FORMAT = 9
+
+
+class PlanLockContractVersionWarning(UserWarning):
+    """The only difference from the lock is a feature group's CONTRACT_VERSION."""
 
 
 class PlanLockMismatchError(Exception):
@@ -26,6 +33,20 @@ def _class_path(cls: Any) -> str | None:
 
 def _sorted_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(records, key=lambda record: json.dumps(record, sort_keys=True))
+
+
+def _divergence_record(r: Divergence) -> dict[str, Any]:
+    return {
+        "source": r.source.value if r.source else None,
+        "framework": r.framework,
+        "kind": r.kind.value,
+        "cause": r.cause.value,
+        "subtypes": sorted(r.subtypes),
+        "outputs": sorted(r.outputs),
+        "reason": r.reason,
+        "variant": r.variant,
+        "docs": r.docs,
+    }
 
 
 def _masked_group(group: dict[str, Any], step: PlanStep) -> dict[str, Any]:
@@ -43,7 +64,7 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
     for step in plan:
         if step.step_kind == "compute":
             requested.update(step.requested_feature_names)
-            record = {
+            record: dict[str, Any] = {
                 "feature_names": sorted(step.feature_names),
                 "feature_group": _class_path(step.feature_group),
                 "compute_framework": _class_path(step.compute_framework),
@@ -64,12 +85,22 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                 record["credential_handles"] = list(step.credential_handles)
             if step.runtime_parameters:
                 record["runtime_parameters"] = list(step.runtime_parameters)
+            if step.contract_version is not None:
+                record["contract_version"] = step.contract_version
+            if step.divergences:
+                record["divergences"] = [_divergence_record(r) for r in sorted(step.divergences, key=divergence_order)]
             lock["compute"].append(record)
             wide_record: dict[str, Any] = {
                 key: value
                 for key, value in record.items()
                 if key
-                not in ("compute_framework_reason", "leaves_connection", "credential_handles", "runtime_parameters")
+                not in (
+                    "compute_framework_reason",
+                    "leaves_connection",
+                    "credential_handles",
+                    "runtime_parameters",
+                    "divergences",
+                )
             }
             options = step.content_options
             wide_record["options"] = None if options is None else stable_text(_masked_group(options.group, step))
@@ -166,6 +197,31 @@ def write_plan_lock(plan: Sequence[PlanStep], path: str | os.PathLike[str]) -> N
         handle.write(_dump(content))
 
 
+def _without_contract_version(content: dict[str, Any]) -> dict[str, Any]:
+    records = [{k: v for k, v in r.items() if k != "contract_version"} for r in content.get("compute", [])]
+    return {**content, "compute": _sorted_records(records)}
+
+
+def _contract_version_only(locked: dict[str, Any], resolved: dict[str, Any]) -> bool:
+    return _without_contract_version(locked) == _without_contract_version(resolved)
+
+
+def _contract_version_message(locked: dict[str, Any], resolved: dict[str, Any]) -> str:
+    def versions(content: dict[str, Any]) -> dict[str, set[Any]]:
+        found: dict[str, set[Any]] = {}
+        for record in content["compute"]:
+            found.setdefault(record["feature_group"], set()).add(record.get("contract_version"))
+        return found
+
+    before, after = versions(locked), versions(resolved)
+    changed = [
+        f"{group}: locked {sorted(before[group], key=str)}, resolved {sorted(after[group], key=str)}"
+        for group in sorted(before)
+        if before[group] != after.get(group)
+    ]
+    return "Plan lock contract version changed: " + "; ".join(changed)
+
+
 def check_plan_lock(plan: Sequence[PlanStep], path: str | os.PathLike[str]) -> None:
     """Raise PlanLockMismatchError unless the plan matches the lock file; never writes."""
     target = Path(path)
@@ -176,7 +232,11 @@ def check_plan_lock(plan: Sequence[PlanStep], path: str | os.PathLike[str]) -> N
             f"with this content:\n{resolved}"
         )
     locked = json.loads(target.read_text(encoding="utf-8-sig"))
-    if locked == json.loads(resolved):
+    resolved_content = json.loads(resolved)
+    if locked == resolved_content:
+        return
+    if _contract_version_only(locked, resolved_content):
+        warnings.warn(_contract_version_message(locked, resolved_content), PlanLockContractVersionWarning, stacklevel=2)
         return
     diff = difflib.unified_diff(
         (json.dumps(locked, sort_keys=True, indent=2) + "\n").splitlines(keepends=True),

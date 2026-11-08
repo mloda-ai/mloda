@@ -16,6 +16,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.credential_grant import read_recorder
 from mloda.core.abstract_plugins.components.credential_scrub import redact_escaping_exception
+from mloda.core.abstract_plugins.components.divergence import Divergence
 from mloda.core.abstract_plugins.components.declared_attributes import scalar_attributes
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows, current_failed_rows_collector
 from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
@@ -91,6 +92,8 @@ class HookContext:
     data_access_loader: str | None = None
     implementation: str | None = None
     implementation_version: str | None = None
+    divergences: tuple[Divergence, ...] = ()
+    contract_version: int | None = None
     join_type: str | None = None
     join_keys: tuple[str, ...] | None = None
     asof_config: "AsOfJoinConfig | None" = None

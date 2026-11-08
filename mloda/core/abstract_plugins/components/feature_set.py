@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from mloda.core.abstract_plugins.implementation import Implementation
     from mloda.core.abstract_plugins.components.input_data.claim_route import DataAccessReader
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
+    from mloda.core.abstract_plugins.hook_context import HookContext
 
 
 def merge_input_feature_edges(pairs: Iterable[tuple[str, Iterable[str]]]) -> dict[str, tuple[str, ...]] | None:
@@ -83,6 +84,7 @@ class FeatureSet:
         # Columns a Link reads from this step's data, stamped by the planner.
         self.link_index_columns: frozenset[str] = frozenset()
         self._load_marker: InputDataLoadMarker | None = current_input_data_load_marker.get()
+        self._calculate_context: HookContext | None = None
         self._defaults_materialized_for: type[FeatureGroup] | None = None
         self._defaults_checked: tuple[tuple[tuple[Feature, Options], ...], Options | None] = ((), None)
 
@@ -103,7 +105,12 @@ class FeatureSet:
 
     def __getstate__(self) -> dict[str, Any]:
         """Drop the marker when pickling: it holds a class by reference and a worker recomputes it cheaply."""
-        return {**self.__dict__, "_defaults_materialized_for": None, "_defaults_checked": ((), None)}
+        return {
+            **self.__dict__,
+            "_defaults_materialized_for": None,
+            "_defaults_checked": ((), None),
+            "_calculate_context": None,
+        }
 
     def freeze(self) -> None:
         """Freeze features, options and filters, mark the set prepared; copies and run views stay writable."""
@@ -184,6 +191,7 @@ class FeatureSet:
             view.artifact_to_save = None
             view.artifact_value = binding.value
         view.save_artifact = None
+        view._calculate_context = None
         return view
 
     def runtime_parameter(self, key: str, feature: Feature | None = None) -> Any:

@@ -909,6 +909,8 @@ class ComputeFramework(ABC):
             ):
                 if extender is None:
                     return method(self.data, features)
+                if stamped:
+                    features._calculate_context = context
                 return _invoke_extender(
                     extender,
                     instrument(context, method, row_count=self._row_count, output_schema=self._output_schema),

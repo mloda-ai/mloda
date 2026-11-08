@@ -895,6 +895,7 @@ def test_the_handle_key_is_written_only_in_the_compute_record() -> None:
 
     assert content["compute"][0]["credential_handles"] == list(_HANDLES)
     assert all("credential_handles" not in r for r in content["joins"] + content["transforms"])
+    assert "credentials_read" not in _lock_text([_compute_step(credential_handles=_HANDLES)])
     assert content["format"] == PLAN_LOCK_FORMAT == 8
 
 

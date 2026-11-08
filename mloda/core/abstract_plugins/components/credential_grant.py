@@ -1,6 +1,7 @@
 """Hold the credentials a step declared for the duration of its execution, masked in errors and logs."""
 
-from collections.abc import Mapping
+from collections.abc import Generator, Mapping
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from typing import Any, Protocol
 
@@ -91,6 +92,25 @@ class grant_scope:  # noqa: N801
             redaction.__exit__(exc_type, exc, tb)
         finally:
             secrets.__exit__(exc_type, exc, tb)
+
+
+_READ_RECORDERS: ContextVar[tuple[set[str], ...]] = ContextVar("mloda_credential_read_recorders", default=())
+
+
+@contextmanager
+def read_recorder() -> Generator[set[str], None, None]:
+    """Collect the handles read inside the block, alongside any enclosing recorders."""
+    recorder: set[str] = set()
+    token = _READ_RECORDERS.set((*_READ_RECORDERS.get(), recorder))
+    try:
+        yield recorder
+    finally:
+        _READ_RECORDERS.reset(token)
+
+
+def record_credential_read(handle: str) -> None:
+    for recorder in _READ_RECORDERS.get():
+        recorder.add(handle)
 
 
 def _read_granted(handle: str) -> Any:

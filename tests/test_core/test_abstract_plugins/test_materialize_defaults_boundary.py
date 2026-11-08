@@ -36,6 +36,7 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda.core.abstract_plugins.components.validators.datatype_validator import DataTypeMismatchError
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.provider import DataCreatorFeatureGroup, PropertySpec
 from mloda.user import DataType, GlobalFilter, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -796,6 +797,16 @@ class TestFeatureSetMaterializeOptionDefaults:
         feature_set = FeatureSet([Feature("mdb_unit_pickle", Options())])
         feature_set._defaults_materialized_for = FeatureGroup
         assert pickle.loads(pickle.dumps(feature_set))._defaults_materialized_for is None  # nosec B301
+
+    def test_pickle_drops_the_stashed_calculate_context(self) -> None:
+        feature_set = FeatureSet([Feature("mdb_unit_pickle_ctx", Options())])
+        feature_set._calculate_context = HookContext(
+            hook=ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+            feature_group_class=None,
+            feature_group_version=None,
+            compute_framework_name=None,
+        )
+        assert pickle.loads(pickle.dumps(feature_set))._calculate_context is None  # nosec B301
 
     def test_collapse_of_same_name_twins_raises_actionable_duplicate_message(self) -> None:
         """Filling a context default on one twin of a same-name pair collapses the set: the ValueError

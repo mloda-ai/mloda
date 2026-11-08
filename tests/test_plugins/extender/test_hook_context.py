@@ -4,15 +4,23 @@ Pins construction, the ambient current()/activate() scope (including nested
 restore), row_count's __len__ gating, and instrument's timing/status bookkeeping.
 """
 
+import contextvars
 import copy
 import dataclasses
 import json
 import pickle  # nosec B403
+import threading
+from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
 import pytest
 
+from mloda.core.abstract_plugins.components.credential_access import (
+    CredentialReadRefused,
+    credentials_scope,
+    read_credential,
+)
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.function_extender import ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
@@ -205,6 +213,7 @@ class TestHookContextIsFrozenExceptOutcomeFields:
             ("feature_group_class", "pkg.Forged"),
             ("specialized_from", ("pkg.Forged",)),
             ("failed_rows", ("forged",)),
+            ("credentials_read", ("forged",)),
             ("step_uuid", uuid4()),
         ],
     )
@@ -240,6 +249,7 @@ class TestHookContextIsFrozenExceptOutcomeFields:
             "feature_names",
             "feature_group_class",
             "failed_rows",
+            "credentials_read",
             "step_uuid",
         ],
     )
@@ -621,6 +631,118 @@ class TestHookContextResultAttributes:
         assert seen == [(), ()]
         assert context.failed_rows == ()
 
+    def test_credentials_read_defaults_to_empty_tuple(self) -> None:
+        assert _make_context().credentials_read == ()
+
+    def test_instrument_records_reads_sorted_and_deduplicated(self) -> None:
+        context = _make_context()
+
+        def raw() -> str:
+            read_credential("b")
+            read_credential("a")
+            read_credential("b")
+            return "ok"
+
+        with credentials_scope({"a": {"k": "SECRET-A"}, "b": {"k": "SECRET-B"}}):
+            instrument(context, raw)()
+
+        assert context.credentials_read == ("a", "b")
+        assert "SECRET" not in repr(context)
+
+    def test_instrument_refused_read_leaves_empty(self) -> None:
+        context = _make_context()
+
+        def raw() -> None:
+            with pytest.raises(CredentialReadRefused):
+                read_credential("undeclared")
+
+        with credentials_scope({"a": {"k": "v"}}):
+            instrument(context, raw)()
+
+        assert context.credentials_read == ()
+
+    def test_instrument_resets_credentials_read_per_call(self) -> None:
+        context = _make_context()
+        seen: list[tuple[str, ...]] = []
+
+        def raw() -> None:
+            seen.append(context.credentials_read)
+            if len(seen) == 1:
+                read_credential("a")
+
+        wrapped = instrument(context, raw)
+        with credentials_scope({"a": {"k": "v"}}):
+            wrapped()
+            after_first: tuple[str, ...] = context.credentials_read
+            wrapped()
+
+        final: tuple[str, ...] = context.credentials_read
+        assert after_first == ("a",)
+        assert seen == [(), ()]
+        assert final == ()
+
+    def test_nested_instrument_sees_only_its_own_reads(self) -> None:
+        outer = _make_context()
+        inner = _make_context()
+
+        def inner_raw() -> None:
+            read_credential("b")
+
+        def outer_raw() -> None:
+            read_credential("a")
+            instrument(inner, inner_raw)()
+
+        with credentials_scope({"a": {"k": "v"}, "b": {"k": "v"}}):
+            instrument(outer, outer_raw)()
+
+        assert inner.credentials_read == ("b",)
+        assert outer.credentials_read == ("a", "b")
+
+    def test_concurrent_sibling_calls_in_copied_contexts_keep_their_reads_apart(self) -> None:
+        context_a = _make_context()
+        context_b = _make_context()
+        barrier = threading.Barrier(2, timeout=5)
+
+        def reader(handle: str) -> Callable[[], None]:
+            def raw() -> None:
+                read_credential(handle)
+                barrier.wait()
+
+            return raw
+
+        with credentials_scope({"a": {"k": "v"}, "b": {"k": "v"}}):
+            run_a = contextvars.copy_context()
+            run_b = contextvars.copy_context()
+            thread_a = threading.Thread(target=run_a.run, args=(instrument(context_a, reader("a")),))
+            thread_b = threading.Thread(target=run_b.run, args=(instrument(context_b, reader("b")),))
+            thread_a.start()
+            thread_b.start()
+            thread_a.join(timeout=10)
+            thread_b.join(timeout=10)
+
+        assert context_a.credentials_read == ("a",)
+        assert context_b.credentials_read == ("b",)
+
+    def test_instrument_error_path_publishes_reads_before_raising(self) -> None:
+        context = _make_context()
+
+        def raw() -> None:
+            read_credential("a")
+            raise RuntimeError("boom")
+
+        with credentials_scope({"a": {"k": "v"}}):
+            with pytest.raises(RuntimeError):
+                instrument(context, raw)()
+
+        assert context.credentials_read == ("a",)
+
+    def test_instrument_outside_any_grant_leaves_empty(self) -> None:
+        context = _make_context()
+
+        instrument(context, lambda: "ok")()
+
+        assert context.credentials_read == ()
+
 
 class TestHookContextRowCount:
     """HookContext.row_count is __len__-gated, never calls len() on unsized objects."""
@@ -899,7 +1021,7 @@ class TestInstrumentPreservesSelf:
         assert not hasattr(wrapped, "__self__")
 
 
-_EMPTY_TUPLE_DEFAULTS = {"feature_names", "specialized_from", "failed_rows", "credential_handles"}
+_EMPTY_TUPLE_DEFAULTS = {"feature_names", "specialized_from", "failed_rows", "credential_handles", "credentials_read"}
 
 
 class TestHookContextKeywordDefaults:

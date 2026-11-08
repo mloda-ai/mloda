@@ -7,7 +7,9 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components import divergence as divergence_module
 from mloda.core.abstract_plugins.components.divergence import (
+    MAX_DOCS_LENGTH,
     MAX_REASON_LENGTH,
     Divergence,
     DivergenceKind,
@@ -15,9 +17,11 @@ from mloda.core.abstract_plugins.components.divergence import (
     divergence_problems,
     stamped,
 )
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import ANY_OUTPUT_PART
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import Cause, OperationFeatureGroup, SubtypeDeclaration, property_spec
+from mloda.user.pyarrow import PyArrowTable
 from mloda.user.python_dict import PythonDictFramework
 
 KEY = "divtest_kind"
@@ -87,6 +91,8 @@ class TestConstruction:
             {"reason": 3},
             {"docs": 3, "cause": Cause.OTHER},
             {"variant": 3, "kind": DivergenceKind.VARIANT},
+            {"subtypes": {"sum": "skips NaN"}},
+            {"outputs": {"a": "skips NaN"}},
         ],
         ids=[
             "kind",
@@ -98,6 +104,8 @@ class TestConstruction:
             "int_reason",
             "docs",
             "variant",
+            "mapping_subtypes",
+            "mapping_outputs",
         ],
     )
     def test_wrong_types_raise_type_error(self, kwargs: dict[str, Any]) -> None:
@@ -118,7 +126,17 @@ class TestConstruction:
             {"kind": DivergenceKind.VARIANT},
             {"kind": DivergenceKind.VARIANT, "variant": ""},
             {"variant": "fast"},
-            {"docs": "x" * (MAX_REASON_LENGTH + 1)},
+            {"docs": "x" * (MAX_DOCS_LENGTH + 1), "cause": Cause.OTHER},
+            {"reason": "   ", "cause": Cause.NOT_IMPLEMENTED},
+            {"reason": "a\tb"},
+            {"reason": "a\x00b"},
+            {"reason": "a\x1bb"},
+            {"kind": DivergenceKind.VARIANT, "variant": "a\tb"},
+            {"kind": DivergenceKind.VARIANT, "variant": "a\x00b"},
+            {"kind": DivergenceKind.VARIANT, "variant": "a\x1bb"},
+            {"cause": Cause.OTHER, "docs": "a\tb"},
+            {"cause": Cause.OTHER, "docs": "a\x00b"},
+            {"cause": Cause.OTHER, "docs": "a\x1bb"},
             {"kind": DivergenceKind.VARIANT, "variant": "x" * (MAX_REASON_LENGTH + 1)},
         ],
         ids=[
@@ -134,6 +152,16 @@ class TestConstruction:
             "variant_kind_empty_variant",
             "variant_on_non_variant_kind",
             "docs_too_long",
+            "whitespace_reason_not_implemented",
+            "reason_tab",
+            "reason_nul",
+            "reason_esc",
+            "variant_tab",
+            "variant_nul",
+            "variant_esc",
+            "docs_tab",
+            "docs_nul",
+            "docs_esc",
             "variant_too_long",
         ],
     )
@@ -155,6 +183,13 @@ class TestConstruction:
         kwargs[field] = "one\n"
         with pytest.raises(ValueError):
             _record(**kwargs)
+
+    def test_docs_up_to_its_own_limit_are_accepted(self) -> None:
+        assert _record(cause=Cause.OTHER, docs="x" * MAX_DOCS_LENGTH).docs == "x" * MAX_DOCS_LENGTH
+
+    def test_a_reason_just_over_its_limit_is_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            _record(reason="x" * 201)
 
     def test_a_reason_of_exactly_the_limit_is_accepted(self) -> None:
         assert _record(reason="x" * MAX_REASON_LENGTH).reason == "x" * MAX_REASON_LENGTH
@@ -194,7 +229,7 @@ class TestAppliesTo:
         record = _record()
         assert record.applies_to("sum", None)
         assert record.applies_to(None, None)
-        assert record.applies_to("mean", "a")
+        assert record.applies_to("mean", frozenset({"a"}))
 
     def test_subtypes_record_applies_to_its_subtypes_only(self) -> None:
         record = _record(subtypes={"sum"})
@@ -205,10 +240,11 @@ class TestAppliesTo:
     def test_outputs_record_applies_to_a_whole_feature_request(self) -> None:
         assert _record(outputs={"a"}).applies_to("sum", None)
 
-    def test_outputs_record_applies_to_a_named_part(self) -> None:
+    def test_outputs_record_applies_when_a_requested_part_is_covered(self) -> None:
         record = _record(outputs={"a"})
-        assert record.applies_to("sum", "a")
-        assert not record.applies_to("sum", "b")
+        assert record.applies_to("sum", frozenset({"a"}))
+        assert record.applies_to("sum", frozenset({"a", "b"}))
+        assert not record.applies_to("sum", frozenset({"b"}))
 
 
 class TestStamped:
@@ -368,6 +404,22 @@ class TestImplementationDeclaration:
         with pytest.raises(TypeError):
             _make_impl(_make_group(), DIVERGENCES=(_record(),))
 
+    def test_the_legacy_divergent_spelling_fails_at_definition(self) -> None:
+        with pytest.raises(TypeError, match="divergences"):
+            _make_impl(_make_group(), divergent={"sum": "skips NaN"})
+
+    def test_an_any_output_part_group_accepts_any_output_name(self) -> None:
+        group = _make_group(OUTPUT_PARTS=(ANY_OUTPUT_PART,))
+        impl = _make_impl(group, divergences=(_record(outputs={"col1"}),))
+        assert impl.divergences[0].outputs == frozenset({"col1"})
+
+    def test_an_any_output_part_group_accepts_any_output_name_in_its_own_divergences(self) -> None:
+        group = _make_group(OUTPUT_PARTS=(ANY_OUTPUT_PART,), DIVERGENCES=(_record(outputs={"col1"}),))
+        assert group.DIVERGENCES[0].outputs == frozenset({"col1"})
+
+    def test_the_any_output_part_constant_mirrors_the_parser(self) -> None:
+        assert divergence_module.ANY_OUTPUT_PART == ANY_OUTPUT_PART
+
     def test_the_removed_divergent_mapping_is_not_an_attribute(self) -> None:
         assert not hasattr(Implementation, "divergent")
         assert not hasattr(Implementation, "divergence")
@@ -379,9 +431,6 @@ class TestImplementationDeclaration:
         assert record.framework == PythonDictFramework.get_class_name()
 
     def test_an_inherited_record_takes_the_subclass_framework(self) -> None:
-        pytest.importorskip("pyarrow")
-        from mloda.user.pyarrow import PyArrowTable
-
         group = _make_group()
         parent = _make_impl(group, divergences=(_record(subtypes={"sum"}),))
         child: Any = type("DivTestChildImpl", (parent,), {"compute_framework": PyArrowTable})
@@ -417,6 +466,6 @@ class TestDivergencesFor:
         group = _make_group(OUTPUT_PARTS=("a", "b"))
         impl = _make_impl(group, divergences=(_record(outputs={"a"}),))
         options = Options({KEY: "sum"})
-        assert len(impl.divergences_for(group, "divtest_x", options, part="a")) == 1
-        assert impl.divergences_for(group, "divtest_x", options, part="b") == ()
+        assert len(impl.divergences_for(group, "divtest_x", options, parts=frozenset({"a"}))) == 1
+        assert impl.divergences_for(group, "divtest_x", options, parts=frozenset({"b"})) == ()
         assert len(impl.divergences_for(group, "divtest_x", options)) == 1

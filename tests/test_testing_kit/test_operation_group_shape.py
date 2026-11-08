@@ -168,7 +168,7 @@ def test_shape_b_group_without_probe_fails_only_declines() -> None:
         (make_divergence_outside_universe, "divergences:", "outside the subtype universe"),
         (make_group_divergence_outside_universe, "divergences:", "outside the subtype universe"),
         (make_empty_reason, "divergences:", "no reason"),
-        (make_one_sided_alias, "aliases:", "diverges for only one"),
+        (make_one_sided_alias, "aliases:", "declares different divergences for 'sum' and 'mean'"),
         (make_alias_outside_universe, "aliases:", "outside the subtype universe"),
         (make_unsupported_not_declining, "declines:", "does not decline"),
         (make_probe_never_accepted, "declines:", "probe not accepted"),
@@ -188,6 +188,16 @@ def test_alias_with_a_whole_plugin_divergence_passes() -> None:
     group = _make_group_a()
     _keep = _make_impl(group, divergences=(WHOLE_PLUGIN,))
     assert check_operation_group_shape(group, alias_pairs=(("sum", "mean"),)).failures == ()
+
+
+def test_alias_with_records_of_different_kinds_reports_instead_of_raising() -> None:
+    group = _make_group_a()
+    value = Divergence(kind=DivergenceKind.VALUE, cause=Cause.BACKEND, subtypes=frozenset({"sum"}), reason="skips NaN")
+    _keep = _make_impl(group, divergences=(value, WHOLE_PLUGIN))
+    result = check_operation_group_shape(group, alias_pairs=(("sum", "mean"),))
+    assert any(
+        f.startswith("aliases:") and "declares different divergences for 'sum' and 'mean'" in f for f in result.failures
+    ), result.failures
 
 
 def test_alias_with_a_gap_record_on_one_side_passes() -> None:

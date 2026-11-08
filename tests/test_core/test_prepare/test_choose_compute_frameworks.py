@@ -1168,6 +1168,18 @@ def _reason_outputs_record_penalizes_a_whole_feature_request(net: _Net) -> list[
     return _fresh_div_net(net, (_record(outputs=frozenset({"a"})),), {P})
 
 
+def _reason_outputs_record_skips_a_request_for_another_part(net: _Net) -> list[Feature]:
+    features = _fresh_div_net(net, (_record(outputs=frozenset({"a"})),), {P})
+    features[0].record_part("b")
+    return features
+
+
+def _reason_outputs_record_penalizes_a_request_for_its_part(net: _Net) -> list[Feature]:
+    features = _fresh_div_net(net, (_record(outputs=frozenset({"a"})),), {P})
+    features[0].record_part("a")
+    return features
+
+
 def _reason_whole_plugin_record_prefers_the_matching_version(net: _Net) -> list[Feature]:
     return _fresh_div_net(net, (_record(),), {P, A})
 
@@ -1383,6 +1395,8 @@ def _reason_neutral_without_native_moved_by_a_connection_home(net: _Net) -> list
         (_reason_gap_record_does_not_penalize, None, None, [DEFAULT_ORDER], [P]),
         (_reason_whole_plugin_record_penalizes, None, None, [ONLY_ALLOWED + SUM_TAG], [P]),
         (_reason_outputs_record_penalizes_a_whole_feature_request, None, None, [ONLY_ALLOWED + SUM_TAG], [P]),
+        (_reason_outputs_record_skips_a_request_for_another_part, None, None, [ONLY_ALLOWED], [P]),
+        (_reason_outputs_record_penalizes_a_request_for_its_part, None, None, [ONLY_ALLOWED + SUM_TAG], [P]),
         (_reason_whole_plugin_record_prefers_the_matching_version, None, None, [PREFERS_MATCHING], [A]),
         (_reason_group_divergences_do_not_change_the_choice, None, None, [DEFAULT_ORDER], [P]),
         (_reason_group_divergences_add_no_tag, None, None, [ONLY_ALLOWED], [P]),
@@ -1449,6 +1463,8 @@ def _reason_neutral_without_native_moved_by_a_connection_home(net: _Net) -> list
         "gap_record_does_not_penalize",
         "whole_plugin_record_penalizes",
         "outputs_record_penalizes_a_whole_feature_request",
+        "outputs_record_skips_a_request_for_another_part",
+        "outputs_record_penalizes_a_request_for_its_part",
         "whole_plugin_record_prefers_the_matching_version",
         "group_divergences_do_not_change_the_choice",
         "group_divergences_add_no_tag",

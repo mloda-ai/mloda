@@ -115,6 +115,8 @@ class Implementation(ABC, Generic[G]):
         super().__init_subclass__(**kwargs)
         if "DIVERGENCES" in cls.__dict__:
             raise TypeError(f"{cls.__name__} declares 'DIVERGENCES'; an Implementation spells it divergences.")
+        if "divergent" in cls.__dict__:
+            raise TypeError(f"{cls.__name__} declares 'divergent'; an Implementation declares divergences.")
         if _has_abstract_member(cls):
             _registry.add(cls)  # a decorator may still make it concrete
             return
@@ -132,7 +134,12 @@ class Implementation(ABC, Generic[G]):
             )
         if not is_nominal_subclass(framework, ComputeFramework):
             raise TypeError(f"{cls.__name__} must set compute_framework to a ComputeFramework subclass.")
-        validate_divergences(cls.__name__, cls.divergences, group.subtype_universe, group.OUTPUT_PARTS)
+        validate_divergences(
+            cls.__name__,
+            cls.divergences,
+            group.subtype_universe,
+            group.OUTPUT_PARTS,
+        )
         _registry.add(cls)
 
     @classmethod
@@ -169,15 +176,12 @@ class Implementation(ABC, Generic[G]):
 
     @classmethod
     def divergences_for(
-        cls, group: type[FeatureGroup], feature_name: str, options: Options, *, part: str | None = None
+        cls, group: type[FeatureGroup], feature_name: str, options: Options, *, parts: frozenset[str] | None = None
     ) -> tuple[Divergence, ...]:
-        """The stamped non-GAP records that apply to the feature."""
-        if part is None:
-            split = FeatureGroup.split_output_part(feature_name)
-            part = None if split is None else split[1]
+        """The stamped non-GAP records that apply to the feature; parts is None for the whole feature."""
         subtype = cls.canonical_subtype(group, feature_name, options)
         return tuple(
-            r for r in cls.divergence_records() if r.kind is not DivergenceKind.GAP and r.applies_to(subtype, part)
+            r for r in cls.divergence_records() if r.kind is not DivergenceKind.GAP and r.applies_to(subtype, parts)
         )
 
     @classmethod

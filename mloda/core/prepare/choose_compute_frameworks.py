@@ -312,7 +312,9 @@ class ChooseComputeFrameworks:
             found = {
                 scrub_credentials(r.describe())
                 for f in block.features
-                for r in impl.divergences_for(block.fg, str(f.name), f.options)
+                for r in impl.divergences_for(
+                    block.fg, str(f.name), f.options, parts=f.requested_parts if f.parts_only else None
+                )
             }
             if found:
                 result[framework] = tuple(sorted(found))

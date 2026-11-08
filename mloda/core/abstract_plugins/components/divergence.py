@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 
 MAX_REASON_LENGTH = 200
+MAX_DOCS_LENGTH = 500
+ANY_OUTPUT_PART = "*"  # mirrors ANY_OUTPUT_PART in feature_chain_parser
 
 
 class Cause(Enum):
@@ -35,15 +37,22 @@ def _single_line_problem(label: str, text: str) -> str | None:
     lines = text.splitlines()
     if text and (len(lines) != 1 or lines[0] != text):
         return f"{label} must be a single line"
-    if len(text) > MAX_REASON_LENGTH:
-        return f"{label} must be at most {MAX_REASON_LENGTH} characters"
+    if not text.isprintable():
+        return f"{label} must contain only printable characters"
+    limit = MAX_DOCS_LENGTH if label == "docs" else MAX_REASON_LENGTH
+    if len(text) > limit:
+        return f"{label} must be at most {limit} characters"
     return None
 
 
 def _value_problems(record: Divergence) -> list[str]:
     problems: list[str] = []
     reason, variant, docs = record.reason, record.variant, record.docs
-    if not isinstance(reason, str) or (not reason.strip() and record.cause is not Cause.NOT_IMPLEMENTED):
+    if (
+        not isinstance(reason, str)
+        or (reason and not reason.strip())
+        or (not reason and record.cause is not Cause.NOT_IMPLEMENTED)
+    ):
         problems.append("gives no reason")
     for label, text in (("reason", reason), ("variant", variant), ("docs", docs)):
         if isinstance(text, str):
@@ -62,7 +71,7 @@ def _value_problems(record: Divergence) -> list[str]:
 
 
 def _names(label: str, value: object) -> frozenset[str]:
-    if isinstance(value, str) or not hasattr(value, "__iter__"):
+    if isinstance(value, str | Mapping) or not hasattr(value, "__iter__"):
         raise TypeError(f"{label} must be an iterable of strings, got {value!r}")
     names = frozenset(value)
     if not all(isinstance(n, str) for n in names):
@@ -104,12 +113,12 @@ class Divergence:
         """The reason, or "not implemented" for a reasonless NOT_IMPLEMENTED record."""
         return self.reason or "not implemented"
 
-    def applies_to(self, subtype: str | None, part: str | None) -> bool:
-        """Whether the record covers a feature with this canonical subtype and requested output part."""
+    def applies_to(self, subtype: str | None, parts: frozenset[str] | None) -> bool:
+        """Whether the record covers a feature with this canonical subtype and requested output parts."""
         if self.subtypes:
             return subtype in self.subtypes
         if self.outputs:
-            return part is None or part in self.outputs
+            return parts is None or bool(parts & self.outputs)
         return True
 
 
@@ -147,7 +156,7 @@ def divergence_problems(
         outside = sorted(record.subtypes - universe)
         if outside:
             problems.append(f"{owner} divergences name {outside} outside the subtype universe")
-        if output_parts is not None:
+        if output_parts is not None and ANY_OUTPUT_PART not in output_parts:
             unknown = sorted(record.outputs - set(output_parts))
             if unknown:
                 problems.append(f"{owner} divergences name {unknown} outside OUTPUT_PARTS")

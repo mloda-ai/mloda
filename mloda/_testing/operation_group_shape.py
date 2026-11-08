@@ -27,9 +27,9 @@ def _implementations(group: type[OperationFeatureGroup]) -> dict[type[Implementa
     return found
 
 
-def _reasons(impl: type[Implementation[Any]], subtype: str) -> list[tuple[DivergenceKind, str]]:
+def _reasons(impl: type[Implementation[Any]], subtype: str) -> list[tuple[str, str]]:
     records = (r for r in impl.divergences if r.kind is not DivergenceKind.GAP and r.applies_to(subtype, None))
-    return sorted((r.kind, r.describe()) for r in records)
+    return sorted((r.kind.value, r.describe()) for r in records)
 
 
 def _alias_failures(
@@ -43,7 +43,7 @@ def _alias_failures(
             continue
         for impl in impls:
             if _reasons(impl, first) != _reasons(impl, second):
-                failures.append(f"aliases: {impl.__name__} diverges for only one of '{first}' and '{second}'")
+                failures.append(f"aliases: {impl.__name__} declares different divergences for '{first}' and '{second}'")
     return failures
 
 

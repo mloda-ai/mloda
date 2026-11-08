@@ -17,6 +17,7 @@ import pytest
 
 import mloda.interfaces.cli.main as cli_main
 import mloda.interfaces.mcp.main as mcp_main
+from mloda.core.abstract_plugins.components import log_masking
 from mloda.interfaces.service.config import Settings, load_settings
 from tests.helpers.docs_scope import shipped_feature_group_registry
 
@@ -300,6 +301,16 @@ class TestServe:
         assert transport == "stdio"
         assert isinstance(server, mcpserver.MCPServer)
         assert "mloda_explain_request" in (server.instructions or "")
+
+    def test_serve_enables_process_wide_log_masking(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        mcpserver = pytest.importorskip("mcp.server.mcpserver")
+        monkeypatch.setattr(mcpserver.MCPServer, "run", lambda self, transport="stdio", **kwargs: None)
+        registry = shipped_feature_group_registry()
+        monkeypatch.setattr("mloda.core.api.plugin_docs.feature_group_subclasses", registry)
+
+        assert mcp_main.serve(load_settings(_config(tmp_path), ENV), env=ENV) == 0
+
+        assert log_masking.process_wide_log_masking_enabled() is True
 
 
 class TestMcpModule:

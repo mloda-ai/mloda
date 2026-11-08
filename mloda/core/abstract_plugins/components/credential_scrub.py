@@ -270,6 +270,7 @@ class registered_secrets_scope:  # noqa: N801
         self._literals = literals
         self._identity = literals if identity is None else identity
         self._tokens: list[tuple[Token[frozenset[str]], Token[frozenset[str]]]] = []
+        self._tracked: list[int | None] = []
 
     def __enter__(self) -> None:
         previous = _REGISTERED_SECRETS.get()
@@ -284,8 +285,17 @@ class registered_secrets_scope:  # noqa: N801
             from mloda.core.abstract_plugins.components.log_masking import ensure_log_masking
 
             ensure_log_masking()
+        from mloda.core.abstract_plugins.components.log_masking import _track_scope_literals
+
+        self._tracked.append(_track_scope_literals(self._literals))
 
     def __exit__(self, *exc_info: object) -> None:
+        generation = self._tracked.pop()
+        if generation is not None:
+            from mloda.core.abstract_plugins.components import log_masking
+
+            if generation == log_masking._fork_generation:
+                log_masking._release_scope_literals(self._literals)
         secrets_token, identity_token = self._tokens.pop()
         _IDENTITY_SECRETS.reset(identity_token)
         _REGISTERED_SECRETS.reset(secrets_token)

@@ -295,9 +295,10 @@ def test_operation_group_shape_check_passes(group: type[Any]) -> None:
 
 
 @pytest.mark.parametrize(("name", "impl"), IMPLEMENTATION_CASES)
-def test_divergent_keys_are_subtypes_of_the_group(name: str, impl: type[Any]) -> None:
+def test_divergence_subtypes_are_subtypes_of_the_group(name: str, impl: type[Any]) -> None:
     group = OPERATION_FAMILIES[name][0]
-    assert set(impl.divergent) <= set(group.subtype_universe())
+    declared = set().union(*(record.subtypes for record in impl.divergences))
+    assert declared <= set(group.subtype_universe())
 
 
 @pytest.mark.parametrize(("name", "impl"), IMPLEMENTATION_CASES)

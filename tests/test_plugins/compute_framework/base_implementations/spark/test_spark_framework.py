@@ -26,7 +26,7 @@ from typing import Any
 from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
 from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
 from mloda._testing.compute_framework.output_schema_suite import OutputSchemaSuite
-from mloda._testing.declarations import Cause
+from mloda.provider import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter, SparkAdapter
 from mloda.user import JoinType
 import pytest

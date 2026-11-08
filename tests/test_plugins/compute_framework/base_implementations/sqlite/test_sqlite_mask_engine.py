@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from mloda._testing.compute_framework.mask_suite import SqlMaskEngineSuite
-from mloda._testing.declarations import Cause
+from mloda.provider import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter, SqliteAdapter
 from mloda.provider import BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident

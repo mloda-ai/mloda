@@ -131,6 +131,9 @@ from mloda.core.abstract_plugins.components.utils import is_match_abort as is_ma
 # Subtype declaration
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 
+# Divergence record
+from mloda.core.abstract_plugins.components.divergence import Cause, Divergence, DivergenceKind, DivergenceSource
+
 # Transformers
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
@@ -251,6 +254,11 @@ __all__ = [
     "is_match_abort",
     # Subtype declaration
     "SubtypeDeclaration",
+    # Divergence record
+    "Cause",
+    "Divergence",
+    "DivergenceKind",
+    "DivergenceSource",
     # Transformers
     "BaseTransformer",
     "ComputeFrameworkTransformer",

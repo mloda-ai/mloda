@@ -24,7 +24,7 @@ from collections.abc import Iterator
 from typing import Any
 import pytest
 from mloda._testing.compute_framework.merge_suite import MergeEngineSuite
-from mloda._testing.declarations import Cause
+from mloda.provider import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter, SparkAdapter
 from mloda.user import Index
 from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engine import SparkMergeEngine

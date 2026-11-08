@@ -1,4 +1,4 @@
-"""Shape check for an operation group: its Implementations declare consistent supported and divergent subtypes."""
+"""Shape check for an operation group: its Implementations declare consistent supported subtypes and divergences."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from typing import Any
 
 from mloda._testing.result import CheckResult
 from mloda._testing.suite import assert_passed
+from mloda.core.abstract_plugins.components.divergence import DivergenceKind, divergence_problems
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import Implementation, current_implementations, serving_implementation
@@ -26,6 +27,11 @@ def _implementations(group: type[OperationFeatureGroup]) -> dict[type[Implementa
     return found
 
 
+def _reasons(impl: type[Implementation[Any]], subtype: str) -> list[tuple[DivergenceKind, str]]:
+    records = (r for r in impl.divergences if r.kind is not DivergenceKind.GAP and r.applies_to(subtype, None))
+    return sorted((r.kind, r.describe()) for r in records)
+
+
 def _alias_failures(
     impls: Sequence[type[Implementation[Any]]], universe: frozenset[str], alias_pairs: Sequence[tuple[str, str]]
 ) -> list[str]:
@@ -36,23 +42,21 @@ def _alias_failures(
             failures.append(f"aliases: ({first}, {second}) names {missing} outside the subtype universe")
             continue
         for impl in impls:
-            if (first in impl.divergent) != (second in impl.divergent):
+            if _reasons(impl, first) != _reasons(impl, second):
                 failures.append(f"aliases: {impl.__name__} diverges for only one of '{first}' and '{second}'")
     return failures
 
 
-def _declaration_failures(impl: type[Implementation[Any]], universe: frozenset[str]) -> list[str]:
+def _declaration_failures(
+    impl: type[Implementation[Any]], universe: frozenset[str], parts: tuple[str, ...] | None
+) -> list[str]:
     name = impl.__name__
     failures: list[str] = []
     if impl.supported is not None:
         extra = sorted(impl.supported - universe)
         if extra:
             failures.append(f"supported: {name} lists {extra} outside the subtype universe")
-    for subtype, reason in impl.divergent.items():
-        if subtype not in universe:
-            failures.append(f"divergent: {name} marks '{subtype}' outside the subtype universe")
-        if not isinstance(reason, str) or not reason.strip():
-            failures.append(f"divergent: {name} gives '{subtype}' no reason")
+    failures.extend(f"divergences: {p}" for p in divergence_problems(name, impl.divergences, universe, parts))
     return failures
 
 
@@ -106,7 +110,7 @@ def check_operation_group_shape(
     alias_pairs: Sequence[tuple[str, str]] = (),
     probe: Probe | None = None,
 ) -> CheckResult:
-    """Check Implementations declare valid supported and divergent subtypes and decline the rest.
+    """Check Implementations declare valid supported subtypes and divergences and decline the rest.
 
     The acceptance control uses one supported subtype."""
     universe = group.subtype_universe()
@@ -115,8 +119,12 @@ def check_operation_group_shape(
     if not impls:
         failures.append(f"implementations: no loaded Implementation serves {group.__name__}")
     failures.extend(_alias_failures(list(impls), universe, alias_pairs))
+    failures.extend(
+        f"divergences: {p}"
+        for p in divergence_problems(group.__name__, group.DIVERGENCES, universe, group.OUTPUT_PARTS)
+    )
     for impl, framework in impls.items():
-        failures.extend(_declaration_failures(impl, universe))
+        failures.extend(_declaration_failures(impl, universe, group.OUTPUT_PARTS))
         failures.extend(_decline_failures(group, impl, framework, universe, probe))
     return CheckResult(check="operation_group_shape", subject=group.__name__, failures=tuple(failures))
 

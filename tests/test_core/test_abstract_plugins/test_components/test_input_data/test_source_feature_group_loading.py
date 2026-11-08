@@ -939,8 +939,9 @@ class TestOperationGroupImplementation:
         sum_options = Options({toy.OPTOY_KEY: "sum"})
         median_options = Options({toy.OPTOY_KEY: "median"})
 
-        assert toy.OpToyPandas.divergence(toy.OpToyFG, toy.OPTOY_FEATURE, sum_options) == "skips NaN in sum"
-        assert toy.OpToyPandas.divergence(toy.OpToyFG, toy.OPTOY_FEATURE, median_options) is None
+        sum_records = toy.OpToyPandas.divergences_for(toy.OpToyFG, toy.OPTOY_FEATURE, sum_options)
+        assert [r.describe() for r in sum_records] == ["skips NaN in sum"]
+        assert toy.OpToyPandas.divergences_for(toy.OpToyFG, toy.OPTOY_FEATURE, median_options) == ()
 
 
 INNER = "optoy_chain_src__optoy_chain"

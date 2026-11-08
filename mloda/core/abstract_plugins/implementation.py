@@ -1,7 +1,6 @@
 """Implementation: a plugin that serves one (Source or Operation FeatureGroup, ComputeFramework) pair."""
 
 import inspect
-import types
 import typing
 import weakref
 from abc import ABC, abstractmethod
@@ -13,6 +12,13 @@ from typing import Any, ClassVar, Generic, TypeVar
 from mloda.core.abstract_plugins.components.base_feature_group_version import (
     BaseFeatureGroupVersion,
     ThirdPartyVersionMode,
+)
+from mloda.core.abstract_plugins.components.divergence import (
+    Divergence,
+    DivergenceKind,
+    DivergenceSource,
+    stamped,
+    validate_divergences,
 )
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
@@ -99,7 +105,7 @@ class Implementation(ABC, Generic[G]):
     feature_group: ClassVar[type[FeatureGroup]]
     compute_framework: ClassVar[type[ComputeFramework]]
     supported: ClassVar[frozenset[str] | None] = None
-    divergent: ClassVar[Mapping[str, str]] = types.MappingProxyType({})
+    divergences: ClassVar[tuple[Divergence, ...]] = ()
 
     def __class_getitem__(cls, params: Any) -> Any:
         """Subscribe without typing's cache, so a reloaded or redefined group can be reclaimed."""
@@ -107,6 +113,8 @@ class Implementation(ABC, Generic[G]):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
+        if "DIVERGENCES" in cls.__dict__:
+            raise TypeError(f"{cls.__name__} declares 'DIVERGENCES'; an Implementation spells it divergences.")
         if _has_abstract_member(cls):
             _registry.add(cls)  # a decorator may still make it concrete
             return
@@ -124,6 +132,7 @@ class Implementation(ABC, Generic[G]):
             )
         if not is_nominal_subclass(framework, ComputeFramework):
             raise TypeError(f"{cls.__name__} must set compute_framework to a ComputeFramework subclass.")
+        validate_divergences(cls.__name__, cls.divergences, group.subtype_universe, group.OUTPUT_PARTS)
         _registry.add(cls)
 
     @classmethod
@@ -153,10 +162,23 @@ class Implementation(ABC, Generic[G]):
         return canonical if canonical in group.subtype_universe() else None
 
     @classmethod
-    def divergence(cls, group: type[FeatureGroup], feature_name: str, options: Options) -> str | None:
-        """The declared reason this implementation differs from the reference for the feature, else None."""
-        canonical = cls.canonical_subtype(group, feature_name, options)
-        return None if canonical is None else cls.divergent.get(canonical)
+    def divergence_records(cls) -> tuple[Divergence, ...]:
+        """The declared divergences, stamped with the implementation source and this class's framework."""
+        framework = cls.compute_framework.get_class_name()
+        return tuple(stamped(r, DivergenceSource.IMPLEMENTATION, framework) for r in cls.divergences)
+
+    @classmethod
+    def divergences_for(
+        cls, group: type[FeatureGroup], feature_name: str, options: Options, *, part: str | None = None
+    ) -> tuple[Divergence, ...]:
+        """The stamped non-GAP records that apply to the feature."""
+        if part is None:
+            split = FeatureGroup.split_output_part(feature_name)
+            part = None if split is None else split[1]
+        subtype = cls.canonical_subtype(group, feature_name, options)
+        return tuple(
+            r for r in cls.divergence_records() if r.kind is not DivergenceKind.GAP and r.applies_to(subtype, part)
+        )
 
     @classmethod
     @abstractmethod

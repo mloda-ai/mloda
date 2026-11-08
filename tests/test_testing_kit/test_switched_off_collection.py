@@ -8,7 +8,7 @@ pytest_plugins = ["pytester"]
 
 HEADER = """
 import pytest
-from mloda._testing.declarations import Cause
+from mloda.provider import Cause
 from mloda._testing.suite import ConformanceSuite
 
 

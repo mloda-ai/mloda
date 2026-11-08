@@ -2,7 +2,7 @@ from typing import Any
 import pytest
 
 from mloda._testing.compute_framework.merge_suite import MergeEngineSuite, make_merge_link
-from mloda._testing.declarations import Cause
+from mloda.provider import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter, PyArrowAdapter
 from mloda.user import Index, JoinType
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_merge_engine import PyArrowMergeEngine

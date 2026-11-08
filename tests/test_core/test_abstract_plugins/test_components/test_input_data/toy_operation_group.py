@@ -11,6 +11,9 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import (
+    Cause,
+    Divergence,
+    DivergenceKind,
     ComputeFramework,
     FeatureSet,
     DataCreatorFeatureGroup,
@@ -105,7 +108,11 @@ class OpToyBareFG(_NamedFeatureGroup):
 class OpToyPandas(Implementation[OpToyFG]):
     feature_group = OpToyFG
     compute_framework = PandasDataFrame
-    divergent = {"sum": "skips NaN in sum"}
+    divergences = (
+        Divergence(
+            kind=DivergenceKind.VALUE, cause=Cause.BACKEND, subtypes=frozenset({"sum"}), reason="skips NaN in sum"
+        ),
+    )
     served_by: ClassVar[list[Any]] = []
 
     @classmethod

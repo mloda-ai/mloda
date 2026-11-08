@@ -30,7 +30,7 @@ from mloda.user import FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda._testing.compute_framework.connection_suite import ConnectionEndToEndSuite
-from mloda._testing.declarations import Cause
+from mloda.provider import Cause
 from mloda._testing.framework_adapter import IcebergAdapter
 from tests.helpers.tfs_source_feature_groups import TfsRawValPyArrowSource
 

@@ -15,7 +15,7 @@ import pytest
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
-from mloda.provider import SubtypeDeclaration
+from mloda.provider import Divergence, SubtypeDeclaration
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
@@ -131,11 +131,11 @@ _MULTI_COLUMNS: dict[str, list[float | None]] = {
     "d": [4.0, 6.0, 8.0, 10.0, 12.0],
 }
 
-_DIVERGENT_DECLARATIONS: dict[type[Implementation[Any]], dict[str, str]] = {
-    PandasAggregation: {},
-    PolarsLazyAggregation: {},
-    PyArrowAggregation: {},
-    PythonDictAggregation: {},
+_DIVERGENT_DECLARATIONS: dict[type[Implementation[Any]], tuple[Divergence, ...]] = {
+    PandasAggregation: (),
+    PolarsLazyAggregation: (),
+    PyArrowAggregation: (),
+    PythonDictAggregation: (),
 }
 
 
@@ -247,7 +247,7 @@ class TestImplementationsConformToTheReferenceContract:
         runner: Callable[[str, dict[str, list[float | None]]], list[Any]],
         aggregation_type: str,
     ) -> None:
-        assert dict(implementation.divergent) == _DIVERGENT_DECLARATIONS[implementation]
+        assert implementation.divergences == _DIVERGENT_DECLARATIONS[implementation]
         shapes = {
             "single": _SINGLE_COLUMN,
             "multi": _MULTI_COLUMNS,
@@ -266,7 +266,12 @@ class TestImplementationsConformToTheReferenceContract:
             compare = same_on_pandas if implementation is PandasAggregation else same
             if not all(compare(a, e) for a, e in zip(actual, expected)):
                 differing.append(f"{shape}: {actual} != reference {expected}")
-        assert bool(differing) == (aggregation_type in implementation.divergent), differing
+        declared = implementation.divergences_for(
+            implementation.feature_group,
+            f"x__{aggregation_type}_aggr",
+            Options({AggregatedFeatureGroup.AGGREGATION_TYPE: aggregation_type}),
+        )
+        assert bool(differing) == bool(declared), differing
 
     @pytest.mark.parametrize("aggregation_type", sorted(AGGREGATION_UNIVERSE))
     @pytest.mark.parametrize("scalar", NAN_LIKE_VALUES)

@@ -494,7 +494,7 @@ class TestImplementationsConformToTheReferenceContract:
 
     @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
     def test_declares_no_divergence(self, implementation: type[Implementation[Any]]) -> None:
-        assert dict(implementation.divergent) == {}
+        assert implementation.divergences == ()
 
     @pytest.mark.parametrize("method", _ALL_METHODS)
     @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)

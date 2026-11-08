@@ -5,7 +5,7 @@ import pyarrow as pa
 import pytest
 
 from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
-from mloda._testing.declarations import Cause
+from mloda.provider import Cause
 from mloda._testing.framework_adapter import SqliteAdapter
 from mloda.user import Feature
 from mloda.user import SingleFilter

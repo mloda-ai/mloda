@@ -25,6 +25,10 @@ class TestAuthoringSurfaceIsExported:
             "is_no_default",
             "validate_property_values",
             "PropertyValidationError",
+            "Divergence",
+            "DivergenceKind",
+            "DivergenceSource",
+            "Cause",
         ],
     )
     def test_name_is_public(self, name: str) -> None:

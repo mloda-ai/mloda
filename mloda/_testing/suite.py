@@ -9,7 +9,7 @@ from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 from typing import Any, ClassVar
 
-from mloda._testing.declarations import Cause
+from mloda.core.abstract_plugins.components.divergence import Cause
 from mloda._testing.result import CheckResult
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.user.python_dict import PythonDictFramework

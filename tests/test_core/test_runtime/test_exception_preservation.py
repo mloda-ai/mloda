@@ -1285,6 +1285,16 @@ class ChsWinConsumerFG(ChsWindowFG):
         return {Feature("chs_read_src_a")}
 
 
+def _try_read(key: str) -> None:
+    """Record whether the outer handle is readable or refused under key."""
+    try:
+        read_credential(_E2E_HANDLE)
+        _WINDOW_EVENTS.append((key, "readable"))
+    except CredentialReadRefused as refused:
+        assert _E2E_HANDLE in str(refused)
+        _WINDOW_EVENTS.append((key, "refused"))
+
+
 class _ReadProbeExtender(Extender):
     """Tries read_credential around each wrapped call and records the outcome and the HookContext."""
 
@@ -1302,12 +1312,7 @@ class _ReadProbeExtender(Extender):
         self.kept.append(context)
         key = f"ext:{context.hook.value}"
         self.contexts.append((context.hook.value, context.feature_group_class, repr(context)))
-        try:
-            read_credential(_E2E_HANDLE)
-            _WINDOW_EVENTS.append((key, "readable"))
-        except CredentialReadRefused as refused:
-            assert _E2E_HANDLE in str(refused)
-            _WINDOW_EVENTS.append((key, "refused"))
+        _try_read(key)
         try:
             return func(*args, **kwargs)
         except Exception as exc:
@@ -1745,31 +1750,23 @@ class _NestedProbe(Extender):
     def wraps(self) -> set[ExtenderHook]:
         return set(self.hooks)
 
-    @staticmethod
-    def _try(key: str) -> None:
-        try:
-            read_credential(_E2E_HANDLE)
-            _WINDOW_EVENTS.append((key, "readable"))
-        except CredentialReadRefused:
-            _WINDOW_EVENTS.append((key, "refused"))
-
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         context = HookContext.current()
         assert context is not None
-        self._try(f"inner:{context.hook.value}")
+        _try_read(f"inner:{context.hook.value}")
         return func(*args, **kwargs)
 
     def on_plan_start(self, plan: Any) -> None:
-        self._try("inner:on_plan_start")
+        _try_read("inner:on_plan_start")
 
     def on_plan_complete(self, plan: Any, outcome: Any) -> None:
-        self._try("inner:on_plan_complete")
+        _try_read("inner:on_plan_complete")
 
     def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
-        self._try("inner:on_run_start")
+        _try_read("inner:on_run_start")
 
     def on_run_complete(self, run: Any, outcome: Any) -> None:
-        self._try("inner:on_run_complete")
+        _try_read("inner:on_run_complete")
 
 
 class ChsNestedOuterFG(ChsSource):
@@ -1806,19 +1803,22 @@ class ChsNestedBareFG(ChsSource):
 def _inner_run(group: Any, name: str, entry: str, extenders: set[Extender], options: dict[str, Any]) -> list[str]:
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
-    result = getattr(mloda, entry)(
-        [Feature(name, options=options)],
-        compute_frameworks=[PandasDataFrame],
-        data_access_collection=_vault_dac({_VAULT_B: _TWO_VAULTS[_VAULT_B]}),
-        plugin_collector=PluginCollector.enabled_feature_groups({group}),
-        function_extender=extenders,
+    kwargs: dict[str, Any] = {
+        "compute_frameworks": [PandasDataFrame],
+        "data_access_collection": _vault_dac({_VAULT_B: _TWO_VAULTS[_VAULT_B]}),
+        "plugin_collector": PluginCollector.enabled_feature_groups({group}),
+        "function_extender": extenders,
+    }
+    features = [Feature(name, options=options)]
+    result = (
+        mloda.prepare(features, **kwargs).run() if entry == "prepare" else getattr(mloda, entry)(features, **kwargs)
     )
     return [str(row) for frame in result for row in frame[name]]
 
 
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
-@pytest.mark.parametrize("entry", ["run_all", "stream_all"])
+@pytest.mark.parametrize("entry", ["run_all", "stream_all", "prepare"])
 def test_a_nested_run_starts_with_the_credential_window_closed(
     entry: str, mode: ParallelizationMode, flight_server: Any
 ) -> None:
@@ -1849,7 +1849,8 @@ def test_a_nested_run_starts_with_the_credential_window_closed(
 
 
 @pytest.mark.timeout(15)
-def test_a_nested_group_that_declares_nothing_is_refused(flight_server: Any) -> None:
+def test_the_outer_window_reopens_after_a_nested_run_raises(flight_server: Any) -> None:
+    """The outer step reads again after a nested run raises."""
     _WINDOW_EVENTS.clear()
     _NESTED_INNER.clear()
     failures: list[BaseException] = []

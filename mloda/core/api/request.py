@@ -184,58 +184,59 @@ class mlodaAPI:
         function_extender: set[Extender] | None = None,
         output_framework: str | type[ComputeFramework] | None = None,
     ) -> None:
-        self.engine: None | Engine = None
-        self.function_extender = function_extender
-        self.plugin_collector = plugin_collector
-        filtered = filter_extenders_by_strict_mode(function_extender, plugin_collector)
-        self._extenders: set[Extender] = set(filtered) if filtered is not None else set()
-        reject_old_run_complete_signature(self._extenders)
-        self._plan_steps: tuple[PlanStep, ...] = ()
-        self._artifact_steps: tuple[tuple[UUID, FeatureSet], ...] = ()
-        verified = current_verified_context()
-        self.plan_context = PlanContext(
-            plan_id=generate_run_id(),
-            tenant_id=verified.tenant_id if verified else None,
-            project_id=verified.project_id if verified else None,
-            principal=verified.principal if verified else None,
-            created_at=datetime.now(UTC),
-            origin=_PLAN_ORIGIN.get() or "prepare",
-        )
-        self.plan_id = self.plan_context.plan_id
+        with run_boundary():
+            self.engine: None | Engine = None
+            self.function_extender = function_extender
+            self.plugin_collector = plugin_collector
+            filtered = filter_extenders_by_strict_mode(function_extender, plugin_collector)
+            self._extenders: set[Extender] = set(filtered) if filtered is not None else set()
+            reject_old_run_complete_signature(self._extenders)
+            self._plan_steps: tuple[PlanStep, ...] = ()
+            self._artifact_steps: tuple[tuple[UUID, FeatureSet], ...] = ()
+            verified = current_verified_context()
+            self.plan_context = PlanContext(
+                plan_id=generate_run_id(),
+                tenant_id=verified.tenant_id if verified else None,
+                project_id=verified.project_id if verified else None,
+                principal=verified.principal if verified else None,
+                created_at=datetime.now(UTC),
+                origin=_PLAN_ORIGIN.get() or "prepare",
+            )
+            self.plan_id = self.plan_context.plan_id
 
-        with run_boundary(), _plan_origin(None):
-            call_contained_hook(self._extenders, "on_plan_start", self.plan_context)
-            plan_outcome = LifecycleOutcome("succeeded")
-            try:
-                self._plan(
-                    requested_features,
-                    compute_frameworks,
-                    links,
-                    data_access_collection,
-                    global_filter,
-                    api_data,
-                    copy_features,
-                    strict_type_enforcement,
-                    column_ordering,
-                    parallelization_modes,
-                    output_framework,
-                )
-                self._plan_steps = tuple(self._resolve_plan_steps())
-                # A prepared FeatureSet skips the compute-boundary defaults fill, so no materialized stamp is needed.
-                self._artifact_steps = tuple(
-                    (step.uuid, step.features)
-                    for step in self._execution_plan()
-                    if isinstance(step, FeatureGroupStep) and step.feature_group.artifact() is not None
-                )
-                if self._extenders:
-                    self._stamp_structure_hash()
-            except BaseException as error:
-                plan_outcome = error_outcome(error)
-                if self._extenders:
-                    note_mloda_id(error, "plan_id", self.plan_context.plan_id)
-                raise
-            finally:
-                call_contained_hook(self._extenders, "on_plan_complete", self.plan_context, plan_outcome)
+            with _plan_origin(None):
+                call_contained_hook(self._extenders, "on_plan_start", self.plan_context)
+                plan_outcome = LifecycleOutcome("succeeded")
+                try:
+                    self._plan(
+                        requested_features,
+                        compute_frameworks,
+                        links,
+                        data_access_collection,
+                        global_filter,
+                        api_data,
+                        copy_features,
+                        strict_type_enforcement,
+                        column_ordering,
+                        parallelization_modes,
+                        output_framework,
+                    )
+                    self._plan_steps = tuple(self._resolve_plan_steps())
+                    # A prepared FeatureSet skips the compute-boundary defaults fill, so no materialized stamp is needed.
+                    self._artifact_steps = tuple(
+                        (step.uuid, step.features)
+                        for step in self._execution_plan()
+                        if isinstance(step, FeatureGroupStep) and step.feature_group.artifact() is not None
+                    )
+                    if self._extenders:
+                        self._stamp_structure_hash()
+                except BaseException as error:
+                    plan_outcome = error_outcome(error)
+                    if self._extenders:
+                        note_mloda_id(error, "plan_id", self.plan_context.plan_id)
+                    raise
+                finally:
+                    call_contained_hook(self._extenders, "on_plan_complete", self.plan_context, plan_outcome)
 
     def _stamp_structure_hash(self) -> None:
         if self.engine is None:
@@ -907,17 +908,18 @@ class mlodaAPI:
     @property
     def run_surface(self) -> RunSurface:
         """What ``run()`` accepts: api_data columns, artifact inputs, runtime parameters and credential handles."""
-        _, declared, bound = self._credential_handle_scope()
-        groups = {
-            key: {group.__name__ for group, _ in entries}
-            for key, entries in self._declared_runtime_parameters().items()
-        }
-        return RunSurface(
-            api_data={name: tuple(sorted(columns)) for name, columns in self._api_data_columns.items()},
-            artifacts=self.artifact_inputs,
-            parameters={key: tuple(sorted(names)) for key, names in groups.items()},
-            credentials=tuple(sorted(declared - bound)),
-        )
+        with run_boundary():
+            _, declared, bound = self._credential_handle_scope()
+            groups = {
+                key: {group.__name__ for group, _ in entries}
+                for key, entries in self._declared_runtime_parameters().items()
+            }
+            return RunSurface(
+                api_data={name: tuple(sorted(columns)) for name, columns in self._api_data_columns.items()},
+                artifacts=self.artifact_inputs,
+                parameters={key: tuple(sorted(names)) for key, names in groups.items()},
+                credentials=tuple(sorted(declared - bound)),
+            )
 
     def _run_collection(
         self, credentials: Mapping[str, Any] | None
@@ -1029,28 +1031,28 @@ class mlodaAPI:
             run_parameters = self._run_parameters(parameters)
             run_inputs = self._run_inputs(api_data, artifacts, run_parameters, names)
             run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
-        plan = list(self._plan_snapshot())
-        with self._credential_redaction(self._secret_literals(run_dac), self._identity_literals(run_dac)):
-            runner = self._batch_run(
-                parallelization_modes,
-                flight_server,
-                api_data=api_data,
-                artifacts=artifacts,
-                run_context=run_context,
-                run_dac=run_dac,
-                run_parameters=run_parameters,
+            plan = list(self._plan_snapshot())
+            with self._credential_redaction(self._secret_literals(run_dac), self._identity_literals(run_dac)):
+                runner = self._batch_run(
+                    parallelization_modes,
+                    flight_server,
+                    api_data=api_data,
+                    artifacts=artifacts,
+                    run_context=run_context,
+                    run_dac=run_dac,
+                    run_parameters=run_parameters,
+                )
+                items = self._plan_ordered_items(runner, plan)
+            return RunResult(
+                [r for _, r in items],
+                plan,
+                items,
+                run_id=run_context.run_id,
+                plan_id=self.plan_id,
+                connection_handles=dict(self._connection_handles),
+                failed_rows=runner.get_failed_rows(),
+                artifacts=runner.get_artifacts(),
             )
-            items = self._plan_ordered_items(runner, plan)
-        return RunResult(
-            [r for _, r in items],
-            plan,
-            items,
-            run_id=run_context.run_id,
-            plan_id=self.plan_id,
-            connection_handles=dict(self._connection_handles),
-            failed_rows=runner.get_failed_rows(),
-            artifacts=runner.get_artifacts(),
-        )
 
     def stream_run(
         self,

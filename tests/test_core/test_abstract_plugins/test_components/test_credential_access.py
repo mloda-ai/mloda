@@ -22,7 +22,12 @@ from mloda.core.abstract_plugins.components.credential_access import (
     readable_credentials,
     run_boundary,
 )
-from mloda.core.abstract_plugins.components.credential_grant import StaticGrant, grant_scope, read_recorder
+from mloda.core.abstract_plugins.components.credential_grant import (
+    StaticGrant,
+    _read_granted,
+    grant_scope,
+    read_recorder,
+)
 from datetime import UTC
 
 _HOST = "access-host.internal.example"
@@ -247,15 +252,18 @@ class TestReadCredential:
             assert read_credential("h")["host"] == _HOST
 
     def test_run_boundary_closes_the_window_and_hides_outer_recorders_then_restores(self) -> None:
-        with _scope():
+        with _scope(), grant_scope(StaticGrant({"h": _credential()})):
             with read_recorder() as outer:
                 with run_boundary():
                     with pytest.raises(CredentialReadRefused):
                         read_credential("h")
+                    with pytest.raises(RuntimeError):
+                        _read_granted("h")
                     with credentials_scope({"inner": _credential()}):
                         assert read_credential("inner")["host"] == _HOST
                 assert outer == set()
                 assert read_credential("h")["host"] == _HOST
+                assert _read_granted("h")["host"] == _HOST
             assert outer == {"h"}
 
     def test_readable_credentials_opens_the_window_over_a_held_grant(self) -> None:

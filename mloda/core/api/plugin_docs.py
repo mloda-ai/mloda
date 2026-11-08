@@ -18,6 +18,7 @@ Example:
 from typing import Any
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import SOURCE_INTROSPECTION_ERRORS
+from mloda.core.abstract_plugins.components.credential_access import run_boundary
 from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
 from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
@@ -402,6 +403,28 @@ def resolve_feature(
         ResolvedFeature containing the resolved FeatureGroup (if found),
         all matching candidates, and any error message.
     """
+    with run_boundary():
+        return _resolve_feature(
+            feature,
+            options=options,
+            plugin_collector=plugin_collector,
+            feature_group=feature_group,
+            links=links,
+            data_access_collection=data_access_collection,
+            compute_frameworks=compute_frameworks,
+        )
+
+
+def _resolve_feature(
+    feature: str | Feature,
+    *,
+    options: Options | None,
+    plugin_collector: PluginCollector | None,
+    feature_group: str | type[FeatureGroup] | None,
+    links: set[Link] | None,
+    data_access_collection: DataAccessCollection | None,
+    compute_frameworks: set[type[ComputeFramework]] | None,
+) -> ResolvedFeature:
     if isinstance(feature, Feature):
         if options is not None or feature_group is not None:
             raise TypeError(

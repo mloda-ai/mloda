@@ -109,13 +109,16 @@ class _RunBoundary:
     """Close the read window and hide outer read recorders for a block (a class, like _ReadableScope)."""
 
     def __init__(self) -> None:
-        self._tokens: list[tuple[Token[CredentialLookup | None], Token[tuple[set[str], ...]]]] = []
+        self._tokens: list[
+            tuple[Token[CredentialLookup | None], Token[tuple[set[str], ...]], Token[CredentialLookup | None]]
+        ] = []
 
     def __enter__(self) -> None:
-        self._tokens.append((_READABLE.set(None), _READ_RECORDERS.set(())))
+        self._tokens.append((_READABLE.set(None), _READ_RECORDERS.set(()), _GRANT_HOLDER.set(None)))
 
     def __exit__(self, *exc_info: object) -> None:
-        readable_token, recorders_token = self._tokens.pop()
+        readable_token, recorders_token, holder_token = self._tokens.pop()
+        _GRANT_HOLDER.reset(holder_token)
         _READ_RECORDERS.reset(recorders_token)
         _READABLE.reset(readable_token)
 

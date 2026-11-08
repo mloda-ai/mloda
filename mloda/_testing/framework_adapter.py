@@ -210,7 +210,7 @@ class FrameworkAdapter(ABC):
         return self.from_arrow(pa.table({}))
 
     def rows(self, result: Any) -> list[dict[str, Any]]:
-        """Row dicts with nulls as None, also from the frame run_all returns; reads per column, so lazy adapters override."""
+        """Row dicts, nulls as None, also for run_all frames; reads per column, so lazy adapters override."""
         names = self.column_names(result)
         columns = [self.column_values(result, name) for name in names]
         return [dict(zip(names, values)) for values in zip(*columns, strict=True)]

@@ -26,7 +26,8 @@ from mloda.interfaces.service.config import ConfigError, Settings, load_settings
 from mloda.interfaces.service.errors import is_error
 from mloda.interfaces.service.planner import Planner
 from mloda.interfaces.service.runner import Runner
-from mloda.interfaces.service.sources import check_credentials
+from mloda.interfaces.service.lock import MLODA_LOCK
+from mloda.interfaces.service.sources import ServiceCredentials, check_credentials
 from mloda.user import PluginCollector
 
 DEFAULT_CONFIG = "mloda.toml"
@@ -50,8 +51,16 @@ def build_services(
         raise ConfigError(problem)
     key = env.get(SIGNING_KEY_ENV)
     principal = getpass.getuser()
+    credentials = ServiceCredentials(settings.credentials, env, data_access_collection)
+    with MLODA_LOCK:
+        credentials.collection({})
     catalog = Catalog.build(
-        settings, plugin_collector, principal=principal, env=env, data_access_collection=data_access_collection
+        settings,
+        plugin_collector,
+        principal=principal,
+        env=env,
+        data_access_collection=data_access_collection,
+        service_credentials=credentials,
     )
     now = time.time if clock is None else clock
     planner = Planner(
@@ -63,6 +72,7 @@ def build_services(
         clock=now,
         env=env,
         data_access_collection=data_access_collection,
+        service_credentials=credentials,
     )
     return catalog, planner, Runner(planner, clock=now)
 

@@ -1887,3 +1887,101 @@ class TestCredentialRuns:
         result = _run(planner, runner, {"features": [CRED_FEATURE]})
 
         assert _preview_rows(result)[0] == {CRED_FEATURE: cred_digest(ROTATED)}
+
+
+def _file_cred_services(tmp_path: Path, **overrides: Any) -> tuple[Planner, Runner, Path]:
+    secret_file = tmp_path / "pii"
+    secret_file.write_text(TOKEN + "\n")
+    settings = _cred_settings(
+        tmp_path, 'token = { file = "pii" }', options={CRED_KEY: "db"}, default_classification="public", **overrides
+    )
+    planner, runner = _cred_services(settings, {})
+    return planner, runner, secret_file
+
+
+class TestMissingCredentialTolerance:
+    def test_missing_secret_file_spares_requests_that_read_no_credential(self, tmp_path: Path) -> None:
+        planner, runner, secret_file = _file_cred_services(tmp_path)
+        secret_file.unlink()
+
+        rows = _preview_rows(_run(planner, runner, {"features": ["income"]}))
+
+        assert [row["income"] for row in rows] == [10, 20, 30, 40, 50]
+
+    def test_credential_reading_explain_fails_naming_no_handle_or_path(self, tmp_path: Path) -> None:
+        planner, _, secret_file = _file_cred_services(tmp_path)
+        secret_file.unlink()
+
+        result = planner.explain({"features": [CRED_FEATURE]})
+
+        error = _error(result, "internal")
+        dumped = json.dumps(result)
+        assert "ConfigError" in error["message"]
+        assert "db" not in error["message"]
+        _assert_value_absent("pii", dumped)
+        _assert_value_absent(TOKEN, dumped)
+
+    def test_restoring_the_secret_file_makes_the_credential_request_succeed_again(self, tmp_path: Path) -> None:
+        planner, runner, secret_file = _file_cred_services(tmp_path)
+        request = {"features": [CRED_FEATURE]}
+        secret_file.unlink()
+        _error(planner.explain(request), "internal")
+
+        secret_file.write_text(ROTATED + "\n")
+
+        assert _preview_rows(_run(planner, runner, request))[0] == {CRED_FEATURE: cred_digest(ROTATED)}
+
+    def test_unreadable_credential_never_lets_the_other_one_bind(self, tmp_path: Path) -> None:
+        first = _write_sqlite(tmp_path)
+        other_dir = tmp_path / "other"
+        other_dir.mkdir()
+        second = _write_sqlite(other_dir)
+        (tmp_path / "one.txt").write_text(str(first))
+        (tmp_path / "two.txt").write_text(str(second))
+        credentials = 'sqlite = { file = "one.txt" }\n\n[mcp.credentials.other]\nsqlite = { file = "two.txt" }'
+        planner, _ = _cred_services(_cred_settings(tmp_path, credentials), {})
+        (tmp_path / "two.txt").unlink()
+
+        error = _error(planner.explain({"features": ["sq_amount"]}), "internal")
+
+        assert "ConfigError" in error["message"]
+
+    def test_unreadable_handle_logs_one_warning_and_one_info_when_back(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        planner, _, secret_file = _file_cred_services(tmp_path)
+        _success(planner.explain({"features": ["income"]}))
+        secret_file.unlink()
+
+        with caplog.at_level(logging.INFO):
+            for _ in range(3):
+                planner.explain({"features": ["income"]})
+            warnings = [r for r in caplog.records if r.levelno == logging.WARNING and "db" in r.getMessage()]
+            secret_file.write_text(TOKEN + "\n")
+            _success(planner.explain({"features": ["income"]}))
+            infos = [r for r in caplog.records if r.levelno == logging.INFO and "db" in r.getMessage()]
+
+        assert len(warnings) == 1
+        assert len(infos) == 1
+        _assert_value_absent(TOKEN, caplog.text)
+
+    @pytest.mark.parametrize("command", ["explain", "run"])
+    def test_one_resolve_per_request(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str) -> None:
+        settings = _cred_settings(tmp_path, 'token = "TOK_VAR"\nother = "OTHER_VAR"', options={CRED_KEY: "db"})
+        planner, runner = _cred_services(settings, {"TOK_VAR": TOKEN, "OTHER_VAR": ROTATED})
+        explained = _success(planner.explain({"features": [CRED_FEATURE]}))
+        reads: list[str] = []
+        real = service_sources._credential_value
+
+        def counting(handle: str, name: str, ref: Any, env: Mapping[str, str]) -> str:
+            reads.append(name)
+            return real(handle, name, ref, env)
+
+        monkeypatch.setattr(service_sources, "_credential_value", counting)
+
+        if command == "explain":
+            _success(planner.explain({"features": [CRED_FEATURE]}))
+        else:
+            _preview_rows(runner.run(explained["plan_id"]))
+
+        assert sorted(reads) == ["other", "token"]

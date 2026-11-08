@@ -36,12 +36,7 @@ from mloda.interfaces.service.request import (
     refused_group_option_violations,
     unlisted_group_option_violations,
 )
-from mloda.interfaces.service.sources import (
-    check_credentials,
-    credential_values,
-    data_access_collection,
-    source_columns,
-)
+from mloda.interfaces.service.sources import ServiceCredentials, source_columns
 from mloda.steward import verified_context
 
 MAX_DESCRIPTION_LENGTH = 300
@@ -183,10 +178,12 @@ class Catalog:
         principal: str | None = None,
         env: Mapping[str, str] | None = None,
         data_access_collection: DataAccessCollection | None = None,
+        service_credentials: ServiceCredentials | None = None,
     ) -> None:
         self._settings = settings
-        self._env: Mapping[str, str] = {} if env is None else env
-        self._base = data_access_collection
+        self._credentials = service_credentials or ServiceCredentials(
+            settings.credentials, {} if env is None else env, data_access_collection
+        )
         self._principal = principal
         self._collector = collector
         self._entries = tuple(entries)
@@ -202,6 +199,7 @@ class Catalog:
         principal: str | None = None,
         env: Mapping[str, str] | None = None,
         data_access_collection: DataAccessCollection | None = None,
+        service_credentials: ServiceCredentials | None = None,
     ) -> "Catalog":
         """Load the installed plugins, then index the FeatureGroups ``base`` enables minus the denied ones, once.
 
@@ -213,7 +211,13 @@ class Catalog:
             infos = get_feature_group_docs(plugin_collector=collector)
         entries = [_entry(info) for info in infos]
         return cls(
-            settings, collector, entries, principal=principal, env=env, data_access_collection=data_access_collection
+            settings,
+            collector,
+            entries,
+            principal=principal,
+            env=env,
+            data_access_collection=data_access_collection,
+            service_credentials=service_credentials,
         )
 
     def search(
@@ -275,13 +279,8 @@ class Catalog:
             if unlisted:
                 message = "A request may only set options listed in allow_options."
                 return error_result("policy_denied", message, problems_to_details(unlisted))
-        unavailable = check_credentials(self._settings, self._env)
-        if unavailable is not None:
-            return failure_result("Describe", ConfigError(unavailable))
         with verified_context(principal=self._principal), MLODA_LOCK:
-            collection = data_access_collection(
-                self._settings.sources, credential_values(self._settings.credentials, self._env), self._base
-            )
+            collection, missing = self._credentials.collection(self._settings.sources)
             resolved = resolve_feature(
                 name,
                 options=Options(
@@ -290,6 +289,8 @@ class Catalog:
                 plugin_collector=self._collector,
                 data_access_collection=collection,
             )
+        if missing and resolved.feature_group is None:
+            return failure_result("Describe", ConfigError(next(iter(missing.values()))))
         if resolved.feature_group is not None:
             return self._described(name, resolved.feature_group, resolved)
         if resolved.candidates:

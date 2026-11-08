@@ -663,6 +663,13 @@ class TestPlanStepDataclass:
 
         assert field.default is None
 
+    def test_join_and_transform_steps_carry_the_defaults(self) -> None:
+        others = [s for s in _prepare_cross_framework_join_session().resolved_plan() if s.step_kind != "compute"]
+        assert others
+        for step in others:
+            assert step.divergences == ()
+            assert step.contract_version is None
+
     def test_join_type_defaults_to_none(self) -> None:
         """Compute and transform steps must not need to pass join_type."""
         step = PlanStep(
@@ -958,13 +965,6 @@ class TestPlanStepImplementation:
 
         assert dataclasses.replace(step, divergences=(record,)) != step
         assert dataclasses.replace(step, contract_version=2) != step
-
-    def test_join_and_transform_steps_carry_the_defaults(self) -> None:
-        others = [s for s in _prepare_cross_framework_join_session().resolved_plan() if s.step_kind != "compute"]
-        assert others
-        for step in others:
-            assert step.divergences == ()
-            assert step.contract_version is None
 
     @staticmethod
     def _explain_op_toy_child() -> tuple[Any, PlanStep]:

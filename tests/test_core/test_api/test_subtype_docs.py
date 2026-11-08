@@ -343,18 +343,16 @@ class TestFeatureGroupInfoContractVersionAndDivergences:
         assert group.divergences == []
 
     def test_implementations_are_listed_once_per_docs_call(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from mloda.core.abstract_plugins import implementation as implementation_module
-        from mloda.core.api import plugin_docs
+        from mloda.core.abstract_plugins.implementation import current_implementations
 
         calls: list[int] = []
-        real = implementation_module.current_implementations
+        real = current_implementations
 
         def counting() -> Any:
             calls.append(1)
             return real()
 
-        monkeypatch.setattr(implementation_module, "current_implementations", counting)
-        monkeypatch.setattr(plugin_docs, "current_implementations", counting, raising=False)
+        monkeypatch.setattr("mloda.core.api.plugin_docs.current_implementations", counting)
 
         get_feature_group_docs(
             plugin_collector=PluginCollector.enabled_feature_groups({SubDeclDocPlainFG, SubDeclDocOptionFG})

@@ -18,9 +18,12 @@ from mloda.core.abstract_plugins.components.divergence import (
     stamped,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import ANY_OUTPUT_PART
+from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import Cause, OperationFeatureGroup, SubtypeDeclaration, property_spec
+from mloda.user import Options
 from mloda.user.pyarrow import PyArrowTable
 from mloda.user.python_dict import PythonDictFramework
 
@@ -53,6 +56,16 @@ def _make_impl(group: type[Any], framework: type[Any] = PythonDictFramework, **a
         **attrs,
     }
     return type("DivTestImpl", (Implementation,), body)
+
+
+def _feature_set(*features: Feature) -> FeatureSet:
+    return FeatureSet(features)
+
+
+def _feature(name: str = "divtest_x", kind: str | None = "sum", part: str | None = None) -> Feature:
+    feature = Feature(name, Options({KEY: kind} if kind else {}))
+    feature.record_part(part)
+    return feature
 
 
 class TestConstruction:
@@ -521,8 +534,6 @@ class TestImplementationDeclaration:
 
 class TestDivergencesFor:
     def test_returns_the_stamped_records_applying_to_the_feature(self) -> None:
-        from mloda.user import Options
-
         group = _make_group()
         whole = _record(kind=DivergenceKind.TYPE, reason="floats")
         impl = _make_impl(group, divergences=(_record(subtypes={"sum"}), _record(subtypes={"mean"}), whole))
@@ -531,16 +542,12 @@ class TestDivergencesFor:
         assert all(r.source is DivergenceSource.IMPLEMENTATION for r in found)
 
     def test_gap_records_are_excluded(self) -> None:
-        from mloda.user import Options
-
         group = _make_group()
         gap = _record(kind=DivergenceKind.GAP, subtypes={"sum"})
         impl = _make_impl(group, divergences=(gap,))
         assert impl.divergences_for(group, "divtest_x", Options({KEY: "sum"})) == ()
 
     def test_an_explicit_part_selects_outputs_records(self) -> None:
-        from mloda.user import Options
-
         group = _make_group(OUTPUT_PARTS=("a", "b"))
         impl = _make_impl(group, divergences=(_record(outputs={"a"}),))
         options = Options({KEY: "sum"})
@@ -549,8 +556,6 @@ class TestDivergencesFor:
         assert len(impl.divergences_for(group, "divtest_x", options)) == 1
 
     def test_include_gaps_adds_exactly_the_gap_records(self) -> None:
-        from mloda.user import Options
-
         group = _make_group()
         gap = _record(kind=DivergenceKind.GAP, subtypes={"sum"}, reason="no sum")
         other_gap = _record(kind=DivergenceKind.GAP, subtypes={"mean"}, reason="no mean")
@@ -563,20 +568,6 @@ class TestDivergencesFor:
         assert [r.reason for r in default] == ["skips NaN"]
         assert [r.reason for r in with_gaps] == ["skips NaN", "no sum"]
         assert [r for r in with_gaps if r not in default] == [r for r in with_gaps if r.kind is DivergenceKind.GAP]
-
-
-def _feature_set(*features: Any) -> Any:
-    from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-
-    return FeatureSet(features)
-
-
-def _feature(name: str = "divtest_x", kind: str | None = "sum", part: str | None = None) -> Any:
-    from mloda.user import Feature, Options
-
-    feature = Feature(name, Options({KEY: kind} if kind else {}))
-    feature.record_part(part)
-    return feature
 
 
 class TestStepDivergences:

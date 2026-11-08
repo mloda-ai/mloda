@@ -8,6 +8,7 @@ import importlib.util
 import json
 import sys
 import types
+import warnings
 import uuid
 import weakref
 from pathlib import Path
@@ -18,6 +19,7 @@ import pytest
 
 from mloda.core.api.plan_lock import PLAN_LOCK_FORMAT, _lock_text
 from mloda.steward import (
+    PlanLockContractVersionWarning,
     PlanLockMismatchError,
     PlanStep,
     check_plan_lock,
@@ -1152,50 +1154,50 @@ def _lock_with_contract_version(tmp_path: Path, version: int) -> tuple[Path, lis
     return lock, plan
 
 
-def test_a_contract_version_only_difference_warns_and_does_not_raise(tmp_path: Path) -> None:
-    from mloda.steward import PlanLockContractVersionWarning
+def _edit_lock(lock: Path, edit: Callable[[dict[str, Any]], None]) -> None:
+    content = json.loads(lock.read_text(encoding="utf-8"))
+    edit(content)
+    lock.write_text(json.dumps(content, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
+
+def _set_locked_version(version: int | None) -> Callable[[dict[str, Any]], None]:
+    def edit(content: dict[str, Any]) -> None:
+        if version is None:
+            content["compute"][0].pop("contract_version")
+        else:
+            content["compute"][0]["contract_version"] = version
+
+    return edit
+
+
+@pytest.mark.parametrize(
+    ("locked", "resolved"),
+    [(1, 2), (7, 2), (None, 2)],
+    ids=["version_only", "edited_lock_file", "missing_locked_version"],
+)
+def test_a_contract_version_only_difference_warns_and_does_not_raise(
+    tmp_path: Path, locked: int | None, resolved: int
+) -> None:
     lock, _ = _lock_with_contract_version(tmp_path, 1)
+    _edit_lock(lock, _set_locked_version(locked))
 
     with pytest.warns(PlanLockContractVersionWarning) as caught:
-        check_plan_lock([_compute_step(contract_version=2)], lock)
+        check_plan_lock([_compute_step(contract_version=resolved)], lock)
 
+    message = str(caught[0].message)
+    assert "AggregatedFeatureGroup" in message
+    assert str(resolved) in message
+    if locked is not None:
+        assert str(locked) in message
+
+
+def test_a_contract_version_changes_the_structure_hash() -> None:
     assert plan_structure_hash([_compute_step(contract_version=2)]) != plan_structure_hash(
         [_compute_step(contract_version=1)]
     )
-    message = str(caught[0].message)
-    assert "AggregatedFeatureGroup" in message
-    assert "1" in message
-    assert "2" in message
-
-
-def test_a_contract_version_only_difference_warns_on_an_edited_lock_file(tmp_path: Path) -> None:
-    from mloda.steward import PlanLockContractVersionWarning
-
-    lock, plan = _lock_with_contract_version(tmp_path, 1)
-    content = json.loads(lock.read_text(encoding="utf-8"))
-    content["compute"][0]["contract_version"] = 7
-    lock.write_text(json.dumps(content, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-
-    with pytest.warns(PlanLockContractVersionWarning):
-        check_plan_lock(plan, lock)
-
-
-def test_a_missing_locked_contract_version_still_only_warns(tmp_path: Path) -> None:
-    from mloda.steward import PlanLockContractVersionWarning
-
-    lock = tmp_path / "plan.lock"
-    write_plan_lock([_compute_step()], lock)
-
-    with pytest.warns(PlanLockContractVersionWarning):
-        check_plan_lock([_compute_step(contract_version=2)], lock)
 
 
 def test_a_steward_can_turn_the_contract_version_warning_into_a_failure(tmp_path: Path) -> None:
-    import warnings
-
-    from mloda.steward import PlanLockContractVersionWarning
-
     lock, _ = _lock_with_contract_version(tmp_path, 1)
 
     with warnings.catch_warnings():
@@ -1205,41 +1207,33 @@ def test_a_steward_can_turn_the_contract_version_warning_into_a_failure(tmp_path
 
 
 def test_the_contract_version_warning_is_a_user_warning() -> None:
-    from mloda.steward import PlanLockContractVersionWarning
-
     assert issubclass(PlanLockContractVersionWarning, UserWarning)
     assert not issubclass(PlanLockContractVersionWarning, PlanLockMismatchError)
 
 
-def test_a_contract_version_change_with_another_difference_still_raises(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("step_inputs", "edit", "match"),
+    [
+        ({"contract_version": 2, "compute_framework": PyArrowTable}, None, None),
+        ({"contract_version": 2}, lambda c: c.update(format=PLAN_LOCK_FORMAT - 1), "format"),
+        ({"contract_version": 1, "divergences": (_RECORD,)}, None, None),
+    ],
+    ids=["another_difference", "format_difference", "divergence_difference"],
+)
+def test_a_contract_version_change_with_any_other_difference_still_raises(
+    tmp_path: Path, step_inputs: dict[str, Any], edit: Callable[[dict[str, Any]], None] | None, match: str | None
+) -> None:
     lock, _ = _lock_with_contract_version(tmp_path, 1)
+    if edit is not None:
+        _edit_lock(lock, edit)
 
-    with pytest.raises(PlanLockMismatchError):
-        check_plan_lock([_compute_step(contract_version=2, compute_framework=PyArrowTable)], lock)
-
-
-def test_a_contract_version_change_with_a_format_difference_still_raises(tmp_path: Path) -> None:
-    lock, _ = _lock_with_contract_version(tmp_path, 1)
-    content = json.loads(lock.read_text(encoding="utf-8"))
-    content["format"] = PLAN_LOCK_FORMAT - 1
-    lock.write_text(json.dumps(content, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-
-    with pytest.raises(PlanLockMismatchError, match="format"):
-        check_plan_lock([_compute_step(contract_version=2)], lock)
-
-
-def test_a_divergence_difference_still_raises(tmp_path: Path) -> None:
-    lock, _ = _lock_with_contract_version(tmp_path, 1)
-
-    with pytest.raises(PlanLockMismatchError):
-        check_plan_lock([_compute_step(contract_version=1, divergences=(_RECORD,))], lock)
+    with pytest.raises(PlanLockMismatchError, match=match):
+        check_plan_lock([_compute_step(**step_inputs)], lock)
 
 
 def test_a_real_plain_group_plan_warns_when_its_contract_version_changes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from mloda.steward import PlanLockContractVersionWarning
-
     lock = tmp_path / "plan.lock"
     monkeypatch.setattr(ToyWorkerFG, "CONTRACT_VERSION", 1, raising=False)
     written = [_explain_compute_step(ToyWorkerFG)]

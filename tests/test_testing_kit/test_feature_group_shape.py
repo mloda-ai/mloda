@@ -475,6 +475,30 @@ def make_mapping_password_default() -> type[FeatureGroup]:
     return make_secret_group({"conn": PropertySpec("Connection.", default={"password": "x"})})
 
 
+def make_uri_query_secret() -> type[FeatureGroup]:
+    default = "https://api.example.com/v1?token=abc123"
+    return make_secret_group({"endpoint": PropertySpec("Endpoint.", default=default)})
+
+
+def make_azure_sas_secret() -> type[FeatureGroup]:
+    default = "https://acct.blob.core.windows.net/c?sv=1&sig=abc123"
+    return make_secret_group({"endpoint": PropertySpec("Endpoint.", default=default)})
+
+
+def make_masked_then_real_secret() -> type[FeatureGroup]:
+    default = "password=*** api_key=realsecret123"
+    return make_secret_group({"conn": PropertySpec("Connection.", default=default)})
+
+
+def make_bytes_password_default() -> type[FeatureGroup]:
+    return make_secret_group({"conn": PropertySpec("Connection.", default={"password": b"x"})})
+
+
+def make_plural_env_named_key() -> type[FeatureGroup]:
+    explanation = "Names the environment variables holding the key."
+    return make_secret_group({"pii_key_env": PropertySpec(explanation, default="PII_KEY")})
+
+
 def test_toy_group_passes() -> None:
     result = check_feature_group_shape(make_toy_group())
     assert result.check == "feature_group_shape"
@@ -525,6 +549,11 @@ def test_undeclared_option_failure_is_named() -> None:
         (make_env_named_key, "secrets:"),
         (make_bearer_default, "secrets:"),
         (make_mapping_password_default, "secrets:"),
+        (make_uri_query_secret, "secrets:"),
+        (make_azure_sas_secret, "secrets:"),
+        (make_masked_then_real_secret, "secrets:"),
+        (make_bytes_password_default, "secrets:"),
+        (make_plural_env_named_key, "secrets:"),
     ],
 )
 def test_broken_group_fails_only_its_sub_check(make: Callable[[], type[FeatureGroup]], prefix: str) -> None:
@@ -552,9 +581,15 @@ def test_secret_named_options_declared_as_handles_pass() -> None:
     assert check_feature_group_shape(db).failures == ()
 
 
-def test_plain_api_key_failure_suggests_handle() -> None:
-    result = check_feature_group_shape(make_plain_api_key())
-    assert any("api_key" in f and "api_key_handle" in f and "credential_handle_spec" in f for f in result.failures)
+@pytest.mark.parametrize(
+    ("make", "handle"),
+    [(make_plain_api_key, "api_key_handle"), (make_env_named_key, "pii_key_handle")],
+)
+def test_secret_failure_suggests_handle(make: Callable[[], type[FeatureGroup]], handle: str) -> None:
+    result = check_feature_group_shape(make())
+    assert any(handle in f and "credential_handle_spec" in f for f in result.failures), result.failures
+    if handle == "api_key_handle":
+        assert any("api_key" in f for f in result.failures), result.failures
 
 
 def test_secret_default_failure_does_not_echo_value() -> None:
@@ -563,17 +598,14 @@ def test_secret_default_failure_does_not_echo_value() -> None:
     assert "abcdef1234567890xyz" not in repr(result)
 
 
-def test_env_name_option_failure_points_to_handle() -> None:
-    result = check_feature_group_shape(make_env_named_key())
-    assert any("pii_key_handle" in f and "credential_handle_spec" in f for f in result.failures), result.failures
-
-
 def test_benign_url_default_and_deployment_environment_pass() -> None:
     group = make_secret_group(
         {
             "endpoint": PropertySpec("Endpoint.", default="https://api.example.com/v1?format=json"),
             "target_env": PropertySpec("Deployment environment: dev or prod.", default="dev"),
             "agg": PropertySpec("Aggregation.", default="mean"),
+            "conn_defaults": PropertySpec("Connection defaults.", default={"password": ""}),
+            "template": PropertySpec("Template.", default="password="),
         }
     )
     assert check_feature_group_shape(group).failures == ()
@@ -591,12 +623,13 @@ def test_not_secret_options_silences_one_option_only() -> None:
     assert not any("token" in f for f in result.failures), result.failures
 
 
-@pytest.mark.parametrize("not_secret", [{"ghost": "reason"}, {"api_key": "  "}, {"api_key": 5}])
-def test_invalid_not_secret_options_fail(not_secret: dict[str, Any]) -> None:
+@pytest.mark.parametrize("not_secret", [{"ghost": "reason"}, {"api_key": "  "}, {"api_key": 5}, ("api_key",)])
+def test_invalid_not_secret_options_fail(not_secret: Any) -> None:
     group = make_secret_group({"api_key": PropertySpec("API key.", default="placeholder")}, not_secret)
     result = check_feature_group_shape(group)
     assert any(f.startswith("secrets:") for f in result.failures), result.failures
-    assert any(f.startswith("secrets:") and next(iter(not_secret)) in f for f in result.failures), result.failures
+    marker = next(iter(not_secret)) if isinstance(not_secret, dict) else "NOT_SECRET_OPTIONS"
+    assert any(f.startswith("secrets:") and marker in f for f in result.failures), result.failures
 
 
 def test_unbuildable_group_reports_names_and_secrets_failures() -> None:

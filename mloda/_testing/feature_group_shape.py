@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import math
 import re
+from collections.abc import Mapping
 from itertools import product
 from typing import Any
 
@@ -15,7 +16,12 @@ from mloda._testing.typed_data import TypedTestData
 from mloda._testing.value_fit import value_fits
 from mloda.core.abstract_plugins.components.credential_handle import CredentialHandleSpec
 from mloda.core.abstract_plugins.components.credential_leaves import iter_credential_leaves
-from mloda.core.abstract_plugins.components.credential_scrub import _SECRET_KEY, scrub_credentials, strip_uri_userinfo
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    _KEYWORD_PATTERN,
+    _SECRET_KEY,
+    scrub_credentials,
+    strip_uri_userinfo,
+)
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.divergence import Divergence
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -177,16 +183,23 @@ def _check_strict(cls: type[FeatureGroup], names: list[str], base: Options) -> l
     return failures
 
 
-_ENV_VAR_TEXT = re.compile(r"\benv(?:ironment)?[ _-]?var(?:iable)?\b", re.IGNORECASE)
+_ENV_VAR_TEXT = re.compile(r"\benv(?:ironment)?[ _-]?var(?:iable)?s?\b", re.IGNORECASE)
 
 
 def _masked_default(default: Any) -> bool:
     for leaf in iter_credential_leaves(default):
         s = leaf.leaf
+        if leaf.shaped and (s.strip() if isinstance(s, str) else isinstance(s, (bytes, bytearray)) and s):
+            return True
         if not isinstance(s, str):
             continue
-        if leaf.shaped or ("***" in scrub_credentials(s) and "***" not in s) or strip_uri_userinfo(s) != s:
+        bare = _KEYWORD_PATTERN.sub("", s)
+        if scrub_credentials(bare).count("***") > bare.count("***") or strip_uri_userinfo(s) != s:
             return True
+        for m in _KEYWORD_PATTERN.finditer(s):
+            value = m.group(0)[len(m.group("keyword") + m.group("sep")) :]
+            if value and value != "***":
+                return True
     return False
 
 
@@ -195,7 +208,11 @@ def _check_secrets(cls: type[FeatureGroup]) -> tuple[list[str], list[str]]:
     notes: list[str] = []
     mapping = _mapping(cls)
     silenced: dict[str, str] = {}
-    for key, reason in cls.NOT_SECRET_OPTIONS.items():
+    not_secret = cls.NOT_SECRET_OPTIONS
+    if not isinstance(not_secret, Mapping):
+        failures.append("secrets: NOT_SECRET_OPTIONS must be a mapping of option key to reason")
+        not_secret = {}
+    for key, reason in not_secret.items():
         if key not in (cls.PROPERTY_MAPPING or {}):
             failures.append(f"secrets: NOT_SECRET_OPTIONS names undeclared option '{key}'")
         elif not isinstance(reason, str) or not reason.strip():

@@ -74,6 +74,8 @@ def _value_problems(record: Divergence) -> list[str]:
         problems.append("variant is only allowed for kind VARIANT")
     if record.subtypes and record.outputs:
         problems.append("declare subtypes or outputs, not both")
+    if ANY_OUTPUT_PART in record.outputs:
+        problems.append(f"outputs must not name '{ANY_OUTPUT_PART}' (omit outputs to cover every part)")
     return problems
 
 

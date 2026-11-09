@@ -212,8 +212,9 @@ def _credential_hit(value: Any, seen: set[int]) -> str | None:
 def refuse_credential_option_values(options: Options) -> None:
     """Refuse a Credential or RegisteredCredential in any non-pointer option value, naming key and type only."""
     # Function-local: avoids an import cycle through the source feature group module.
-    from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
     from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
+
+    from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
 
     pointer_keys: Any = None
     for key, value in [*options.group.items(), *options.context.items()]:

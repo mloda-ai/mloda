@@ -8,6 +8,26 @@ from contextvars import ContextVar, Token
 from typing import Any
 from urllib.parse import unquote
 
+_OBJECT_STORE_SCHEMES = frozenset({"s3", "s3a", "s3n", "gs", "gcs", "abfs", "abfss", "wasb", "wasbs", "az", "adl"})
+_PWD_ROOTS = frozenset(
+    {
+        "home",
+        "Users",
+        "root",
+        "tmp",
+        "var",
+        "opt",
+        "srv",
+        "usr",
+        "mnt",
+        "workspace",
+        "workspaces",
+        "app",
+        "data",
+        "builds",
+        "runner",
+    }
+)
 _AZURE_CONTAINER_SCHEMES = frozenset({"abfs", "abfss", "wasb", "wasbs"})
 _AZURE_CONTAINER_PATTERN = re.compile(r"[a-z0-9-]{3,63}|\$(?:root|web|logs)")
 
@@ -118,7 +138,8 @@ _AUTHORIZATION_PATTERN = re.compile(
 # host shape (EZConnect //, a descriptor (, or host:port) so `path/to/x@y` and `user@example.com` are left alone.
 # (?!\d+/) keeps a bare port like `8080/` from being read as the user.
 _SLASH_DSN_PATTERN = re.compile(
-    r"(?<![\w.$#/-])(?!\d+/)(?P<user>[\w.$#-]+)/[^\s/]+@(?=//|\(|[\w.-]+:\d+(?!\w)|(?![0-9]+(?:\.[0-9]+){0,2}(?:[-+][\w.]*)?/)[\w.-]+/\w)"
+    r"(?<![\w.$#/-])(?!\d+/)(?P<user>[\w.$#-]+)/[^\s/]+@"
+    r"(?=//|\(|[\w.-]+:\d+(?!\w)|(?!\d+(?:\.\d+){1,2}/|\d+\.\d+\.\d+[-+][\w.]*/)[\w.-]+/\w)"
 )
 # Slash in userinfo right after `://`; the dotless user keeps `unpkg.com/react@18/` and `github.com/user@host` intact.
 _SCHEME_SLASH_DSN_PATTERN = re.compile(r"(?<=://)(?P<user>[\w$#~-]+)/[^\s/@]+@(?=[\w.-]+(?:[/:?#\s)\]'\"]|$))")
@@ -257,8 +278,8 @@ def _mask_path_password(match: re.Match[str]) -> str:
     digits = rest.partition("/")[0]
     if not digits.isascii() or not digits.isdigit():
         return f"{scheme}://{user}:***@"
-    # Four or more digits read as a port; fewer read as a password, like _DB_USERINFO_PATTERN.
-    if len(digits) >= 4:
+    # Digits are a port except on object-store schemes, where the path piece is a password.
+    if scheme.lower() not in _OBJECT_STORE_SCHEMES:
         return match[0]
     return f"{scheme}://{user}:{digits}/***@"
 
@@ -532,10 +553,11 @@ def _keyword_repl(m: re.Match[str]) -> str:
         and not m["known"]
         and (start == 0 or text[start - 1].isspace())
         and _PATH_VALUE.fullmatch(value)
+        and value.split("/")[1] in _PWD_ROOTS
         and (end == len(text) or text[end].isspace())
     ):
         return m[0]
-    if _COUNT_NAME.fullmatch(keyword.rpartition(".")[2]) and value.isascii() and value.isdigit():
+    if _COUNT_NAME.fullmatch(keyword.rpartition(".")[2]) and value.isascii() and value.isdigit() and len(value) <= 7:
         return m[0]
     if (m["quoted"] or m["braced"]) and end < len(text) and text[end] not in ";&'\"" and not text[end].isspace():
         closer = "}" if m["braced"] else value[0]

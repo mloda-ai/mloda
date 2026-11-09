@@ -497,8 +497,9 @@ class TestPlanTimeRefusals:
         [
             ({"key": SECRET, "path": BYTES_SECRET}, None),
             ({"key": SECRET, "chs_pub_blob": BYTES_SECRET}, {"chs_pub_blob"}),
+            ({"key": SECRET, "chs_pub_blob": memoryview(BYTES_SECRET)}, {"chs_pub_blob"}),
         ],
-        ids=["safe_key", "declared_public_key"],
+        ids=["safe_key", "declared_public_key", "declared_public_key_memoryview"],
     )
     def test_bytes_under_a_safe_or_public_key_are_accepted(
         self, credentials: dict[str, Any], public_keys: set[str] | None
@@ -522,7 +523,7 @@ class TestPlanTimeRefusals:
         message = _refusal(_prepare, [_vault("vault-main")], dac, ChsVaultFG)
 
         assert "vault-main" in message
-        assert "host" in message
+        assert "at 'host'" in message
         assert BYTES_SECRET.decode() not in message
 
     @pytest.mark.parametrize(

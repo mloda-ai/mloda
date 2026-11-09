@@ -339,6 +339,20 @@ class TestUserinfoUriPlanIdentity:
             ),
             ("https://h/password=LITERALX1/plan{s}", "https://h/password=***/plan{s}", "LITERALX1", None),  # nosec B105
             ("s3://AKIA:12/LITERALX2@bucket/plan{s}", "s3://AKIA:12/***@bucket/plan{s}", "LITERALX2", None),
+            ("s3://AKIA:1234/LITERALX3@bucket/plan{s}", "s3://AKIA:1234/***@bucket/plan{s}", "LITERALX3", None),
+            ("gs://AKIA:9/LITERALX4@bucket/plan{s}", "gs://AKIA:9/***@bucket/plan{s}", "LITERALX4", None),
+            (
+                "http://h:80/dir@v2/plan{s}",
+                "http://h:80/dir@v2/plan{s}",
+                "NOSECRETHERE",  # nosec B105
+                None,
+            ),
+            (
+                "https://h:443/pkg@2024/plan{s}",
+                "https://h:443/pkg@2024/plan{s}",
+                "NOSECRETHERE",  # nosec B105
+                None,
+            ),
             (
                 "https://evil.example:8443/x@trusted.corp/plan{s}",
                 "https://evil.example:8443/x@trusted.corp/plan{s}",
@@ -360,6 +374,10 @@ class TestUserinfoUriPlanIdentity:
             "literal-hive-segment",
             "keyword-in-path",
             "userinfo-in-path-after-port",
+            "s3-four-digit-userinfo",
+            "gs-one-digit-userinfo",
+            "http-port-dir-at-version-kept",
+            "https-port-pkg-at-year-kept",
             "port-path-at-host-kept",
             "port-dir-at-version-kept",
         ],

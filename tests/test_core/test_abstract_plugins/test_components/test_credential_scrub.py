@@ -479,6 +479,15 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
     ("slash_dsn_digit_led_host", "scott/hunter2z9@9db.example.com/orcl", ["hunter2z9"], ["9db.example.com/orcl"]),
     ("slash_dsn_word_host", "x/hunter2z9@next/z", ["hunter2z9"], []),
     ("slash_dsn_four_octet_ipv4", "pkg/hunter2z9@1.2.3.4/x", ["hunter2z9"], []),
+    ("slash_dsn_digit_dash_host", "scott/hunter2z9@1-db.example.com/orcl", ["hunter2z9"], []),
+    ("slash_dsn_digit_dash_tier", "scott/hunter2z9@3-tier/orcl", ["hunter2z9"], []),
+    ("slash_dsn_two_digit_host", "user/hunter2z9@12/x", ["hunter2z9"], []),
+    ("slash_dsn_one_digit_host", "user/hunter2z9@1/x", ["hunter2z9"], []),
+    ("slash_dsn_one_digit_host_two", "user/hunter2z9@2/x", ["hunter2z9"], []),
+    ("pwd_non_root_path_start", "PWD=/a/hunter2z9", ["hunter2z9"], []),
+    ("pwd_non_root_path_sec", "PWD=/sec/hunter2z9", ["hunter2z9"], []),
+    ("pwd_non_root_path_after_space", "x PWD=/sec/hunter2z9", ["hunter2z9"], []),
+    ("max_token_eight_digits", "max_token=12345678", ["12345678"], []),
 ]
 
 
@@ -662,6 +671,10 @@ UNCHANGED_LOOKALIKE_CASES: list[str] = [
     "env PWD=/home/dev/project",
     "max_token=128",
     "cfg.max_token=128",
+    "PWD=/Users/dev/project",
+    "PWD=/tmp/build/x",
+    "OLDPWD=/var/lib/app",
+    "max_token=1234567",
 ]
 
 

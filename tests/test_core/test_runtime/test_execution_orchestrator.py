@@ -1324,6 +1324,7 @@ class TestFinalizeTouchesSharedStateOnlyInTheOwningProcess:
         orchestrator.join.assert_called_once()
         assert drop_tables.call_count == int(owns)
         assert orchestrator.cfw_register.get_artifacts.call_count == int(owns)
+        assert orchestrator.cfw_register.get_step_durations.call_count == int(owns)
 
 
 class TestExitOfANeverEnteredOrchestrator:

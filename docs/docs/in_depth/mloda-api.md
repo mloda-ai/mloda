@@ -176,15 +176,15 @@ for step in results.plan:
 
 `run_id` and `plan_id` on `RunResult` and `ResultStream` (from `run_all`, `stream_all`, `run()` and `stream_run()`) are the run's `HookContext.run_id` and `plan_id`, so a result can be matched to the records extenders wrote for its run; a `ResultStream` has them before its first element.
 
-`step_durations` on `RunResult` and `ResultStream` (from `run_all`, `stream_all`, `run()` and `stream_run()`) holds one `StepDuration(feature_group, step_uuid, duration_seconds)` per feature group step that completed `calculate_feature`, in completion order. A group can appear more than once; `step_uuid` is `PlanStep.step_uuid`, so join on it to tell steps apart.
+`step_durations` on `RunResult` and `ResultStream` (from `run_all`, `stream_all`, `run()` and `stream_run()`) holds one `StepDuration(feature_group, step_uuid, duration_seconds)` per feature group step that completed `calculate_feature`, in the order the steps finished. A group can appear more than once; `step_uuid` is `PlanStep.step_uuid`, so join on it to tell steps apart.
 
-It times the `calculate_feature` call only, not a `FEATURE_GROUP_CALCULATE_FEATURE` extender's own time, filters, transforms or joins. A nested `INPUT_DATA_LOAD` counts (with its extenders); a file the framework reads after a source group returned an `InputDataDescriptor` does not. A lazy framework measures building the frame, not executing it. A calculate extender that returns without calling `func` leaves no entry.
+It times the `calculate_feature` call only, not a `FEATURE_GROUP_CALCULATE_FEATURE` extender's own time, filters, transforms or joins. A nested `INPUT_DATA_LOAD` counts (with its extenders); a file the framework reads after a source group returned an `InputDataDescriptor` does not. A lazy framework measures building the frame, not executing it. A calculate extender that returns without calling `func` leaves no entry, and one that calls `func` more than once reports its last successful call.
 
 ```python
-per_group: dict[str, float] = {}
+budget_seconds = 5.0
+assert results.step_durations
 for entry in results.step_durations:
-    per_group[entry.feature_group] = per_group.get(entry.feature_group, 0.0) + entry.duration_seconds
-assert per_group and all(0.0 <= seconds < 60.0 for seconds in per_group.values())
+    assert entry.duration_seconds < budget_seconds, f"{entry.feature_group} took {entry.duration_seconds:.3f}s"
 ```
 
 To pin a resolved plan, see [Plan Lock](plan-lock.md).

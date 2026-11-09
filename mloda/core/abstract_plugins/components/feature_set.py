@@ -198,6 +198,7 @@ class FeatureSet:
             view.artifact_value = binding.value
         view.save_artifact = None
         view._calculate_context = None
+        view._calculate_seconds = None
         return view
 
     def runtime_parameter(self, key: str, feature: Feature | None = None) -> Any:

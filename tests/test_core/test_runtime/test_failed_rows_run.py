@@ -220,3 +220,6 @@ class TestMultiprocessingFailedRows:
         }
         assert {d.feature_group for d in result.step_durations} == {"FrOne", "FrOther"}
         assert all(d.duration_seconds > 0 for d in result.step_durations)
+        assert {d.step_uuid for d in result.step_durations} == {
+            s.step_uuid for s in result.plan if s.step_kind == "compute"
+        }

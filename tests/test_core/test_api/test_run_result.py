@@ -291,7 +291,7 @@ class TestRunResultPlan:
 
         assert results.plan == results.plan
 
-    @pytest.mark.parametrize("name", ["plan", "run_id", "plan_id"])
+    @pytest.mark.parametrize("name", ["plan", "run_id", "plan_id", "step_durations"])
     def test_plan_and_ids_are_read_only(self, name: str) -> None:
         results = _run_all()
 
@@ -386,10 +386,6 @@ class TestRunResultStepDurations:
         assert entry.step_uuid == step.step_uuid
         assert entry.duration_seconds >= _SLEEP_LOWER_BOUND
 
-    def test_step_durations_are_read_only(self) -> None:
-        with pytest.raises(AttributeError):
-            _run_sleep().step_durations = ()
-
     def test_prepared_session_runs_do_not_accumulate(self) -> None:
         session = mloda.prepare(
             ["run_result_sleep_value"],
@@ -413,7 +409,7 @@ class TestRunResultStepDurations:
     def test_extender_cannot_overwrite_the_reported_value(self) -> None:
         [entry] = _run_sleep(extenders={_CalcExtender(write_duration=999)}).step_durations
 
-        assert entry.duration_seconds != 999
+        assert entry.duration_seconds >= _SLEEP_LOWER_BOUND
         assert entry.duration_seconds < 999
 
     def test_present_without_a_calculate_extender(self) -> None:
@@ -524,7 +520,7 @@ class TestStreamEarlyClose:
 
 
 class TestResultStreamArtifactsAndFailedRows:
-    """ResultStream.artifacts and failed_rows are empty until the stream is exhausted or closed."""
+    """ResultStream.artifacts, failed_rows and step_durations are empty until the stream is exhausted or closed."""
 
     def test_defaults_before_consumption_and_after_exhaustion(self) -> None:
         stream = _stream_all()
@@ -634,13 +630,7 @@ class TestRunResultIsPlainData:
         assert results.run_id is not None
         assert loaded.run_id == results.run_id
         assert loaded.plan_id == results.plan_id
-
-    def test_pickle_round_trip_preserves_step_durations(self) -> None:
-        results = _run_sleep()
-
-        loaded = pickle.loads(pickle.dumps(results))  # nosec B301
-
-        assert len(results.step_durations) == 1
+        assert results.step_durations
         assert loaded.step_durations == results.step_durations
 
     def test_deepcopy_preserves_content(self) -> None:

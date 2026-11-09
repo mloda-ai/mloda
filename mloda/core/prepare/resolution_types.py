@@ -10,6 +10,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     DeclineCode,
 )
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.divergence import Divergence
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 
@@ -100,6 +101,10 @@ class EvaluationResult:
     specialized_from: tuple[type[FeatureGroup], ...] = ()
     # (base, part) of each identified candidate that matched the name as a declared output part.
     output_parts: dict[type[FeatureGroup], tuple[str, str]] = field(default_factory=dict)
+    # Per candidate, the frameworks identification dropped for an unallowed variant and the records behind it.
+    variant_blocks: dict[type[FeatureGroup], dict[type[ComputeFramework], tuple[Divergence, ...]]] = field(
+        default_factory=dict
+    )
 
     @property
     def failure_kind(self) -> Literal["multiple", "abstract_only", "none"] | None:

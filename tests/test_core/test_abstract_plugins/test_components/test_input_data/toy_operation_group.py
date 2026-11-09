@@ -259,6 +259,23 @@ class OpToyVariantEmptyConsumerFG(OpToyVariantOpenConsumerFG):
     INPUT = "optoyvar_empty"
 
 
+OPTOY_VARIANT_NARROW_CONSUMER = "optoyvar_narrow_consumer"
+
+
+class OpToyVariantNarrowFG(OpToyVariantFG):
+    """Pandas only supports median, so sum on Pandas is dropped for a non-variant reason."""
+
+    FEATURE = "optoyvar_narrow"
+    SUBTYPES = SubtypeDeclaration(key=OPTOY_KEY, supported={"PandasDataFrame": {"median"}})
+
+
+class OpToyVariantNarrowConsumerFG(OpToyVariantOpenConsumerFG):
+    """Unpinned consumer over the narrowed variant group."""
+
+    NAME = OPTOY_VARIANT_NARROW_CONSUMER
+    INPUT = "optoyvar_narrow"
+
+
 OPTOY_CHAIN_SRC = "optoy_chain_src"
 OPTOY_CHAIN_SUFFIX = "__optoy_chain"
 CHAIN_LOG: list[tuple[str, str]] = []

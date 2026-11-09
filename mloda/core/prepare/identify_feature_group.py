@@ -88,6 +88,7 @@ from mloda.core.abstract_plugins.components.utils import (
     safe_exc_str,
     safe_field,
 )
+from mloda.core.abstract_plugins.components.divergence import Divergence
 from mloda.core.abstract_plugins.compute_framework import (
     ComputeFramework,
     compute_framework_subclasses,
@@ -329,6 +330,7 @@ class IdentifyFeatureGroupClass:
     _criteria_matched_feature_groups: set[type[FeatureGroup]]
     _abstract_matched_feature_groups: set[type[FeatureGroup]]
     _candidate_frameworks: dict[type[FeatureGroup], CandidateFrameworks]
+    _variant_blocks: dict[type[FeatureGroup], dict[type[ComputeFramework], tuple[Divergence, ...]]]
     _match_rejections: dict[type[FeatureGroup], MatchRejection]
     _matcher_errors: dict[type[FeatureGroup], str]
     _eliminations: dict[type[FeatureGroup], Elimination]
@@ -357,6 +359,7 @@ class IdentifyFeatureGroupClass:
         self._criteria_matched_feature_groups = set()
         self._abstract_matched_feature_groups = set()
         self._candidate_frameworks = {}
+        self._variant_blocks = {}
         # Reasons the first match pass recorded, keyed by candidate class.
         self._match_rejections = {}
         # Contained matcher raises as text, keyed by candidate class: never the exception object.
@@ -465,6 +468,7 @@ class IdentifyFeatureGroupClass:
                 criteria_matched=self._criteria_matched_feature_groups,
                 abstract_matched=self._abstract_matched_feature_groups,
                 candidate_frameworks=self._candidate_frameworks,
+                variant_blocks=self._variant_blocks,
                 eliminations=self._eliminations,
                 specialized_from=specialized_from,
                 output_parts={fg: self._output_parts[fg] for fg in identified if fg in self._output_parts},
@@ -974,6 +978,7 @@ class IdentifyFeatureGroupClass:
             and (not pinned or (impl is not None and is_nominal_subclass(impl, tuple(pinned))))
         }
         if not fitting or not fitting <= set(blocked):
+            self._variant_blocks[feature_group] = blocked
             return supported - set(blocked)
         self._record_elimination(
             feature_group, "variant", variant_block_reason(feature_group, blocked, served, options)

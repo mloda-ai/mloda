@@ -1,10 +1,11 @@
 """Plan-time pass turning Feature(implementation=...) pins into per-step allowed compute frameworks."""
 
 from collections import defaultdict
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from typing import Any
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.divergence import Divergence
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import (
@@ -12,7 +13,6 @@ from mloda.core.abstract_plugins.implementation import (
     loaded_implementations,
     named_implementations,
     serving_implementation,
-    unallowed_variants,
     variant_block_reason,
 )
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
@@ -30,7 +30,13 @@ def _qualified(cls: type) -> str:
 class ResolveImplementationPins:
     """Resolves pins on requested features over their transitive inputs; never mutates a Feature."""
 
-    def __init__(self, graph: Graph, accessible: Collection[type[Implementation[Any]]]) -> None:
+    def __init__(
+        self,
+        graph: Graph,
+        accessible: Collection[type[Implementation[Any]]],
+        variant_blocks: Mapping[UUID, Mapping[Framework, tuple[Divergence, ...]]] | None = None,
+    ) -> None:
+        self.variant_blocks = variant_blocks or {}
         self.graph = graph
         self.accessible = list(accessible)
         self.loaded = loaded_implementations()
@@ -145,13 +151,8 @@ class ResolveImplementationPins:
         if not serves and not feature.framework_pinned:
             fw = impl.compute_framework
             served = self._serving(group, fw)
-            parts = (
-                next(iter(feature.requested_parts))
-                if feature.parts_only and len(feature.requested_parts) == 1
-                else None
-            )
             found = (
-                unallowed_variants(group, served, str(feature.name), feature.options, parts)
+                self.variant_blocks.get(uuid, {}).get(fw, ())
                 if fw not in (feature.compute_frameworks or ())
                 and served is not None
                 and is_nominal_subclass(served, impl)

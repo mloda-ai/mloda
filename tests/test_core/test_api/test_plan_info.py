@@ -1269,6 +1269,14 @@ class TestPlanStepVariantAllowOption:
         assert "OpToyVariantEmptyFG.VARIANTS does not list, so it cannot be allowed" in str(caught.value)
         assert "to allow it add" not in str(caught.value)
 
+    def test_a_chained_pin_dropped_for_a_non_variant_reason_gives_no_allow_variants_hint(self) -> None:
+        toy = importlib.import_module(self.TOY)
+        with pytest.raises(ImplementationPinError) as caught:
+            self._chained_pin("OpToyVariantNarrowConsumerFG,OpToyVariantNarrowFG", toy.OPTOY_VARIANT_NARROW_CONSUMER)
+
+        assert "allow_variants" not in str(caught.value)
+        assert "served by no compute framework enabled for this run" in str(caught.value)
+
 
 class TestPlanStepInputFeatureEdgesField:
     """input_feature_edges is an optional per-output-feature mapping appended after step_uuid."""

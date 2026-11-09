@@ -557,6 +557,23 @@ def test_duplicate_column_frame_keeps_names_and_types(name: str, adapter: Any, p
         assert _column_types(name, frame) == [_DUP_TYPES[name][pair[0]], _DUP_TYPES[name][pair[1]]]
 
 
+def test_pyarrow_has_type_on_duplicate_column_frame_uses_the_first_column() -> None:
+    import pyarrow as pa
+
+    table = pa.table([pa.array([1], pa.int16()), pa.array(["x"])], names=["a", "a"])
+
+    assert _make("PyArrow").has_type(table, "a", DataType.INT32) is False
+
+
+@pytest.mark.parametrize("data_type", [DataType.INT32, DataType.INT64])
+def test_sqlite_has_type_on_a_plain_arrow_table_is_none(data_type: DataType) -> None:
+    import pyarrow as pa
+
+    table = pa.table({"c": pa.array([1], pa.int64())})
+
+    assert _make("Sqlite").has_type(table, "c", data_type) is None
+
+
 def test_iceberg_duplicate_column_frame_is_plain_arrow() -> None:
     import pyarrow as pa
 

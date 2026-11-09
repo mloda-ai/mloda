@@ -208,7 +208,7 @@ class IcebergFramework(ComputeFramework):
             field_type = self._native_field_type(data, column_name)
             if isinstance(field_type, DecimalType):
                 return DataType.DECIMAL
-            return self._exact_column_data_type(data, column_name)
+            return self._iceberg_type_to_exact_data_type(field_type)
         if pa is not None and isinstance(data, pa.Table):
             arrow_type = arrow_schema_field_type(data.schema, column_name)
             if arrow_type is None:
@@ -218,20 +218,24 @@ class IcebergFramework(ComputeFramework):
 
     def _exact_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         if IcebergTable is not None and isinstance(data, IcebergTable):
-            field_type = self._native_field_type(data, column_name)
-            if isinstance(field_type, DecimalType):
-                return DataType.DECIMAL if (field_type.precision, field_type.scale) == (38, 18) else None
-            return next((dt for t, dt in _ICEBERG_EXACT_TYPES if isinstance(field_type, t)), None)
+            return self._iceberg_type_to_exact_data_type(self._native_field_type(data, column_name))
         if pa is not None and isinstance(data, pa.Table):
             arrow_type = arrow_schema_field_type(data.schema, column_name)
             return None if arrow_type is None else DataType._from_arrow_type_exact(arrow_type)
         return None
 
     @staticmethod
+    def _iceberg_type_to_exact_data_type(field_type: Any) -> DataType | None:
+        if isinstance(field_type, DecimalType):
+            return DataType.DECIMAL if (field_type.precision, field_type.scale) == (38, 18) else None
+        return next((dt for t, dt in _ICEBERG_EXACT_TYPES if isinstance(field_type, t)), None)
+
+    @staticmethod
     def _native_field_type(table: Any, column_name: str) -> Any | None:
-        if column_name not in set(table.schema().column_names):
+        schema = table.schema()
+        if column_name not in schema.column_names:
             return None
-        field = table.schema().find_field(column_name)
+        field = schema.find_field(column_name)
         return None if field is None else field.field_type
 
     def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:

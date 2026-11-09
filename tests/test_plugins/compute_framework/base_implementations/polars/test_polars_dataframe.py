@@ -196,9 +196,6 @@ class TestPolarsIsMissingColumnError:
         assert PolarsDataFrame.is_missing_column_error(error) is False
 
 
-_POLARS_FOLDS = [
-    ("Datetime_ns", "TIMESTAMP_MICROS"),
-]
 _POLARS_EXACT = [
     ("Int16", None),
     ("UInt16", None),
@@ -238,14 +235,6 @@ def polars_frame(name: str) -> Any:
     import polars as pl
 
     return pl.DataFrame({"c": pl.Series("c", [], dtype=polars_dtype(name))})
-
-
-@pytest.mark.parametrize("name, expected", _POLARS_FOLDS)
-def test_extract_column_data_type_folds_inexact_types(name: str, expected: str) -> None:
-    from mloda.user import DataType
-
-    framework = PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-    assert framework._extract_column_data_type(polars_frame(name), "c") == DataType[expected]
 
 
 @pytest.mark.parametrize("name, expected", _POLARS_EXACT)

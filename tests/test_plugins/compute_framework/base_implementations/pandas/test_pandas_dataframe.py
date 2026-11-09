@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -236,6 +237,26 @@ _PANDAS_LENIENT = [
 def test_extract_column_data_type_folds_inexact_numpy_types(dtype: str, expected: str) -> None:
     df = pd.DataFrame({"c": pd.Series([1, 2], dtype=dtype)})
     assert _pandas_framework()._extract_column_data_type(df, "c") == DataType[expected]
+
+
+_WIDE_LONGDOUBLE = np.dtype(np.longdouble).itemsize > 8
+
+
+@pytest.mark.parametrize(
+    "series, expected",
+    [
+        pytest.param(
+            pd.Series(np.array([1.5], dtype=np.longdouble)),
+            DataType.DOUBLE,
+            marks=pytest.mark.skipif(not _WIDE_LONGDOUBLE, reason="longdouble is 8 bytes on this platform"),
+            id="longdouble",
+        ),
+        pytest.param(pd.Series(pd.Categorical([True, False])), DataType.BOOLEAN, id="categorical_bool"),
+        pytest.param(pd.Series(pd.arrays.SparseArray([True, False])), DataType.BOOLEAN, id="sparse_bool"),
+    ],
+)
+def test_extract_column_data_type_keeps_pandas_predicate_folds(series: Any, expected: DataType) -> None:
+    assert _pandas_framework()._extract_column_data_type(pd.DataFrame({"c": series}), "c") == expected
 
 
 @pytest.mark.parametrize(

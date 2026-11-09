@@ -15,6 +15,7 @@ except ImportError:
     pd = None
 
 _PANDAS_LOCAL_VARIABLE_PREFIX = "local variable"
+# datetime64 s and ns count as exact TIMESTAMP_MICROS because pandas coerces them.
 _PANDAS_EXACT: dict[tuple[str, int | None], DataType] = {
     ("i", 1): DataType.INT8,
     ("i", 4): DataType.INT32,
@@ -113,12 +114,25 @@ class PandasDataFrame(ComputeFramework):
         if isinstance(dtype, pd.ArrowDtype):
             return DataType.from_arrow_type_safe(dtype.pyarrow_dtype)
         fold = _PANDAS_FOLDS.get(_kind_and_size(dtype))
-        return fold if fold is not None else self._exact_column_data_type(data, column_name)
+        if fold is not None:
+            return fold
+        exact = self._pandas_dtype_to_exact_data_type(dtype)
+        if exact is not None:
+            return exact
+        if pd.api.types.is_bool_dtype(dtype):
+            return DataType.BOOLEAN
+        if pd.api.types.is_float_dtype(dtype) and dtype.itemsize > 8:
+            return DataType.DOUBLE
+        return None
 
     def _exact_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         dtype = self._first_column_dtype(data, column_name)
         if dtype is None:
             return None
+        return self._pandas_dtype_to_exact_data_type(dtype)
+
+    @staticmethod
+    def _pandas_dtype_to_exact_data_type(dtype: Any) -> DataType | None:
         if isinstance(dtype, pd.ArrowDtype):
             return DataType._from_arrow_type_exact(dtype.pyarrow_dtype)
         if isinstance(dtype, pd.StringDtype):

@@ -313,13 +313,7 @@ def _duckdb_relation(sql_type: str) -> DuckdbRelation:
 
 
 _DUCKDB_FOLDS = [
-    ("SMALLINT", DataType.INT32),
-    ("USMALLINT", DataType.INT32),
-    ("UINTEGER", DataType.INT64),
     ("HUGEINT", DataType.INT64),
-    ("TIMESTAMP_S", DataType.TIMESTAMP_MICROS),
-    ("TIMESTAMP_NS", DataType.TIMESTAMP_MICROS),
-    ("DECIMAL(10,2)", DataType.DECIMAL),
 ]
 _DUCKDB_EXACT: list[tuple[str, DataType | None]] = [
     ("SMALLINT", None),

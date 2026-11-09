@@ -22,6 +22,7 @@ ensure proper resource management across all test methods.
 
 import os
 from collections.abc import Iterator
+from types import SimpleNamespace
 from typing import Any
 from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
 from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
@@ -564,14 +565,15 @@ def _spark_types() -> Any:
     return pytest.importorskip("pyspark.sql.types")
 
 
-def _stub_spark_frame(spark_type: Any) -> Any:
-    from types import SimpleNamespace
-
+def _jvm_free_spark_frame(spark_type: Any) -> Any:
+    """A JVM-free stand-in for a one-column Spark DataFrame."""
     t = _spark_types()
     return SimpleNamespace(columns=["c"], schema=t.StructType([t.StructField("c", spark_type)]))
 
 
 _SPARK_FOLDS = [
+    (lambda t: t.ShortType(), "INT32"),
+    (lambda t: t.DecimalType(10, 2), "DECIMAL"),
     (lambda t: t.DecimalType(38, 18), "DECIMAL"),
     (lambda t: t.TimestampType(), "TIMESTAMP_MICROS"),
     (lambda t: t.TimestampNTZType(), "TIMESTAMP_MICROS"),
@@ -582,7 +584,7 @@ _SPARK_FOLDS = [
 def test_extract_column_data_type_folds_inexact_types_jvm_free(make_type: Any, expected: str) -> None:
     from mloda.user import DataType
 
-    frame = _stub_spark_frame(make_type(_spark_types()))
+    frame = _jvm_free_spark_frame(make_type(_spark_types()))
     framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
     assert framework._extract_column_data_type(frame, "c") == DataType[expected]
 
@@ -619,6 +621,6 @@ def test_exact_column_data_type_jvm_free() -> None:
     from mloda.user import DataType
 
     framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-    frame = _stub_spark_frame(_spark_types().TimestampType())
+    frame = _jvm_free_spark_frame(_spark_types().TimestampType())
     assert framework._exact_column_data_type(frame, "c") == DataType.TIMESTAMP_MICROS_TZ
     assert framework._exact_column_data_type(frame, "nope") is None

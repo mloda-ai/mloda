@@ -211,12 +211,15 @@ class DuckDBFramework(ComputeFramework):
                 return _DUCKDB_FOLDS[type_str]
             if type_str.startswith("DECIMAL"):
                 return DataType.DECIMAL
-        return self._exact_column_data_type(data, column_name)
+        return self._duckdb_type_to_exact_data_type(duckdb_type)
 
     def _exact_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         if column_name not in data.columns:
             return None
-        duckdb_type = data.types[data.columns.index(column_name)]
+        return self._duckdb_type_to_exact_data_type(data.types[data.columns.index(column_name)])
+
+    @staticmethod
+    def _duckdb_type_to_exact_data_type(duckdb_type: Any) -> DataType | None:
         if duckdb_type.id in ("list", "array"):
             return DataType.LIST
         return _DUCKDB_EXACT_TYPE_MAP.get(str(duckdb_type).upper())

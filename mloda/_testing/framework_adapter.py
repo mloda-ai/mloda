@@ -182,7 +182,7 @@ class FrameworkAdapter(ABC):
         if exact == data_type:
             return True
         if exact is None:
-            return None if self.lost_type(result, column) and data_type in self.untyped_may_hold else False
+            return None if data_type in self.untyped_may_hold and self.lost_type(result, column) else False
         # The framework itself reads the column as data_type (a session-zone timestamp as naive), so judge by value.
         return None if instance._extract_column_data_type(result, column) == data_type else False
 
@@ -491,6 +491,9 @@ class SqliteAdapter(_ArrowReadAdapter):
         from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 
         return SqliteFramework
+
+    def _readback_framework(self, result: Any) -> type[ComputeFramework]:
+        return self.compute_framework()
 
     def open(self) -> None:
         import sqlite3

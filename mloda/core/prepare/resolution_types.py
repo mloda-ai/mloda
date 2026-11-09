@@ -31,6 +31,7 @@ EliminationStage = Literal[
     "capability",
     "frameworks_not_enabled",
     "framework_pin",
+    "variant",
     "links",
     "declarations",
     "inputs",

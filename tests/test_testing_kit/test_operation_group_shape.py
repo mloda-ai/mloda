@@ -82,6 +82,14 @@ def make_group_divergence_outside_universe() -> tuple[type[OperationFeatureGroup
     return group, {"impl": impl}
 
 
+def make_unlisted_variant() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
+    group = _make_group_a()
+    impl = _make_impl(group)
+    record = Divergence(kind=DivergenceKind.VARIANT, cause=Cause.BACKEND, variant="skip_nan", reason="skips NaN")
+    setattr(impl, "divergences", (record,))
+    return group, {"impl": impl}
+
+
 def make_one_sided_alias() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
     group = _make_group_a()
     impl = _make_impl(group, divergences=(SUM_SKIPS_NAN,))
@@ -168,6 +176,7 @@ def test_shape_b_group_without_probe_fails_only_declines() -> None:
         (make_divergence_outside_universe, "divergences:", "outside the subtype universe"),
         (make_group_divergence_outside_universe, "divergences:", "outside the subtype universe"),
         (make_empty_reason, "divergences:", "no reason"),
+        (make_unlisted_variant, "divergences:", "skip_nan"),
         (make_one_sided_alias, "aliases:", "declares different divergences for 'sum' and 'mean'"),
         (make_alias_outside_universe, "aliases:", "outside the subtype universe"),
         (make_unsupported_not_declining, "declines:", "does not decline"),
@@ -287,3 +296,11 @@ def test_alias_outside_universe_is_reported_without_implementation() -> None:
     group, _parts = make_no_implementation()
     result = check_operation_group_shape(group, alias_pairs=(("sum", "bogus"),))
     assert any(f.startswith("aliases:") for f in result.failures), result.failures
+
+
+def test_a_listed_variant_passes() -> None:
+    group = _make_group_a()
+    setattr(group, "VARIANTS", frozenset({"skip_nan"}))
+    record = Divergence(kind=DivergenceKind.VARIANT, cause=Cause.BACKEND, variant="skip_nan", reason="skips NaN")
+    _keep = _make_impl(group, divergences=(record,))
+    assert check_operation_group_shape(group).failures == ()

@@ -29,6 +29,8 @@ OPTOY_CHILD_FEATURE = "optoy_child_value"
 OPTOY_BARE_FEATURE = "optoy_bare_value"
 OPTOY_KEY = "optoy_kind"
 OPTOY_PANDAS_OFF = "optoy_pandas_off"
+OPTOY_VARIANT_FEATURE = "optoyvar_value"
+OPTOY_VARIANT = "skip_nan"
 PANDAS_MARK = 1
 PYARROW_MARK = 2
 
@@ -142,6 +144,44 @@ class OpToyPyArrow(Implementation[OpToyFG]):
     ) -> Any:
         cls.served_by.append(group)
         return pa.table({OPTOY_FEATURE: [PYARROW_MARK], OPTOY_CHILD_FEATURE: [PYARROW_MARK]})
+
+
+class OpToyVariantFG(_NamedFeatureGroup):
+    """Operation group whose Pandas implementation follows the skip_nan variant; PyArrow is the default."""
+
+    FEATURE = OPTOY_VARIANT_FEATURE
+    VARIANTS = frozenset({OPTOY_VARIANT})
+
+
+class OpToyVariantPandas(Implementation[OpToyVariantFG]):
+    feature_group = OpToyVariantFG
+    compute_framework = PandasDataFrame
+    divergences = (
+        Divergence(
+            kind=DivergenceKind.VARIANT,
+            cause=Cause.BACKEND,
+            variant=OPTOY_VARIANT,
+            subtypes=frozenset({"sum"}),
+            reason="skips NaN in sum",
+        ),
+    )
+
+    @classmethod
+    def calculate(
+        cls, group: type[OpToyVariantFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        return pd.DataFrame({OPTOY_VARIANT_FEATURE: [PANDAS_MARK]})
+
+
+class OpToyVariantPyArrow(Implementation[OpToyVariantFG]):
+    feature_group = OpToyVariantFG
+    compute_framework = PyArrowTable
+
+    @classmethod
+    def calculate(
+        cls, group: type[OpToyVariantFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        return pa.table({OPTOY_VARIANT_FEATURE: [PYARROW_MARK]})
 
 
 OPTOY_CHAIN_SRC = "optoy_chain_src"

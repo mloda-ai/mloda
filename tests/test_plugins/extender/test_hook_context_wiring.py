@@ -992,6 +992,7 @@ class TestImplementationIdentityOnCalculateFeature:
         assert extender.captured.implementation_version is None
         assert extender.captured.divergences == ()
         assert extender.captured.contract_version is None
+        assert extender.captured.allowed_variants == ()
 
     @pytest.mark.parametrize(
         "framework_name, impl_name", [("PandasDataFrame", "OpToyPandas"), ("PyArrowTable", "OpToyPyArrow")]
@@ -1028,6 +1029,27 @@ class TestImplementationIdentityOnCalculateFeature:
             assert sorted(
                 (r.source.value if r.source else None, r.framework, r.reason) for r in captured.divergences
             ) == sorted(expected)
+
+    @pytest.mark.parametrize("allow", [None, "skip_nan"], ids=["not_allowed", "allowed"])
+    def test_operation_step_carries_the_allowed_variants(self, allow: str | None) -> None:
+        toy = importlib.import_module(
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+        )
+        options: dict[str, Any] = {toy.OPTOY_KEY: "sum"}
+        if allow is not None:
+            options["allow_variants"] = allow
+        extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+
+        mloda.run_all(
+            [Feature(toy.OPTOY_VARIANT_FEATURE, options)],
+            compute_frameworks=["PandasDataFrame", "PyArrowTable"],
+            plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyVariantFG}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert extender.captured is not None
+        assert extender.captured.allowed_variants == (() if allow is None else ("skip_nan",))
 
 
 class TestHookContextCredentialHandles:

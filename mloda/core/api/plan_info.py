@@ -116,6 +116,7 @@ class PlanStep:
 
     ``divergences``: the stamped, scrubbed records of the group and its implementation that apply, else ().
     ``contract_version``: the step's feature group CONTRACT_VERSION, else None.
+    ``allowed_variants``: the sorted rule variants the step's features allow, else ().
 
     ``bound_credential_handle``: the handle a compute step's source binds ("<unnamed>", "<pointer>" for placeholders),
     else None; excluded from equality.
@@ -162,6 +163,7 @@ class PlanStep:
     divergences: tuple[Divergence, ...] = ()
     contract_version: int | None = None
     bound_credential_handle: str | None = field(default=None, compare=False)
+    allowed_variants: tuple[str, ...] = ()
     _data_access_identity: str | None = field(default=None, compare=False)
     _data_access_identity_is_fallback: bool | None = field(default=None, compare=False)
     _neutral: bool = field(default=False, compare=False)
@@ -418,6 +420,7 @@ def build_plan_steps(
                     runtime_parameters=step.features.runtime_parameters,
                     divergences=step.features.divergences,
                     contract_version=step.feature_group.CONTRACT_VERSION,
+                    allowed_variants=step.features.allowed_variants,
                     _match_digests=match_digests(options.group) if options else {},
                     _match_key_id=_key_id(),
                     input_feature_edges={

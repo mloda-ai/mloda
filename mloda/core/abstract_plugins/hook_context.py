@@ -94,6 +94,7 @@ class HookContext:
     implementation_version: str | None = None
     divergences: tuple[Divergence, ...] = ()
     contract_version: int | None = None
+    allowed_variants: tuple[str, ...] = ()
     join_type: str | None = None
     join_keys: tuple[str, ...] | None = None
     asof_config: "AsOfJoinConfig | None" = None

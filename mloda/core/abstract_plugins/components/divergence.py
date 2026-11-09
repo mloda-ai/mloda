@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Any
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 MAX_REASON_LENGTH = 200
 MAX_DOCS_LENGTH = 500
@@ -84,6 +85,16 @@ def _names(label: str, value: object) -> frozenset[str]:
     return names
 
 
+def variant_names(label: str, value: object) -> frozenset[str]:
+    """The validated variant names; raises TypeError or ValueError naming the label."""
+    names = _names(label, value)
+    for name in names:
+        problem = _single_line_problem(label, name)
+        if problem:
+            raise ValueError(problem)
+    return names
+
+
 @dataclass(frozen=True, kw_only=True)
 class Divergence:
     """One declared difference from the reference contract, for a whole plugin, some subtypes or some outputs."""
@@ -152,7 +163,12 @@ def needs_universe(records: object) -> bool:
 
 
 def divergence_problems(
-    owner: str, records: object, universe: frozenset[str], output_parts: tuple[str, ...] | None
+    owner: str,
+    records: object,
+    universe: frozenset[str],
+    output_parts: tuple[str, ...] | None,
+    *,
+    variants: frozenset[str] | None = None,
 ) -> list[str]:
     """Every problem with a divergence declaration; never raises on arbitrary input."""
     problems = structure_problems(owner, records)
@@ -168,6 +184,8 @@ def divergence_problems(
             unknown = sorted(record.outputs - set(output_parts))
             if unknown:
                 problems.append(f"{owner} divergences name {unknown} outside OUTPUT_PARTS")
+        if variants is not None and record.kind is DivergenceKind.VARIANT and record.variant not in variants:
+            problems.append(f"{owner} divergences name variant '{record.variant}' not listed in VARIANTS")
         problems.extend(f"{owner} divergences record {p}" for p in _value_problems(record))
     return problems
 
@@ -177,12 +195,16 @@ def validate_divergences(
     records: object,
     universe: Callable[[], frozenset[str]],
     output_parts: tuple[str, ...] | None,
+    *,
+    variants: frozenset[str] | None = None,
 ) -> None:
     """Raise TypeError for container or entry problems, else ValueError; universe is computed only if needed."""
     shape = structure_problems(owner, records)
     if shape:
         raise TypeError("; ".join(shape))
-    problems = divergence_problems(owner, records, universe() if needs_universe(records) else frozenset(), output_parts)
+    problems = divergence_problems(
+        owner, records, universe() if needs_universe(records) else frozenset(), output_parts, variants=variants
+    )
     if problems:
         raise ValueError("; ".join(problems))
 
@@ -200,3 +222,19 @@ def divergence_order(r: Divergence) -> tuple[Any, ...]:
         r.variant or "",
         r.docs or "",
     )
+
+
+def allowed_variants(options: Any) -> frozenset[str]:
+    """The variant names a feature allows through its allow_variants group option."""
+    value = options.get(DefaultOptionKeys.allow_variants)
+    if value is None:
+        return frozenset()
+    if isinstance(value, str):
+        value = (value,)
+    label = str(DefaultOptionKeys.allow_variants)
+    if not isinstance(value, tuple | list | set | frozenset):
+        raise TypeError(f"{label} must be a string or a collection of strings, got {value!r}")
+    names = _names(label, value) if all(value) else None
+    if names is None or any(_single_line_problem(label, n) for n in names):
+        raise TypeError(f"{label} must hold non-empty single-line strings, got {value!r}")
+    return names

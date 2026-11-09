@@ -1914,6 +1914,17 @@ class TestNonForwardedKeysConstant:
         assert "in_features" not in child.inherited_context_keys
         assert child.group["kg_backend"] == "neo4j"
 
+    def test_allow_variants_is_a_forwarded_group_option(self) -> None:
+        """allow_variants is not excluded and reaches an input feature like any group option."""
+        from mloda.core.abstract_plugins.components.options import NON_FORWARDED_KEYS
+
+        assert "allow_variants" not in NON_FORWARDED_KEYS
+        child = Options()
+
+        child.inherit_from(Options(group={"allow_variants": ("skip_nan",), "kg_backend": "neo4j"}))
+
+        assert child.group["allow_variants"] == ("skip_nan",)
+
 
 class TestInheritFromCrossNamespaceIndependence:
     """

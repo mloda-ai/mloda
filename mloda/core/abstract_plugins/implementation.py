@@ -17,10 +17,12 @@ from mloda.core.abstract_plugins.components.divergence import (
     Divergence,
     DivergenceKind,
     DivergenceSource,
+    allowed_variants,
     divergence_order,
     stamped,
     validate_divergences,
 )
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -151,6 +153,7 @@ class Implementation(ABC, Generic[G]):
             cls.divergences,
             group.subtype_universe,
             group.OUTPUT_PARTS,
+            variants=group.VARIANTS,
         )
         _registry.add(cls)
 
@@ -216,6 +219,35 @@ def step_divergences(
         parts = feature.requested_parts if feature.parts_only else None
         found.update(r for r in records if r.applies_to(subtype, parts))
     return tuple(sorted(found, key=divergence_order))
+
+
+def step_allowed_variants(features: FeatureSet) -> tuple[str, ...]:
+    """The sorted, credential-scrubbed union of the variants the set's features allow."""
+    allowed = frozenset().union(*(allowed_variants(f.options) for f in features.features))
+    return tuple(sorted(scrub_credentials(v) for v in allowed))
+
+
+def unallowed_variants(
+    group: type[FeatureGroup],
+    framework: type[ComputeFramework],
+    implementations: Iterable[type[Implementation[Any]]],
+    feature_name: str,
+    options: Options,
+    part: str | None,
+) -> tuple[Divergence, ...]:
+    """The serving implementation's VARIANT records that apply to the feature and that it does not allow."""
+    if not group.VARIANTS or not is_nominal_subclass(group, OperationFeatureGroup):
+        return ()
+    implementation = serving_implementation(group, framework, implementations)
+    if implementation is None or not any(r.kind is DivergenceKind.VARIANT for r in implementation.divergences):
+        return ()
+    allowed = allowed_variants(options) & group.VARIANTS
+    parts = None if part is None else frozenset({part})
+    return tuple(
+        r
+        for r in implementation.divergences_for(group, feature_name, options, parts=parts)
+        if r.kind is DivergenceKind.VARIANT and r.variant not in allowed
+    )
 
 
 def serving_implementation(

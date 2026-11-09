@@ -38,6 +38,7 @@ from mloda.core.abstract_plugins.implementation import accessible_implementation
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda.core.prepare.identify_feature_group import (
     FeatureResolutionError,
@@ -854,6 +855,21 @@ class TestEliminationStages:
         )
         assert err.result.eliminations[ElimPinFG011] == Elimination(stage="framework_pin", reason=reason)
         assert f"  - ElimPinFG011 (compute framework pin): {reason}" in str(err)
+
+    def test_variant_stage(self) -> None:
+        toy = _op_toy()
+        feature = Feature(toy.OPTOY_VARIANT_FEATURE, {toy.OPTOY_KEY: "sum"}, compute_framework="PandasDataFrame")
+        plugins: FeatureGroupEnvironmentMapping = {toy.OpToyVariantFG: {PandasDataFrame, PyArrowTable}}
+
+        with accessible_implementations({toy.OpToyVariantPandas, toy.OpToyVariantPyArrow}):
+            err = _fail(feature, plugins)
+
+        reason = (
+            "OpToyVariantPandas on PandasDataFrame follows variant 'skip_nan', which this feature does not allow; "
+            'to allow it add {"allow_variants": ("skip_nan",)} to the feature\'s options'
+        )
+        assert err.result.eliminations[toy.OpToyVariantFG] == Elimination(stage="variant", reason=reason)
+        assert f"  - OpToyVariantFG (rule variant): {reason}" in str(err)
 
     def test_links_stage(self) -> None:
         feature = Feature(LINKS_FEATURE)

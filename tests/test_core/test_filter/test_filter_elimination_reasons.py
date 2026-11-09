@@ -98,6 +98,7 @@ SCOPE_STAGE: EliminationStage = "scope"
 CAPABILITY_STAGE: EliminationStage = "capability"
 FRAMEWORKS_NOT_ENABLED_STAGE: EliminationStage = "frameworks_not_enabled"
 FRAMEWORK_PIN_STAGE: EliminationStage = "framework_pin"
+VARIANT_STAGE: EliminationStage = "variant"
 LINKS_STAGE: EliminationStage = "links"
 DECLARATIONS_STAGE: EliminationStage = "declarations"
 INPUTS_STAGE: EliminationStage = "inputs"
@@ -132,6 +133,7 @@ EXPECTED_DEPTH_ORDER: tuple[tuple[EliminationStage, ...], ...] = (
     (SCOPE_STAGE,),
     (CAPABILITY_STAGE, FRAMEWORKS_NOT_ENABLED_STAGE),
     (FRAMEWORK_PIN_STAGE,),
+    (VARIANT_STAGE,),
     (LINKS_STAGE,),
     (DECLARATIONS_STAGE,),
     (INPUTS_STAGE,),

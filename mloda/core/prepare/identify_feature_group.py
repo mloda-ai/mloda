@@ -54,6 +54,7 @@ from mloda.core.abstract_plugins.components.input_data.source_feature_group impo
     concrete_source_groups,
 )
 from mloda.core.abstract_plugins.components.domain import Domain
+from mloda.core.abstract_plugins.components.divergence import allowed_variants
 from mloda.core.abstract_plugins.components.options import Options, reject_reserved_reader_key
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
@@ -98,7 +99,12 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-from mloda.core.abstract_plugins.implementation import current_implementations, loaded_implementations
+from mloda.core.abstract_plugins.implementation import (
+    current_implementations,
+    loaded_implementations,
+    serving_implementation,
+    unallowed_variants,
+)
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 
 import logging
@@ -433,6 +439,7 @@ class IdentifyFeatureGroupClass:
         # Pre-matching guard: a >1 pin fires regardless of whether any candidate matches (the old check
         # sat inside the filter loop, so it never ran when the name matched nothing).
         validate_single_framework_pin(feature)
+        allowed_variants(feature.options)
         validate_source_pointers(feature, accessible_plugins, excluded, data_access_collection)
         refuse_credential_option_values(feature.options)
         self = cls(data_access_collection)
@@ -911,6 +918,12 @@ class IdentifyFeatureGroupClass:
                 self._record_elimination(feature_group, "framework_pin", _with_unavailable_pin(pin_reason, feature))
                 continue
 
+            supported_frameworks = self._allowed_variant_frameworks(
+                feature_group, feature, supported_frameworks, options, requested_part
+            )
+            if not supported_frameworks:
+                continue
+
             if not self._filter_feature_group_by_links(feature_group, links):
                 self._record_elimination(feature_group, "links", "no index column matches the run's links")
                 continue
@@ -923,6 +936,64 @@ class IdentifyFeatureGroupClass:
                     continue
 
             identified[feature_group] = supported_frameworks
+
+    def _allowed_variant_frameworks(
+        self,
+        feature_group: type[FeatureGroup],
+        feature: Feature,
+        supported: set[type[ComputeFramework]],
+        options: Options,
+        part: str | None,
+    ) -> set[type[ComputeFramework]]:
+        """The frameworks left after dropping those that follow a variant the feature does not allow.
+
+        Empty when every fitting framework is blocked; the elimination is recorded here."""
+        if not feature_group.VARIANTS:
+            return supported
+        implementations = list(current_implementations())
+        name = self._hook_name(feature_group, feature)
+        served = {cfw: serving_implementation(feature_group, cfw, implementations) for cfw in supported}
+        pins = feature.implementation_pin
+        pinned = (
+            [
+                impl
+                for impl in implementations
+                if is_nominal_subclass(feature_group, impl.feature_group)
+                and (impl.__name__ in pins or f"{impl.__module__}:{impl.__qualname__}" in pins)
+            ]
+            if pins
+            else []
+        )
+        framework_pin = feature.compute_frameworks
+        fitting = {
+            cfw
+            for cfw, impl in served.items()
+            if (framework_pin is None or cfw in framework_pin)
+            and (not pinned or (impl is not None and is_nominal_subclass(impl, tuple(pinned))))
+        }
+        blocked = {
+            cfw: found
+            for cfw in fitting
+            if (found := unallowed_variants(feature_group, cfw, implementations, str(name), options, part))
+        }
+        if not fitting or not fitting <= set(blocked):
+            return supported - set(blocked)
+        allowed = allowed_variants(options)
+        reasons = []
+        for cfw in sorted(blocked, key=lambda c: c.get_class_name()):
+            names = sorted({str(r.variant) for r in blocked[cfw]})
+            suggestion = ", ".join(f'"{n}"' for n in sorted(allowed | set(names)))
+            if len(allowed | set(names)) == 1:
+                suggestion += ","
+            quoted = ", ".join(f"'{n}'" for n in names)
+            impl = served[cfw]
+            reasons.append(
+                f"{impl.__name__ if impl else cfw.get_class_name()} on {cfw.get_class_name()} follows "
+                f"{'variants' if len(names) > 1 else 'variant'} {quoted}, which this feature does not allow; "
+                f'to allow it add {{"allow_variants": ({suggestion})}} to the feature\'s options'
+            )
+        self._record_elimination(feature_group, "variant", "; ".join(reasons))
+        return set()
 
     def _filter_loop(
         self,

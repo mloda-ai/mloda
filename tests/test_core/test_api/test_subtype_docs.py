@@ -275,6 +275,7 @@ class TestSubDeclDocContractAFeatureGroupInfoFields:
         assert info.subtype_error is None
         assert info.contract_version is None
         assert info.divergences == []
+        assert info.variants == []
 
     def test_keyword_construction_accepts_new_fields(self) -> None:
         info = FeatureGroupInfo(
@@ -367,6 +368,16 @@ class TestFeatureGroupInfoContractVersionAndDivergences:
             ("feature_group", None, "group returns floats"),
             ("implementation", "PandasDataFrame", "skips NaN in sum"),
         ]
+
+    def test_a_group_reports_its_listed_variants_sorted(self) -> None:
+        toy = importlib.import_module(
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+        )
+        docs = get_feature_group_docs(plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyVariantFG}))
+
+        assert [d.name for d in docs] == ["OpToyVariantFG"]
+        assert docs[0].variants == ["skip_nan"]
+        assert self._toy_doc().variants == []
 
     def test_each_serving_implementation_contributes_its_records_once(self) -> None:
         doc = self._toy_doc()

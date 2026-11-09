@@ -254,6 +254,7 @@ def get_feature_group_docs(
                     lambda: fg_class.CONTRACT_VERSION, None, field=f"{cls_name}.CONTRACT_VERSION"
                 ),
                 divergences=_divergence_records(fg_class, implementations),
+                variants=sorted(fg_class.VARIANTS),
             )
         )
 

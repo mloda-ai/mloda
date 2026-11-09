@@ -139,6 +139,7 @@ def dispatch_input_data_load(
         implementation_version=calc_context.implementation_version,
         divergences=calc_context.divergences,
         contract_version=calc_context.contract_version,
+        allowed_variants=calc_context.allowed_variants,
         declared_attributes=safe_field(
             lambda: read_declared_attributes(owner, features),
             None,

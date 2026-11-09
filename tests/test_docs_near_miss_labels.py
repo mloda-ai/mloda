@@ -338,3 +338,9 @@ def test_the_label_table_rows_are_exactly_the_distinct_stage_labels() -> None:
 
     stale = rows - ALLOWED_LABELS
     assert not stale, f"{page} label table names label(s) no stage carries: {sorted(stale)}."
+
+
+def test_the_troubleshooting_page_lists_the_rule_variant_label() -> None:
+    page = DOCS_ROOT / LABEL_TABLE_PAGE
+    assert _STAGE_LABELS["variant"] == "rule variant"
+    assert "rule variant" in page.read_text(encoding="utf-8")

@@ -276,6 +276,7 @@ class TestPolarsLazyDataTypeValidatorSuite(DataTypeValidatorSuite):
     }
 
 
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 @pytest.mark.parametrize(
     "name, expected",
     [

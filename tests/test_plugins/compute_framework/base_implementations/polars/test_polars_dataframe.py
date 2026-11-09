@@ -237,6 +237,7 @@ def polars_frame(name: str) -> Any:
     return pl.DataFrame({"c": pl.Series("c", [], dtype=polars_dtype(name))})
 
 
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 @pytest.mark.parametrize("name, expected", _POLARS_EXACT)
 def test_exact_column_data_type(name: str, expected: str | None) -> None:
     from mloda.user import DataType

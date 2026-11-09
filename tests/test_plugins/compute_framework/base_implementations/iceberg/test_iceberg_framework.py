@@ -446,6 +446,9 @@ class TestIcebergIsMissingColumnError:
         assert IcebergFramework.is_missing_column_error(explanatory) is False
 
 
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
 @pytest.mark.parametrize(
     "arrow_type, folded, exact",
     [

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+from mloda.core.abstract_plugins.components.constants import ANY_OUTPUT_PART
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
@@ -16,7 +17,6 @@ if TYPE_CHECKING:
 
 MAX_REASON_LENGTH = 200
 MAX_DOCS_LENGTH = 500
-ANY_OUTPUT_PART = "*"  # mirrors ANY_OUTPUT_PART in feature_chain_parser
 
 
 class Cause(Enum):

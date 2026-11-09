@@ -7,7 +7,6 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components import divergence as divergence_module
 from mloda.core.abstract_plugins.components.divergence import (
     MAX_DOCS_LENGTH,
     MAX_REASON_LENGTH,
@@ -595,9 +594,6 @@ class TestImplementationDeclaration:
     def test_an_any_output_part_group_accepts_any_output_name_in_its_own_divergences(self) -> None:
         group = _make_group(OUTPUT_PARTS=(ANY_OUTPUT_PART,), DIVERGENCES=(_record(outputs={"col1"}),))
         assert group.DIVERGENCES[0].outputs == frozenset({"col1"})
-
-    def test_the_any_output_part_constant_mirrors_the_parser(self) -> None:
-        assert divergence_module.ANY_OUTPUT_PART == ANY_OUTPUT_PART
 
     def test_the_removed_divergent_mapping_is_not_an_attribute(self) -> None:
         assert not hasattr(Implementation, "divergent")

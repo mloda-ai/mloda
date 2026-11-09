@@ -9,6 +9,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from mloda.core.abstract_plugins.components.constants import ANY_OUTPUT_PART as ANY_OUTPUT_PART
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.match_rejection import (
@@ -37,7 +38,6 @@ logger = logging.getLogger(__name__)
 CHAIN_SEPARATOR = "__"  # Separates chained transformations (source→suffix)
 COLUMN_SEPARATOR = "~"  # Separates multi-column output index
 INPUT_SEPARATOR = "&"  # Separates multiple input features
-ANY_OUTPUT_PART = "*"  # In OUTPUT_PARTS: parts are named at run time
 
 
 def option_key_is_present(spec: PropertySpec, key: str, options: Options) -> bool:

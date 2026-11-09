@@ -178,23 +178,35 @@ def _value_failures(
         if r.kind is not DivergenceKind.VARIANT or r.variant in allowed
     ]
     written = _written(adapter, data, expected, names)
+    wrote = {w[1] for w in written}
     for name in dict.fromkeys(names):
-        if not any(w[1] == name for w in written):
+        if name not in wrote:
             failures.append(f"setup: {parent.__name__} wrote no column for '{name}'")
     if adapter.row_count(expected) == 0:
         skipped.append(f"values: {parent.__name__} returned no rows, nothing compared")
         return failures
+
+    def covered(name: str, parts: frozenset[str]) -> bool:
+        subtype = Implementation.canonical_subtype(subclass, name, chosen)
+        return any(r.applies_to(subtype, parts) for r in records)
+
     present = adapter.column_names(actual)
     for column, name, parts in written:
         if column not in present:
             failures.append(f"values: '{column}' is missing from {subclass.__name__}'s result")
         elif not _same(adapter.column_values(expected, column), adapter.column_values(actual, column)):
-            subtype = Implementation.canonical_subtype(subclass, name, chosen)
-            if not any(r.applies_to(subtype, parts) for r in records):
+            if not covered(name, parts):
                 failures.append(
                     f"values: '{column}' differs from {parent.__name__} "
                     f"and {subclass.__name__} declares no divergence for it"
                 )
+    known = adapter.column_names(expected)
+    for column, name, parts in _written(adapter, data, actual, names):
+        if column not in known and name in wrote and not covered(name, parts):
+            failures.append(
+                f"values: '{column}' is missing from {parent.__name__}'s result "
+                f"and {subclass.__name__} declares no divergence for it"
+            )
     return failures
 
 
@@ -210,7 +222,7 @@ def check_subclass_scope(
 ) -> CheckResult:
     """Check subclass replaces parent only with the selecting options; only these two classes are considered.
 
-    With input_data it also compares the requested output columns with the parent's, assuming identical row order.
+    With input_data it also compares the requested output columns with the parent's both ways, assuming identical row order.
     With require_run, a rule exclusion, a missing serving Implementation, a route block or no rows is a failure.
     """
     failures = _run(subclass, parent, selecting, requests)

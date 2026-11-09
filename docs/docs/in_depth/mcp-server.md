@@ -81,8 +81,9 @@ a source alias. Secret files are read again for every request, so a rotated file
 environment variable needs a restart. A group declares its handle option with `credential_handle_spec`; set it in
 `[mcp.options]`.
 
-A credential that cannot be read is left out. Requests whose plan reads any credential, and explains and describes
-that do not resolve, fail until it is back; other requests keep working. The log names the handle when it becomes
+A credential that cannot be read is left out. Requests whose plan has a source that binds a credential (even one named
+by `data_access_handle`), and explains and describes that do not resolve, fail until it is back; other requests keep
+working, including a group that reads only its declared, readable handles. The log names the handle when it becomes
 unreadable and again when it is back. A column that a file and a credential source both serve may resolve to the file
 meanwhile. The short-value warning appears at startup, when a value changes, and when a handle is readable again.
 `restrict_sources` does not narrow credentials. A database source binds the only registered credential; with several,

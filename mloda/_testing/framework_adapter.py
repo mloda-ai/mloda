@@ -165,6 +165,37 @@ def _polars_has_type(dtype: Any, data_type: DataType) -> bool:
     return bool(dtype == exact[data_type])
 
 
+def _spark_has_type(spark_type: Any, data_type: DataType) -> bool | None:
+    t = require("pyspark.sql.types", "reading Spark test frames")
+
+    if data_type in (DataType.UINT8, DataType.UINT64, DataType.TIMESTAMP_MILLIS):
+        return None
+    if data_type == DataType.LIST:
+        return isinstance(spark_type, t.ArrayType)
+    if data_type == DataType.STRING:
+        return isinstance(spark_type, t.StringType)
+    if data_type == DataType.DECIMAL:
+        return bool(spark_type == t.DecimalType(38, 18))
+    if data_type == DataType.TIMESTAMP_MICROS:
+        if isinstance(spark_type, t.TimestampType):
+            # Deliberately not False: SparkFramework reads a session-zone TimestampType as TIMESTAMP_MICROS, so judge it by value.
+            return None
+        return isinstance(spark_type, t.TimestampNTZType)
+    if data_type == DataType.TIMESTAMP_MICROS_TZ:
+        return isinstance(spark_type, t.TimestampType)
+    exact = {
+        DataType.INT8: t.ByteType(),
+        DataType.INT32: t.IntegerType(),
+        DataType.INT64: t.LongType(),
+        DataType.FLOAT: t.FloatType(),
+        DataType.DOUBLE: t.DoubleType(),
+        DataType.BOOLEAN: t.BooleanType(),
+        DataType.BINARY: t.BinaryType(),
+        DataType.DATE: t.DateType(),
+    }
+    return bool(spark_type == exact[data_type])
+
+
 class FrameworkAdapter(ABC):
     """Builds frames for one compute framework from typed data and reads them back."""
 
@@ -663,11 +694,13 @@ class IcebergAdapter(_ArrowReadAdapter):
 class SparkAdapter(_ArrowReadAdapter):
     """Borrows the caller's active SparkSession, never starts or stops one; Spark rejects unsigned integer types."""
 
-    # has_type stays None: a Spark-type mapping is not implemented (no unsigned or millisecond types in Spark).
     capabilities = AdapterCapabilities(typed_columns=True)
 
     def __init__(self) -> None:
         self._session: Any = None
+
+    def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
+        return _spark_has_type(self.column_type(result, column), data_type)
 
     @property
     def connection(self) -> Any:

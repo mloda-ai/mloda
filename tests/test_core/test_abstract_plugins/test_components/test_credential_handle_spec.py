@@ -254,6 +254,46 @@ class ChsReqOptChildFG(ChsReqParentFG):
     PROPERTY_MAPPING = {"chs_req_handle": credential_handle_spec("Optional handle.", default=None)}
 
 
+class ChsReqSameKeyLoserFG(ChsSource):
+    PROPERTY_MAPPING = {"chs_req_handle": credential_handle_spec("Same key, optional, no framework.", default=None)}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rq_a"}
+
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
+    ) -> bool:
+        return False
+
+
+class ChsReqFallbackFG(ChsSource):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rq_a"}
+
+
+class ChsPatternFG(FeatureChainParserMixin, ChsSource):
+    PREFIX_PATTERN = r".*__chspat$"
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {"chs_pat_handle": credential_handle_spec("Pattern handle.")}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class ChsPatternFallbackFG(ChsSource):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"x__chspat"}
+
+
 class ChsReqSameOptFG(ChsSource):
     PROPERTY_MAPPING = {"chs_req_handle": credential_handle_spec("Same key, optional.", default=None)}
 
@@ -965,6 +1005,11 @@ def test_a_credential_handle_spec_can_never_be_a_runtime_parameter() -> None:
         dataclasses.replace(credential_handle_spec("Handle."), runtime=True)
 
 
+def test_deferred_binding_is_fixed_on_a_credential_handle_spec() -> None:
+    with pytest.raises(ValueError, match="deferred_binding"):
+        dataclasses.replace(credential_handle_spec("Handle."), deferred_binding=True)
+
+
 class TestMissingHandleKeyAborts:
     """A required handle key that is absent aborts planning instead of falling back to another group."""
 
@@ -1032,6 +1077,25 @@ class TestMissingHandleKeyAborts:
         assert _steps(session, ChsReqSameOptFG)
         assert not _steps(session, ChsReqParentFG)
 
+    def test_a_same_key_group_that_loses_on_frameworks_does_not_suppress_the_abort(self) -> None:
+        feature = Feature("chs_rq_a", options={"chs_req_handel": "good"})
+
+        message = _abort(_prepare, [feature], None, ChsReqParentFG, ChsReqSameKeyLoserFG, ChsReqFallbackFG)
+
+        assert "chs_req_handle" in message
+        assert "ChsReqParentFG" in message
+
+    @pytest.mark.parametrize("with_fallback", [False, True])
+    def test_a_name_pattern_group_aborts_on_a_misspelled_handle_key(self, with_fallback: bool) -> None:
+        groups: list[type[FeatureGroup]] = [ChsPatternFG]
+        if with_fallback:
+            groups.append(ChsPatternFallbackFG)
+
+        message = _abort(_prepare, [Feature("x__chspat", options={"chs_pat_handel": "good"})], None, *groups)
+
+        assert "chs_pat_handle" in message
+        assert "ChsPatternFG" in message
+
     def test_a_group_missing_two_handle_keys_names_both(self) -> None:
         message = _refusal(_prepare, [Feature("chs_two_a")], None, ChsTwoHandleFG)
 
@@ -1082,10 +1146,6 @@ class TestMissingHandleKeyAborts:
         assert HANDLE_KEY in message
         assert group.__name__ in message
         assert "requires credential handle option" in message
-
-    def test_deferred_binding_is_fixed_on_a_credential_handle_spec(self) -> None:
-        with pytest.raises(ValueError, match="deferred_binding"):
-            dataclasses.replace(credential_handle_spec("Handle."), deferred_binding=True)
 
     def test_a_missing_plain_required_key_keeps_the_fallback(self) -> None:
         session = _prepare([Feature("chs_plain_a")], None, _plugins(ChsPlainRequiredFG, ChsFallbackFG))
@@ -1138,6 +1198,12 @@ _VALUE_SHAPES = [
     pytest.param(lambda: {Credential(token=SECRET): 1}, True, id="dict-key"),
     pytest.param(lambda: {Credential(token=SECRET)}, True, id="set"),
     pytest.param(lambda: frozenset({Credential(token=SECRET)}), True, id="frozenset"),
+    pytest.param(lambda: [{"x": 1}.items(), {"y": Credential(token=SECRET)}.items()], True, id="items-views-in-a-list"),
+    pytest.param(
+        lambda: {"first": {"x": 1}.items(), "second": {"y": [Credential(token=SECRET)]}.items()},
+        True,
+        id="items-views-in-a-dict",
+    ),
 ]
 
 
@@ -1243,6 +1309,7 @@ class TestCredentialValuesInOptionsAreRefused:
             pytest.param(lambda: Credential(token=SECRET), id="credential"),
             pytest.param(lambda: RegisteredCredential({"token": SECRET}), id="registered"),
             pytest.param(lambda: [Credential(token=SECRET)], id="list"),
+            pytest.param(lambda: {"hmac": SECRET}, id="plain-dict"),
         ],
     )
     def test_a_pointer_key_on_a_non_source_root_is_refused_naming_key_type_and_group(

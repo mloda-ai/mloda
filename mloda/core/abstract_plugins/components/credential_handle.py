@@ -214,7 +214,7 @@ def _children(value: Any) -> list[Any]:
     return []
 
 
-def _credential_hit(value: Any, seen: set[int]) -> str | None:
+def _credential_hit(value: Any, seen: dict[int, Any]) -> str | None:
     """The credential type name found in value, descending containers, or None."""
     from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
     from mloda.core.abstract_plugins.components.credential_access import ResolvedCredential
@@ -223,7 +223,7 @@ def _credential_hit(value: Any, seen: set[int]) -> str | None:
         return type(value).__name__
     if id(value) in seen:
         return None
-    seen.add(id(value))
+    seen[id(value)] = value
     for child in _children(value):
         hit = _credential_hit(child, seen)
         if hit is not None:
@@ -241,7 +241,7 @@ def refuse_credential_option_values(options: Options) -> None:
 
     pointer_keys: Any = None
     for key, value in [*options.group.items(), *options.context.items()]:
-        hit = _credential_hit(value, set())
+        hit = _credential_hit(value, {})
         if hit is None:
             continue
         if pointer_keys is None:
@@ -267,10 +267,13 @@ def refuse_unread_pointer_credentials(feature_group: type[FeatureGroup], options
         source = sources.get(key)
         if source is None or not options.is_own(key):
             continue
-        hit = _credential_hit(value, set())
-        if hit is None or is_nominal_subclass(feature_group, source):
+        hit = _credential_hit(value, {})
+        if is_nominal_subclass(feature_group, source):
             continue
-        holder = hit if type(value).__name__ == hit else f"{type(value).__name__} holding a {hit}"
+        if hit is None and not isinstance(value, Mapping):
+            continue
+        what = hit or "credential"
+        holder = what if type(value).__name__ == what else f"{type(value).__name__} holding a {what}"
         raise _refuse(
             f"Option '{key}' holds a {holder} but {feature_group.__name__} is not the source group {key}, so the "
             f"credential would reach a group that never reads it. Register the credential in the "

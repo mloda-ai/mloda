@@ -150,6 +150,17 @@ class TestReservedHandleNames:
         assert _RESERVED_REASONS[name] in str(exc.value)
         assert name not in dac.handles()
 
+    @pytest.mark.parametrize("name", list(_RESERVED_REASONS))
+    def test_with_credentials_refuses_a_reserved_name(self, name: str) -> None:
+        dac = DataAccessCollection()
+
+        with pytest.raises(ValueError, match="reserved") as exc:
+            dac.with_credentials({name: {"host": "h"}})
+
+        assert name in str(exc.value)
+        assert _RESERVED_REASONS[name] in str(exc.value)
+        assert name not in dac.handles()
+
     def test_an_ordinary_name_is_still_accepted(self) -> None:
         dac = DataAccessCollection(credentials={"pointer": {"host": "h"}})
         dac.add_connection("unnamed", object())

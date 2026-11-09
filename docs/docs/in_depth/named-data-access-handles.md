@@ -244,7 +244,7 @@ fails, in `prepare()`, `explain()` and `run_all()` alike, with an error naming t
 credential value) when:
 
 - the key is set in `Options.context` instead of the group options;
-- a required handle key (no default) is absent from the options of a group that owns the feature name, even when another group matches the feature; the message names a close option key when one exists. A matching group suppresses the refusal only when it is a strict subclass of the refusing group, declares the same missing key, or declares a handle key the request itself set (a forwarded key counts, a default does not). Groups matched by name pattern or config path never refuse on a missing handle, so a misspelled key there falls through silently;
+- a matched group whose required handle is absent (for example one with an overridden matcher), or a required handle key (no default) absent from the options of a group that owns the feature name, even when another group matches the feature; the message names a close option key when one exists. A matching group suppresses the refusal only when it is a strict subclass of the refusing group, declares the same missing key, or declares a handle key the request itself set (a forwarded key counts, a default does not). Groups matched by config path never refuse on a missing handle, so a misspelled key there falls through silently;
 - the value is not a non-empty `str`;
 - the handle is not registered, or is registered under another kind (the message lists the named credential handles);
 - the handle is an unnamed credential (a declared handle must be named);
@@ -284,7 +284,7 @@ A credential is never an option value. A `Credential`, `RegisteredCredential` or
 non-pointer option is refused at plan time, also nested in mappings, mapping views, sets, sequences (not `str`, bytes,
 `range` or `array`) and dataclass instances. Iterators and generators are not walked. The source pointer form
 (`{"SqliteFG": Credential(...)}`) still works, except on a root feature whose group is not the owning source (or a
-subclass of it). A consumer holding a pointer with no source below it, and a pointer merged from an inherited copy,
+subclass of it); there any pointer value is refused, a plain mapping included. A consumer holding a pointer with no source below it, and a pointer merged from an inherited copy,
 are not refused.
 A bare `str` secret under an ordinary key cannot be detected, so do not do it.
 

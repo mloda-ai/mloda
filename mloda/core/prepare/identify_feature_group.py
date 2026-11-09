@@ -956,10 +956,12 @@ class IdentifyFeatureGroupClass:
             self._validated_handles.add(fg)
             validate_credential_handles(fg, self._matched_options[fg], data_access_collection)
 
-    def _raise_uncovered_missing_handle_abort(self, feature: Feature) -> None:
+    def _raise_uncovered_missing_handle_abort(
+        self, feature: Feature, identified: FeatureGroupEnvironmentMapping
+    ) -> None:
         """Raise the first missing-handle abort no matched group covers (subclass, same key, or requested handle)."""
         requested = feature.options.group.keys()
-        matched = self._criteria_matched_feature_groups
+        matched = identified
         for fg in sorted(self._missing_handle_aborts, key=_candidate_sort_key):
             absent, abort = self._missing_handle_aborts[fg]
             covered = any(
@@ -1044,7 +1046,7 @@ class IdentifyFeatureGroupClass:
                     # Outside the scope, so the chain check stacks like an eager one and a cycle cannot see it unanswered.
                     check.answer = any(self._computes(fg, feature) for fg in sorted(narrowed, key=_candidate_sort_key))
         self._validate_new_handles(identified, data_access_collection)
-        self._raise_uncovered_missing_handle_abort(feature)
+        self._raise_uncovered_missing_handle_abort(feature, identified)
         _identified_feature_groups = identified
 
         candidates = set(_identified_feature_groups)

@@ -168,6 +168,8 @@ class DataAccessCollection:
 
     def with_credentials(self, credentials: Mapping[str, Any]) -> "DataAccessCollection":
         """A copy with the given handles' credentials replaced; this collection is never modified."""
+        for handle in credentials:
+            _refuse_reserved_handle(handle)
         duplicate = self.copy()
         normalized = cast(dict[str, Any], self._normalize_credentials(dict(credentials)))
         duplicate.credentials.update(normalized)

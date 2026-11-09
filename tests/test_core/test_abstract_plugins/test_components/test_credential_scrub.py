@@ -471,18 +471,6 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
     ("dotted_s3a_secret_key", "fs.s3a.secret.key=X1234567", ["X1234567"], ["fs.s3a.secret.key="]),  # nosec B105
     ("dotted_db_password_keyword", "db.password=hunter2z9", ["hunter2z9"], ["db.password="]),
     ("dotted_db_password_dict", "{'db.password': 'hunter2z9'}", ["hunter2z9"], ["'db.password'"]),
-    (
-        "multiline_json_password",
-        '{\n  "user": "u",\n  "password": "hunter2z9"\n}',
-        ["hunter2z9"],
-        ['"user": "u"'],
-    ),
-    (
-        "multiline_pprint_password",
-        "{'user': 'u',\n 'password': 'hunter2z9'}",
-        ["hunter2z9"],
-        ["'user': 'u'"],
-    ),
     ("odbc_pwd_path_like_value", "UID=sa;PWD=/Secret1x;Server=h", ["/Secret1x", "Secret1x"], ["UID=sa", "Server=h"]),
     ("odbc_pwd_after_brace", "{PWD=/Secret1x;a=b}", ["Secret1x"], []),
     ("pwd_single_segment_path", "PWD=/Secret1x", ["Secret1x"], []),
@@ -553,6 +541,13 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
         "{'user': 'u',\n 'password': 'hunter2z9'}",
         "{'user': 'u',\n 'password': '***'}",
     ),
+    ("closer_quote_before_colon_kept", "pwd='}':\"&", "pwd='***':\"&"),
+    ("closer_brace_before_comma_kept", "pwd={,},&", "pwd={***},&"),
+    ("closer_single_quote_dropped_at_end", "password='x'", "password=***"),
+    ("closer_single_quote_dropped_before_semicolon", "password='x';", "password=***;"),
+    ("closer_single_quote_dropped_before_space", "password='x' ", "password=*** "),
+    ("closer_double_quote_dropped_at_end", 'password="x"', "password=***"),
+    ("closer_brace_dropped_at_end", "password={x}", "password=***"),
     ("private_use_char_in_input_is_replaced", "a\ue001bcd rest", "a\ufffdbcd rest"),
 ]
 
@@ -799,22 +794,6 @@ def test_scrub_credentials_is_idempotent(text: str) -> None:
     once = scrub_credentials(text)
     twice = scrub_credentials(once)
     assert once == twice
-
-
-@pytest.mark.parametrize(
-    "text,expected",
-    [
-        ("pwd='}':\"&", "pwd='***':\"&"),
-        ("pwd={,},&", "pwd={***},&"),
-        ("password='x'", "password=***"),
-        ("password='x';", "password=***;"),
-        ("password='x' ", "password=*** "),
-        ('password="x"', "password=***"),
-        ("password={x}", "password=***"),
-    ],
-)
-def test_scrub_credentials_reemits_closers_only_before_a_value_char(text: str, expected: str) -> None:
-    assert scrub_credentials(text) == expected
 
 
 def _assert_scrubs_linearly(build: Callable[[int], str], n: int, what: str) -> str:

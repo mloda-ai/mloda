@@ -492,8 +492,18 @@ class TestPlanTimeRefusals:
 
         assert results[0]["chs_vault_a"].tolist() == [1, 2, 3]
 
-    def test_bytes_under_a_safe_key_are_accepted(self) -> None:
-        dac = _dac(**{"vault-main": {"key": SECRET, "path": BYTES_SECRET}})
+    @pytest.mark.parametrize(
+        "credentials,public_keys",
+        [
+            ({"key": SECRET, "path": BYTES_SECRET}, None),
+            ({"key": SECRET, "chs_pub_blob": BYTES_SECRET}, {"chs_pub_blob"}),
+        ],
+        ids=["safe_key", "declared_public_key"],
+    )
+    def test_bytes_under_a_safe_or_public_key_are_accepted(
+        self, credentials: dict[str, Any], public_keys: set[str] | None
+    ) -> None:
+        dac = DataAccessCollection(credentials={"vault-main": credentials}, public_credential_keys=public_keys)
 
         results = mloda.run_all(
             [_vault("vault-main")],
@@ -514,21 +524,6 @@ class TestPlanTimeRefusals:
         assert "vault-main" in message
         assert "host" in message
         assert BYTES_SECRET.decode() not in message
-
-    def test_bytes_under_a_declared_public_key_are_accepted(self) -> None:
-        dac = DataAccessCollection(
-            credentials={"vault-main": {"key": SECRET, "chs_pub_blob": BYTES_SECRET}},
-            public_credential_keys={"chs_pub_blob"},
-        )
-
-        results = mloda.run_all(
-            [_vault("vault-main")],
-            compute_frameworks=[PandasDataFrame],
-            data_access_collection=dac,
-            plugin_collector=_plugins(ChsVaultFG),
-        )
-
-        assert results[0]["chs_vault_a"].tolist() == [1, 2, 3]
 
     @pytest.mark.parametrize(
         "credential", [{"chs_blob": memoryview(BYTES_SECRET)}, {"password": [memoryview(BYTES_SECRET)]}]

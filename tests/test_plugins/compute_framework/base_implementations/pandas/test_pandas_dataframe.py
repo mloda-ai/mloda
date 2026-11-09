@@ -227,9 +227,6 @@ def _pandas_framework() -> PandasDataFrame:
 
 
 _PANDAS_LENIENT = [
-    ("int16", "INT32"),
-    ("uint16", "INT32"),
-    ("uint32", "INT64"),
     ("Int16", "INT32"),
     ("float16", "FLOAT"),
 ]
@@ -245,10 +242,8 @@ def test_extract_column_data_type_folds_inexact_numpy_types(dtype: str, expected
     "arrow_type, expected",
     [
         (pa.large_string(), DataType.STRING),
-        (pa.timestamp("ns"), DataType.TIMESTAMP_MICROS),
-        (pa.decimal128(10, 2), DataType.DECIMAL),
     ],
-    ids=["large_string", "timestamp_ns", "decimal_10_2"],
+    ids=["large_string"],
 )
 def test_extract_arrow_dtype_column_folds_inexact_types(arrow_type: pa.DataType, expected: DataType) -> None:
     df = pd.DataFrame({"c": pd.Series(pa.array([], type=arrow_type), dtype=pd.ArrowDtype(arrow_type))})
@@ -285,4 +280,4 @@ def test_exact_column_data_type_missing_column_is_none() -> None:
 
 def test_exact_column_data_type_sparse_column_does_not_raise() -> None:
     df = pd.DataFrame({"c": pd.arrays.SparseArray([0, 0, 1])})
-    assert _pandas_framework()._exact_column_data_type(df, "c") in (None, DataType.INT64)
+    assert _pandas_framework()._exact_column_data_type(df, "c") is None

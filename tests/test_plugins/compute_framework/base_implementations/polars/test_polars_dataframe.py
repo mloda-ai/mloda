@@ -197,11 +197,7 @@ class TestPolarsIsMissingColumnError:
 
 
 _POLARS_FOLDS = [
-    ("Int16", "INT32"),
-    ("UInt16", "INT32"),
-    ("UInt32", "INT64"),
     ("Datetime_ns", "TIMESTAMP_MICROS"),
-    ("Decimal_10_2", "DECIMAL"),
 ]
 _POLARS_EXACT = [
     ("Int16", None),

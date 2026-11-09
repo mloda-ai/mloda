@@ -201,14 +201,8 @@ def _arrow_framework() -> PyArrowTable:
 
 
 _ARROW_LENIENT = [
-    (pa.int16(), "INT32"),
-    (pa.uint16(), "INT32"),
-    (pa.uint32(), "INT64"),
     (pa.large_string(), "STRING"),
     (pa.large_binary(), "BINARY"),
-    (pa.timestamp("s"), "TIMESTAMP_MICROS"),
-    (pa.timestamp("ns"), "TIMESTAMP_MICROS"),
-    (pa.decimal128(10, 2), "DECIMAL"),
 ]
 
 

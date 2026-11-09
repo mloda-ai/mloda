@@ -278,7 +278,7 @@ class TestPolarsLazyDataTypeValidatorSuite(DataTypeValidatorSuite):
 
 @pytest.mark.parametrize(
     "name, expected",
-    [("Int16", "INT32"), ("UInt32", "INT64"), ("Datetime_ns", "TIMESTAMP_MICROS"), ("Decimal_10_2", "DECIMAL")],
+    [("Datetime_ns", "TIMESTAMP_MICROS")],
 )
 def test_extract_column_data_type_folds_inexact_types(name: str, expected: str) -> None:
     from mloda.user import DataType

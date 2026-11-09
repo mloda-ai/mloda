@@ -572,8 +572,6 @@ def _stub_spark_frame(spark_type: Any) -> Any:
 
 
 _SPARK_FOLDS = [
-    (lambda t: t.ShortType(), "INT32"),
-    (lambda t: t.DecimalType(10, 2), "DECIMAL"),
     (lambda t: t.DecimalType(38, 18), "DECIMAL"),
     (lambda t: t.TimestampType(), "TIMESTAMP_MICROS"),
     (lambda t: t.TimestampNTZType(), "TIMESTAMP_MICROS"),

@@ -606,6 +606,8 @@ def test_benign_url_default_and_deployment_environment_pass() -> None:
             "agg": PropertySpec("Aggregation.", default="mean"),
             "conn_defaults": PropertySpec("Connection defaults.", default={"password": ""}),
             "template": PropertySpec("Template.", default="password="),
+            "limits": PropertySpec("Limits.", default="max_token=5"),
+            "cwd": PropertySpec("Working directory.", default="PWD=/home/runner/work"),
         }
     )
     assert check_feature_group_shape(group).failures == ()

@@ -18,6 +18,7 @@ from mloda.core.abstract_plugins.components.credential_handle import CredentialH
 from mloda.core.abstract_plugins.components.credential_leaves import iter_credential_leaves
 from mloda.core.abstract_plugins.components.credential_scrub import (
     _KEYWORD_PATTERN,
+    _keyword_repl,
     _SECRET_KEY,
     scrub_credentials,
     strip_uri_userinfo,
@@ -197,8 +198,7 @@ def _masked_default(default: Any) -> bool:
         if scrub_credentials(bare).count("***") > bare.count("***") or strip_uri_userinfo(s) != s:
             return True
         for m in _KEYWORD_PATTERN.finditer(s):
-            value = m.group(0)[len(m.group("keyword") + m.group("sep")) :]
-            if value and value != "***":
+            if m["value"] and m["value"] != "***" and _keyword_repl(m) != m[0]:
                 return True
     return False
 

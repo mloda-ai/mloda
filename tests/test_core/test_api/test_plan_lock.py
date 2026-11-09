@@ -659,6 +659,7 @@ def test_plan_structure_hash_ignores_non_lock_fields() -> None:
             step_uuid=uuid.uuid4(),
             implementation_version="v1",
             feature_group_version="g1",
+            bound_credential_handle="db-main",
         ),
         dataclasses.replace(base[1], join_token=uuid.uuid4()),
     ]
@@ -932,7 +933,7 @@ def test_plan_content_hash_of_a_real_handle_plan_equals_the_hash_with_the_field_
 ) -> None:
     steps = _explain_two_handles() if plan_kind == "declared" else _explain_sqlite(tmp_path)
 
-    cleared = [dataclasses.replace(s, credential_handles=()) for s in steps]
+    cleared = [dataclasses.replace(s, credential_handles=(), bound_credential_handle=None) for s in steps]
 
     assert plan_content_hash(steps) == plan_content_hash(cleared)
     assert plan_structure_hash(steps) != plan_structure_hash(cleared)
@@ -964,6 +965,7 @@ def test_the_lock_of_a_database_source_plan_names_the_bound_handle(tmp_path: Pat
 
     (compute,) = [s for s in steps if s.step_kind == "compute"]
     assert compute.credential_handles == ("db-main",)
+    assert compute.bound_credential_handle == "db-main"
     assert json.loads(_lock_text(steps))["compute"][0]["credential_handles"] == ["db-main"]
 
 

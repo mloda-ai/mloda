@@ -320,6 +320,7 @@ class ExecutionPlan:
                 )
                 step.features.runtime_parameters = tuple(sorted(runtime_parameter_keys(step.feature_group)))
                 bound = self._bound_credential_handle(step, self.data_access_collection)
+                step.features.bound_credential_handle = bound
                 step.features.credential_handles = (
                     step.credential_handles
                     if bound is None or bound in step.credential_handles

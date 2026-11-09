@@ -964,11 +964,13 @@ class TestSuccess:
             source_feature_group=None,
             source_compute_framework=None,
             credential_handles=("vault-a", "vault-b"),
+            bound_credential_handle="vault-a",
         )
 
         record = _step_record(1, step, None)
 
         assert "credential_handles" not in record
+        assert "bound_credential_handle" not in record
         assert set(record) == STEP_KEYS
         assert "vault-a" not in json.dumps(record)
 

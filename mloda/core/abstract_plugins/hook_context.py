@@ -107,6 +107,7 @@ class HookContext:
     result_attributes: dict[str, str | int | float | bool] | None = None
     failed_rows: tuple[FailedRows, ...] = ()
     credential_handles: tuple[str, ...] = ()
+    bound_credential_handle: str | None = None
     credentials_read: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:

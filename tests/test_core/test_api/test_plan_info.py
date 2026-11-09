@@ -653,6 +653,7 @@ class TestPlanStepDataclass:
             "feature_group_hash",
             "leaves_connection",
             "credential_handles",
+            "bound_credential_handle",
             "runtime_parameters",
             "divergences",
             "contract_version",

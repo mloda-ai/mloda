@@ -152,9 +152,9 @@ def make_changed_with_inherited_record() -> Pair:
     return parent, _gated_subclass(parent, "variant", _calc(5))
 
 
-def make_changed_with_variant_record() -> Pair:
+def make_changed_with_variant_record(calc: Calc | None = None) -> Pair:
     parent = make_parent(variants=frozenset({"v"}))
-    return parent, _gated_subclass(parent, "variant", _calc(5), (CHANGED_VARIANT,))
+    return parent, _gated_subclass(parent, "variant", calc or _calc(5), (CHANGED_VARIANT,))
 
 
 def make_broken_run() -> Pair:
@@ -347,6 +347,12 @@ def test_well_scoped_subclass_passes(data: TypedTestData | None) -> None:
             "missing from GatedChild",
         ),
         (make_changed_with_variant_record, "values:", DATA, "differs"),
+        (
+            functools.partial(make_changed_with_variant_record, _calc(2, extra=7)),
+            "values:",
+            DATA,
+            "missing from ScopeParent",
+        ),
         (make_broken_run, "values:", DATA, "run raised"),
     ],
 )
@@ -372,6 +378,10 @@ def test_broken_pair_fails_only_its_sub_check(
             functools.partial(make_changed, _calc(2, 3, extra=7), (CHANGED,), run_time_parts=True),
             id="added-run-time-part",
         ),
+        pytest.param(
+            functools.partial(make_changed, _calc(2, 3, extra=7), (ADDED_PART,), run_time_parts=True),
+            id="added-run-time-part-scoped",
+        ),
     ],
 )
 def test_declared_divergence_excuses_changed_column(make: Callable[[], Pair]) -> None:
@@ -379,8 +389,12 @@ def test_declared_divergence_excuses_changed_column(make: Callable[[], Pair]) ->
     assert check_subclass_scope(sub, parent, SELECTING, input_data=DATA).failures == ()
 
 
-def test_allowed_variant_record_excuses_changed_column() -> None:
-    parent, sub = make_changed_with_variant_record()
+@pytest.mark.parametrize(
+    "calc",
+    [pytest.param(_calc(5), id="changed"), pytest.param(_calc(2, extra=7), id="added")],
+)
+def test_allowed_variant_record_excuses_changed_column(calc: Calc) -> None:
+    parent, sub = make_changed_with_variant_record(calc)
     assert check_subclass_scope(sub, parent, ALLOWING, input_data=DATA).failures == ()
 
 

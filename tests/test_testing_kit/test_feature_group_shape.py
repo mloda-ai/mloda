@@ -16,6 +16,8 @@ from mloda._testing.framework_adapter import (
     PythonDictAdapter,
 )
 from mloda._testing.typed_data import TypedTestData
+from mloda._testing.feature_group_shape import _route_block
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda._testing.feature_group_shape import assert_feature_group_shape, check_feature_group_shape
 from mloda.core.abstract_plugins.components.credential_handle import credential_handle_spec
@@ -268,8 +270,11 @@ def make_operation_group(
     names: frozenset[str] = frozenset({"rg_out"}),
     variants: frozenset[str] = frozenset(),
     subtypes: bool = False,
+    output_parts: tuple[str, ...] | None = None,
 ) -> type[FeatureGroup]:
     class OperationGroup(OperationFeatureGroup):
+        if output_parts is not None:
+            OUTPUT_PARTS = output_parts
         if variants:
             VARIANTS = variants
         if subtypes:
@@ -1162,3 +1167,131 @@ def test_encoding_feature_group_part_columns_are_found_on_pandas() -> None:
     result = check_feature_group_shape(EncodingFeatureGroup, base, input_data=data, adapter=PandasAdapter())
     assert not any(f.startswith(("outputs:", "determinism:")) for f in result.failures), result.failures
     assert not any(n.startswith("run:") for n in result.notes), result.notes
+
+
+_RouteCase = tuple[type[FeatureGroup], str, Options, str]
+_MakeImpl = Callable[..., type[Implementation[Any]]]
+
+
+def _route_routed(mi: _MakeImpl) -> _RouteCase:
+    group = make_operation_group()
+    _serve_with(mi, group, "ok")
+    return group, "rg_out", Options(), "routed"
+
+
+def _route_accepts_declines(mi: _MakeImpl) -> _RouteCase:
+    group = make_operation_group()
+    _decline(_serve_with(mi, group, "ok"), [])
+    return group, "rg_out", Options(), "capability"
+
+
+def _route_subtype_unsupported(mi: _MakeImpl) -> _RouteCase:
+    group = make_operation_group(subtypes=True)
+    setattr(_serve_with(mi, group, "ok"), "supported", frozenset({"median"}))
+    return group, "rg_out", SUM, "capability"
+
+
+def _route_variant_unallowed(mi: _MakeImpl) -> _RouteCase:
+    group = make_operation_group(variants=frozenset({"v"}))
+    setattr(_serve_with(mi, group, "ok"), "divergences", (VARIANT_RECORD,))
+    return group, "rg_out", Options(), "variant"
+
+
+def _route_variant_allowed(mi: _MakeImpl) -> _RouteCase:
+    group = make_operation_group(variants=frozenset({"v"}))
+    setattr(_serve_with(mi, group, "ok"), "divergences", (VARIANT_RECORD,))
+    return group, "rg_out", Options(group={str(DefaultOptionKeys.allow_variants): "v"}), "routed"
+
+
+def _part_impl(mi: _MakeImpl, group: type[FeatureGroup]) -> None:
+    def accepts(cls: Any, feature_name: str, options: Options, *, part: str | None = None) -> bool:
+        return feature_name == "rg_out" and part != "b"
+
+    setattr(_serve_with(mi, group, "ok"), "accepts", classmethod(accepts))
+
+
+def _route_part_routed(mi: _MakeImpl) -> _RouteCase:
+    group = make_operation_group(output_parts=("a", "b"))
+    _part_impl(mi, group)
+    return group, "rg_out~a", Options(), "routed"
+
+
+def _route_part_declined(mi: _MakeImpl) -> _RouteCase:
+    group = make_operation_group(output_parts=("a", "b"))
+    _part_impl(mi, group)
+    return group, "rg_out~b", Options(), "capability"
+
+
+def _route_undeclared_part_routed(mi: _MakeImpl) -> _RouteCase:
+    group = make_operation_group(names=frozenset({"rg_out~x"}))
+    _serve_with(mi, group, "ok")
+    return group, "rg_out~x", Options(), "routed"
+
+
+def _route_undeclared_part_declined(mi: _MakeImpl) -> _RouteCase:
+    group = make_operation_group(names=frozenset({"rg_out~x"}))
+    _decline(_serve_with(mi, group, "ok"), [])
+    return group, "rg_out~x", Options(), "capability"
+
+
+def _route_matched_options(mi: _MakeImpl) -> _RouteCase:
+    base = make_operation_group()
+
+    class Marking(base):  # type: ignore[valid-type, misc]
+        @classmethod
+        def match_feature_group_criteria(
+            cls, feature_name: Any, options: Options, data_access_collection: Any = None
+        ) -> bool:
+            matched = super().match_feature_group_criteria(feature_name, options, data_access_collection)
+            if matched:
+                options.add_to_group("probed", "yes")
+            return bool(matched)
+
+    def accepts(cls: Any, feature_name: str, options: Options, *, part: str | None = None) -> bool:
+        return bool(options.get("probed") == "yes")
+
+    setattr(_serve_with(mi, Marking, "ok"), "accepts", classmethod(accepts))
+    return Marking, "rg_out", Options(), "routed"
+
+
+def _route_raising_accepts(mi: _MakeImpl) -> _RouteCase:
+    group = make_operation_group()
+    _decline(_serve_with(mi, group, "ok"), [], raises=True)
+    return group, "rg_out", Options(), "raised"
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        _route_routed,
+        _route_accepts_declines,
+        _route_subtype_unsupported,
+        _route_variant_unallowed,
+        _route_variant_allowed,
+        _route_part_routed,
+        _route_part_declined,
+        _route_undeclared_part_routed,
+        _route_undeclared_part_declined,
+        _route_matched_options,
+        _route_raising_accepts,
+    ],
+)
+def test_route_block_agrees_with_the_planner(
+    make_implementation: _MakeImpl, case: Callable[[_MakeImpl], _RouteCase]
+) -> None:
+    group, name, options, expected = case(make_implementation)
+    block, raised = _route_block(group, PythonDictAdapter(), name, options._fork())
+    accessible: dict[type[FeatureGroup], set[type[ComputeFramework]]] = {group: {PythonDictFramework}}
+    feature = Feature(name, options=options._fork())
+    if expected == "raised":
+        assert raised is not None
+        with pytest.raises(Exception):
+            IdentifyFeatureGroupClass.evaluate(feature, accessible, None)
+        return
+    result = IdentifyFeatureGroupClass.evaluate(feature, accessible, None)
+    assert raised is None
+    routed = PythonDictFramework in result.identified.get(group, set())
+    assert routed == (expected == "routed")
+    assert (block is None) == routed
+    if not routed:
+        assert result.eliminations[group].stage == expected

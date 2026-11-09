@@ -17,6 +17,8 @@ from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlyDict
 
 from mloda.core.abstract_plugins.components.credential_scrub import (
     _mask_item,
+    _with_escaped,
+    current_registered_escaped,
     current_registered_secrets,
     mask_literals,
     redact_exception,
@@ -44,15 +46,17 @@ _probe_seen = {"factory": False, "make_record": False}
 _process_wide = False
 _union_counts: dict[str, int] = {}
 _union: frozenset[str] = frozenset()
+_union_masks: tuple[frozenset[str], frozenset[str]] = (frozenset(), frozenset())
 _fork_generation = 0
 
 
 def _renew_lock_after_fork() -> None:
-    global _lock, _union_counts, _union, _fork_generation
+    global _lock, _union_counts, _union, _union_masks, _fork_generation
     _fork_generation += 1
     _lock = threading.Lock()
     _union_counts = {}
     _union = frozenset()
+    _union_masks = (frozenset(), frozenset())
 
 
 if hasattr(os, "register_at_fork"):
@@ -77,7 +81,7 @@ def enable_process_wide_log_masking() -> None:
 
 def _track_scope_literals(literals: frozenset[str]) -> int | None:
     """Count literals into the union if process-wide masking is on; the fork generation tracked in, else None."""
-    global _union
+    global _union, _union_masks
     if not _process_wide or not literals:
         return None
     with _lock:
@@ -86,11 +90,12 @@ def _track_scope_literals(literals: frozenset[str]) -> int | None:
         for literal in literals:
             _union_counts[literal] = _union_counts.get(literal, 0) + 1
         _union = frozenset(_union_counts)
+        _union_masks = (_union, _with_escaped(_union))
         return _fork_generation
 
 
 def _release_scope_literals(literals: frozenset[str]) -> None:
-    global _union
+    global _union, _union_masks
     with _lock:
         for literal in literals:
             remaining = _union_counts.get(literal, 0) - 1
@@ -99,20 +104,21 @@ def _release_scope_literals(literals: frozenset[str]) -> None:
             else:
                 _union_counts.pop(literal, None)
         _union = frozenset(_union_counts)
+        _union_masks = (_union, _with_escaped(_union))
 
 
-def _active_literals() -> frozenset[str]:
+def _active_literals() -> tuple[frozenset[str], frozenset[str]]:
+    """The active literals and their escaped forms; the pair is always truthy, test the first item."""
     own = current_registered_secrets()
-    return own | _union if _process_wide else own
+    own_escaped = current_registered_escaped()
+    if not _process_wide:
+        return own, own_escaped
+    union, union_escaped = _union_masks
+    return own | union, own_escaped | union_escaped
 
 
-def _with_escaped(literals: frozenset[str]) -> frozenset[str]:
-    """The literals plus their repr-escaped forms, which an object's repr can carry instead."""
-    return literals | {repr(literal)[1:-1] for literal in literals if literal}
-
-
-def _holds_literal(text: str, literals: frozenset[str]) -> bool:
-    return any(literal and literal in text for literal in _with_escaped(literals))
+def _holds_literal(text: str, escaped: frozenset[str]) -> bool:
+    return any(literal and literal in text for literal in escaped)
 
 
 def _mask_args(args: Any, literals: frozenset[str]) -> Any:
@@ -133,11 +139,11 @@ def _formatted(msg: Any, args: Any) -> str:
     return text % args if args else text
 
 
-def _mask_formatted(record: logging.LogRecord, literals: frozenset[str]) -> bool:
+def _mask_formatted(record: logging.LogRecord, literals: frozenset[str], escaped: frozenset[str]) -> bool:
     """Mask msg and args in place, keeping the template; False when the result would still leak."""
     msg = _mask_item(record.msg, literals)
     args = _mask_args(record.args, literals)
-    if _holds_literal(_formatted(msg, args), literals):
+    if _holds_literal(_formatted(msg, args), escaped):
         return False
     record.msg = msg
     record.args = args
@@ -145,31 +151,31 @@ def _mask_formatted(record: logging.LogRecord, literals: frozenset[str]) -> bool
     return True
 
 
-def _mask_flattened(record: logging.LogRecord, literals: frozenset[str]) -> bool:
-    record.msg = mask_literals(record.getMessage(), _with_escaped(literals))
+def _mask_flattened(record: logging.LogRecord, literals: frozenset[str], escaped: frozenset[str]) -> bool:
+    record.msg = mask_literals(record.getMessage(), escaped)
     record.args = ()
     _mask_extras(record, literals)
     return True
 
 
-def _stringify_args(args: Any, literals: frozenset[str]) -> Any:
+def _stringify_args(args: Any, escaped: frozenset[str]) -> Any:
     if isinstance(args, tuple):
-        return tuple(_masked_text(arg, literals) for arg in args)
+        return tuple(_masked_text(arg, escaped) for arg in args)
     if isinstance(args, Mapping):
-        return {key: _masked_text(args[key], literals) for key in args}
+        return {key: _masked_text(args[key], escaped) for key in args}
     return args
 
 
-def _masked_text(value: Any, literals: frozenset[str]) -> Any:
+def _masked_text(value: Any, escaped: frozenset[str]) -> Any:
     for text in (str(value), repr(value)):
-        if _holds_literal(text, literals):
-            return mask_literals(text, _with_escaped(literals))
+        if _holds_literal(text, escaped):
+            return mask_literals(text, escaped)
     return value
 
 
-def _mask_unformattable(record: logging.LogRecord, literals: frozenset[str]) -> bool:
+def _mask_unformattable(record: logging.LogRecord, literals: frozenset[str], escaped: frozenset[str]) -> bool:
     msg = mask_literals(str(record.msg), literals)
-    args = _stringify_args(record.args, literals)
+    args = _stringify_args(record.args, escaped)
     record.msg = msg
     record.args = args
     _mask_extras(record, literals)
@@ -184,10 +190,10 @@ def _mask_blank(record: logging.LogRecord) -> None:
     record.stack_info = None
 
 
-def _mask_record(record: logging.LogRecord, literals: frozenset[str]) -> None:
+def _mask_record(record: logging.LogRecord, literals: frozenset[str], escaped: frozenset[str]) -> None:
     for strategy in (_mask_formatted, _mask_flattened, _mask_unformattable):
         try:
-            done = strategy(record, literals)
+            done = strategy(record, literals, escaped)
         except Exception:  # noqa: BLE001  # a factory must never raise into the caller's log call; fail closed
             done = False
         if done:
@@ -202,9 +208,9 @@ def _wrap_factory(previous: Callable[..., logging.LogRecord]) -> Callable[..., l
             _probe_seen["factory"] = True
             return record
         if not _disabled:
-            literals = _active_literals()
+            literals, escaped = _active_literals()
             if literals:
-                _mask_record(record, literals)
+                _mask_record(record, literals, escaped)
         return record
 
     return masking_factory
@@ -229,7 +235,7 @@ def _wrap_make_record(previous: Callable[..., logging.LogRecord]) -> Callable[..
             _probe_seen["make_record"] = True
             return record
         if extra and not _disabled:
-            literals = _active_literals()
+            literals, _ = _active_literals()
             if literals:
                 for key in extra:
                     value = record.__dict__[key] if key in record.__dict__ else None

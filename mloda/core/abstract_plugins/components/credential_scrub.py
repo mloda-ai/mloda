@@ -222,6 +222,12 @@ def _cut_path_parameter_regions(uri: str) -> str:
 
 _REGISTERED_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_registered_secrets", default=frozenset())
 _IDENTITY_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_identity_secrets", default=frozenset())
+_REGISTERED_ESCAPED: ContextVar[frozenset[str]] = ContextVar("mloda_registered_escaped", default=frozenset())
+
+
+def _with_escaped(literals: frozenset[str]) -> frozenset[str]:
+    """The literals plus their repr-escaped forms, which an object's repr can carry instead."""
+    return literals | {repr(literal)[1:-1] for literal in literals if literal}
 
 
 def _literal_spans(text: str, literals: Iterable[str]) -> list[tuple[int, int]]:
@@ -249,9 +255,12 @@ def _merge_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
 
 def mask_literals(text: str, literals: Iterable[str]) -> str:
     """Replace every occurrence of each literal with ``***``, merging overlaps."""
+    spans = _literal_spans(text, literals)
+    if not spans:
+        return text
     out = io.StringIO()
     cursor = 0
-    for start, end in _merge_spans(_literal_spans(text, literals)):
+    for start, end in _merge_spans(spans):
         out.write(text[cursor:start])
         out.write("***")
         cursor = end
@@ -269,7 +278,7 @@ class registered_secrets_scope:  # noqa: N801
     def __init__(self, literals: frozenset[str], identity: frozenset[str] | None = None) -> None:
         self._literals = literals
         self._identity = literals if identity is None else identity
-        self._tokens: list[tuple[Token[frozenset[str]], Token[frozenset[str]]]] = []
+        self._tokens: list[tuple[Token[frozenset[str]], Token[frozenset[str]], Token[frozenset[str]]]] = []
         self._tracked: list[int | None] = []
 
     def __enter__(self) -> None:
@@ -279,6 +288,7 @@ class registered_secrets_scope:  # noqa: N801
             (
                 _REGISTERED_SECRETS.set(merged),
                 _IDENTITY_SECRETS.set(_IDENTITY_SECRETS.get() | self._identity),
+                _REGISTERED_ESCAPED.set(_REGISTERED_ESCAPED.get() | _with_escaped(self._literals)),
             )
         )
         if merged and not previous:
@@ -296,13 +306,18 @@ class registered_secrets_scope:  # noqa: N801
 
             if generation == log_masking._fork_generation:
                 log_masking._release_scope_literals(self._literals)
-        secrets_token, identity_token = self._tokens.pop()
+        secrets_token, identity_token, escaped_token = self._tokens.pop()
+        _REGISTERED_ESCAPED.reset(escaped_token)
         _IDENTITY_SECRETS.reset(identity_token)
         _REGISTERED_SECRETS.reset(secrets_token)
 
 
 def current_registered_secrets() -> frozenset[str]:
     return _REGISTERED_SECRETS.get()
+
+
+def current_registered_escaped() -> frozenset[str]:
+    return _REGISTERED_ESCAPED.get()
 
 
 def current_identity_secrets() -> frozenset[str]:

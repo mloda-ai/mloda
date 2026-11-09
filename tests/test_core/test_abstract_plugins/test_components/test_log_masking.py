@@ -26,6 +26,7 @@ import pytest
 from mloda.core.abstract_plugins.components import log_masking
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.credential_scrub import (
+    current_registered_escaped,
     current_registered_secrets,
     registered_secrets_scope,
     scrub_credentials,
@@ -43,6 +44,7 @@ _STATE: tuple[tuple[str, Any], ...] = (
     ("_previous_make_record", None),
     ("_process_wide", False),
     ("_union", frozenset()),
+    ("_union_masks", (frozenset(), frozenset())),
     ("_fork_generation", 0),
 )
 
@@ -377,16 +379,106 @@ def test_str_extra_values_are_masked_and_other_values_untouched(capture: _Captur
     assert getattr(record, "obj") is holder
 
 
+class _CallCounting:
+    """Arg whose str and repr must never be called; counts any call."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def __str__(self) -> str:
+        self.calls += 1
+        return "counted"
+
+    def __repr__(self) -> str:
+        self.calls += 1
+        return "counted"
+
+
+@pytest.mark.parametrize("process_wide", [False, True], ids=["run_scoped", "process_wide_empty_union"])
 @pytest.mark.parametrize("installed", [False, True], ids=["never_installed", "installed_before"])
-def test_records_are_untouched_with_nothing_registered(capture: _Capture, installed: bool) -> None:
+def test_records_are_untouched_with_nothing_registered(capture: _Capture, installed: bool, process_wide: bool) -> None:
+    if process_wide:
+        log_masking.enable_process_wide_log_masking()
     if installed:
         with _scope(_SECRET):
             pass
-    capture.logger.info("login %s", _SECRET, extra={"tag": _SECRET})
+    probe = _CallCounting()
+    args = (_SECRET, probe)
+    capture.logger.info("login %s", *args, extra={"tag": _SECRET})
 
     (record,) = capture.records
-    assert record.args == (_SECRET,)
+    assert record.args == args
+    assert record.args is not None and record.args[0] == _SECRET
     assert getattr(record, "tag") == _SECRET
+    assert probe.calls == 0
+    capture.logger.info(probe)
+    assert capture.records[-1].msg is probe
+    assert probe.calls == 0
+
+
+class _CountingLiteral(str):
+    """A str literal whose repr calls are counted."""
+
+    repr_calls: list[int]
+
+    def __new__(cls, value: str) -> _CountingLiteral:
+        self = super().__new__(cls, value)
+        self.repr_calls = []
+        return self
+
+    def __repr__(self) -> str:
+        self.repr_calls.append(1)
+        return str.__repr__(self)
+
+
+@pytest.mark.parametrize("mode", ["run_scoped", "process_wide"])
+def test_no_escaped_form_is_rebuilt_per_record(capture: _Capture, mode: str) -> None:
+    literal = _CountingLiteral(_BACKSLASH)
+    assert repr(literal)[1:-1] != literal
+    literal.repr_calls.clear()
+
+    class _LitHolder:
+        def __str__(self) -> str:
+            return f"holder({literal})"
+
+    holder = _LitHolder()
+
+    def log_many() -> None:
+        for i in range(20):
+            capture.logger.info("plain %s %s", i, "text")
+        capture.logger.info("hold %s", holder)
+        capture.logger.info("bytes %s", literal.encode())
+
+    if mode == "run_scoped":
+        with _scope(literal):
+            baseline = len(literal.repr_calls)
+            assert baseline > 0
+            log_many()
+            after = len(literal.repr_calls)
+    else:
+        log_masking.enable_process_wide_log_masking()
+        with _HeldScope(literal):
+            baseline = len(literal.repr_calls)
+            assert baseline > 0
+            _outside(log_many)
+            after = len(literal.repr_calls)
+
+    assert after == baseline
+    assert len(capture.records) == 22
+    for record in capture.records[-2:]:
+        _assert_no_literal(record, literal)
+
+
+@pytest.mark.parametrize("literal, msg, args", _NESTED_CASES)
+def test_escaped_forms_are_masked_on_the_process_wide_path(
+    capture: _Capture, literal: str, msg: Any, args: tuple[Any, ...]
+) -> None:
+    log_masking.enable_process_wide_log_masking()
+    with _HeldScope(literal):
+        _outside(lambda: capture.logger.info(msg, *args))
+
+    (record,) = capture.records
+    _assert_no_literal(record, literal)
 
 
 def test_empty_scope_does_not_install() -> None:
@@ -508,6 +600,7 @@ def test_one_scope_object_entered_twice_keeps_its_literal_until_the_last_exit() 
     assert _SECRET in log_masking._union
     scope.__exit__(None, None, None)
     assert log_masking._union == frozenset()
+    assert log_masking._union_masks == (frozenset(), frozenset())
     assert log_masking._union_counts == {}
 
 
@@ -521,12 +614,14 @@ def _inherited_scope_scenario() -> None:
     inherited.__enter__()
     log_masking._renew_lock_after_fork()
     assert log_masking._union == frozenset()
+    assert log_masking._union_masks == (frozenset(), frozenset())
     child = _scope(_SECRET)
     child.__enter__()
     inherited.__exit__(None, None, None)
     assert _SECRET in log_masking._union
     child.__exit__(None, None, None)
     assert log_masking._union == frozenset()
+    assert log_masking._union_masks == (frozenset(), frozenset())
     assert log_masking._union_counts == {}
 
 
@@ -552,6 +647,8 @@ def test_union_and_counts_are_empty_after_nested_scopes_exit() -> None:
         with _scope(_SECRET, _OTHER):
             assert log_masking._union == frozenset({_SECRET, _OTHER})
     assert log_masking._union == frozenset()
+    assert log_masking._union_masks == (frozenset(), frozenset())
+    assert current_registered_escaped() == frozenset()
     assert log_masking._union_counts == {}
 
 

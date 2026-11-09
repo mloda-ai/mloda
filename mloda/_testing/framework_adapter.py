@@ -178,7 +178,7 @@ def _spark_has_type(spark_type: Any, data_type: DataType) -> bool | None:
         return bool(spark_type == t.DecimalType(38, 18))
     if data_type == DataType.TIMESTAMP_MICROS:
         if isinstance(spark_type, t.TimestampType):
-            # Spark's own data-type extraction reads a session-zone timestamp as TIMESTAMP_MICROS.
+            # Deliberately not False: SparkFramework reads a session-zone TimestampType as TIMESTAMP_MICROS, so judge it by value.
             return None
         return isinstance(spark_type, t.TimestampNTZType)
     if data_type == DataType.TIMESTAMP_MICROS_TZ:

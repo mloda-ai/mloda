@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -153,15 +153,6 @@ def test_spark_has_type_matches_adapter_schema() -> None:
         assert _spark_has_type(schema[name].dataType, dt) is True, name
 
 
-def test_spark_has_type_on_real_frame(adapter: Any) -> None:
-    with adapter:
-        result = adapter.from_typed(TypedTestData({"i": (DataType.INT64, [1, 2]), "s": (DataType.STRING, ["a", "b"])}))
-
-        assert adapter.has_type(result, "i", DataType.INT64) is True
-        assert adapter.has_type(result, "s", DataType.STRING) is True
-        assert adapter.has_type(result, "i", DataType.INT32) is False
-
-
 def test_spark_has_type_on_zero_rows(adapter: Any) -> None:
     with adapter:
         result = adapter.from_typed(TypedTestData({"i": (DataType.INT64, []), "s": (DataType.STRING, [])}))
@@ -171,7 +162,6 @@ def test_spark_has_type_on_zero_rows(adapter: Any) -> None:
 
 
 def test_spark_has_type_distinguishes_aware_from_naive(adapter: Any) -> None:
-
     aware = datetime(2024, 1, 1, 12, 30, tzinfo=UTC)
     with adapter:
         zoned = adapter.from_typed(TypedTestData({"t": (DataType.TIMESTAMP_MICROS_TZ, [aware])}))

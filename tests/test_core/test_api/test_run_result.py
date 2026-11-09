@@ -579,14 +579,24 @@ class TestPublicExports:
         assert "RunResult" in mloda_user.__all__
         assert "ResultStream" in mloda_user.__all__
 
+    # The API is provisional: when this fails because the shape changed, update
+    # docs/docs/in_depth/mloda-api.md and the registry testing guide example.
     def test_step_duration_is_exported_and_a_frozen_dataclass(self) -> None:
         from mloda.core.abstract_plugins.components.step_duration import StepDuration as ModuleStepDuration
-        from mloda.user import StepDuration
+        from mloda.user import ResultStream, RunResult, StepDuration
+
+        msg = "StepDuration changed: update docs/docs/in_depth/mloda-api.md and the registry testing guide example"
 
         assert StepDuration is ModuleStepDuration
         assert "StepDuration" in mloda_user.__all__
         assert dataclasses.is_dataclass(StepDuration)
-        assert [f.name for f in dataclasses.fields(StepDuration)] == ["feature_group", "step_uuid", "duration_seconds"]
+        assert [f.name for f in dataclasses.fields(StepDuration)] == [
+            "feature_group",
+            "step_uuid",
+            "duration_seconds",
+        ], msg
+        for cls in (RunResult, ResultStream):
+            assert isinstance(getattr(cls, "step_durations"), property), msg
         entry = StepDuration("g", uuid4(), 0.1)
         with pytest.raises(dataclasses.FrozenInstanceError):
             entry.duration_seconds = 1.0  # type: ignore[misc]

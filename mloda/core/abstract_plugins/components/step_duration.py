@@ -1,4 +1,4 @@
-"""Wall-clock time of one feature group step's calculate_feature call."""
+"""Wall-clock time of one feature group step's calculate_feature call; step_uuid is PlanStep.step_uuid."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from uuid import UUID
 
 @dataclass(frozen=True)
 class StepDuration:
-    """Seconds one feature group step spent in calculate_feature; step_uuid is PlanStep.step_uuid."""
+    """Provisional: seconds one feature group step spent in calculate_feature; may grow into per-step metrics."""
 
     feature_group: str
     step_uuid: UUID

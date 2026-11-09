@@ -176,7 +176,7 @@ for step in results.plan:
 
 `run_id` and `plan_id` on `RunResult` and `ResultStream` (from `run_all`, `stream_all`, `run()` and `stream_run()`) are the run's `HookContext.run_id` and `plan_id`, so a result can be matched to the records extenders wrote for its run; a `ResultStream` has them before its first element.
 
-`step_durations` on `RunResult` and `ResultStream` (from `run_all`, `stream_all`, `run()` and `stream_run()`) holds one `StepDuration(feature_group, step_uuid, duration_seconds)` per feature group step that completed `calculate_feature`, in the order the steps finished. A group can appear more than once; `step_uuid` is `PlanStep.step_uuid`, so join on it to tell steps apart.
+`step_durations` on `RunResult` and `ResultStream` (from `run_all`, `stream_all`, `run()` and `stream_run()`) holds one `StepDuration(feature_group, step_uuid, duration_seconds)` per feature group step that completed `calculate_feature`, in the order the steps finished. A group can appear more than once; `step_uuid` is `PlanStep.step_uuid`, so join on it to tell steps apart. The field is provisional and may grow into a broader per-step metrics record, so read fields by name.
 
 It times the `calculate_feature` call only, not a `FEATURE_GROUP_CALCULATE_FEATURE` extender's own time, filters, transforms or joins. A nested `INPUT_DATA_LOAD` counts (with its extenders); a file the framework reads after a source group returned an `InputDataDescriptor` does not. A lazy framework measures building the frame, not executing it. A calculate extender that returns without calling `func` leaves no entry, and one that calls `func` more than once reports its last successful call.
 

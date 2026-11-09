@@ -672,13 +672,28 @@ def test_installed_packages_runs_on_pandas() -> None:
     assert result.failures == (), result.failures
 
 
-def test_source_input_feature_run_is_not_applicable() -> None:
+def _source_input_feature_case() -> tuple[type[FeatureGroup], Options, str, bool]:
     base = Options(group={DefaultOptionKeys.in_features: frozenset(["src_feature"])})
+    return SourceInputFeature, base, "not applicable", True
+
+
+def _toy_source_case() -> tuple[type[FeatureGroup], Options, str, bool]:
+    pytest.importorskip("pyarrow")
+    from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
+
+    return ToySourceFG, Options(), "not applicable to source groups", False
+
+
+@pytest.mark.parametrize("case", [_source_input_feature_case, _toy_source_case], ids=["source_input", "toy_source"])
+def test_source_group_run_is_not_applicable(case: Callable[[], tuple[type[FeatureGroup], Options, str, bool]]) -> None:
+    group, base, note, must_pass = case()
     result = check_feature_group_shape(
-        SourceInputFeature, base_options=base, input_data=TypedTestData({}), adapter=PythonDictAdapter()
+        group, base_options=base, input_data=TypedTestData({}), adapter=PythonDictAdapter()
     )
-    assert result.passed, result.failures
-    assert any("not applicable" in n for n in result.notes), result.notes
+    if must_pass:
+        assert result.passed, result.failures
+    assert any(n.startswith("run:") and note in n for n in result.notes), result.notes
+    assert not any(f.startswith("outputs:") for f in result.failures), result.failures
 
 
 def _serve_with(
@@ -732,6 +747,11 @@ def test_operation_group_without_serving_implementation_notes_run_skipped(
     assert f"run: no implementation of {group.__name__} serves PythonDictFramework" in result.notes, result.notes
 
 
+class _UnavailableAdapter(PythonDictAdapter):
+    def is_available(self) -> bool:
+        return False
+
+
 def test_framework_excluded_by_rule_notes_run_skipped() -> None:
     group = make_run_group("drops_output", rule={PandasDataFrame})
     result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
@@ -740,12 +760,8 @@ def test_framework_excluded_by_rule_notes_run_skipped() -> None:
 
 
 def test_unavailable_adapter_notes_run_skipped() -> None:
-    class UnavailableAdapter(PythonDictAdapter):
-        def is_available(self) -> bool:
-            return False
-
     result = check_feature_group_shape(
-        make_run_group("drops_output"), input_data=_run_data(), adapter=UnavailableAdapter()
+        make_run_group("drops_output"), input_data=_run_data(), adapter=_UnavailableAdapter()
     )
     assert result.failures == (), result.failures
     assert "run: PythonDictFramework is not available" in result.notes, result.notes
@@ -902,11 +918,6 @@ def test_undeclared_part_name_reaches_accepts_whole(
     assert ("rg_out~0", None) in calls, calls
 
 
-class _UnavailableAdapter(PythonDictAdapter):
-    def is_available(self) -> bool:
-        return False
-
-
 def _case_no_implementation(mi: Callable[..., type[Implementation[Any]]]) -> tuple[type[FeatureGroup], Any]:
     return make_operation_group(), PythonDictAdapter()
 
@@ -926,20 +937,21 @@ def _case_unavailable(mi: Callable[..., type[Implementation[Any]]]) -> tuple[typ
 
 
 @pytest.mark.parametrize(
-    ("case", "fails_when_required"),
+    ("require_run", "case", "fails_when_required"),
     [
-        pytest.param(_case_no_implementation, True, id="no_implementation"),
-        pytest.param(_case_route_block, True, id="route_block"),
-        pytest.param(_case_rule_excluded, False, id="rule_excluded"),
-        pytest.param(_case_unavailable, False, id="unavailable"),
+        pytest.param(False, _case_no_implementation, True, id="no_implementation-optional"),
+        pytest.param(True, _case_no_implementation, True, id="no_implementation-required"),
+        pytest.param(False, _case_route_block, True, id="route_block-optional"),
+        pytest.param(True, _case_route_block, True, id="route_block-required"),
+        pytest.param(True, _case_rule_excluded, False, id="rule_excluded-required"),
+        pytest.param(True, _case_unavailable, False, id="unavailable-required"),
     ],
 )
-@pytest.mark.parametrize("require_run", [False, True])
 def test_skipped_run_is_a_note_unless_required(
     make_implementation: Callable[..., type[Implementation[Any]]],
+    require_run: bool,
     case: Callable[..., tuple[type[FeatureGroup], Any]],
     fails_when_required: bool,
-    require_run: bool,
 ) -> None:
     group, adapter = case(make_implementation)
     result = check_feature_group_shape(group, input_data=_run_data(), adapter=adapter, require_run=require_run)
@@ -956,15 +968,6 @@ def test_assert_fails_on_missing_serving_implementation_unless_run_not_required(
         assert_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
     assert "run:" in str(excinfo.value)
     assert_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter(), require_run=False)
-
-
-def test_source_group_run_is_not_applicable() -> None:
-    pytest.importorskip("pyarrow")
-    from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
-
-    result = check_feature_group_shape(ToySourceFG, input_data=TypedTestData({}), adapter=PythonDictAdapter())
-    assert any(n.startswith("run:") and "not applicable to source groups" in n for n in result.notes), result.notes
-    assert not any(f.startswith("outputs:") for f in result.failures), result.failures
 
 
 def test_encoding_feature_group_part_columns_are_found_on_pandas() -> None:

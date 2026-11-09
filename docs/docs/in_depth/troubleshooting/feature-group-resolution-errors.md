@@ -241,7 +241,7 @@ What keeps a subclass out:
 - A compute-framework pin the subclass cannot serve.
 - A [plan lock](../plan-lock.md): a takeover changes the recorded class and fails `check_plan_lock` with `PlanLockMismatchError`.
 
-To test that a subclass takes over only for its own option, call `check_subclass_scope(Sub, Parent, selecting)` (or `assert_subclass_scope`) from `mloda._testing.subclass_scope`. A pattern-matching parent needs `requests=`, and values are not compared. It reports a subclass that steals plain requests or misses its own.
+To test that a subclass takes over only for its own option, call `check_subclass_scope(Sub, Parent, selecting)` (or `assert_subclass_scope`) from `mloda._testing.subclass_scope`. A pattern-matching parent needs `requests=`. Pass `input_data=` (a `TypedTestData`, optional `adapter=`) to also compare the subclass's output columns with the parent's; a column is skipped when a divergence record the subclass declares itself (on the group or its own Implementation, any kind but GAP) covers it. It reports a subclass that steals plain requests or misses its own.
 
 For an operation group, `check_operation_group_shape` (or `assert_operation_group_shape`) from `mloda._testing.operation_group_shape` checks that each Implementation declares valid `supported` subtypes and `divergences` records and declines the rest; pass `alias_pairs=` for aliased subtypes and `probe=` for groups that resolve subtypes without an option key.
 

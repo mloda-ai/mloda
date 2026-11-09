@@ -8,27 +8,82 @@ from typing import Any
 import pytest
 
 from mloda._testing.subclass_scope import assert_subclass_scope, check_subclass_scope
+from mloda._testing.typed_data import TypedTestData
+from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.components.divergence import Cause, Divergence, DivergenceKind
+from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
+from mloda.user.python_dict import PythonDictFramework
 
 Pair = tuple[type[FeatureGroup], type[FeatureGroup]]
 SELECTING = Options(group={"variant": "x"})
+DATA = TypedTestData({"sc_src": (DataType.INT64, [1, 2, 3])})
+CHANGED = Divergence(kind=DivergenceKind.VALUE, cause=Cause.BACKEND, reason="values changed")
+CHANGED_TYPE = Divergence(kind=DivergenceKind.TYPE, cause=Cause.BACKEND, reason="type changed")
+CHANGED_PART = Divergence(
+    kind=DivergenceKind.VALUE, cause=Cause.BACKEND, outputs=frozenset({"p"}), reason="part changed"
+)
+GAP = Divergence(kind=DivergenceKind.GAP, cause=Cause.NOT_IMPLEMENTED)
+Calc = Callable[[Any, Any, Any], Any]
 
 
-def make_parent() -> type[FeatureGroup]:
-    class ScopeParent(FeatureGroup):
+def _calc(main: int | None, part: int | None = None) -> Calc:
+    """A calculate function writing sc_a = sc_src * main and sc_a~p = sc_src * part; None skips the column."""
+
+    def calc(cls: Any, data: Any, features: Any) -> Any:
+        if main is not None:
+            data["sc_a"] = [v * main for v in data["sc_src"]]
+        if part is not None:
+            data["sc_a~p"] = [v * part for v in data["sc_src"]]
+        return data
+
+    return calc
+
+
+def make_parent(
+    *,
+    base: type[FeatureGroup] = FeatureGroup,
+    calculates: bool = True,
+    parts: bool = False,
+    divergences: tuple[Divergence, ...] = (),
+) -> type[FeatureGroup]:
+    class ScopeParent(base):  # type: ignore[valid-type, misc]
+        DIVERGENCES = divergences
+        if parts:
+            OUTPUT_PARTS = ("p",)
+
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {"sc_a"}
 
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+            return {Feature("sc_src")}
+
+        if calculates:
+            calculate_feature = classmethod(_calc(2, 3 if parts else None))
+
     return ScopeParent
 
 
-def _gated_subclass(parent: type[FeatureGroup], required_key: str) -> type[FeatureGroup]:
+def _gated_subclass(
+    parent: type[FeatureGroup],
+    required_key: str,
+    calc: Calc | None = None,
+    divergences: tuple[Divergence, ...] = (),
+) -> type[FeatureGroup]:
     class GatedChild(parent):  # type: ignore[valid-type, misc]
+        if divergences:
+            DIVERGENCES = divergences
+        if calc is not None:
+            calculate_feature = classmethod(calc)
+
         @classmethod
         def match_feature_group_criteria(
             cls, feature_name: Any, options: Options, data_access_collection: Any = None
@@ -43,6 +98,40 @@ def _gated_subclass(parent: type[FeatureGroup], required_key: str) -> type[Featu
 def make_well_scoped() -> Pair:
     parent = make_parent()
     return parent, _gated_subclass(parent, "variant")
+
+
+def make_changed(calc: Calc | None = None, divergences: tuple[Divergence, ...] = (), *, parts: bool = False) -> Pair:
+    parent = make_parent(parts=parts)
+    return parent, _gated_subclass(parent, "variant", calc or _calc(5), divergences)
+
+
+def make_changed_with_inherited_record() -> Pair:
+    parent = make_parent(divergences=(CHANGED,))
+    return parent, _gated_subclass(parent, "variant", _calc(5))
+
+
+def make_changed_with_gap() -> Pair:
+    return make_changed(divergences=(GAP,))
+
+
+def make_changed_with_value_record() -> Pair:
+    return make_changed(divergences=(CHANGED,))
+
+
+def make_changed_with_type_record() -> Pair:
+    return make_changed(divergences=(CHANGED_TYPE,))
+
+
+def make_part_changed_with_part_record() -> Pair:
+    return make_changed(_calc(2, 9), (CHANGED_PART,), parts=True)
+
+
+def make_main_changed_with_part_record() -> Pair:
+    return make_changed(_calc(5, 3), (CHANGED_PART,), parts=True)
+
+
+def make_dropping_column() -> Pair:
+    return make_changed(_calc(2), parts=True)
 
 
 def make_ungated() -> Pair:
@@ -165,26 +254,75 @@ def make_unloaded_framework_pair() -> tuple[type[FeatureGroup], type[FeatureGrou
     return parent, UnloadedChild, UnloadedFramework
 
 
-def test_well_scoped_subclass_passes() -> None:
+@pytest.mark.parametrize("data", [None, DATA])
+def test_well_scoped_subclass_passes(data: TypedTestData | None) -> None:
     parent, sub = make_well_scoped()
-    result = check_subclass_scope(sub, parent, SELECTING)
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=data)
     assert result.check == "subclass_scope"
     assert result.subject == sub.__name__
     assert result.failures == ()
 
 
 @pytest.mark.parametrize(
-    ("make", "prefix"),
+    ("make", "prefix", "data", "phrase"),
     [
-        (make_ungated, "steals:"),
-        (make_gate_rejects_own_option, "misses:"),
+        (make_ungated, "steals:", None, ""),
+        (make_gate_rejects_own_option, "misses:", None, ""),
+        (make_ungated, "steals:", DATA, ""),
+        (make_changed, "values:", DATA, "differs"),
+        (make_changed_with_gap, "values:", DATA, "differs"),
+        (make_changed_with_inherited_record, "values:", DATA, "differs"),
+        (make_main_changed_with_part_record, "values:", DATA, "differs"),
+        (make_dropping_column, "values:", DATA, "missing"),
     ],
 )
-def test_broken_pair_fails_only_its_sub_check(make: Callable[[], Pair], prefix: str) -> None:
+def test_broken_pair_fails_only_its_sub_check(
+    make: Callable[[], Pair], prefix: str, data: TypedTestData | None, phrase: str
+) -> None:
     parent, sub = make()
-    result = check_subclass_scope(sub, parent, SELECTING)
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=data)
     assert not result.passed
     assert all(f.startswith(prefix) for f in result.failures), result.failures
+    assert phrase in " ".join(result.failures), result.failures
+
+
+@pytest.mark.parametrize(
+    "make",
+    [make_changed_with_value_record, make_changed_with_type_record, make_part_changed_with_part_record],
+)
+def test_declared_divergence_excuses_changed_column(make: Callable[[], Pair]) -> None:
+    parent, sub = make()
+    assert check_subclass_scope(sub, parent, SELECTING, input_data=DATA).failures == ()
+
+
+def test_no_input_data_notes_values_not_compared() -> None:
+    parent, sub = make_changed()
+    result = check_subclass_scope(sub, parent, SELECTING)
+    assert result.failures == ()
+    assert any(n.startswith("values:") and "no input_data" in n for n in result.notes), result.notes
+
+
+def test_parent_without_calculate_feature_notes_and_skips_values() -> None:
+    parent = make_parent(calculates=False)
+    sub = _gated_subclass(parent, "variant", _calc(5))
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
+    assert result.failures == ()
+    assert any(n.startswith("values:") for n in result.notes), result.notes
+
+
+@pytest.mark.parametrize(("record", "passes"), [(True, True), (False, False)])
+def test_operation_group_values_use_serving_implementations(
+    make_implementation: Callable[..., type[Implementation[Any]]], record: bool, passes: bool
+) -> None:
+    parent = make_parent(base=OperationFeatureGroup, calculates=False)
+    sub = _gated_subclass(parent, "variant")
+    make_implementation(parent, PythonDictFramework, _calc(2))
+    sub_impl = make_implementation(sub, PythonDictFramework, _calc(5))
+    if record:
+        setattr(sub_impl, "divergences", (CHANGED,))
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
+    assert result.passed is passes, result.failures
+    assert all(f.startswith("values:") for f in result.failures), result.failures
 
 
 def test_not_a_subclass_is_a_setup_failure() -> None:
@@ -266,3 +404,10 @@ def test_assert_raises_pytest_failure_for_ungated_subclass() -> None:
     with pytest.raises(pytest.fail.Exception) as excinfo:
         assert_subclass_scope(sub, parent, SELECTING)
     assert "steals:" in str(excinfo.value)
+
+
+def test_assert_forwards_input_data_and_raises_on_undeclared_value_change() -> None:
+    parent, sub = make_changed()
+    with pytest.raises(pytest.fail.Exception) as excinfo:
+        assert_subclass_scope(sub, parent, SELECTING, input_data=DATA)
+    assert "values:" in str(excinfo.value)

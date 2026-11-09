@@ -840,6 +840,7 @@ _FORM_BUILDERS: dict[str, Callable[[str], str]] = {
     "repr": lambda literal: repr(literal)[1:-1],
     "json_ascii": lambda literal: json.dumps(literal)[1:-1],
     "json_utf8": lambda literal: json.dumps(literal, ensure_ascii=False)[1:-1],
+    "quote_forced_repr": lambda literal: repr(literal + '"')[1:-2],
 }
 
 
@@ -2813,6 +2814,24 @@ class TestRedactException:
 
         assert all(_LITERAL not in text for text in _group_texts(result))
 
+    def test_deep_base_exception_group_stays_a_base_exception_and_leaks_nothing(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        node: BaseException = KeyboardInterrupt()
+        for _ in range(40):
+            node = BaseExceptionGroup(f"top {_LITERAL}", [node])
+
+        result = redact_exception(node, frozenset({_LITERAL}))
+
+        level: BaseException = result
+        while isinstance(level, BaseExceptionGroup):
+            assert not isinstance(level, Exception)
+            level = level.exceptions[0]
+        assert not isinstance(level, Exception)
+        assert not isinstance(level, KeyboardInterrupt)
+        assert not isinstance(result, Exception)
+        assert all(_LITERAL not in text for text in _group_texts(result))
+
     def test_except_star_still_splits_the_rebuilt_group(self) -> None:
         from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
 
@@ -2831,7 +2850,7 @@ class TestRedactException:
         assert _LITERAL not in caught[0].message
 
     def test_reraise_redacted_does_not_raise_when_nothing_was_rebuilt(self) -> None:
-        from mloda.core.abstract_plugins.components.credential_scrub import (  # type: ignore[attr-defined,unused-ignore]
+        from mloda.core.abstract_plugins.components.credential_scrub import (
             reraise_redacted,
         )
 

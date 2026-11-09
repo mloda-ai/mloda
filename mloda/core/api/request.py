@@ -11,7 +11,8 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.credential_scrub import (
     _SECRET_KEY,
     _mask_secret_keys,
-    reraise_redacted,
+    _reraise_forms,
+    _with_escaped,
     registered_secrets_scope,
     scrub_credentials,
 )
@@ -133,7 +134,7 @@ class _CredentialRedaction:
     """Mask secret literals, close the credential read window (a class: see registered_secrets_scope)."""
 
     def __init__(self, literals: frozenset[str], identity: frozenset[str] | None = None) -> None:
-        self._literals = literals
+        self._forms = _with_escaped(literals)
         self._scope = registered_secrets_scope(literals, identity)
         self._boundary = run_boundary()
 
@@ -144,7 +145,7 @@ class _CredentialRedaction:
     def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
         try:
             if exc is not None:
-                reraise_redacted(exc, self._literals)
+                _reraise_forms(exc, self._forms)
         finally:
             self._boundary.__exit__(exc_type, exc, tb)
             self._scope.__exit__(exc_type, exc, tb)

@@ -147,6 +147,7 @@ _FORM_BUILDERS: dict[str, Callable[[str], str]] = {
     "repr": lambda literal: repr(literal)[1:-1],
     "json_ascii": lambda literal: json.dumps(literal)[1:-1],
     "json_utf8": lambda literal: json.dumps(literal, ensure_ascii=False)[1:-1],
+    "quote_forced_repr": lambda literal: repr(literal + '"')[1:-2],
 }
 
 
@@ -165,7 +166,14 @@ _BACKSLASH = "ab\\cd'ef12345"
 _QUOTES = "a\"b'c-12345"
 _NEWLINE = "line1\nsecret-9"  # stands for a multi-line PEM key
 _UNICODE = 'sec"re\\t-ä-1234'  # nosec B105  (raw, repr, ASCII JSON and UTF-8 JSON all differ)
-_ECHO_LITERALS = {"backslash": _BACKSLASH, "quotes": _QUOTES, "newline": _NEWLINE, "unicode": _UNICODE}
+_SINGLE_QUOTE = "pa'ssword-123"  # nosec B105  (inside a string with both quote kinds, repr escapes it as \')
+_ECHO_LITERALS = {
+    "backslash": _BACKSLASH,
+    "quotes": _QUOTES,
+    "newline": _NEWLINE,
+    "unicode": _UNICODE,
+    "single_quote": _SINGLE_QUOTE,
+}
 _NESTED_CASES = [
     pytest.param(literal, msg, args, id=f"{lit_id}_{shape_id}")
     for lit_id, literal in _ECHO_LITERALS.items()

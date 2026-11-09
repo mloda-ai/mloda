@@ -283,11 +283,12 @@ _REGISTERED_ESCAPED: ContextVar[frozenset[str]] = ContextVar("mloda_registered_e
 
 
 def _with_escaped(literals: frozenset[str]) -> frozenset[str]:
-    """The literals plus their repr, JSON and non-ASCII JSON escaped forms, which a rendering can carry instead."""
+    """The literals plus their repr (both quote styles), JSON and non-ASCII JSON escaped forms."""
     forms = set(literals)
     for literal in literals:
         if literal:
             forms.add(repr(literal)[1:-1])
+            forms.add(repr(literal + '"')[1:-2])
             forms.add(json.dumps(literal)[1:-1])
             forms.add(json.dumps(literal, ensure_ascii=False)[1:-1])
     return frozenset(forms)
@@ -634,7 +635,7 @@ def _rebuilt_group(
     if id(group) in memo:
         return memo[id(group)]
     if depth > _MAX_MASK_DEPTH:
-        memo[id(group)] = RuntimeError("***")
+        memo[id(group)] = RuntimeError("***") if isinstance(group, Exception) else BaseException("***")
         return memo[id(group)]
     original = group.exceptions
     members = [_rebuilt_group(m, forms, memo, depth + 1) if isinstance(m, BaseExceptionGroup) else m for m in original]
@@ -683,7 +684,12 @@ def _rewire(nodes: list[BaseException], memo: dict[int, BaseException]) -> None:
 
 def reraise_redacted(exc: BaseException, literals: frozenset[str]) -> None:
     """Mask ``exc`` and raise the masked copy when a group had to be rebuilt."""
-    masked = redact_exception(exc, literals)
+    _reraise_forms(exc, _with_escaped(literals) if literals else frozenset())
+
+
+def _reraise_forms(exc: BaseException, forms: frozenset[str]) -> None:
+    """Like reraise_redacted, with the escaped forms already expanded."""
+    masked = _redact_forms(exc, forms) if forms else exc
     if masked is exc:
         return
     context = masked.__context__
@@ -702,7 +708,7 @@ class redact_escaping_exception:  # noqa: N801
 
     def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
         if exc is not None:
-            reraise_redacted(exc, current_registered_secrets())
+            _reraise_forms(exc, current_registered_escaped())
 
 
 def redact_mapping(mapping: Mapping[Any, Any]) -> dict[Any, str]:

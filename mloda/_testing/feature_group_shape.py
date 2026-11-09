@@ -441,10 +441,6 @@ def _no_implementation_reason(cls: type[FeatureGroup], adapter: FrameworkAdapter
     return None
 
 
-def _framework_gate_reason(cls: type[FeatureGroup], adapter: FrameworkAdapter) -> str | None:
-    return _rule_reason(cls, adapter) or _availability_reason(adapter) or _no_implementation_reason(cls, adapter)
-
-
 def _route_block(
     cls: type[FeatureGroup], adapter: FrameworkAdapter, name: str, options: Options
 ) -> tuple[str | None, str | None]:
@@ -489,11 +485,7 @@ def _run_checks(
 ) -> list[str]:
     failures: list[str] = []
 
-    def note_or_fail(reason: str) -> None:
-        if require_run:
-            failures.append(f"run: {reason}")
-        else:
-            notes.append(f"run: {reason}")
+    skipped = failures if require_run else notes
 
     reason = _not_applicable_reason(cls) or _availability_reason(adapter)
     if reason is not None:
@@ -501,7 +493,7 @@ def _run_checks(
         return []
     reason = _rule_reason(cls, adapter) or _no_implementation_reason(cls, adapter)
     if reason is not None:
-        note_or_fail(reason)
+        skipped.append(f"run: {reason}")
         return failures
     remaining = []
     for name in names:
@@ -509,7 +501,7 @@ def _run_checks(
         if raised is not None:
             failures.append(f"run: {raised}")
         elif block is not None:
-            note_or_fail(block)
+            skipped.append(f"run: {block}")
         else:
             remaining.append(name)
     if not remaining:

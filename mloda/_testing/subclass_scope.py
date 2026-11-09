@@ -8,10 +8,12 @@ from typing import Any
 from mloda._testing.feature_group_shape import (
     _base_options,
     _first_value,
-    _framework_gate_reason,
+    _availability_reason,
     _input_problems,
     _compared,
+    _no_implementation_reason,
     _not_applicable_reason,
+    _rule_reason,
     _route_block,
     _run as _run_group,
     _same,
@@ -130,17 +132,21 @@ def _value_failures(
     data: TypedTestData,
     adapter: FrameworkAdapter,
     notes: list[str],
+    require_run: bool,
 ) -> list[str]:
+    failures: list[str] = []
+    skipped = failures if require_run else notes
     for cls in (parent, subclass):
-        reason = _framework_gate_reason(cls, adapter)
-        if reason is None:
-            reason = _not_applicable_reason(cls)
+        reason = _not_applicable_reason(cls) or _availability_reason(adapter)
         if reason is not None:
             notes.append(f"values: {reason}")
             return []
+        reason = _rule_reason(cls, adapter) or _no_implementation_reason(cls, adapter)
+        if reason is not None:
+            skipped.append(f"values: {reason}")
+            return failures
     chosen = _combined(base, selecting)
     impls = {cls: _serving_implementation(cls, adapter) for cls in (parent, subclass)}
-    failures: list[str] = []
     remaining = []
     for name in names:
         blocked = False
@@ -149,7 +155,7 @@ def _value_failures(
             if raised is not None:
                 failures.append(f"values: {raised}")
             elif block is not None:
-                notes.append(f"values: {block}")
+                skipped.append(f"values: {block}")
             blocked = blocked or raised is not None or block is not None
         if not blocked:
             remaining.append(name)
@@ -193,10 +199,12 @@ def check_subclass_scope(
     *,
     input_data: TypedTestData | None = None,
     adapter: FrameworkAdapter | None = None,
+    require_run: bool = False,
 ) -> CheckResult:
     """Check subclass replaces parent only with the selecting options; only these two classes are considered.
 
     With input_data it also compares the requested output columns with the parent's, assuming identical row order.
+    With require_run, a rule exclusion, a missing serving Implementation or a route block on it is a failure, not a note.
     """
     failures = _run(subclass, parent, selecting, requests)
     notes: list[str] = []
@@ -209,7 +217,7 @@ def check_subclass_scope(
         base = _base_options(parent)
         if base is not None:
             failures += _value_failures(
-                subclass, parent, names, base, selecting, input_data, adapter or PythonDictAdapter(), notes
+                subclass, parent, names, base, selecting, input_data, adapter or PythonDictAdapter(), notes, require_run
             )
     return CheckResult(check="subclass_scope", subject=subclass.__name__, failures=tuple(failures), notes=tuple(notes))
 
@@ -242,6 +250,10 @@ def assert_subclass_scope(
     *,
     input_data: TypedTestData | None = None,
     adapter: FrameworkAdapter | None = None,
+    require_run: bool = True,
 ) -> None:
-    """Fail the running pytest test if the subclass scope check reports failures."""
-    assert_passed(check_subclass_scope(subclass, parent, selecting, requests, input_data=input_data, adapter=adapter))
+    """Fail the running pytest test if the subclass scope check reports failures; require_run defaults to True."""
+    result = check_subclass_scope(
+        subclass, parent, selecting, requests, input_data=input_data, adapter=adapter, require_run=require_run
+    )
+    assert_passed(result)

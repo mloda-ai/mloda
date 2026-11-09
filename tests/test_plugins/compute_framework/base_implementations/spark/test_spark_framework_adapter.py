@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any
 
 import pytest
@@ -74,3 +74,108 @@ def test_open_twice_raises(adapter: Any) -> None:
 def test_from_typed_outside_session_raises(adapter: Any) -> None:
     with pytest.raises(RuntimeError):
         adapter.from_typed(TypedTestData({"i": (DataType.INT64, [1])}))
+
+
+_D = DataType
+_HAS_TYPE_CASES: list[tuple[Any, DataType, bool | None]] = [
+    (lambda t: t.ByteType(), _D.INT8, True),
+    (lambda t: t.ByteType(), _D.INT32, False),
+    (lambda t: t.IntegerType(), _D.INT32, True),
+    (lambda t: t.IntegerType(), _D.INT64, False),
+    (lambda t: t.LongType(), _D.INT64, True),
+    (lambda t: t.LongType(), _D.INT32, False),
+    (lambda t: t.ShortType(), _D.INT32, False),
+    (lambda t: t.FloatType(), _D.FLOAT, True),
+    (lambda t: t.FloatType(), _D.DOUBLE, False),
+    (lambda t: t.DoubleType(), _D.DOUBLE, True),
+    (lambda t: t.DoubleType(), _D.FLOAT, False),
+    (lambda t: t.BooleanType(), _D.BOOLEAN, True),
+    (lambda t: t.BooleanType(), _D.INT64, False),
+    (lambda t: t.StringType(), _D.STRING, True),
+    (lambda t: t.StringType(), _D.BINARY, False),
+    (lambda t: t.StringType("UTF8_LCASE"), _D.STRING, True),
+    (lambda t: t.BinaryType(), _D.BINARY, True),
+    (lambda t: t.BinaryType(), _D.STRING, False),
+    (lambda t: t.DateType(), _D.DATE, True),
+    (lambda t: t.DateType(), _D.TIMESTAMP_MICROS, False),
+    (lambda t: t.TimestampNTZType(), _D.TIMESTAMP_MICROS, True),
+    (lambda t: t.TimestampNTZType(), _D.TIMESTAMP_MICROS_TZ, False),
+    (lambda t: t.TimestampType(), _D.TIMESTAMP_MICROS_TZ, True),
+    (lambda t: t.TimestampType(), _D.TIMESTAMP_MICROS, None),
+    (lambda t: t.DecimalType(38, 18), _D.DECIMAL, True),
+    (lambda t: t.DecimalType(10, 2), _D.DECIMAL, False),
+    (lambda t: t.ArrayType(t.LongType()), _D.LIST, True),
+    (lambda t: t.ArrayType(t.LongType()), _D.INT64, False),
+    (lambda t: t.LongType(), _D.UINT8, None),
+    (lambda t: t.LongType(), _D.UINT64, None),
+    (lambda t: t.TimestampNTZType(), _D.TIMESTAMP_MILLIS, None),
+]
+
+
+@pytest.mark.parametrize("make_type, declared, expected", _HAS_TYPE_CASES)
+def test_spark_has_type_is_exact(make_type: Any, declared: DataType, expected: bool | None) -> None:
+    types = pytest.importorskip("pyspark.sql.types")
+    from mloda._testing.framework_adapter import _spark_has_type
+
+    assert _spark_has_type(make_type(types), declared) is expected
+
+
+def test_spark_has_type_matches_adapter_schema() -> None:
+    pa = pytest.importorskip("pyarrow")
+    pytest.importorskip("pyspark.sql.types")
+    from decimal import Decimal
+
+    from pyspark.sql.pandas.types import from_arrow_schema
+
+    from mloda._testing.framework_adapter import _spark_has_type, to_arrow_table
+
+    data = TypedTestData(
+        {
+            "i": (DataType.INT64, [1]),
+            "s": (DataType.STRING, ["a"]),
+            "t": (DataType.TIMESTAMP_MICROS, [datetime(2024, 1, 1, 12, 30)]),
+            "z": (DataType.TIMESTAMP_MICROS_TZ, [datetime(2024, 1, 1, 12, 30, tzinfo=UTC)]),
+            "d": (DataType.DECIMAL, [Decimal("1.5")]),
+            "l": (DataType.LIST, [[1, 2]]),
+        }
+    )
+    arrow_types = {"l": pa.list_(pa.int64())}
+    schema = from_arrow_schema(to_arrow_table(data, arrow_types).schema, prefer_timestamp_ntz=True)
+    expected = {
+        "i": DataType.INT64,
+        "s": DataType.STRING,
+        "t": DataType.TIMESTAMP_MICROS,
+        "z": DataType.TIMESTAMP_MICROS_TZ,
+        "d": DataType.DECIMAL,
+        "l": DataType.LIST,
+    }
+    for name, dt in expected.items():
+        assert _spark_has_type(schema[name].dataType, dt) is True, name
+
+
+def test_spark_has_type_on_real_frame(adapter: Any) -> None:
+    with adapter:
+        result = adapter.from_typed(TypedTestData({"i": (DataType.INT64, [1, 2]), "s": (DataType.STRING, ["a", "b"])}))
+
+        assert adapter.has_type(result, "i", DataType.INT64) is True
+        assert adapter.has_type(result, "s", DataType.STRING) is True
+        assert adapter.has_type(result, "i", DataType.INT32) is False
+
+
+def test_spark_has_type_on_zero_rows(adapter: Any) -> None:
+    with adapter:
+        result = adapter.from_typed(TypedTestData({"i": (DataType.INT64, []), "s": (DataType.STRING, [])}))
+
+        assert adapter.has_type(result, "i", DataType.INT64) is True
+        assert adapter.has_type(result, "s", DataType.STRING) is True
+
+
+def test_spark_has_type_distinguishes_aware_from_naive(adapter: Any) -> None:
+
+    aware = datetime(2024, 1, 1, 12, 30, tzinfo=UTC)
+    with adapter:
+        zoned = adapter.from_typed(TypedTestData({"t": (DataType.TIMESTAMP_MICROS_TZ, [aware])}))
+        naive = adapter.from_typed(TypedTestData({"t": (DataType.TIMESTAMP_MICROS, [datetime(2024, 1, 1, 12, 30)])}))
+
+        assert adapter.has_type(zoned, "t", DataType.TIMESTAMP_MICROS_TZ) is True
+        assert adapter.has_type(naive, "t", DataType.TIMESTAMP_MICROS_TZ) is False

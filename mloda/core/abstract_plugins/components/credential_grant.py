@@ -1,7 +1,6 @@
 """Hold the credentials a step declared for the duration of its execution, masked in errors and logs."""
 
-from collections.abc import Generator, Mapping
-from contextlib import contextmanager
+from collections.abc import Mapping
 from contextvars import ContextVar, Token
 from typing import Any, Protocol
 
@@ -17,30 +16,35 @@ class CredentialLookup:
     """The opened credentials of one step; refuses every read once closed."""
 
     def __init__(self, values: Mapping[str, Any], policy: CredentialKeyPolicy | None = None) -> None:
-        self._data: dict[str, Any] = dict(values)
+        self._data: dict[str, Any] | None = dict(values)
         self.policy = policy
-        self._closed = False
 
     @property
     def closed(self) -> bool:
-        return self._closed
+        return self._data is None
 
     def credential(self, handle: str) -> Any:
-        if self._closed:
+        data = self._data
+        if data is None:
             raise RuntimeError(f"Credential '{handle}' is no longer available: the step has ended.")
-        if handle not in self._data:
+        if handle not in data:
             raise KeyError(f"Credential '{handle}' was not declared by this step.")
-        return self._data[handle]
+        return data[handle]
 
     def declared(self) -> tuple[str, ...]:
-        return tuple(sorted(self._data))
+        data = self._data
+        return () if data is None else tuple(sorted(data))
+
+    def snapshot(self) -> Mapping[str, Any] | None:
+        """The values, or None once closed; the dict is never mutated, callers must not expose it."""
+        return self._data
 
     def close(self) -> None:
-        self._data = {}
-        self._closed = True
+        self._data = None
 
     def _values(self) -> list[Any]:
-        return list(self._data.values())
+        data = self._data
+        return [] if data is None else list(data.values())
 
 
 class CredentialGrant(Protocol):
@@ -97,15 +101,19 @@ class grant_scope:  # noqa: N801
 _READ_RECORDERS: ContextVar[tuple[set[str], ...]] = ContextVar("mloda_credential_read_recorders", default=())
 
 
-@contextmanager
-def read_recorder() -> Generator[set[str], None, None]:
-    """Collect the handles read inside the block, alongside any enclosing recorders."""
-    recorder: set[str] = set()
-    token = _READ_RECORDERS.set((*_READ_RECORDERS.get(), recorder))
-    try:
-        yield recorder
-    finally:
-        _READ_RECORDERS.reset(token)
+class read_recorder:  # noqa: N801
+    """Collect the handles read inside the block, alongside any enclosing recorders; a fresh set per enter."""
+
+    def __init__(self) -> None:
+        self._tokens: list[Token[tuple[set[str], ...]]] = []
+
+    def __enter__(self) -> set[str]:
+        recorder: set[str] = set()
+        self._tokens.append(_READ_RECORDERS.set((*_READ_RECORDERS.get(), recorder)))
+        return recorder
+
+    def __exit__(self, *exc_info: object) -> None:
+        _READ_RECORDERS.reset(self._tokens.pop())
 
 
 def record_credential_read(handle: str) -> None:

@@ -72,12 +72,14 @@ def dispatch_input_data_load(
     if cfw is None:
         marker = features._load_marker
         if marker is not None:
+            secrets = marker.secrets
+            identity_secrets = marker.identity_secrets
             active = marker.active
             if active is not None and marker.has_extender:
                 with (
                     active[0].activate(),
                     active[1].activate(),
-                    registered_secrets_scope(marker.secrets, marker.identity_secrets),
+                    registered_secrets_scope(secrets, identity_secrets),
                 ):
                     return dispatch_input_data_load(
                         owner,

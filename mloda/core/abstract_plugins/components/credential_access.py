@@ -60,6 +60,8 @@ class ResolvedCredential(MutableMapping[str, Any]):
         self._fields[key] = value
 
     def __delitem__(self, key: str) -> None:
+        if key not in self._fields:
+            raise CredentialFieldMissing(f"Credential '{self.handle}' has no field '{key}'.")
         del self._fields[key]
 
     def __iter__(self) -> Iterator[str]:
@@ -77,21 +79,41 @@ class ResolvedCredential(MutableMapping[str, Any]):
         raise TypeError(f"Credential '{self.handle}' must not be pickled or copied.")
 
 
-_READABLE: ContextVar[CredentialLookup | None] = ContextVar("mloda_credential_readable", default=None)
+class _ReadableWindow:
+    """One readable window over a lookup; copied contexts hold it and see nothing once it closes."""
+
+    __slots__ = ("_lookup",)
+
+    def __init__(self, lookup: CredentialLookup | None) -> None:
+        self._lookup: CredentialLookup | None = lookup
+
+    def values(self) -> Mapping[str, Any] | None:
+        lookup = self._lookup
+        return None if lookup is None else lookup.snapshot()
+
+    def close(self) -> None:
+        self._lookup = None
+
+
+_READABLE: ContextVar[_ReadableWindow | None] = ContextVar("mloda_credential_readable", default=None)
 
 
 class _ReadableScope:
-    """Set the readable lookup for a block; a class, not @contextmanager (see registered_secrets_scope)."""
+    """Set the readable window for a block; a class, not @contextmanager (see registered_secrets_scope)."""
 
     def __init__(self, hide: bool) -> None:
         self._hide = hide
-        self._tokens: list[Token[CredentialLookup | None]] = []
+        self._frames: list[tuple[_ReadableWindow | None, Token[_ReadableWindow | None]]] = []
 
     def __enter__(self) -> None:
-        self._tokens.append(_READABLE.set(None if self._hide else _GRANT_HOLDER.get()))
+        window = None if self._hide else _ReadableWindow(_GRANT_HOLDER.get())
+        self._frames.append((window, _READABLE.set(window)))
 
     def __exit__(self, *exc_info: object) -> None:
-        _READABLE.reset(self._tokens.pop())
+        window, token = self._frames.pop()
+        if window is not None:
+            window.close()
+        _READABLE.reset(token)
 
 
 def readable_credentials() -> _ReadableScope:
@@ -105,7 +127,7 @@ def hidden_credentials() -> _ReadableScope:
 
 
 def restore_readable(method: Callable[..., Any]) -> Callable[..., Any]:
-    """Wrap method so it runs with the readable lookup as it is now, not as it is when called."""
+    """Wrap method so it runs with the readable window as it is now, not as it is when called."""
     captured = _READABLE.get()
 
     @functools.wraps(method)
@@ -151,16 +173,16 @@ class credentials_scope:  # noqa: N801
 
 def read_credential(handle: str) -> ResolvedCredential:
     """The declared credential for handle; readable only inside calculate_feature or an artifact saver."""
-    lookup = _READABLE.get()
-    if lookup is None or lookup.closed:
+    window = _READABLE.get()
+    values = None if window is None else window.values()
+    if values is None:
         raise CredentialReadRefused(
             f"Credential '{handle}' can only be read inside calculate_feature or an artifact saver "
             "of a step that declares it."
         )
-    declared = lookup.declared()
-    if handle not in declared:
-        names = ", ".join(repr(name) for name in declared)
+    if handle not in values:
+        names = ", ".join(repr(name) for name in sorted(values))
         raise CredentialReadRefused(f"Credential '{handle}' was not declared by this step; declared: {names}.")
-    resolved = ResolvedCredential(handle, lookup.credential(handle))
+    resolved = ResolvedCredential(handle, values[handle])
     record_credential_read(handle)
     return resolved

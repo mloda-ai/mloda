@@ -835,6 +835,45 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
         assert len(extender.all_captured) == 1
         assert extender.all_captured[0].data_access_identity == expected_identity
 
+    @pytest.mark.parametrize("kind", ["gate", "non_gate", "none"])
+    def test_the_marker_drops_the_registered_literals_when_the_calculation_ends(self, kind: str) -> None:
+        features = FeatureSet()
+        seen: list[tuple[frozenset[str], frozenset[str]]] = []
+
+        class _InspectingGroup:
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                marker = features._load_marker
+                assert marker is not None
+                seen.append((marker.secrets, marker.identity_secrets))
+                return [1]
+
+        with registered_secrets_scope(frozenset({_TOKEN}), identity=frozenset({_TOKEN})):
+            _framework_for(kind).run_calculate_feature(cast(Any, _InspectingGroup), features)
+
+        marker = features._load_marker
+        assert marker is not None
+        assert seen == [(frozenset({_TOKEN}), frozenset({_TOKEN}))]
+        assert marker.secrets == frozenset()
+        assert marker.identity_secrets == frozenset()
+
+    def test_calculating_twice_on_one_feature_set_still_masks_the_hopped_identity(self) -> None:
+        class _TokenReader(_CountingReader):
+            @classmethod
+            def data_access_identity(cls, data_access: Any) -> str:
+                return f"s3://bucket/bot{_TOKEN}/a.csv"
+
+        extender = _InputDataLoadCapturingExtender()
+        cfw = PythonDictFramework(function_extender={extender})
+        features = FeatureSet()
+        group = _threaded_load_feature_group("received", reader=_TokenReader)
+
+        with registered_secrets_scope(frozenset({_TOKEN}), identity=frozenset({_TOKEN})):
+            assert cfw.run_calculate_feature(group, features) == [1, 2, 3]
+            assert cfw.run_calculate_feature(group, features) == [1, 2, 3]
+
+        assert [context.data_access_identity for context in extender.all_captured] == ["s3://bucket/bot***/a.csv"] * 2
+
     def test_non_gate_extender_observes_the_hopped_load(self) -> None:
         extender = _InputDataLoadCapturingExtender()
         cfw = PythonDictFramework(function_extender={extender})

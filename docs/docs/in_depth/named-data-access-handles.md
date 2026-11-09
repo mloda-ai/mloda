@@ -336,8 +336,9 @@ step binds it when the session is prepared (prepare a new session to change it).
 
 `read_credential` returns a `ResolvedCredential`: a mapping with item access, `get`, iteration and `**` unpacking, a
 fresh copy per read, and the attributes `handle`, `version`, `expires_at` and `store` (the last three are `None` for
-now). A missing field raises `CredentialFieldMissing` (a `KeyError`) naming handle and field. A read outside the window,
-or of a handle the step did not declare, raises `CredentialReadRefused` (not a `LookupError`).
+now). A missing field raises `CredentialFieldMissing` (a `KeyError`) naming handle and field, on item access and on
+`del` or `pop` alike. A nested mapping is a plain dict, so a missing nested key reports as a missing column. A read
+outside the window, or of a handle the step did not declare, raises `CredentialReadRefused` (not a `LookupError`).
 
 A handle a source step binds at match time is reported in the plan, the lock and the hooks but grants no `read_credential`; a credential not registered in the collection renders `<pointer>`.
 
@@ -358,18 +359,19 @@ with credentials_scope({"pii-hmac-key": {"key": "test-hmac-key"}}):
 
 Limits:
 
-- A plugin-started thread has no scope and logs raw unless process-wide log masking is on; run its work with `contextvars.copy_context().run` and join inside the step. A copied context used after the step fails closed.
+- A plugin-started thread has no scope and logs raw unless process-wide log masking is on; run its work with `contextvars.copy_context().run` and join inside the step. A context copied inside a window cannot read once that window closes, even while the step runs (for example in validate hooks).
 - An awaited asyncio task and `asyncio.to_thread` carry the scope; `run_in_executor` does not.
 - A value captured in a serialized UDF closure is outside every mask; read on the driver, never capture.
 - Cached or transformed values are outside the masks.
 - A lazy result (generator, lazy frame) that reads a credential after `calculate_feature` returns is refused; read before returning.
 - A saver's return value must never carry a credential.
-- `repr` redacts; `json.dumps`, pickle and deepcopy raise; `dict(cred)` copies the values, so never serialize it.
+- `repr` redacts; pickle and deepcopy raise, and `json.dumps` raises the stdlib `TypeError`, which does not name the handle; `dict(cred)` copies the values, so never serialize it.
 - Trust boundary: code that declares a handle can read it; only the process worker is an OS boundary. A process worker holds only the secrets of the step it is running (all of them for a source whose credential cannot be derived; none during bootstrap and extender close); the parent still masks with every registered secret.
 - Verbose tracebacks show frame locals, and a reused worker may linger on a value.
 - Values under 8 characters are not masked.
 - A key outside the listed connection fields is masked unless declared public (see declared credential keys).
-- A prepared session holds the registered value.
+- A prepared session copies the registered credentials at `prepare()` (plain dicts and `RegisteredCredential`, lists, tuples and sets, nested too; other objects, dict subclasses such as `OrderedDict` included, are shared), so later edits to the collection do not reach it; pass a rotated value per run with `run(credentials=...)`.
+- A credential sent to a process worker must pickle; one that does not is refused when its step is dispatched, naming the handle (earlier steps may already have run).
 - Log masking covers exact registered literals and their `repr` and JSON escaped forms only; see [Log record masking](#log-record-masking) for its limits.
 - In a notebook the caller reads any environment variable on its own side.
 

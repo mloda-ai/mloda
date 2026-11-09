@@ -7,7 +7,8 @@ there.
 """
 
 import pickle  # nosec
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
+from multiprocessing.reduction import ForkingPickler
 from typing import Any
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -192,3 +193,24 @@ def raise_on_multiprocessing_connection_conflict(steps: Iterable[Any]) -> None:
         )
         if ParallelizationMode.MULTIPROCESSING in cfw_class.supported_parallelization_modes():
             raise ValueError(_multiprocessing_connection_conflict_error(cfw_class))
+
+
+def _forking_picklable(value: Any) -> bool:
+    try:
+        ForkingPickler.dumps(value)
+    except Exception:  # a lock or client raises TypeError, RuntimeError or PicklingError alike
+        return False
+    return True
+
+
+def refuse_unpicklable_credentials(grant: Any, values: Mapping[str, Any]) -> None:
+    """Raise ValueError naming the handle if the grant cannot cross the process queue; never the pickler text."""
+    if _forking_picklable(grant):
+        return
+    bad = next((handle for handle, value in values.items() if not _forking_picklable(value)), None)
+    subject = f"The credential for handle '{bad}'" if bad is not None else "The credential grant"
+    raise ValueError(
+        f"{subject} cannot be pickled, so mloda cannot send it to a multiprocessing worker process.\n"
+        "Resolution: register only str, numbers and plain containers, build clients inside calculate_feature, "
+        "or run without ParallelizationMode.MULTIPROCESSING."
+    )

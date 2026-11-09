@@ -23,6 +23,7 @@ from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.user.python_dict import PythonDictFramework
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 Pair = tuple[type[FeatureGroup], type[FeatureGroup]]
 SELECTING = Options(group={"variant": "x"})
@@ -349,6 +350,17 @@ def test_operation_group_values_use_serving_implementations(
     result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
     assert result.passed is passes, result.failures
     assert all(f.startswith("values:") for f in result.failures), result.failures
+
+
+def test_operation_group_without_serving_implementation_notes_values_skipped(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+) -> None:
+    parent = make_parent(base=OperationFeatureGroup, calculates=False)
+    sub = _gated_subclass(parent, "variant")
+    make_implementation(parent, PandasDataFrame, lambda _, data, features: data)
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
+    assert result.failures == (), result.failures
+    assert f"values: no implementation of {parent.__name__} serves PythonDictFramework" in result.notes, result.notes
 
 
 def test_not_a_subclass_is_a_setup_failure() -> None:

@@ -1,4 +1,4 @@
-"""Shape check for a plain FeatureGroup: names, foreign names, inputs, required and strict options."""
+"""Shape check for a FeatureGroup: names, foreign names, inputs, required and strict options."""
 
 from __future__ import annotations
 
@@ -22,9 +22,10 @@ from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCo
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
-from mloda.core.abstract_plugins.components.utils import safe_field_with_error
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field_with_error
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.core.abstract_plugins.implementation import Implementation, current_implementations
+from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 
 _FOREIGN_NAME = "conformance_foreign_feature"
 _UNKNOWN_VALUE = "conformance_unknown_value"
@@ -174,19 +175,25 @@ def _same(a: list[Any], b: list[Any]) -> bool:
     return len(a) == len(b) and all(_cell_same(x, y) for x, y in zip(a, b))
 
 
+def _serving_implementation(cls: type[FeatureGroup], adapter: FrameworkAdapter) -> type[Implementation[Any]] | None:
+    """The Implementation an operation group runs through on the adapter's framework; None for any other group."""
+    if not is_nominal_subclass(cls, OperationFeatureGroup):
+        return None
+    return cls.select_implementation(adapter.compute_framework(), list(current_implementations()))
+
+
 def _run(
     cls: type[FeatureGroup],
     adapter: FrameworkAdapter,
     data: TypedTestData,
     names: list[str],
     base: Options,
-    implementation: type[Implementation[Any]] | None = None,
 ) -> tuple[Any, str | None]:
     """Run through the adapter's ComputeFramework like a feature group step, then validate the output."""
 
     def go() -> Any:
         features = FeatureSet()
-        features.implementation = implementation
+        features.implementation = _serving_implementation(cls, adapter)
         for name in names:
             features.add(Feature(name, options=base))
         cfw = adapter.compute_framework()(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
@@ -351,6 +358,8 @@ def _framework_gate_reason(cls: type[FeatureGroup], adapter: FrameworkAdapter) -
         return f"{framework.__name__} excluded by compute_framework_rule"
     if not adapter.is_available():
         return f"{framework.__name__} is not available"
+    if is_nominal_subclass(cls, OperationFeatureGroup) and _serving_implementation(cls, adapter) is None:
+        return f"no implementation of {cls.__name__} serves {framework.__name__}"
     return None
 
 
@@ -398,7 +407,7 @@ def check_feature_group_shape(
     input_data: TypedTestData | None = None,
     adapter: FrameworkAdapter | None = None,
 ) -> CheckResult:
-    """Check a plain FeatureGroup's match contract and, given input_data, its run; a raising matcher is a non-match."""
+    """Check a FeatureGroup's match contract and, given input_data, its run; a raising matcher is a non-match."""
     base = base_options if base_options is not None else _base_options(cls)
     if base is None:
         failures = ["names: cannot build a matching request; declare allowed_values or default, or pass base_options"]

@@ -13,6 +13,7 @@ from mloda._testing.feature_group_shape import (
     _no_calculate_reason,
     _run as _run_group,
     _same,
+    _serving_implementation,
 )
 from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter
 from mloda._testing.result import CheckResult
@@ -25,8 +26,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.implementation import Implementation, current_implementations
-from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
 from mloda.core.prepare.identify_feature_group import evaluate_and_render
 
@@ -154,22 +154,14 @@ def _value_failures(
             notes.append(f"values: {reason}")
             return []
     chosen = _combined(base, selecting)
-    impls: dict[type[FeatureGroup], type[Implementation[Any]] | None] = {parent: None, subclass: None}
-    for cls in (parent, subclass):
-        if is_nominal_subclass(cls, OperationFeatureGroup):
-            impls[cls] = cls.select_implementation(adapter.compute_framework(), list(current_implementations()))
-            if impls[cls] is None:
-                notes.append(
-                    f"values: no implementation of {cls.__name__} serves {adapter.compute_framework().__name__}"
-                )
-                return []
+    impls = {cls: _serving_implementation(cls, adapter) for cls in (parent, subclass)}
     problems = _input_problems(parent, names, base, data) + _input_problems(subclass, names, chosen, data)
     if problems:
         return [f"values: {p}" for p in dict.fromkeys(problems)]
-    expected, error = _run_group(parent, adapter, data, names, base, impls[parent])
+    expected, error = _run_group(parent, adapter, data, names, base)
     if error is not None:
         return [f"setup: {parent.__name__} run raised: {error}"]
-    actual, error = _run_group(subclass, adapter, data, names, chosen, impls[subclass])
+    actual, error = _run_group(subclass, adapter, data, names, chosen)
     if error is not None:
         return [f"values: {subclass.__name__} run raised: {error}"]
     allowed = allowed_variants(chosen)

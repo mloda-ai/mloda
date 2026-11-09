@@ -290,6 +290,7 @@ class TestBoundHandleIsNotGranted:
         (step,) = _steps(session, SqliteFG)
         assert step.credential_handles == ()
         assert step.features.credential_handles == ("db-main",)
+        assert step.features.bound_credential_handle == "db-main"
 
     def test_a_source_group_cannot_read_the_bound_credential_at_run_time(self, tmp_path: Path) -> None:
         dac, _, _ = bound_case(tmp_path, "named")

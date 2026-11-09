@@ -117,6 +117,9 @@ class PlanStep:
     ``divergences``: the stamped, scrubbed records of the group and its implementation that apply, else ().
     ``contract_version``: the step's feature group CONTRACT_VERSION, else None.
 
+    ``bound_credential_handle``: the handle a compute step's source binds ("<unnamed>", "<pointer>" for placeholders),
+    else None; excluded from equality.
+
     ``implementation``: the Implementation class serving a compute step, else None.
     ``implementation_path``: its ``module:qualname``, "neutral" for a source group step without one, else None.
     ``implementation_specialized_from``: the winner's concrete Implementation ancestors that serve the step's pair, sorted by path.
@@ -158,6 +161,7 @@ class PlanStep:
     runtime_parameters: tuple[str, ...] = field(default=(), compare=False)
     divergences: tuple[Divergence, ...] = ()
     contract_version: int | None = None
+    bound_credential_handle: str | None = field(default=None, compare=False)
     _data_access_identity: str | None = field(default=None, compare=False)
     _data_access_identity_is_fallback: bool | None = field(default=None, compare=False)
     _neutral: bool = field(default=False, compare=False)
@@ -410,6 +414,7 @@ def build_plan_steps(
                     feature_set_options=snapshot,
                     step_uuid=step.uuid,
                     credential_handles=step.features.credential_handles,
+                    bound_credential_handle=step.features.bound_credential_handle,
                     runtime_parameters=step.features.runtime_parameters,
                     divergences=step.features.divergences,
                     contract_version=step.feature_group.CONTRACT_VERSION,

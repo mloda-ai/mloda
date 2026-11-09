@@ -65,6 +65,7 @@ class FeatureSet:
         self.any_uuid: UUID | None = None
         self.step_uuid: UUID | None = None
         self.credential_handles: tuple[str, ...] = ()
+        self.bound_credential_handle: str | None = None
         self.runtime_parameters: tuple[str, ...] = ()
         self.run_parameters: Mapping[str, Any] = {}
         self.filters: set[SingleFilter] | None = None

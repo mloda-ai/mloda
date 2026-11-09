@@ -1522,11 +1522,13 @@ class TestInputDataLoadHookCarriesBoundCredentialHandle:
         contexts = self._load_contexts(dac, options)
 
         assert [c.credential_handles for c in contexts] == [expected]
+        assert [c.bound_credential_handle for c in contexts] == [expected[0]]
 
     def test_a_file_source_keeps_no_handles(self, tmp_path: Path) -> None:
         contexts = self._load_contexts(csv_file_source(tmp_path), {}, CsvFG)
 
         assert [c.credential_handles for c in contexts] == [()]
+        assert [c.bound_credential_handle for c in contexts] == [None]
 
     def test_a_handle_declared_and_bound_is_listed_once(self, tmp_path: Path) -> None:
         dac, _, _ = bound_case(tmp_path, "named")
@@ -1537,3 +1539,4 @@ class TestInputDataLoadHookCarriesBoundCredentialHandle:
         contexts = self._load_contexts(dac, {"idl_bound_vault_handle": "db-main"}, _BoundHandleSqliteFG)
 
         assert [c.credential_handles for c in contexts] == [("db-main",)]
+        assert [c.bound_credential_handle for c in contexts] == ["db-main"]

@@ -1132,6 +1132,7 @@ class ComputeFramework(ABC):
         specialized_from: tuple[str, ...] = ()
         step_uuid: UUID | None = None
         credential_handles: tuple[str, ...] = ()
+        bound_credential_handle: str | None = None
         implementation: str | None = None
         implementation_version: str | None = None
         divergences: tuple[Divergence, ...] = ()
@@ -1145,6 +1146,7 @@ class ComputeFramework(ABC):
                 )
             step_uuid = features.step_uuid
             credential_handles = features.credential_handles
+            bound_credential_handle = features.bound_credential_handle
             feature_names = tuple(str(name) for name in features.get_all_names())
             input_features = self._declared_input_feature_names(feature_group_cls, features)
             input_feature_edges = getattr(features, "declared_input_feature_edges", None)
@@ -1179,6 +1181,7 @@ class ComputeFramework(ABC):
             structure_hash=self.run_context.structure_hash,
             step_uuid=step_uuid,
             credential_handles=credential_handles,
+            bound_credential_handle=bound_credential_handle,
             carrier=self.run_context.carrier,
             tenant_id=self.run_context.tenant_id,
             project_id=self.run_context.project_id,

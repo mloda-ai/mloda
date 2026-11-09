@@ -124,6 +124,7 @@ def dispatch_input_data_load(
         structure_hash=calc_context.structure_hash,
         step_uuid=calc_context.step_uuid,
         credential_handles=calc_context.credential_handles,
+        bound_credential_handle=calc_context.bound_credential_handle,
         carrier=calc_context.carrier,
         tenant_id=calc_context.tenant_id,
         project_id=calc_context.project_id,

@@ -216,6 +216,7 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 - **feature_group_hash** (`str | None`): the group's code hash, set when an inherited implementation serves a subclass group or a source group loads neutrally (`"unavailable"` if hashing fails). Excluded from equality.
 - **implementation_specialized_from** (`tuple[type[Implementation[Any]], ...]`): the winner's concrete `Implementation` ancestors that serve the step's pair, sorted by path; empty otherwise.
 - **credential_handles** (`tuple[str, ...]`): the credential handles a compute step declares (could read) plus the one its source binds (reads), `()` otherwise. Excluded from equality.
+- **bound_credential_handle** (`str | None`): the handle a compute step's source binds (`<unnamed>`, `<pointer>` for placeholders), `None` otherwise. Excluded from equality.
 - **step_uuid** (`UUID | None`): the compute step's uuid, the key `RunResult.frames()` and `ResultStream.frames()` pair by; None otherwise. Excluded from equality (fresh per planning run).
 - **feature_group_name** / **compute_framework_name** / **source_feature_group_name** / **source_compute_framework_name** / **result_framework_name** (`str | None`): Class names of the above, None when unset.
 - **declared_left_framework_names** / **declared_right_framework_names** (`tuple[str, ...]`): class names of the two tuples above, same order.

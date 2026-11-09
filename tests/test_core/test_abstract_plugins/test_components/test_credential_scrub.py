@@ -468,6 +468,29 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
         ["tok/en@"],
         ["https://tok/***@host/x"],
     ),
+    ("dotted_s3a_secret_key", "fs.s3a.secret.key=X1234567", ["X1234567"], ["fs.s3a.secret.key="]),  # nosec B105
+    ("dotted_db_password_keyword", "db.password=hunter2z9", ["hunter2z9"], ["db.password="]),
+    ("dotted_db_password_dict", "{'db.password': 'hunter2z9'}", ["hunter2z9"], ["'db.password'"]),
+    (
+        "multiline_json_password",
+        '{\n  "user": "u",\n  "password": "hunter2z9"\n}',
+        ["hunter2z9"],
+        ['"user": "u"'],
+    ),
+    (
+        "multiline_pprint_password",
+        "{'user': 'u',\n 'password': 'hunter2z9'}",
+        ["hunter2z9"],
+        ["'user': 'u'"],
+    ),
+    ("odbc_pwd_path_like_value", "UID=sa;PWD=/Secret1x;Server=h", ["/Secret1x", "Secret1x"], ["UID=sa", "Server=h"]),
+    ("odbc_pwd_after_brace", "{PWD=/Secret1x;a=b}", ["Secret1x"], []),
+    ("pwd_single_segment_path", "PWD=/Secret1x", ["Secret1x"], []),
+    ("max_token_non_digit", "max_token=hunter2z9", ["hunter2z9"], []),
+    ("slash_dsn_ipv4_host", "scott/hunter2z9@10.0.0.1/orcl", ["hunter2z9"], ["10.0.0.1/orcl"]),
+    ("slash_dsn_digit_led_host", "scott/hunter2z9@9db.example.com/orcl", ["hunter2z9"], ["9db.example.com/orcl"]),
+    ("slash_dsn_word_host", "x/hunter2z9@next/z", ["hunter2z9"], []),
+    ("slash_dsn_four_octet_ipv4", "pkg/hunter2z9@1.2.3.4/x", ["hunter2z9"], []),
 ]
 
 
@@ -514,6 +537,21 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
         "dict_repr_password_three_level_nesting",
         "{'password': ('a', ('b', ['c', 'd']), 'hunter2z9'), 'user': 'bob'}",
         "{'password': '***', 'user': 'bob'}",
+    ),
+    (
+        "dotted_key_dict_repr",
+        "{'db.password': 'hunter2z9', 'host': 'h'}",
+        "{'db.password': '***', 'host': 'h'}",
+    ),
+    (
+        "multiline_json_password_exact",
+        '{\n  "user": "u",\n  "password": "hunter2z9"\n}',
+        '{\n  "user": "u",\n  "password": "***"\n}',
+    ),
+    (
+        "multiline_pprint_password_exact",
+        "{'user': 'u',\n 'password': 'hunter2z9'}",
+        "{'user': 'u',\n 'password': '***'}",
     ),
     ("private_use_char_in_input_is_replaced", "a\ue001bcd rest", "a\ufffdbcd rest"),
 ]
@@ -614,6 +652,21 @@ UNCHANGED_LOOKALIKE_CASES: list[str] = [
     "uri:mongodb+srv://cluster/db",
     "backend:sqlite:///tmp/x.db",
     "Location:wss://x/y",
+    "ValueError:duckdb://x",
+    "source:clickhouse://h/db",
+    "source:mariadb://h/db",
+    "source:rediss://h/db",
+    "source:cockroachdb://h/db",
+    "source:amqp://h/db",
+    "source:amqps://h/db",
+    "source:sqlserver://h/db",
+    "node_modules/foo@1.2.3/index.js",
+    "lib/foo@1.2.3-beta/x.js",
+    "PWD=/home/dev/project",
+    "OLDPWD=/home/dev/old",
+    "env PWD=/home/dev/project",
+    "max_token=128",
+    "cfg.max_token=128",
 ]
 
 
@@ -732,12 +785,36 @@ def test_text_without_url_is_unchanged() -> None:
         "X-Proxy-Authorization=NTLM TlRMTVNTUAAB",
         "alice:hunter2://host/db",
         "https://tok/en@host/x",
+        "pwd='}':\"&",
+        "pwd={,},&",
+        '/pwd=""@',
+        'pwd=""pwd={,',
+        ";pwd={:}:",
+        "pwd={pwd}x@",
+        "fs.s3a.secret.key=X1234567",
+        '{\n  "user": "u",\n  "password": "hunter2z9"\n}',
     ],
 )
 def test_scrub_credentials_is_idempotent(text: str) -> None:
     once = scrub_credentials(text)
     twice = scrub_credentials(once)
     assert once == twice
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("pwd='}':\"&", "pwd='***':\"&"),
+        ("pwd={,},&", "pwd={***},&"),
+        ("password='x'", "password=***"),
+        ("password='x';", "password=***;"),
+        ("password='x' ", "password=*** "),
+        ('password="x"', "password=***"),
+        ("password={x}", "password=***"),
+    ],
+)
+def test_scrub_credentials_reemits_closers_only_before_a_value_char(text: str, expected: str) -> None:
+    assert scrub_credentials(text) == expected
 
 
 def _assert_scrubs_linearly(build: Callable[[int], str], n: int, what: str) -> str:
@@ -931,6 +1008,30 @@ def test_slash_at_repeat_scrubs_fast() -> None:
 
 def test_slash_password_host_repeat_scrubs_fast() -> None:
     _assert_scrubs_linearly(lambda k: "s/p@" + "h" * k, 50_000, "a slash-dsn prefix followed by a long host run")
+
+
+@pytest.mark.parametrize(
+    "build, n, what",
+    [
+        (lambda k: "a." * k + "x", 20_000, "a dotted prefix run"),
+        (lambda k: "{'" + "a." * k, 20_000, "a quoted dotted prefix run"),
+        (lambda k: "password." * k, 8000, "a repeated dotted password"),
+        (lambda k: "secret." * k, 8000, "a repeated dotted secret"),
+        (lambda k: ",\n" * k, 20_000, "repeated comma newline runs"),
+    ],
+    ids=["dotted_prefix", "quoted_dotted_prefix", "dotted_password", "dotted_secret", "comma_newlines"],
+)
+def test_dotted_and_multiline_inputs_scrub_fast(build: Callable[[int], str], n: int, what: str) -> None:
+    _assert_scrubs_linearly(build, n, what)
+
+
+def test_repeated_dropped_userinfo_uri_scrubs_fast_under_a_registered_scope() -> None:
+    from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+    with registered_secrets_scope(frozenset({"secret123"})):
+        _assert_scrubs_linearly(
+            lambda k: "https://secret12@secret123.example/p " * k, 4000, "repeated dropped-userinfo uris in a scope"
+        )
 
 
 def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
@@ -1868,6 +1969,15 @@ class TestRegisteredSecretsScope:
 
         assert _LITERAL not in masked
         assert "***" in masked
+
+    def test_a_uri_dropping_userinfo_leaks_no_fragment_of_the_literal(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+        with registered_secrets_scope(frozenset({"secret123"})):
+            masked = scrub_credentials("https://secret12@secret123.example/p")
+
+        assert "secret123" not in masked
+        assert "secret12" not in masked
 
     def test_nested_scopes_union_and_reset_in_order(self) -> None:
         from mloda.core.abstract_plugins.components.credential_scrub import (

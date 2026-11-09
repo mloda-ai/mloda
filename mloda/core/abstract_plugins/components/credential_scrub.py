@@ -29,7 +29,8 @@ _USERINFO_HEAD = _SCHEME + r"://[^\s/?#@:]*:(?!\d+(?:[?#\s]|$|"
 _USERINFO_TAIL = r"))(?:(?!://)[^\s@])*@"
 # strip_uri_userinfo feeds a data-access identity, which must name the host a client contacts: `host:port/path` is a host.
 _USERINFO_FALLBACK_PATTERN = re.compile(_USERINFO_HEAD + r"/" + _USERINFO_TAIL)
-# scrub_credentials reads `name:123/x@host/` as `user:pwd@` (a password), since free text has no such constraint.
+# scrub_credentials reads `name:123/x@host/` as `user:pwd@` (a password), since free text has no such constraint;
+# that includes `https://host:443/user@example.com/profile`, kept on purpose (fail closed).
 _FREE_TEXT_USERINFO_PATTERN = re.compile(_USERINFO_HEAD + r"/(?![^\s/?#@]+@[\w.~-]+(?::\d+)?/)" + _USERINFO_TAIL)
 _DB_SCHEMES = (
     "postgres|postgresql|mysql|mariadb|mongodb|redis|rediss|mssql|sqlserver|oracle|snowflake|redshift|"
@@ -45,22 +46,32 @@ _DB_USERINFO_PATTERN = re.compile(
 
 # Shared suffix a credential-shaped key name must end with, reused by the keyword and quoted-key patterns.
 _SECRET_NAME = (  # nosec B105
-    r"(?:password|passwd|pwd|secret|token|signature|sig|api[_-]?key|access[_-]?key|"
-    r"account[_-]?key|secret[_-]?key|private[_-]?key|sessionid|sessid)"
+    r"(?:password|passwd|pwd|secret|token|signature|sig|api[._-]?key|access[._-]?key|"
+    r"account[._-]?key|secret[._-]?key|private[._-]?key|sessionid|sessid)"
 )
 
 _KNOWN_SCHEMES = r"(?i:bearer|basic|token|digest|apikey|negotiate)"
 
-# (?<![\w-]), not (?<![A-Za-z]): a name-start anchor so a prefixed identifier (sslpassword,
-# PGPASSWORD, X-Api-Key) still matches, captured whole so the prefix survives the replacement.
+
+# (?<![\w.-]), not (?<![A-Za-z]): a name-start anchor so a prefixed or dotted identifier (sslpassword,
+# PGPASSWORD, X-Api-Key, fs.s3a.secret.key) still matches, captured whole so the prefix survives the replacement.
 # Optional scheme prefix so `access_token=Bearer abc` masks the token, not just the word `Bearer`.
 # Trailing `}` optional: an unterminated `{` masks to end of line instead of rescanning.
-_KEYWORD_PATTERN = re.compile(
-    rf"(?<![\w-])(?P<keyword>[\w-]*{_SECRET_NAME})(?P<sep>[ \t]*=[ \t]*)"
-    rf"(?:{_KNOWN_SCHEMES}[ \t]+)?"
-    r"(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"|\{(?:[^}\n]|\}\})*\}?|[^;&\s'\"]*)",
-    re.IGNORECASE,
-)
+def _keyword_pattern(plain: str) -> re.Pattern[str]:
+    return re.compile(
+        rf"(?<![\w.-])(?P<keyword>[\w.-]*{_SECRET_NAME})(?P<sep>[ \t]*=[ \t]*)"
+        rf"(?P<known>{_KNOWN_SCHEMES}[ \t]+)?"
+        r"(?P<value>(?P<quoted>'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\")"
+        r"|(?P<braced>\{(?:[^}\n]|\}\})*\}?)|" + plain + ")",
+        re.IGNORECASE,
+    )
+
+
+_KEYWORD_PATTERN = _keyword_pattern(r"[^;&\s'\"]*")
+# The identity form: a plain value ends at `/` or `::` too, so one path segment is masked, not the rest of the path.
+_KEYWORD_SEGMENT_PATTERN = _keyword_pattern(r"(?:(?!::)[^;&/\s'\"])*")
+_PATH_VALUE = re.compile(r"/[\w.-]+(?:/[\w.-]+)+/?")
+_COUNT_NAME = re.compile(r"(?:max|min|num|total)[_-]?token", re.IGNORECASE)
 
 
 def _container_body(closer: str, depth: int = 0) -> str:
@@ -82,7 +93,7 @@ _NEST_DEPTH = 3
 
 # Anchored on a `{`/`,` lead so prose like `invalid password: too short` or unquoted `password: X` is left alone.
 _QUOTED_KEY_PATTERN = re.compile(
-    r"(?P<lead>[{,][ \t]*)(?P<quote>['\"])(?P<keyword>[\w-]*" + _SECRET_NAME + r")(?P=quote)[ \t]*:[ \t]*"
+    r"(?P<lead>[{,]\s*)(?P<quote>['\"])(?P<keyword>[\w.-]*" + _SECRET_NAME + r")(?P=quote)[ \t]*:[ \t]*"
     r"(?:b?'(?:[^'\\\n]|\\.)*'|b?\"(?:[^\"\\\n]|\\.)*\""
     rf"|\[{_container_body(']', _NEST_DEPTH)}\]?|\{{{_container_body('}', _NEST_DEPTH)}\}}?"
     rf"|(?:[A-Za-z_][\w.]*)?\({_container_body(')', _NEST_DEPTH)}\)?|[^,}}\s]*)",
@@ -107,7 +118,7 @@ _AUTHORIZATION_PATTERN = re.compile(
 # host shape (EZConnect //, a descriptor (, or host:port) so `path/to/x@y` and `user@example.com` are left alone.
 # (?!\d+/) keeps a bare port like `8080/` from being read as the user.
 _SLASH_DSN_PATTERN = re.compile(
-    r"(?<![\w.$#/-])(?!\d+/)(?P<user>[\w.$#-]+)/[^\s/]+@(?=//|\(|[\w.-]+:\d+(?!\w)|[\w.-]+/\w)"
+    r"(?<![\w.$#/-])(?!\d+/)(?P<user>[\w.$#-]+)/[^\s/]+@(?=//|\(|[\w.-]+:\d+(?!\w)|(?![0-9]+(?:\.[0-9]+){0,2}(?:[-+][\w.]*)?/)[\w.-]+/\w)"
 )
 # Slash in userinfo right after `://`; the dotless user keeps `unpkg.com/react@18/` and `github.com/user@host` intact.
 _SCHEME_SLASH_DSN_PATTERN = re.compile(r"(?<=://)(?P<user>[\w$#~-]+)/[^\s/@]+@(?=[\w.-]+(?:[/:?#\s)\]'\"]|$))")
@@ -115,7 +126,7 @@ _SCHEME_SLASH_DSN_PATTERN = re.compile(r"(?<=://)(?P<user>[\w$#~-]+)/[^\s/@]+@(?
 _PLAIN_URI_SCHEMES = (
     "http|https|s3|s3a|s3n|gs|gcs|abfs|abfss|wasb|wasbs|az|adl|file|ftp|sftp|hdfs|"
     "postgres|postgresql|mysql|mongodb|redis|sqlite|snowflake|mssql|ws|wss|ssh|git|grpc|kafka|ftps|"
-    "oracle|redshift|bigquery|databricks"
+    "oracle|redshift|bigquery|databricks|" + _DB_SCHEMES + "|duckdb"
 )
 # `user:password://host`: the password sits in the scheme position. Delimiters are excluded from both classes
 # and the lookbehind anchors the start, so the scan stays linear. The password may hold `@` and be followed by one
@@ -237,6 +248,24 @@ def _drop_user_only(match: re.Match[str]) -> str:
 def strip_uri_userinfo(text: str) -> str:
     """Drop `user:pwd@` and `user@` userinfo after every `scheme://`, keeping an Azure container."""
     return _USER_ONLY_PATTERN.sub(_drop_user_only, _drop_free_text_userinfo(text, _USERINFO_FALLBACK_PATTERN))
+
+
+def _mask_path_password(match: re.Match[str]) -> str:
+    """A free-text userinfo match left after strip_uri_userinfo: mask the path piece, keep the authority."""
+    scheme = match["scheme"]
+    user, _, rest = match[0][len(scheme) + 3 :].partition(":")
+    digits = rest.partition("/")[0]
+    if not digits.isascii() or not digits.isdigit():
+        return f"{scheme}://{user}:***@"
+    # 4+ digits read as a port, as on main (1-3 digits read as a password, like _DB_USERINFO_PATTERN).
+    if len(digits) >= 4:
+        return match[0]
+    return f"{scheme}://{user}:{digits}/***@"
+
+
+def mask_identity_credentials(text: str) -> str:
+    """Mask, keeping the authority, a password read from the path after `host:port/` and per-segment keyword values."""
+    return _KEYWORD_SEGMENT_PATTERN.sub(_keyword_repl, _FREE_TEXT_USERINFO_PATTERN.sub(_mask_path_password, text))
 
 
 _MAX_DECODE_ROUNDS = 4
@@ -396,8 +425,8 @@ def current_identity_secrets() -> frozenset[str]:
 def scrub_credentials(text: str) -> str:
     """Mask URI user info, bearer/Authorization tokens, key=value and quoted-key secrets, user/password@host DSNs.
 
-    Patterns run on the original text so a literal never deletes their anchors; every output char that came
-    from a registered literal is masked, so no fragment of one survives.
+    Patterns run on the original text so a literal never deletes their anchors. Origins are exact for the URI
+    pass and a greedy subsequence alignment elsewhere; output chars that align to a registered literal are masked.
     """
     registered = _REGISTERED_ESCAPED.get()
     if not registered:
@@ -452,7 +481,26 @@ def _align(matched: str, matched_origin: list[int], replacement: str) -> list[in
     return result
 
 
-def _sub_tracked(pattern: re.Pattern[str], repl: Any, text: str, origin: list[int]) -> tuple[str, list[int]]:
+def _uri_origins(match: re.Match[str], replacement: str, origin: list[int]) -> list[int]:
+    """Exact origins for a URI-pass replacement: scheme, kept Azure container and host onward come from group spans."""
+    base = match.start()
+    lead = len(match["scheme"]) + 3
+    result = [origin[match.start("scheme") - base + i] for i in range(lead)]
+    userinfo = match["userinfo"]
+    rest = lead
+    if userinfo and replacement.startswith(f"{userinfo}@", lead):
+        span = match.start("userinfo") - base
+        result.extend(origin[span + i] for i in range(len(userinfo) + 1))
+        rest += len(userinfo) + 1
+    host = match.start("host") - base
+    size = match.end() - base
+    result.extend(origin[host + i] if host + i < size else -1 for i in range(len(replacement) - rest))
+    return result
+
+
+def _sub_tracked(
+    pattern: re.Pattern[str], repl: Any, text: str, origin: list[int], origin_of: Any = None
+) -> tuple[str, list[int]]:
     out = io.StringIO()
     origins: list[int] = []
     cursor = 0
@@ -462,7 +510,10 @@ def _sub_tracked(pattern: re.Pattern[str], repl: Any, text: str, origin: list[in
         origins.extend(origin[cursor:start])
         replacement = _replacement(match, repl)
         out.write(replacement)
-        origins.extend(_align(match[0], origin[start:end], replacement))
+        if origin_of is None:
+            origins.extend(_align(match[0], origin[start:end], replacement))
+        else:
+            origins.extend(origin_of(match, replacement, origin[start:end]))
         cursor = end
     out.write(text[cursor:])
     origins.extend(origin[cursor:])
@@ -471,6 +522,26 @@ def _sub_tracked(pattern: re.Pattern[str], repl: Any, text: str, origin: list[in
 
 def _authorization_repl(m: re.Match[str]) -> str:
     return m["head"] + (f"{m['scheme']} ***" if m["scheme"] else "***")
+
+
+def _keyword_repl(m: re.Match[str]) -> str:
+    keyword, sep, value = m["keyword"], m["sep"], m["value"]
+    text, start, end = m.string, m.start(), m.end()
+    if (
+        keyword in ("PWD", "OLDPWD")
+        and not m["known"]
+        and (start == 0 or text[start - 1].isspace())
+        and _PATH_VALUE.fullmatch(value)
+        and (end == len(text) or text[end].isspace())
+    ):
+        return m[0]
+    if _COUNT_NAME.fullmatch(keyword.rpartition(".")[2]) and value.isascii() and value.isdigit():
+        return m[0]
+    if (m["quoted"] or m["braced"]) and end < len(text) and text[end] not in ";&'\"" and not text[end].isspace():
+        closer = "}" if m["braced"] else value[0]
+        opener = "{" if m["braced"] else value[0]
+        return f"{keyword}{sep}{opener}***{closer}"
+    return f"{keyword}{sep}***"
 
 
 _QUOTED_KEY_REPL = r"\g<lead>\g<quote>\g<keyword>\g<quote>: \g<quote>***\g<quote>"
@@ -483,7 +554,7 @@ _PASSES: list[tuple[re.Pattern[str], Any]] = [
     (_PASSWORD_AS_SCHEME_PATTERN, r"\g<user>:***"),
     (_AUTHORIZATION_PATTERN, _authorization_repl),
     (_BEARER_PATTERN, r"\g<scheme> ***"),
-    (_KEYWORD_PATTERN, r"\g<keyword>\g<sep>***"),
+    (_KEYWORD_PATTERN, _keyword_repl),
     (_QUOTED_KEY_PATTERN, _QUOTED_KEY_REPL),
     (_SLASH_DSN_PATTERN, r"\g<user>/***@"),
     (_SCHEME_SLASH_DSN_PATTERN, r"\g<user>/***@"),
@@ -501,7 +572,9 @@ def _scrub_tracked(text: str) -> tuple[str, list[int]]:
     text = text.replace(_JDBC_CUT, "\ufffd")
     origin = list(range(len(text)))
     for pattern, repl in _PASSES:
-        text, origin = _sub_tracked(pattern, repl, text, origin)
+        text, origin = _sub_tracked(
+            pattern, repl, text, origin, _uri_origins if pattern is _FREE_TEXT_URI_PATTERN else None
+        )
     return text, origin
 
 
@@ -751,7 +824,7 @@ def _redact_recursive(value: Any, ancestors: set[int]) -> Any:
     return value
 
 
-_SECRET_KEY = re.compile(r"[\w-]*" + _SECRET_NAME, re.IGNORECASE)
+_SECRET_KEY = re.compile(r"[\w.-]*" + _SECRET_NAME, re.IGNORECASE)
 
 
 def _mask_secret_keys(value: Any, ancestors: frozenset[int] = frozenset()) -> Any:

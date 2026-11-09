@@ -777,6 +777,8 @@ def test_plan_content_hash_scrubs_credential_option_values_only() -> None:
     assert hashed(password="a1") == hashed(password="b2")  # nosec B106
     assert hashed(conn={"password": "a1", "host": "h"}) == hashed(conn={"password": "b2", "host": "h"})  # nosec B105
     assert hashed(conn={"api_key": "a1"}) == hashed(conn={"api_key": "b2"})
+    assert hashed(**{"db.password": "a1"}) == hashed(**{"db.password": "b2"})  # nosec B106
+    assert hashed(conn={"fs.s3a.secret.key": "a1"}) == hashed(conn={"fs.s3a.secret.key": "b2"})
     assert hashed(window=3) != hashed(window=4)
     assert hashed(conns=[{"password": "a1"}]) == hashed(conns=[{"password": "b2"}])  # nosec B105
     assert hashed(conns=({"password": "a1"},)) == hashed(conns=({"password": "b2"},))  # nosec B105

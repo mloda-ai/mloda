@@ -72,6 +72,8 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     - The source feature must contain text data
     """
 
+    CONTRACT_VERSION = 1
+
     # Option key for the list of operations
     CLEANING_OPERATIONS = "cleaning_operations"
 

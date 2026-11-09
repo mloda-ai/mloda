@@ -156,6 +156,8 @@ invalid). See
 [Declaring capability per subtype](compute-framework-integration.md#declaring-capability-per-subtype).
 A file or document group also reports `suffixes`, the sorted suffixes it owns by default (empty for other groups).
 
+It also reports `contract_version` (the group's `CONTRACT_VERSION`, `None` when unset) and `divergences` (the stamped, scrubbed records of the group and of each serving implementation).
+
 ## Inspecting Compute Frameworks
 
 Get documentation for compute frameworks:

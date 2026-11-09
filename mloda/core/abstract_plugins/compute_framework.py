@@ -1116,6 +1116,7 @@ class ComputeFramework(ABC):
 
     @final
     def _build_hook_context(self, hook: ExtenderHook, feature_group: Any, features: Any) -> HookContext:
+        from mloda.core.abstract_plugins.components.divergence import Divergence
         from mloda.core.abstract_plugins.components.feature_set import FeatureSet
         from mloda.core.abstract_plugins.components.input_data.source_feature_group import implementation_path
 
@@ -1133,7 +1134,9 @@ class ComputeFramework(ABC):
         credential_handles: tuple[str, ...] = ()
         implementation: str | None = None
         implementation_version: str | None = None
+        divergences: tuple[Divergence, ...] = ()
         if isinstance(features, FeatureSet):
+            divergences = features.divergences
             impl = features.implementation
             implementation = implementation_path(feature_group_cls, impl, features.input_data_match)
             if impl is not None:
@@ -1183,6 +1186,8 @@ class ComputeFramework(ABC):
             worker_index=self.worker_index,
             implementation=implementation,
             implementation_version=implementation_version,
+            divergences=divergences,
+            contract_version=getattr(feature_group_cls, "CONTRACT_VERSION", None),
         )
 
     @staticmethod

@@ -16,6 +16,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
     redact_option_value,
 )
 from mloda.core.abstract_plugins.components.credential import Credential
+from mloda.core.abstract_plugins.components.divergence import Divergence
 from mloda.core.abstract_plugins.components.credential_handle import credential_handle_keys
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.input_data.input_data_load import (
@@ -113,6 +114,9 @@ class PlanStep:
 
     ``runtime_parameters``: the sorted runtime parameter keys a compute step declares, else (); excluded from equality.
 
+    ``divergences``: the stamped, scrubbed records of the group and its implementation that apply, else ().
+    ``contract_version``: the step's feature group CONTRACT_VERSION, else None.
+
     ``implementation``: the Implementation class serving a compute step, else None.
     ``implementation_path``: its ``module:qualname``, "neutral" for a source group step without one, else None.
     ``implementation_specialized_from``: the winner's concrete Implementation ancestors that serve the step's pair, sorted by path.
@@ -152,6 +156,8 @@ class PlanStep:
     leaves_connection: str | None = None
     credential_handles: tuple[str, ...] = field(default=(), compare=False)
     runtime_parameters: tuple[str, ...] = field(default=(), compare=False)
+    divergences: tuple[Divergence, ...] = ()
+    contract_version: int | None = None
     _data_access_identity: str | None = field(default=None, compare=False)
     _data_access_identity_is_fallback: bool | None = field(default=None, compare=False)
     _neutral: bool = field(default=False, compare=False)
@@ -405,6 +411,8 @@ def build_plan_steps(
                     step_uuid=step.uuid,
                     credential_handles=step.features.credential_handles,
                     runtime_parameters=step.features.runtime_parameters,
+                    divergences=step.features.divergences,
+                    contract_version=step.feature_group.CONTRACT_VERSION,
                     _match_digests=match_digests(options.group) if options else {},
                     _match_key_id=_key_id(),
                     input_feature_edges={

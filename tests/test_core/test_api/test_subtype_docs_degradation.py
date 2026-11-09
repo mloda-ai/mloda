@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.provider import FeatureGroup, SubtypeDeclaration, property_spec
+from mloda.provider import Divergence, FeatureGroup, SubtypeDeclaration, property_spec
 from mloda.steward import FeatureGroupInfo, get_feature_group_docs, resolve_feature
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -115,6 +115,18 @@ class SbfixDocBogusSupportedFG(FeatureGroup):
         return None
 
 
+class SbfixRaisingRecordsFG(SbfixDocBogusSupportedFG):
+    """Group whose divergence records cannot be read."""
+
+    CONTRACT_VERSION = 2
+    SUBTYPES = None  # type: ignore[assignment]
+    PROPERTY_MAPPING = {}
+
+    @classmethod
+    def divergence_records(cls) -> tuple[Divergence, ...]:
+        raise RuntimeError("sbfix records exploded")
+
+
 def _sbfix_doc_for(fg_class: type[FeatureGroup]) -> FeatureGroupInfo:
     """Fetch the FeatureGroupInfo of one class object, independent of what else is registered."""
     docs = get_feature_group_docs(plugin_collector=PluginCollector.enabled_feature_groups(fg_class))
@@ -163,3 +175,9 @@ class TestSbfixBogusSupportedSurfacedInDocs:
         assert doc.subtype_error is not None
         assert SBFIX_BOGUS_FRAMEWORK in doc.subtype_error
         assert "SbfixDocBogusSupportedFG" in doc.subtype_error
+
+    def test_a_raising_divergence_read_degrades_to_no_records_and_keeps_the_contract_version(self) -> None:
+        doc = _sbfix_doc_for(SbfixRaisingRecordsFG)
+
+        assert doc.divergences == []
+        assert doc.contract_version == 2

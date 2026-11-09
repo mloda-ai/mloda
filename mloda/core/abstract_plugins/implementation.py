@@ -17,6 +17,7 @@ from mloda.core.abstract_plugins.components.divergence import (
     Divergence,
     DivergenceKind,
     DivergenceSource,
+    divergence_order,
     stamped,
     validate_divergences,
 )
@@ -96,6 +97,14 @@ def _is_pair(cls: Any) -> bool:
     return _PAIR_VERDICTS[cls]
 
 
+def _canonical_subtype(group: type[FeatureGroup], feature_name: str, options: Options) -> str | None:
+    subtype = group.resolve_subtype(feature_name, options)
+    if subtype is None:
+        return None
+    canonical = group.canonical_subtype(subtype)
+    return canonical if canonical in group.subtype_universe() else None
+
+
 class Implementation(ABC, Generic[G]):
     """Names its pair with feature_group and compute_framework and computes it in calculate.
 
@@ -117,6 +126,9 @@ class Implementation(ABC, Generic[G]):
             raise TypeError(f"{cls.__name__} declares 'DIVERGENCES'; an Implementation spells it divergences.")
         if "divergent" in cls.__dict__:
             raise TypeError(f"{cls.__name__} declares 'divergent'; an Implementation declares divergences.")
+        for name in ("contract_version", "CONTRACT_VERSION"):
+            if name in cls.__dict__:
+                raise TypeError(f"{cls.__name__} declares '{name}'; the FeatureGroup declares the contract version.")
         if _has_abstract_member(cls):
             _registry.add(cls)  # a decorator may still make it concrete
             return
@@ -162,11 +174,7 @@ class Implementation(ABC, Generic[G]):
     @classmethod
     def canonical_subtype(cls, group: type[FeatureGroup], feature_name: str, options: Options) -> str | None:
         """The feature's canonical subtype when the group declares it, else None."""
-        subtype = group.resolve_subtype(feature_name, options)
-        if subtype is None:
-            return None
-        canonical = group.canonical_subtype(subtype)
-        return canonical if canonical in group.subtype_universe() else None
+        return _canonical_subtype(group, feature_name, options)
 
     @classmethod
     def divergence_records(cls) -> tuple[Divergence, ...]:
@@ -176,10 +184,15 @@ class Implementation(ABC, Generic[G]):
 
     @classmethod
     def divergences_for(
-        cls, group: type[FeatureGroup], feature_name: str, options: Options, *, parts: frozenset[str] | None = None
+        cls,
+        group: type[FeatureGroup],
+        feature_name: str,
+        options: Options,
+        *,
+        parts: frozenset[str] | None = None,
     ) -> tuple[Divergence, ...]:
         """The stamped non-GAP records that apply to the feature; parts is None for the whole feature."""
-        subtype = cls.canonical_subtype(group, feature_name, options)
+        subtype = _canonical_subtype(group, feature_name, options)
         return tuple(
             r for r in cls.divergence_records() if r.kind is not DivergenceKind.GAP and r.applies_to(subtype, parts)
         )
@@ -188,6 +201,21 @@ class Implementation(ABC, Generic[G]):
     @abstractmethod
     def calculate(cls, group: type[G], data: Any, features: FeatureSet, framework: ComputeFramework | None) -> Any:
         """Compute the features; data is the input frame for an operation group, the SourceMatch for a source group."""
+
+
+def step_divergences(
+    group: type[FeatureGroup], implementation: type[Implementation[Any]] | None, features: FeatureSet
+) -> tuple[Divergence, ...]:
+    """Stamped group and implementation records applying to any feature of the set, GAP included, sorted."""
+    records = group.divergence_records() + (implementation.divergence_records() if implementation else ())
+    if not records:
+        return ()
+    found: set[Divergence] = set()
+    for feature in features.features:
+        subtype = _canonical_subtype(group, str(feature.name), feature.options)
+        parts = feature.requested_parts if feature.parts_only else None
+        found.update(r for r in records if r.applies_to(subtype, parts))
+    return tuple(sorted(found, key=divergence_order))
 
 
 def serving_implementation(

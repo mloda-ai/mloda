@@ -86,6 +86,8 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     resolution/splitting would be placed here.
     """
 
+    CONTRACT_VERSION = 1
+
     # Option key for aggregation type
     AGGREGATION_TYPE = "aggregation_type"
 

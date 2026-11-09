@@ -8,6 +8,7 @@ import importlib.util
 import json
 import sys
 import types
+import warnings
 import uuid
 import weakref
 from pathlib import Path
@@ -18,6 +19,7 @@ import pytest
 
 from mloda.core.api.plan_lock import PLAN_LOCK_FORMAT, _lock_text
 from mloda.steward import (
+    PlanLockContractVersionWarning,
     PlanLockMismatchError,
     PlanStep,
     check_plan_lock,
@@ -27,9 +29,13 @@ from mloda.steward import (
 )
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.divergence import DivergenceSource, stamped
 from mloda.provider import (
     BaseFeatureGroupVersion,
+    Cause,
     ComputeFramework,
+    Divergence,
+    DivergenceKind,
     DataCreatorFeatureGroup,
     FeatureGroup,
     FeatureSet,
@@ -145,7 +151,7 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
     text = lock.read_text(encoding="utf-8")
     content = json.loads(text)
     assert text == json.dumps(content, sort_keys=True, indent=2) + "\n"
-    assert content["format"] == PLAN_LOCK_FORMAT == 8
+    assert content["format"] == PLAN_LOCK_FORMAT == 9
     assert set(content) == {"format", "requested_features", "compute", "joins", "transforms"}
     assert content["requested_features"] == ["lock_io_value"]
     assert set(content["compute"][0]) == {
@@ -563,7 +569,7 @@ def test_a_lock_written_in_the_previous_format_with_a_reader_entry_fails_check(t
     write_plan_lock(plan, lock)
     content = json.loads(lock.read_text(encoding="utf-8"))
     content["format"] = PLAN_LOCK_FORMAT - 1
-    assert content["format"] == 7
+    assert content["format"] == 8
     for record in content["compute"]:
         record["reader"] = None
     lock.write_text(json.dumps(content, sort_keys=True, indent=2) + "\n", encoding="utf-8")
@@ -661,6 +667,13 @@ def test_plan_structure_hash_ignores_non_lock_fields() -> None:
     assert plan_structure_hash(varied) == plan_structure_hash(base)
 
 
+_RECORD = stamped(
+    Divergence(kind=DivergenceKind.VALUE, cause=Cause.BACKEND, subtypes=frozenset({"sum"}), reason="skips NaN"),
+    DivergenceSource.IMPLEMENTATION,
+    "PandasDataFrame",
+)
+
+
 def _content_plan() -> list[PlanStep]:
     return [
         _compute_step(
@@ -676,6 +689,7 @@ def _content_plan() -> list[PlanStep]:
     [
         pytest.param(lambda: _with(0, compute_framework=PyArrowTable), id="compute_framework"),
         pytest.param(lambda: _with(0, input_feature_edges={"lock_io_value": ("b",)}), id="input_feature_edges"),
+        pytest.param(lambda: _with(0, divergences=(_RECORD,)), id="divergences"),
         pytest.param(lambda: _with(1, join_keys=("l=other",)), id="join_keys"),
     ],
 )
@@ -699,6 +713,10 @@ def test_plan_content_hash_is_a_sha256_hex_and_differs_from_the_structure_hash()
     # Pinned: the content hash includes the implementation fields, so adding them re-pinned this value; any later
     # change to the hashed content must re-pin it deliberately.
     assert digest == "62f9a6790421ab2966b13bf8f47acabed346aa22b4910f7ca7eb5820f3bd4c63"
+
+
+def test_plan_content_hash_ignores_the_divergence_records() -> None:
+    assert plan_content_hash(_with(0, divergences=(_RECORD,))) == plan_content_hash(_content_plan())
 
 
 def test_plan_content_hash_ignores_run_ids_and_reason_text() -> None:
@@ -729,6 +747,7 @@ def _with(index: int, **overrides: object) -> list[PlanStep]:
         pytest.param(lambda: _with(0, compute_framework=PyArrowTable), id="compute_framework"),
         pytest.param(lambda: _with(0, feature_set_options=Options(group={"window": 4})), id="group_option"),
         pytest.param(lambda: _with(0, input_feature_edges={"lock_io_value": ("b",)}), id="input_edges"),
+        pytest.param(lambda: _with(0, contract_version=2), id="contract_version"),
         pytest.param(lambda: _with(1, join_type="left"), id="join_type"),
         pytest.param(lambda: _with(1, join_keys=("l=other",)), id="join_keys"),
     ],
@@ -842,10 +861,10 @@ _NO_HANDLE_LOCK = (
     '      "feature_names": [\n        "lock_io_value"\n      ],\n      "implementation": null,\n'
     '      "implementation_hash": null,\n      "implementation_specialized_from": [],\n'
     '      "input_feature_edges": {},\n      "leaves_connection": null,\n      "result_framework": null,\n'
-    '      "specialized_from": []\n    }\n  ],\n  "format": 8,\n  "joins": [],\n'
+    '      "specialized_from": []\n    }\n  ],\n  "format": 9,\n  "joins": [],\n'
     '  "requested_features": [\n    "lock_io_value"\n  ],\n  "transforms": []\n}\n'
 )
-_NO_HANDLE_STRUCTURE_HASH = "4596f5bde15568ac6ca82f2c379bde0522f073de137cee0e4e16aa21d1ed8cc2"
+_NO_HANDLE_STRUCTURE_HASH = "ffbb67cbe2aebeefb07d86f4d4df3a3484333d04ef916d4c6682bcc18a283648"
 _HANDLES = ("vault-a", "vault-b")
 
 
@@ -896,7 +915,7 @@ def test_the_handle_key_is_written_only_in_the_compute_record() -> None:
     assert content["compute"][0]["credential_handles"] == list(_HANDLES)
     assert all("credential_handles" not in r for r in content["joins"] + content["transforms"])
     assert "credentials_read" not in _lock_text([_compute_step(credential_handles=_HANDLES)])
-    assert content["format"] == PLAN_LOCK_FORMAT == 8
+    assert content["format"] == PLAN_LOCK_FORMAT == 9
 
 
 def test_plan_content_hash_ignores_the_declared_handles() -> None:
@@ -1066,3 +1085,208 @@ def test_a_pre_field_lock_fails_for_a_new_field_plan_with_a_diff_naming_only_tha
     assert changed
     assert all(ln.startswith("+") for ln in changed)
     assert {ln[1:].strip() for ln in changed} == expected
+
+
+_RECORD_KEYS = {"source", "framework", "kind", "cause", "subtypes", "outputs", "reason", "variant", "docs"}
+
+
+def test_a_compute_record_omits_the_new_keys_when_empty_or_none() -> None:
+    record = json.loads(_lock_text([_compute_step()]))["compute"][0]
+
+    assert "contract_version" not in record
+    assert "divergences" not in record
+
+
+def test_a_compute_record_writes_the_contract_version_and_sorted_divergences() -> None:
+    late = stamped(
+        Divergence(kind=DivergenceKind.TYPE, cause=Cause.BACKEND, reason="floats"),
+        DivergenceSource.IMPLEMENTATION,
+        "PandasDataFrame",
+    )
+    early = stamped(
+        Divergence(kind=DivergenceKind.TYPE, cause=Cause.BACKEND, reason="floats"),
+        DivergenceSource.FEATURE_GROUP,
+        None,
+    )
+    content = json.loads(_lock_text([_compute_step(contract_version=4, divergences=(late, early, _RECORD))]))
+    record = content["compute"][0]
+
+    assert record["contract_version"] == 4
+    assert [r["source"] for r in record["divergences"]] == ["feature_group", "implementation", "implementation"]
+    assert all(set(r) == _RECORD_KEYS for r in record["divergences"])
+    assert record["divergences"][0] == {
+        "source": "feature_group",
+        "framework": None,
+        "kind": "type",
+        "cause": "backend",
+        "subtypes": [],
+        "outputs": [],
+        "reason": "floats",
+        "variant": None,
+        "docs": None,
+    }
+    assert all("contract_version" not in r and "divergences" not in r for r in content["joins"] + content["transforms"])
+
+
+def test_an_operation_group_step_round_trips_its_contract_version_and_divergences(tmp_path: Path) -> None:
+    toy = importlib.import_module(
+        "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+    )
+    lock = tmp_path / "plan.lock"
+    steps = mloda.explain(
+        [Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"}, compute_framework="PandasDataFrame")],
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyFG}),
+    )
+
+    write_plan_lock(steps, lock)
+
+    record = json.loads(lock.read_text(encoding="utf-8"))["compute"][0]
+    assert record["contract_version"] == 3
+    assert sorted(r["reason"] for r in record["divergences"]) == ["group returns floats", "skips NaN in sum"]
+    check_plan_lock(steps, lock)
+
+
+def _lock_with_contract_version(tmp_path: Path, version: int) -> tuple[Path, list[PlanStep]]:
+    lock = tmp_path / "plan.lock"
+    plan = [_compute_step(contract_version=version)]
+    write_plan_lock(plan, lock)
+    return lock, plan
+
+
+def _edit_lock(lock: Path, edit: Callable[[dict[str, Any]], None]) -> None:
+    content = json.loads(lock.read_text(encoding="utf-8"))
+    edit(content)
+    lock.write_text(json.dumps(content, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+
+
+def _set_locked_version(version: int | None) -> Callable[[dict[str, Any]], None]:
+    def edit(content: dict[str, Any]) -> None:
+        if version is None:
+            content["compute"][0].pop("contract_version")
+        else:
+            content["compute"][0]["contract_version"] = version
+
+    return edit
+
+
+@pytest.mark.parametrize(
+    ("locked", "resolved"),
+    [(1, 2), (7, 2), (None, 2)],
+    ids=["version_only", "edited_lock_file", "missing_locked_version"],
+)
+def test_a_contract_version_only_difference_warns_and_does_not_raise(
+    tmp_path: Path, locked: int | None, resolved: int
+) -> None:
+    lock, _ = _lock_with_contract_version(tmp_path, 1)
+    _edit_lock(lock, _set_locked_version(locked))
+
+    with pytest.warns(PlanLockContractVersionWarning) as caught:
+        check_plan_lock([_compute_step(contract_version=resolved)], lock)
+
+    message = str(caught[0].message)
+    assert "AggregatedFeatureGroup" in message
+    assert str(resolved) in message
+    if locked is not None:
+        assert str(locked) in message
+
+
+def test_a_contract_version_changes_the_structure_hash() -> None:
+    assert plan_structure_hash([_compute_step(contract_version=2)]) != plan_structure_hash(
+        [_compute_step(contract_version=1)]
+    )
+
+
+def test_a_steward_can_turn_the_contract_version_warning_into_a_failure(tmp_path: Path) -> None:
+    lock, _ = _lock_with_contract_version(tmp_path, 1)
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", category=PlanLockContractVersionWarning)
+        with pytest.raises(PlanLockContractVersionWarning):
+            check_plan_lock([_compute_step(contract_version=2)], lock)
+
+
+def test_lock_divergences_with_a_variant_or_docs_tie_are_written_in_a_fixed_order() -> None:
+    def record(**kwargs: Any) -> Any:
+        base: dict[str, Any] = {"kind": DivergenceKind.VARIANT, "cause": Cause.OTHER, "reason": "same", "docs": "d"}
+        return stamped(Divergence(**{**base, **kwargs}), DivergenceSource.FEATURE_GROUP, None)
+
+    records = (
+        record(variant="b"),
+        record(variant="a"),
+        record(kind=DivergenceKind.TYPE, docs="y"),
+        record(kind=DivergenceKind.TYPE, docs="x"),
+    )
+    for ordered in (records, records[::-1]):
+        written = json.loads(_lock_text([_compute_step(divergences=ordered)]))["compute"][0]["divergences"]
+        assert [(r["variant"], r["docs"]) for r in written] == [(None, "x"), (None, "y"), ("a", "d"), ("b", "d")]
+
+
+@pytest.mark.parametrize("compute", ["x", [1]], ids=["not_a_list", "not_dicts"])
+def test_a_hand_edited_lock_with_a_malformed_compute_raises_a_mismatch(tmp_path: Path, compute: Any) -> None:
+    lock, plan = _lock_with_contract_version(tmp_path, 1)
+    _edit_lock(lock, lambda c: c.update(compute=compute))
+
+    with pytest.raises(PlanLockMismatchError):
+        check_plan_lock(plan, lock)
+
+
+def test_two_groups_differing_only_in_contract_version_warn_once_naming_both(tmp_path: Path) -> None:
+    def plan(version: int) -> list[PlanStep]:
+        return [
+            _compute_step(contract_version=version),
+            _compute_step(feature_group=ToyWorkerFG, feature_names=("lock_io_other",), contract_version=version),
+        ]
+
+    lock = tmp_path / "plan.lock"
+    write_plan_lock(plan(1), lock)
+
+    with pytest.warns(PlanLockContractVersionWarning) as caught:
+        check_plan_lock(plan(2), lock)
+
+    assert len(caught) == 1
+    message = str(caught[0].message)
+    assert "AggregatedFeatureGroup" in message
+    assert "ToyWorkerFG" in message
+    assert message.count("locked [1]") == 2
+    assert message.count("resolved [2]") == 2
+
+
+def test_the_contract_version_warning_is_a_user_warning() -> None:
+    assert issubclass(PlanLockContractVersionWarning, UserWarning)
+    assert not issubclass(PlanLockContractVersionWarning, PlanLockMismatchError)
+
+
+@pytest.mark.parametrize(
+    ("step_inputs", "edit", "match"),
+    [
+        ({"contract_version": 2, "compute_framework": PyArrowTable}, None, None),
+        ({"contract_version": 2}, lambda c: c.update(format=PLAN_LOCK_FORMAT - 1), "format"),
+        ({"contract_version": 1, "divergences": (_RECORD,)}, None, None),
+    ],
+    ids=["another_difference", "format_difference", "divergence_difference"],
+)
+def test_a_contract_version_change_with_any_other_difference_still_raises(
+    tmp_path: Path, step_inputs: dict[str, Any], edit: Callable[[dict[str, Any]], None] | None, match: str | None
+) -> None:
+    lock, _ = _lock_with_contract_version(tmp_path, 1)
+    if edit is not None:
+        _edit_lock(lock, edit)
+
+    with pytest.raises(PlanLockMismatchError, match=match):
+        check_plan_lock([_compute_step(**step_inputs)], lock)
+
+
+def test_a_real_plain_group_plan_warns_when_its_contract_version_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock = tmp_path / "plan.lock"
+    monkeypatch.setattr(ToyWorkerFG, "CONTRACT_VERSION", 1, raising=False)
+    written = [_explain_compute_step(ToyWorkerFG)]
+    write_plan_lock(written, lock)
+    assert json.loads(lock.read_text(encoding="utf-8"))["compute"][0]["contract_version"] == 1
+    check_plan_lock(written, lock)
+
+    monkeypatch.setattr(ToyWorkerFG, "CONTRACT_VERSION", 2, raising=False)
+    with pytest.warns(PlanLockContractVersionWarning, match="ToyWorkerFG"):
+        check_plan_lock([_explain_compute_step(ToyWorkerFG)], lock)

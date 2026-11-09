@@ -1185,6 +1185,27 @@ class TestFrameworkSubclassImplementation:
         assert context.implementation == expected
         assert context.implementation_version == ToyWorkerPythonDict.version()
 
+    def test_load_hook_carries_the_contract_version_and_divergences(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from mloda.provider import Cause, Divergence, DivergenceKind
+
+        record = Divergence(kind=DivergenceKind.TYPE, cause=Cause.BACKEND, reason="load floats")
+        monkeypatch.setattr(ToyWorkerFG, "CONTRACT_VERSION", 4, raising=False)
+        monkeypatch.setattr(ToyWorkerFG, "DIVERGENCES", (record,), raising=False)
+        capture = _LoadCapture()
+
+        mloda.run_all(
+            [WORKER_COLUMN],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({ToyWorkerFG}),
+            data_access_collection=toy_dac(h1={WORKER_COLUMN: [1, 2]}),
+            function_extender={capture},
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+        (context,) = capture.contexts
+        assert context.contract_version == 4
+        assert [r.reason for r in context.divergences] == ["load floats"]
+
 
 @pytest.mark.timeout(30)
 class TestImplementationInASpawnWorker:

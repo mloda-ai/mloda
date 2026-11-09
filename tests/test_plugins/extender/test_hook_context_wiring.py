@@ -965,6 +965,8 @@ class TestImplementationIdentityOnCalculateFeature:
         assert extender.captured is not None
         assert extender.captured.implementation is None
         assert extender.captured.implementation_version is None
+        assert extender.captured.divergences == ()
+        assert extender.captured.contract_version is None
 
     @pytest.mark.parametrize(
         "framework_name, impl_name", [("PandasDataFrame", "OpToyPandas"), ("PyArrowTable", "OpToyPyArrow")]
@@ -992,6 +994,15 @@ class TestImplementationIdentityOnCalculateFeature:
         assert validate_output.captured is not None
         assert validate_output.captured.implementation == extender.captured.implementation
         assert validate_output.captured.implementation_version == extender.captured.implementation_version
+        group_only = [("feature_group", None, "group returns floats")]
+        expected = group_only + (
+            [("implementation", "PandasDataFrame", "skips NaN in sum")] if framework_name == "PandasDataFrame" else []
+        )
+        for captured in (extender.captured, validate_output.captured):
+            assert captured.contract_version == 3
+            assert sorted(
+                (r.source.value if r.source else None, r.framework, r.reason) for r in captured.divergences
+            ) == sorted(expected)
 
 
 class TestHookContextCredentialHandles:

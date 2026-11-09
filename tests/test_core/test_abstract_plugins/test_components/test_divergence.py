@@ -18,9 +18,12 @@ from mloda.core.abstract_plugins.components.divergence import (
     stamped,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import ANY_OUTPUT_PART
+from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import Cause, OperationFeatureGroup, SubtypeDeclaration, property_spec
+from mloda.user import Options
 from mloda.user.pyarrow import PyArrowTable
 from mloda.user.python_dict import PythonDictFramework
 
@@ -53,6 +56,16 @@ def _make_impl(group: type[Any], framework: type[Any] = PythonDictFramework, **a
         **attrs,
     }
     return type("DivTestImpl", (Implementation,), body)
+
+
+def _feature_set(*features: Feature) -> FeatureSet:
+    return FeatureSet(features)
+
+
+def _feature(name: str = "divtest_x", kind: str | None = "sum", part: str | None = None) -> Feature:
+    feature = Feature(name, Options({KEY: kind} if kind else {}))
+    feature.record_part(part)
+    return feature
 
 
 class TestConstruction:
@@ -262,6 +275,50 @@ class TestStamped:
         assert (copy.kind, copy.cause, copy.subtypes, copy.reason) == (V, B, frozenset({"sum"}), "r")
 
 
+class TestStampedScrub:
+    URL = "postgres://admin:hunter2@db.example.com/prod"
+
+    def _raw(self) -> Divergence:
+        return _record(
+            kind=DivergenceKind.VARIANT,
+            variant=f"via {self.URL}",
+            cause=Cause.OTHER,
+            docs=f"see {self.URL}",
+            reason=f"backend at {self.URL}",
+        )
+
+    def test_a_stamped_copy_masks_credentials_in_reason_variant_and_docs(self) -> None:
+        copy = stamped(self._raw(), DivergenceSource.IMPLEMENTATION, "F")
+        assert copy.variant is not None and copy.docs is not None
+        for text in (copy.reason, copy.variant, copy.docs):
+            assert "hunter2" not in text
+            assert "db.example.com" in text
+
+    def test_the_raw_declaration_stays_as_written(self) -> None:
+        raw = self._raw()
+        stamped(raw, DivergenceSource.IMPLEMENTATION, "F")
+        assert "hunter2" in raw.reason
+        assert "hunter2" in (raw.variant or "")
+        assert "hunter2" in (raw.docs or "")
+        assert "hunter2" in repr(raw)
+
+    def test_absent_variant_and_docs_stay_none(self) -> None:
+        copy = stamped(_record(), DivergenceSource.FEATURE_GROUP, None)
+        assert copy.variant is None
+        assert copy.docs is None
+
+    def test_a_credential_free_record_is_unchanged(self) -> None:
+        copy = stamped(_record(reason="skips NaN"), DivergenceSource.FEATURE_GROUP, None)
+        assert copy.reason == "skips NaN"
+
+    def test_every_record_a_group_or_implementation_stamps_is_scrubbed(self) -> None:
+        raw = _record(reason=f"at {self.URL}")
+        group = _make_group(DIVERGENCES=(raw,))
+        impl = _make_impl(group, divergences=(raw,))
+        assert "hunter2" not in group.divergence_records()[0].reason
+        assert "hunter2" not in impl.divergence_records()[0].reason
+
+
 class TestDivergenceProblems:
     UNIVERSE = frozenset({"sum", "mean"})
 
@@ -370,6 +427,40 @@ class TestFeatureGroupDeclaration:
         assert _make_group().divergence_records() == ()
 
 
+class TestContractVersionDeclaration:
+    def test_default_is_none(self) -> None:
+        assert FeatureGroup.CONTRACT_VERSION is None
+        assert _make_group().CONTRACT_VERSION is None
+
+    @pytest.mark.parametrize("value", [1, 2, 10])
+    def test_a_positive_int_is_kept(self, value: int) -> None:
+        assert _make_group(CONTRACT_VERSION=value).CONTRACT_VERSION == value
+
+    def test_a_subclass_inherits_the_version(self) -> None:
+        group = _make_group(CONTRACT_VERSION=2)
+        child: Any = type("DivTestChild", (group,), {})
+        assert child.CONTRACT_VERSION == 2
+
+    @pytest.mark.parametrize("value", [True, False, "1", 1.0, [1]], ids=["true", "false", "str", "float", "list"])
+    def test_a_non_int_raises_type_error(self, value: Any) -> None:
+        with pytest.raises(TypeError):
+            _make_group(CONTRACT_VERSION=value)
+
+    @pytest.mark.parametrize("value", [0, -1])
+    def test_an_int_below_one_raises_value_error(self, value: int) -> None:
+        with pytest.raises(ValueError):
+            _make_group(CONTRACT_VERSION=value)
+
+    def test_the_lowercase_spelling_fails_at_definition(self) -> None:
+        with pytest.raises(TypeError, match="CONTRACT_VERSION"):
+            _make_group(contract_version=1)
+
+    @pytest.mark.parametrize("name", ["contract_version", "CONTRACT_VERSION"])
+    def test_an_implementation_cannot_declare_it(self, name: str) -> None:
+        with pytest.raises(TypeError, match="contract"):
+            _make_impl(_make_group(), **{name: 1})  # type: ignore[arg-type]
+
+
 class TestImplementationDeclaration:
     def test_default_is_an_empty_tuple(self) -> None:
         assert Implementation.divergences == ()
@@ -443,8 +534,6 @@ class TestImplementationDeclaration:
 
 class TestDivergencesFor:
     def test_returns_the_stamped_records_applying_to_the_feature(self) -> None:
-        from mloda.user import Options
-
         group = _make_group()
         whole = _record(kind=DivergenceKind.TYPE, reason="floats")
         impl = _make_impl(group, divergences=(_record(subtypes={"sum"}), _record(subtypes={"mean"}), whole))
@@ -453,19 +542,118 @@ class TestDivergencesFor:
         assert all(r.source is DivergenceSource.IMPLEMENTATION for r in found)
 
     def test_gap_records_are_excluded(self) -> None:
-        from mloda.user import Options
-
         group = _make_group()
         gap = _record(kind=DivergenceKind.GAP, subtypes={"sum"})
         impl = _make_impl(group, divergences=(gap,))
         assert impl.divergences_for(group, "divtest_x", Options({KEY: "sum"})) == ()
 
     def test_an_explicit_part_selects_outputs_records(self) -> None:
-        from mloda.user import Options
-
         group = _make_group(OUTPUT_PARTS=("a", "b"))
         impl = _make_impl(group, divergences=(_record(outputs={"a"}),))
         options = Options({KEY: "sum"})
         assert len(impl.divergences_for(group, "divtest_x", options, parts=frozenset({"a"}))) == 1
         assert impl.divergences_for(group, "divtest_x", options, parts=frozenset({"b"})) == ()
         assert len(impl.divergences_for(group, "divtest_x", options)) == 1
+
+
+class TestStepDivergences:
+    """The step-level union of group and serving-implementation records over a FeatureSet."""
+
+    @staticmethod
+    def _call(group: Any, impl: Any, features: Any) -> tuple[Divergence, ...]:
+        from mloda.core.abstract_plugins.implementation import step_divergences
+
+        return tuple(step_divergences(group, impl, features))
+
+    def test_group_and_implementation_records_are_joined(self) -> None:
+        group = _make_group(DIVERGENCES=(_record(kind=DivergenceKind.TYPE, reason="floats"),))
+        impl = _make_impl(group, divergences=(_record(subtypes={"sum"}),))
+
+        found = self._call(group, impl, _feature_set(_feature()))
+
+        assert [(r.source, r.reason) for r in found] == [
+            (DivergenceSource.FEATURE_GROUP, "floats"),
+            (DivergenceSource.IMPLEMENTATION, "skips NaN"),
+        ]
+        assert found[1].framework == PythonDictFramework.get_class_name()
+
+    def test_gap_records_are_included(self) -> None:
+        group = _make_group(DIVERGENCES=(_record(kind=DivergenceKind.GAP, subtypes={"sum"}, reason="g"),))
+        impl = _make_impl(group, divergences=(_record(kind=DivergenceKind.GAP, subtypes={"sum"}, reason="i"),))
+
+        found = self._call(group, impl, _feature_set(_feature()))
+
+        assert sorted(r.reason for r in found) == ["g", "i"]
+
+    def test_records_for_other_subtypes_are_filtered_out(self) -> None:
+        group = _make_group(DIVERGENCES=(_record(subtypes={"mean"}, reason="g-mean"),))
+        impl = _make_impl(group, divergences=(_record(subtypes={"mean"}, reason="i-mean"),))
+
+        assert self._call(group, impl, _feature_set(_feature(kind="sum"))) == ()
+        assert len(self._call(group, impl, _feature_set(_feature(kind="mean")))) == 2
+
+    def test_the_union_spans_every_feature_of_the_set(self) -> None:
+        group = _make_group()
+        impl = _make_impl(
+            group, divergences=(_record(subtypes={"sum"}, reason="s"), _record(subtypes={"mean"}, reason="m"))
+        )
+
+        found = self._call(group, impl, _feature_set(_feature("divtest_a", "sum"), _feature("divtest_b", "mean")))
+
+        assert sorted(r.reason for r in found) == ["m", "s"]
+
+    def test_parts_only_features_select_outputs_records(self) -> None:
+        group = _make_group(OUTPUT_PARTS=("a", "b"), DIVERGENCES=(_record(outputs={"a"}, reason="a-only"),))
+
+        assert len(self._call(group, None, _feature_set(_feature(part="a")))) == 1
+        assert self._call(group, None, _feature_set(_feature(part="b"))) == ()
+        assert len(self._call(group, None, _feature_set(_feature()))) == 1
+
+    def test_a_plain_group_without_an_implementation_yields_its_whole_plugin_records(self) -> None:
+        plain = type("DivTestPlainStep", (FeatureGroup,), {"DIVERGENCES": (_record(reason="plain"),)})
+
+        found = self._call(plain, None, _feature_set(_feature("divtest_plain", None)))
+
+        assert [(r.source, r.framework, r.reason) for r in found] == [(DivergenceSource.FEATURE_GROUP, None, "plain")]
+
+    def test_a_plain_group_without_records_yields_nothing(self) -> None:
+        plain = type("DivTestPlainEmpty", (FeatureGroup,), {})
+        assert self._call(plain, None, _feature_set(_feature("divtest_plain", None))) == ()
+
+    def test_duplicates_across_features_are_collapsed(self) -> None:
+        group = _make_group(DIVERGENCES=(_record(reason="once"),))
+        features = _feature_set(_feature("divtest_a"), _feature("divtest_b"))
+
+        assert len(self._call(group, None, features)) == 1
+
+    def test_the_order_is_deterministic(self) -> None:
+        group = _make_group(
+            DIVERGENCES=(
+                _record(kind=DivergenceKind.TYPE, reason="z"),
+                _record(reason="b"),
+                _record(reason="a"),
+            )
+        )
+        impl = _make_impl(group, divergences=(_record(reason="i"),))
+        features = _feature_set(_feature())
+
+        first = self._call(group, impl, features)
+        assert first == self._call(group, impl, features)
+        assert [r.source for r in first] == [DivergenceSource.FEATURE_GROUP] * 3 + [DivergenceSource.IMPLEMENTATION]
+        assert [r.reason for r in first[:3]] == ["a", "b", "z"]
+
+    def test_ties_on_everything_but_variant_or_docs_order_by_variant_then_docs(self) -> None:
+        from mloda.core.abstract_plugins.components.divergence import divergence_order
+
+        variants = [_record(kind=DivergenceKind.VARIANT, variant=v, reason="same") for v in ("b", "a", "c")]
+        docs = [_record(cause=Cause.OTHER, docs=d, reason="same") for d in ("y", "x")]
+        group = _make_group(DIVERGENCES=(*variants, *docs))
+
+        found = self._call(group, None, _feature_set(_feature()))
+
+        assert [r.variant for r in found if r.kind is DivergenceKind.VARIANT] == ["a", "b", "c"]
+        assert [r.docs for r in found if r.cause is Cause.OTHER] == ["x", "y"]
+        assert list(found) == sorted(found, key=divergence_order)
+        assert divergence_order(stamped(variants[1], DivergenceSource.FEATURE_GROUP, None)) < divergence_order(
+            stamped(variants[0], DivergenceSource.FEATURE_GROUP, None)
+        )

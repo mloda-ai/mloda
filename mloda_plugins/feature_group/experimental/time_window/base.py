@@ -79,6 +79,8 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
 
     """
 
+    CONTRACT_VERSION = 1
+
     # Option keys for time window configuration
     WINDOW_FUNCTION = "window_function"
     WINDOW_SIZE = "window_size"

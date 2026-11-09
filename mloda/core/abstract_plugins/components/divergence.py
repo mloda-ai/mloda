@@ -6,6 +6,9 @@ import copy
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
+
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 
 MAX_REASON_LENGTH = 200
 MAX_DOCS_LENGTH = 500
@@ -124,6 +127,11 @@ class Divergence:
 
 def stamped(record: Divergence, source: DivergenceSource, framework: str | None) -> Divergence:
     result = copy.copy(record)
+    object.__setattr__(result, "reason", scrub_credentials(record.reason))
+    if record.variant is not None:
+        object.__setattr__(result, "variant", scrub_credentials(record.variant))
+    if record.docs is not None:
+        object.__setattr__(result, "docs", scrub_credentials(record.docs))
     object.__setattr__(result, "source", source)
     object.__setattr__(result, "framework", framework)
     return result
@@ -177,3 +185,18 @@ def validate_divergences(
     problems = divergence_problems(owner, records, universe() if needs_universe(records) else frozenset(), output_parts)
     if problems:
         raise ValueError("; ".join(problems))
+
+
+def divergence_order(r: Divergence) -> tuple[Any, ...]:
+    """Total deterministic sort key for stamped records."""
+    return (
+        list(DivergenceSource).index(r.source) if r.source else -1,
+        r.framework or "",
+        list(DivergenceKind).index(r.kind),
+        list(Cause).index(r.cause),
+        sorted(r.subtypes),
+        sorted(r.outputs),
+        r.reason,
+        r.variant or "",
+        r.docs or "",
+    )

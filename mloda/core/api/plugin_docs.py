@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import SO
 from mloda.core.abstract_plugins.components.credential_access import run_boundary
 from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
 from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, feature_group_subclasses
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
@@ -49,7 +50,13 @@ from mloda.core.prepare.accessible_plugins import (
     dedup_feature_group_subclasses,
     registry_for,
 )
-from mloda.core.abstract_plugins.implementation import accessible_implementations
+from mloda.core.abstract_plugins.components.divergence import Divergence
+from mloda.core.abstract_plugins.implementation import (
+    Implementation,
+    accessible_implementations,
+    current_implementations,
+    serving_implementation,
+)
 from mloda.core.prepare.identify_feature_group import evaluate_and_render
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.core.prepare.resolution_failure_renderer import scope_callout
@@ -118,6 +125,27 @@ def _dedup_degrading_on_conflict(
         return dedup_feature_group_subclasses(feature_groups, allow_redefinition=True)
 
 
+def _divergence_records(
+    fg_class: type[FeatureGroup], implementations: list[type[Implementation[Any]]]
+) -> list[Divergence]:
+    """The group's stamped records plus those of each distinct serving implementation."""
+
+    stop_after = "load_neutral" if is_nominal_subclass(fg_class, SourceFeatureGroup) else None
+
+    def read() -> list[Divergence]:
+        serving = {
+            impl
+            for cfw in fg_class.compute_framework_definition()
+            if (impl := serving_implementation(fg_class, cfw, implementations, stop_after=stop_after)) is not None
+        }
+        records = list(fg_class.divergence_records())
+        for impl in sorted(serving, key=lambda i: f"{i.__module__}:{i.__qualname__}"):
+            records.extend(impl.divergence_records())
+        return records
+
+    return safe_field(read, [], field=f"{fg_class.__name__}.divergence_records")
+
+
 def get_feature_group_docs(
     name: str | None = None,
     search: str | None = None,
@@ -159,6 +187,7 @@ def get_feature_group_docs(
         all_feature_groups = {fg for fg in all_feature_groups if plugin_collector.applicable_feature_group_class(fg)}
     all_feature_groups = _dedup_degrading_on_conflict(all_feature_groups, allow_redefinition=allow_redefinition)
     results = []
+    implementations = list(current_implementations())
 
     for fg_class in all_feature_groups:
         if fg_class.__module__ == "__main__":
@@ -221,6 +250,10 @@ def get_feature_group_docs(
                 subtype_error=subtype_error,
                 claim_routes=list(getattr(fg_class, "CLAIM_ROUTES", ())),
                 suffixes=_owned_suffixes(fg_class),
+                contract_version=safe_field(
+                    lambda: fg_class.CONTRACT_VERSION, None, field=f"{cls_name}.CONTRACT_VERSION"
+                ),
+                divergences=_divergence_records(fg_class, implementations),
             )
         )
 

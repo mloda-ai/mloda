@@ -1,6 +1,8 @@
 """Pinning tests for the cycle-2 subtype persona surfaces of issue #639 (docs and resolve_feature)."""
 
 import gc
+import importlib
+from typing import Any
 from abc import abstractmethod
 
 import pytest
@@ -10,7 +12,19 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.provider import FeatureChainParserMixin, FeatureGroup, SubtypeDeclaration, property_spec
+from mloda.provider import (
+    Cause,
+    Divergence,
+    DivergenceKind,
+    FeatureChainParserMixin,
+    FeatureGroup,
+    SubtypeDeclaration,
+    property_spec,
+)
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation import ToyWorkerFG
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation_impl import (
+    ToyWorkerPythonDict,
+)
 from mloda.steward import FeatureGroupInfo, ResolvedFeature, get_feature_group_docs, resolve_feature
 from mloda.user import PluginCollector, PluginLoader
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -259,6 +273,8 @@ class TestSubDeclDocContractAFeatureGroupInfoFields:
         assert info.parametric_subtypes == []
         assert info.subtype_support == {}
         assert info.subtype_error is None
+        assert info.contract_version is None
+        assert info.divergences == []
 
     def test_keyword_construction_accepts_new_fields(self) -> None:
         info = FeatureGroupInfo(
@@ -274,12 +290,16 @@ class TestSubDeclDocContractAFeatureGroupInfoFields:
             parametric_subtypes=["b"],
             subtype_support={"Fw": ["a", "b"]},
             subtype_error="boom",
+            contract_version=2,
+            divergences=[],
         )
         assert info.subtype_key == "k"
         assert info.subtypes == ["a", "b"]
         assert info.parametric_subtypes == ["b"]
         assert info.subtype_support == {"Fw": ["a", "b"]}
         assert info.subtype_error == "boom"
+        assert info.contract_version == 2
+        assert info.divergences == []
 
     def test_mutable_defaults_are_not_shared(self) -> None:
         first = FeatureGroupInfo("n1", "d", "v", "m", [], set(), "n1_")
@@ -287,9 +307,102 @@ class TestSubDeclDocContractAFeatureGroupInfoFields:
         first.subtypes.append("x")
         first.parametric_subtypes.append("x")
         first.subtype_support["Fw"] = ["x"]
+        first.divergences.append(object())  # type: ignore[arg-type]
         assert second.subtypes == []
         assert second.parametric_subtypes == []
         assert second.subtype_support == {}
+        assert second.divergences == []
+
+
+class SubDeclDocWorkerSubFG(ToyWorkerFG):
+    """Source subclass that keeps the parent's load_neutral."""
+
+
+class SubDeclDocWorkerNeutralFG(ToyWorkerFG):
+    """Source subclass that overrides load_neutral, so the planner stops before the parent's Implementation."""
+
+    @classmethod
+    def load_neutral(cls, match: Any, features: Any) -> Any:
+        return {}
+
+
+class TestSourceSubclassDivergenceDocs:
+    """Docs list a parent Implementation's records only for a subclass the planner would let it serve."""
+
+    @staticmethod
+    def _reasons(group: type[FeatureGroup], monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        record = Divergence(kind=DivergenceKind.VALUE, cause=Cause.BACKEND, reason="worker differs")
+        monkeypatch.setattr(ToyWorkerPythonDict, "divergences", (record,))
+        docs = get_feature_group_docs(plugin_collector=PluginCollector.enabled_feature_groups({group}))
+        assert [d.name for d in docs] == [group.__name__]
+        return [r.reason for r in docs[0].divergences]
+
+    def test_a_subclass_without_its_own_load_neutral_lists_the_parent_records(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        assert self._reasons(SubDeclDocWorkerSubFG, monkeypatch) == ["worker differs"]
+
+    def test_a_subclass_overriding_load_neutral_does_not(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        assert self._reasons(SubDeclDocWorkerNeutralFG, monkeypatch) == []
+
+
+class TestFeatureGroupInfoContractVersionAndDivergences:
+    """get_feature_group_docs reports the group's CONTRACT_VERSION and its and its implementations' records."""
+
+    @staticmethod
+    def _toy_doc() -> FeatureGroupInfo:
+        toy = importlib.import_module(
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+        )
+        docs = get_feature_group_docs(plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyFG}))
+        assert [d.name for d in docs] == ["OpToyFG"]
+        return docs[0]
+
+    def test_a_group_reports_its_contract_version_and_stamped_records(self) -> None:
+        doc = self._toy_doc()
+
+        assert doc.contract_version == 3
+        found = sorted((r.source.value if r.source else None, r.framework, r.reason) for r in doc.divergences)
+        assert found == [
+            ("feature_group", None, "group returns floats"),
+            ("implementation", "PandasDataFrame", "skips NaN in sum"),
+        ]
+
+    def test_each_serving_implementation_contributes_its_records_once(self) -> None:
+        doc = self._toy_doc()
+
+        reasons = [r.reason for r in doc.divergences]
+        assert reasons.count("skips NaN in sum") == 1
+        assert reasons.count("group returns floats") == 1
+
+    def test_a_group_without_declarations_reports_none_and_no_records(self) -> None:
+        group = next(
+            d
+            for d in get_feature_group_docs(
+                plugin_collector=PluginCollector.enabled_feature_groups({SubDeclDocPlainFG})
+            )
+        )
+
+        assert group.contract_version is None
+        assert group.divergences == []
+
+    def test_implementations_are_listed_once_per_docs_call(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from mloda.core.abstract_plugins.implementation import current_implementations
+
+        calls: list[int] = []
+        real = current_implementations
+
+        def counting() -> Any:
+            calls.append(1)
+            return real()
+
+        monkeypatch.setattr("mloda.core.api.plugin_docs.current_implementations", counting)
+
+        get_feature_group_docs(
+            plugin_collector=PluginCollector.enabled_feature_groups({SubDeclDocPlainFG, SubDeclDocOptionFG})
+        )
+
+        assert len(calls) == 1
 
 
 class TestSubDeclDocContractBFeatureGroupDocs:

@@ -10,7 +10,9 @@ from mloda._testing.feature_group_shape import (
     _first_value,
     _framework_gate_reason,
     _input_problems,
-    _no_calculate_reason,
+    _compared,
+    _not_applicable_reason,
+    _route_block,
     _run as _run_group,
     _same,
     _serving_implementation,
@@ -21,7 +23,6 @@ from mloda._testing.suite import assert_passed
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.divergence import Divergence, DivergenceKind, allowed_variants
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
@@ -120,20 +121,6 @@ def _own_records(
     return [r for r in records if r.kind in _EXCUSING]
 
 
-def _compared(columns: list[str], names: list[str]) -> list[tuple[str, str, frozenset[str]]]:
-    unique = list(dict.fromkeys(names))
-    found = []
-    for column in columns:
-        if column in unique:
-            found.append((column, column, frozenset[str]()))
-            continue
-        prefixed = [n for n in unique if column.startswith(f"{n}~")]
-        if prefixed:
-            name = max(prefixed, key=len)
-            found.append((column, name, frozenset({column[len(name) + 1 :]})))
-    return found
-
-
 def _value_failures(
     subclass: type[FeatureGroup],
     parent: type[FeatureGroup],
@@ -147,23 +134,37 @@ def _value_failures(
     for cls in (parent, subclass):
         reason = _framework_gate_reason(cls, adapter)
         if reason is None:
-            reason = _no_calculate_reason(cls)
-        if reason is None and is_nominal_subclass(cls, SourceFeatureGroup):
-            reason = "not applicable to source groups"
+            reason = _not_applicable_reason(cls)
         if reason is not None:
             notes.append(f"values: {reason}")
             return []
     chosen = _combined(base, selecting)
     impls = {cls: _serving_implementation(cls, adapter) for cls in (parent, subclass)}
+    failures: list[str] = []
+    remaining = []
+    for name in names:
+        blocked = False
+        for cls, options in ((parent, base), (subclass, chosen)):
+            block, raised = _route_block(cls, adapter, name, options)
+            if raised is not None:
+                failures.append(f"values: {raised}")
+            elif block is not None:
+                notes.append(f"values: {block}")
+            blocked = blocked or raised is not None or block is not None
+        if not blocked:
+            remaining.append(name)
+    if not remaining:
+        return failures
+    names = remaining
     problems = _input_problems(parent, names, base, data) + _input_problems(subclass, names, chosen, data)
     if problems:
-        return [f"values: {p}" for p in dict.fromkeys(problems)]
+        return failures + [f"values: {p}" for p in dict.fromkeys(problems)]
     expected, error = _run_group(parent, adapter, data, names, base)
     if error is not None:
-        return [f"setup: {parent.__name__} run raised: {error}"]
+        return [*failures, f"setup: {parent.__name__} run raised: {error}"]
     actual, error = _run_group(subclass, adapter, data, names, chosen)
     if error is not None:
-        return [f"values: {subclass.__name__} run raised: {error}"]
+        return [*failures, f"values: {subclass.__name__} run raised: {error}"]
     allowed = allowed_variants(chosen)
     records = [
         r
@@ -171,7 +172,6 @@ def _value_failures(
         if r.kind is not DivergenceKind.VARIANT or r.variant in allowed
     ]
     present = adapter.column_names(actual)
-    failures = []
     for column, name, parts in _compared(adapter.column_names(expected), names):
         if column not in present:
             failures.append(f"values: '{column}' is missing from {subclass.__name__}'s result")

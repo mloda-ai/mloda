@@ -604,55 +604,73 @@ def test_unroutable_pair_skips_values_comparison_and_compares_nothing(
         assert any(n.startswith("values:") and "sc_a" in n for n in result.notes), result.notes
 
 
+@pytest.mark.parametrize("require_run", [False, True])
 def test_declined_name_does_not_stop_the_other_name_from_being_compared(
-    make_implementation: Callable[..., type[Implementation[Any]]],
+    make_implementation: Callable[..., type[Implementation[Any]]], require_run: bool
 ) -> None:
     parent, sub, _, sub_impl = _two_framework_pair(
         make_implementation, _calc_two(2, 2), _calc_two(2, 5), names=frozenset({"sc_a", "sc_b"})
     )
     _declining(sub_impl, only="sc_a")
-    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
-    assert any(n.startswith("values:") and "sc_a" in n for n in result.notes), result.notes
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA, require_run=require_run)
     assert any(f.startswith("values:") and "'sc_b' differs" in f for f in result.failures), result.failures
-    assert not any("'sc_a'" in f for f in result.failures), result.failures
+    if require_run:
+        assert any(f.startswith("values:") and "sc_a" in f and "differs" not in f for f in result.failures), (
+            result.failures
+        )
+        assert not any(n.startswith("values:") for n in result.notes), result.notes
+    else:
+        assert any(n.startswith("values:") and "sc_a" in n for n in result.notes), result.notes
+        assert not any("'sc_a'" in f for f in result.failures), result.failures
 
 
-def test_required_declined_name_fails_and_the_other_name_is_still_compared(
-    make_implementation: Callable[..., type[Implementation[Any]]],
-) -> None:
-    parent, sub, _, sub_impl = _two_framework_pair(
-        make_implementation, _calc_two(2, 2), _calc_two(2, 5), names=frozenset({"sc_a", "sc_b"})
-    )
-    _declining(sub_impl, only="sc_a")
-    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA, require_run=True)
-    assert any(f.startswith("values:") and "sc_a" in f and "differs" not in f for f in result.failures), result.failures
-    assert any(f.startswith("values:") and "'sc_b' differs" in f for f in result.failures), result.failures
-    assert not any(n.startswith("values:") for n in result.notes), result.notes
+INPUT_ONLY = TypedTestData({"sc_src": (DataType.INT64, [1, 2, 3]), "sc_a~p": (DataType.INT64, [4, 5, 6])})
 
 
+@pytest.mark.parametrize(("data", "phrase"), [(DATA, "did not produce"), (INPUT_ONLY, "wrote no column")])
 def test_parent_writing_no_requested_column_is_a_setup_failure(
-    make_implementation: Callable[..., type[Implementation[Any]]],
+    make_implementation: Callable[..., type[Implementation[Any]]], data: TypedTestData, phrase: str
 ) -> None:
     parent, sub, _, _ = _two_framework_pair(make_implementation, _calc(None), _calc(5))
-    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
-    assert any(f.startswith("setup:") and "did not produce" in f for f in result.failures), result.failures
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=data)
+    assert any(f.startswith("setup:") and phrase in f and "sc_a" in f for f in result.failures), result.failures
 
 
-@pytest.mark.parametrize("case", ["declined", "rule_excluded"])
+EMPTY = TypedTestData({"sc_src": (DataType.INT64, [])})
+
+
+@pytest.mark.parametrize("require_run", [False, True])
+def test_empty_fixture_compares_nothing(
+    make_implementation: Callable[..., type[Implementation[Any]]], require_run: bool
+) -> None:
+    parent, sub, _, _ = _two_framework_pair(make_implementation, _calc(2), _calc(5))
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=EMPTY, require_run=require_run)
+    if require_run:
+        assert any(f.startswith("values:") and "no rows" in f for f in result.failures), result.failures
+        assert not any(n.startswith("values:") and "no rows" in n for n in result.notes), result.notes
+    else:
+        assert result.failures == (), result.failures
+        assert any(n.startswith("values:") and "no rows" in n for n in result.notes), result.notes
+
+
+@pytest.mark.parametrize("case", ["declined", "rule_excluded", "empty"])
 def test_assert_fails_on_skipped_comparison_unless_not_required(
     make_implementation: Callable[..., type[Implementation[Any]]], case: str
 ) -> None:
     if case == "declined":
         parent, sub, parent_impl, _ = _two_framework_pair(make_implementation, _calc(2), _calc(5))
         _declining(parent_impl)
+    elif case == "empty":
+        parent, sub, _, _ = _two_framework_pair(make_implementation, _calc(2), _calc(5))
     else:
         pytest.importorskip("pandas")
         parent = make_parent(rule={PandasDataFrame})
         sub = _gated_subclass(parent, "variant", _calc(5))
+    data = EMPTY if case == "empty" else DATA
     with pytest.raises(pytest.fail.Exception) as excinfo:
-        assert_subclass_scope(sub, parent, SELECTING, input_data=DATA)
+        assert_subclass_scope(sub, parent, SELECTING, input_data=data)
     assert "values:" in str(excinfo.value)
-    assert_subclass_scope(sub, parent, SELECTING, input_data=DATA, require_run=False)
+    assert_subclass_scope(sub, parent, SELECTING, input_data=data, require_run=False)
 
 
 def test_allowed_variant_still_compares_through_the_implementation(

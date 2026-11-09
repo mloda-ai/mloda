@@ -1,6 +1,7 @@
 """The configured sources as mloda sees them: their files, readers, columns and data access collection."""
 
 import inspect
+import logging
 import os
 from collections.abc import Mapping
 from functools import partial
@@ -13,6 +14,7 @@ from mloda.provider import ReadFileFG, get_all_subclasses
 
 # A ReadFileFG group signals "cannot tell" by raising one of these.
 READER_ERRORS: tuple[type[Exception], ...] = (ImportError, OSError, ValueError)
+_LOGGER = logging.getLogger(__name__)
 
 
 def readers_for(path: str) -> list[type[ReadFileFG]]:
@@ -45,8 +47,12 @@ def _credential_value(handle: str, name: str, ref: CredentialRef, env: Mapping[s
     if isinstance(ref, FileRef):
         if not os.path.isfile(ref.path) or not os.access(ref.path, os.R_OK):
             raise ConfigError(f"{where}: file {ref.path} is missing or not readable")
-        with open(ref.path, "rb") as stream:
-            raw = stream.read()
+        # The file can vanish between the check and the read.
+        try:
+            with open(ref.path, "rb") as stream:
+                raw = stream.read()
+        except OSError:
+            raise ConfigError(f"{where}: file {ref.path} is missing or not readable") from None
         # Decoding errors carry the offending bytes, so they are replaced by a message naming only the file.
         try:
             text = raw.decode("utf-8")
@@ -72,6 +78,71 @@ def credential_values(
     }
 
 
+def tolerant_credential_values(
+    credentials: Mapping[str, Mapping[str, CredentialRef]], env: Mapping[str, str]
+) -> tuple[dict[str, Credential], dict[str, str]]:
+    """Read every credential; a handle with an unreadable field is left out and described in the problems."""
+    values: dict[str, Credential] = {}
+    problems: dict[str, str] = {}
+    for handle, fields in credentials.items():
+        # A ConfigError names the handle and field, never a value.
+        try:
+            values[handle] = Credential(
+                {name: _credential_value(handle, name, ref, env) for name, ref in fields.items()}
+            )
+        except ConfigError as error:
+            problems[handle] = str(error)
+    return values, problems
+
+
+class ServiceCredentials:
+    """The service's credentials, re-read per call; touched only under MLODA_LOCK."""
+
+    def __init__(
+        self,
+        credentials: Mapping[str, Mapping[str, CredentialRef]],
+        env: Mapping[str, str],
+        base: DataAccessCollection | None = None,
+    ) -> None:
+        self._credentials = credentials
+        self._env = env
+        taken = _taken_handle(credentials, base)
+        if taken:
+            raise ConfigError(taken)
+        self._base = base
+        self._layer = DataAccessCollection()
+        self._registered: dict[str, Credential] = {}
+        self._unreadable: set[str] = set()
+
+    @property
+    def base(self) -> DataAccessCollection | None:
+        """The live base collection, never a snapshot."""
+        return self._base
+
+    def collection(self, sources: Mapping[str, SourceConfig]) -> tuple[DataAccessCollection, dict[str, str]]:
+        """A fresh collection of ``sources`` and the readable credentials, with the problems of the others."""
+        values, problems = tolerant_credential_values(self._credentials, self._env)
+        self._log_transitions(problems)
+        for handle in [handle for handle in self._registered if handle not in values]:
+            del self._registered[handle]
+            del self._layer.credentials[handle]
+        for handle, credential in values.items():
+            if self._registered.get(handle) != credential:
+                self._layer = self._layer.with_credentials({handle: credential})
+                self._registered[handle] = credential
+        merged = DataAccessCollection() if self._base is None else self._base.copy()
+        merged.credentials.update(self._layer.credentials)
+        return data_access_collection(sources, None, merged), problems
+
+    def _log_transitions(self, problems: Mapping[str, str]) -> None:
+        for handle, problem in problems.items():
+            if handle not in self._unreadable:
+                _LOGGER.warning("Credential unreadable, requests that read it fail: %s", problem)
+        for handle in self._unreadable - set(problems):
+            _LOGGER.info("Credential '%s' is readable again.", handle)
+        self._unreadable = set(problems)
+
+
 def check_credentials(
     settings: Settings, env: Mapping[str, str], base: DataAccessCollection | None = None
 ) -> str | None:
@@ -81,7 +152,11 @@ def check_credentials(
         credential_values(settings.credentials, env)
     except ConfigError as error:
         return str(error)
-    taken = sorted(set(settings.credentials) & set(base.handles() if base is not None else ()))
+    return _taken_handle(settings.credentials, base)
+
+
+def _taken_handle(credentials: Mapping[str, object], base: DataAccessCollection | None) -> str | None:
+    taken = sorted(set(credentials) & set(base.handles() if base is not None else ()))
     if taken:
         return f"[mcp.credentials.{taken[0]}]: the handle is already registered in the given collection"
     return None

@@ -9,6 +9,7 @@ import csv
 import getpass
 import io
 import json
+import logging
 import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -676,6 +677,61 @@ class TestCredentials:
 
         with pytest.raises(ConfigError, match="token"):
             build_services(settings, env=ENV, plugin_collector=_base(CredentialReadMcp8), clock=_clock)
+
+
+class TestShortCredentialWarning:
+    OTHER_CONFIG = CRED_CONFIG + '\n[mcp.credentials.other]\ntoken = "OTHER_VAR"\n'
+
+    @staticmethod
+    def _short_warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
+        logger = "mloda.core.abstract_plugins.components.data_access_collection"
+        return [r.getMessage() for r in caplog.records if r.name == logger and "shorter than" in r.getMessage()]
+
+    def _services(self, tmp_path: Path, text: str, env: dict[str, str]) -> Planner:
+        settings = load_settings(_config(tmp_path, text), env)
+        _, planner, _ = build_services(settings, env=env, plugin_collector=_base(CredentialReadMcp8), clock=_clock)
+        return planner
+
+    def test_warns_once_at_startup_and_not_again_while_values_are_unchanged(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        env = {**ENV, "TOK_VAR": "short1"}
+        with caplog.at_level(logging.WARNING):
+            planner = self._services(tmp_path, CRED_CONFIG, env)
+            at_startup = len(self._short_warnings(caplog))
+            for _ in range(3):
+                planner.explain({"features": [CRED_FEATURE]})
+
+        assert at_startup == 1
+        assert len(self._short_warnings(caplog)) == 1
+
+    def test_warns_again_for_a_handle_whose_value_changes(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        env = {**ENV, "TOK_VAR": "short1"}
+        planner = self._services(tmp_path, CRED_CONFIG, env)
+        caplog.clear()
+
+        with caplog.at_level(logging.WARNING):
+            env["TOK_VAR"] = "short2"
+            planner.explain({"features": [CRED_FEATURE]})
+            planner.explain({"features": [CRED_FEATURE]})
+
+        assert len(self._short_warnings(caplog)) == 1
+
+    def test_an_unchanged_handle_does_not_warn_when_another_one_changes(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        env = {**ENV, "TOK_VAR": "short1", "OTHER_VAR": "short3"}
+        planner = self._services(tmp_path, self.OTHER_CONFIG, env)
+        caplog.clear()
+
+        with caplog.at_level(logging.WARNING):
+            env["OTHER_VAR"] = "short4"
+            planner.explain({"features": [CRED_FEATURE]})
+
+        (warning,) = self._short_warnings(caplog)
+        assert "'other'" in warning
 
 
 class TestRunFormats:

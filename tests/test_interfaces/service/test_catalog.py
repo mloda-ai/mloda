@@ -729,3 +729,19 @@ class TestCredentialCatalog:
         assert option["name"] == CRED_KEY
         assert option.get("default") is None
         assert CRED_DEFAULT_HANDLE not in json.dumps(result)
+
+    def test_describe_of_a_credential_free_group_survives_an_unavailable_credential(self, tmp_path: Path) -> None:
+        env: dict[str, str] = {}
+        collector = PluginCollector.enabled_feature_groups({*ALLOWED, CredentialReadMcp8})
+        credentials = {HANDLE: {"token": "VAULT_TOKEN_VAR"}}
+        settings = _settings(tmp_path, credentials=credentials, options={CRED_KEY: HANDLE})
+        catalog = Catalog.build(settings, collector, env=env)
+
+        free = catalog.describe("mcp3_alpha_total")
+        refused = catalog.describe(CRED_FEATURE)
+        env["VAULT_TOKEN_VAR"] = "tok-Zk9-secret-77"
+        restored = catalog.describe(CRED_FEATURE)
+
+        assert not is_error(free), free
+        assert is_error(refused), refused
+        assert not is_error(restored), restored

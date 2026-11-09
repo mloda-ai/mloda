@@ -13,7 +13,7 @@ import re
 import secrets
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
@@ -23,7 +23,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.interfaces.service.catalog import MAX_DESCRIPTION_LENGTH, Catalog, plugin_collector_for, sanitize_text
-from mloda.interfaces.service.config import Settings, SourceConfig
+from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig
 from mloda.interfaces.service.errors import error_result, failure_result, problems_to_details
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.request import (
@@ -38,7 +38,7 @@ from mloda.interfaces.service.request import (
     in_feature_sources,
     validate_request,
 )
-from mloda.interfaces.service.sources import READER_ERRORS, credential_values, data_access_collection, source_columns
+from mloda.interfaces.service.sources import READER_ERRORS, ServiceCredentials, source_columns
 from mloda.provider import ApiDataFG, ReadFileFG, SourceMatch
 from mloda.steward import verified_context
 from mloda.user import (
@@ -178,6 +178,7 @@ class PlannedRequest:
     producers: Mapping[str, tuple[PlanStep, str | None]]
     estimate: dict[str, Any]
     digest: str
+    collection: DataAccessCollection = field(compare=False, repr=False)
 
 
 class Planner:
@@ -194,6 +195,7 @@ class Planner:
         clock: Callable[[], float] = time.time,
         env: Mapping[str, str] | None = None,
         data_access_collection: DataAccessCollection | None = None,
+        service_credentials: ServiceCredentials | None = None,
     ) -> None:
         self._settings = settings
         self._catalog = catalog
@@ -203,7 +205,13 @@ class Planner:
         self._base = plugin_collector
         self._clock = clock
         self._env: Mapping[str, str] = {} if env is None else env
-        self._dac = data_access_collection
+        shared = catalog.service_credentials
+        if service_credentials is not None:
+            self._credentials = service_credentials
+        elif shared.base is data_access_collection:
+            self._credentials = shared
+        else:
+            self._credentials = ServiceCredentials(settings.credentials, self._env, data_access_collection)
 
     @property
     def settings(self) -> Settings:
@@ -253,16 +261,33 @@ class Planner:
         if denied is not None:
             return denied
         sources = self._sources(parsed.restrict_sources)
+        diagnosis: ResolutionDiagnosis | None = None
+        steps: list[PlanStep] = []
+        failure: Exception | None = None
         try:  # plugin boundary: plugin code runs during planning and its exception text may hold data
             with verified_context(principal=self._principal), MLODA_LOCK:
                 PluginLoader.all()
-                diagnosis = mloda.diagnose(parsed.features, **self._plan_kwargs(parsed, sources))
-                steps = (
-                    mloda.explain(parsed.features, **self._plan_kwargs(parsed, sources)) if diagnosis.complete else []
-                )
+                collection, missing = self._credentials.collection(sources)
+                try:
+                    diagnosis = mloda.diagnose(parsed.features, **self._plan_kwargs(parsed, collection.copy()))
+                    if diagnosis.complete:
+                        steps = mloda.explain(parsed.features, **self._plan_kwargs(parsed, collection.copy()))
+                except Exception as error:
+                    if not missing:
+                        raise
+                    failure = error
         except Exception as error:
             return failure_result("Planning", error)
-        if not diagnosis.complete:
+        if missing and (
+            failure is not None
+            or diagnosis is None
+            or not diagnosis.complete
+            or any(step.credential_handles for step in steps)
+        ):
+            refusal = ConfigError(next(iter(missing.values())))
+            refusal.__context__ = failure
+            return failure_result("Planning", refusal)
+        if diagnosis is not None and not diagnosis.complete:
             return self._unresolved(diagnosis, request_names, sources)
         planned = self._denied([("/features", name) for step in steps for name in step.feature_names])
         if planned is not None:
@@ -293,13 +318,14 @@ class Planner:
             producers=producers,
             estimate=estimate,
             digest=_digest(steps),
+            collection=collection,
         )
 
     def execute(self, planned: PlannedRequest) -> RunResult:
         """Run a planned request with mloda under the service lock and this planner's principal."""
         with verified_context(principal=self._principal), MLODA_LOCK:
             PluginLoader.all()
-            kwargs = self._plan_kwargs(planned.parsed, planned.sources)
+            kwargs = self._plan_kwargs(planned.parsed, planned.collection.copy())
             return mloda.run_all(planned.parsed.features, output_framework="PythonDictFramework", **kwargs)
 
     def classifications(self, names: Sequence[str], steps: Sequence[PlanStep]) -> dict[str, str]:
@@ -354,11 +380,10 @@ class Planner:
             return dict(self._settings.sources)
         return {alias: self._settings.sources[alias] for alias in restrict}
 
-    def _plan_kwargs(self, parsed: ParsedRequest, sources: Mapping[str, SourceConfig]) -> dict[str, Any]:
-        credentials = credential_values(self._settings.credentials, self._env)
+    def _plan_kwargs(self, parsed: ParsedRequest, collection: DataAccessCollection) -> dict[str, Any]:
         return {
             "compute_frameworks": list(self._settings.compute_frameworks),
-            "data_access_collection": data_access_collection(sources, credentials, self._dac),
+            "data_access_collection": collection,
             "global_filter": parsed.global_filter,
             "api_data": dict(parsed.inline_data) or None,
             "plugin_collector": plugin_collector_for(self._settings, self._base),

@@ -118,6 +118,10 @@ class PyArrowTable(ComputeFramework):
             return None
         return DataType.from_arrow_type_safe(arrow_type)
 
+    def _exact_column_data_type(self, data: Any, column_name: str) -> DataType | None:
+        arrow_type = arrow_schema_field_type(data.schema, column_name)
+        return None if arrow_type is None else DataType._from_arrow_type_exact(arrow_type)
+
     def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
         return arrow_append_columns(data, columns)
 

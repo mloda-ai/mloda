@@ -138,7 +138,24 @@ class SparkFramework(ComputeFramework):
     def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         if column_name not in data.columns:
             return None
+        from pyspark.sql.types import DecimalType, ShortType, TimestampType
+
         spark_type = data.schema[column_name].dataType
+        if isinstance(spark_type, ShortType):
+            return DataType.INT32
+        if isinstance(spark_type, DecimalType):
+            return DataType.DECIMAL
+        if isinstance(spark_type, TimestampType):
+            return DataType.TIMESTAMP_MICROS
+        return self._spark_type_to_exact_data_type(spark_type)
+
+    def _exact_column_data_type(self, data: Any, column_name: str) -> DataType | None:
+        if column_name not in data.columns:
+            return None
+        return self._spark_type_to_exact_data_type(data.schema[column_name].dataType)
+
+    @staticmethod
+    def _spark_type_to_exact_data_type(spark_type: Any) -> DataType | None:
         from pyspark.sql.types import (
             ArrayType,
             BinaryType,
@@ -150,37 +167,28 @@ class SparkFramework(ComputeFramework):
             FloatType,
             IntegerType,
             LongType,
-            ShortType,
             StringType,
             TimestampNTZType,
             TimestampType,
         )
 
-        if isinstance(spark_type, ByteType):
-            return DataType.INT8
-        if isinstance(spark_type, ArrayType):
-            return DataType.LIST
-        if isinstance(spark_type, (IntegerType, ShortType)):
-            return DataType.INT32
-        if isinstance(spark_type, LongType):
-            return DataType.INT64
-        if isinstance(spark_type, FloatType):
-            return DataType.FLOAT
-        if isinstance(spark_type, DoubleType):
-            return DataType.DOUBLE
-        if isinstance(spark_type, BooleanType):
-            return DataType.BOOLEAN
-        if isinstance(spark_type, StringType):
-            return DataType.STRING
-        if isinstance(spark_type, BinaryType):
-            return DataType.BINARY
-        if isinstance(spark_type, DateType):
-            return DataType.DATE
-        if isinstance(spark_type, (TimestampType, TimestampNTZType)):
-            return DataType.TIMESTAMP_MICROS
         if isinstance(spark_type, DecimalType):
-            return DataType.DECIMAL
-        return None
+            return DataType.DECIMAL if (spark_type.precision, spark_type.scale) == (38, 18) else None
+        exact = (
+            (ByteType, DataType.INT8),
+            (IntegerType, DataType.INT32),
+            (LongType, DataType.INT64),
+            (FloatType, DataType.FLOAT),
+            (DoubleType, DataType.DOUBLE),
+            (BooleanType, DataType.BOOLEAN),
+            (StringType, DataType.STRING),
+            (BinaryType, DataType.BINARY),
+            (DateType, DataType.DATE),
+            (TimestampNTZType, DataType.TIMESTAMP_MICROS),
+            (TimestampType, DataType.TIMESTAMP_MICROS_TZ),
+            (ArrayType, DataType.LIST),
+        )
+        return next((data_type for spark_class, data_type in exact if isinstance(spark_type, spark_class)), None)
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
         """Read schema.fields once, rather than indexing the schema by name per column. Duplicate

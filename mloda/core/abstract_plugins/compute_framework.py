@@ -767,6 +767,10 @@ class ComputeFramework(ABC):
         """
         return None
 
+    def _exact_column_data_type(self, data: Any, column_name: str) -> DataType | None:
+        """The DataType whose native form the column has exactly; None for a missing, untyped or inexact column."""
+        return None
+
     def _row_count(self, data: Any) -> int | None:
         """Best-effort row count for observability; override when __len__ is missing, wrong,
         or would materialize/query."""

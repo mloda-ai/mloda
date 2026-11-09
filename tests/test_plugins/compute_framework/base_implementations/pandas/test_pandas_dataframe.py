@@ -220,3 +220,69 @@ class TestPandasIsMissingColumnError:
 
     def test_bare_attribute_error_is_not_a_missing_column(self) -> None:
         assert PandasDataFrame.is_missing_column_error(AttributeError("x")) is False
+
+
+def _pandas_framework() -> PandasDataFrame:
+    return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+
+_PANDAS_LENIENT = [
+    ("int16", "INT32"),
+    ("uint16", "INT32"),
+    ("uint32", "INT64"),
+    ("Int16", "INT32"),
+    ("float16", "FLOAT"),
+]
+
+
+@pytest.mark.parametrize("dtype, expected", _PANDAS_LENIENT)
+def test_extract_column_data_type_folds_inexact_numpy_types(dtype: str, expected: str) -> None:
+    df = pd.DataFrame({"c": pd.Series([1, 2], dtype=dtype)})
+    assert _pandas_framework()._extract_column_data_type(df, "c") == DataType[expected]
+
+
+@pytest.mark.parametrize(
+    "arrow_type, expected",
+    [
+        (pa.large_string(), DataType.STRING),
+        (pa.timestamp("ns"), DataType.TIMESTAMP_MICROS),
+        (pa.decimal128(10, 2), DataType.DECIMAL),
+    ],
+    ids=["large_string", "timestamp_ns", "decimal_10_2"],
+)
+def test_extract_arrow_dtype_column_folds_inexact_types(arrow_type: pa.DataType, expected: DataType) -> None:
+    df = pd.DataFrame({"c": pd.Series(pa.array([], type=arrow_type), dtype=pd.ArrowDtype(arrow_type))})
+    assert _pandas_framework()._extract_column_data_type(df, "c") == expected
+
+
+_PANDAS_EXACT: list[tuple[Any, DataType | None]] = [
+    (pd.Series([1], dtype="int16"), None),
+    (pd.Series([1], dtype="uint32"), None),
+    (pd.Series([1], dtype="float16"), None),
+    (pd.Series([1], dtype="int32"), DataType.INT32),
+    (pd.Series([1], dtype="Int64"), DataType.INT64),
+    (pd.Series([1.5], dtype="float32"), DataType.FLOAT),
+    (pd.Series([True], dtype="bool"), DataType.BOOLEAN),
+    (pd.Series(["a"], dtype="string"), DataType.STRING),
+    (pd.Series([Decimal("1.5")]), None),
+    (pd.Series([datetime(2024, 1, 1)], dtype="datetime64[ms]"), DataType.TIMESTAMP_MILLIS),
+    (pd.Series([datetime(2024, 1, 1, tzinfo=UTC)]), DataType.TIMESTAMP_MICROS_TZ),
+    (pd.Series([1], dtype=pd.ArrowDtype(pa.int16())), None),
+    (pd.Series(["a"], dtype=pd.ArrowDtype(pa.large_string())), None),
+    (pd.Series([1], dtype=pd.ArrowDtype(pa.int64())), DataType.INT64),
+    (pd.Series([[1]], dtype=pd.ArrowDtype(pa.list_(pa.int64()))), DataType.LIST),
+]
+
+
+@pytest.mark.parametrize("series, expected", _PANDAS_EXACT)
+def test_exact_column_data_type(series: Any, expected: DataType | None) -> None:
+    assert _pandas_framework()._exact_column_data_type(pd.DataFrame({"c": series}), "c") == expected
+
+
+def test_exact_column_data_type_missing_column_is_none() -> None:
+    assert _pandas_framework()._exact_column_data_type(pd.DataFrame({"c": [1]}), "nope") is None
+
+
+def test_exact_column_data_type_sparse_column_does_not_raise() -> None:
+    df = pd.DataFrame({"c": pd.arrays.SparseArray([0, 0, 1])})
+    assert _pandas_framework()._exact_column_data_type(df, "c") in (None, DataType.INT64)

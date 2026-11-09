@@ -15,6 +15,27 @@ except ImportError:
     pd = None
 
 _PANDAS_LOCAL_VARIABLE_PREFIX = "local variable"
+_PANDAS_EXACT: dict[tuple[str, int | None], DataType] = {
+    ("i", 1): DataType.INT8,
+    ("i", 4): DataType.INT32,
+    ("i", 8): DataType.INT64,
+    ("u", 1): DataType.UINT8,
+    ("u", 8): DataType.UINT64,
+    ("f", 4): DataType.FLOAT,
+    ("f", 8): DataType.DOUBLE,
+    ("b", 1): DataType.BOOLEAN,
+}
+_PANDAS_FOLDS: dict[tuple[str, int | None], DataType] = {
+    ("i", 2): DataType.INT32,
+    ("u", 2): DataType.INT32,
+    ("u", 4): DataType.INT64,
+    ("f", 2): DataType.FLOAT,
+}
+
+
+def _kind_and_size(dtype: Any) -> tuple[str, int | None]:
+    numpy_dtype = getattr(dtype, "numpy_dtype", dtype)
+    return getattr(numpy_dtype, "kind", ""), getattr(numpy_dtype, "itemsize", None)
 
 
 class PandasDataFrame(ComputeFramework):
@@ -89,33 +110,25 @@ class PandasDataFrame(ComputeFramework):
         dtype = self._first_column_dtype(data, column_name)
         if dtype is None:
             return None
-
         if isinstance(dtype, pd.ArrowDtype):
             return DataType.from_arrow_type_safe(dtype.pyarrow_dtype)
+        fold = _PANDAS_FOLDS.get(_kind_and_size(dtype))
+        return fold if fold is not None else self._exact_column_data_type(data, column_name)
+
+    def _exact_column_data_type(self, data: Any, column_name: str) -> DataType | None:
+        dtype = self._first_column_dtype(data, column_name)
+        if dtype is None:
+            return None
+        if isinstance(dtype, pd.ArrowDtype):
+            return DataType._from_arrow_type_exact(dtype.pyarrow_dtype)
         if isinstance(dtype, pd.StringDtype):
             return DataType.STRING
-        if isinstance(dtype, pd.BooleanDtype):
-            return DataType.BOOLEAN
-        if isinstance(dtype, pd.api.types.DatetimeTZDtype):
+        if isinstance(dtype, pd.DatetimeTZDtype):
             return DataType.TIMESTAMP_MICROS_TZ
-        if pd.api.types.is_bool_dtype(dtype):
-            return DataType.BOOLEAN
-        if pd.api.types.is_integer_dtype(dtype):
-            if dtype.itemsize == 1:
-                return DataType.INT8 if dtype.kind == "i" else DataType.UINT8
-            if dtype.kind == "u" and dtype.itemsize == 8:
-                return DataType.UINT64
-            if dtype.kind == "u":
-                return DataType.INT32 if dtype.itemsize == 2 else DataType.INT64
-            return DataType.INT32 if dtype.itemsize <= 4 else DataType.INT64
-        if pd.api.types.is_float_dtype(dtype):
-            return DataType.FLOAT if dtype.itemsize <= 4 else DataType.DOUBLE
-        if pd.api.types.is_datetime64_dtype(dtype):
-            dtype_str = str(dtype)
-            unit = dtype_str[len("datetime64[") : -1] if "[" in dtype_str else "ns"
-            return DataType.TIMESTAMP_MILLIS if unit == "ms" else DataType.TIMESTAMP_MICROS
-
-        return None
+        kind, size = _kind_and_size(dtype)
+        if kind == "M":
+            return DataType.TIMESTAMP_MILLIS if str(dtype) == "datetime64[ms]" else DataType.TIMESTAMP_MICROS
+        return _PANDAS_EXACT.get((kind, size))
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
         """Zip columns/dtypes positionally (indexing by name breaks on duplicates); first

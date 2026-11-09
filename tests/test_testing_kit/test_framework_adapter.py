@@ -583,3 +583,59 @@ def test_zero_column_frame_cannot_hold(adapter: Any) -> None:
     with adapter:
         with pytest.raises(NotImplementedError, match="cannot hold"):
             adapter.zero_column_frame()
+
+
+@pytest.mark.parametrize("name", ["PyArrow", "Pandas", "Polars", "DuckDB"])
+def test_int16_is_not_exactly_int32(adapter: Any) -> None:
+    import pyarrow as pa
+
+    with adapter:
+        result = adapter.from_typed(TypedTestData({"c": (DataType.INT32, [1, 2])}), {"c": pa.int16()})
+
+        assert adapter.has_type(result, "c", DataType.INT32) is False
+
+
+def _toy_adapter(with_exact: bool, lost: bool = False) -> Any:
+    from mloda._testing.framework_adapter import AdapterCapabilities, PythonDictAdapter
+    from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+        PythonDictFramework,
+    )
+
+    class _ToyFramework(PythonDictFramework):
+        def _exact_column_data_type(self, data: Any, column_name: str) -> DataType | None:
+            return DataType.INT64 if column_name == "c" else None
+
+    class _ToyAdapter(PythonDictAdapter):
+        capabilities = AdapterCapabilities(typed_columns=True)
+        untyped_may_hold = frozenset({DataType.STRING})
+
+        def compute_framework(self) -> Any:
+            return _ToyFramework if with_exact else PythonDictFramework
+
+        def lost_type(self, result: Any, column: str) -> bool:
+            return lost
+
+    return _ToyAdapter()
+
+
+def test_base_has_type_uses_the_framework_exact_readback() -> None:
+    adapter = _toy_adapter(with_exact=True)
+    frame = {"c": [1], "u": [1]}
+
+    assert adapter.has_type(frame, "c", DataType.INT64) is True
+    assert adapter.has_type(frame, "c", DataType.INT32) is False
+    assert adapter.has_type(frame, "u", DataType.INT64) is False
+
+
+def test_base_has_type_untyped_column_is_none_only_for_types_it_may_hold() -> None:
+    adapter = _toy_adapter(with_exact=True, lost=True)
+    frame = {"u": ["a"]}
+
+    assert adapter.has_type(frame, "u", DataType.STRING) is None
+    assert adapter.has_type(frame, "u", DataType.INT64) is False
+
+
+def test_base_has_type_is_none_for_a_framework_without_exact_readback() -> None:
+    adapter = _toy_adapter(with_exact=False)
+
+    assert adapter.has_type({"c": [1]}, "c", DataType.INT64) is None

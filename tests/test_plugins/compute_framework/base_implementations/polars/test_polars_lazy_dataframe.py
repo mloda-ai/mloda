@@ -274,3 +274,35 @@ class TestPolarsLazyDataTypeValidatorSuite(DataTypeValidatorSuite):
             "Polars has no second-precision datetime; it widens to ms (TIMESTAMP_MILLIS)",
         ),
     }
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [("Int16", "INT32"), ("UInt32", "INT64"), ("Datetime_ns", "TIMESTAMP_MICROS"), ("Decimal_10_2", "DECIMAL")],
+)
+def test_extract_column_data_type_folds_inexact_types(name: str, expected: str) -> None:
+    from mloda.user import DataType
+    from tests.test_plugins.compute_framework.base_implementations.polars.test_polars_dataframe import polars_frame
+
+    framework = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    assert framework._extract_column_data_type(polars_frame(name).lazy(), "c") == DataType[expected]
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("Int16", None),
+        ("Datetime_ns", None),
+        ("Int32", "INT32"),
+        ("Datetime_tz", "TIMESTAMP_MICROS_TZ"),
+        ("List", "LIST"),
+    ],
+)
+def test_exact_column_data_type(name: str, expected: str | None) -> None:
+    from mloda.user import DataType
+    from tests.test_plugins.compute_framework.base_implementations.polars.test_polars_dataframe import polars_frame
+
+    framework = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    assert framework._exact_column_data_type(polars_frame(name).lazy(), "c") == (
+        DataType[expected] if expected else None
+    )

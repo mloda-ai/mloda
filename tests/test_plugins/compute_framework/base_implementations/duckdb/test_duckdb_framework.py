@@ -305,3 +305,55 @@ class TestDuckDBIsMissingColumnError:
         with pytest.raises(duckdb.BinderException) as excinfo:
             duckdb.connect().sql("select t.x from (select 1 as a) t")
         assert DuckDBFramework.is_missing_column_error(excinfo.value) is True
+
+
+def _duckdb_relation(sql_type: str) -> DuckdbRelation:
+    connection = duckdb.connect()
+    return DuckdbRelation(connection, connection.sql(f"SELECT CAST(NULL AS {sql_type}) AS c LIMIT 0"))
+
+
+_DUCKDB_FOLDS = [
+    ("SMALLINT", DataType.INT32),
+    ("USMALLINT", DataType.INT32),
+    ("UINTEGER", DataType.INT64),
+    ("HUGEINT", DataType.INT64),
+    ("TIMESTAMP_S", DataType.TIMESTAMP_MICROS),
+    ("TIMESTAMP_NS", DataType.TIMESTAMP_MICROS),
+    ("DECIMAL(10,2)", DataType.DECIMAL),
+]
+_DUCKDB_EXACT: list[tuple[str, DataType | None]] = [
+    ("SMALLINT", None),
+    ("USMALLINT", None),
+    ("UINTEGER", None),
+    ("HUGEINT", None),
+    ("TIMESTAMP_S", None),
+    ("TIMESTAMP_NS", None),
+    ("DECIMAL(10,2)", None),
+    ("INTEGER", DataType.INT32),
+    ("BIGINT", DataType.INT64),
+    ("TIMESTAMP", DataType.TIMESTAMP_MICROS),
+    ("TIMESTAMP_MS", DataType.TIMESTAMP_MILLIS),
+    ("TIMESTAMPTZ", DataType.TIMESTAMP_MICROS_TZ),
+    ("BIGINT[]", DataType.LIST),
+    ("DECIMAL(38,18)", DataType.DECIMAL),
+]
+
+
+@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
+@pytest.mark.parametrize("sql_type, expected", _DUCKDB_FOLDS)
+def test_extract_column_data_type_folds_inexact_types(sql_type: str, expected: DataType) -> None:
+    framework = DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    assert framework._extract_column_data_type(_duckdb_relation(sql_type), "c") == expected
+
+
+@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
+@pytest.mark.parametrize("sql_type, expected", _DUCKDB_EXACT)
+def test_exact_column_data_type_on_zero_row_relation(sql_type: str, expected: DataType | None) -> None:
+    framework = DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    assert framework._exact_column_data_type(_duckdb_relation(sql_type), "c") == expected
+
+
+@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
+def test_exact_column_data_type_missing_column_is_none() -> None:
+    framework = DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    assert framework._exact_column_data_type(_duckdb_relation("INTEGER"), "nope") is None

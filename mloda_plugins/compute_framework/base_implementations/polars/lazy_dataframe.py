@@ -84,6 +84,12 @@ class PolarsLazyDataFrame(PolarsDataFrame):
             return None
         return PolarsDataFrame._polars_type_to_data_type(schema[column_name])
 
+    def _exact_column_data_type(self, data: Any, column_name: str) -> DataType | None:
+        schema = data.collect_schema()
+        if column_name not in schema.names():
+            return None
+        return PolarsDataFrame._polars_exact_data_type(schema[column_name])
+
     def _output_schema(self, data: Any) -> OutputSchema | None:
         """Read collect_schema() once and build the sorted (name, dtype) pairs from it directly.
 

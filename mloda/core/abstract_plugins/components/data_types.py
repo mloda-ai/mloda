@@ -195,3 +195,11 @@ class DataType(Enum):
     def from_arrow_type_safe(cls, arrow_type: pa.DataType) -> DataType | None:
         """Non-raising counterpart of from_arrow_type: returns None for unsupported types."""
         return cls._arrow_type_to_dtype_or_none(arrow_type)
+
+    @classmethod
+    def _from_arrow_type_exact(cls, arrow_type: pa.DataType) -> DataType | None:
+        """The DataType whose arrow type is exactly arrow_type (any unit, zone or element for TZ and LIST); else None."""
+        data_type = cls._arrow_type_to_dtype_or_none(arrow_type)
+        if data_type is None or data_type in (cls.TIMESTAMP_MICROS_TZ, cls.LIST):
+            return data_type
+        return data_type if arrow_type == cls.to_arrow_type(data_type) else None

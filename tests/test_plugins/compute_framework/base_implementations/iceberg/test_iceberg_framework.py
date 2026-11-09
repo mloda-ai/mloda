@@ -444,3 +444,20 @@ class TestIcebergIsMissingColumnError:
             explanatory = ValueError("Feature 'f' read a column it did not declare in input_features().")
             explanatory.__cause__ = key_error
         assert IcebergFramework.is_missing_column_error(explanatory) is False
+
+
+@pytest.mark.parametrize(
+    "arrow_type, folded, exact",
+    [
+        (lambda: pa.int16(), DataType.INT32, None),
+        (lambda: pa.large_string(), DataType.STRING, None),
+        (lambda: pa.decimal128(10, 2), DataType.DECIMAL, None),
+        (lambda: pa.int32(), DataType.INT32, DataType.INT32),
+    ],
+    ids=["int16", "large_string", "decimal_10_2", "int32"],
+)
+def test_pyarrow_table_folds_and_exact_readback(arrow_type: Any, folded: DataType, exact: DataType | None) -> None:
+    framework = IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    table = pa.table({"c": pa.array([], type=arrow_type())})
+    assert framework._extract_column_data_type(table, "c") == folded
+    assert framework._exact_column_data_type(table, "c") == exact

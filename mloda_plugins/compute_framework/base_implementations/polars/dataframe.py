@@ -16,6 +16,25 @@ try:
 except ImportError:
     pl = None  # type: ignore[assignment]
 
+_POLARS_EXACT: dict[Any, DataType] = (
+    {
+        pl.Int8: DataType.INT8,
+        pl.Int32: DataType.INT32,
+        pl.Int64: DataType.INT64,
+        pl.UInt8: DataType.UINT8,
+        pl.UInt64: DataType.UINT64,
+        pl.Float32: DataType.FLOAT,
+        pl.Float64: DataType.DOUBLE,
+        pl.Boolean: DataType.BOOLEAN,
+        pl.String: DataType.STRING,
+        pl.Binary: DataType.BINARY,
+        pl.Date: DataType.DATE,
+    }
+    if pl is not None
+    else {}
+)
+_POLARS_DATETIME_EXACT = {"ms": DataType.TIMESTAMP_MILLIS, "us": DataType.TIMESTAMP_MICROS}
+
 
 class PolarsDataFrame(ComputeFramework):
     INSTALL_HINT = 'pip install "mloda[polars]"'
@@ -83,41 +102,38 @@ class PolarsDataFrame(ComputeFramework):
             return None
         return self._polars_type_to_data_type(data[column_name].dtype)
 
+    def _exact_column_data_type(self, data: Any, column_name: str) -> DataType | None:
+        if column_name not in data.columns:
+            return None
+        return self._polars_exact_data_type(data[column_name].dtype)
+
     @staticmethod
     def _polars_type_to_data_type(dtype: Any) -> DataType | None:
         if pl is None:
             return None
-        if dtype == pl.Int8:
-            return DataType.INT8
-        if dtype == pl.UInt8:
-            return DataType.UINT8
-        if dtype == pl.UInt64:
-            return DataType.UINT64
-        if dtype in (pl.Int16, pl.UInt16, pl.Int32):
+        if dtype in (pl.Int16, pl.UInt16):
             return DataType.INT32
-        if dtype in (pl.Int64, pl.UInt32):
+        if dtype == pl.UInt32:
             return DataType.INT64
-        if dtype == pl.Float32:
-            return DataType.FLOAT
-        if dtype == pl.Float64:
-            return DataType.DOUBLE
-        if dtype == pl.Boolean:
-            return DataType.BOOLEAN
-        if dtype == pl.String:
-            return DataType.STRING
-        if dtype == pl.Binary:
-            return DataType.BINARY
-        if dtype == pl.Date:
-            return DataType.DATE
-        if isinstance(dtype, (pl.List, pl.Array)):
-            return DataType.LIST
-        if isinstance(dtype, pl.Datetime) and dtype.time_zone is not None:
-            return DataType.TIMESTAMP_MICROS_TZ
-        if isinstance(dtype, pl.Datetime):
-            return DataType.TIMESTAMP_MILLIS if dtype.time_unit == "ms" else DataType.TIMESTAMP_MICROS
+        if isinstance(dtype, pl.Datetime) and dtype.time_zone is None and dtype.time_unit == "ns":
+            return DataType.TIMESTAMP_MICROS
         if isinstance(dtype, pl.Decimal):
             return DataType.DECIMAL
-        return None
+        return PolarsDataFrame._polars_exact_data_type(dtype)
+
+    @staticmethod
+    def _polars_exact_data_type(dtype: Any) -> DataType | None:
+        if pl is None:
+            return None
+        if isinstance(dtype, (pl.List, pl.Array)):
+            return DataType.LIST
+        if isinstance(dtype, pl.Datetime):
+            if dtype.time_zone is not None:
+                return DataType.TIMESTAMP_MICROS_TZ
+            return _POLARS_DATETIME_EXACT.get(dtype.time_unit)
+        if isinstance(dtype, pl.Decimal):
+            return DataType.DECIMAL if (dtype.precision, dtype.scale) == (38, 18) else None
+        return _POLARS_EXACT.get(dtype)
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
         """Read `.schema` once and build the sorted (name, dtype) pairs from it directly. The dict

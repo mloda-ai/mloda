@@ -558,3 +558,69 @@ class TestSparkOutputSchemaSuite(OutputSchemaSuite):
         spark_adapter = self.adapter_class()
         with spark_adapter:
             yield spark_adapter
+
+
+def _spark_types() -> Any:
+    return pytest.importorskip("pyspark.sql.types")
+
+
+def _stub_spark_frame(spark_type: Any) -> Any:
+    from types import SimpleNamespace
+
+    t = _spark_types()
+    return SimpleNamespace(columns=["c"], schema=t.StructType([t.StructField("c", spark_type)]))
+
+
+_SPARK_FOLDS = [
+    (lambda t: t.ShortType(), "INT32"),
+    (lambda t: t.DecimalType(10, 2), "DECIMAL"),
+    (lambda t: t.DecimalType(38, 18), "DECIMAL"),
+    (lambda t: t.TimestampType(), "TIMESTAMP_MICROS"),
+    (lambda t: t.TimestampNTZType(), "TIMESTAMP_MICROS"),
+]
+
+
+@pytest.mark.parametrize("make_type, expected", _SPARK_FOLDS)
+def test_extract_column_data_type_folds_inexact_types_jvm_free(make_type: Any, expected: str) -> None:
+    from mloda.user import DataType
+
+    frame = _stub_spark_frame(make_type(_spark_types()))
+    framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    assert framework._extract_column_data_type(frame, "c") == DataType[expected]
+
+
+_SPARK_EXACT = [
+    (lambda t: t.ByteType(), "INT8"),
+    (lambda t: t.ShortType(), None),
+    (lambda t: t.IntegerType(), "INT32"),
+    (lambda t: t.LongType(), "INT64"),
+    (lambda t: t.FloatType(), "FLOAT"),
+    (lambda t: t.DoubleType(), "DOUBLE"),
+    (lambda t: t.BooleanType(), "BOOLEAN"),
+    (lambda t: t.StringType(), "STRING"),
+    (lambda t: t.StringType("UTF8_LCASE"), "STRING"),
+    (lambda t: t.BinaryType(), "BINARY"),
+    (lambda t: t.DateType(), "DATE"),
+    (lambda t: t.TimestampNTZType(), "TIMESTAMP_MICROS"),
+    (lambda t: t.TimestampType(), "TIMESTAMP_MICROS_TZ"),
+    (lambda t: t.ArrayType(t.LongType()), "LIST"),
+    (lambda t: t.DecimalType(38, 18), "DECIMAL"),
+    (lambda t: t.DecimalType(10, 2), None),
+]
+
+
+@pytest.mark.parametrize("make_type, expected", _SPARK_EXACT)
+def test_spark_type_to_exact_data_type(make_type: Any, expected: str | None) -> None:
+    from mloda.user import DataType
+
+    result = SparkFramework._spark_type_to_exact_data_type(make_type(_spark_types()))
+    assert result == (DataType[expected] if expected else None)
+
+
+def test_exact_column_data_type_jvm_free() -> None:
+    from mloda.user import DataType
+
+    framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    frame = _stub_spark_frame(_spark_types().TimestampType())
+    assert framework._exact_column_data_type(frame, "c") == DataType.TIMESTAMP_MICROS_TZ
+    assert framework._exact_column_data_type(frame, "nope") is None

@@ -152,6 +152,8 @@ class TestConstruction:
             {"cause": Cause.OTHER, "docs": "a\x00b"},
             {"cause": Cause.OTHER, "docs": "a\x1bb"},
             {"kind": DivergenceKind.VARIANT, "variant": "x" * (MAX_REASON_LENGTH + 1)},
+            {"outputs": ["*"]},
+            {"outputs": ["*", "col1"]},
         ],
         ids=[
             "empty_subtype",
@@ -177,6 +179,8 @@ class TestConstruction:
             "docs_nul",
             "docs_esc",
             "variant_too_long",
+            "any_output_part",
+            "any_output_part_with_a_name",
         ],
     )
     def test_wrong_values_raise_value_error(self, kwargs: dict[str, Any]) -> None:
@@ -371,6 +375,12 @@ class TestDivergenceProblems:
         record = _record()
         object.__setattr__(record, "cause", Cause.OTHER)
         assert divergence_problems("Owner", (record,), self.UNIVERSE, None)
+
+    def test_a_smuggled_wildcard_output_is_still_reported(self) -> None:
+        record = _record(outputs={"col1"})
+        object.__setattr__(record, "outputs", frozenset({ANY_OUTPUT_PART}))
+        problems = divergence_problems("Owner", (record,), self.UNIVERSE, (ANY_OUTPUT_PART,))
+        assert any("omit outputs" in p for p in problems)
 
 
 class TestFeatureGroupDeclaration:

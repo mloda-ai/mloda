@@ -175,12 +175,18 @@ _NO_LEAK_CASES = [
 ]
 
 
+@pytest.mark.parametrize("process_wide", [False, True], ids=["run_scoped", "process_wide"])
 @pytest.mark.parametrize("literal, msg, args", _NO_LEAK_CASES)
 def test_registered_literal_never_survives_in_a_record(
-    capture: _Capture, literal: str, msg: Any, args: tuple[Any, ...]
+    capture: _Capture, literal: str, msg: Any, args: tuple[Any, ...], process_wide: bool
 ) -> None:
-    with _scope(literal):
-        capture.logger.info(msg, *args)
+    if process_wide:
+        log_masking.enable_process_wide_log_masking()
+        with _HeldScope(literal):
+            _outside(lambda: capture.logger.info(msg, *args))
+    else:
+        with _scope(literal):
+            capture.logger.info(msg, *args)
 
     (record,) = capture.records
     _assert_no_literal(record, literal)
@@ -467,18 +473,6 @@ def test_no_escaped_form_is_rebuilt_per_record(capture: _Capture, mode: str) -> 
     assert len(capture.records) == 22
     for record in capture.records[-2:]:
         _assert_no_literal(record, literal)
-
-
-@pytest.mark.parametrize("literal, msg, args", _NESTED_CASES)
-def test_escaped_forms_are_masked_on_the_process_wide_path(
-    capture: _Capture, literal: str, msg: Any, args: tuple[Any, ...]
-) -> None:
-    log_masking.enable_process_wide_log_masking()
-    with _HeldScope(literal):
-        _outside(lambda: capture.logger.info(msg, *args))
-
-    (record,) = capture.records
-    _assert_no_literal(record, literal)
 
 
 def test_empty_scope_does_not_install() -> None:

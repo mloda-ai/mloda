@@ -60,6 +60,7 @@ def make_parent(
     divergences: tuple[Divergence, ...] = (),
     variants: frozenset[str] = frozenset(),
     names: frozenset[str] = frozenset({"sc_a"}),
+    writes_on_match: bool = False,
 ) -> type[FeatureGroup]:
     class ScopeParent(base):  # type: ignore[valid-type, misc]
         DIVERGENCES = divergences
@@ -67,6 +68,16 @@ def make_parent(
             VARIANTS = variants
         if parts:
             OUTPUT_PARTS = ("p",)
+        if writes_on_match:
+
+            @classmethod
+            def match_feature_group_criteria(
+                cls, feature_name: Any, options: Options, data_access_collection: Any = None
+            ) -> bool:
+                matched: bool = super().match_feature_group_criteria(feature_name, options, data_access_collection)
+                if matched:
+                    options.set("written_by_match", "yes")
+                return matched
 
         @classmethod
         def feature_names_supported(cls) -> set[str]:
@@ -368,6 +379,23 @@ def test_part_request_reaches_the_route_gate_as_base_name_and_part(
     result = check_subclass_scope(sub, parent, SELECTING, requests=["sc_a~p"], input_data=DATA)
     assert result.failures == (), result.failures
     assert not any(n.startswith("values:") for n in result.notes), result.notes
+
+
+def test_route_gate_sees_options_written_by_the_match(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+) -> None:
+    parent = make_parent(base=OperationFeatureGroup, calculates=False, writes_on_match=True)
+    sub = _gated_subclass(parent, "variant")
+
+    def accepts(cls: Any, feature_name: str, options: Options, *, part: str | None = None) -> bool:
+        return bool(options.get("written_by_match") == "yes")
+
+    for group, factor in ((parent, 2), (sub, 5)):
+        impl = make_implementation(group, PythonDictFramework, _calc(factor))
+        setattr(impl, "accepts", classmethod(accepts))
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
+    assert any(f.startswith("values:") and "differs" in f for f in result.failures), result.failures
+    assert not any(n.startswith("values:") and "not routed" in n for n in result.notes), result.notes
 
 
 def test_operation_group_without_serving_implementation_notes_values_skipped(

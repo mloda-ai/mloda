@@ -113,6 +113,8 @@ def _active_literals() -> tuple[frozenset[str], frozenset[str]]:
     own_escaped = current_registered_escaped()
     if not _process_wide:
         return own, own_escaped
+    if not own:
+        return _union_masks
     union, union_escaped = _union_masks
     return own | union, own_escaped | union_escaped
 
@@ -174,7 +176,7 @@ def _masked_text(value: Any, escaped: frozenset[str]) -> Any:
 
 
 def _mask_unformattable(record: logging.LogRecord, literals: frozenset[str], escaped: frozenset[str]) -> bool:
-    msg = mask_literals(str(record.msg), literals)
+    msg = mask_literals(str(record.msg), escaped)
     args = _stringify_args(record.args, escaped)
     record.msg = msg
     record.args = args

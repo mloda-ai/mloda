@@ -309,21 +309,25 @@ def test_container_msg_keeps_its_type(capture: _Capture, container: Any) -> None
 
 
 @pytest.mark.parametrize(
-    "msg, args",
+    "literal, msg, args",
     [
-        pytest.param("a %s %s", (_SECRET,), id="wrong_count"),
-        pytest.param("%(a)s %(b)s", ({"a": _SECRET},), id="missing_key"),
-        pytest.param(f"x {_SECRET}", ("extra",), id="no_placeholder"),
-        pytest.param("x %s %s", (_Boom(), _SECRET), id="raising_str"),
+        pytest.param(_SECRET, "a %s %s", (_SECRET,), id="wrong_count"),
+        pytest.param(_SECRET, "%(a)s %(b)s", ({"a": _SECRET},), id="missing_key"),
+        pytest.param(_SECRET, f"x {_SECRET}", ("extra",), id="no_placeholder"),
+        pytest.param(_SECRET, "x %s %s", (_Boom(), _SECRET), id="raising_str"),
+        pytest.param(_BACKSLASH, [_BACKSLASH], ("stray",), id="container_msg_escaped_form"),
     ],
 )
-def test_malformed_call_is_masked_and_never_raises(capture: _Capture, msg: str, args: tuple[Any, ...]) -> None:
-    with _scope(_SECRET):
+def test_malformed_call_is_masked_and_never_raises(
+    capture: _Capture, literal: str, msg: Any, args: tuple[Any, ...]
+) -> None:
+    with _scope(literal):
         capture.logger.info(msg, *args)
 
     (record,) = capture.records
-    assert _SECRET not in str(record.msg)
-    assert _SECRET not in repr(record.args)
+    for form in (literal, repr(literal)[1:-1]):
+        assert form not in str(record.msg)
+        assert form not in repr(record.args)
 
 
 def test_malformed_call_with_repr_only_literal_does_not_keep_the_object(capture: _Capture) -> None:
@@ -385,6 +389,41 @@ def test_str_extra_values_are_masked_and_other_values_untouched(capture: _Captur
     assert getattr(record, "obj") is holder
 
 
+class _Sneaky(str):
+    """A str subclass whose str() and format() render the registered literal."""
+
+    def __str__(self) -> str:
+        return _SECRET
+
+    def __format__(self, spec: str) -> str:
+        return _SECRET
+
+
+def test_str_subclass_extra_value_is_normalised_to_plain_str(capture: _Capture) -> None:
+    with _scope(_SECRET):
+        capture.logger.info("m", extra={"sneaky": _Sneaky("x")})
+
+    (record,) = capture.records
+    assert type(getattr(record, "sneaky")) is str
+    assert _SECRET not in logging.Formatter("%(message)s %(sneaky)s").format(record)
+
+
+class _RaisingRepr(str):
+    def __repr__(self) -> str:
+        raise RuntimeError("repr is broken")
+
+
+def test_literal_with_a_raising_repr_does_not_stay_registered() -> None:
+    def run() -> None:
+        with pytest.raises(RuntimeError):
+            with _scope(_RaisingRepr(_SECRET)):
+                pass
+        assert current_registered_secrets() == frozenset()
+        assert current_registered_escaped() == frozenset()
+
+    contextvars.copy_context().run(run)
+
+
 class _CallCounting:
     """Arg whose str and repr must never be called; counts any call."""
 
@@ -410,11 +449,10 @@ def test_records_are_untouched_with_nothing_registered(capture: _Capture, instal
             pass
     probe = _CallCounting()
     args = (_SECRET, probe)
-    capture.logger.info("login %s", *args, extra={"tag": _SECRET})
+    capture.logger.info("login %s %s", *args, extra={"tag": _SECRET})
 
     (record,) = capture.records
     assert record.args == args
-    assert record.args is not None and record.args[0] == _SECRET
     assert getattr(record, "tag") == _SECRET
     assert probe.calls == 0
     capture.logger.info(probe)

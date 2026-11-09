@@ -256,7 +256,7 @@ def _merge_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
 def mask_literals(text: str, literals: Iterable[str]) -> str:
     """Replace every occurrence of each literal with ``***``, merging overlaps."""
     spans = _literal_spans(text, literals)
-    if not spans:
+    if not spans and type(text) is str:
         return text
     out = io.StringIO()
     cursor = 0
@@ -284,11 +284,13 @@ class registered_secrets_scope:  # noqa: N801
     def __enter__(self) -> None:
         previous = _REGISTERED_SECRETS.get()
         merged = previous | self._literals
+        identity = _IDENTITY_SECRETS.get() | self._identity
+        escaped = _REGISTERED_ESCAPED.get() | _with_escaped(self._literals)
         self._tokens.append(
             (
                 _REGISTERED_SECRETS.set(merged),
-                _IDENTITY_SECRETS.set(_IDENTITY_SECRETS.get() | self._identity),
-                _REGISTERED_ESCAPED.set(_REGISTERED_ESCAPED.get() | _with_escaped(self._literals)),
+                _IDENTITY_SECRETS.set(identity),
+                _REGISTERED_ESCAPED.set(escaped),
             )
         )
         if merged and not previous:

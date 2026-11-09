@@ -12,6 +12,7 @@ from queue import Empty
 
 from mloda.core.abstract_plugins.close_context import CloseContext, CloseReason
 from mloda.core.abstract_plugins.components.credential_grant import grant_scope
+from mloda.core.abstract_plugins.hook_context import carried_gate_scope
 from mloda.core.abstract_plugins.components.credential_scrub import (
     current_registered_secrets,
     redact_exception,
@@ -231,8 +232,8 @@ def worker(
                     break
                 continue
 
-            step, grant, secrets, identity = command
-            with registered_secrets_scope(secrets, identity), grant_scope(grant):
+            step, grant, secrets, identity, in_gate_scope = command
+            with registered_secrets_scope(secrets, identity), grant_scope(grant), carried_gate_scope(in_gate_scope):
                 try:
                     data = _execute_command(step, cfw_register, cfw, data, from_cfw)
                 except BaseException as e:

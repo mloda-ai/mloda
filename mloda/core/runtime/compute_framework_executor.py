@@ -41,6 +41,7 @@ from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep, resolve_join_source_cfw
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.runtime.worker_manager import WorkerManager
+from mloda.core.abstract_plugins.hook_context import in_input_data_load_gate_scope
 from mloda.core.runtime.worker.thread_worker import thread_worker
 from mloda.core.runtime.worker.multiprocessing_worker import worker
 
@@ -448,6 +449,7 @@ class ComputeFrameworkExecutor:
                 current_identity_secrets(),
                 self._credential_grant(step),
                 self.worker_manager.result_uuids_collection.add,
+                in_input_data_load_gate_scope(),
             ),
             daemon=True,  # an abandoned step thread must not block interpreter exit
         )
@@ -486,7 +488,10 @@ class ComputeFrameworkExecutor:
             self.worker_manager.send_command(cfw_uuid, DISABLE_LOG_MASKING_COMMAND)
         elif process_wide_log_masking_enabled():
             self.worker_manager.send_command(cfw_uuid, ENABLE_PROCESS_WIDE_LOG_MASKING_COMMAND)
-        self.worker_manager.send_command(cfw_uuid, (step, self._credential_grant(step), secrets, identity))
+        self.worker_manager.send_command(
+            cfw_uuid,
+            (step, self._credential_grant(step), secrets, identity, in_input_data_load_gate_scope()),
+        )
         # Track by step.get_result_uuid() (== step.uuid), the id a worker reports back via
         # result_queue. get_uuids() returns feature uuids instead, a different namespace that
         # made find_orphaned_steps flag every finished worker as still owing a result.

@@ -18,7 +18,7 @@ Example:
 from typing import Any
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import SOURCE_INTROSPECTION_ERRORS
-from mloda.core.abstract_plugins.components.credential_access import run_boundary
+from mloda.core.api.run_boundary import run_boundary
 from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
 from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup

@@ -225,7 +225,7 @@ class TestWorkerRegisteredSecrets:
         second: tuple[frozenset[str], frozenset[str]] = (frozenset({_STEP_B_SECRET}), frozenset())
         empty: tuple[frozenset[str], frozenset[str]] = (frozenset(), frozenset())
         for secrets, identity in (first, second, empty):
-            command_queue.put((_SecretsRecordingCommand(), None, secrets, identity))
+            command_queue.put((_SecretsRecordingCommand(), None, secrets, identity, False))
         command_queue.put("STOP")
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
@@ -239,7 +239,7 @@ class TestWorkerRegisteredSecrets:
             worker_module, "_handle_command_result", Mock(side_effect=RuntimeError(f"upload failed {_REGISTERED}"))
         )
         command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
-        command_queue.put((_SecretsRecordingCommand(), None, frozenset({_REGISTERED}), frozenset()))
+        command_queue.put((_SecretsRecordingCommand(), None, frozenset({_REGISTERED}), frozenset(), False))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -390,7 +390,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         contexts: list[CloseContext | None] = []
         extender = _CloseRecordingExtender(contexts=contexts)
         cfw.function_extender = {extender}
-        command_queue.put((_RaisingCommand(error), None, frozenset(), frozenset()))
+        command_queue.put((_RaisingCommand(error), None, frozenset(), frozenset(), False))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -472,7 +472,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
         extender = _CloseRecordingExtender()
         cfw.function_extender = {extender}
-        command_queue.put((_RaisingCommand(RuntimeError), None, frozenset(), frozenset()))
+        command_queue.put((_RaisingCommand(RuntimeError), None, frozenset(), frozenset(), False))
 
         with pytest.raises(KeyboardInterrupt):
             worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
@@ -490,7 +490,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_run_context.return_value = RunContext()
         cfw_register.set_error.side_effect = [TypeError("cannot pickle"), None]
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        command_queue.put((_RaisingCommand(SystemExit), None, frozenset(), frozenset()))
+        command_queue.put((_RaisingCommand(SystemExit), None, frozenset(), frozenset(), False))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -508,7 +508,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        command_queue.put((_UnprintableRaisingCommand(), None, frozenset(), frozenset()))
+        command_queue.put((_UnprintableRaisingCommand(), None, frozenset(), frozenset(), False))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -526,7 +526,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        command_queue.put((_LeakRaisingCommand(), None, frozenset(), frozenset()))
+        command_queue.put((_LeakRaisingCommand(), None, frozenset(), frozenset(), False))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -545,7 +545,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        command_queue.put((_ContainerLeakRaisingCommand(), None, frozenset({_REGISTERED}), frozenset()))
+        command_queue.put((_ContainerLeakRaisingCommand(), None, frozenset({_REGISTERED}), frozenset(), False))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -566,7 +566,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        command_queue.put((_ChainedLeakRaisingCommand(), None, frozenset(), frozenset()))
+        command_queue.put((_ChainedLeakRaisingCommand(), None, frozenset(), frozenset(), False))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
@@ -1078,10 +1078,16 @@ class TestWorkerCredentialGrant:
 
         command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
         command_queue.put(
-            (_GrantReadingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}}), frozenset(), frozenset())
+            (_GrantReadingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}}), frozenset(), frozenset(), False)
         )
         command_queue.put(
-            (_GrantObservingCommand(), StaticGrant({"second": {"token": _SECOND_SECRET}}), frozenset(), frozenset())
+            (
+                _GrantObservingCommand(),
+                StaticGrant({"second": {"token": _SECOND_SECRET}}),
+                frozenset(),
+                frozenset(),
+                False,
+            )
         )
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
@@ -1099,7 +1105,7 @@ class TestWorkerCredentialGrant:
 
         command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
         command_queue.put(
-            (_GrantReadingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}}), frozenset(), frozenset())
+            (_GrantReadingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}}), frozenset(), frozenset(), False)
         )
         command_queue.put("STOP")
 
@@ -1114,7 +1120,7 @@ class TestWorkerCredentialGrant:
 
         command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
         command_queue.put(
-            (_GrantEchoingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}}), frozenset(), frozenset())
+            (_GrantEchoingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}}), frozenset(), frozenset(), False)
         )
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
@@ -1133,7 +1139,13 @@ class TestWorkerCredentialGrant:
 
         command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
         command_queue.put(
-            (_SetStateRaisingCommand(), StaticGrant({"first": {"token": _FIRST_SECRET}}), frozenset(), frozenset())
+            (
+                _SetStateRaisingCommand(),
+                StaticGrant({"first": {"token": _FIRST_SECRET}}),
+                frozenset(),
+                frozenset(),
+                False,
+            )
         )
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
@@ -1151,7 +1163,13 @@ class TestWorkerCredentialGrant:
         value = {"zz_worker_public_key": _PUBLIC_KEY_VALUE, "token": _FIRST_SECRET}
         command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
         command_queue.put(
-            (_GrantPolicyObservingCommand(), StaticGrant({"first": value}, policy=policy), frozenset(), frozenset())
+            (
+                _GrantPolicyObservingCommand(),
+                StaticGrant({"first": value}, policy=policy),
+                frozenset(),
+                frozenset(),
+                False,
+            )
         )
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
@@ -1179,7 +1197,7 @@ class TestWorkerHonoursTheDisableLogMaskingCommand:
         _SEEN_BY_STEPS.clear()
         command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
         command_queue.put(log_masking.DISABLE_LOG_MASKING_COMMAND)
-        command_queue.put((_SecretsRecordingCommand(), None, frozenset(), frozenset()))
+        command_queue.put((_SecretsRecordingCommand(), None, frozenset(), frozenset(), False))
         command_queue.put("STOP")
 
         with caplog.at_level(logging.WARNING):
@@ -1212,7 +1230,7 @@ class TestWorkerHonoursTheEnableProcessWideLogMaskingCommand:
         if disable_first:
             command_queue.put(log_masking.DISABLE_LOG_MASKING_COMMAND)
         command_queue.put(log_masking.ENABLE_PROCESS_WIDE_LOG_MASKING_COMMAND)
-        command_queue.put((_SecretsRecordingCommand(), None, frozenset(), frozenset()))
+        command_queue.put((_SecretsRecordingCommand(), None, frozenset(), frozenset(), False))
         command_queue.put("STOP")
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)

@@ -19,6 +19,7 @@ import pytest
 
 from mloda.user import ParallelizationMode
 from mloda.provider import ComputeFramework
+from mloda.core.abstract_plugins.hook_context import input_data_load_gate_scope
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, build_hook_extenders
 from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
 from mloda.core.abstract_plugins.components.credential_leaves import (
@@ -1244,6 +1245,7 @@ class TestThreadExecuteStep:
                 frozenset(),
                 None,
                 worker_manager.result_uuids_collection.add,
+                False,
             ),
             daemon=True,
         )
@@ -1522,7 +1524,7 @@ class TestMultiExecuteStep:
 
         executor.multi_execute_step(step)
 
-        worker_manager.send_command.assert_called_once_with(cfw_uuid, (step, None, frozenset(), frozenset()))
+        worker_manager.send_command.assert_called_once_with(cfw_uuid, (step, None, frozenset(), frozenset(), False))
 
     def test_records_assignment_with_the_steps_own_result_uuid_not_get_uuids(self) -> None:
         """record_assignment must use step.get_result_uuid(), not the feature uuids from get_uuids()."""
@@ -2125,8 +2127,13 @@ class TestGrantDispatch:
 
         assert len(_RecordingGrantKind.instances) == 1
         worker_manager.send_command.assert_called_once_with(
-            cfw_uuid, (step, _RecordingGrantKind.instances[0], frozenset(), frozenset())
+            cfw_uuid, (step, _RecordingGrantKind.instances[0], frozenset(), frozenset(), False)
         )
+
+        worker_manager.send_command.reset_mock()
+        with input_data_load_gate_scope():
+            executor.multi_execute_step(step)
+        assert worker_manager.send_command.call_args.args[1][4] is True
 
     @patch("mloda.core.runtime.compute_framework_executor.worker")
     def test_multi_execute_step_sends_only_the_steps_secrets_and_none_in_the_worker_args(
@@ -2143,7 +2150,7 @@ class TestGrantDispatch:
 
         args = worker_manager.create_worker_process.call_args.args[2]
         assert args == (cfw_register, executor.cfw_collection[cfw_uuid], None)
-        _, grant, secrets, identity = worker_manager.send_command.call_args.args[1]
+        _, grant, secrets, identity, _in_gate_scope = worker_manager.send_command.call_args.args[1]
         assert grant is None
         assert _STEP_PASSWORD in secrets and _STEP_PASSWORD in identity
         assert "run-wide-secret-value" not in secrets
@@ -2171,7 +2178,13 @@ class TestGrantDispatch:
             frozenset(),
             _RecordingGrantKind.instances[0],
             worker_manager.result_uuids_collection.add,
+            False,
         )
+
+        mock_thread_class.reset_mock()
+        with input_data_load_gate_scope():
+            executor.thread_execute_step(step)
+        assert mock_thread_class.call_args.kwargs["args"][8] is True
 
 
 def _reading_execute(handle: str) -> Any:
@@ -2304,7 +2317,7 @@ class TestLogMaskingCommandDispatch:
 
         executor.multi_execute_step(step)
 
-        step_command: tuple[Any, Any] = (cfw_uuid, (step, None, frozenset(), frozenset()))
+        step_command: tuple[Any, Any] = (cfw_uuid, (step, None, frozenset(), frozenset(), False))
         disable_command: tuple[Any, Any] = (cfw_uuid, log_masking.DISABLE_LOG_MASKING_COMMAND)
         enable_command: tuple[Any, Any] = (
             cfw_uuid,

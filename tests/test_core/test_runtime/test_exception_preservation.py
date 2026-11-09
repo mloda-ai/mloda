@@ -36,6 +36,7 @@ import pytest
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.provider import (
     BaseArtifact,
     CredentialFieldMissing,
@@ -45,13 +46,16 @@ from mloda.provider import (
     SourceMatch,
     credential_handle_spec,
     read_credential,
+    report_failed_rows,
 )
+from mloda.steward import GateBypassError
 from mloda.user import Credential, Feature, ParallelizationMode, PluginCollector, mloda
 
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsSource, ChsTwoHandleFG
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     TOY_TOKEN,
     ToySourceFG,
+    toy_dac,
     toy_token_request,
 )
 
@@ -1800,15 +1804,28 @@ class ChsNestedBareFG(ChsSource):
         return pd.DataFrame({name: [1] for name in features.get_all_names()})
 
 
-def _inner_run(group: Any, name: str, entry: str, extenders: set[Extender], options: dict[str, Any]) -> list[str]:
+def _inner_run(
+    group: Any,
+    name: str,
+    entry: str,
+    extenders: set[Extender],
+    options: dict[str, Any],
+    frameworks: list[Any] | None = None,
+    dac: Any = None,
+    mode: ParallelizationMode = ParallelizationMode.SYNC,
+    flight_server: Any = None,
+) -> list[str]:
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
     kwargs: dict[str, Any] = {
-        "compute_frameworks": [PandasDataFrame],
-        "data_access_collection": _vault_dac({_VAULT_B: _TWO_VAULTS[_VAULT_B]}),
+        "compute_frameworks": frameworks or [PandasDataFrame],
+        "data_access_collection": dac or _vault_dac({_VAULT_B: _TWO_VAULTS[_VAULT_B]}),
         "plugin_collector": PluginCollector.enabled_feature_groups({group}),
         "function_extender": extenders,
     }
+    if mode != ParallelizationMode.SYNC:
+        kwargs["parallelization_modes"] = {mode}
+        kwargs["flight_server"] = flight_server
     features = [Feature(name, options=options)]
     result = (
         mloda.prepare(features, **kwargs).run() if entry == "prepare" else getattr(mloda, entry)(features, **kwargs)
@@ -1868,6 +1885,209 @@ def test_the_outer_window_reopens_after_a_nested_run_raises(flight_server: Any) 
     assert len(failures) == 1
     assert _E2E_HANDLE in str(failures[0])
     assert _events("outer_after") == [_E2E_HOST]
+
+
+_NESTED_SEEN: dict[str, Any] = {}
+_NESTED_GATE_LOADS: dict[str, list[str]] = {"outer": [], "inner": []}
+
+
+class _NestedLoadGate(Extender):
+    """INPUT_DATA_LOAD extender recording the loading group under a label; a gate when never_fall_back."""
+
+    def __init__(self, label: str, gate: bool) -> None:
+        self.label = label
+        self.never_fall_back = gate
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_LOAD}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        context = HookContext.current()
+        assert context is not None
+        _NESTED_GATE_LOADS[self.label].append(str(context.feature_group_class))
+        return func(*args, **kwargs)
+
+
+class ChsNestedPublishOuterFG(ChsNestedOuterFG):
+    """Publishes an attribute and reports failed rows, runs a nested run, then publishes again."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_nested_publish_outer_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        HookContext.publish_result_attributes({"outer_before": 1})
+        report_failed_rows("chs_nested_publish_outer_a", [0], "outer_reason")
+        before = HookContext.current()
+        _NESTED_INNER[0]()
+        _NESTED_SEEN["outer_same_context"] = HookContext.current() is before
+        _NESTED_SEEN["outer_framework_after"] = ComputeFramework.current()
+        HookContext.publish_result_attributes({"outer_after": 1})
+        return pd.DataFrame({name: [1] for name in features.get_all_names()})
+
+
+class ChsNestedInnerPublishFG(ChsSource):
+    """Inner group: publishes an attribute, reports failed rows and records the current contexts."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_nested_inner_publish_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        _NESTED_SEEN["inner_hook_context"] = HookContext.current()
+        _NESTED_SEEN["inner_framework"] = ComputeFramework.current()
+        HookContext.publish_result_attributes({"inner_attr": 1})
+        report_failed_rows("chs_nested_inner_publish_a", [1], "inner_reason")
+        return pd.DataFrame({name: [1] for name in features.get_all_names()})
+
+
+def _run_publish_outer(mode: ParallelizationMode, flight_server: Any) -> _ReadProbeExtender:
+    _WINDOW_EVENTS.clear()
+    keep = _ReadProbeExtender({ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE})
+    _grant_run(ChsNestedPublishOuterFG, "chs_nested_publish_outer_a", mode, flight_server, {keep})
+    return keep
+
+
+def _outer_context(keep: _ReadProbeExtender) -> HookContext:
+    outer = [c for c in keep.kept if c.feature_names == ("chs_nested_publish_outer_a",)]
+    assert len(outer) == 1
+    return outer[0]
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+@pytest.mark.parametrize("entry", ["run_all", "stream_all", "prepare"])
+def test_a_nested_run_does_not_see_or_write_the_outer_hook_context_or_framework(
+    entry: str, mode: ParallelizationMode, flight_server: Any
+) -> None:
+    _NESTED_SEEN.clear()
+    _NESTED_INNER.clear()
+    _NESTED_INNER.append(lambda: _inner_run(ChsNestedInnerPublishFG, "chs_nested_inner_publish_a", entry, set(), {}))
+
+    keep = _run_publish_outer(mode, flight_server)
+
+    assert _NESTED_SEEN["inner_hook_context"] is None
+    assert _NESTED_SEEN["inner_framework"] is None
+    assert _NESTED_SEEN["outer_same_context"] is True
+    assert _NESTED_SEEN["outer_framework_after"] is not None
+    attributes = _outer_context(keep).result_attributes
+    assert attributes is not None
+    assert set(attributes) == {"outer_before", "outer_after"}
+
+
+@pytest.mark.timeout(15)
+def test_a_nested_run_does_not_add_failed_rows_to_the_outer_context(flight_server: Any) -> None:
+    """Regression pin: every step opens its own collector, so this already holds."""
+    _NESTED_SEEN.clear()
+    _NESTED_INNER.clear()
+    _NESTED_INNER.append(
+        lambda: _inner_run(ChsNestedInnerPublishFG, "chs_nested_inner_publish_a", "run_all", set(), {})
+    )
+
+    keep = _run_publish_outer(ParallelizationMode.SYNC, flight_server)
+
+    assert {rows.reason for rows in _outer_context(keep).failed_rows} == {"outer_reason"}
+
+
+class ChsNestedLoadOuterFG(ChsNestedOuterFG):
+    """Outer group of the gate cases: only runs the nested call."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_nested_load_outer_a"}
+
+
+def _nested_toy_load(
+    extenders: set[Extender], mode: ParallelizationMode = ParallelizationMode.SYNC, flight_server: Any = None
+) -> None:
+    _inner_run(
+        ToySourceFG,
+        "toyfmt_nested_col",
+        "run_all",
+        extenders,
+        {},
+        frameworks=[PythonDictFramework],
+        dac=toy_dac(h1={"toyfmt_nested_col": [1]}),
+        mode=mode,
+        flight_server=flight_server,
+    )
+
+
+def _run_gated_outer() -> None:
+    _grant_run(
+        ChsNestedLoadOuterFG,
+        "chs_nested_load_outer_a",
+        ParallelizationMode.SYNC,
+        None,
+        {_NestedLoadGate("outer", gate=True)},
+    )
+
+
+_INNER_MODES = [ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING]
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("inner_extenders", ["none", "non_gating"])
+@pytest.mark.parametrize("inner_mode", _INNER_MODES)
+def test_a_nested_load_under_an_outer_gate_without_its_own_gate_fails_closed(
+    inner_extenders: str, inner_mode: ParallelizationMode, flight_server: Any
+) -> None:
+    _WINDOW_EVENTS.clear()
+    _NESTED_GATE_LOADS.update(outer=[], inner=[])
+    failures: list[BaseException] = []
+    extenders: set[Extender] = set() if inner_extenders == "none" else {_NestedLoadGate("inner", gate=False)}
+
+    def inner() -> None:
+        with pytest.raises(GateBypassError) as caught:
+            _nested_toy_load(extenders, inner_mode, flight_server)
+        failures.append(caught.value)
+
+    _NESTED_INNER.clear()
+    _NESTED_INNER.append(inner)
+
+    _run_gated_outer()
+
+    assert len(failures) == 1
+    assert _NESTED_GATE_LOADS["outer"] == []
+    assert _NESTED_GATE_LOADS["inner"] == []
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("inner_mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+def test_a_nested_load_under_an_outer_gate_goes_through_the_inner_runs_own_gate(
+    inner_mode: ParallelizationMode,
+) -> None:
+    _WINDOW_EVENTS.clear()
+    _NESTED_GATE_LOADS.update(outer=[], inner=[])
+    _NESTED_INNER.clear()
+    _NESTED_INNER.append(lambda: _nested_toy_load({_NestedLoadGate("inner", gate=True)}, inner_mode))
+
+    _run_gated_outer()
+
+    assert _NESTED_GATE_LOADS["outer"] == []
+    assert [name.rsplit(".", 1)[-1] for name in _NESTED_GATE_LOADS["inner"]] == ["ToySourceFG"]
+
+
+@pytest.mark.timeout(15)
+def test_the_outer_hook_context_and_framework_are_back_after_a_nested_run_raises(flight_server: Any) -> None:
+    _NESTED_SEEN.clear()
+    _NESTED_INNER.clear()
+
+    def inner() -> None:
+        with pytest.raises(Exception):
+            _inner_run(ChsNestedBareFG, "chs_nested_bare_a", "run_all", set(), {})
+
+    _NESTED_INNER.append(inner)
+
+    keep = _run_publish_outer(ParallelizationMode.SYNC, flight_server)
+
+    assert _NESTED_SEEN["outer_same_context"] is True
+    assert _NESTED_SEEN["outer_framework_after"] is not None
+    attributes = _outer_context(keep).result_attributes
+    assert attributes is not None
+    assert "outer_after" in attributes
 
 
 @pytest.mark.timeout(15)

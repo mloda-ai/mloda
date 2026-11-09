@@ -4,6 +4,7 @@ See ``docs/docs/in_depth/named-data-access-handles.md`` for the user-facing guid
 """
 
 import logging
+import sqlite3
 import threading
 import time
 from pathlib import Path
@@ -857,8 +858,6 @@ class TestCopy:
     """copy() returns an independent collection that shares the connection objects."""
 
     def test_mutating_the_copy_leaves_the_original_untouched(self) -> None:
-        import sqlite3
-
         kept = sqlite3.connect(":memory:")
         extra = sqlite3.connect(":memory:")
         original = DataAccessCollection(connections={"kept": kept}, files=["/a.csv"], folders={"raw": "/raw"})
@@ -941,8 +940,6 @@ class TestCopy:
         assert copied["self"] is not original.credentials["h"]["self"]
 
     def test_with_copied_credentials_shares_connections_and_leaves_the_original(self) -> None:
-        import sqlite3
-
         conn = sqlite3.connect(":memory:")
         original = DataAccessCollection(connections={"c": conn}, credentials={"h": {"k": ["v"]}})
 

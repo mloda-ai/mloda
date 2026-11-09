@@ -111,9 +111,9 @@ class _ReadableScope:
 
     def __exit__(self, *exc_info: object) -> None:
         window, token = self._frames.pop()
-        _READABLE.reset(token)
         if window is not None:
             window.close()
+        _READABLE.reset(token)
 
 
 def readable_credentials() -> _ReadableScope:
@@ -127,7 +127,7 @@ def hidden_credentials() -> _ReadableScope:
 
 
 def restore_readable(method: Callable[..., Any]) -> Callable[..., Any]:
-    """Wrap method so it runs with the readable lookup as it is now, not as it is when called."""
+    """Wrap method so it runs with the readable window as it is now, not as it is when called."""
     captured = _READABLE.get()
 
     @functools.wraps(method)

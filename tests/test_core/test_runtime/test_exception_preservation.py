@@ -2648,8 +2648,6 @@ def test_a_credential_edited_after_prepare_does_not_reach_the_session_read() -> 
 
 @pytest.mark.timeout(15)
 def test_an_unpicklable_credential_is_refused_naming_the_handle_in_multiprocessing(flight_server: Any) -> None:
-    import threading
-
     credential = {**_vault_values(), "lock": threading.Lock()}
     dac = _vault_dac({_E2E_HANDLE: credential})
 

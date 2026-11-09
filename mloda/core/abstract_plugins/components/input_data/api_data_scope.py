@@ -1,10 +1,11 @@
 """Run-scoped access to one api_data set for the step that loads it; imports no FeatureGroup."""
 
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
+
+from mloda.core.abstract_plugins.components.var_scope import VarScope
 
 _API_DATA_LOOKUP: ContextVar[tuple[str, Callable[[], Any]] | None] = ContextVar("mloda_api_data_lookup", default=None)
 
@@ -18,14 +19,11 @@ class ApiDataRef:
     value_type: type | None = None
 
 
-@contextmanager
-def api_data_scope(lookup: Callable[[], Any], key: str) -> Iterator[None]:
+class api_data_scope(VarScope[tuple[str, Callable[[], Any]] | None]):  # noqa: N801
     """Make lookup, bound to the set key, the reader of api_data inside the block."""
-    token = _API_DATA_LOOKUP.set((key, lookup))
-    try:
-        yield
-    finally:
-        _API_DATA_LOOKUP.reset(token)
+
+    def __init__(self, lookup: Callable[[], Any], key: str) -> None:
+        super().__init__(_API_DATA_LOOKUP, (key, lookup))
 
 
 def read_api_data(key: str) -> Any:

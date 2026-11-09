@@ -329,8 +329,9 @@ step binds it when the session is prepared (prepare a new session to change it).
 
 `read_credential` returns a `ResolvedCredential`: a mapping with item access, `get`, iteration and `**` unpacking, a
 fresh copy per read, and the attributes `handle`, `version`, `expires_at` and `store` (the last three are `None` for
-now). A missing field raises `CredentialFieldMissing` (a `KeyError`) naming handle and field, on item access and on `del` or `pop` alike. A nested mapping is a plain dict, so a missing nested key reports as a missing column. A read outside the window,
-or of a handle the step did not declare, raises `CredentialReadRefused` (not a `LookupError`).
+now). A missing field raises `CredentialFieldMissing` (a `KeyError`) naming handle and field, on item access and on
+`del` or `pop` alike. A nested mapping is a plain dict, so a missing nested key reports as a missing column. A read
+outside the window, or of a handle the step did not declare, raises `CredentialReadRefused` (not a `LookupError`).
 
 A handle a source step binds at match time is reported in the plan, the lock and the hooks but grants no `read_credential`; a credential not registered in the collection renders `<pointer>`.
 
@@ -362,7 +363,7 @@ Limits:
 - Verbose tracebacks show frame locals, and a reused worker may linger on a value.
 - Values under 8 characters are not masked.
 - A key outside the listed connection fields is masked unless declared public (see declared credential keys).
-- A prepared session copies the registered credentials at `prepare()` (dicts, lists, tuples and sets, nested too; other objects are shared), so later edits to the collection do not reach it; pass a rotated value per run with `run(credentials=...)`.
+- A prepared session copies the registered credentials at `prepare()` (plain dicts and `RegisteredCredential`, lists, tuples and sets, nested too; other objects, dict subclasses such as `OrderedDict` included, are shared), so later edits to the collection do not reach it; pass a rotated value per run with `run(credentials=...)`.
 - A credential sent to a process worker must pickle; one that does not is refused when its step is dispatched, naming the handle (earlier steps may already have run).
 - Log masking covers exact registered literals and their `repr` and JSON escaped forms only; see [Log record masking](#log-record-masking) for its limits.
 - In a notebook the caller reads any environment variable on its own side.

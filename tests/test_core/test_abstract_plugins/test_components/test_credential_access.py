@@ -33,7 +33,7 @@ from mloda.core.abstract_plugins.components.credential_grant import (
     read_recorder,
 )
 from mloda.core.abstract_plugins.components.failed_rows import _COLLECTOR, FailedRowsCollector
-from mloda.core.abstract_plugins.components.input_data.api_data_scope import _API_DATA_LOOKUP
+from mloda.core.abstract_plugins.components.input_data.api_data_scope import _API_DATA_LOOKUP, api_data_scope
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, _current_compute_framework
 from mloda.core.abstract_plugins.function_extender import ExtenderHook
 from mloda.core.abstract_plugins.hook_context import (
@@ -506,6 +506,7 @@ def _hook_context() -> HookContext:
         pytest.param(lambda: ComputeFramework().activate(), _current_compute_framework, id="compute_framework"),
         pytest.param(lambda: _hook_context().activate(), _current_hook_context, id="hook_context"),
         pytest.param(input_data_load_gate_scope, _in_gate_scope, id="input_data_load_gate_scope"),
+        pytest.param(lambda: api_data_scope(lambda: {}, "k"), _API_DATA_LOOKUP, id="api_data_scope"),
     ],
 )
 def test_a_frozen_exception_keeps_its_type_through_the_scope(make_scope: Any, var: contextvars.ContextVar[Any]) -> None:

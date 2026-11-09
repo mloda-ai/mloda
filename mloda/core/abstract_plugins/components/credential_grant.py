@@ -10,7 +10,6 @@ from mloda.core.abstract_plugins.components.credential_leaves import (
     credential_secret_literals,
 )
 from mloda.core.abstract_plugins.components.credential_scrub import redact_escaping_exception, registered_secrets_scope
-from mloda.core.abstract_plugins.components.var_scope import VarScope
 
 
 class CredentialLookup:
@@ -102,16 +101,19 @@ class grant_scope:  # noqa: N801
 _READ_RECORDERS: ContextVar[tuple[set[str], ...]] = ContextVar("mloda_credential_read_recorders", default=())
 
 
-class read_recorder(VarScope[tuple[set[str], ...]]):  # noqa: N801
+class read_recorder:  # noqa: N801
     """Collect the handles read inside the block, alongside any enclosing recorders; a fresh set per enter."""
 
     def __init__(self) -> None:
-        super().__init__(_READ_RECORDERS, ())
+        self._tokens: list[Token[tuple[set[str], ...]]] = []
 
-    def __enter__(self) -> set[str]:  # type: ignore[override]
+    def __enter__(self) -> set[str]:
         recorder: set[str] = set()
-        self._tokens.append(self._var.set((*self._var.get(), recorder)))
+        self._tokens.append(_READ_RECORDERS.set((*_READ_RECORDERS.get(), recorder)))
         return recorder
+
+    def __exit__(self, *exc_info: object) -> None:
+        _READ_RECORDERS.reset(self._tokens.pop())
 
 
 def record_credential_read(handle: str) -> None:

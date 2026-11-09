@@ -7,6 +7,7 @@ the helper level AND through the seam, where a raise out of the ``except`` block
 """
 
 import gc
+import pickle  # nosec B403
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -16,7 +17,12 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.utils import escalate_match_abort, is_match_abort
+from mloda.core.abstract_plugins.components.utils import (
+    escalate_match_abort,
+    is_credential_abort,
+    is_match_abort,
+    mark_credential_abort,
+)
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -207,3 +213,13 @@ class TestPermissiveExceptionIsNotEscalated:
         assert snapshot.stage == MATCHER_ERROR_STAGE
         assert snapshot.reason is not None
         assert "PermissiveGetattrError845r" in snapshot.reason
+
+
+class TestCredentialAbortMarkSurvivesPickle:
+    """The credential abort mark rides the exception dict, so it crosses a process boundary."""
+
+    def test_the_credential_abort_mark_survives_a_pickle_round_trip(self) -> None:
+        marked = mark_credential_abort(ValueError("x"))
+
+        assert is_credential_abort(pickle.loads(pickle.dumps(marked)))  # nosec B301
+        assert not is_credential_abort(ValueError("x"))

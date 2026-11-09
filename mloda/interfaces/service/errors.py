@@ -6,7 +6,8 @@ import secrets
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from mloda.core.abstract_plugins.components.utils import failure_report
+from mloda.core.abstract_plugins.components.utils import failure_report, is_credential_abort, safe_exc_str
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
 from mloda.interfaces.service.request import MAX_NAME_LENGTH, Problem
 
@@ -58,11 +59,18 @@ def _missing_input(error: BaseException) -> MissingInputFeatureError | None:
     return None
 
 
-def failure_result(action: str, error: Exception) -> dict[str, dict[str, Any]]:
-    """An internal error naming only the exception class; the log gets the audit id and a traceback without messages."""
+def failure_result(action: str, error: Exception, *, trusted: bool = False) -> dict[str, dict[str, Any]]:
+    """An internal error naming only the exception class, plus a credential refusal's names-only text for a trusted
+    caller (the text is also logged); the log gets the audit id and a traceback without messages."""
     missing = _missing_input(error)
+    refusal = ""
+    if is_credential_abort(error):
+        refusal = re.sub(r"\s+", " ", strip_control_characters(scrub_credentials(safe_exc_str(error)))).strip()
     if missing is None:
-        result = error_result("internal", f"{action} failed with {type(error).__name__}.")
+        if trusted and refusal:
+            result = error_result("internal", f"{action} failed: {refusal}")
+        else:
+            result = error_result("internal", f"{action} failed with {type(error).__name__}.")
     else:
         group, feature = _clean(missing.feature_group), _clean(missing.feature)
         detail = {
@@ -72,7 +80,8 @@ def failure_result(action: str, error: Exception) -> dict[str, dict[str, Any]]:
         }
         message = f"{action} failed: feature group {group} cannot compute feature '{feature}', an input is missing."
         result = error_result(missing.code, message, [detail])
-    _LOGGER.error("%s failed audit_id=%s\n%s", action, result["error"]["audit_id"], failure_report(error)[1])
+    reason = f": {refusal}" if refusal else ""
+    _LOGGER.error("%s failed audit_id=%s%s\n%s", action, result["error"]["audit_id"], reason, failure_report(error)[1])
     return result
 
 

@@ -764,7 +764,7 @@ CRED_TOKEN = "tok-Zk9-server-secret-77"  # nosec B105
 CODE_TOKEN = "tok-Qw3-code-built-55"  # nosec B105
 
 
-def _credential_settings(tmp_path: Path, handle: str) -> Settings:
+def _credential_settings(tmp_path: Path, handle: str | None) -> Settings:
     settings = _settings(tmp_path, "execute")
     config = tmp_path / "cred.toml"
     config.write_text(
@@ -804,6 +804,22 @@ class TestCredentials:
         for text in _texts(explained) + _texts(ran):
             assert CRED_TOKEN not in text
             assert CODE_TOKEN not in text
+
+    @pytest.mark.parametrize("handle", ["dbx", None], ids=["misspelled", "unset"])
+    async def test_explain_with_a_bad_handle_stays_generic(self, tmp_path: Path, handle: str | None) -> None:
+        settings = _credential_settings(tmp_path, handle)
+
+        async with Client(build_server(*_credential_services(settings))) as client:
+            explained = await client.call_tool(EXPLAIN, {"request": {"features": [CRED_FEATURE]}})
+
+        structured = _assert_envelope(explained)
+        error = structured["error"]
+        assert error["code"] == "internal"
+        assert error["message"] == "Planning failed with ValueError."
+        dumped = json.dumps(_without_audit(structured)) + "".join(_texts(explained)).replace(error["audit_id"], "")
+        for name in ("dbx", "['db']"):
+            assert name not in dumped
+        assert CRED_TOKEN not in dumped
 
     def test_a_base_handle_equal_to_a_table_handle_is_refused(self, tmp_path: Path) -> None:
         base = DataAccessCollection()

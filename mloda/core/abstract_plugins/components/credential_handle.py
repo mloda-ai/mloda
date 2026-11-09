@@ -25,6 +25,7 @@ from mloda.core.abstract_plugins.components.utils import (
     PREFIX_OPTION_KEY_FLAG,
     escalate_match_abort,
     is_nominal_subclass,
+    mark_credential_abort,
 )
 
 if TYPE_CHECKING:
@@ -41,7 +42,7 @@ def _handle_element_validator(value: Any) -> bool:
         f"A credential handle must be a non-empty str naming a registered credential, got {type(value).__name__}."
     )
     error.__dict__[PREFIX_OPTION_KEY_FLAG] = True
-    raise escalate_match_abort(error)
+    raise escalate_match_abort(mark_credential_abort(error))
 
 
 def _field_names(spec: CredentialHandleSpec, name: str, value: Any) -> tuple[str, ...]:
@@ -145,7 +146,7 @@ def _bytes_path(entry: Any, policy: CredentialKeyPolicy | None) -> str | None:
 
 
 def _refuse(message: str) -> ValueError:
-    return escalate_match_abort(ValueError(message))
+    return escalate_match_abort(mark_credential_abort(ValueError(message)))
 
 
 def _check_one(

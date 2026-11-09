@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.utils import mark_credential_abort
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.interfaces.service.catalog import Catalog
@@ -1220,3 +1221,24 @@ class TestInlineLimits:
         _success(Runner(planner).run(plan_id))
 
         assert calls
+
+
+ABORT_TEXT = "credential handle 'dbx' is not registered; have ['db']"
+
+
+class TestCredentialAbortWhileRunning:
+    @pytest.mark.parametrize(("trusted", "shown"), [(True, True), (False, False)])
+    def test_the_names_only_text_is_shown_to_a_trusted_caller_only(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, trusted: bool, shown: bool
+    ) -> None:
+        planner = _planner(_settings(tmp_path, trusted_caller=trusted))
+        plan_id = _plan_id(planner)
+
+        def refuse(_planner: Planner, planned: Any) -> Any:
+            raise mark_credential_abort(ValueError(ABORT_TEXT))
+
+        monkeypatch.setattr(Planner, "execute", refuse)
+
+        error = _error(Runner(planner).run(plan_id, full=trusted), "internal")
+
+        assert (ABORT_TEXT in error["message"]) is shown

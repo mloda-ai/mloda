@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.utils import mark_credential_abort
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
 from mloda.interfaces.service.errors import (
     ERROR_CODES,
@@ -206,3 +207,54 @@ def test_failure_result_logs_the_audit_line_for_missing_input(caplog: pytest.Log
     records = [r for r in caplog.records if r.name == "mloda.interfaces.service"]
     assert len(records) == 1
     assert result["error"]["audit_id"] in records[0].getMessage()
+
+
+def _credential_abort(text: str) -> ValueError:
+    return mark_credential_abort(ValueError(text))
+
+
+def test_failure_result_shows_a_credential_abort_to_a_trusted_caller() -> None:
+    result = failure_result(
+        "Planning", _credential_abort("credential handle 'dbx' is not registered; have ['db']"), trusted=True
+    )
+
+    error = result["error"]
+    assert error["code"] == "internal"
+    assert "dbx" in error["message"]
+    assert "['db']" in error["message"]
+    assert error["message"].startswith("Planning failed: ")
+
+
+def test_failure_result_keeps_a_credential_abort_generic_for_an_untrusted_caller() -> None:
+    result = failure_result("Planning", _credential_abort("credential handle 'dbx' is not registered"))
+
+    assert result["error"]["message"] == "Planning failed with ValueError."
+    assert "dbx" not in result["error"]["message"]
+
+
+def test_failure_result_keeps_a_non_credential_abort_generic_when_trusted() -> None:
+    secret = "SECRET_plain_value_1"  # nosec B105
+
+    result = failure_result("Planning", ValueError(secret), trusted=True)
+
+    assert result["error"]["message"] == "Planning failed with ValueError."
+    assert secret not in json.dumps(result)
+
+
+def test_failure_result_does_not_trust_a_credential_abort_only_in_the_cause() -> None:
+    wrapper = _caused_by(_credential_abort("credential handle 'dbx' is not registered"))
+
+    result = failure_result("Planning", wrapper, trusted=True)
+
+    assert result["error"]["message"] == "Planning failed with RuntimeError."
+
+
+def test_failure_result_logs_the_audit_id_and_the_abort_text(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.ERROR, logger="mloda.interfaces.service"):
+        result = failure_result("Planning", _credential_abort("credential handle 'dbx'\nis not registered"))
+
+    (record,) = [r for r in caplog.records if r.name == "mloda.interfaces.service"]
+    first_line = record.getMessage().split("\n")[0]
+    assert result["error"]["audit_id"] in first_line
+    assert "dbx" in first_line
+    assert "is not registered" in first_line

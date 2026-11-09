@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig, load_settings
+from tests.test_interfaces.source_groups import PASTED
 
 
 def _write(tmp_path: Path, text: str) -> Path:
@@ -458,6 +459,9 @@ def test_load_does_not_check_the_environment(tmp_path: Path) -> None:
         ("[mcp.credentials.db]\ntoken = {}\n", ["db", "token"]),
         ('[mcp.credentials._auto_credentials_1]\ntoken = "VAR"\n', ["_auto_credentials_1"]),
         ('[mcp.credentials.""]\ntoken = "VAR"\n', []),
+        ('[mcp.credentials.db]\ntoken = "A=B C"\n', ["db", "token"]),
+        ('[mcp.credentials.db]\ntoken = "1VAR"\n', ["db", "token"]),
+        ('[mcp.credentials.db]\n"" = "VAR"\n', ["db"]),
         ('[mcp.credentials.db]\ntoken = "VAR"\n[mcp.sources.db]\nfiles = ["a.csv"]\n', ["db"]),
     ],
 )
@@ -469,6 +473,55 @@ def test_bad_credentials_table_is_config_error_naming_handle_and_field(
 
     for name in names:
         assert name in str(raised.value)
+
+
+def test_a_pasted_value_is_refused_without_echoing_it(tmp_path: Path) -> None:
+    path = _write(tmp_path, f'[mcp.credentials.db]\ntoken = "{PASTED}"\n')
+
+    with pytest.raises(ConfigError) as raised:
+        load_settings(path, env={})
+    with pytest.raises(ConfigError) as direct:
+        Settings(credentials={"db": {"token": PASTED}})
+
+    for error in (raised, direct):
+        assert "db" in str(error.value)
+        assert "token" in str(error.value)
+        assert PASTED not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    ("handle", "name"),
+    [("db\nINJECTED", "token"), ("db\rX", "token"), ("db\tX", "token"), ("db", "to\nken"), ("db", "to\x00ken")],
+)
+def test_control_characters_in_a_handle_or_field_name_are_refused_without_a_raw_newline(handle: str, name: str) -> None:
+    with pytest.raises(ConfigError) as raised:
+        Settings(credentials={handle: {name: "VAR"}})
+
+    text = str(raised.value)
+    assert "\n" not in text
+    assert "\r" not in text
+    assert "\t" not in text
+    assert "\x00" not in text
+
+
+def test_a_control_character_handle_from_toml_is_refused(tmp_path: Path) -> None:
+    path = _write(tmp_path, '[mcp.credentials."db\\nINJECTED"]\ntoken = "VAR"\n')
+
+    with pytest.raises(ConfigError) as raised:
+        load_settings(path, env={})
+
+    assert "\n" not in str(raised.value)
+
+
+def test_a_handle_table_that_is_not_a_mapping_is_config_error_naming_the_handle() -> None:
+    with pytest.raises(ConfigError, match="db"):
+        Settings(credentials={"db": "TOKEN"})  # type: ignore[dict-item]
+
+
+def test_a_role_style_handle_parses(tmp_path: Path) -> None:
+    settings = load_settings(_write(tmp_path, '[mcp.credentials."pii-hmac-key"]\nkey = "HMAC_VAR"\n'), env={})
+
+    assert settings.credentials["pii-hmac-key"]["key"] == "HMAC_VAR"
 
 
 def test_credential_handle_equal_to_a_source_alias_is_config_error() -> None:

@@ -127,7 +127,7 @@ class Runner:
         try:
             result = self._planner.execute(planned)
         except Exception as error:  # plugin boundary: the exception text may hold data, so only the type is reported
-            return failure_result("The run", error)
+            return failure_result("The run", error, trusted=self._planner.settings.trusted_caller)
         stored: list[dict[str, list[Any]]] = []
         if full:
             tables = [self._full_table(frame, planned.names, result.plan) for frame in result]

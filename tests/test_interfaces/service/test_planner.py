@@ -54,6 +54,7 @@ from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG
 from tests.helpers.plugin_stubs import StubFeatureGroup
 from tests.test_interfaces.source_groups import (
+    PASTED_UNDERSCORE,
     CALLER_LOCKED_FEATURE,
     CALLER_LOCKED_KEY,
     CRED_FEATURE,
@@ -1718,12 +1719,13 @@ class TestCredentialTable:
     @pytest.mark.parametrize(
         ("credentials", "env", "message_has"),
         [
-            ('token = "TOK_VAR"\nother = "OTHER_VAR"', {"TOK_VAR": TOKEN}, ["db", "other", "OTHER_VAR"]),
+            ('token = "TOK_VAR"\nother = "OTHER_VAR"', {"TOK_VAR": TOKEN}, ["db", "other"]),
             ('token = "TOK_VAR"\nother = "OTHER_VAR"', {"TOK_VAR": TOKEN, "OTHER_VAR": ""}, ["db", "other"]),
             ('token = "TOK_VAR"\nother = { file = "nope.txt" }', {"TOK_VAR": TOKEN}, ["db", "other", "nope.txt"]),
             ('token = "TOK_VAR"\nother = { file = "empty.txt" }', {"TOK_VAR": TOKEN}, ["db", "other"]),
+            ('token = "TOK_VAR"\nother = "OTHER_VAR"', {"TOK_VAR": TOKEN, "OTHER_VAR": " \t "}, ["db", "other"]),
         ],
-        ids=["unset_var", "empty_var", "missing_file", "empty_file"],
+        ids=["unset_var", "empty_var", "missing_file", "empty_file", "blank_var"],
     )
     def test_check_names_handle_and_field_never_a_value(
         self, tmp_path: Path, credentials: str, env: dict[str, str], message_has: list[str]
@@ -1737,6 +1739,20 @@ class TestCredentialTable:
         for part in message_has:
             assert part in problem
         assert TOKEN not in problem
+        assert "OTHER_VAR" not in problem
+
+    def test_a_pasted_underscore_token_is_never_echoed_by_check_or_log(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        settings = _cred_settings(tmp_path, f'token = "{PASTED_UNDERSCORE}"')
+
+        with caplog.at_level(logging.DEBUG):
+            problem = service_sources.check_credentials(settings, {})
+            service_sources.ServiceCredentials(settings.credentials, {}).collection(settings.sources)
+
+        assert problem is not None
+        assert "[mcp.credentials.db] field 'token'" in problem
+        _assert_value_absent(PASTED_UNDERSCORE, problem, caplog.text)
 
     def test_crlf_file_is_stripped_to_the_value(self, tmp_path: Path) -> None:
         (tmp_path / "pii").write_bytes(ROTATED.encode() + b"\r\n")
@@ -2185,3 +2201,33 @@ class TestCredentialRuns:
             _preview_rows(runner.run(explained["plan_id"]))
 
         assert sorted(reads) == ["other", "token"]
+
+
+class TestCredentialHandleDiagnostics:
+    @staticmethod
+    def _explain(tmp_path: Path, handle: str | None, trusted: bool) -> dict[str, Any]:
+        overrides: dict[str, Any] = {} if handle is None else {"options": {CRED_KEY: handle}}
+        settings = dataclasses.replace(_cred_settings(tmp_path, **overrides), trusted_caller=trusted)
+        planner, _ = _cred_services(settings, {"TOK_VAR": TOKEN})
+        return planner.explain({"features": [CRED_FEATURE]})
+
+    @pytest.mark.parametrize(
+        ("handle", "named"), [("dbx", ["dbx"]), (None, [CRED_KEY, "is not set"])], ids=["misspelled", "unset"]
+    )
+    def test_a_trusted_caller_is_told_what_is_wrong(self, tmp_path: Path, handle: str | None, named: list[str]) -> None:
+        error = _error(self._explain(tmp_path, handle, True), "internal")
+
+        for needle in named:
+            assert needle in error["message"]
+        assert TOKEN not in json.dumps(error)
+
+    @pytest.mark.parametrize("handle", ["dbx", None], ids=["misspelled", "unset"])
+    def test_an_untrusted_caller_gets_the_generic_message(self, tmp_path: Path, handle: str | None) -> None:
+        result = self._explain(tmp_path, handle, False)
+
+        error = _error(result, "internal")
+        assert error["message"] == "Planning failed with ValueError."
+        dumped = json.dumps({**result, "error": {**error, "audit_id": None}})
+        for name in ("dbx", "db"):
+            _assert_value_absent(name, dumped)
+        _assert_value_absent(TOKEN, dumped)

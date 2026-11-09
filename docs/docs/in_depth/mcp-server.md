@@ -76,9 +76,13 @@ numbers, booleans, lists or tables (no TOML dates or times), and `in_features` i
 
 `[mcp.credentials.<handle>]` registers a credential for groups that read it with `read_credential` and for database
 sources. The table holds environment variable names and file paths, never values. Startup fails, naming the handle and
-the field, if a variable is unset or empty or a file is missing or empty. A handle may not start with `_auto_` or equal
-a source alias. Secret files are read again for every request, so a rotated file takes effect without a restart; an
-environment variable needs a restart. A group declares its handle option with `credential_handle_spec`; set it in
+the field, if a variable is unset, empty or blank or a file is missing, empty or blank. A field value must be an
+environment variable name (letters, digits and `_`, not starting with a digit); a name with `.` or `-` fails
+startup, while an underscore-only token such as `sk_live_abc` still passes the rule. An empty field name is refused.
+Handle names are free-form (for example `pii-hmac-key`), non-empty, without control characters, and may not start with
+`_auto_` or equal a source alias. The unset or blank error names the handle and field, not the variable. Secret files
+are read again for every request, so a rotated file takes effect without a restart; an environment variable needs a
+restart. A group declares its handle option with `credential_handle_spec`; set it in
 `[mcp.options]`.
 
 A credential that cannot be read is left out. Requests whose plan has a source that binds a credential (even one named
@@ -220,7 +224,9 @@ does.
 `mloda run` executes regardless of `mode`, since you started it yourself, but applies the same limits and preview
 rules. Exit codes: `0` success, `2` an error result or nothing could run (bad config, bad request, policy, limit, or a
 FeatureGroup that failed while planning or running, reported as `internal`), `3` a completed run whose result
-carries `failed_rows`, `1` any other failure.
+carries `failed_rows`, `1` any other failure. Every error result is also written to stderr as `mloda: error: <message>`.
+A credential handle refusal (a misspelled or unset handle) shows its text, naming handles and keys only, in that message
+and on stderr. The MCP server reports it as `internal` and logs the text with the audit id.
 
 A completed run result has a `failed_rows` list only when feature groups reported rows that got no value. Each entry has
 `column`, `reason` (a short code), `row_count`, `rows` and `truncated`; `rows` holds at most 1000 positions unless

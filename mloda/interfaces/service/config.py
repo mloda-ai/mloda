@@ -35,6 +35,7 @@ _MCP_KEYS = frozenset(
 )
 _SOURCE_KEYS = frozenset({"files", "folders"})
 _AUTO_PREFIX = "_auto_"
+_ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _ENV_PREFIX = "MLODA_MCP_"
 _INLINE_LIMIT_KEYS = ("max_inline_values", "max_inline_chars")
 _ENV_INT_KEYS = frozenset({"max_rows", *_INLINE_LIMIT_KEYS})
@@ -100,6 +101,27 @@ class Settings:
         shared = sorted(set(self.credentials) & set(self.sources))
         if shared:
             raise ConfigError(f"Handles are unique across kinds; {shared} is both a source and a credential")
+        for handle, fields in self.credentials.items():
+            if not handle:
+                raise ConfigError('[mcp.credentials.""]: a handle name must not be empty')
+            if not handle.isprintable():
+                raise ConfigError(f"[mcp.credentials.{handle!r}]: a handle name must not contain control characters")
+            if not isinstance(fields, Mapping):
+                raise ConfigError(f"[mcp.credentials.{handle}] must be a table of fields")
+            if handle.startswith(_AUTO_PREFIX):
+                raise ConfigError(f"[mcp.credentials.{handle}]: handles starting with '{_AUTO_PREFIX}' are reserved")
+            for name, ref in fields.items():
+                if not name:
+                    raise ConfigError(f"[mcp.credentials.{handle}]: a field name must not be empty")
+                if not name.isprintable():
+                    raise ConfigError(
+                        f"[mcp.credentials.{handle}]: a field name must not contain control characters: {name!r}"
+                    )
+                if isinstance(ref, str) and not _ENV_NAME.fullmatch(ref):
+                    raise ConfigError(
+                        f"[mcp.credentials.{handle}] field '{name}' must name an environment variable "
+                        "(letters, digits and _, not starting with a digit), never hold the value"
+                    )
 
     def config_hash(self) -> str:
         """SHA-256 hex digest of the settings, independent of mapping insertion order."""
@@ -234,10 +256,6 @@ def _build_credentials(value: Any, base_dir: Path) -> dict[str, dict[str, Creden
     handles = _str_mapping(value, "credentials")
     built: dict[str, dict[str, CredentialRef]] = {}
     for handle, table in handles.items():
-        if not handle:
-            raise ConfigError('[mcp.credentials.""]: a handle name must not be empty')
-        if handle.startswith(_AUTO_PREFIX):
-            raise ConfigError(f"[mcp.credentials.{handle}]: handles starting with '{_AUTO_PREFIX}' are reserved")
         if not isinstance(table, Mapping) or not table:
             raise ConfigError(f"[mcp.credentials.{handle}] must be a non-empty table of fields")
         built[handle] = {name: _build_credential_ref(handle, name, ref, base_dir) for name, ref in table.items()}

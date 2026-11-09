@@ -60,11 +60,11 @@ def _credential_value(handle: str, name: str, ref: CredentialRef, env: Mapping[s
             raise ConfigError(f"{where}: file {ref.path} is not valid UTF-8") from None
         value = text.removesuffix("\n").removesuffix("\r")
         if not value.strip():
-            raise ConfigError(f"{where}: file {ref.path} is empty")
+            raise ConfigError(f"{where}: file {ref.path} is empty or blank")
         return value
     value = env.get(ref, "")
-    if not value:
-        raise ConfigError(f"{where}: environment variable {ref} is unset or empty")
+    if not value.strip():
+        raise ConfigError(f"{where}: its environment variable is unset, empty or blank")
     return value
 
 

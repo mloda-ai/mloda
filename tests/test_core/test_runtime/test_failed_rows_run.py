@@ -218,3 +218,5 @@ class TestMultiprocessingFailedRows:
             ("FrOne", (1, 3), "timeout"),
             ("FrOther", (2,), "quota"),
         }
+        assert {d.feature_group for d in result.step_durations} == {"FrOne", "FrOther"}
+        assert all(d.duration_seconds > 0 for d in result.step_durations)

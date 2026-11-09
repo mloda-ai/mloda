@@ -90,6 +90,7 @@ class FeatureSet:
         self.link_index_columns: frozenset[str] = frozenset()
         self._load_marker: InputDataLoadMarker | None = current_input_data_load_marker.get()
         self._calculate_context: HookContext | None = None
+        self._calculate_seconds: float | None = None
         self._defaults_materialized_for: type[FeatureGroup] | None = None
         self._defaults_checked: tuple[tuple[tuple[Feature, Options], ...], Options | None] = ((), None)
 

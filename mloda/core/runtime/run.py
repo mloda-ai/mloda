@@ -12,6 +12,7 @@ import logging
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, build_hook_extenders
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
+from mloda.core.abstract_plugins.components.step_duration import StepDuration
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -318,6 +319,7 @@ class ExecutionOrchestrator:
             if not in_other_process:
                 self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
                 self.data_lifecycle_manager.set_failed_rows(self.cfw_register.get_failed_rows())
+                self.data_lifecycle_manager.set_step_durations(self.cfw_register.get_step_durations())
         finally:
             self.join(abandon_threads=cancelled)
         if not in_other_process:
@@ -697,6 +699,10 @@ class ExecutionOrchestrator:
     def get_failed_rows(self) -> tuple[FailedRows, ...]:
         """Gets the rows feature groups reported as valueless."""
         return self.data_lifecycle_manager.get_failed_rows()
+
+    def get_step_durations(self) -> tuple[StepDuration, ...]:
+        """Gets the calculate_feature duration of each completed feature group step."""
+        return self.data_lifecycle_manager.get_step_durations()
 
     def _cfw_to_occupy(self, step: Any) -> UUID | None:
         """Resolve the cfw a step needs exclusively, without creating one."""

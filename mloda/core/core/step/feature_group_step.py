@@ -7,6 +7,7 @@ from mloda.core.abstract_plugins.components.input_data.api_data_scope import Api
 from mloda.core.abstract_plugins.components.credential_access import readable_credentials
 from mloda.core.abstract_plugins.components.credential_grant import read_recorder
 from mloda.core.abstract_plugins.components.failed_rows import collect_failed_rows
+from mloda.core.abstract_plugins.components.step_duration import StepDuration
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
@@ -81,6 +82,9 @@ class FeatureGroupStep(Step):
                 data = self.run_calculate_feature(cfw, features, location, data)
         if collector.entries:
             cfw_register.add_failed_rows(collector.entries)
+        seconds = getattr(features, "_calculate_seconds", None)
+        if seconds is not None:
+            cfw_register.add_step_duration(StepDuration(self.feature_group.get_class_name(), self.uuid, seconds))
         with read_recorder() as saver_reads:
             try:
                 with readable_credentials():

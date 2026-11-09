@@ -4,6 +4,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
+from mloda.core.abstract_plugins.components.step_duration import StepDuration
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -37,6 +38,7 @@ class DataLifecycleManager:
         self.track_data_to_drop: dict[UUID, set[UUID]] = {}
         self.artifacts: dict[str, Any] = {}
         self.failed_rows: tuple[FailedRows, ...] = ()
+        self.step_durations: tuple[StepDuration, ...] = ()
         self._transformer = transformer
         self.column_ordering = column_ordering
         self.request_feature_order = request_feature_order
@@ -265,6 +267,14 @@ class DataLifecycleManager:
     def get_failed_rows(self) -> tuple[FailedRows, ...]:
         """Returns the failed-row entries the run reported."""
         return self.failed_rows
+
+    def set_step_durations(self, step_durations: list[StepDuration]) -> None:
+        """Stores the step durations the run recorded."""
+        self.step_durations = tuple(step_durations)
+
+    def get_step_durations(self) -> tuple[StepDuration, ...]:
+        """Returns the step durations the run recorded."""
+        return self.step_durations
 
     def get_artifacts(self) -> dict[str, Any]:
         """

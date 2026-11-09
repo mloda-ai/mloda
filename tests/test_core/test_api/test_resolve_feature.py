@@ -8,6 +8,7 @@ and candidate tracking.
 
 import ast
 import inspect
+import json
 import linecache
 import sys
 import textwrap
@@ -15,6 +16,7 @@ import textwrap
 import pytest
 from typing import Any
 
+from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -143,6 +145,37 @@ class OptionGatedResolveFeatureGroup(FeatureGroup):
         if feature_name != OPTION_GATED_FEATURE:
             return False
         return bool(options.get(PARTITION_BY_KEY))
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+ABORT_ECHO_KEY = "rf_abort_echo_secret"
+ABORT_PLAIN_KEY = "rf_abort_echo_plain"
+ABORT_ECHO_FEATURE = "rf_abort_echo_feature"
+ABORT_ECHO_SECRET = "rf-abort-Zk3Fw8Qd2Lm"  # nosec B105
+ABORT_ECHO_QUOTED_SECRET = 'res"ol\\ve-ä-98765'  # nosec B105
+
+
+class AbortEchoResolveFeatureGroup(FeatureGroup):
+    """Matches only when the marker option is present, then aborts with the option value in the message."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        if ABORT_PLAIN_KEY in options:
+            raise ValueError(options.get(ABORT_PLAIN_KEY))
+        if ABORT_ECHO_KEY not in options:
+            return False
+        raise escalate_match_abort(ValueError(options.get(ABORT_ECHO_KEY)))
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
@@ -780,6 +813,64 @@ class TestResolveFeatureIsNonThrowing:
 
         assert result.feature_group is ForwardMismatchResolveFeatureGroup
         assert result.error is None
+
+    @staticmethod
+    def _resolve_abort(
+        message: str, secret_dac: bool = True, marked: bool = True, secret: str = ABORT_ECHO_SECRET
+    ) -> ResolvedFeature:
+        dac = DataAccessCollection(credentials={"vault": {"token": secret}}) if secret_dac else None
+        key = ABORT_ECHO_KEY if marked else ABORT_PLAIN_KEY
+        return resolve_feature(
+            ABORT_ECHO_FEATURE,
+            options=Options(group={key: message}),
+            plugin_collector=PluginCollector.enabled_feature_groups({AbortEchoResolveFeatureGroup}),
+            data_access_collection=dac,
+        )
+
+    @pytest.mark.parametrize("marked", [True, False], ids=["marked", "contained"])
+    def test_match_abort_echoing_a_registered_secret_is_masked_in_error(self, marked: bool) -> None:
+        result = self._resolve_abort(f"bad {ABORT_ECHO_SECRET}", marked=marked)
+
+        assert result.error is not None
+        assert ABORT_ECHO_SECRET not in result.error
+        assert "bad ***" in result.error
+
+    @pytest.mark.parametrize("marked", [True, False], ids=["marked", "contained"])
+    @pytest.mark.parametrize(
+        "echoed",
+        [
+            pytest.param(ABORT_ECHO_QUOTED_SECRET, id="raw"),
+            pytest.param(repr(ABORT_ECHO_QUOTED_SECRET)[1:-1], id="repr"),
+            pytest.param(json.dumps(ABORT_ECHO_QUOTED_SECRET)[1:-1], id="json_ascii"),
+            pytest.param(json.dumps(ABORT_ECHO_QUOTED_SECRET, ensure_ascii=False)[1:-1], id="json_utf8"),
+        ],
+    )
+    def test_match_abort_echoing_any_form_of_a_registered_secret_is_masked(self, echoed: str, marked: bool) -> None:
+        result = self._resolve_abort(f"bad {echoed}", marked=marked, secret=ABORT_ECHO_QUOTED_SECRET)
+
+        assert result.error is not None
+        assert "bad ***" in result.error
+        assert echoed not in result.error
+
+    def test_match_abort_without_a_credential_keeps_its_text(self) -> None:
+        result = self._resolve_abort(f"bad {ABORT_ECHO_SECRET}", secret_dac=False)
+
+        assert result.error is not None
+        assert f"bad {ABORT_ECHO_SECRET}" in result.error
+
+    def test_match_abort_with_a_blank_message_keeps_the_type_name_fallback(self) -> None:
+        result = self._resolve_abort("")
+
+        assert result.error is not None
+        assert "ValueError" in result.error
+
+    def test_success_with_a_credential_collection_has_no_error(self) -> None:
+        dac = DataAccessCollection(credentials={"vault": {"token": ABORT_ECHO_SECRET}})
+
+        result = resolve_feature(SPLIT_CAP_FEATURE, data_access_collection=dac)
+
+        assert result.error is None
+        assert result.feature_group is not None
 
     def test_unknown_compute_framework_option_does_not_raise(self) -> None:
         """A bad compute_framework option makes the internal Feature() raise ValueError; it must not escape.

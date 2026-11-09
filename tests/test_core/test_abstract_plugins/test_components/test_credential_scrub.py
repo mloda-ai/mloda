@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from collections import OrderedDict, defaultdict
 from collections.abc import Callable
 from enum import Enum
 from typing import Any, NamedTuple
+from urllib.parse import quote
 
 import pytest
 
@@ -826,6 +828,54 @@ def test_repeated_jdbc_scheme_prefix_scrubs_fast(build: Callable[[int], str], n:
 )
 def test_repeated_userinfo_shaped_prefix_scrubs_fast(build: Callable[[int], str], n: int) -> None:
     _assert_scrubs_linearly(build, n, "a repeated userinfo-shaped prefix")
+
+
+# A literal whose raw, repr, ASCII JSON and UTF-8 JSON forms all differ (quote, backslash, non-ASCII).
+_FORM_LITERAL = 'sec"re\\t-ä-1234'  # nosec B105
+_FORM_BUILDERS: dict[str, Callable[[str], str]] = {
+    "raw": lambda literal: literal,
+    "repr": lambda literal: repr(literal)[1:-1],
+    "json_ascii": lambda literal: json.dumps(literal)[1:-1],
+    "json_utf8": lambda literal: json.dumps(literal, ensure_ascii=False)[1:-1],
+}
+
+
+def test_the_form_literal_has_four_distinct_forms() -> None:
+    assert len({build(_FORM_LITERAL) for build in _FORM_BUILDERS.values()}) == 4
+
+
+@pytest.mark.parametrize("form", list(_FORM_BUILDERS))
+def test_scrub_credentials_masks_every_form_of_a_registered_literal(form: str) -> None:
+    from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+    echoed = _FORM_BUILDERS[form](_FORM_LITERAL)
+    with registered_secrets_scope(frozenset({_FORM_LITERAL})):
+        result = scrub_credentials(f"login {echoed} ok")
+
+    assert result == "login *** ok"
+
+
+@pytest.mark.parametrize("form", list(_FORM_BUILDERS))
+def test_scrub_credentials_cuts_a_percent_encoded_path_hiding_any_form(form: str) -> None:
+    from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+    literal = "ab\\cd-ä-12345"  # nosec B105
+    encoded = quote(_FORM_BUILDERS[form](literal), safe="")
+    with registered_secrets_scope(frozenset({literal})):
+        result = scrub_credentials(f"https://host/dir/{encoded}")
+
+    assert encoded not in result
+    assert result.startswith("https://host/dir/")
+
+
+def test_repeated_escaped_form_with_a_registered_literal_scrubs_fast() -> None:
+    from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+    escaped = _FORM_BUILDERS["json_ascii"](_FORM_LITERAL)
+    with registered_secrets_scope(frozenset({_FORM_LITERAL})):
+        result = _assert_scrubs_linearly(lambda k: f"v {escaped} " * k, 8000, "a repeated escaped secret form")
+
+    assert escaped not in result
 
 
 def test_repeated_password_keyword_with_registered_literals_scrubs_fast() -> None:
@@ -2169,23 +2219,241 @@ class TestRedactException:
         assert exc.token == expected
         assert type(exc.token) is type(expected)
 
-    def test_set_and_non_dict_mapping_attributes_are_left_as_is(self) -> None:
+    def test_non_dict_mapping_attributes_are_left_as_is(self) -> None:
         from types import MappingProxyType
 
         from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
 
         exc = ValueError("failed")
-        as_set = {_LITERAL}
         as_proxy = MappingProxyType({"k": _LITERAL})
-        setattr(exc, "as_set", as_set)
         setattr(exc, "as_proxy", as_proxy)
 
         redact_exception(exc, frozenset({_LITERAL}))
 
-        assert getattr(exc, "as_set") is as_set
         assert getattr(exc, "as_proxy") is as_proxy
-        assert _LITERAL in as_set
         assert as_proxy["k"] == _LITERAL
+
+    @pytest.mark.parametrize("kind", [set, frozenset])
+    def test_a_set_attribute_is_masked_into_a_plain_set_of_the_same_kind(self, kind: type) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        exc = ValueError("failed")
+        setattr(exc, "as_set", kind({_LITERAL, "keep"}))
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert type(getattr(exc, "as_set")) is kind
+        assert getattr(exc, "as_set") == kind({"***", "keep"})
+
+    @pytest.mark.parametrize("kind", [set, frozenset])
+    def test_a_set_attribute_holding_no_literal_keeps_its_identity(self, kind: type) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        exc = ValueError("failed")
+        untouched = kind({"keep", "other"})
+        setattr(exc, "as_set", untouched)
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert getattr(exc, "as_set") is untouched
+
+    @pytest.mark.parametrize("kind", [set, frozenset])
+    def test_two_set_elements_collapsing_into_one_mask_are_fine(self, kind: type) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import _mask_item
+
+        masked = _mask_item(kind({_LITERAL, _OTHER_LITERAL}), frozenset({_LITERAL, _OTHER_LITERAL}))
+
+        assert type(masked) is kind
+        assert masked == kind({"***"})
+
+    @pytest.mark.parametrize("kind", [set, frozenset])
+    def test_mask_item_masks_a_set_and_keeps_an_unchanged_one(self, kind: type) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import _mask_item
+
+        unchanged = kind({"a", "b"})
+
+        assert _mask_item(unchanged, frozenset({_LITERAL})) is unchanged
+        assert _mask_item(kind({_LITERAL, "a"}), frozenset({_LITERAL})) == kind({"***", "a"})
+
+    def test_a_set_nested_in_an_arg_is_masked(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        exc = ValueError("bad", {_LITERAL, "keep"})
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert exc.args == ("bad", {"***", "keep"})
+
+    @pytest.mark.parametrize("form", list(_FORM_BUILDERS))
+    def test_every_form_of_a_registered_literal_is_masked(self, form: str) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        echoed = _FORM_BUILDERS[form](_FORM_LITERAL)
+        exc = ValueError(f"x {echoed} y")
+        setattr(exc, "detail", f"d {echoed}")
+
+        redact_exception(exc, frozenset({_FORM_LITERAL}))
+
+        assert str(exc) == "x *** y"
+        assert getattr(exc, "detail") == "d ***"
+
+    @pytest.mark.parametrize(
+        ("factory", "expected"),
+        [
+            pytest.param(
+                lambda: PermissionError("prod_db may not be used in this run"),
+                "prod_db may not be used in this run",
+                id="permission-one-arg",
+            ),
+            pytest.param(lambda: ConnectionError("x"), "x", id="connection"),
+            pytest.param(lambda: TimeoutError("t"), "t", id="timeout"),
+            pytest.param(lambda: FileNotFoundError("gone"), "gone", id="file-not-found-one-arg"),
+            pytest.param(lambda: OSError(2), "2", id="errno-only"),
+            pytest.param(
+                lambda: FileNotFoundError(2, "No such file", "/data/x"),
+                "[Errno 2] No such file: '/data/x'",
+                id="errno-strerror-filename",
+            ),
+            pytest.param(
+                lambda: OSError(2, "No such file", "/data/x", None, "/data/y"),
+                "[Errno 2] No such file: '/data/x' -> '/data/y'",
+                id="five-arg-filename2",
+            ),
+        ],
+    )
+    def test_an_oserror_not_holding_the_literal_keeps_its_exact_text(
+        self, factory: Callable[[], BaseException], expected: str
+    ) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        exc = factory()
+        args = exc.args
+        assert str(exc) == expected
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert str(exc) == expected
+        assert exc.args == args
+
+    @pytest.mark.parametrize(
+        ("factory", "expected"),
+        [
+            pytest.param(
+                lambda: OSError(2, f"bad {_LITERAL}", "/data/x"), "[Errno 2] bad ***: '/data/x'", id="strerror"
+            ),
+            pytest.param(
+                lambda: OSError(2, "No such file", f"/x/{_LITERAL}"),
+                "[Errno 2] No such file: '/x/***'",
+                id="filename",
+            ),
+            pytest.param(
+                lambda: OSError(2, "No such file", "/data/x", None, f"/y/{_LITERAL}"),
+                "[Errno 2] No such file: '/data/x' -> '/y/***'",
+                id="filename2",
+            ),
+        ],
+    )
+    def test_an_oserror_holding_the_literal_masks_only_that_part_of_its_text(
+        self, factory: Callable[[], BaseException], expected: str
+    ) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        exc = factory()
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert str(exc) == expected
+
+    @pytest.mark.parametrize(
+        ("factory", "field", "expected"),
+        [
+            pytest.param(lambda: OSError(2, f"s {_LITERAL}"), "strerror", "s ***", id="oserror-strerror"),
+            pytest.param(lambda: OSError(2, "s", f"/f/{_LITERAL}"), "filename", "/f/***", id="oserror-filename"),
+            pytest.param(
+                lambda: OSError(2, "s", "/a", None, f"/f/{_LITERAL}"), "filename2", "/f/***", id="oserror-filename2"
+            ),
+            pytest.param(lambda: ImportError(f"m {_LITERAL}"), "msg", "m ***", id="import-msg"),
+            pytest.param(lambda: ImportError("m", name=f"n.{_LITERAL}"), "name", "n.***", id="import-name"),
+            pytest.param(lambda: ImportError("m", path=f"/p/{_LITERAL}"), "path", "/p/***", id="import-path"),
+            pytest.param(lambda: SyntaxError(f"m {_LITERAL}"), "msg", "m ***", id="syntax-msg"),
+            pytest.param(
+                lambda: SyntaxError("m", (f"/f/{_LITERAL}", 1, 1, "t")), "filename", "/f/***", id="syntax-filename"
+            ),
+            pytest.param(lambda: SyntaxError("m", ("f", 1, 1, f"t {_LITERAL}")), "text", "t ***", id="syntax-text"),
+            pytest.param(
+                lambda: UnicodeEncodeError("utf-8", f"x{_LITERAL}", 0, 1, "r"), "object", "x***", id="encode-object"
+            ),
+            pytest.param(
+                lambda: UnicodeEncodeError("utf-8", "x", 0, 1, f"r {_LITERAL}"), "reason", "r ***", id="encode-reason"
+            ),
+            pytest.param(
+                lambda: UnicodeDecodeError("utf-8", b"\xff", 0, 1, f"r {_LITERAL}"),
+                "reason",
+                "r ***",
+                id="decode-reason",
+            ),
+            pytest.param(
+                lambda: UnicodeTranslateError(f"x{_LITERAL}", 0, 1, "r"), "object", "x***", id="translate-object"
+            ),
+            pytest.param(
+                lambda: UnicodeTranslateError("x", 0, 1, f"r {_LITERAL}"), "reason", "r ***", id="translate-reason"
+            ),
+            pytest.param(lambda: SystemExit(f"bye {_LITERAL}"), "code", "bye ***", id="system-exit-code"),
+        ],
+    )
+    def test_a_native_str_field_is_masked(
+        self, factory: Callable[[], BaseException], field: str, expected: str
+    ) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        exc = factory()
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert getattr(exc, field) == expected
+        assert _LITERAL not in str(exc)
+
+    def test_a_subclass_property_cannot_shadow_or_reject_a_native_field(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        class ShadowImportError(ImportError):
+            @property
+            def msg(self) -> str:  # type: ignore[override]
+                return "shadow"
+
+        class ShadowOSError(OSError):
+            @property
+            def strerror(self) -> str:  # type: ignore[override]
+                return "shadow"
+
+        imp = ShadowImportError(f"m {_LITERAL}")
+        err = ShadowOSError(2, f"s {_LITERAL}")
+
+        redact_exception(imp, frozenset({_LITERAL}))
+        redact_exception(err, frozenset({_LITERAL}))
+
+        assert vars(ImportError)["msg"].__get__(imp) == "m ***"
+        assert vars(OSError)["strerror"].__get__(err) == "s ***"
+
+    def test_a_non_str_native_or_unlisted_field_keeps_its_identity(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        obj_value = [_LITERAL]
+        stop_value = [_LITERAL]
+        raw_name = _LITERAL.encode()
+        attribute = AttributeError("x", name="n", obj=obj_value)
+        stop = StopIteration(stop_value)
+        os_error = OSError(2, "s", raw_name)
+        exit_code = SystemExit(7)
+
+        for exc in (attribute, stop, os_error, exit_code):
+            redact_exception(exc, frozenset({_LITERAL}))
+
+        assert attribute.obj is obj_value
+        assert obj_value == [_LITERAL]
+        assert stop.value is stop_value
+        assert os_error.filename is raw_name
+        assert exit_code.code == 7
 
     def test_a_deeply_nested_list_attribute_is_masked_without_recursion_error(self) -> None:
         from mloda.core.abstract_plugins.components.credential_scrub import redact_exception

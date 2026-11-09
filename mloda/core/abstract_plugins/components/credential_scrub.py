@@ -1,6 +1,7 @@
 """Strip credentials from free text before it reaches core's failure logs or MlodaRunError."""
 
 import io
+import json
 import re
 from collections.abc import Iterable, Mapping
 from contextvars import ContextVar, Token
@@ -180,7 +181,7 @@ def _cut_hidden_percent(scheme: str, host: str, path: str) -> str:
         return path
     decoded = unquote(path)
     probe = f"{scheme}://{host}{decoded}"
-    hides = "%" in decoded or any(mark in decoded for mark in ("@", "'", '"', "://", *_REGISTERED_SECRETS.get()))
+    hides = "%" in decoded or any(mark in decoded for mark in ("@", "'", '"', "://", *_REGISTERED_ESCAPED.get()))
     if not hides and _scrub_passes(probe) == probe:
         return path
     head = path.partition("%")[0]
@@ -282,8 +283,14 @@ _REGISTERED_ESCAPED: ContextVar[frozenset[str]] = ContextVar("mloda_registered_e
 
 
 def _with_escaped(literals: frozenset[str]) -> frozenset[str]:
-    """The literals plus their repr-escaped forms, which an object's repr can carry instead."""
-    return literals | {repr(literal)[1:-1] for literal in literals if literal}
+    """The literals plus their repr, JSON and non-ASCII JSON escaped forms, which a rendering can carry instead."""
+    forms = set(literals)
+    for literal in literals:
+        if literal:
+            forms.add(repr(literal)[1:-1])
+            forms.add(json.dumps(literal)[1:-1])
+            forms.add(json.dumps(literal, ensure_ascii=False)[1:-1])
+    return frozenset(forms)
 
 
 def _literal_spans(text: str, literals: Iterable[str]) -> list[tuple[int, int]]:
@@ -388,7 +395,7 @@ def scrub_credentials(text: str) -> str:
     Patterns run on the original text so a literal never deletes their anchors; every output char that came
     from a registered literal is masked, so no fragment of one survives.
     """
-    registered = _REGISTERED_SECRETS.get()
+    registered = _REGISTERED_ESCAPED.get()
     if not registered:
         return _scrub_passes(text)
     hidden = _merge_spans(_literal_spans(text, registered))
@@ -499,11 +506,11 @@ _MAX_MASK_DEPTH = 32
 
 
 def _mask_item(item: Any, literals: frozenset[str], memo: dict[int, Any] | None = None, depth: int = 0) -> Any:
-    """Mask str leaves in tuples, lists and dicts; return ``item`` itself when nothing inside changed."""
+    """Mask str leaves in tuples, lists, dicts, sets and frozensets; return ``item`` itself when nothing changed."""
     if isinstance(item, str):
         masked_str = mask_literals(item, literals)
         return item if masked_str == item else masked_str
-    if not isinstance(item, (tuple, list, dict)):
+    if not isinstance(item, (tuple, list, dict, set, frozenset)):
         return item
     if depth > _MAX_MASK_DEPTH:
         return "***"
@@ -531,6 +538,15 @@ def _mask_item(item: Any, literals: frozenset[str], memo: dict[int, Any] | None 
             memo[id(item)] = item
             return item
         return masked_dict
+    if isinstance(item, (set, frozenset)):
+        memo[id(item)] = "***"
+        members = [_mask_item(element, literals, memo, depth + 1) for element in item]
+        if all(new is old for new, old in zip(members, item)):
+            memo[id(item)] = item
+            return item
+        rebuilt = set(members) if isinstance(item, set) else frozenset(members)
+        memo[id(item)] = rebuilt
+        return rebuilt
     memo[id(item)] = "***"
     elements = [_mask_item(element, literals, memo, depth + 1) for element in item]
     if all(new is old for new, old in zip(elements, item)):
@@ -541,10 +557,26 @@ def _mask_item(item: Any, literals: frozenset[str], memo: dict[int, Any] | None 
     return result
 
 
+_STR_FIELDS: tuple[tuple[type[BaseException], tuple[str, ...]], ...] = (
+    (OSError, ("strerror", "filename", "filename2")),
+    (ImportError, ("msg", "name", "path")),
+    (SyntaxError, ("msg", "filename", "text")),
+    (UnicodeEncodeError, ("object", "reason")),
+    (UnicodeDecodeError, ("reason",)),
+    (UnicodeTranslateError, ("object", "reason")),
+    (SystemExit, ("code",)),
+)
+
+
 def redact_exception(exc: BaseException, literals: frozenset[str]) -> BaseException:
-    """Mask literals in place across the exception, its chain, group members, notes and refusals."""
+    """Mask literals and their escaped forms in place across the exception, chain, groups, notes and refusals."""
     if not literals:
         return exc
+    return _redact_forms(exc, _with_escaped(literals))
+
+
+def _redact_forms(exc: BaseException, literals: frozenset[str]) -> BaseException:
+    """Mask the already expanded ``literals`` in place across the exception graph."""
     seen: set[int] = set()
     pending: list[BaseException] = [exc]
     while pending:
@@ -557,13 +589,21 @@ def redact_exception(exc: BaseException, literals: frozenset[str]) -> BaseExcept
             object.__setattr__(current, "args", masked_args)
         attributes = vars(current)
         for name, value in list(attributes.items()):
-            if isinstance(value, (str, dict, list, tuple)) and not name.startswith("__"):
+            if isinstance(value, (str, dict, list, tuple, set, frozenset)) and not name.startswith("__"):
                 masked = _mask_item(value, literals)
                 if masked is not value:
                     attributes[name] = masked
-        if isinstance(current, OSError):
-            for name in ("strerror", "filename", "filename2"):
-                object.__setattr__(current, name, _mask_item(getattr(current, name), literals))
+        for base, names in _STR_FIELDS:
+            if not isinstance(current, base):
+                continue
+            for name in names:
+                # The base's own descriptor, written only on change: a None in these fields alters OSError.__str__.
+                descriptor = getattr(base, name)
+                value = descriptor.__get__(current)
+                if isinstance(value, str):
+                    masked_value = mask_literals(value, literals)
+                    if masked_value != value:
+                        descriptor.__set__(current, masked_value)
         notes = getattr(current, "__notes__", None)
         if isinstance(notes, list):
             object.__setattr__(current, "__notes__", [_mask_item(note, literals) for note in notes])

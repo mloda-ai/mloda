@@ -26,7 +26,7 @@ import errno
 import json
 import logging
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -45,6 +45,7 @@ from mloda.provider import (
     FeatureSet,
     SourceMatch,
     credential_handle_spec,
+    property_spec,
     read_credential,
     report_failed_rows,
 )
@@ -901,20 +902,25 @@ def _grant_run(
     mode: ParallelizationMode,
     flight_server: Any,
     function_extender: set[Extender] | None = None,
+    dac: Any | None = None,
+    options: dict[str, Any] | None = None,
 ) -> Any:
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
     from tests.helpers.credential_handle_stubs import HANDLE_KEY
 
     groups = set(group) if isinstance(group, tuple) else {group}
     return mloda.run_all(
-        [Feature(name, options={HANDLE_KEY: _E2E_HANDLE})],
+        [Feature(name, options={HANDLE_KEY: _E2E_HANDLE, **(options or {})})],
         compute_frameworks=[PandasDataFrame],
         parallelization_modes={mode},
         flight_server=flight_server,
-        data_access_collection=_vault_dac(),
+        data_access_collection=_vault_dac() if dac is None else dac,
         plugin_collector=PluginCollector.enabled_feature_groups(groups),
         function_extender=function_extender,
     )
+
+
+_NATIVE_FIELDS = ("strerror", "filename", "filename2", "msg", "name", "path", "text", "reason")
 
 
 class _FileRecordingExtender(Extender):
@@ -936,9 +942,10 @@ class _FileRecordingExtender(Extender):
                 with open(self.path, "a") as handle:
                     handle.write(json.dumps([list(context.credential_handles), list(context.credentials_read)]) + "\n")
             return result
-        except Exception as exc:
+        except BaseException as exc:
+            fields = {name: getattr(exc, name, None) for name in _NATIVE_FIELDS}
             with open(self.path, "a") as handle:
-                handle.write(f"{exc} {exc.args!r}\n")
+                handle.write(f"{exc} {exc.args!r} {fields!r}\n")
             raise
 
 
@@ -1003,6 +1010,148 @@ class ChsFailingReadFG(ChsSource):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         value = _granted(features.get_options_key(HANDLE_KEY))
         raise ValueError(f"read failed host={value['host']} value={dict(value)}")
+
+
+_E2E_PEM = "-----BEGIN KEY-----\nMIIe2eÄbc123\n-----END KEY-----"  # nosec B105
+ECHO_KIND_KEY = "chs_echo_kind"
+_ECHO_FACTORIES: dict[str, Callable[[Mapping[str, Any]], BaseException]] = {
+    "permission": lambda value: PermissionError("prod_db may not be used in this run"),
+    "file_not_found": lambda value: FileNotFoundError(2, "No such file", "/data/x"),
+    "import_msg": lambda value: ImportError(f"cannot import {value['hmac']}"),
+    "syntax_msg": lambda value: SyntaxError(f"bad {value['hmac']}"),
+    "syntax_text": lambda value: SyntaxError("bad", ("f.py", 1, 1, f"x = {value['hmac']}")),
+    "decode_reason": lambda value: UnicodeDecodeError("utf-8", b"\xff", 0, 1, f"bad {value['hmac']}"),
+    "pem_repr_and_json": lambda value: ValueError(f"key {value['pem']!r} {json.dumps(value['pem'])}"),
+}
+
+
+class ChsEchoFailFG(ChsSource):
+    """Reads its declared handle, then raises the exception its echo-kind option picks from the factory table."""
+
+    PROPERTY_MAPPING = {
+        HANDLE_KEY: credential_handle_spec("Vault credential handle."),
+        ECHO_KIND_KEY: property_spec(
+            "Which exception to raise.", allowed_values={kind: kind for kind in _ECHO_FACTORIES}, strict=True
+        ),
+    }
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_echo_fail_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        value = _granted(features.get_options_key(HANDLE_KEY))
+        raise _ECHO_FACTORIES[features.get_options_key(ECHO_KIND_KEY)](value)
+
+
+def _echo_run(
+    kind: str, mode: ParallelizationMode, flight_server: Any, extenders: set[Extender] | None = None, dac: Any = None
+) -> Any:
+    return _grant_run(
+        ChsEchoFailFG, "chs_echo_fail_a", mode, flight_server, extenders, dac=dac, options={ECHO_KIND_KEY: kind}
+    )
+
+
+class _RefuseProdHandle(Extender):
+    """The documented refusal: on_run_start raises for a step that declares the handle."""
+
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        for step in steps:
+            if _E2E_HANDLE in step.credential_handles:
+                raise PermissionError("prod_db may not be used in this run")
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+@pytest.mark.parametrize(
+    "kind, error_type, text",
+    [
+        pytest.param("permission", PermissionError, "prod_db may not be used in this run", id="one_arg_permission"),
+        pytest.param(
+            "file_not_found", FileNotFoundError, "[Errno 2] No such file: '/data/x'", id="three_arg_not_found"
+        ),
+    ],
+)
+def test_an_error_echoing_no_secret_keeps_its_exact_text_in_every_mode(
+    mode: ParallelizationMode, kind: str, error_type: type[Exception], text: str, flight_server: Any
+) -> None:
+    with pytest.raises(error_type) as excinfo:
+        _echo_run(kind, mode, flight_server)
+
+    assert type(excinfo.value) is error_type
+    assert str(excinfo.value) == text
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+@pytest.mark.parametrize(
+    "kind, error_type, field",
+    [
+        pytest.param("import_msg", ImportError, "msg", id="import_msg"),
+        pytest.param("syntax_msg", SyntaxError, "msg", id="syntax_msg"),
+        pytest.param("syntax_text", SyntaxError, "text", id="syntax_text"),
+        pytest.param("decode_reason", UnicodeDecodeError, "reason", id="decode_reason"),
+    ],
+)
+def test_a_native_field_echoing_a_secret_is_masked_in_every_mode(
+    mode: ParallelizationMode,
+    kind: str,
+    error_type: type[Exception],
+    field: str,
+    flight_server: Any,
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: Any,
+) -> None:
+    seen = tmp_path / "seen.txt"
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(error_type) as excinfo:
+            _echo_run(kind, mode, flight_server, {_FileRecordingExtender(str(seen))})
+
+    exc = excinfo.value
+    assert _E2E_HMAC not in getattr(exc, field)
+    assert _E2E_HMAC not in str(exc)
+    assert _E2E_HMAC not in repr(exc.args)
+    assert _E2E_HMAC not in caplog.text
+    assert _E2E_HMAC not in seen.read_text()
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_a_repr_and_json_echoed_multi_line_secret_is_masked_in_every_mode(
+    mode: ParallelizationMode, flight_server: Any, caplog: pytest.LogCaptureFixture, tmp_path: Any
+) -> None:
+    seen = tmp_path / "seen.txt"
+    dac = _vault_dac({_E2E_HANDLE: {**_vault_values(), "pem": _E2E_PEM}})
+    forms = [_E2E_PEM, repr(_E2E_PEM)[1:-1], json.dumps(_E2E_PEM)[1:-1], json.dumps(_E2E_PEM, ensure_ascii=False)[1:-1]]
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(ValueError) as excinfo:
+            _echo_run("pem_repr_and_json", mode, flight_server, {_FileRecordingExtender(str(seen))}, dac)
+
+    exc = excinfo.value
+    for form in forms:
+        assert form not in str(exc)
+        assert form not in repr(exc.args)
+        assert form not in caplog.text
+        assert form not in seen.read_text()
+    assert "MIIe2e" not in str(exc)
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_the_documented_refusal_keeps_its_exact_text_with_a_credential_registered(
+    mode: ParallelizationMode, flight_server: Any
+) -> None:
+    with pytest.raises(PermissionError) as excinfo:
+        _grant_run(ChsReadingFG, "chs_read_a", mode, flight_server, {_RefuseProdHandle()})
+
+    assert str(excinfo.value) == "prod_db may not be used in this run"
 
 
 class ChsReadingArtifact(BaseArtifact):

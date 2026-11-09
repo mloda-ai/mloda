@@ -37,6 +37,7 @@ _WRITABLE_FIELDS = frozenset({"rows_out", "output_schema", "duration_seconds", "
 _gate_scopes = 0
 _gate_scopes_lock = threading.Lock()
 _result_attributes_lock = threading.Lock()
+_in_gate_scope: ContextVar[bool] = ContextVar("mloda_in_input_data_load_gate_scope", default=False)
 
 
 @contextlib.contextmanager
@@ -45,11 +46,18 @@ def input_data_load_gate_scope() -> Generator[None, None, None]:
     global _gate_scopes
     with _gate_scopes_lock:
         _gate_scopes += 1
+    token = _in_gate_scope.set(True)
     try:
         yield
     finally:
+        _in_gate_scope.reset(token)
         with _gate_scopes_lock:
             _gate_scopes -= 1
+
+
+def in_input_data_load_gate_scope() -> bool:
+    """True inside a gated calculation in this context, including work nested under it."""
+    return _in_gate_scope.get()
 
 
 def input_data_load_gate_scopes_active() -> int:

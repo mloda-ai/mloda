@@ -9,7 +9,6 @@ from typing import Any, NoReturn
 from mloda.core.abstract_plugins.components.credential_grant import (
     record_credential_read,
     _GRANT_HOLDER,
-    _READ_RECORDERS,
     CredentialLookup,
     StaticGrant,
     grant_scope,
@@ -103,29 +102,6 @@ def readable_credentials() -> _ReadableScope:
 def hidden_credentials() -> _ReadableScope:
     """Make reads refuse inside the block."""
     return _ReadableScope(hide=True)
-
-
-class _RunBoundary:
-    """Close the read window and hide outer read recorders for a block (a class, like _ReadableScope)."""
-
-    def __init__(self) -> None:
-        self._tokens: list[
-            tuple[Token[CredentialLookup | None], Token[tuple[set[str], ...]], Token[CredentialLookup | None]]
-        ] = []
-
-    def __enter__(self) -> None:
-        self._tokens.append((_READABLE.set(None), _READ_RECORDERS.set(()), _GRANT_HOLDER.set(None)))
-
-    def __exit__(self, *exc_info: object) -> None:
-        readable_token, recorders_token, holder_token = self._tokens.pop()
-        _GRANT_HOLDER.reset(holder_token)
-        _READ_RECORDERS.reset(recorders_token)
-        _READABLE.reset(readable_token)
-
-
-def run_boundary() -> _RunBoundary:
-    """Start a mloda run with the window closed and no outer recorders."""
-    return _RunBoundary()
 
 
 def restore_readable(method: Callable[..., Any]) -> Callable[..., Any]:

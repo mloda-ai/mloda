@@ -11,7 +11,12 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
 from mloda.core.abstract_plugins.components.credential_access import hidden_credentials, restore_readable
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import ExtenderHook, GateBypassError, _invoke_extender
-from mloda.core.abstract_plugins.hook_context import HookContext, input_data_load_gate_scopes_active, instrument
+from mloda.core.abstract_plugins.hook_context import (
+    HookContext,
+    in_input_data_load_gate_scope,
+    input_data_load_gate_scopes_active,
+    instrument,
+)
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
 
@@ -30,6 +35,22 @@ def _is_fallback_identity(data_access: Any, identity: str) -> bool:
     if identity == type(data_access).__name__:
         return True
     return isinstance(data_access, Mapping) and identity == _format_keys(str(key) for key in data_access)
+
+
+def _refuse_nested_ungated(owner_type: Any) -> None:
+    """Fail closed when an ungated load runs inside a gated calculation (a nested run needs its own gate)."""
+    if in_input_data_load_gate_scope():
+        raise GateBypassError(
+            f"{owner_type.__qualname__} loaded its source in a nested mloda run inside a calculation under an "
+            "INPUT_DATA_LOAD gate, and the nested run needs an INPUT_DATA_LOAD gate of its own."
+        )
+
+
+def _load_ungated(
+    owner_type: Any, load: Callable[[Any, FeatureSet], Any], data_access: Any, features: FeatureSet
+) -> Any:
+    _refuse_nested_ungated(owner_type)
+    return load(data_access, features)
 
 
 def dispatch_input_data_load(
@@ -73,18 +94,18 @@ def dispatch_input_data_load(
                     f"{owner_type.__qualname__} loaded its source after its calculation finished under an "
                     "INPUT_DATA_LOAD gate."
                 )
-            return load(data_access, features)
+            return _load_ungated(owner_type, load, data_access, features)
         if input_data_load_gate_scopes_active() > 0:
             raise GateBypassError(
                 f"{owner_type.__qualname__} loaded its source outside the calculation context while an "
                 "INPUT_DATA_LOAD gate is active (a thread hop lost it); run the thread's work with "
                 "contextvars.copy_context().run."
             )
-        return load(data_access, features)
+        return _load_ungated(owner_type, load, data_access, features)
 
     extender = cfw.get_function_extender(ExtenderHook.INPUT_DATA_LOAD)
     if extender is None:
-        return load(data_access, features)
+        return _load_ungated(owner_type, load, data_access, features)
 
     calc_context = HookContext.current()
     if calc_context is None:
@@ -93,7 +114,10 @@ def dispatch_input_data_load(
                 f"{owner_type.__qualname__} loaded its source without a calculate-phase HookContext under an "
                 "INPUT_DATA_LOAD gate; run the thread's work with contextvars.copy_context().run."
             )
-        return load(data_access, features)
+        return _load_ungated(owner_type, load, data_access, features)
+
+    if not extender.never_fall_back:
+        _refuse_nested_ungated(owner_type)
 
     access_identity = identity()
     is_fallback = _is_fallback_identity(data_access, access_identity)

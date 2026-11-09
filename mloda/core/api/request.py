@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
     scrub_credentials,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
-from mloda.core.abstract_plugins.components.credential_access import run_boundary
+from mloda.core.api.run_boundary import run_boundary
 from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, safe_value_text
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourcePointerError
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector

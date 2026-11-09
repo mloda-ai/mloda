@@ -1,6 +1,7 @@
 """Tests for read_credential, credentials_scope, the readable windows and ResolvedCredential."""
 
 import asyncio
+import contextlib
 import contextvars
 import copy
 import json
@@ -20,7 +21,6 @@ from mloda.core.abstract_plugins.components.credential_access import (
     read_credential,
     readable,
     readable_credentials,
-    run_boundary,
 )
 from mloda.core.abstract_plugins.components.credential_grant import (
     StaticGrant,
@@ -28,6 +28,14 @@ from mloda.core.abstract_plugins.components.credential_grant import (
     grant_scope,
     read_recorder,
 )
+from contextvars import ContextVar
+
+from mloda.core.abstract_plugins.components.failed_rows import _COLLECTOR, FailedRowsCollector
+from mloda.core.abstract_plugins.components.input_data.api_data_scope import _API_DATA_LOOKUP
+from mloda.core.abstract_plugins.compute_framework import _current_compute_framework
+from mloda.core.abstract_plugins.hook_context import _current_hook_context
+from mloda.core.abstract_plugins.input_data_load_marker import current_input_data_load_marker
+from mloda.core.api.run_boundary import run_boundary
 from datetime import UTC
 
 _HOST = "access-host.internal.example"
@@ -265,6 +273,32 @@ class TestReadCredential:
                 assert read_credential("h")["host"] == _HOST
                 assert _read_granted("h")["host"] == _HOST
             assert outer == {"h"}
+
+    @pytest.mark.parametrize(
+        ("var", "outer"),
+        [
+            (_current_hook_context, object()),
+            (_current_compute_framework, object()),
+            (current_input_data_load_marker, object()),
+            (_COLLECTOR, FailedRowsCollector("outer_group")),
+            (_API_DATA_LOOKUP, ("outer", lambda: None)),
+        ],
+        ids=["hook_context", "compute_framework", "input_data_load_marker", "failed_rows", "api_data_lookup"],
+    )
+    @pytest.mark.parametrize("raises", [False, True])
+    def test_run_boundary_resets_the_step_vars_then_restores_the_outer_value(
+        self, var: ContextVar[Any], outer: Any, raises: bool
+    ) -> None:
+        token = var.set(outer)
+        try:
+            with pytest.raises(ValueError) if raises else contextlib.nullcontext():
+                with run_boundary():
+                    assert var.get() is None
+                    if raises:
+                        raise ValueError("inner failure")
+            assert var.get() is outer
+        finally:
+            var.reset(token)
 
     def test_readable_credentials_opens_the_window_over_a_held_grant(self) -> None:
         with grant_scope(StaticGrant({"h": _credential()})):

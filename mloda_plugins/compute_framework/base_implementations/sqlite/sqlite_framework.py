@@ -195,6 +195,7 @@ class SqliteFramework(ComputeFramework):
 
     @classmethod
     def supported_parallelization_modes(cls) -> set[ParallelizationMode]:
+        """The live connection is reused without thread isolation and cannot cross a process boundary."""
         return {ParallelizationMode.SYNC}
 
     @classmethod

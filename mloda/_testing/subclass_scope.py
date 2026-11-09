@@ -10,13 +10,13 @@ from mloda._testing.feature_group_shape import (
     _first_value,
     _availability_reason,
     _input_problems,
-    _compared,
     _no_implementation_reason,
     _not_applicable_reason,
     _rule_reason,
     _route_block,
     _run as _run_group,
     _same,
+    _written,
     _serving_implementation,
 )
 from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter
@@ -177,8 +177,15 @@ def _value_failures(
         for r in _own_records(subclass, parent, impls[subclass], impls[parent])
         if r.kind is not DivergenceKind.VARIANT or r.variant in allowed
     ]
+    written = _written(adapter, data, expected, names)
+    for name in dict.fromkeys(names):
+        if not any(w[1] == name for w in written):
+            failures.append(f"setup: {parent.__name__} wrote no column for '{name}'")
+    if adapter.row_count(expected) == 0:
+        skipped.append(f"values: {parent.__name__} returned no rows, nothing compared")
+        return failures
     present = adapter.column_names(actual)
-    for column, name, parts in _compared(adapter.column_names(expected), names):
+    for column, name, parts in written:
         if column not in present:
             failures.append(f"values: '{column}' is missing from {subclass.__name__}'s result")
         elif not _same(adapter.column_values(expected, column), adapter.column_values(actual, column)):
@@ -204,7 +211,7 @@ def check_subclass_scope(
     """Check subclass replaces parent only with the selecting options; only these two classes are considered.
 
     With input_data it also compares the requested output columns with the parent's, assuming identical row order.
-    With require_run, a rule exclusion, a missing serving Implementation or a route block on it is a failure, not a note.
+    With require_run, a rule exclusion, a missing serving Implementation, a route block or no rows is a failure.
     """
     failures = _run(subclass, parent, selecting, requests)
     notes: list[str] = []

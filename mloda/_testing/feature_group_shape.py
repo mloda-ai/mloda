@@ -484,7 +484,6 @@ def _run_checks(
     require_run: bool,
 ) -> list[str]:
     failures: list[str] = []
-
     skipped = failures if require_run else notes
 
     reason = _not_applicable_reason(cls) or _availability_reason(adapter)

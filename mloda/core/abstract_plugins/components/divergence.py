@@ -6,10 +6,13 @@ import copy
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.components.options import Options
 
 MAX_REASON_LENGTH = 200
 MAX_DOCS_LENGTH = 500
@@ -224,17 +227,17 @@ def divergence_order(r: Divergence) -> tuple[Any, ...]:
     )
 
 
-def allowed_variants(options: Any) -> frozenset[str]:
+def allowed_variants(options: Options) -> frozenset[str]:
     """The variant names a feature allows through its allow_variants group option."""
-    value = options.get(DefaultOptionKeys.allow_variants)
+    label = str(DefaultOptionKeys.allow_variants)
+    value = options.group.get(label)
     if value is None:
         return frozenset()
     if isinstance(value, str):
         value = (value,)
-    label = str(DefaultOptionKeys.allow_variants)
-    if not isinstance(value, tuple | list | set | frozenset):
-        raise TypeError(f"{label} must be a string or a collection of strings, got {value!r}")
-    names = _names(label, value) if all(value) else None
-    if names is None or any(_single_line_problem(label, n) for n in names):
-        raise TypeError(f"{label} must hold non-empty single-line strings, got {value!r}")
-    return names
+    shape = "a non-empty single-line string or a collection of them"
+    if not isinstance(value, tuple | list | set | frozenset) or not all(isinstance(n, str) and n for n in value):
+        raise TypeError(f"{label} must be {shape}")
+    if any(_single_line_problem(label, n) for n in value):
+        raise TypeError(f"{label} must be {shape}")
+    return frozenset(value)

@@ -184,6 +184,51 @@ class OpToyVariantPyArrow(Implementation[OpToyVariantFG]):
         return pa.table({OPTOY_VARIANT_FEATURE: [PYARROW_MARK]})
 
 
+class OpToyVariantEmptyFG(OpToyVariantFG):
+    """Subclass that empties VARIANTS, so the inherited variant record is unlisted."""
+
+    FEATURE = "optoyvar_empty"
+    VARIANTS = frozenset()
+
+
+class OpToyVariantOtherFG(OpToyVariantFG):
+    """Subclass that narrows VARIANTS to a name the inherited variant record does not follow."""
+
+    FEATURE = "optoyvar_other"
+    VARIANTS = frozenset({"other"})
+
+
+OPTOY_VARIANT_CONSUMER = "optoyvar_consumer"
+
+
+class OpToyVariantConsumerFG(OperationFeatureGroup):
+    """Consumer whose input is the variant feature pinned to Pandas."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == OPTOY_VARIANT_CONSUMER
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(OPTOY_VARIANT_FEATURE, compute_framework="PandasDataFrame")}
+
+
+class OpToyVariantConsumerPandas(Implementation[OpToyVariantConsumerFG]):
+    feature_group = OpToyVariantConsumerFG
+    compute_framework = PandasDataFrame
+
+    @classmethod
+    def calculate(
+        cls, group: type[OpToyVariantConsumerFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        data[OPTOY_VARIANT_CONSUMER] = PANDAS_MARK
+        return data
+
+
 OPTOY_CHAIN_SRC = "optoy_chain_src"
 OPTOY_CHAIN_SUFFIX = "__optoy_chain"
 CHAIN_LOG: list[tuple[str, str]] = []

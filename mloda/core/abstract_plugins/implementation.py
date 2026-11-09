@@ -229,17 +229,17 @@ def step_allowed_variants(features: FeatureSet) -> tuple[str, ...]:
 
 def unallowed_variants(
     group: type[FeatureGroup],
-    framework: type[ComputeFramework],
-    implementations: Iterable[type[Implementation[Any]]],
+    implementation: type[Implementation[Any]] | None,
     feature_name: str,
     options: Options,
     part: str | None,
 ) -> tuple[Divergence, ...]:
-    """The serving implementation's VARIANT records that apply to the feature and that it does not allow."""
-    if not group.VARIANTS or not is_nominal_subclass(group, OperationFeatureGroup):
+    """The implementation's VARIANT records that apply to the feature and that it does not allow.
+
+    A variant the group does not list is never allowed."""
+    if implementation is None or not is_nominal_subclass(group, OperationFeatureGroup):
         return ()
-    implementation = serving_implementation(group, framework, implementations)
-    if implementation is None or not any(r.kind is DivergenceKind.VARIANT for r in implementation.divergences):
+    if not any(r.kind is DivergenceKind.VARIANT for r in implementation.divergences):
         return ()
     allowed = allowed_variants(options) & group.VARIANTS
     parts = None if part is None else frozenset({part})
@@ -248,6 +248,13 @@ def unallowed_variants(
         for r in implementation.divergences_for(group, feature_name, options, parts=parts)
         if r.kind is DivergenceKind.VARIANT and r.variant not in allowed
     )
+
+
+def named_implementations(
+    name: str, implementations: Iterable[type[Implementation[Any]]]
+) -> list[type[Implementation[Any]]]:
+    """The implementations a pin name selects: bare class name or module:qualname."""
+    return [c for c in implementations if name in (c.__name__, f"{c.__module__}:{c.__qualname__}")]
 
 
 def serving_implementation(

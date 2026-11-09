@@ -14,6 +14,7 @@ from mloda.core.abstract_plugins.components.divergence import (
     Divergence,
     DivergenceKind,
     DivergenceSource,
+    allowed_variants,
     divergence_problems,
     stamped,
 )
@@ -508,8 +509,6 @@ class TestVariantsDeclaration:
 
 
 class TestAllowedVariants:
-    KEY_ = "allow_variants"
-
     @pytest.mark.parametrize(
         "value, expected",
         [
@@ -519,24 +518,25 @@ class TestAllowedVariants:
             ({"a"}, {"a"}),
             (frozenset({"a", "b"}), {"a", "b"}),
             ((), set()),
+            (None, set()),
         ],
     )
     def test_accepted_shapes(self, value: Any, expected: set[str]) -> None:
-        from mloda.core.abstract_plugins.components.divergence import allowed_variants
+        data = {} if value is None else {"allow_variants": value}
+        assert allowed_variants(Options(data)) == frozenset(expected)
 
-        assert allowed_variants(Options({self.KEY_: value})) == frozenset(expected)
-
-    def test_absent_is_empty(self) -> None:
-        from mloda.core.abstract_plugins.components.divergence import allowed_variants
-
-        assert allowed_variants(Options({})) == frozenset()
+    def test_a_value_under_context_options_only_is_ignored(self) -> None:
+        assert allowed_variants(Options(group={}, context={"allow_variants": "a"})) == frozenset()
 
     @pytest.mark.parametrize("value", [3, b"a", ["a", 1], [""]])
     def test_a_bad_shape_raises_a_type_error_naming_the_key(self, value: Any) -> None:
-        from mloda.core.abstract_plugins.components.divergence import allowed_variants
-
         with pytest.raises(TypeError, match="allow_variants"):
-            allowed_variants(Options({self.KEY_: value}))
+            allowed_variants(Options({"allow_variants": value}))
+
+    def test_the_type_error_does_not_echo_the_value(self) -> None:
+        with pytest.raises(TypeError) as caught:
+            allowed_variants(Options({"allow_variants": ["s3cr3t-value", 1]}))
+        assert "s3cr3t-value" not in str(caught.value)
 
 
 class TestImplementationDeclaration:

@@ -1111,14 +1111,6 @@ def test_a_compute_record_writes_the_allowed_variants_only_when_non_empty() -> N
     assert record["allowed_variants"] == ["a", "b"]
 
 
-def test_locks_for_the_same_plan_differ_with_and_without_the_allowed_variants(tmp_path: Path) -> None:
-    without, with_option = tmp_path / "a.lock", tmp_path / "b.lock"
-    write_plan_lock([_compute_step()], without)
-    write_plan_lock([_compute_step(allowed_variants=("skip_nan",))], with_option)
-
-    assert without.read_text() != with_option.read_text()
-
-
 def test_a_compute_record_writes_the_contract_version_and_sorted_divergences() -> None:
     late = stamped(
         Divergence(kind=DivergenceKind.TYPE, cause=Cause.BACKEND, reason="floats"),

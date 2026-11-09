@@ -17,11 +17,11 @@ from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlyDict
 
 from mloda.core.abstract_plugins.components.credential_scrub import (
     _mask_item,
+    _redact_forms,
     _with_escaped,
     current_registered_escaped,
     current_registered_secrets,
     mask_literals,
-    redact_exception,
 )
 
 DISABLE_LOG_MASKING_COMMAND = "DISABLE_LOG_MASKING"
@@ -128,12 +128,14 @@ def _mask_args(args: Any, literals: frozenset[str]) -> Any:
     return args if isinstance(args, Mapping) and type(args) not in (dict, ReadOnlyDict) else _mask_item(args, literals)
 
 
-def _mask_extras(record: logging.LogRecord, literals: frozenset[str]) -> None:
+def _mask_extras(record: logging.LogRecord, escaped: frozenset[str]) -> None:
     exc_info = record.exc_info
     if isinstance(exc_info, tuple) and len(exc_info) == 3 and isinstance(exc_info[1], BaseException):
-        redact_exception(exc_info[1], literals)
+        masked = _redact_forms(exc_info[1], escaped)
+        if masked is not exc_info[1]:
+            record.exc_info = (type(masked), masked, exc_info[2])
     if isinstance(record.stack_info, str):
-        record.stack_info = mask_literals(record.stack_info, literals)
+        record.stack_info = mask_literals(record.stack_info, escaped)
 
 
 def _formatted(msg: Any, args: Any) -> str:
@@ -149,14 +151,14 @@ def _mask_formatted(record: logging.LogRecord, literals: frozenset[str], escaped
         return False
     record.msg = msg
     record.args = args
-    _mask_extras(record, literals)
+    _mask_extras(record, escaped)
     return True
 
 
 def _mask_flattened(record: logging.LogRecord, literals: frozenset[str], escaped: frozenset[str]) -> bool:
     record.msg = mask_literals(record.getMessage(), escaped)
     record.args = ()
-    _mask_extras(record, literals)
+    _mask_extras(record, escaped)
     return True
 
 
@@ -180,7 +182,7 @@ def _mask_unformattable(record: logging.LogRecord, literals: frozenset[str], esc
     args = _stringify_args(record.args, escaped)
     record.msg = msg
     record.args = args
-    _mask_extras(record, literals)
+    _mask_extras(record, escaped)
     return True
 
 
@@ -237,12 +239,12 @@ def _wrap_make_record(previous: Callable[..., logging.LogRecord]) -> Callable[..
             _probe_seen["make_record"] = True
             return record
         if extra and not _disabled:
-            literals, _ = _active_literals()
+            literals, escaped = _active_literals()
             if literals:
                 for key in extra:
                     value = record.__dict__[key] if key in record.__dict__ else None
                     if isinstance(value, str):
-                        record.__dict__[key] = mask_literals(value, literals)
+                        record.__dict__[key] = mask_literals(value, escaped)
         return record
 
     return masking_make_record

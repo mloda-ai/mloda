@@ -38,6 +38,6 @@ def thread_worker(
             if mark_done is not None:
                 mark_done(command.uuid)
         except BaseException as e:  # not only Exception: anything escaping a thread is lost and the run hangs
-            redact_exception(e, current_registered_secrets())
-            msg, exc_info = failure_report(e)
-            cfw_register.set_error(msg, exc_info, exception=e)
+            masked = redact_exception(e, current_registered_secrets())
+            msg, exc_info = failure_report(masked)
+            cfw_register.set_error(msg, exc_info, exception=masked)

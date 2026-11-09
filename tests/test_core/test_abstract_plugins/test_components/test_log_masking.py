@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextvars
 import json
+import linecache
 import logging
 import re
 import subprocess  # nosec B404
@@ -28,6 +29,7 @@ from mloda.core.abstract_plugins.components.credential import RegisteredCredenti
 from mloda.core.abstract_plugins.components.credential_scrub import (
     current_registered_escaped,
     current_registered_secrets,
+    redact_exception,
     registered_secrets_scope,
     scrub_credentials,
 )
@@ -139,8 +141,22 @@ class _ReprOnly:
         return f"repr({_SECRET})"
 
 
+# Written out here, not imported: a form the code under test forgets must still fail the assertions.
+_FORM_BUILDERS: dict[str, Callable[[str], str]] = {
+    "raw": lambda literal: literal,
+    "repr": lambda literal: repr(literal)[1:-1],
+    "json_ascii": lambda literal: json.dumps(literal)[1:-1],
+    "json_utf8": lambda literal: json.dumps(literal, ensure_ascii=False)[1:-1],
+    "quote_forced_repr": lambda literal: repr(literal + '"')[1:-2],
+}
+
+
+def _forms(literal: str) -> list[str]:
+    return [build(literal) for build in _FORM_BUILDERS.values()]
+
+
 def _assert_no_literal(record: logging.LogRecord, literal: str) -> None:
-    for form in (literal, repr(literal)[1:-1]):
+    for form in _forms(literal):
         assert form not in record.getMessage()
         assert form not in str(record.msg)
         assert form not in repr(record.args)
@@ -148,15 +164,26 @@ def _assert_no_literal(record: logging.LogRecord, literal: str) -> None:
 
 _BACKSLASH = "ab\\cd'ef12345"
 _QUOTES = "a\"b'c-12345"
-_NEWLINE = "line1\nsecret-9"
+_NEWLINE = "line1\nsecret-9"  # stands for a multi-line PEM key
+_UNICODE = 'sec"re\\t-ä-1234'  # nosec B105  (raw, repr, ASCII JSON and UTF-8 JSON all differ)
+_SINGLE_QUOTE = "pa'ssword-123"  # nosec B105  (inside a string with both quote kinds, repr escapes it as \')
+_ECHO_LITERALS = {
+    "backslash": _BACKSLASH,
+    "quotes": _QUOTES,
+    "newline": _NEWLINE,
+    "unicode": _UNICODE,
+    "single_quote": _SINGLE_QUOTE,
+}
 _NESTED_CASES = [
     pytest.param(literal, msg, args, id=f"{lit_id}_{shape_id}")
-    for lit_id, literal in (("backslash", _BACKSLASH), ("quotes", _QUOTES), ("newline", _NEWLINE))
+    for lit_id, literal in _ECHO_LITERALS.items()
     for shape_id, msg, args in (
         ("list", "cfg %s", ([literal],)),
         ("tuple", "cfg %s", ((literal,),)),
         ("list_and_int", "cfg %s and %s", ([literal], 1)),
         ("bytes", "b %s", (literal.encode(),)),
+        ("json", "cfg %s", (json.dumps({"k": literal}),)),
+        ("json_utf8", "cfg %s", (json.dumps({"k": literal}, ensure_ascii=False),)),
     )
 ]
 
@@ -354,6 +381,17 @@ def test_exc_info_exception_is_masked(capture: _Capture) -> None:
     assert _SECRET not in logging.Formatter().format(record)
 
 
+def test_exc_info_exception_group_message_is_masked(capture: _Capture) -> None:
+    group = ExceptionGroup(f"bad {_SECRET}", [ValueError("m")])
+    with _scope(_SECRET):
+        capture.logger.error("x", exc_info=group)
+
+    (record,) = capture.records
+    assert record.exc_info is not None
+    assert _SECRET not in cast(ExceptionGroup[Exception], record.exc_info[1]).message
+    assert _SECRET not in logging.Formatter().format(record)
+
+
 def test_logger_exception_outside_an_except_block_does_not_raise(capture: _Capture) -> None:
     with _scope(_SECRET):
         capture.logger.exception("no active exception %s", _SECRET)
@@ -376,6 +414,71 @@ def test_stack_info_is_masked(capture: _Capture) -> None:
     (record,) = capture.records
     assert record.stack_info is not None
     assert _STACK_LITERAL not in record.stack_info
+
+
+def _emit_stack_echoing(logger: logging.Logger, echoed: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Log with stack_info from a frame whose source line carries echoed, as a traceback line would."""
+    filename = f"<stack-echo-{uuid4().hex}>"
+    clean = "def emit(logger):\n    logger.info('with stack', stack_info=True)\n"
+    shown = ["def emit(logger):\n", f"    logger.info('with stack', stack_info=True)  # {echoed}\n"]
+    monkeypatch.setitem(linecache.cache, filename, (len(clean), None, shown, filename))
+    namespace: dict[str, Any] = {}
+    exec(compile(clean, filename, "exec"), namespace)  # nosec B102
+    namespace["emit"](logger)
+
+
+_ECHO_SINKS = ["redact_exception", "scrub_credentials", "msg", "arg", "extra", "exc_info", "stack_info"]
+_ECHO_CASES = [
+    pytest.param(literal, form, sink, id=f"{lit_id}-{form}-{sink}")
+    for lit_id, literal in _ECHO_LITERALS.items()
+    for form in _FORM_BUILDERS
+    for sink in _ECHO_SINKS
+    # a source line cannot hold a raw newline, so the injected stack text would stop at the break
+    if not (sink == "stack_info" and "\n" in _FORM_BUILDERS[form](literal))
+]
+
+
+@pytest.mark.parametrize("literal, form, sink", _ECHO_CASES)
+def test_every_echoed_form_of_a_registered_literal_is_masked_by_every_sink(
+    capture: _Capture, monkeypatch: pytest.MonkeyPatch, literal: str, form: str, sink: str
+) -> None:
+    echoed = _FORM_BUILDERS[form](literal)
+    forms = _forms(literal)
+    with _scope(literal):
+        if sink == "redact_exception":
+            exc = ValueError(f"x {echoed} y")
+            redact_exception(exc, frozenset({literal}))
+            assert all(f not in str(exc) for f in forms)
+            return
+        if sink == "scrub_credentials":
+            assert all(f not in scrub_credentials(f"x {echoed} y") for f in forms)
+            return
+        if sink == "msg":
+            capture.logger.info(f"x {echoed} y")
+        elif sink == "arg":
+            capture.logger.info("x %s y", echoed)
+        elif sink == "extra":
+            capture.logger.info("m", extra={"tag": echoed})
+        elif sink == "exc_info":
+            try:
+                raise ValueError(f"x {echoed} y")
+            except ValueError:
+                capture.logger.error("failed", exc_info=True)
+        else:
+            _emit_stack_echoing(capture.logger, echoed, monkeypatch)
+
+    (record,) = capture.records
+    _assert_no_literal(record, literal)
+    if sink == "extra":
+        assert all(f not in getattr(record, "tag") for f in forms)
+    if sink == "exc_info":
+        assert record.exc_info is not None
+        rendered = logging.Formatter().format(record)
+        assert all(f not in str(record.exc_info[1]) and f not in rendered for f in forms)
+    if sink == "stack_info":
+        assert record.stack_info is not None
+        assert "# ***" in record.stack_info
+        assert all(f not in record.stack_info for f in forms)
 
 
 def test_str_extra_values_are_masked_and_other_values_untouched(capture: _Capture) -> None:
@@ -492,6 +595,10 @@ def test_no_escaped_form_is_rebuilt_per_record(capture: _Capture, mode: str) -> 
             capture.logger.info("plain %s %s", i, "text")
         capture.logger.info("hold %s", holder)
         capture.logger.info("bytes %s", literal.encode())
+        try:
+            raise ValueError(f"bad {literal}")
+        except ValueError:
+            capture.logger.error("failed", exc_info=True)
 
     if mode == "run_scoped":
         with _scope(literal):
@@ -508,9 +615,12 @@ def test_no_escaped_form_is_rebuilt_per_record(capture: _Capture, mode: str) -> 
             after = len(literal.repr_calls)
 
     assert after == baseline
-    assert len(capture.records) == 22
-    for record in capture.records[-2:]:
+    assert len(capture.records) == 23
+    for record in capture.records[-3:]:
         _assert_no_literal(record, literal)
+    failed = capture.records[-1]
+    assert failed.exc_info is not None
+    assert all(form not in str(failed.exc_info[1]) for form in _forms(literal))
 
 
 def test_empty_scope_does_not_install() -> None:

@@ -1,6 +1,7 @@
 """Strip credentials from free text before it reaches core's failure logs or MlodaRunError."""
 
 import io
+import json
 import re
 from collections.abc import Iterable, Mapping
 from contextvars import ContextVar, Token
@@ -180,7 +181,7 @@ def _cut_hidden_percent(scheme: str, host: str, path: str) -> str:
         return path
     decoded = unquote(path)
     probe = f"{scheme}://{host}{decoded}"
-    hides = "%" in decoded or any(mark in decoded for mark in ("@", "'", '"', "://", *_REGISTERED_SECRETS.get()))
+    hides = "%" in decoded or any(mark in decoded for mark in ("@", "'", '"', "://", *_REGISTERED_ESCAPED.get()))
     if not hides and _scrub_passes(probe) == probe:
         return path
     head = path.partition("%")[0]
@@ -282,8 +283,15 @@ _REGISTERED_ESCAPED: ContextVar[frozenset[str]] = ContextVar("mloda_registered_e
 
 
 def _with_escaped(literals: frozenset[str]) -> frozenset[str]:
-    """The literals plus their repr-escaped forms, which an object's repr can carry instead."""
-    return literals | {repr(literal)[1:-1] for literal in literals if literal}
+    """The literals plus their repr (both quote styles), JSON and non-ASCII JSON escaped forms."""
+    forms = set(literals)
+    for literal in literals:
+        if literal:
+            forms.add(repr(literal)[1:-1])
+            forms.add(repr(literal + '"')[1:-2])
+            forms.add(json.dumps(literal)[1:-1])
+            forms.add(json.dumps(literal, ensure_ascii=False)[1:-1])
+    return frozenset(forms)
 
 
 def _literal_spans(text: str, literals: Iterable[str]) -> list[tuple[int, int]]:
@@ -388,7 +396,7 @@ def scrub_credentials(text: str) -> str:
     Patterns run on the original text so a literal never deletes their anchors; every output char that came
     from a registered literal is masked, so no fragment of one survives.
     """
-    registered = _REGISTERED_SECRETS.get()
+    registered = _REGISTERED_ESCAPED.get()
     if not registered:
         return _scrub_passes(text)
     hidden = _merge_spans(_literal_spans(text, registered))
@@ -499,11 +507,11 @@ _MAX_MASK_DEPTH = 32
 
 
 def _mask_item(item: Any, literals: frozenset[str], memo: dict[int, Any] | None = None, depth: int = 0) -> Any:
-    """Mask str leaves in tuples, lists and dicts; return ``item`` itself when nothing inside changed."""
+    """Mask str leaves in tuples, lists, dicts, sets and frozensets; return ``item`` itself when nothing changed."""
     if isinstance(item, str):
         masked_str = mask_literals(item, literals)
         return item if masked_str == item else masked_str
-    if not isinstance(item, (tuple, list, dict)):
+    if not isinstance(item, (tuple, list, dict, set, frozenset)):
         return item
     if depth > _MAX_MASK_DEPTH:
         return "***"
@@ -531,6 +539,15 @@ def _mask_item(item: Any, literals: frozenset[str], memo: dict[int, Any] | None 
             memo[id(item)] = item
             return item
         return masked_dict
+    if isinstance(item, (set, frozenset)):
+        memo[id(item)] = "***"
+        members = [_mask_item(element, literals, memo, depth + 1) for element in item]
+        if all(new is old for new, old in zip(members, item)):
+            memo[id(item)] = item
+            return item
+        rebuilt = set(members) if isinstance(item, set) else frozenset(members)
+        memo[id(item)] = rebuilt
+        return rebuilt
     memo[id(item)] = "***"
     elements = [_mask_item(element, literals, memo, depth + 1) for element in item]
     if all(new is old for new, old in zip(elements, item)):
@@ -541,29 +558,55 @@ def _mask_item(item: Any, literals: frozenset[str], memo: dict[int, Any] | None 
     return result
 
 
+_STR_FIELDS: tuple[tuple[type[BaseException], tuple[str, ...]], ...] = (
+    (OSError, ("strerror", "filename", "filename2")),
+    (ImportError, ("msg", "name", "path")),
+    (SyntaxError, ("msg", "filename", "text")),
+    (UnicodeEncodeError, ("object", "reason")),
+    (UnicodeDecodeError, ("reason",)),
+    (UnicodeTranslateError, ("object", "reason")),
+    (SystemExit, ("code",)),
+)
+
+
 def redact_exception(exc: BaseException, literals: frozenset[str]) -> BaseException:
-    """Mask literals in place across the exception, its chain, group members, notes and refusals."""
+    """Mask in place and return the exception, or a copy when a group's read-only message had to change."""
     if not literals:
         return exc
+    return _redact_forms(exc, _with_escaped(literals))
+
+
+def _redact_forms(exc: BaseException, literals: frozenset[str]) -> BaseException:
+    """Mask the already expanded ``literals`` in place across the exception graph."""
     seen: set[int] = set()
+    visited: list[BaseException] = []
     pending: list[BaseException] = [exc]
     while pending:
         current = pending.pop()
         if id(current) in seen:
             continue
         seen.add(id(current))
+        visited.append(current)
         masked_args = _mask_item(current.args, literals)
         if masked_args is not current.args:
             object.__setattr__(current, "args", masked_args)
         attributes = vars(current)
         for name, value in list(attributes.items()):
-            if isinstance(value, (str, dict, list, tuple)) and not name.startswith("__"):
+            if isinstance(value, (str, dict, list, tuple, set, frozenset)) and not name.startswith("__"):
                 masked = _mask_item(value, literals)
                 if masked is not value:
                     attributes[name] = masked
-        if isinstance(current, OSError):
-            for name in ("strerror", "filename", "filename2"):
-                object.__setattr__(current, name, _mask_item(getattr(current, name), literals))
+        for base, names in _STR_FIELDS:
+            if not isinstance(current, base):
+                continue
+            for name in names:
+                # The base's own descriptor, written only on change: a None in these fields alters OSError.__str__.
+                descriptor = getattr(base, name)
+                value = descriptor.__get__(current)
+                if isinstance(value, str):
+                    masked_value = mask_literals(value, literals)
+                    if masked_value != value:
+                        descriptor.__set__(current, masked_value)
         notes = getattr(current, "__notes__", None)
         if isinstance(notes, list):
             object.__setattr__(current, "__notes__", [_mask_item(note, literals) for note in notes])
@@ -575,7 +618,86 @@ def redact_exception(exc: BaseException, literals: frozenset[str]) -> BaseExcept
         pending.extend(
             nested for nested in (current.__cause__, current.__context__, *members) if isinstance(nested, BaseException)
         )
-    return exc
+    groups = [g for g in visited if isinstance(g, BaseExceptionGroup)]
+    if not any(mask_literals(g.message, literals) != g.message for g in groups):
+        return exc
+    memo: dict[int, BaseException] = {}
+    for group in groups:
+        _rebuilt_group(group, literals, memo, 0)
+    _rewire([*visited, *memo.values()], memo)
+    return memo.get(id(exc), exc)
+
+
+def _rebuilt_group(
+    group: BaseExceptionGroup[Any], forms: frozenset[str], memo: dict[int, BaseException], depth: int
+) -> BaseException:
+    """Return ``group`` or a copy with the forms masked in its message and nested groups."""
+    if id(group) in memo:
+        return memo[id(group)]
+    if depth > _MAX_MASK_DEPTH:
+        memo[id(group)] = RuntimeError("***") if isinstance(group, Exception) else BaseException("***")
+        return memo[id(group)]
+    original = group.exceptions
+    members = [_rebuilt_group(m, forms, memo, depth + 1) if isinstance(m, BaseExceptionGroup) else m for m in original]
+    members_changed = any(new is not old for new, old in zip(members, original))
+    message = mask_literals(group.message, forms)
+    if message == group.message and not members_changed:
+        memo[id(group)] = group
+        return group
+    copy = BaseExceptionGroup.__new__(type(group), message, members)
+    copy.__dict__.update(group.__dict__)
+    args = list(group.args)
+    for index, element in enumerate(args):
+        if (
+            isinstance(element, (list, tuple))
+            and len(element) == len(original)
+            and all(a is b for a, b in zip(element, original))
+        ):
+            args[index] = list(members)
+    object.__setattr__(copy, "args", tuple(args))
+    copy.with_traceback(group.__traceback__)
+    object.__setattr__(copy, "__cause__", group.__cause__)
+    object.__setattr__(copy, "__context__", group.__context__)
+    object.__setattr__(copy, "__suppress_context__", group.__suppress_context__)
+    memo[id(group)] = copy
+    return copy
+
+
+def _rewire(nodes: list[BaseException], memo: dict[int, BaseException]) -> None:
+    """Point causes, contexts and member containers at the rebuilt groups."""
+    for current in nodes:
+        for name in ("__cause__", "__context__"):
+            target = getattr(current, name)
+            replacement = memo.get(id(target)) if target is not None else None
+            if replacement is not None and replacement is not target:
+                suppress = current.__suppress_context__
+                object.__setattr__(current, name, replacement)
+                object.__setattr__(current, "__suppress_context__", suppress)
+        attributes = vars(current)
+        for name in ("refusals", "exceptions"):
+            value = attributes.get(name)
+            if isinstance(value, (tuple, list)):
+                swapped = [memo.get(id(item), item) for item in value]
+                if any(new is not old for new, old in zip(swapped, value)):
+                    attributes[name] = tuple(swapped) if isinstance(value, tuple) else swapped
+
+
+def reraise_redacted(exc: BaseException, literals: frozenset[str]) -> None:
+    """Mask ``exc`` and raise the masked copy when a group had to be rebuilt."""
+    _reraise_forms(exc, _with_escaped(literals) if literals else frozenset())
+
+
+def _reraise_forms(exc: BaseException, forms: frozenset[str]) -> None:
+    """Like reraise_redacted, with the escaped forms already expanded."""
+    masked = _redact_forms(exc, forms) if forms else exc
+    if masked is exc:
+        return
+    context = masked.__context__
+    try:
+        raise masked
+    finally:
+        # raise in __exit__ chains the handled original, which still holds the raw message.
+        object.__setattr__(masked, "__context__", context)
 
 
 class redact_escaping_exception:  # noqa: N801
@@ -586,7 +708,7 @@ class redact_escaping_exception:  # noqa: N801
 
     def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
         if exc is not None:
-            redact_exception(exc, current_registered_secrets())
+            _reraise_forms(exc, current_registered_escaped())
 
 
 def redact_mapping(mapping: Mapping[Any, Any]) -> dict[Any, str]:

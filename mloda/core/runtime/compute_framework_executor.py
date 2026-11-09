@@ -424,9 +424,9 @@ class ComputeFrameworkExecutor:
                 self.worker_manager.result_uuids_collection.add(step.uuid)
 
             except Exception as e:
-                redact_exception(e, current_registered_secrets())
-                msg, exc_info = failure_report(e)
-                self.cfw_register.set_error(msg, exc_info, exception=e)
+                masked = redact_exception(e, current_registered_secrets())
+                msg, exc_info = failure_report(masked)
+                self.cfw_register.set_error(msg, exc_info, exception=masked)
 
     def thread_execute_step(self, step: Any) -> None:
         """

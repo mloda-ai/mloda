@@ -1974,6 +1974,70 @@ class TestCredentialRuns:
             _assert_value_absent(name, dumped)
         _assert_value_absent(str(tmp_path), dumped)
 
+    def _partly_unreadable(self, tmp_path: Path, handle: str) -> tuple[Planner, Runner]:
+        credentials = 'token = "TOK_VAR"\n\n[mcp.credentials.other]\ntoken = { file = "gone.txt" }'
+        settings = _cred_settings(tmp_path, credentials, options={CRED_KEY: handle})
+        return _cred_services(settings, {"TOK_VAR": TOKEN})
+
+    def test_request_naming_a_readable_handle_works_while_another_is_unreadable(self, tmp_path: Path) -> None:
+        planner, runner = self._partly_unreadable(tmp_path, "db")
+
+        result = _run(planner, runner, {"features": [CRED_FEATURE]})
+
+        assert _preview_rows(result) == [{CRED_FEATURE: cred_digest(TOKEN)}] * 5
+
+    def test_request_naming_the_unreadable_handle_is_refused_without_naming_it(self, tmp_path: Path) -> None:
+        planner, _ = self._partly_unreadable(tmp_path, "other")
+
+        error = _error(planner.explain({"features": [CRED_FEATURE]}), "internal")
+
+        assert "ConfigError" in error["message"]
+        text = json.dumps({"message": error["message"], "details": error.get("details")})
+        for name in ("db", "other", "gone.txt"):
+            _assert_value_absent(name, text)
+
+    @pytest.mark.parametrize(
+        ("credentials", "overrides", "features"),
+        [
+            (
+                'token = "TOK_VAR"\n\n[mcp.credentials.wh]\nsqlite = "WH_PATH"',
+                {"data_access_handle": "wh"},
+                ["sq_amount"],
+            ),
+            ('sqlite = "WH_PATH"\ntoken = "TOK_VAR"', {CRED_KEY: "db"}, [CRED_FEATURE, "sq_amount"]),
+        ],
+        ids=["operator_handle", "single_credential"],
+    )
+    def test_unreadable_credential_refuses_a_request_that_binds_a_source_credential(
+        self, tmp_path: Path, credentials: str, overrides: dict[str, str], features: list[str]
+    ) -> None:
+        db = _write_sqlite(tmp_path)
+        gone = '\n\n[mcp.credentials.other]\ntoken = { file = "gone.txt" }'
+        env = {"TOK_VAR": TOKEN, "WH_PATH": str(db)}
+        request = {"features": features}
+        readable = _cred_settings(tmp_path, credentials, options=overrides)
+        _success(_cred_services(readable, env)[0].explain(request))
+        settings = _cred_settings(tmp_path, credentials + gone, options=overrides)
+        planner, _ = _cred_services(settings, env)
+
+        error = _error(planner.explain(request), "internal")
+
+        assert "ConfigError" in error["message"]
+
+    def test_base_credential_shadowing_an_unreadable_configured_handle_is_refused(self, tmp_path: Path) -> None:
+        base = DataAccessCollection()
+        secret_file = tmp_path / "pii"
+        secret_file.write_text(TOKEN + "\n")
+        settings = _cred_settings(tmp_path, 'token = { file = "pii" }', options={CRED_KEY: "db"})
+        planner, _ = _cred_services(settings, {}, base)
+        base.add_credentials("db", Credential(token=ROTATED))
+        secret_file.unlink()
+
+        error = _error(planner.explain({"features": [CRED_FEATURE]}), "internal")
+
+        assert "ConfigError" in error["message"]
+        _assert_value_absent(ROTATED, json.dumps({"message": error["message"], "details": error.get("details")}))
+
     def test_unreadable_handle_logs_one_warning_and_one_info_when_back(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:

@@ -282,7 +282,12 @@ class Planner:
             failure is not None
             or diagnosis is None
             or not diagnosis.complete
-            or any(step.credential_handles for step in steps)
+            or any(
+                step.bound_credential_handle is not None
+                # a handle added to the live base after startup can shadow an unreadable configured one
+                or not missing.keys().isdisjoint(step.credential_handles)
+                for step in steps
+            )
         ):
             refusal = ConfigError(next(iter(missing.values())))
             refusal.__context__ = failure

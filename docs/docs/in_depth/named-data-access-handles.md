@@ -276,17 +276,16 @@ declared handle with the required fields, for example `Credential(key="ci-placeh
 Use placeholders of 8 characters or longer.
 
 A declared handle stays on the declaring feature: its inputs inherit it only through an explicit `forward_group`
-allowlist. A feature whose group does not declare the key forwards it like any group option, so an input that declares it
-receives it and records it in `credential_handles`. A handle is never part of a feature name: a pattern that captures a
-handle key raises at class definition. The names `<pointer>` and `<unnamed>` are reserved: the plan record uses them, so
-no handle can be registered under them.
+allowlist. A feature whose group does not declare the key forwards it like any group option. A handle is never part of
+a feature name: a pattern that captures a handle key raises at class definition. The names `<pointer>` and `<unnamed>`
+are reserved for the plan record, so no handle can be registered under them.
 
 A credential is never an option value. A `Credential`, `RegisteredCredential` or `ResolvedCredential` anywhere in a
 non-pointer option is refused at plan time, also nested in mappings, mapping views, sets, sequences (not `str`, bytes,
 `range` or `array`) and dataclass instances. Iterators and generators are not walked. The source pointer form
-(`{"SqliteFG": Credential(...)}`) still works, but a pointer-key credential the feature sets itself on a root feature
-whose group is not the owning source (or a subclass of it) is refused. Two gaps stay: a consumer that holds a pointer
-with no source below it, and a pointer merged from an inherited copy, are not refused.
+(`{"SqliteFG": Credential(...)}`) still works, except on a root feature whose group is not the owning source (or a
+subclass of it). A consumer holding a pointer with no source below it, and a pointer merged from an inherited copy,
+are not refused.
 A bare `str` secret under an ordinary key cannot be detected, so do not do it.
 
 ## Runtime access versus match-time binding

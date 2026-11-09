@@ -232,10 +232,7 @@ def _credential_hit(value: Any, seen: set[int]) -> str | None:
 
 
 def refuse_credential_option_values(options: Options) -> None:
-    """Refuse a Credential, RegisteredCredential or ResolvedCredential in any non-pointer option value.
-
-    Walks mappings, mapping views, sets, sequences and dataclass instances; the message names key and type only.
-    """
+    """Refuse a credential in any non-pointer option value, walking containers; names key and type only."""
     # Function-local: avoids an import cycle through the source feature group module.
     from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
 
@@ -261,10 +258,7 @@ def refuse_credential_option_values(options: Options) -> None:
 
 
 def refuse_unread_pointer_credentials(feature_group: type[FeatureGroup], options: Options) -> None:
-    """Refuse a credential under a source pointer key the feature set itself when its group is not that source.
-
-    Names key, type and group, never the value.
-    """
+    """Refuse a self-set pointer-key credential on a group that is not that source; never names the value."""
     # Function-local: avoids an import cycle through the source feature group module.
     from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
 

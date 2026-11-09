@@ -137,7 +137,10 @@ class ServiceCredentials:
     def _log_transitions(self, problems: Mapping[str, str]) -> None:
         for handle, problem in problems.items():
             if handle not in self._unreadable:
-                _LOGGER.warning("Credential unreadable, requests that read it fail: %s", problem)
+                _LOGGER.warning(
+                    "Credential unreadable, requests that depend on it or whose source binds a credential fail: %s",
+                    problem,
+                )
         for handle in self._unreadable - set(problems):
             _LOGGER.info("Credential '%s' is readable again.", handle)
         self._unreadable = set(problems)

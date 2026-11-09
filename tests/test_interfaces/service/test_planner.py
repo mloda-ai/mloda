@@ -1996,16 +1996,31 @@ class TestCredentialRuns:
         for name in ("db", "other", "gone.txt"):
             _assert_value_absent(name, text)
 
-    def test_unreadable_credential_refuses_a_request_that_also_binds_a_source_credential(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize(
+        ("credentials", "overrides", "features"),
+        [
+            (
+                'token = "TOK_VAR"\n\n[mcp.credentials.wh]\nsqlite = "WH_PATH"',
+                {"data_access_handle": "wh"},
+                ["sq_amount"],
+            ),
+            ('sqlite = "WH_PATH"\ntoken = "TOK_VAR"', {CRED_KEY: "db"}, [CRED_FEATURE, "sq_amount"]),
+        ],
+        ids=["operator_handle", "single_credential"],
+    )
+    def test_unreadable_credential_refuses_a_request_that_binds_a_source_credential(
+        self, tmp_path: Path, credentials: str, overrides: dict[str, str], features: list[str]
+    ) -> None:
         db = _write_sqlite(tmp_path)
-        credentials = (
-            'token = "TOK_VAR"\n\n[mcp.credentials.wh]\nsqlite = "WH_PATH"\n\n'
-            '[mcp.credentials.other]\ntoken = { file = "gone.txt" }'
-        )
-        settings = _cred_settings(tmp_path, credentials, options={CRED_KEY: "db", "data_access_handle": "wh"})
-        planner, _ = _cred_services(settings, {"TOK_VAR": TOKEN, "WH_PATH": str(db)})
+        gone = '\n\n[mcp.credentials.other]\ntoken = { file = "gone.txt" }'
+        env = {"TOK_VAR": TOKEN, "WH_PATH": str(db)}
+        request = {"features": features}
+        readable = _cred_settings(tmp_path, credentials, options=overrides)
+        _success(_cred_services(readable, env)[0].explain(request))
+        settings = _cred_settings(tmp_path, credentials + gone, options=overrides)
+        planner, _ = _cred_services(settings, env)
 
-        error = _error(planner.explain({"features": [CRED_FEATURE, "sq_amount"]}), "internal")
+        error = _error(planner.explain(request), "internal")
 
         assert "ConfigError" in error["message"]
 
@@ -2021,6 +2036,7 @@ class TestCredentialRuns:
         error = _error(planner.explain({"features": [CRED_FEATURE]}), "internal")
 
         assert "ConfigError" in error["message"]
+        _assert_value_absent(ROTATED, json.dumps({"message": error["message"], "details": error.get("details")}))
 
     def test_unreadable_handle_logs_one_warning_and_one_info_when_back(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture

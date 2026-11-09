@@ -811,6 +811,13 @@ def test_repeated_jdbc_scheme_prefix_scrubs_fast(build: Callable[[int], str], n:
         pytest.param(lambda k: "https://" + "a/b@" * k, 20_000, id="slash_at"),
         pytest.param(lambda k: "(a:" * k, 20_000, id="paren"),
         pytest.param(lambda k: "[x" * k, 20_000, id="bracket"),
+        pytest.param(lambda k: "https://h/x?a=1)" * k, 20_000, id="url_query_close_paren_no_space"),
+        pytest.param(lambda k: "a:b:c://" * k, 20_000, id="two_colon_scheme_repeat"),
+        pytest.param(lambda k: "postgresql://" + "u:12/" * k, 20_000, id="db_digit_slash_without_at"),
+        pytest.param(lambda k: "postgresql://" + "u:12/" * k + "@", 20_000, id="db_digit_slash_with_at"),
+        pytest.param(lambda k: "zip://d;%74oken=x'" * k, 20_000, id="encoded_host_param_quote_repeat"),
+        pytest.param(lambda k: "zip://d%74oken=x " * k, 20_000, id="encoded_host_key_repeat"),
+        pytest.param(lambda k: "postgresql://u:5432/" * k, 20_000, id="db_port_slash_repeat"),
         pytest.param(lambda k: "k:v," * k, 20_000, id="kv_comma"),
         pytest.param(lambda k: "a:b," * k, 20_000, id="ab_comma"),
         pytest.param(lambda k: "k=a:b;" * k, 20_000, id="kv_semicolon"),
@@ -1278,7 +1285,7 @@ class TestScrubUriProjection:
                 id="path-at-digest-with-tail-kept",
             ),
             pytest.param("https://host:8443/a/b@c/d", "https://host:8443/a/b@c/d", id="path-at-mid-segment-kept"),
-            pytest.param("https://user:123/PW@host", "https://host", id="digit-userinfo-no-path-dropped"),
+            pytest.param("https://user:123/PW@host", "https://user:123/PW@host", id="digit-userinfo-no-path-kept"),
             pytest.param("https://host:8443/a@b/c.csv", "https://b/c.csv", id="ambiguous-path-at-host-shape-dropped"),
             pytest.param(
                 "https://host:8443/alice@corp.com/report.csv",
@@ -1354,6 +1361,317 @@ class TestScrubUriProjection:
                 "postgresql://host",
                 id="slash-in-userinfo-after-digit-segment-is-dropped",
             ),
+            pytest.param(
+                "{'url': 'https://h/x?a=1', 'password': 'sec'}",
+                "{'url': 'https://h/x', 'password': '***'}",
+                id="py-dict-url-then-password-keeps-closing-quote",
+            ),
+            pytest.param(
+                '{"url": "https://h/x?a=1", "password": "sec"}',
+                '{"url": "https://h/x", "password": "***"}',
+                id="json-dict-url-then-password-keeps-closing-quote",
+            ),
+            pytest.param(
+                "{'a': 'see https://h/x?a=1', 'password': 'sec'}",
+                "{'a': 'see https://h/x', 'password': '***'}",
+                id="py-dict-prose-url-then-password",
+            ),
+            pytest.param(
+                "{'url': 'https://h/x?password=hun]ter2', 'password': 'sec'}",
+                "{'url': 'https://h/x', 'password': '***'}",
+                id="py-dict-url-secret-bracket-then-password",
+            ),
+            pytest.param(
+                "{'url': 'jdbc:postgresql://h/db;a=1', 'password': 'sec'}",
+                "{'url': 'jdbc:postgresql://h', 'password': '***'}",
+                id="py-dict-jdbc-url-then-password",
+            ),
+            pytest.param(
+                "{'url':'https://h/x?a=1','password':'sec'}",
+                "{'url':'https://h/x','password': '***'}",
+                id="py-dict-compact-url-then-password",
+            ),
+            pytest.param(
+                '["https://h1/p?a=1","https://h2/p?b=2","https://h3/p?c=3"]',
+                '["https://h1/p","https://h2/p","https://h3/p"]',
+                id="compact-json-url-list",
+            ),
+            pytest.param(
+                "[https://h1/p?a=1],[https://h2/p?b=2]",
+                "[https://h1/p],[https://h2/p]",
+                id="bracketed-urls-comma-separated",
+            ),
+            pytest.param(
+                "{'url':'https://h/x?a=1','table':'sales','err':'timeout'}",
+                "{'url':'https://h/x','table':'sales','err':'timeout'}",
+                id="py-dict-compact-url-keeps-siblings",
+            ),
+            pytest.param(
+                '{"https://h/x?a=1":{"status":500,"reason":"timeout"}}',
+                '{"https://h/x":{"status":500,"reason":"timeout"}}',
+                id="json-url-as-key-keeps-nested-value",
+            ),
+            pytest.param(
+                "failed to read 'https://h/x?a=1'. Retrying",
+                "failed to read 'https://h/x'. Retrying",
+                id="quoted-url-then-period",
+            ),
+            pytest.param("'https://h/x?a=1': 500", "'https://h/x': 500", id="quoted-url-then-colon"),
+            pytest.param("url='https://h/x?a=1'; retry", "url='https://h/x'; retry", id="quoted-url-then-semicolon"),
+            pytest.param("(https://h/x?a=1) next", "(https://h/x) next", id="paren-url-then-text"),
+            pytest.param("'https://h/x?a=1', next", "'https://h/x', next", id="quoted-url-then-comma"),
+            pytest.param("[https://h/x?a=1], next", "[https://h/x], next", id="bracket-url-then-comma"),
+            pytest.param("'https://h/x?a=1'", "'https://h/x'", id="quoted-url-with-query-alone"),
+            pytest.param("https://h/x?password=hun]ter2", "https://h/x", id="dropped-value-cut-at-close-bracket"),
+            pytest.param("https://h/x?password=hun)ter2", "https://h/x", id="dropped-value-cut-at-close-paren"),
+            pytest.param("https://h/x?password=hun<ter2", "https://h/x", id="dropped-value-cut-at-lt"),
+            pytest.param("https://h/x?password=hun>ter2", "https://h/x", id="dropped-value-cut-at-gt"),
+            pytest.param("https://h/x?password=hun'ter2", "https://h/x", id="dropped-value-cut-at-quote"),
+            pytest.param('https://h/x?password=hun"ter2', "https://h/x", id="dropped-value-cut-at-double-quote"),
+            pytest.param("https://h/x?hun]ter2", "https://h/x", id="bare-query-cut-at-close-bracket"),
+            pytest.param("https://h/x?tok)en9", "https://h/x", id="bare-query-cut-at-close-paren"),
+            pytest.param("https://h/x#hun]ter2", "https://h/x", id="fragment-cut-at-close-bracket"),
+            pytest.param(
+                "https://h/x?%70assword%3Dhun]ter2", "https://h/x", id="encoded-keyword-query-cut-at-close-bracket"
+            ),
+            pytest.param(
+                "https://h/x?%2570assword%253Dhun]ter2",
+                "https://h/x",
+                id="double-encoded-keyword-query-cut-at-close-bracket",
+            ),
+            pytest.param("zip://d;%74oken=SEC'RET", "zip://d", id="host-param-encoded-token-cut-at-quote"),
+            pytest.param("s3://b/%74oken=SEC]RET/x.csv", "s3://b/", id="path-encoded-token-cut-at-close-bracket"),
+            pytest.param(
+                "zip://d;%74oken=SEC]RET::s3://b/x.csv",
+                "zip://d://b/x.csv",
+                id="host-param-encoded-token-cut-at-bracket-in-chain",
+            ),
+            pytest.param(
+                "failed: zip://d;%74oken=SECRET::s3://b/x.csv",
+                "failed: zip://d::s3://b/x.csv",
+                id="host-param-encoded-token-chain-keeps-tail-without-terminator",
+            ),
+            pytest.param("https://host:8443/pkg@2", "https://host:8443/pkg@2", id="digit-userinfo-path-at-digit-kept"),
+            pytest.param(
+                "https://cdn.example.com:8443/lodash@4",
+                "https://cdn.example.com:8443/lodash@4",
+                id="port-path-at-digit-kept",
+            ),
+            pytest.param("https://reg:5000/img@latest", "https://reg:5000/img@latest", id="port-path-at-word-kept"),
+            pytest.param("s3://b:9000/k@v2", "s3://b:9000/k@v2", id="s3-port-path-at-version-kept"),
+            pytest.param(
+                "postgresql://u:12/ss@db.internal", "postgresql://db.internal", id="db-scheme-digit-slash-dotted-host"
+            ),
+            pytest.param(
+                "postgresql://u:12/ss@db.internal:5432",
+                "postgresql://db.internal:5432",
+                id="db-scheme-digit-slash-dotted-host-port",
+            ),
+            pytest.param(
+                "postgresql://u:12/ss@host:5432", "postgresql://host:5432", id="db-scheme-digit-slash-host-port"
+            ),
+            pytest.param("postgresql://u:12/s/s@host", "postgresql://host", id="db-scheme-digit-two-slashes-bare-host"),
+            pytest.param(
+                "postgresql://u:12/s/s@db.internal",
+                "postgresql://db.internal",
+                id="db-scheme-digit-two-slashes-dotted-host",
+            ),
+            pytest.param(
+                "postgresql://u:12/s/s@host/db", "postgresql://host/db", id="db-scheme-digit-two-slashes-host-path"
+            ),
+            pytest.param(
+                "postgresql://u:12/ss@host?sslmode=require",
+                "postgresql://host",
+                id="db-scheme-digit-slash-host-query",
+            ),
+            pytest.param(
+                "postgresql+psycopg2://u:12/ss@db.internal",
+                "postgresql+psycopg2://db.internal",
+                id="db-scheme-plus-suffix-digit-slash",
+            ),
+            pytest.param(
+                "POSTGRESQL://u:12/ss@db.internal", "POSTGRESQL://db.internal", id="db-scheme-upper-case-digit-slash"
+            ),
+            pytest.param(
+                "mongodb+srv://u:12/ss@db.internal", "mongodb+srv://db.internal", id="mongodb-srv-digit-slash"
+            ),
+            pytest.param(
+                "rediss://u:12/ss@cache.internal:6380", "rediss://cache.internal:6380", id="rediss-digit-slash"
+            ),
+            pytest.param("amqp://u:12/ss@mq.internal", "amqp://mq.internal", id="amqp-digit-slash"),
+            pytest.param("clickhouse://u:12/ss@db.internal", "clickhouse://db.internal", id="clickhouse-digit-slash"),
+            pytest.param("'postgresql://u:12/ss@host'", "'postgresql://host'", id="db-scheme-digit-slash-quoted"),
+            pytest.param(
+                "(postgresql://u:12/ss@host)", "(postgresql://host)", id="db-scheme-digit-slash-parenthesised"
+            ),
+            pytest.param("postgresql://h:5432/db", "postgresql://h:5432/db", id="db-scheme-port-path-kept"),
+            pytest.param(
+                "postgresql://h:5432/db@prod",
+                "postgresql://h:5432/db@prod",
+                id="db-scheme-port-path-at-word-source-handle-stays-readable",
+            ),
+            pytest.param("user:pw:9x://host", "user:***://host", id="scheme-position-password-digit-led-extra-colon"),
+            pytest.param("ERROR:root:zip://d/x.csv", "ERROR:root:zip://d/x.csv", id="log-prefix-error-root-kept"),
+            pytest.param(
+                "WARNING:mloda:hf://datasets/x", "WARNING:mloda:hf://datasets/x", id="log-prefix-warning-mloda-kept"
+            ),
+            pytest.param("INFO:mloda:rediss://h/0", "INFO:mloda:rediss://h/0", id="log-prefix-info-mloda-kept"),
+            pytest.param("ERROR:mloda:memory://t/x", "ERROR:mloda:memory://t/x", id="log-prefix-error-mloda-kept"),
+            pytest.param(
+                "ERROR:root:https://h/x failed", "ERROR:root:https://h/x failed", id="log-prefix-then-prose-kept"
+            ),
+            pytest.param("WARNING:mloda:s3://b/x.csv", "WARNING:mloda:s3://b/x.csv", id="log-prefix-s3-kept"),
+            pytest.param("url:https://h/x", "url:https://h/x", id="label-colon-url-kept"),
+            pytest.param("dsn:postgres://h/db", "dsn:postgres://h/db", id="label-colon-dsn-kept"),
+            pytest.param("s3://bucket/key:https://h/x", "s3://bucket/key:https://h/x", id="uri-colon-uri-kept"),
+            pytest.param("/var/log/app:https://h/x", "/var/log/app:https://h/x", id="path-colon-url-kept"),
+            pytest.param("simplecache::s3://b/x.csv", "simplecache::s3://b/x.csv", id="chain-double-colon-kept"),
+            pytest.param("x:jdbc:h2://h/db", "x:jdbc:h2://h/db", id="label-colon-jdbc-kept"),
+            pytest.param("a:://h", "a:://h", id="empty-scheme-after-colon-kept"),
+            pytest.param("see a:b:c://h", "see a:***://h", id="accepted-masking-two-colon-prefix-treated-as-password"),
+            pytest.param(
+                "/var/log/app:zip://h/x",
+                "/var/log/app:***://h/x",
+                id="accepted-masking-path-colon-known-scheme-treated-as-password",
+            ),
+            pytest.param(
+                "postgresql://h:5432/db?password=p@ssw0rd", "postgresql://h:5432/db", id="at-in-query-password-port"
+            ),
+            pytest.param(
+                "postgresql://h:12/db?password=p@ssw0rd", "postgresql://h:12/db", id="at-in-query-password-digit-port"
+            ),
+            pytest.param(
+                "jdbc:mysql://h:3306/db?user=u&password=p@ssword",
+                "jdbc:mysql://h:3306/db",
+                id="at-in-jdbc-query-password",
+            ),
+            pytest.param(
+                "postgresql://h:5432/db;password=hun@ter2",
+                "postgresql://h:5432/db;password=***",
+                id="at-in-semicolon-password-masked-in-place",
+            ),
+            pytest.param(
+                "jdbc:postgresql://h:5432/db;password=hun@ter2",
+                "jdbc:postgresql://h:5432",
+                id="at-in-jdbc-semicolon-password-drops-path",
+            ),
+            pytest.param(
+                "postgresql://h:5432/db?user=alice@corp&sslcert=SECRET",
+                "postgresql://h:5432/db",
+                id="at-in-query-user-then-secret-key",
+            ),
+            pytest.param(
+                "mongodb://h:27017/db?authSource=admin@x&sharedkey=SECRET",
+                "mongodb://h:27017/db",
+                id="at-in-query-auth-source-then-secret-key",
+            ),
+            pytest.param("redis://h:6379/0?auth=p@ss", "redis://h:6379/0", id="at-in-query-auth-value"),
+            pytest.param("ftp://h:21/x#tok@en", "ftp://h:21/x", id="at-in-fragment-token"),
+            pytest.param(
+                '{"url":"kafka://b:9092/t","email":"a@b.com"}',
+                '{"url":"kafka://b:9092/t","email":"a@b.com"}',
+                id="email-in-sibling-json-value-kept",
+            ),
+            pytest.param(
+                "postgresql://h:5432/db,admin@corp.com",
+                "postgresql://h:5432/db,admin@corp.com",
+                id="email-after-comma-kept",
+            ),
+            pytest.param(
+                "postgresql://db.internal:5432/sales@prod",
+                "postgresql://db.internal:5432/sales@prod",
+                id="source-handle-dotted-host-kept",
+            ),
+            pytest.param(
+                "Two sources: postgresql://db.internal:5432/sales@prod, postgresql://db.internal:5432/sales@staging",
+                "Two sources: postgresql://db.internal:5432/sales@prod, postgresql://db.internal:5432/sales@staging",
+                id="source-handles-two-in-prose-kept",
+            ),
+            pytest.param(
+                "mysql://h:3306/db@replica matched but table gone",
+                "mysql://h:3306/db@replica matched but table gone",
+                id="source-handle-with-prose-tail-kept",
+            ),
+            pytest.param("sftp://h:22/data/x.csv@a", "sftp://h:22/data/x.csv@a", id="path-at-sftp-file-kept"),
+            pytest.param("sftp://host:22/home/u@dom/f", "sftp://host:22/home/u@dom/f", id="path-at-sftp-mid-kept"),
+            pytest.param("kafka://b:9092/t@v", "kafka://b:9092/t@v", id="path-at-kafka-topic-version-kept"),
+            pytest.param("ssh://host:22/repo@main", "ssh://host:22/repo@main", id="path-at-ssh-ref-kept"),
+            pytest.param("ftp://host:21/file@v1.tar", "ftp://host:21/file@v1.tar", id="path-at-ftp-file-version-kept"),
+            pytest.param(
+                "docker://reg:5000/img@sha256:abc", "docker://reg:5000/img@sha256:abc", id="path-at-docker-digest-kept"
+            ),
+            pytest.param("hf://h:9/ds@main", "hf://h:9/ds@main", id="path-at-hf-dataset-ref-kept"),
+            pytest.param("zip://h:1/a@b", "zip://h:1/a@b", id="path-at-zip-single-digit-port-kept"),
+            pytest.param("iceberg://h:80/ns@v", "iceberg://h:80/ns@v", id="path-at-iceberg-namespace-version-kept"),
+            pytest.param(
+                "postgres://user:pw@db:5432/x@y", "postgres://db:5432/x@y", id="real-userinfo-then-path-at-kept"
+            ),
+            pytest.param("mysql://u:p@host:3306/db@v", "mysql://host:3306/db@v", id="real-userinfo-then-db-at-kept"),
+            pytest.param("redis://:pw@h:6379/0@x", "redis://h:6379/0@x", id="empty-user-real-userinfo-then-at-kept"),
+            pytest.param(
+                "sftp://u:pw@host:22/home/a@b", "sftp://host:22/home/a@b", id="sftp-real-userinfo-then-path-at-kept"
+            ),
+            pytest.param("redis://:12/ss@host", "redis://host", id="empty-user-digit-slash-redis"),
+            pytest.param("postgresql://:12/ss@host", "postgresql://host", id="empty-user-digit-slash-postgresql"),
+            pytest.param("mysql://:9/x/y@h", "mysql://h", id="empty-user-digit-two-slashes-mysql"),
+            pytest.param(
+                "postgresql://u:5432/ss@db.internal", "postgresql://db.internal", id="plausible-port-slash-dotted-host"
+            ),
+            pytest.param(
+                "postgresql://u:5432/ss@db.internal:5432",
+                "postgresql://db.internal:5432",
+                id="plausible-port-slash-dotted-host-port",
+            ),
+            pytest.param(
+                "postgresql://u:5432/ss@host:5432", "postgresql://host:5432", id="plausible-port-slash-host-port"
+            ),
+            pytest.param(
+                "jdbc:postgresql://h/db;a=pw],'ter2", "jdbc:postgresql://h", id="jdbc-value-closer-comma-quote-cut"
+            ),
+            pytest.param(
+                "jdbc:postgresql://h/db;password=pw]:[ter2",
+                "jdbc:postgresql://h",
+                id="jdbc-value-closer-colon-opener-cut",
+            ),
+            pytest.param(
+                "jdbc:sqlserver://h;password=pw],'ter2",
+                "jdbc:sqlserver://h",
+                id="jdbc-host-param-closer-comma-quote-cut",
+            ),
+            pytest.param("https://h/x?password=hun],'ter2", "https://h/x", id="query-value-closer-comma-quote-cut"),
+            pytest.param("https://h/x?password=hun):{ter2", "https://h/x", id="query-value-closer-colon-brace-cut"),
+            pytest.param("https://h/x?password=a],'b", "https://h/x", id="query-short-value-closer-comma-quote-cut"),
+            pytest.param("https://h/x?password=a)):'b", "https://h/x", id="query-value-double-closer-colon-quote-cut"),
+            pytest.param(
+                "https://a;jdbc:postgresql://h/db;user=x;mypass=y",
+                "https://a;jdbc:postgresql://h",
+                id="semicolon-before-jdbc-uri-is-not-host-param",
+            ),
+            pytest.param(
+                "https://a;jdbc:postgresql://h:1/db;sslkey=y",
+                "https://a;jdbc:postgresql://h:1",
+                id="semicolon-before-jdbc-uri-with-port-is-not-host-param",
+            ),
+            pytest.param("zip://d%3Btoken%3DSECRET", "zip://d", id="host-encoded-semicolon-and-equals-cut"),
+            pytest.param("zip://d%3B%74oken=SECRET", "zip://d", id="host-encoded-semicolon-encoded-letter-cut"),
+            pytest.param("zip://%74oken=SECRET", "zip://", id="empty-host-encoded-letter-key-cut"),
+            pytest.param("zip://%74oken%3DSECRET", "zip://", id="empty-host-encoded-letter-and-equals-cut"),
+            pytest.param("zip://d%74oken=SECRET", "zip://d", id="host-encoded-letter-key-without-semicolon-cut"),
+            pytest.param("zip://d:80%3Btoken%3DSECRET", "zip://d:80", id="host-port-encoded-semicolon-cut"),
+            pytest.param(
+                "zip://d%3Btoken%3DSECRET::s3://b/x.csv",
+                "zip://d::s3://b/x.csv",
+                id="host-encoded-semicolon-cut-keeps-chain-tail",
+            ),
+            pytest.param("s3://b%20x/y", "s3://b%20x/y", id="host-encoded-space-kept"),
+            pytest.param("s3://b%2Fc/y", "s3://b%2Fc/y", id="host-encoded-slash-kept"),
+            pytest.param("zip://d%41::s3://b/x", "zip://d%41::s3://b/x", id="host-encoded-letter-benign-chain-kept"),
+            pytest.param("error:root:zip://d/x.csv", "error:root:zip://d/x.csv", id="log-prefix-lower-case-error-kept"),
+            pytest.param("TRACE:root:zip://d/x.csv", "TRACE:root:zip://d/x.csv", id="log-prefix-trace-kept"),
+            pytest.param("NOTICE:root:hf://d/x", "NOTICE:root:hf://d/x", id="log-prefix-notice-kept"),
+            pytest.param("alice:jdbc:x://host", "alice:jdbc:x://host", id="label-colon-jdbc-subprotocol-kept"),
+            pytest.param("alice:jdbc://host", "alice:***://host", id="password-before-bare-jdbc-scheme-masked"),
+            pytest.param("alice:JDBC://host", "alice:***://host", id="password-before-upper-case-jdbc-scheme-masked"),
         ],
     )
     def test_scrub_keeps_host_and_path_only(self, uri: str, expected: str) -> None:
@@ -1430,7 +1748,7 @@ class TestScrubUriFailClosed:
             pytest.param("s3://b/d;v=1&token=SECRETAMP/x.csv", "SECRETAMP", id="path-param-ampersand"),
             pytest.param("s3://b/d;token = SECRETSPACE/x.csv", "SECRETSPACE", id="path-param-spaces-around-equals"),
             pytest.param("s3://b/d;token=SECRETVAL,b/x.csv", "SECRETVAL", id="path-param-comma-in-value"),
-            pytest.param("postgresql://u:12/ss@host/db", "ss",id="digit-userinfo-slash-password"),
+            pytest.param("postgresql://u:12/ss@host/db", "ss", id="digit-userinfo-slash-password"),
             pytest.param("https://tok/en9x@host/x", "en9x", id="slash-in-userinfo-token"),
             pytest.param("https://tok/en9x@host", "en9x", id="slash-in-userinfo-token-bare-host"),
             pytest.param("(https://tok/en9x@host)", "en9x", id="slash-in-userinfo-token-parenthesised"),
@@ -1458,6 +1776,9 @@ class TestScrubUriFailClosed:
             pytest.param("user:pw:x://host", "pw", id="extra-colon-after-password-in-scheme-position"),
             pytest.param("x/alice:hunter2://host", "hunter2", id="slash-before-user-in-scheme-position"),
             pytest.param("postgresql://u:12/ss@host", "12/ss", id="slash-in-userinfo-after-digit-segment-no-path"),
+            pytest.param(
+                '{"url":"https://h/x?a=1","password":"s://ec"}', "s://ec", id="json-compact-password-with-scheme-shape"
+            ),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:
@@ -1585,6 +1906,25 @@ class TestRegisteredSecretsScope:
             pytest.param(
                 "abc;def123456", "https://host/abc;def123456/x.csv", "def123456", id="semicolon-literal-in-url-path"
             ),
+            pytest.param(
+                "hun]ter2",
+                "{'url': 'https://h/x?password=hun]ter2', 'password': 'sec'}",
+                "hun",
+                id="bracket-literal-in-query-head-gone",
+            ),
+            pytest.param(
+                "hun]ter2",
+                "{'url': 'https://h/x?password=hun]ter2', 'password': 'sec'}",
+                "ter2",
+                id="bracket-literal-in-query-tail-gone",
+            ),
+            pytest.param(
+                "hun]ter2",
+                "{'url': 'https://h/x?password=hun]ter2', 'password': 'sec'}",
+                "sec",
+                id="bracket-literal-in-query-sibling-password-gone",
+            ),
+            pytest.param("x'y", "'https://h/x?a=1x'y'", "x'y", id="quote-literal-after-query"),
         ],
     )
     def test_secret_is_masked_when_the_literal_overlaps_a_pattern(self, literal: str, text: str, secret: str) -> None:

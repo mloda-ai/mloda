@@ -17,11 +17,11 @@ _FREE_TEXT_URI_PATTERN = re.compile(
     _SCHEME + r"://"
     r"(?:(?P<userinfo>[^/?#\s]*)@)?"
     r"(?P<host>(?:\[[0-9A-Fa-f:.]+\]|[\w.~-]*)(?::\d+)?)"
-    # `;` parameters directly after a pathless host (stops at `/`, so the path group still owns
-    # later segments, and at `::`, so a chained URI keeps its own match).
-    r"(?P<params>;(?:(?!::)[^\s?#\"'<>\]/])*)?"
+    # `;` or percent-escape parameters directly after a pathless host (stops at `/`, so the path group still owns
+    # later segments, at `::`, so a chained URI keeps its own match, and a `;` before another URI is no parameter).
+    r"(?P<params>(?:(?:;(?![A-Za-z][\w+.:-]*://)|(?=%))(?:(?!::)[^\s?#\"'<>\];/])*)+)?"
     r"(?P<path>/[^\s?#\"'<>\]]*)?"
-    r"(?:[?#][^\s\"'<>)\]]*)?"
+    r"(?P<query>[?#][^\s\"'<>)\]]*)?"
 )
 
 _USERINFO_HEAD = _SCHEME + r"://[^\s/?#@:]*:(?!\d+(?:[?#\s]|$|"
@@ -29,11 +29,17 @@ _USERINFO_TAIL = r"))(?:(?!://)[^\s@])*@"
 # strip_uri_userinfo feeds a data-access identity, which must name the host a client contacts: `host:port/path` is a host.
 _USERINFO_FALLBACK_PATTERN = re.compile(_USERINFO_HEAD + r"/" + _USERINFO_TAIL)
 # scrub_credentials reads `name:123/x@host/` as `user:pwd@` (a password), since free text has no such constraint.
-# The guard after the slash also counts a bare `@host` at the end of the token (no path after the host)
-# as that userinfo shape, so `name:12/x@host` is read the same way; a dotted or port-carrying tail
-# (`a@b.csv`, `pkg@1.2.3`) stays a path, as the kept cases in the tests pin.
-_FREE_TEXT_USERINFO_PATTERN = re.compile(
-    _USERINFO_HEAD + r"/(?![^\s/?#@]+@(?:[\w.~-]+(?::\d+)?/|[\w~-]+(?=[?#\s]|$)))" + _USERINFO_TAIL
+_FREE_TEXT_USERINFO_PATTERN = re.compile(_USERINFO_HEAD + r"/(?![^\s/?#@]+@[\w.~-]+(?::\d+)?/)" + _USERINFO_TAIL)
+_DB_SCHEMES = (
+    "postgres|postgresql|mysql|mariadb|mongodb|redis|rediss|mssql|sqlserver|oracle|snowflake|redshift|"
+    "clickhouse|cockroachdb|amqp|amqps"
+)
+_DB_CREDENTIAL = r"(?:(?!://)[^\s@?#;&=,'\"])*"
+_DB_HOST_TAIL = r"(?:[\w~-]+(?:\.[\w~-]+)+(?::\d+)?|[\w.~-]+:\d+)(?=[/?#\s\"')\]}>]|$)"
+# `host:port/path@handle` is a source handle, so only a non-port digit run or a host-shaped tail reads as a password.
+_DB_USERINFO_PATTERN = re.compile(
+    rf"(?<![A-Za-z0-9+.-])(?<!(?i:jdbc):)(?P<scheme>(?i:{_DB_SCHEMES})(?:\+[\w.-]+)?)://[^\s/?#@:]*:"
+    rf"(?:\d{{1,3}}/{_DB_CREDENTIAL}@|\d+/{_DB_CREDENTIAL}@(?={_DB_HOST_TAIL}))"
 )
 
 # Shared suffix a credential-shaped key name must end with, reused by the keyword and quoted-key patterns.
@@ -114,19 +120,30 @@ _PLAIN_URI_SCHEMES = (
 # and the lookbehind anchors the start, so the scan stays linear. The password may hold `@` and be followed by one
 # `:word`; a `/` may precede the user. `jdbc:` is never the user or the head of the password.
 _DELIM = "\\s\"'(\\[{<=,;"
+_LOG_LEVELS = "DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL|FATAL|TRACE|NOTICE"
 _PLAIN_SCHEME_GUARD = rf"(?!(?i:{_PLAIN_URI_SCHEMES})(?:\+[\w.-]+)?://)"
 _PASSWORD_AS_SCHEME_PATTERN = re.compile(
-    rf"(?<![^{_DELIM}/])(?!(?i:jdbc):)(?P<user>[^{_DELIM}:/@]+):"
-    rf"(?!(?i:jdbc):){_PLAIN_SCHEME_GUARD}(?P<pw>[^{_DELIM}:/]+(?::{_PLAIN_SCHEME_GUARD}[^{_DELIM}:/@]+)?)(?=://)"
+    rf"(?<![^{_DELIM}/])(?!(?i:jdbc):)"
+    # A log level before an extra word (`ERROR:Failed:x://`) is a prefix, not a user.
+    rf"(?!(?i:{_LOG_LEVELS}):[^{_DELIM}:/]+:{_PLAIN_SCHEME_GUARD}[^{_DELIM}:/@]+://)"
+    rf"(?P<user>[^{_DELIM}:/@]+):"
+    rf"(?!(?i:jdbc):[^/]){_PLAIN_SCHEME_GUARD}(?P<pw>[^{_DELIM}:/]+(?::{_PLAIN_SCHEME_GUARD}[^{_DELIM}:/@]+)?)(?=://)"
 )
 
 
 # Non-whitespace text after a jdbc match, cut at the next `://` so repeated URIs scan linearly.
 _JDBC_TAIL_PATTERN = re.compile(r"(?:(?!://)\S)*")
-# Private-use marker _uri_projection appends after a dropped jdbc path; _scrub_passes cuts it with the token tail.
-# _scrub_uri_match appends the same marker when a dropped query or key=value path may continue past the match.
+# Private-use marker appended after a dropped jdbc path, and by _scrub_uri_match after a dropped query,
+# key=value path or hidden percent path; _cut_marker_tail cuts the token tail that follows it.
 _JDBC_CUT = "\ue001"
 _JDBC_CUT_PATTERN = re.compile(_JDBC_CUT + _JDBC_TAIL_PATTERN.pattern)
+# Closers then sentence punctuation then whitespace or end: the match ended a value, nothing was cut off.
+_CLOSING_END_PATTERN = re.compile(r"[\"'<>)\]}]+[,:;.!?]*(?:\s|$)")
+# Closers then a separator and an opener: a following list or dict item, if the URL itself was opened.
+_CLOSING_NEXT_PATTERN = re.compile(r"[\"'<>)\]}]+[,:][\"'\[{(<]")
+_OPENERS = "\"'([{<"
+# Closers kept after a cut so a later `, 'password': ...` still has its `,` lead.
+_CLOSERS = "\"'<>)]},"
 # Characters the free-text URI pattern refuses inside a query or fragment (a path refuses all but `)` too):
 # a match ending right before one of them may have stopped in the middle of a dropped value.
 _MATCH_END_TERMINATORS = frozenset("\"'<>)]")
@@ -170,25 +187,24 @@ def _cut_hidden_percent(scheme: str, host: str, path: str) -> str:
     return head[: head.rfind("/") + 1]
 
 
-def _query_part(match: re.Match[str]) -> str:
-    """The query/fragment part of the matched text (from the first `?` or `#`), or empty."""
-    starts = [index for index in (match[0].find("?"), match[0].find("#")) if index != -1]
-    return match[0][min(starts) :] if starts else ""
-
-
-def _cut_dropped_tail(match: re.Match[str], scrubbed: str, dropped_key_value: bool) -> str:
-    """Append the cut marker when a dropped key=value value may continue past the end of the match.
-
-    The URI pattern stops at a quote, bracket or angle bracket, so a dropped query or key=value path
-    whose value contains such a character leaves the rest of the value in the text after the match.
-    The marker makes _scrub_passes cut the token tail too, as it already does for a dropped jdbc path.
-    A clean URL drops nothing, so its closing quote or bracket in the text survives.
-    """
-    if scrubbed.endswith(_JDBC_CUT) or not dropped_key_value:
+def _cut_dropped_tail(match: re.Match[str], scrubbed: str, dropped: bool) -> str:
+    """Append the cut marker when a dropped value may continue past the match (it stops at a quote or bracket)."""
+    if scrubbed.endswith(_JDBC_CUT) or not dropped:
         return scrubbed
-    if match.end() < len(match.string) and match.string[match.end()] in _MATCH_END_TERMINATORS:
-        return scrubbed + _JDBC_CUT
-    return scrubbed
+    text, end, start = match.string, match.end(), match.start()
+    if end >= len(text) or text[end] not in _MATCH_END_TERMINATORS:
+        return scrubbed
+    if _CLOSING_END_PATTERN.match(text, end):
+        return scrubbed
+    if _CLOSING_NEXT_PATTERN.match(text, end) and start > 0 and text[start - 1] in _OPENERS:
+        return scrubbed
+    return scrubbed + _JDBC_CUT
+
+
+def _cut_marker_tail(marker: re.Match[str]) -> str:
+    """Drop the token tail after the marker, keeping only its trailing run of closers."""
+    tail = marker[0][1:]
+    return tail[len(tail.rstrip(_CLOSERS)) :]
 
 
 def _scrub_uri_match(match: re.Match[str]) -> str:
@@ -196,7 +212,8 @@ def _scrub_uri_match(match: re.Match[str]) -> str:
     path = (match["params"] or "") + (match["path"] or "")
     projection = _uri_projection(match)
     if projection is not None:
-        return _cut_dropped_tail(match, projection, "=" in _query_part(match))
+        dropped = bool(match["query"]) or not projection.endswith(path)
+        return _cut_dropped_tail(match, projection, dropped)
     scrubbed = f"{scheme}://{host}{_cut_hidden_percent(scheme, host, _cut_key_value_path(path))}"
     return _cut_dropped_tail(match, scrubbed, True)
 
@@ -448,9 +465,10 @@ def _authorization_repl(m: re.Match[str]) -> str:
 _QUOTED_KEY_REPL = r"\g<lead>\g<quote>\g<keyword>\g<quote>: \g<quote>***\g<quote>"
 
 _PASSES: list[tuple[re.Pattern[str], Any]] = [
+    (_DB_USERINFO_PATTERN, r"\g<scheme>://"),
     (_FREE_TEXT_USERINFO_PATTERN, r"\g<scheme>://"),
     (_FREE_TEXT_URI_PATTERN, _scrub_uri_match),
-    (_JDBC_CUT_PATTERN, ""),  # a dropped jdbc path also takes its token tail
+    (_JDBC_CUT_PATTERN, _cut_marker_tail),
     (_PASSWORD_AS_SCHEME_PATTERN, r"\g<user>:***"),
     (_AUTHORIZATION_PATTERN, _authorization_repl),
     (_BEARER_PATTERN, r"\g<scheme> ***"),

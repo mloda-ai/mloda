@@ -774,23 +774,6 @@ class TokenIdentityFG(ToySourceFG):
         raise ValueError(f"username={TOY_TOKEN}")
 
 
-@pytest.mark.parametrize("entry", ["run_all", "explain", "resolved_plan"])
-def test_plan_building_error_masks_registered_token(entry: str, caplog: pytest.LogCaptureFixture) -> None:
-    request = toy_token_request(TokenIdentityFG, _TOKEN_COLUMN)
-    with caplog.at_level(logging.DEBUG):
-        with pytest.raises(ValueError) as excinfo:
-            if entry == "run_all":
-                mloda.run_all([Feature(name=_TOKEN_COLUMN)], **request)
-            elif entry == "explain":
-                mloda.explain([Feature(name=_TOKEN_COLUMN)], **request)
-            else:
-                mloda.prepare([Feature(name=_TOKEN_COLUMN)], **request).resolved_plan()
-
-    assert TOY_TOKEN not in str(excinfo.value)
-    assert TOY_TOKEN not in repr(excinfo.value.args)
-    assert TOY_TOKEN not in caplog.text
-
-
 class TokenIdentityGroupFG(ToySourceFG):
     """data_access_identity raises an exception group with the registered token in its message."""
 
@@ -800,10 +783,13 @@ class TokenIdentityGroupFG(ToySourceFG):
 
 
 @pytest.mark.parametrize("entry", ["run_all", "explain", "resolved_plan"])
-def test_plan_building_group_masks_registered_token(entry: str, caplog: pytest.LogCaptureFixture) -> None:
-    request = toy_token_request(TokenIdentityGroupFG, _TOKEN_COLUMN)
+@pytest.mark.parametrize("group, error_type", [(TokenIdentityFG, ValueError), (TokenIdentityGroupFG, ExceptionGroup)])
+def test_plan_building_error_masks_registered_token(
+    group: type[ToySourceFG], error_type: type[Exception], entry: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    request = toy_token_request(group, _TOKEN_COLUMN)
     with caplog.at_level(logging.DEBUG):
-        with pytest.raises(ExceptionGroup) as excinfo:
+        with pytest.raises(error_type) as excinfo:
             if entry == "run_all":
                 mloda.run_all([Feature(name=_TOKEN_COLUMN)], **request)
             elif entry == "explain":
@@ -812,7 +798,8 @@ def test_plan_building_group_masks_registered_token(entry: str, caplog: pytest.L
                 mloda.prepare([Feature(name=_TOKEN_COLUMN)], **request).resolved_plan()
 
     exc: Any = excinfo.value
-    assert TOY_TOKEN not in exc.message
+    if group is TokenIdentityGroupFG:
+        assert TOY_TOKEN not in exc.message
     assert TOY_TOKEN not in str(exc)
     assert TOY_TOKEN not in repr(exc.args)
     assert TOY_TOKEN not in caplog.text
@@ -1081,6 +1068,14 @@ def _echo_run(
     )
 
 
+def _assert_form_absent(form: str, exc: BaseException, caplog: pytest.LogCaptureFixture, seen: Any | None) -> None:
+    assert form not in str(exc)
+    assert form not in repr(exc.args)
+    assert form not in caplog.text
+    if seen is not None:
+        assert form not in seen.read_text()
+
+
 class _RefuseProdHandle(Extender):
     """The documented refusal: on_run_start raises for a step that declares the handle."""
 
@@ -1144,10 +1139,7 @@ def test_a_native_field_echoing_a_secret_is_masked_in_every_mode(
 
     exc = excinfo.value
     assert _E2E_HMAC not in getattr(exc, field)
-    assert _E2E_HMAC not in str(exc)
-    assert _E2E_HMAC not in repr(exc.args)
-    assert _E2E_HMAC not in caplog.text
-    assert _E2E_HMAC not in seen.read_text()
+    _assert_form_absent(_E2E_HMAC, exc, caplog, seen)
 
 
 @pytest.mark.timeout(15)
@@ -1169,15 +1161,11 @@ def test_an_exception_group_echoing_a_secret_is_masked_in_every_mode(
     exc: Any = excinfo.value
     assert type(exc) is ExceptionGroup
     assert _E2E_HMAC not in exc.message
-    assert _E2E_HMAC not in str(exc)
-    assert _E2E_HMAC not in repr(exc.args)
     (member,) = exc.exceptions
     assert type(member) is ValueError
     assert _E2E_HMAC not in str(member)
     assert _E2E_HMAC not in repr(member.args)
-    assert _E2E_HMAC not in caplog.text
-    if with_extender:
-        assert _E2E_HMAC not in seen.read_text()
+    _assert_form_absent(_E2E_HMAC, exc, caplog, seen if with_extender else None)
 
 
 @pytest.mark.timeout(15)
@@ -1194,10 +1182,7 @@ def test_a_repr_and_json_echoed_multi_line_secret_is_masked_in_every_mode(
 
     exc = excinfo.value
     for form in forms:
-        assert form not in str(exc)
-        assert form not in repr(exc.args)
-        assert form not in caplog.text
-        assert form not in seen.read_text()
+        _assert_form_absent(form, exc, caplog, seen)
     assert "MIIe2e" not in str(exc)
 
 

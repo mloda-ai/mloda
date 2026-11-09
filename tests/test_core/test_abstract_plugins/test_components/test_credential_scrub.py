@@ -2306,15 +2306,6 @@ class TestRedactException:
         assert getattr(exc, "as_set") is untouched
 
     @pytest.mark.parametrize("kind", [set, frozenset])
-    def test_two_set_elements_collapsing_into_one_mask_are_fine(self, kind: type) -> None:
-        from mloda.core.abstract_plugins.components.credential_scrub import _mask_item
-
-        masked = _mask_item(kind({_LITERAL, _OTHER_LITERAL}), frozenset({_LITERAL, _OTHER_LITERAL}))
-
-        assert type(masked) is kind
-        assert masked == kind({"***"})
-
-    @pytest.mark.parametrize("kind", [set, frozenset])
     def test_mask_item_masks_a_set_and_keeps_an_unchanged_one(self, kind: type) -> None:
         from mloda.core.abstract_plugins.components.credential_scrub import _mask_item
 
@@ -2322,6 +2313,10 @@ class TestRedactException:
 
         assert _mask_item(unchanged, frozenset({_LITERAL})) is unchanged
         assert _mask_item(kind({_LITERAL, "a"}), frozenset({_LITERAL})) == kind({"***", "a"})
+
+        collapsed = _mask_item(kind({_LITERAL, _OTHER_LITERAL}), frozenset({_LITERAL, _OTHER_LITERAL}))
+        assert type(collapsed) is kind
+        assert collapsed == kind({"***"})
 
     def test_a_set_nested_in_an_arg_is_masked(self) -> None:
         from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
@@ -2603,19 +2598,11 @@ class TestRedactException:
 
         assert _LITERAL not in repr(exc.args)
 
-    @pytest.mark.parametrize(
-        "build",
-        [
-            lambda s: s,
-            lambda s: repr(s)[1:-1],
-            lambda s: json.dumps(s)[1:-1],
-            lambda s: json.dumps(s, ensure_ascii=False)[1:-1],
-        ],
-        ids=["raw", "repr", "json_ascii", "json_utf8"],
-    )
-    def test_a_group_message_holding_any_form_returns_a_masked_copy(self, build: Callable[[str], str]) -> None:
+    @pytest.mark.parametrize("form", list(_FORM_BUILDERS))
+    def test_a_group_message_holding_any_form_returns_a_masked_copy(self, form: str) -> None:
         from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
 
+        build = _FORM_BUILDERS[form]
         group = ExceptionGroup(f"bad {build(_FORM_LITERAL)} end", [ValueError("m")])
 
         result = redact_exception(group, frozenset({_FORM_LITERAL}))

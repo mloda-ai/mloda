@@ -88,6 +88,8 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                 record["contract_version"] = step.contract_version
             if step.divergences:
                 record["divergences"] = [_divergence_record(r) for r in sorted(step.divergences, key=divergence_order)]
+            if step.allowed_variants:
+                record["allowed_variants"] = list(step.allowed_variants)
             lock["compute"].append(record)
             wide_record: dict[str, Any] = {
                 key: value
@@ -99,6 +101,7 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                     "credential_handles",
                     "runtime_parameters",
                     "divergences",
+                    "allowed_variants",
                 )
             }
             options = step.content_options

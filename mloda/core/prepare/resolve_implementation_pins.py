@@ -7,7 +7,12 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations, serving_implementation
+from mloda.core.abstract_plugins.implementation import (
+    Implementation,
+    loaded_implementations,
+    named_implementations,
+    serving_implementation,
+)
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation_pin_error import ImplementationPinError
@@ -72,7 +77,7 @@ class ResolveImplementationPins:
         return self._chain(uuid) - {uuid}
 
     def _lookup(self, name: str, request: str) -> type[Implementation[Any]]:
-        matches = [c for c in self.loaded if name in (c.__name__, _qualified(c))]
+        matches = named_implementations(name, self.loaded)
         if not matches:
             raise ImplementationPinError(
                 f"Step {request} pins implementation {name}, which is not a loaded Implementation."

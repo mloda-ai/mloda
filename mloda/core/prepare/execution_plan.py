@@ -19,7 +19,7 @@ from mloda.core.abstract_plugins.components.index.index import Index
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
-from mloda.core.abstract_plugins.implementation import Implementation, step_divergences
+from mloda.core.abstract_plugins.implementation import Implementation, step_allowed_variants, step_divergences
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.filter.single_filter import SingleFilter
@@ -3939,6 +3939,7 @@ Available join types:
                 elif is_nominal_subclass(feature_group, OperationFeatureGroup):
                     feature_set.implementation = feature_group.select_implementation(cf, self.implementations)
                 feature_set.divergences = step_divergences(feature_group, feature_set.implementation, feature_set)
+                feature_set.allowed_variants = step_allowed_variants(feature_set)
 
                 feature_group_step = FeatureGroupStep(
                     feature_group,

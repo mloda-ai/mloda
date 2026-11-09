@@ -35,6 +35,8 @@ class FeatureGroupInfo:
     contract_version: int | None = None
     # Stamped records of the group and of each serving implementation, group first.
     divergences: list[Divergence] = field(default_factory=list)
+    # Sorted VARIANTS of the group.
+    variants: list[str] = field(default_factory=list)
 
 
 @dataclass

@@ -35,6 +35,7 @@ from mloda.core.abstract_plugins.components.divergence import (
     Divergence,
     DivergenceSource,
     stamped,
+    variant_names,
     validate_divergences,
 )
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -140,8 +141,12 @@ class FeatureGroup(ABC):
     CONTRACT_VERSION: ClassVar[int | None] = None
     """Version of the reference contract this group follows; None when it declares none."""
 
+    VARIANTS: ClassVar[frozenset[str]] = frozenset()
+    """Variant names the contract allows; an Implementation's VARIANT records must name one of them."""
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
+        cls.VARIANTS = variant_names(f"{cls.__name__}.VARIANTS", cls.VARIANTS)
         if "contract_version" in cls.__dict__:
             raise TypeError(f"{cls.__name__} declares 'contract_version'; a FeatureGroup spells it CONTRACT_VERSION.")
         version = cls.CONTRACT_VERSION
@@ -159,7 +164,9 @@ class FeatureGroup(ABC):
         install_name_path_presence_guard(cls)
         install_required_when_guard(cls)
         cls._validate_subtype_declaration()
-        validate_divergences(cls.__name__, cls.DIVERGENCES, cls.subtype_universe, cls.OUTPUT_PARTS)
+        validate_divergences(
+            cls.__name__, cls.DIVERGENCES, cls.subtype_universe, cls.OUTPUT_PARTS, variants=cls.VARIANTS
+        )
         _registry.add(cls)
 
     @classmethod

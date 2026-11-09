@@ -27,6 +27,7 @@ class DefaultOptionKeys(str, Enum):
     group = "group"
     order_by = "order_by"
     strict_type_enforcement = "strict_type_enforcement"
+    allow_variants = "allow_variants"
 
     def __str__(self) -> str:
         return self.value

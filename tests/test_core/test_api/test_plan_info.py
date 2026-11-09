@@ -115,6 +115,7 @@ from mloda.steward import (
 from tests.helpers.probe_runner import run_probes
 from tests.test_core.test_tooling.runner_recorder import record_runners
 from mloda.user import (
+    FeatureResolutionError,
     Credential,
     DataAccessCollection,
     Feature,
@@ -657,6 +658,7 @@ class TestPlanStepDataclass:
             "divergences",
             "contract_version",
             "bound_credential_handle",
+            "allowed_variants",
         ]
 
     def test_join_keys_defaults_to_none(self) -> None:
@@ -1097,6 +1099,147 @@ class TestPlanStepImplementation:
         assert step.implementation_hash == "unavailable"
         assert step.implementation_version is None
         assert len(plan_structure_hash([step])) == 64
+
+
+class TestPlanStepVariantAllowOption:
+    """A rule variant is followed only when the feature allows it; the default implementation wins otherwise."""
+
+    TOY = "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+
+    def _explain(self, **kwargs: Any) -> PlanStep:
+        toy = importlib.import_module(self.TOY)
+        options: dict[str, Any] = {toy.OPTOY_KEY: "sum"}
+        allow = kwargs.pop("allow", None)
+        if allow is not None:
+            options["allow_variants"] = allow
+        steps = mloda.explain(
+            [Feature(toy.OPTOY_VARIANT_FEATURE, options, **kwargs)],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyVariantFG}),
+        )
+        return next(s for s in steps if s.step_kind == "compute")
+
+    def _explain_group(self, group: str, feature: str, **kwargs: Any) -> list[PlanStep]:
+        toy = importlib.import_module(self.TOY)
+        allow = kwargs.pop("allow", None)
+        options: dict[str, Any] = {toy.OPTOY_KEY: kwargs.pop("kind", "sum")}
+        if allow is not None:
+            options["allow_variants"] = allow
+        return mloda.explain(
+            [Feature(feature, options, **kwargs)],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({getattr(toy, g) for g in group.split(",")}),
+        )
+
+    def _copyable_line(self) -> str:
+        toy = importlib.import_module(self.TOY)
+        return (
+            f"{toy.OpToyVariantPandas.__name__} on PandasDataFrame follows variant 'skip_nan', "
+            "which this feature does not allow; to allow it add "
+            '{"allow_variants": ("skip_nan",)} to the feature\'s options'
+        )
+
+    def test_without_the_option_the_default_implementation_is_chosen(self) -> None:
+        toy = importlib.import_module(self.TOY)
+        step = self._explain()
+
+        assert step.compute_framework is PyArrowTable
+        assert step.implementation is toy.OpToyVariantPyArrow
+        assert step.allowed_variants == ()
+
+    def test_a_framework_pin_on_the_variant_framework_without_the_option_fails_with_the_copyable_line(self) -> None:
+        with pytest.raises(FeatureResolutionError) as caught:
+            self._explain(compute_framework="PandasDataFrame")
+
+        assert self._copyable_line() in str(caught.value)
+        assert "rule variant" in str(caught.value)
+
+    def test_an_implementation_pin_on_the_variant_implementation_without_the_option_fails_the_same_way(self) -> None:
+        toy = importlib.import_module(self.TOY)
+        with pytest.raises(FeatureResolutionError) as caught:
+            self._explain(implementation=toy.OpToyVariantPandas)
+
+        assert self._copyable_line() in str(caught.value)
+
+    def test_a_framework_pin_with_the_option_chooses_the_variant_and_carries_it(self) -> None:
+        toy = importlib.import_module(self.TOY)
+        step = self._explain(compute_framework="PandasDataFrame", allow="skip_nan")
+
+        assert step.compute_framework is PandasDataFrame
+        assert step.implementation is toy.OpToyVariantPandas
+        assert step.allowed_variants == ("skip_nan",)
+
+    def test_with_the_option_and_both_frameworks_the_default_still_wins(self) -> None:
+        step = self._explain(allow=("skip_nan",))
+
+        assert step.compute_framework is PyArrowTable
+        assert step.allowed_variants == ("skip_nan",)
+
+    def test_a_pin_on_the_default_implementation_needs_no_option(self) -> None:
+        step = self._explain(compute_framework="PyArrowTable")
+
+        assert step.compute_framework is PyArrowTable
+
+    def test_a_malformed_option_raises_a_type_error_naming_the_key(self) -> None:
+        with pytest.raises(TypeError, match="allow_variants"):
+            self._explain(allow=3)
+
+    def test_a_malformed_option_error_does_not_echo_the_value(self) -> None:
+        with pytest.raises(TypeError) as caught:
+            self._explain(allow=["s3cr3t-value", 1])
+
+        assert "s3cr3t-value" not in str(caught.value)
+
+    @pytest.mark.parametrize(
+        "group, feature, allow",
+        [
+            ("OpToyVariantEmptyFG", "optoyvar_empty", None),
+            ("OpToyVariantOtherFG", "optoyvar_other", "skip_nan"),
+        ],
+    )
+    def test_a_variant_the_group_does_not_list_can_never_be_allowed(
+        self, group: str, feature: str, allow: str | None
+    ) -> None:
+        with pytest.raises(FeatureResolutionError) as caught:
+            self._explain_group(group, feature, allow=allow, compute_framework="PandasDataFrame")
+
+        text = str(caught.value)
+        assert (
+            f"OpToyVariantPandas on PandasDataFrame follows variant 'skip_nan', which {group}.VARIANTS "
+            "does not list, so it cannot be allowed"
+        ) in text
+        assert "to allow it add" not in text
+
+    def test_a_bare_name_implementation_pin_without_the_option_fails_with_the_copyable_line(self) -> None:
+        with pytest.raises(FeatureResolutionError) as caught:
+            self._explain(implementation="OpToyVariantPandas")
+
+        assert self._copyable_line() in str(caught.value)
+
+    def test_the_suggestion_lists_only_listed_variants_never_raw_user_values(self) -> None:
+        with pytest.raises(FeatureResolutionError) as caught:
+            self._explain(compute_framework="PandasDataFrame", allow="skipnan")
+
+        assert self._copyable_line() in str(caught.value)
+        assert "skipnan" not in str(caught.value)
+
+    def test_a_subtype_the_variant_record_does_not_cover_runs_on_the_variant_framework(self) -> None:
+        toy = importlib.import_module(self.TOY)
+        steps = self._explain_group(
+            "OpToyVariantFG", toy.OPTOY_VARIANT_FEATURE, kind="median", compute_framework="PandasDataFrame"
+        )
+        step = next(s for s in steps if s.step_kind == "compute")
+
+        assert step.compute_framework is PandasDataFrame
+
+    def test_the_consumer_option_reaches_a_variant_input_pinned_to_the_variant_framework(self) -> None:
+        toy = importlib.import_module(self.TOY)
+        groups = "OpToyVariantFG,OpToyVariantConsumerFG"
+        steps = self._explain_group(groups, toy.OPTOY_VARIANT_CONSUMER, allow="skip_nan")
+
+        assert any(s.implementation is toy.OpToyVariantPandas for s in steps)
+        with pytest.raises(FeatureResolutionError, match="rule variant"):
+            self._explain_group(groups, toy.OPTOY_VARIANT_CONSUMER)
 
 
 class TestPlanStepInputFeatureEdgesField:

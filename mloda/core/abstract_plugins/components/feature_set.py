@@ -84,6 +84,7 @@ class FeatureSet:
         self.specialized_from: tuple[str, ...] = ()
         self.implementation: type[Implementation[Any]] | None = None
         self.divergences: tuple[Divergence, ...] = ()
+        self.allowed_variants: tuple[str, ...] = ()
         self.option_split_hint: tuple[str, frozenset[Any]] | None = None
         # Columns a Link reads from this step's data, stamped by the planner.
         self.link_index_columns: frozenset[str] = frozenset()

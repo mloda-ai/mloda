@@ -691,6 +691,7 @@ def _content_plan() -> list[PlanStep]:
         pytest.param(lambda: _with(0, compute_framework=PyArrowTable), id="compute_framework"),
         pytest.param(lambda: _with(0, input_feature_edges={"lock_io_value": ("b",)}), id="input_feature_edges"),
         pytest.param(lambda: _with(0, divergences=(_RECORD,)), id="divergences"),
+        pytest.param(lambda: _with(0, allowed_variants=("skip_nan",)), id="allowed_variants"),
         pytest.param(lambda: _with(1, join_keys=("l=other",)), id="join_keys"),
     ],
 )
@@ -714,6 +715,10 @@ def test_plan_content_hash_is_a_sha256_hex_and_differs_from_the_structure_hash()
     # Pinned: the content hash includes the implementation fields, so adding them re-pinned this value; any later
     # change to the hashed content must re-pin it deliberately.
     assert digest == "62f9a6790421ab2966b13bf8f47acabed346aa22b4910f7ca7eb5820f3bd4c63"
+
+
+def test_plan_content_hash_ignores_the_allowed_variants() -> None:
+    assert plan_content_hash(_with(0, allowed_variants=("skip_nan",))) == plan_content_hash(_content_plan())
 
 
 def test_plan_content_hash_ignores_the_divergence_records() -> None:
@@ -1097,6 +1102,13 @@ def test_a_compute_record_omits_the_new_keys_when_empty_or_none() -> None:
 
     assert "contract_version" not in record
     assert "divergences" not in record
+    assert "allowed_variants" not in record
+
+
+def test_a_compute_record_writes_the_allowed_variants_only_when_non_empty() -> None:
+    record = json.loads(_lock_text([_compute_step(allowed_variants=("a", "b"))]))["compute"][0]
+
+    assert record["allowed_variants"] == ["a", "b"]
 
 
 def test_a_compute_record_writes_the_contract_version_and_sorted_divergences() -> None:

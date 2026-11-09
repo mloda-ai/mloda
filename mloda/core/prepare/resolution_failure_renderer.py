@@ -69,6 +69,7 @@ _STAGE_LABELS: dict[EliminationStage, str] = {
     "capability": "compute framework",
     "frameworks_not_enabled": "compute framework",
     "framework_pin": "compute framework pin",
+    "variant": "rule variant",
     "links": "links",
     "declarations": "declarations",
     "inputs": "inputs",

@@ -1136,8 +1136,10 @@ class ComputeFramework(ABC):
         implementation: str | None = None
         implementation_version: str | None = None
         divergences: tuple[Divergence, ...] = ()
+        allowed_variants: tuple[str, ...] = ()
         if isinstance(features, FeatureSet):
             divergences = features.divergences
+            allowed_variants = features.allowed_variants
             impl = features.implementation
             implementation = implementation_path(feature_group_cls, impl, features.input_data_match)
             if impl is not None:
@@ -1191,6 +1193,7 @@ class ComputeFramework(ABC):
             implementation_version=implementation_version,
             divergences=divergences,
             contract_version=getattr(feature_group_cls, "CONTRACT_VERSION", None),
+            allowed_variants=allowed_variants,
         )
 
     @staticmethod

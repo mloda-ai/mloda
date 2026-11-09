@@ -1028,6 +1028,7 @@ _EMPTY_TUPLE_DEFAULTS = {
     "credential_handles",
     "credentials_read",
     "divergences",
+    "allowed_variants",
 }
 
 

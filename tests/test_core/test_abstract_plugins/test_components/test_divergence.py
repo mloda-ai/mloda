@@ -14,6 +14,7 @@ from mloda.core.abstract_plugins.components.divergence import (
     Divergence,
     DivergenceKind,
     DivergenceSource,
+    allowed_variants,
     divergence_problems,
     stamped,
 )
@@ -461,6 +462,83 @@ class TestContractVersionDeclaration:
             _make_impl(_make_group(), **{name: 1})  # type: ignore[arg-type]
 
 
+def _variant(name: str = "skip_nan") -> Divergence:
+    return _record(kind=DivergenceKind.VARIANT, variant=name)
+
+
+class TestVariantsDeclaration:
+    def test_default_is_an_empty_frozenset(self) -> None:
+        assert FeatureGroup.VARIANTS == frozenset()
+        assert _make_group().VARIANTS == frozenset()
+
+    def test_a_valid_declaration_is_kept(self) -> None:
+        assert _make_group(VARIANTS=frozenset({"a", "b"})).VARIANTS == frozenset({"a", "b"})
+
+    @pytest.mark.parametrize("value", ["a", 3, None, [1], ["a", ""], ["a\nb"], ["a\x00b"]])
+    def test_a_bad_shape_fails_at_definition(self, value: Any) -> None:
+        with pytest.raises((TypeError, ValueError), match="VARIANTS"):
+            _make_group(VARIANTS=value)
+
+    def test_a_variant_record_naming_an_unlisted_variant_fails_at_definition(self) -> None:
+        with pytest.raises(ValueError, match="skip_nan"):
+            _make_group(DIVERGENCES=(_variant(),))
+        with pytest.raises(ValueError, match="skip_nan"):
+            _make_group(VARIANTS=frozenset({"other"}), DIVERGENCES=(_variant(),))
+
+    def test_a_listed_variant_record_is_fine_on_a_group(self) -> None:
+        group = _make_group(VARIANTS=frozenset({"skip_nan"}), DIVERGENCES=(_variant(),))
+        assert len(group.DIVERGENCES) == 1
+
+    def test_an_unlisted_variant_record_fails_on_an_implementation(self) -> None:
+        with pytest.raises(ValueError, match="skip_nan"):
+            _make_impl(_make_group(), divergences=(_variant(),))
+
+    def test_a_listed_variant_record_is_fine_on_an_implementation(self) -> None:
+        impl = _make_impl(_make_group(VARIANTS=frozenset({"skip_nan"})), divergences=(_variant(),))
+        assert impl.divergences[0].variant == "skip_nan"
+
+    def test_non_variant_records_need_no_listing(self) -> None:
+        assert _make_impl(_make_group(), divergences=(_record(),)).divergences
+
+    def test_the_problems_check_is_opt_in_through_the_variants_keyword(self) -> None:
+        records = (_variant(),)
+        assert divergence_problems("Owner", records, frozenset(), None) == []
+        assert divergence_problems("Owner", records, frozenset(), None, variants=frozenset({"skip_nan"})) == []
+        problems = divergence_problems("Owner", records, frozenset(), None, variants=frozenset())
+        assert any("skip_nan" in p for p in problems)
+
+
+class TestAllowedVariants:
+    @pytest.mark.parametrize(
+        "value, expected",
+        [
+            ("a", {"a"}),
+            (("a", "b"), {"a", "b"}),
+            (["a", "b"], {"a", "b"}),
+            ({"a"}, {"a"}),
+            (frozenset({"a", "b"}), {"a", "b"}),
+            ((), set()),
+            (None, set()),
+        ],
+    )
+    def test_accepted_shapes(self, value: Any, expected: set[str]) -> None:
+        data = {} if value is None else {"allow_variants": value}
+        assert allowed_variants(Options(data)) == frozenset(expected)
+
+    def test_a_value_under_context_options_only_is_ignored(self) -> None:
+        assert allowed_variants(Options(group={}, context={"allow_variants": "a"})) == frozenset()
+
+    @pytest.mark.parametrize("value", [3, b"a", ["a", 1], [""]])
+    def test_a_bad_shape_raises_a_type_error_naming_the_key(self, value: Any) -> None:
+        with pytest.raises(TypeError, match="allow_variants"):
+            allowed_variants(Options({"allow_variants": value}))
+
+    def test_the_type_error_does_not_echo_the_value(self) -> None:
+        with pytest.raises(TypeError) as caught:
+            allowed_variants(Options({"allow_variants": ["s3cr3t-value", 1]}))
+        assert "s3cr3t-value" not in str(caught.value)
+
+
 class TestImplementationDeclaration:
     def test_default_is_an_empty_tuple(self) -> None:
         assert Implementation.divergences == ()
@@ -647,7 +725,7 @@ class TestStepDivergences:
 
         variants = [_record(kind=DivergenceKind.VARIANT, variant=v, reason="same") for v in ("b", "a", "c")]
         docs = [_record(cause=Cause.OTHER, docs=d, reason="same") for d in ("y", "x")]
-        group = _make_group(DIVERGENCES=(*variants, *docs))
+        group = _make_group(VARIANTS=frozenset({"a", "b", "c"}), DIVERGENCES=(*variants, *docs))
 
         found = self._call(group, None, _feature_set(_feature()))
 

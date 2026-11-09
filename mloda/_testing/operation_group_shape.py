@@ -48,7 +48,7 @@ def _alias_failures(
 
 
 def _declaration_failures(
-    impl: type[Implementation[Any]], universe: frozenset[str], parts: tuple[str, ...] | None
+    impl: type[Implementation[Any]], universe: frozenset[str], parts: tuple[str, ...] | None, variants: frozenset[str]
 ) -> list[str]:
     name = impl.__name__
     failures: list[str] = []
@@ -56,7 +56,9 @@ def _declaration_failures(
         extra = sorted(impl.supported - universe)
         if extra:
             failures.append(f"supported: {name} lists {extra} outside the subtype universe")
-    failures.extend(f"divergences: {p}" for p in divergence_problems(name, impl.divergences, universe, parts))
+    failures.extend(
+        f"divergences: {p}" for p in divergence_problems(name, impl.divergences, universe, parts, variants=variants)
+    )
     return failures
 
 
@@ -121,10 +123,12 @@ def check_operation_group_shape(
     failures.extend(_alias_failures(list(impls), universe, alias_pairs))
     failures.extend(
         f"divergences: {p}"
-        for p in divergence_problems(group.__name__, group.DIVERGENCES, universe, group.OUTPUT_PARTS)
+        for p in divergence_problems(
+            group.__name__, group.DIVERGENCES, universe, group.OUTPUT_PARTS, variants=group.VARIANTS
+        )
     )
     for impl, framework in impls.items():
-        failures.extend(_declaration_failures(impl, universe, group.OUTPUT_PARTS))
+        failures.extend(_declaration_failures(impl, universe, group.OUTPUT_PARTS, group.VARIANTS))
         failures.extend(_decline_failures(group, impl, framework, universe, probe))
     return CheckResult(check="operation_group_shape", subject=group.__name__, failures=tuple(failures))
 

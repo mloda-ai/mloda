@@ -3,15 +3,30 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
-from mloda._testing.feature_group_shape import _base_options, _first_value
+from mloda._testing.feature_group_shape import (
+    _base_options,
+    _first_value,
+    _framework_gate_reason,
+    _input_problems,
+    _no_calculate_reason,
+    _run as _run_group,
+    _same,
+)
+from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter
 from mloda._testing.result import CheckResult
 from mloda._testing.suite import assert_passed
+from mloda._testing.typed_data import TypedTestData
+from mloda.core.abstract_plugins.components.divergence import Divergence, DivergenceKind, allowed_variants
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.implementation import Implementation, current_implementations
+from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
 from mloda.core.prepare.identify_feature_group import evaluate_and_render
 
@@ -89,15 +104,122 @@ def _scope_failures(
     return failures
 
 
+_EXCUSING = (DivergenceKind.VALUE, DivergenceKind.TYPE, DivergenceKind.VARIANT)
+
+
+def _own_records(
+    subclass: type[FeatureGroup],
+    parent: type[FeatureGroup],
+    sub_impl: type[Implementation[Any]] | None,
+    parent_impl: type[Implementation[Any]] | None,
+) -> list[Divergence]:
+    # Records equal to the parent's count as inherited, not as the subclass's own.
+    records = [r for r in subclass.DIVERGENCES if r not in parent.DIVERGENCES]
+    if sub_impl is not None and parent_impl is not None and sub_impl is not parent_impl:
+        records += [r for r in sub_impl.divergences if r not in parent_impl.divergences]
+    return [r for r in records if r.kind in _EXCUSING]
+
+
+def _compared(columns: list[str], names: list[str]) -> list[tuple[str, str, frozenset[str]]]:
+    unique = list(dict.fromkeys(names))
+    found = []
+    for column in columns:
+        if column in unique:
+            found.append((column, column, frozenset[str]()))
+            continue
+        prefixed = [n for n in unique if column.startswith(f"{n}~")]
+        if prefixed:
+            name = max(prefixed, key=len)
+            found.append((column, name, frozenset({column[len(name) + 1 :]})))
+    return found
+
+
+def _value_failures(
+    subclass: type[FeatureGroup],
+    parent: type[FeatureGroup],
+    names: list[str],
+    base: Options,
+    selecting: Options,
+    data: TypedTestData,
+    adapter: FrameworkAdapter,
+    notes: list[str],
+) -> list[str]:
+    for cls in (parent, subclass):
+        reason = _framework_gate_reason(cls, adapter)
+        if reason is None:
+            reason = _no_calculate_reason(cls)
+        if reason is None and is_nominal_subclass(cls, SourceFeatureGroup):
+            reason = "not applicable to source groups"
+        if reason is not None:
+            notes.append(f"values: {reason}")
+            return []
+    chosen = _combined(base, selecting)
+    impls: dict[type[FeatureGroup], type[Implementation[Any]] | None] = {parent: None, subclass: None}
+    for cls in (parent, subclass):
+        if is_nominal_subclass(cls, OperationFeatureGroup):
+            impls[cls] = cls.select_implementation(adapter.compute_framework(), list(current_implementations()))
+            if impls[cls] is None:
+                notes.append(
+                    f"values: no implementation of {cls.__name__} serves {adapter.compute_framework().__name__}"
+                )
+                return []
+    problems = _input_problems(parent, names, base, data) + _input_problems(subclass, names, chosen, data)
+    if problems:
+        return [f"values: {p}" for p in dict.fromkeys(problems)]
+    expected, error = _run_group(parent, adapter, data, names, base, impls[parent])
+    if error is not None:
+        return [f"setup: {parent.__name__} run raised: {error}"]
+    actual, error = _run_group(subclass, adapter, data, names, chosen, impls[subclass])
+    if error is not None:
+        return [f"values: {subclass.__name__} run raised: {error}"]
+    allowed = allowed_variants(chosen)
+    records = [
+        r
+        for r in _own_records(subclass, parent, impls[subclass], impls[parent])
+        if r.kind is not DivergenceKind.VARIANT or r.variant in allowed
+    ]
+    present = adapter.column_names(actual)
+    failures = []
+    for column, name, parts in _compared(adapter.column_names(expected), names):
+        if column not in present:
+            failures.append(f"values: '{column}' is missing from {subclass.__name__}'s result")
+        elif not _same(adapter.column_values(expected, column), adapter.column_values(actual, column)):
+            subtype = Implementation.canonical_subtype(subclass, name, chosen)
+            if not any(r.applies_to(subtype, parts) for r in records):
+                failures.append(
+                    f"values: '{column}' differs from {parent.__name__} "
+                    f"and {subclass.__name__} declares no divergence for it"
+                )
+    return failures
+
+
 def check_subclass_scope(
     subclass: type[FeatureGroup],
     parent: type[FeatureGroup],
     selecting: Options,
     requests: Sequence[str] | None = None,
+    *,
+    input_data: TypedTestData | None = None,
+    adapter: FrameworkAdapter | None = None,
 ) -> CheckResult:
-    """Check subclass replaces parent only with the selecting options; only these two classes are considered."""
+    """Check subclass replaces parent only with the selecting options; only these two classes are considered.
+
+    With input_data it also compares the requested output columns with the parent's, assuming identical row order.
+    """
     failures = _run(subclass, parent, selecting, requests)
-    return CheckResult(check="subclass_scope", subject=subclass.__name__, failures=tuple(failures))
+    notes: list[str] = []
+    if input_data is None:
+        notes.append("values: not compared (no input_data)")
+    elif any(f.startswith(("setup:", "names:", "misses:")) for f in failures):
+        notes.append("values: not compared (resolution failed)")
+    else:
+        names = list(requests) if requests is not None else sorted(parent.feature_names_supported())
+        base = _base_options(parent)
+        if base is not None:
+            failures += _value_failures(
+                subclass, parent, names, base, selecting, input_data, adapter or PythonDictAdapter(), notes
+            )
+    return CheckResult(check="subclass_scope", subject=subclass.__name__, failures=tuple(failures), notes=tuple(notes))
 
 
 def _run(
@@ -125,6 +247,9 @@ def assert_subclass_scope(
     parent: type[FeatureGroup],
     selecting: Options,
     requests: Sequence[str] | None = None,
+    *,
+    input_data: TypedTestData | None = None,
+    adapter: FrameworkAdapter | None = None,
 ) -> None:
     """Fail the running pytest test if the subclass scope check reports failures."""
-    assert_passed(check_subclass_scope(subclass, parent, selecting, requests))
+    assert_passed(check_subclass_scope(subclass, parent, selecting, requests, input_data=input_data, adapter=adapter))

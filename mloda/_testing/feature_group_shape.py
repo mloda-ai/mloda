@@ -24,6 +24,7 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.utils import safe_field_with_error
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.implementation import Implementation
 
 _FOREIGN_NAME = "conformance_foreign_feature"
 _UNKNOWN_VALUE = "conformance_unknown_value"
@@ -174,12 +175,18 @@ def _same(a: list[Any], b: list[Any]) -> bool:
 
 
 def _run(
-    cls: type[FeatureGroup], adapter: FrameworkAdapter, data: TypedTestData, names: list[str], base: Options
+    cls: type[FeatureGroup],
+    adapter: FrameworkAdapter,
+    data: TypedTestData,
+    names: list[str],
+    base: Options,
+    implementation: type[Implementation[Any]] | None = None,
 ) -> tuple[Any, str | None]:
     """Run through the adapter's ComputeFramework like a feature group step, then validate the output."""
 
     def go() -> Any:
         features = FeatureSet()
+        features.implementation = implementation
         for name in names:
             features.add(Feature(name, options=base))
         cfw = adapter.compute_framework()(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
@@ -331,6 +338,29 @@ def _check_determinism(
     ]
 
 
+def _no_calculate_reason(cls: type[FeatureGroup]) -> str | None:
+    if inspect.getattr_static(cls, "calculate_feature") is inspect.getattr_static(FeatureGroup, "calculate_feature"):
+        return "not applicable, the group has no calculate_feature"
+    return None
+
+
+def _framework_gate_reason(cls: type[FeatureGroup], adapter: FrameworkAdapter) -> str | None:
+    framework = adapter.compute_framework()
+    rule = cls.compute_framework_rule()
+    if rule is not None and framework not in rule:
+        return f"{framework.__name__} excluded by compute_framework_rule"
+    if not adapter.is_available():
+        return f"{framework.__name__} is not available"
+    return None
+
+
+def _input_problems(cls: type[FeatureGroup], names: list[str], base: Options, data: TypedTestData) -> list[str]:
+    missing = sorted(_declared_inputs(cls, names, base) - set(data.types))
+    if missing:
+        return [f"declared input '{m}' is missing from input_data" for m in missing]
+    return [f"requested name '{n}' is already in input_data" for n in names if n in data.types]
+
+
 def _run_checks(
     cls: type[FeatureGroup],
     names: list[str],
@@ -339,23 +369,13 @@ def _run_checks(
     adapter: FrameworkAdapter,
     notes: list[str],
 ) -> list[str]:
-    if inspect.getattr_static(cls, "calculate_feature") is inspect.getattr_static(FeatureGroup, "calculate_feature"):
-        notes.append("run: not applicable, the group has no calculate_feature")
+    reason = _no_calculate_reason(cls) or _framework_gate_reason(cls, adapter)
+    if reason is not None:
+        notes.append(f"run: {reason}")
         return []
-    framework = adapter.compute_framework()
-    rule = cls.compute_framework_rule()
-    if rule is not None and framework not in rule:
-        notes.append(f"run: {framework.__name__} excluded by compute_framework_rule")
-        return []
-    if not adapter.is_available():
-        notes.append(f"run: {framework.__name__} is not available")
-        return []
-    missing = sorted(_declared_inputs(cls, names, base) - set(data.types))
-    if missing:
-        return [f"outputs: declared input '{m}' is missing from input_data" for m in missing]
-    clobbered = [n for n in names if n in data.types]
-    if clobbered:
-        return [f"outputs: requested name '{n}' is already in input_data" for n in clobbered]
+    problems = _input_problems(cls, names, base, data)
+    if problems:
+        return [f"outputs: {p}" for p in problems]
     result, error = _run(cls, adapter, data, names, base)
     if error is not None:
         return [f"outputs: run raised: {error}"]

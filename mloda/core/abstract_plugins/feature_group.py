@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import logging
 from collections.abc import Collection, Mapping
+from types import MappingProxyType
 from typing import Any, ClassVar, Callable, cast, final
 from abc import ABC
 
@@ -130,6 +131,9 @@ class FeatureGroup(ABC):
 
     PUBLIC_CREDENTIAL_KEYS: ClassVar[tuple[str, ...]] = ()
     """Credential keys whose values this group declares non-secret, so they print unmasked."""
+
+    NOT_SECRET_OPTIONS: ClassVar[Mapping[str, str]] = MappingProxyType({})
+    """Option keys the secret-shaped option check skips, each with the reason it holds no secret."""
 
     SUBTYPES: ClassVar[SubtypeDeclaration | None] = None
     """Declarative subtype dimension of the family; ``None`` means no subtype dimension.

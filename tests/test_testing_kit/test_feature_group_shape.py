@@ -18,6 +18,7 @@ from mloda._testing.framework_adapter import (
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda._testing.feature_group_shape import assert_feature_group_shape, check_feature_group_shape
+from mloda.core.abstract_plugins.components.credential_handle import credential_handle_spec
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
@@ -444,6 +445,60 @@ def make_ignores_strict_for_second_name() -> type[FeatureGroup]:
     return IgnoresStrictForSecondName
 
 
+def make_secret_group(options: dict[str, PropertySpec], not_secret: dict[str, Any] | None = None) -> type[FeatureGroup]:
+    class SecretGroup(FeatureGroup):
+        PROPERTY_MAPPING = options
+        if not_secret is not None:
+            NOT_SECRET_OPTIONS = not_secret
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {"sg_a"}
+
+    return SecretGroup
+
+
+def make_plain_api_key() -> type[FeatureGroup]:
+    return make_secret_group({"api_key": PropertySpec("API key.", default="placeholder")})
+
+
+def make_env_named_key() -> type[FeatureGroup]:
+    explanation = "Name of the environment variable holding the key."
+    return make_secret_group({"pii_key_env": PropertySpec(explanation, default="PII_KEY")})
+
+
+def make_bearer_default() -> type[FeatureGroup]:
+    return make_secret_group({"auth": PropertySpec("Auth header.", default="Bearer abcdef1234567890xyz")})
+
+
+def make_mapping_password_default() -> type[FeatureGroup]:
+    return make_secret_group({"conn": PropertySpec("Connection.", default={"password": "x"})})
+
+
+def make_uri_query_secret() -> type[FeatureGroup]:
+    default = "https://api.example.com/v1?token=abc123"
+    return make_secret_group({"endpoint": PropertySpec("Endpoint.", default=default)})
+
+
+def make_azure_sas_secret() -> type[FeatureGroup]:
+    default = "https://acct.blob.core.windows.net/c?sv=1&sig=abc123"
+    return make_secret_group({"endpoint": PropertySpec("Endpoint.", default=default)})
+
+
+def make_masked_then_real_secret() -> type[FeatureGroup]:
+    default = "password=*** api_key=realsecret123"
+    return make_secret_group({"conn": PropertySpec("Connection.", default=default)})
+
+
+def make_bytes_password_default() -> type[FeatureGroup]:
+    return make_secret_group({"conn": PropertySpec("Connection.", default={"password": b"x"})})
+
+
+def make_plural_env_named_key() -> type[FeatureGroup]:
+    explanation = "Names the environment variables holding the key."
+    return make_secret_group({"pii_key_env": PropertySpec(explanation, default="PII_KEY")})
+
+
 def test_toy_group_passes() -> None:
     result = check_feature_group_shape(make_toy_group())
     assert result.check == "feature_group_shape"
@@ -490,6 +545,15 @@ def test_undeclared_option_failure_is_named() -> None:
         (make_matches_any_name_with_undeclared_option, "foreign:"),
         (make_raising_inputs, "inputs:"),
         (make_ignores_strict_for_second_name, "strict:"),
+        (make_plain_api_key, "secrets:"),
+        (make_env_named_key, "secrets:"),
+        (make_bearer_default, "secrets:"),
+        (make_mapping_password_default, "secrets:"),
+        (make_uri_query_secret, "secrets:"),
+        (make_azure_sas_secret, "secrets:"),
+        (make_masked_then_real_secret, "secrets:"),
+        (make_bytes_password_default, "secrets:"),
+        (make_plural_env_named_key, "secrets:"),
     ],
 )
 def test_broken_group_fails_only_its_sub_check(make: Callable[[], type[FeatureGroup]], prefix: str) -> None:
@@ -508,6 +572,82 @@ def test_unbuildable_request_is_reported_not_raised() -> None:
 
     result = check_feature_group_shape(NoDerivableKey)
     assert any(f.startswith("names:") and "cannot build a matching request" in f for f in result.failures)
+
+
+def test_secret_named_options_declared_as_handles_pass() -> None:
+    api = make_secret_group({"api_key": credential_handle_spec("API key handle.", default="my_api")})
+    db = make_secret_group({"db_password": credential_handle_spec("DB handle.", default="my_db")})
+    assert check_feature_group_shape(api).failures == ()
+    assert check_feature_group_shape(db).failures == ()
+
+
+@pytest.mark.parametrize(
+    ("make", "handle"),
+    [(make_plain_api_key, "api_key_handle"), (make_env_named_key, "pii_key_handle")],
+)
+def test_secret_failure_suggests_handle(make: Callable[[], type[FeatureGroup]], handle: str) -> None:
+    result = check_feature_group_shape(make())
+    assert any(handle in f and "credential_handle_spec" in f for f in result.failures), result.failures
+    if handle == "api_key_handle":
+        assert any("api_key" in f for f in result.failures), result.failures
+
+
+def test_secret_default_failure_does_not_echo_value() -> None:
+    result = check_feature_group_shape(make_bearer_default())
+    assert any("auth" in f for f in result.failures), result.failures
+    assert "abcdef1234567890xyz" not in repr(result)
+
+
+def test_benign_url_default_and_deployment_environment_pass() -> None:
+    group = make_secret_group(
+        {
+            "endpoint": PropertySpec("Endpoint.", default="https://api.example.com/v1?format=json"),
+            "target_env": PropertySpec("Deployment environment: dev or prod.", default="dev"),
+            "agg": PropertySpec("Aggregation.", default="mean"),
+            "conn_defaults": PropertySpec("Connection defaults.", default={"password": ""}),
+            "template": PropertySpec("Template.", default="password="),
+            "limits": PropertySpec("Limits.", default="max_token=5"),
+            "cwd": PropertySpec("Working directory.", default="PWD=/home/runner/work"),
+        }
+    )
+    assert check_feature_group_shape(group).failures == ()
+
+
+def test_not_secret_options_silences_one_option_only() -> None:
+    reason = "public lookup id, not a credential"
+    options = {"token": PropertySpec("Lookup id.", default="abc")}
+    result = check_feature_group_shape(make_secret_group(options, {"token": reason}))
+    assert result.passed, result.failures
+    assert any(n.startswith("secrets:") and "token" in n and reason in n for n in result.notes), result.notes
+    both = {**options, "password": PropertySpec("Password.", default="x")}
+    result = check_feature_group_shape(make_secret_group(both, {"token": reason}))
+    assert any(f.startswith("secrets:") and "password" in f for f in result.failures), result.failures
+    assert not any("token" in f for f in result.failures), result.failures
+
+
+@pytest.mark.parametrize("not_secret", [{"ghost": "reason"}, {"api_key": "  "}, {"api_key": 5}, ("api_key",)])
+def test_invalid_not_secret_options_fail(not_secret: Any) -> None:
+    group = make_secret_group({"api_key": PropertySpec("API key.", default="placeholder")}, not_secret)
+    result = check_feature_group_shape(group)
+    assert any(f.startswith("secrets:") for f in result.failures), result.failures
+    marker = next(iter(not_secret)) if isinstance(not_secret, dict) else "NOT_SECRET_OPTIONS"
+    assert any(f.startswith("secrets:") and marker in f for f in result.failures), result.failures
+
+
+def test_unbuildable_group_reports_names_and_secrets_failures() -> None:
+    group = make_secret_group(
+        {"free": PropertySpec("Free-form required key."), "password": PropertySpec("Pw.", default="x")}
+    )
+    result = check_feature_group_shape(group)
+    assert any(f.startswith("names:") and "cannot build a matching request" in f for f in result.failures)
+    assert any(f.startswith("secrets:") for f in result.failures), result.failures
+
+
+def test_secret_check_over_several_groups_flags_only_failing_ones() -> None:
+    groups = [make_plain_api_key(), make_bearer_default(), make_toy_group()]
+    results = [check_feature_group_shape(g) for g in groups]
+    assert [r.subject for r in results] == [g.__name__ for g in groups]
+    assert [r.passed for r in results] == [False, False, True]
 
 
 def test_assert_passes_silently_for_conforming_group() -> None:

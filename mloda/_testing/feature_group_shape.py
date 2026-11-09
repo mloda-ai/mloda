@@ -1,9 +1,11 @@
-"""Shape check for a FeatureGroup: names, foreign names, inputs, required and strict options."""
+"""Shape check for a FeatureGroup: names, foreign names, inputs, required, strict and secret-shaped options."""
 
 from __future__ import annotations
 
 import inspect
 import math
+import re
+from collections.abc import Mapping
 from itertools import product
 from typing import Any
 
@@ -12,6 +14,15 @@ from mloda._testing.result import CheckResult
 from mloda._testing.suite import assert_passed
 from mloda._testing.typed_data import TypedTestData
 from mloda._testing.value_fit import value_fits
+from mloda.core.abstract_plugins.components.credential_handle import CredentialHandleSpec
+from mloda.core.abstract_plugins.components.credential_leaves import iter_credential_leaves
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    _KEYWORD_PATTERN,
+    _keyword_repl,
+    _SECRET_KEY,
+    scrub_credentials,
+    strip_uri_userinfo,
+)
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.divergence import Divergence
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -171,6 +182,64 @@ def _check_strict(cls: type[FeatureGroup], names: list[str], base: Options) -> l
         elif rejection is None or rejection.code != CoreDeclineCode.OPTION_VALUE_REJECTED:
             failures.append(f"strict: rejection of an unknown '{key}' value lacks code option_value_rejected")
     return failures
+
+
+_ENV_VAR_TEXT = re.compile(r"\benv(?:ironment)?[ _-]?var(?:iable)?s?\b", re.IGNORECASE)
+
+
+def _masked_default(default: Any) -> bool:
+    for leaf in iter_credential_leaves(default):
+        s = leaf.leaf
+        if leaf.shaped and (s.strip() if isinstance(s, str) else isinstance(s, (bytes, bytearray)) and s):
+            return True
+        if not isinstance(s, str):
+            continue
+        bare = _KEYWORD_PATTERN.sub("", s)
+        if scrub_credentials(bare).count("***") > bare.count("***") or strip_uri_userinfo(s) != s:
+            return True
+        for m in _KEYWORD_PATTERN.finditer(s):
+            if m["value"] and m["value"] != "***" and _keyword_repl(m) != m[0]:
+                return True
+    return False
+
+
+def _check_secrets(cls: type[FeatureGroup]) -> tuple[list[str], list[str]]:
+    failures: list[str] = []
+    notes: list[str] = []
+    mapping = _mapping(cls)
+    silenced: dict[str, str] = {}
+    not_secret = cls.NOT_SECRET_OPTIONS
+    if not isinstance(not_secret, Mapping):
+        failures.append("secrets: NOT_SECRET_OPTIONS must be a mapping of option key to reason")
+        not_secret = {}
+    for key, reason in not_secret.items():
+        if key not in (cls.PROPERTY_MAPPING or {}):
+            failures.append(f"secrets: NOT_SECRET_OPTIONS names undeclared option '{key}'")
+        elif not isinstance(reason, str) or not reason.strip():
+            failures.append(f"secrets: NOT_SECRET_OPTIONS['{key}'] gives no reason")
+        else:
+            silenced[key] = reason
+    for key, spec in mapping.items():
+        if key in silenced:
+            notes.append(f"secrets: '{key}' is not checked: {silenced[key]}")
+            continue
+        if _SECRET_KEY.fullmatch(key) and not isinstance(spec, CredentialHandleSpec):
+            failures.append(
+                f"secrets: option '{key}' has a credential-shaped name; declare '{key}_handle' with "
+                "credential_handle_spec and read the credential with read_credential"
+            )
+        if not is_no_default(spec.default) and spec.default is not None and _masked_default(spec.default):
+            failures.append(
+                f"secrets: option '{key}' has a default the credential scrubber masks; "
+                "register the secret and name its handle instead"
+            )
+        if key.lower().endswith("_env") and _ENV_VAR_TEXT.search(spec.explanation):
+            stem = key[: -len("_env")]
+            failures.append(
+                f"secrets: option '{key}' names an environment variable; read the environment in the caller, "
+                f"register a Credential and declare '{stem}_handle' with credential_handle_spec"
+            )
+    return failures, notes
 
 
 def _cell_same(x: Any, y: Any) -> bool:
@@ -537,11 +606,19 @@ def check_feature_group_shape(
     """Check a FeatureGroup's match contract and, given input_data, its run; a raising matcher is a non-match.
 
     With require_run, a rule exclusion, a missing serving Implementation or a route block is a failure instead of a note.
+    Secret checks cover declarations, not call sites: a secret under an undeclared benign key goes unseen;
+    silence a false positive per option in NOT_SECRET_OPTIONS with a reason.
     """
     base = base_options if base_options is not None else _base_options(cls)
+    secret_failures, secret_notes = _check_secrets(cls)
     if base is None:
-        failures = ["names: cannot build a matching request; declare allowed_values or default, or pass base_options"]
-        return CheckResult(check="feature_group_shape", subject=cls.__name__, failures=tuple(failures))
+        failures = [
+            "names: cannot build a matching request; declare allowed_values or default, or pass base_options",
+            *secret_failures,
+        ]
+        return CheckResult(
+            check="feature_group_shape", subject=cls.__name__, failures=tuple(failures), notes=tuple(secret_notes)
+        )
     declared = sorted(cls.feature_names_supported())
     names = [cls.get_class_name(), *declared]
     failures = _check_names(cls, names, base)
@@ -549,7 +626,8 @@ def check_feature_group_shape(
     failures += _check_inputs(cls, names, base)
     failures += _check_required(cls, names, base)
     failures += _check_strict(cls, names, base)
-    notes: list[str] = []
+    failures += secret_failures
+    notes: list[str] = list(secret_notes)
     if input_data is None:
         notes.append("run: not run (no input_data); pass input_data to check outputs, types and determinism")
     else:

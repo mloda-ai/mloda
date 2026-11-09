@@ -222,7 +222,8 @@ def check_subclass_scope(
 ) -> CheckResult:
     """Check subclass replaces parent only with the selecting options; only these two classes are considered.
 
-    With input_data it also compares the requested output columns with the parent's both ways, assuming identical row order.
+    With input_data it also compares the requested output columns with the parent's, in both directions,
+    assuming identical row order.
     With require_run, a rule exclusion, a missing serving Implementation, a route block or no rows is a failure.
     """
     failures = _run(subclass, parent, selecting, requests)

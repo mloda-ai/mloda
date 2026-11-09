@@ -34,20 +34,25 @@ CHANGED_TYPE = Divergence(kind=DivergenceKind.TYPE, cause=Cause.BACKEND, reason=
 CHANGED_PART = Divergence(
     kind=DivergenceKind.VALUE, cause=Cause.BACKEND, outputs=frozenset({"p"}), reason="part changed"
 )
+ADDED_PART = Divergence(
+    kind=DivergenceKind.VALUE, cause=Cause.BACKEND, outputs=frozenset({"extra"}), reason="part added"
+)
 GAP = Divergence(kind=DivergenceKind.GAP, cause=Cause.NOT_IMPLEMENTED)
 CHANGED_VARIANT = Divergence(kind=DivergenceKind.VARIANT, cause=Cause.BACKEND, variant="v", reason="variant changed")
 ALLOWING = Options(group={"variant": "x", str(DefaultOptionKeys.allow_variants): "v"})
 Calc = Callable[[Any, Any, Any], Any]
 
 
-def _calc(main: int | None, part: int | None = None) -> Calc:
-    """A calculate function writing sc_a = sc_src * main and sc_a~p = sc_src * part; None skips the column."""
+def _calc(main: int | None, part: int | None = None, extra: int | None = None) -> Calc:
+    """Writes sc_a = sc_src * main, sc_a~p = sc_src * part and sc_a~extra = sc_src * extra; None skips a column."""
 
     def calc(cls: Any, data: Any, features: Any) -> Any:
         if main is not None:
             data["sc_a"] = [v * main for v in data["sc_src"]]
         if part is not None:
             data["sc_a~p"] = [v * part for v in data["sc_src"]]
+        if extra is not None:
+            data["sc_a~extra"] = [v * extra for v in data["sc_src"]]
         return data
 
     return calc
@@ -63,6 +68,7 @@ def make_parent(
     names: frozenset[str] = frozenset({"sc_a"}),
     writes_on_match: bool = False,
     rule: set[type[ComputeFramework]] | None = None,
+    run_time_parts: bool = False,
 ) -> type[FeatureGroup]:
     class ScopeParent(base):  # type: ignore[valid-type, misc]
         DIVERGENCES = divergences
@@ -76,6 +82,8 @@ def make_parent(
             VARIANTS = variants
         if parts:
             OUTPUT_PARTS = ("p",)
+        if run_time_parts:
+            OUTPUT_PARTS = ("*",)
         if writes_on_match:
 
             @classmethod
@@ -95,7 +103,7 @@ def make_parent(
             return {Feature("sc_src")}
 
         if calculates:
-            calculate_feature = classmethod(_calc(2, 3 if parts else None))
+            calculate_feature = classmethod(_calc(2, 3 if parts or run_time_parts else None))
 
     return ScopeParent
 
@@ -128,8 +136,14 @@ def make_well_scoped() -> Pair:
     return parent, _gated_subclass(parent, "variant")
 
 
-def make_changed(calc: Calc | None = None, divergences: tuple[Divergence, ...] = (), *, parts: bool = False) -> Pair:
-    parent = make_parent(parts=parts)
+def make_changed(
+    calc: Calc | None = None,
+    divergences: tuple[Divergence, ...] = (),
+    *,
+    parts: bool = False,
+    run_time_parts: bool = False,
+) -> Pair:
+    parent = make_parent(parts=parts, run_time_parts=run_time_parts)
     return parent, _gated_subclass(parent, "variant", calc or _calc(5), divergences)
 
 
@@ -138,9 +152,9 @@ def make_changed_with_inherited_record() -> Pair:
     return parent, _gated_subclass(parent, "variant", _calc(5))
 
 
-def make_changed_with_variant_record() -> Pair:
+def make_changed_with_variant_record(calc: Calc | None = None) -> Pair:
     parent = make_parent(variants=frozenset({"v"}))
-    return parent, _gated_subclass(parent, "variant", _calc(5), (CHANGED_VARIANT,))
+    return parent, _gated_subclass(parent, "variant", calc or _calc(5), (CHANGED_VARIANT,))
 
 
 def make_broken_run() -> Pair:
@@ -294,8 +308,51 @@ def test_well_scoped_subclass_passes(data: TypedTestData | None) -> None:
             DATA,
             "differs",
         ),
-        (functools.partial(make_changed, _calc(2), parts=True), "values:", DATA, "missing"),
+        (functools.partial(make_changed, _calc(2), parts=True), "values:", DATA, "missing from GatedChild"),
+        (functools.partial(make_changed, _calc(2, extra=7)), "values:", DATA, "missing from ScopeParent"),
+        (
+            functools.partial(make_changed, _calc(2, 3, extra=7), parts=True),
+            "values:",
+            DATA,
+            "missing from ScopeParent",
+        ),
+        (
+            functools.partial(make_changed, _calc(2, extra=7), (GAP,)),
+            "values:",
+            DATA,
+            "missing from ScopeParent",
+        ),
+        (
+            functools.partial(make_changed, _calc(2, extra=7), (CHANGED_PART,)),
+            "values:",
+            DATA,
+            "missing from ScopeParent",
+        ),
+        (
+            functools.partial(make_changed, _calc(2, 3, extra=7), run_time_parts=True),
+            "values:",
+            DATA,
+            "missing from ScopeParent",
+        ),
+        (
+            functools.partial(make_changed, _calc(2), run_time_parts=True),
+            "values:",
+            DATA,
+            "missing from GatedChild",
+        ),
+        (
+            functools.partial(make_changed, _calc(2), (CHANGED,), parts=True),
+            "values:",
+            DATA,
+            "missing from GatedChild",
+        ),
         (make_changed_with_variant_record, "values:", DATA, "differs"),
+        (
+            functools.partial(make_changed_with_variant_record, _calc(2, extra=7)),
+            "values:",
+            DATA,
+            "missing from ScopeParent",
+        ),
         (make_broken_run, "values:", DATA, "run raised"),
     ],
 )
@@ -315,6 +372,16 @@ def test_broken_pair_fails_only_its_sub_check(
         pytest.param(functools.partial(make_changed, divergences=(CHANGED,)), id="value"),
         pytest.param(functools.partial(make_changed, divergences=(CHANGED_TYPE,)), id="type"),
         pytest.param(functools.partial(make_changed, _calc(2, 9), (CHANGED_PART,), parts=True), id="part"),
+        pytest.param(functools.partial(make_changed, _calc(2, extra=7), (CHANGED,)), id="added-unscoped"),
+        pytest.param(functools.partial(make_changed, _calc(2, extra=7), (ADDED_PART,)), id="added-part"),
+        pytest.param(
+            functools.partial(make_changed, _calc(2, 3, extra=7), (CHANGED,), run_time_parts=True),
+            id="added-run-time-part",
+        ),
+        pytest.param(
+            functools.partial(make_changed, _calc(2, 3, extra=7), (ADDED_PART,), run_time_parts=True),
+            id="added-run-time-part-scoped",
+        ),
     ],
 )
 def test_declared_divergence_excuses_changed_column(make: Callable[[], Pair]) -> None:
@@ -322,8 +389,12 @@ def test_declared_divergence_excuses_changed_column(make: Callable[[], Pair]) ->
     assert check_subclass_scope(sub, parent, SELECTING, input_data=DATA).failures == ()
 
 
-def test_allowed_variant_record_excuses_changed_column() -> None:
-    parent, sub = make_changed_with_variant_record()
+@pytest.mark.parametrize(
+    "calc",
+    [pytest.param(_calc(5), id="changed"), pytest.param(_calc(2, extra=7), id="added")],
+)
+def test_allowed_variant_record_excuses_changed_column(calc: Calc) -> None:
+    parent, sub = make_changed_with_variant_record(calc)
     assert check_subclass_scope(sub, parent, ALLOWING, input_data=DATA).failures == ()
 
 
@@ -358,14 +429,22 @@ def test_parent_without_calculate_feature_notes_and_skips_values(require_run: bo
     assert any(n.startswith("values:") for n in result.notes), result.notes
 
 
-@pytest.mark.parametrize(("record", "passes"), [(True, True), (False, False)])
+@pytest.mark.parametrize(
+    ("calc", "record", "passes"),
+    [
+        (_calc(5), True, True),
+        (_calc(5), False, False),
+        (_calc(2, extra=7), True, True),
+        (_calc(2, extra=7), False, False),
+    ],
+)
 def test_operation_group_values_use_serving_implementations(
-    make_implementation: Callable[..., type[Implementation[Any]]], record: bool, passes: bool
+    make_implementation: Callable[..., type[Implementation[Any]]], calc: Calc, record: bool, passes: bool
 ) -> None:
     parent = make_parent(base=OperationFeatureGroup, calculates=False)
     sub = _gated_subclass(parent, "variant")
     make_implementation(parent, PythonDictFramework, _calc(2))
-    sub_impl = make_implementation(sub, PythonDictFramework, _calc(5))
+    sub_impl = make_implementation(sub, PythonDictFramework, calc)
     if record:
         setattr(sub_impl, "divergences", (CHANGED,))
     result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
@@ -634,6 +713,19 @@ def test_parent_writing_no_requested_column_is_a_setup_failure(
     parent, sub, _, _ = _two_framework_pair(make_implementation, _calc(None), _calc(5))
     result = check_subclass_scope(sub, parent, SELECTING, input_data=data)
     assert any(f.startswith("setup:") and phrase in f and "sc_a" in f for f in result.failures), result.failures
+    assert not any("is missing from" in f for f in result.failures), result.failures
+
+
+@pytest.mark.parametrize(
+    ("make", "data"),
+    [
+        (functools.partial(make_changed, _calc_two(2, 5)), DATA),
+        (functools.partial(make_changed, _calc(2, 9)), INPUT_ONLY),
+    ],
+)
+def test_unrequested_and_input_columns_are_not_compared(make: Callable[[], Pair], data: TypedTestData) -> None:
+    parent, sub = make()
+    assert check_subclass_scope(sub, parent, SELECTING, input_data=data).failures == ()
 
 
 EMPTY = TypedTestData({"sc_src": (DataType.INT64, [])})
@@ -643,7 +735,7 @@ EMPTY = TypedTestData({"sc_src": (DataType.INT64, [])})
 def test_empty_fixture_compares_nothing(
     make_implementation: Callable[..., type[Implementation[Any]]], require_run: bool
 ) -> None:
-    parent, sub, _, _ = _two_framework_pair(make_implementation, _calc(2), _calc(5))
+    parent, sub, _, _ = _two_framework_pair(make_implementation, _calc(2), _calc(5, extra=7))
     result = check_subclass_scope(sub, parent, SELECTING, input_data=EMPTY, require_run=require_run)
     if require_run:
         assert any(f.startswith("values:") and "no rows" in f for f in result.failures), result.failures

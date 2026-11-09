@@ -75,6 +75,7 @@ import mloda.steward as mloda_steward
 import mloda.user as mloda_user
 from mloda.core.api.plan_info import _dependency_order, build_plan_steps
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.implementation_pin_error import ImplementationPinError
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.prepare.resolved_join import ResolvedJoinPlan
 from mloda.provider import (
@@ -1240,6 +1241,33 @@ class TestPlanStepVariantAllowOption:
         assert any(s.implementation is toy.OpToyVariantPandas for s in steps)
         with pytest.raises(FeatureResolutionError, match="rule variant"):
             self._explain_group(groups, toy.OPTOY_VARIANT_CONSUMER)
+
+    def _chained_pin(self, group: str, name: str, **kwargs: Any) -> list[PlanStep]:
+        return self._explain_group(f"OpToyVariantFG,{group}", name, **kwargs, implementation="OpToyVariantPandas")
+
+    def test_a_chained_pin_on_the_variant_implementation_fails_with_the_copyable_line(self) -> None:
+        toy = importlib.import_module(self.TOY)
+        with pytest.raises(ImplementationPinError) as caught:
+            self._chained_pin("OpToyVariantOpenConsumerFG", toy.OPTOY_VARIANT_OPEN_CONSUMER)
+
+        advice = self._copyable_line().replace(
+            "the feature's options", f"the options of {toy.OPTOY_VARIANT_OPEN_CONSUMER}"
+        )
+        assert advice in str(caught.value)
+
+    def test_the_chained_pin_advice_works_when_followed(self) -> None:
+        toy = importlib.import_module(self.TOY)
+        steps = self._chained_pin("OpToyVariantOpenConsumerFG", toy.OPTOY_VARIANT_OPEN_CONSUMER, allow="skip_nan")
+
+        assert any(s.implementation is toy.OpToyVariantPandas for s in steps)
+
+    def test_a_chained_pin_on_an_unlisted_variant_says_it_cannot_be_allowed(self) -> None:
+        toy = importlib.import_module(self.TOY)
+        with pytest.raises(ImplementationPinError) as caught:
+            self._chained_pin("OpToyVariantEmptyConsumerFG,OpToyVariantEmptyFG", toy.OPTOY_VARIANT_EMPTY_CONSUMER)
+
+        assert "OpToyVariantEmptyFG.VARIANTS does not list, so it cannot be allowed" in str(caught.value)
+        assert "to allow it add" not in str(caught.value)
 
 
 class TestPlanStepInputFeatureEdgesField:

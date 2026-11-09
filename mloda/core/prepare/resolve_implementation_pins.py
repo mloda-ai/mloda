@@ -12,6 +12,8 @@ from mloda.core.abstract_plugins.implementation import (
     loaded_implementations,
     named_implementations,
     serving_implementation,
+    unallowed_variants,
+    variant_block_reason,
 )
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -46,7 +48,7 @@ class ResolveImplementationPins:
                 continue
             for step, impl in self._assign(uuid, pin):
                 feature = self.graph.nodes[step].feature
-                served = self._allowed(step, impl)
+                served = self._allowed(step, impl, str(node.feature.name))
                 for other, other_impl, other_request in seen:
                     twin = self.graph.nodes[other].feature
                     if (
@@ -131,7 +133,7 @@ class ResolveImplementationPins:
         stop_after = "load_neutral" if is_nominal_subclass(group, SourceFeatureGroup) else None
         return serving_implementation(group, framework, self.accessible, stop_after=stop_after)
 
-    def _allowed(self, uuid: UUID, impl: type[Implementation[Any]]) -> frozenset[Framework]:
+    def _allowed(self, uuid: UUID, impl: type[Implementation[Any]], request: str | None = None) -> frozenset[Framework]:
         node = self.graph.nodes[uuid]
         feature = node.feature
         group = node.feature_group_class
@@ -140,6 +142,25 @@ class ResolveImplementationPins:
             for fw in feature.compute_frameworks or ()
             if (served := self._serving(group, fw)) is not None and is_nominal_subclass(served, impl)
         }
+        if not serves and not feature.framework_pinned:
+            fw = impl.compute_framework
+            served = self._serving(group, fw)
+            parts = (
+                next(iter(feature.requested_parts))
+                if feature.parts_only and len(feature.requested_parts) == 1
+                else None
+            )
+            found = (
+                unallowed_variants(group, served, str(feature.name), feature.options, parts)
+                if fw not in (feature.compute_frameworks or ())
+                and served is not None
+                and is_nominal_subclass(served, impl)
+                else ()
+            )
+            if found:
+                target = f"the options of {request}" if request else "the feature's options"
+                reason = variant_block_reason(group, {fw: found}, {fw: served}, feature.options, target)
+                raise ImplementationPinError(f"Step {feature.name} pins implementation {impl.__name__}: {reason}")
         if not serves:
             reason = (
                 "conflicts with the compute_framework of the feature"

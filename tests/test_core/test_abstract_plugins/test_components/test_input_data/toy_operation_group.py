@@ -229,6 +229,36 @@ class OpToyVariantConsumerPandas(Implementation[OpToyVariantConsumerFG]):
         return data
 
 
+OPTOY_VARIANT_OPEN_CONSUMER = "optoyvar_open_consumer"
+OPTOY_VARIANT_EMPTY_CONSUMER = "optoyvar_empty_consumer"
+
+
+class OpToyVariantOpenConsumerFG(OpToyVariantConsumerFG):
+    """Consumer whose variant input has no framework pin; Pandas serves it through the MRO."""
+
+    NAME: ClassVar[str] = OPTOY_VARIANT_OPEN_CONSUMER
+    INPUT: ClassVar[str] = OPTOY_VARIANT_FEATURE
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == cls.NAME
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(self.INPUT)}
+
+
+class OpToyVariantEmptyConsumerFG(OpToyVariantOpenConsumerFG):
+    """Unpinned consumer over the group whose inherited variant record is unlisted."""
+
+    NAME = OPTOY_VARIANT_EMPTY_CONSUMER
+    INPUT = "optoyvar_empty"
+
+
 OPTOY_CHAIN_SRC = "optoy_chain_src"
 OPTOY_CHAIN_SUFFIX = "__optoy_chain"
 CHAIN_LOG: list[tuple[str, str]] = []

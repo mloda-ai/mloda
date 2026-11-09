@@ -250,6 +250,39 @@ def unallowed_variants(
     )
 
 
+def variant_block_reason(
+    group: type[FeatureGroup],
+    blocked: Mapping[type[ComputeFramework], tuple[Divergence, ...]],
+    served: Mapping[type[ComputeFramework], type[Implementation[Any]] | None],
+    options: Options,
+    target: str = "the feature's options",
+) -> str:
+    """Why each blocked framework is dropped, with the allow_variants line that would admit it."""
+    listed = {
+        cfw: sorted({str(r.variant) for r in found if r.variant in group.VARIANTS}) for cfw, found in blocked.items()
+    }
+    suggested = sorted((allowed_variants(options) & group.VARIANTS) | {n for v in listed.values() for n in v})
+    suggestion = ", ".join(f'"{n}"' for n in suggested) + ("," if len(suggested) == 1 else "")
+    reasons = []
+    for cfw in sorted(blocked, key=lambda c: c.get_class_name()):
+        impl = served[cfw]
+        who = f"{impl.__name__ if impl else cfw.get_class_name()} on {cfw.get_class_name()} follows"
+        unlisted = sorted({str(r.variant) for r in blocked[cfw]} - set(listed[cfw]))
+        if unlisted:
+            quoted = ", ".join(f"'{n}'" for n in unlisted)
+            reasons.append(
+                f"{who} {'variants' if len(unlisted) > 1 else 'variant'} {quoted}, which "
+                f"{group.__name__}.VARIANTS does not list, so it cannot be allowed"
+            )
+        if listed[cfw]:
+            quoted = ", ".join(f"'{n}'" for n in listed[cfw])
+            reasons.append(
+                f"{who} {'variants' if len(listed[cfw]) > 1 else 'variant'} {quoted}, which this feature "
+                f'does not allow; to allow it add {{"allow_variants": ({suggestion})}} to {target}'
+            )
+    return "; ".join(reasons)
+
+
 def named_implementations(
     name: str, implementations: Iterable[type[Implementation[Any]]]
 ) -> list[type[Implementation[Any]]]:

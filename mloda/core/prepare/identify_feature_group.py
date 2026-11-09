@@ -105,6 +105,7 @@ from mloda.core.abstract_plugins.implementation import (
     named_implementations,
     serving_implementation,
     unallowed_variants,
+    variant_block_reason,
 )
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 
@@ -974,32 +975,9 @@ class IdentifyFeatureGroupClass:
         }
         if not fitting or not fitting <= set(blocked):
             return supported - set(blocked)
-        listed = {
-            cfw: sorted({str(r.variant) for r in found if r.variant in feature_group.VARIANTS})
-            for cfw, found in blocked.items()
-        }
-        suggested = sorted(
-            (allowed_variants(options) & feature_group.VARIANTS) | {n for v in listed.values() for n in v}
+        self._record_elimination(
+            feature_group, "variant", variant_block_reason(feature_group, blocked, served, options)
         )
-        suggestion = ", ".join(f'"{n}"' for n in suggested) + ("," if len(suggested) == 1 else "")
-        reasons = []
-        for cfw in sorted(blocked, key=lambda c: c.get_class_name()):
-            impl = served[cfw]
-            who = f"{impl.__name__ if impl else cfw.get_class_name()} on {cfw.get_class_name()} follows"
-            unlisted = sorted({str(r.variant) for r in blocked[cfw]} - set(listed[cfw]))
-            if unlisted:
-                quoted = ", ".join(f"'{n}'" for n in unlisted)
-                reasons.append(
-                    f"{who} {'variants' if len(unlisted) > 1 else 'variant'} {quoted}, which "
-                    f"{feature_group.__name__}.VARIANTS does not list, so it cannot be allowed"
-                )
-            if listed[cfw]:
-                quoted = ", ".join(f"'{n}'" for n in listed[cfw])
-                reasons.append(
-                    f"{who} {'variants' if len(listed[cfw]) > 1 else 'variant'} {quoted}, which this feature "
-                    f'does not allow; to allow it add {{"allow_variants": ({suggestion})}} to the feature\'s options'
-                )
-        self._record_elimination(feature_group, "variant", "; ".join(reasons))
         return set()
 
     def _filter_loop(

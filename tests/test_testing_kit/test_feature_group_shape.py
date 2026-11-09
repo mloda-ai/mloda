@@ -1,4 +1,4 @@
-"""check_feature_group_shape: a conforming plain FeatureGroup passes, each broken one fails its own sub-check."""
+"""check_feature_group_shape: a conforming FeatureGroup passes, each broken one fails its own sub-check."""
 
 from __future__ import annotations
 
@@ -21,8 +21,13 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.provider import DefaultOptionKeys
+from mloda.user.python_dict import PythonDictFramework
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.environment.installed_packages_feature_group import (
     InstalledPackagesFeatureGroup,
 )
@@ -78,11 +83,15 @@ def _double_into(data: Any, out: str, src: str) -> Any:
     return data.append_column(out, pc.multiply(data[src], 2))
 
 
-def make_run_group(kind: str = "ok") -> type[FeatureGroup]:
+def make_run_group(kind: str = "ok", rule: set[type[ComputeFramework]] | None = None) -> type[FeatureGroup]:
     """A group over input rg_src (INT64) and rg_label (STRING) that writes rg_out; kind injects one defect."""
     counter = [0]
 
     class RunGroup(FeatureGroup):
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+            return rule
+
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {"rg_out"}
@@ -190,6 +199,22 @@ def make_run_group(kind: str = "ok") -> type[FeatureGroup]:
             return _double_into(data, "rg_out", "rg_src")
 
     return RunGroup
+
+
+def make_operation_group() -> type[FeatureGroup]:
+    class OperationGroup(OperationFeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {"rg_out"}
+
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+            return {Feature("rg_src"), Feature("rg_label")}
+
+        @classmethod
+        def return_data_type_rule(cls, feature: Feature) -> DataType | None:
+            return DataType.INT64
+
+    return OperationGroup
 
 
 def make_static_run_group() -> type[FeatureGroup]:
@@ -590,3 +615,73 @@ def test_source_input_feature_run_is_not_applicable() -> None:
     )
     assert result.passed, result.failures
     assert any("not applicable" in n for n in result.notes), result.notes
+
+
+def _serve_with(
+    make_implementation: Callable[..., type[Implementation[Any]]], group: type[FeatureGroup], kind: str
+) -> None:
+    run_group = make_run_group(kind)
+    make_implementation(
+        group, PythonDictFramework, lambda _, data, features: run_group.calculate_feature(data, features)
+    )
+
+
+def test_operation_group_conforms_with_serving_implementation(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+) -> None:
+    group = make_operation_group()
+    _serve_with(make_implementation, group, "ok")
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert result.failures == (), result.failures
+    assert not any(n.startswith("run:") for n in result.notes), result.notes
+
+
+@pytest.mark.parametrize(
+    ("kind", "prefix"),
+    [
+        ("drops_output", "outputs:"),
+        ("wrong_type", "type:"),
+        ("leaks_cell_in_error", "error_values:"),
+        ("nondeterministic", "determinism:"),
+    ],
+)
+def test_broken_operation_group_fails_only_its_sub_check(
+    make_implementation: Callable[..., type[Implementation[Any]]], kind: str, prefix: str
+) -> None:
+    group = make_operation_group()
+    _serve_with(make_implementation, group, kind)
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert not result.passed
+    assert all(f.startswith(prefix) for f in result.failures), result.failures
+    assert not any("found no implementation" in f for f in result.failures), result.failures
+
+
+@pytest.mark.parametrize("other_framework", [None, PandasDataFrame])
+def test_operation_group_without_serving_implementation_notes_run_skipped(
+    make_implementation: Callable[..., type[Implementation[Any]]], other_framework: type[ComputeFramework] | None
+) -> None:
+    group = make_operation_group()
+    if other_framework is not None:
+        make_implementation(group, other_framework, lambda _, data, features: data)
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert result.failures == (), result.failures
+    assert f"run: no implementation of {group.__name__} serves PythonDictFramework" in result.notes, result.notes
+
+
+def test_framework_excluded_by_rule_notes_run_skipped() -> None:
+    group = make_run_group("drops_output", rule={PandasDataFrame})
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert result.failures == (), result.failures
+    assert "run: PythonDictFramework excluded by compute_framework_rule" in result.notes, result.notes
+
+
+def test_unavailable_adapter_notes_run_skipped() -> None:
+    class UnavailableAdapter(PythonDictAdapter):
+        def is_available(self) -> bool:
+            return False
+
+    result = check_feature_group_shape(
+        make_run_group("drops_output"), input_data=_run_data(), adapter=UnavailableAdapter()
+    )
+    assert result.failures == (), result.failures
+    assert "run: PythonDictFramework is not available" in result.notes, result.notes

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-
 from typing import Any
 
 from mloda._testing.feature_group_shape import (
@@ -20,8 +19,8 @@ from mloda._testing.result import CheckResult
 from mloda._testing.suite import assert_passed
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.divergence import Divergence, DivergenceKind
-from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass

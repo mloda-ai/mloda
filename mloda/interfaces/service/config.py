@@ -104,11 +104,19 @@ class Settings:
         for handle, fields in self.credentials.items():
             if not handle:
                 raise ConfigError('[mcp.credentials.""]: a handle name must not be empty')
+            if not handle.isprintable():
+                raise ConfigError(f"[mcp.credentials.{handle!r}]: a handle name must not contain control characters")
+            if not isinstance(fields, Mapping):
+                raise ConfigError(f"[mcp.credentials.{handle}] must be a table of fields")
             if handle.startswith(_AUTO_PREFIX):
                 raise ConfigError(f"[mcp.credentials.{handle}]: handles starting with '{_AUTO_PREFIX}' are reserved")
             for name, ref in fields.items():
                 if not name:
                     raise ConfigError(f"[mcp.credentials.{handle}]: a field name must not be empty")
+                if not name.isprintable():
+                    raise ConfigError(
+                        f"[mcp.credentials.{handle}]: a field name must not contain control characters: {name!r}"
+                    )
                 if isinstance(ref, str) and not _ENV_NAME.fullmatch(ref):
                     raise ConfigError(
                         f"[mcp.credentials.{handle}] field '{name}' must name an environment variable "

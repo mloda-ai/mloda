@@ -54,6 +54,7 @@ from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG
 from tests.helpers.plugin_stubs import StubFeatureGroup
 from tests.test_interfaces.source_groups import (
+    PASTED_UNDERSCORE,
     CALLER_LOCKED_FEATURE,
     CALLER_LOCKED_KEY,
     CRED_FEATURE,
@@ -1718,7 +1719,7 @@ class TestCredentialTable:
     @pytest.mark.parametrize(
         ("credentials", "env", "message_has"),
         [
-            ('token = "TOK_VAR"\nother = "OTHER_VAR"', {"TOK_VAR": TOKEN}, ["db", "other", "OTHER_VAR"]),
+            ('token = "TOK_VAR"\nother = "OTHER_VAR"', {"TOK_VAR": TOKEN}, ["db", "other"]),
             ('token = "TOK_VAR"\nother = "OTHER_VAR"', {"TOK_VAR": TOKEN, "OTHER_VAR": ""}, ["db", "other"]),
             ('token = "TOK_VAR"\nother = { file = "nope.txt" }', {"TOK_VAR": TOKEN}, ["db", "other", "nope.txt"]),
             ('token = "TOK_VAR"\nother = { file = "empty.txt" }', {"TOK_VAR": TOKEN}, ["db", "other"]),
@@ -1738,6 +1739,20 @@ class TestCredentialTable:
         for part in message_has:
             assert part in problem
         assert TOKEN not in problem
+        assert "OTHER_VAR" not in problem
+
+    def test_a_pasted_underscore_token_is_never_echoed_by_check_or_log(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        settings = _cred_settings(tmp_path, f'token = "{PASTED_UNDERSCORE}"')
+
+        with caplog.at_level(logging.DEBUG):
+            problem = service_sources.check_credentials(settings, {})
+            service_sources.ServiceCredentials(settings.credentials, {}).collection(settings.sources)
+
+        assert problem is not None
+        assert "[mcp.credentials.db] field 'token'" in problem
+        _assert_value_absent(PASTED_UNDERSCORE, problem, caplog.text)
 
     def test_crlf_file_is_stripped_to_the_value(self, tmp_path: Path) -> None:
         (tmp_path / "pii").write_bytes(ROTATED.encode() + b"\r\n")

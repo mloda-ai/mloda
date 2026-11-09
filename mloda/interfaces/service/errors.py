@@ -60,7 +60,8 @@ def _missing_input(error: BaseException) -> MissingInputFeatureError | None:
 
 
 def failure_result(action: str, error: Exception, *, trusted: bool = False) -> dict[str, dict[str, Any]]:
-    """An internal error naming only the exception class; the log gets the audit id and a traceback without messages."""
+    """An internal error naming only the exception class, plus a credential refusal's names-only text for a trusted
+    caller (the text is also logged); the log gets the audit id and a traceback without messages."""
     missing = _missing_input(error)
     refusal = ""
     if is_credential_abort(error):

@@ -36,6 +36,8 @@ from tests.test_interfaces.source_groups import (
     FAILED,
     FILE_SOURCE_GROUPS,
     MISSING,
+    PASTED,
+    PASTED_UNDERSCORE,
     PLAN_RAISE,
     PLAN_RAISE_SECRET,
     RAISE,
@@ -660,8 +662,7 @@ class TestCredentials:
     def test_a_pasted_value_in_the_config_exits_2_without_echoing_it(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        pasted = "sk-live-aaaaBBBBccccDDDD1234"  # nosec B105
-        config = _config(tmp_path, CRED_CONFIG.replace("TOK_VAR", pasted))
+        config = _config(tmp_path, CRED_CONFIG.replace("TOK_VAR", PASTED))
         _elsewhere(tmp_path, monkeypatch)
         request = _request_file(tmp_path, {"features": [CRED_FEATURE]})
 
@@ -671,8 +672,24 @@ class TestCredentials:
         assert outcome.code == 2
         assert outcome.out == ""
         assert outcome.err.startswith("mloda: error:")
-        assert pasted not in outcome.out + outcome.err
-        assert all(pasted not in record.getMessage() for record in caplog.records)
+        assert PASTED not in outcome.out + outcome.err
+        assert all(PASTED not in record.getMessage() for record in caplog.records)
+
+    @pytest.mark.parametrize("command", ["explain", "run"])
+    def test_a_pasted_underscore_token_is_never_echoed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, command: str
+    ) -> None:
+        config = _config(tmp_path, CRED_CONFIG.replace("TOK_VAR", PASTED_UNDERSCORE))
+        _elsewhere(tmp_path, monkeypatch)
+        request = _request_file(tmp_path, {"features": [CRED_FEATURE]})
+
+        with caplog.at_level(logging.DEBUG):
+            outcome = _cli([command, str(request), "--config", str(config)], extra_groups=[CredentialReadMcp8])
+
+        assert outcome.code == 2
+        assert "[mcp.credentials.db] field 'token'" in outcome.err
+        assert PASTED_UNDERSCORE not in outcome.out + outcome.err
+        assert all(PASTED_UNDERSCORE not in record.getMessage() for record in caplog.records)
 
     @pytest.mark.parametrize(("command", "value"), [("explain", None), ("run", ""), ("explain", "   ")])
     def test_unset_or_empty_variable_exits_2_naming_handle_and_field(
@@ -689,6 +706,7 @@ class TestCredentials:
         assert outcome.out == ""
         assert outcome.err.startswith("mloda: error:")
         assert "[mcp.credentials.db] field 'token'" in outcome.err
+        assert "TOK_VAR" not in outcome.err
 
     @pytest.mark.parametrize("command", ["explain", "run"])
     @pytest.mark.parametrize(

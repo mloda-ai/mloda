@@ -20,6 +20,9 @@ from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import Parqu
 
 FILE_SOURCE_GROUPS: frozenset[type[FeatureGroup]] = frozenset({CsvFG, FeatherFG, JsonFG, OrcFG, ParquetFG})
 
+PASTED = "sk-live-aaaaBBBBccccDDDD1234"  # nosec B105
+PASTED_UNDERSCORE = "ghp_aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bD1fH3jK5"  # nosec B105
+
 RAISE = "income__mcp5_raise"
 RAISE_SECRET = "SECRET_runner_boom_5c1d"  # nosec B105
 

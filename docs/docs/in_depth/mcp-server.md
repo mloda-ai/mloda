@@ -79,8 +79,10 @@ sources. The table holds environment variable names and file paths, never values
 the field, if a variable is unset, empty or blank or a file is missing, empty or blank. A field value must be an
 environment variable name (letters, digits and `_`, not starting with a digit); a name with `.` or `-` fails
 startup, while an underscore-only token such as `sk_live_abc` still passes the rule. An empty field name is refused.
-Handle names follow the core, e.g. `pii-hmac-key`. A handle may not start with `_auto_` or equal a source alias. Secret files are read again for every request, so a rotated file takes effect without a restart; an
-environment variable needs a restart. A group declares its handle option with `credential_handle_spec`; set it in
+Handle names are free-form (for example `pii-hmac-key`), non-empty, without control characters, and may not start with
+`_auto_` or equal a source alias. The unset or blank error names the handle and field, not the variable. Secret files
+are read again for every request, so a rotated file takes effect without a restart; an environment variable needs a
+restart. A group declares its handle option with `credential_handle_spec`; set it in
 `[mcp.options]`.
 
 A credential that cannot be read is left out. Requests whose plan has a source that binds a credential (even one named

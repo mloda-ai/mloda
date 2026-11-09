@@ -64,7 +64,7 @@ def _credential_value(handle: str, name: str, ref: CredentialRef, env: Mapping[s
         return value
     value = env.get(ref, "")
     if not value.strip():
-        raise ConfigError(f"{where}: environment variable {ref} is unset, empty or blank")
+        raise ConfigError(f"{where}: its environment variable is unset, empty or blank")
     return value
 
 

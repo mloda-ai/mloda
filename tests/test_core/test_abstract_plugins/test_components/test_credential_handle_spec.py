@@ -18,11 +18,12 @@ from mloda.core.abstract_plugins.components.credential import RegisteredCredenti
 from mloda.core.abstract_plugins.components.credential_access import ResolvedCredential, credentials_scope
 from mloda.core.abstract_plugins.components.credential_handle import refuse_credential_option_values
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
-from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.components.domain import Domain
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.utils import is_credential_abort, is_match_abort
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -421,29 +422,23 @@ def _abort_refusal(
     entry: Entry, features: list[Feature], dac: DataAccessCollection | None, *groups: type[FeatureGroup]
 ) -> str:
     """Like _refusal, and the raised error carries the credential abort mark."""
-    from mloda.core.abstract_plugins.components.utils import is_credential_abort
-
     with pytest.raises(ValueError) as exc:
         entry(features, dac, _plugins(*groups))
     assert is_credential_abort(exc.value)
     return str(exc.value)
 
 
-def test_the_credential_abort_mark_survives_a_pickle_round_trip() -> None:
-    import pickle  # nosec B403
+@pytest.mark.parametrize("value", [987654321, {"password": OTHER_SECRET}, ""])
+def test_the_prefix_path_rewrap_keeps_the_credential_abort_mark(value: Any) -> None:
+    spec = credential_handle_spec("Handle.")
 
-    from mloda.core.abstract_plugins.components.utils import is_credential_abort, mark_credential_abort
+    with pytest.raises(ValueError) as exc:
+        FeatureChainParser._validate_property_value(value, value, HANDLE_KEY, spec)
 
-    marked = mark_credential_abort(ValueError("x"))
-
-    assert is_credential_abort(pickle.loads(pickle.dumps(marked)))  # nosec B301
-    assert not is_credential_abort(ValueError("x"))
-
-
-def test_credential_abort_flag_is_a_dict_marker() -> None:
-    from mloda.core.abstract_plugins.components.utils import CREDENTIAL_ABORT_FLAG, mark_credential_abort
-
-    assert mark_credential_abort(ValueError("x")).__dict__[CREDENTIAL_ABORT_FLAG] is True
+    assert is_match_abort(exc.value)
+    assert is_credential_abort(exc.value)
+    assert str(exc.value).startswith(f"Option '{HANDLE_KEY}': ")
+    assert OTHER_SECRET not in str(exc.value)
 
 
 def _steps(session: Any, group: type[FeatureGroup]) -> list[FeatureGroupStep]:
@@ -1296,8 +1291,6 @@ class TestCredentialValuesInOptionsAreRefused:
 
         with pytest.raises(ValueError) as exc:
             refuse_credential_option_values(Options({_CRED_OPTION_KEY: cyclic}))
-
-        from mloda.core.abstract_plugins.components.utils import is_credential_abort
 
         assert is_credential_abort(exc.value)
         _assert_credential_refusal(str(exc.value), _CRED_OPTION_KEY)

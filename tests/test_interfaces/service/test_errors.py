@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.utils import mark_credential_abort
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
 from mloda.interfaces.service.errors import (
     ERROR_CODES,
@@ -209,8 +210,6 @@ def test_failure_result_logs_the_audit_line_for_missing_input(caplog: pytest.Log
 
 
 def _credential_abort(text: str) -> ValueError:
-    from mloda.core.abstract_plugins.components.utils import mark_credential_abort
-
     return mark_credential_abort(ValueError(text))
 
 

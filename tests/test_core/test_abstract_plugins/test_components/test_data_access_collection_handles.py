@@ -768,18 +768,38 @@ class TestRedact:
         assert "swordfishlong" not in redacted2
         assert self._REGISTERED_VALUE in redacted2
 
-    def test_large_text_with_secrets_redacts_well_under_one_second(self) -> None:
+    def test_large_text_with_secrets_redacts_linearly(self) -> None:
         dac = DataAccessCollection(
             credentials={
                 "a": {"password": self._REGISTERED_VALUE},
                 "b": {"password": "swordfishlong"},  # nosec B105 B106
             }
         )
-        text = ("filler text " * 20_000) + f"{self._REGISTERED_VALUE} swordfishlong"
-        start = time.perf_counter()
-        redacted = dac.redact(text)
-        elapsed = time.perf_counter() - start
-        assert elapsed < 1.0, f"redact took {elapsed:.3f}s on 200k chars"
+        filler = "filler text "
+        secrets = f"{self._REGISTERED_VALUE} swordfishlong"
+        # Compare CPU time at the full size against a quarter size. Linear is
+        # ~4x, quadratic ~16x; wall-clock time would measure the loaded machine.
+        small_text = (filler * 5_000) + secrets
+        large_text = (filler * 20_000) + secrets
+
+        min_small = min_large = float("inf")
+        redacted = ""
+        ratio = float("inf")
+        for _ in range(3):
+            start = time.process_time()
+            dac.redact(small_text)
+            min_small = min(min_small, time.process_time() - start)
+            start = time.process_time()
+            redacted = dac.redact(large_text)
+            min_large = min(min_large, time.process_time() - start)
+            ratio = min_large / max(min_small, 2e-3)
+            if ratio < 8.0:
+                break
+        assert ratio < 8.0, (
+            f"redact scales super-linearly on a large text with secrets: "
+            f"min small {min_small:.4f}s, min large {min_large:.4f}s, ratio {ratio:.1f}"
+        )
+        assert min_large < 2.0, f"redact is too slow on a large text with secrets: min large {min_large:.4f}s"
         assert self._REGISTERED_VALUE not in redacted
         assert "swordfishlong" not in redacted
 

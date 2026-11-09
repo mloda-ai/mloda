@@ -9,6 +9,7 @@ from mloda.core.abstract_plugins.components.credential_handle import declared_cr
 from mloda.core.abstract_plugins.components.property_spec import runtime_parameter_keys
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.data_access_collection import (
+    RESERVED_HANDLE_NAMES,
     DataAccessCollection,
     credential_handle_of,
     resolve_connection_handle,
@@ -303,7 +304,7 @@ class ExecutionPlan:
             for step in self.execution_plan
             if isinstance(step, FeatureGroupStep)
         }
-        return {h for h in bound if h is not None and h not in ("<pointer>", "<unnamed>")}
+        return {h for h in bound if h is not None and h not in RESERVED_HANDLE_NAMES}
 
     def _stamp_connection_handles(self, steps: Sequence[Step]) -> None:
         """Stamp connection, declared and bound credential handles on every feature group and join step."""
@@ -322,9 +323,7 @@ class ExecutionPlan:
                 bound = self._bound_credential_handle(step, self.data_access_collection)
                 step.features.bound_credential_handle = bound
                 step.features.credential_handles = (
-                    step.credential_handles
-                    if bound is None or bound in step.credential_handles
-                    else (*step.credential_handles, bound)
+                    step.credential_handles if bound is None else tuple(sorted({*step.credential_handles, bound}))
                 )
             elif isinstance(step, JoinStep):
                 consumers = [owner[u] for u in records.get(step.uuid, ()) if u in owner] or [

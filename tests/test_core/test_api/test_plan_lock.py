@@ -40,6 +40,7 @@ from mloda.provider import (
     FeatureGroup,
     FeatureSet,
     Implementation,
+    credential_handle_spec,
     property_spec,
 )
 from tests.helpers.credential_handle_stubs import ChsTwoHandleFG
@@ -947,9 +948,14 @@ def test_plan_content_hash_of_a_real_handle_plan_equals_the_hash_with_the_field_
 
 
 def _explain_sqlite(
-    tmp_path: Path, group: type[SqliteFG] = SqliteFG, options: dict[str, Any] | None = None
+    tmp_path: Path,
+    group: type[SqliteFG] = SqliteFG,
+    options: dict[str, Any] | None = None,
+    extra_credentials: dict[str, Any] | None = None,
 ) -> list[PlanStep]:
     dac, _, _ = bound_case(tmp_path, "named")
+    if dac is not None and extra_credentials:
+        dac = dac.with_credentials(extra_credentials)
     return list(
         mloda.explain(
             [Feature("bound_col", options=options or {})],
@@ -974,6 +980,29 @@ def test_the_lock_of_a_database_source_plan_names_the_bound_handle(tmp_path: Pat
     assert compute.credential_handles == ("db-main",)
     assert compute.bound_credential_handle == "db-main"
     assert json.loads(_lock_text(steps))["compute"][0]["credential_handles"] == ["db-main"]
+
+
+@pytest.mark.parametrize(
+    ("declared", "expected"),
+    [("zz-vault", ("db-main", "zz-vault")), ("aa-vault", ("aa-vault", "db-main"))],
+)
+def test_a_step_that_declares_and_binds_lists_its_handles_sorted(
+    tmp_path: Path, declared: str, expected: tuple[str, ...]
+) -> None:
+    class _DeclaringSqliteFG(SqliteFG):
+        PROPERTY_MAPPING = {"bound_vault_handle": credential_handle_spec("Vault handle.")}
+
+    steps = _explain_sqlite(
+        tmp_path,
+        _DeclaringSqliteFG,
+        {"bound_vault_handle": declared},
+        {declared: {"token": "plan-lock-sort-token"}},  # nosec B105
+    )
+
+    (compute,) = [s for s in steps if s.step_kind == "compute"]
+    assert compute.credential_handles == expected
+    assert compute.bound_credential_handle == "db-main"
+    assert json.loads(_lock_text(steps))["compute"][0]["credential_handles"] == list(expected)
 
 
 def test_a_no_handle_plan_renders_the_frozen_lock_text_and_structure_hash() -> None:

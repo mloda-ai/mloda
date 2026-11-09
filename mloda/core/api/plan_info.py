@@ -109,7 +109,7 @@ class PlanStep:
     ``leaves_connection``: the handle whose connection a compute step's root read, requested result conversion or a
     transform leaves (carried through same-handle steps), "<unnamed>" for an auto handle, else None.
 
-    ``credential_handles``: the handles a compute step declares plus the one its source binds, else ();
+    ``credential_handles``: the sorted handles a compute step declares plus the one its source binds, else ();
     excluded from equality.
 
     ``runtime_parameters``: the sorted runtime parameter keys a compute step declares, else (); excluded from equality.
@@ -397,6 +397,8 @@ def build_plan_steps(
                 if options is None
                 else Options(group=snapshot_group(options.group, frozenset(credential_handle_keys(step.feature_group))))
             )
+            if snapshot is not None:
+                snapshot.credential_handle_keys = frozenset(credential_handle_keys(step.feature_group))
             hash_options = snapshot
             if snapshot is not None and snapshot.group.get("connection_handle") in auto_handles:
                 hash_options = Options(group={**snapshot.group, "connection_handle": "<unnamed>"})

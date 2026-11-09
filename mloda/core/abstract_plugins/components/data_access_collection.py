@@ -4,6 +4,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any, Callable, cast
 
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
+from mloda.core.abstract_plugins.components.credential_access import ResolvedCredential
 from mloda.core.abstract_plugins.components.credential_leaves import (
     MIN_REDACT_LENGTH,
     CredentialKeyPolicy,
@@ -24,6 +25,16 @@ from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 logger = logging.getLogger(__name__)
 
 CONNECTION_HANDLE_OPTION = "connection_handle"
+
+RESERVED_HANDLE_NAMES: dict[str, str] = {
+    "<pointer>": "the plan record uses it for a credential outside the collection",
+    "<unnamed>": "the plan record uses it for an auto-named entry",
+}
+
+
+def _refuse_reserved_handle(handle: Any) -> None:
+    if isinstance(handle, str) and handle in RESERVED_HANDLE_NAMES:
+        raise ValueError(f"Handle '{handle}' is reserved: {RESERVED_HANDLE_NAMES[handle]}. Pick another name.")
 
 
 _KIND_TO_ATTR: dict[str, str] = {
@@ -157,6 +168,8 @@ class DataAccessCollection:
 
     def with_credentials(self, credentials: Mapping[str, Any]) -> "DataAccessCollection":
         """A copy with the given handles' credentials replaced; this collection is never modified."""
+        for handle in credentials:
+            _refuse_reserved_handle(handle)
         duplicate = self.copy()
         normalized = cast(dict[str, Any], self._normalize_credentials(dict(credentials)))
         duplicate.credentials.update(normalized)
@@ -213,6 +226,8 @@ class DataAccessCollection:
 
     @staticmethod
     def _unwrap_credential(value: Any) -> Any:
+        if isinstance(value, ResolvedCredential):
+            return RegisteredCredential(dict(value))
         if isinstance(value, Credential):
             value = value.data
         if isinstance(value, HashableDict):
@@ -296,6 +311,7 @@ class DataAccessCollection:
         for kind, attr in _KIND_TO_ATTR.items():
             registry: dict[str, Any] = getattr(self, attr)
             for handle in registry:
+                _refuse_reserved_handle(handle)
                 if handle in seen:
                     raise ValueError(
                         f"Handle '{handle}' is registered under both kind '{seen[handle]}' and kind '{kind}'. "
@@ -338,6 +354,7 @@ class DataAccessCollection:
         raise TypeError(f"add_{kind}() takes 1 (value) or 2 (handle, value) positional arguments, got {len(args)}.")
 
     def _reject_duplicate(self, handle: str) -> None:
+        _refuse_reserved_handle(handle)
         for kind, attr in _KIND_TO_ATTR.items():
             if handle in getattr(self, attr):
                 raise ValueError(

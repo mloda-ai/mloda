@@ -244,7 +244,7 @@ fails, in `prepare()`, `explain()` and `run_all()` alike, with an error naming t
 credential value) when:
 
 - the key is set in `Options.context` instead of the group options;
-- a required handle key (no default) is absent from the options of a group that owns the feature name, and no other matching group declares a credential handle; the message names a close option key when one exists;
+- a matched group whose required handle is absent (for example one with an overridden matcher), or a required handle key (no default) absent from the options of a group that owns the feature name, even when another group matches the feature; the message names a close option key when one exists. A matching group suppresses the refusal only when it is a strict subclass of the refusing group, declares the same missing key, or declares a handle key the request itself set (a forwarded key counts, a default does not). Groups matched by config path never refuse on a missing handle, so a misspelled key there falls through silently;
 - the value is not a non-empty `str`;
 - the handle is not registered, or is registered under another kind (the message lists the named credential handles);
 - the handle is an unnamed credential (a declared handle must be named);
@@ -277,12 +277,17 @@ In CI, `explain()` validates like `prepare()`, so a plan-lock check registers a 
 declared handle with the required fields, for example `Credential(key="ci-placeholder")` under `pii-hmac-key`.
 Use placeholders of 8 characters or longer.
 
-A handle stays on the feature that declares it: input features inherit it only when their explicit `forward_group`
-allowlist names the key. A handle is never part of a feature name: a pattern that captures a handle key raises at class
-definition.
+A declared handle stays on the declaring feature: its inputs inherit it only through an explicit `forward_group`
+allowlist. A feature whose group does not declare the key forwards it like any group option. A handle is never part of
+a feature name: a pattern that captures a handle key raises at class definition. The names `<pointer>` and `<unnamed>`
+are reserved for the plan record, so no handle can be registered under them.
 
-A credential is never an option value. A `Credential` or `RegisteredCredential` anywhere in a non-pointer option,
-nested in lists, tuples, dicts or sets, is refused at plan time. The source pointer form (`{"SqliteFG": Credential(...)}`) still works.
+A credential is never an option value. A `Credential`, `RegisteredCredential` or `ResolvedCredential` anywhere in a
+non-pointer option is refused at plan time, also nested in mappings, mapping views, sets, sequences (not `str`, bytes,
+`range` or `array`) and dataclass instances. Iterators and generators are not walked. The source pointer form
+(`{"SqliteFG": Credential(...)}`) still works, except on a root feature whose group is not the owning source (or a
+subclass of it); there a typed credential (also nested) is refused. A plain mapping under a pointer key is a routing hint and is not checked, like a bare `str` secret under an ordinary key. A consumer holding a pointer with no source below it, and a pointer merged from an inherited copy,
+are not refused.
 A bare `str` secret under an ordinary key cannot be detected, so do not do it.
 
 ## Runtime access versus match-time binding
@@ -407,7 +412,9 @@ mloda changes these process-wide settings:
 - **"Handle 'X' is registered under kind 'K1', but kind 'K2' was requested"**: you set `data_access_handle='X'`, but the registry has `X` under a different kind. A connection consumer cannot bind to a file handle even if the names match.
 - **"Ambiguous resolve for kind 'K': N candidates [...]; set 'data_access_handle' in Options to disambiguate"**: more than one entry of the requested kind matched. Set `data_access_handle` on the feature's `Options` to pick one, or remove the extras from the DAC.
 - **"credentials value for handle 'X' is not a mapping"**: you passed a bare `{connector_id: slot}` dict as `credentials`, which the named form reads as `{handle: credential}`. Use `credentials=Credential(...)`, the list form `credentials=[{...}]`, or the named form `{handle: {connector_id: slot}}`. See [Typed credentials](#typed-credentials-credential).
-- **"Option 'K' holds a Credential. A credential is never an option value: ..."**: a `Credential` or `RegisteredCredential` sits in an option other than a source pointer (the message says "nested in its value" when it is inside a container). Register it in the `DataAccessCollection`, name its handle in an option declared with `credential_handle_spec`, and read it with `read_credential`.
+- **"Option 'K' holds a Credential. A credential is never an option value: ..."**: a `Credential`, `RegisteredCredential` or `ResolvedCredential` sits in an option other than a source pointer (the message says "nested in its value" when it is inside a container). Register it in the `DataAccessCollection`, name its handle in an option declared with `credential_handle_spec`, and read it with `read_credential`.
+- **"Option 'K' holds a Credential but G is not the source group K ..."**: a pointer-key credential sits on a root feature whose group never reads it. Drop the pointer, or register the credential and name its handle.
+- **"Handle '<pointer>' is reserved ..."**: `<pointer>` and `<unnamed>` are plan record names; pick another handle name.
 - **"credentials list entry N has type T, not a mapping"**: each list entry must be a dict or `Credential`; wrap a bare value such as a DSN as `Credential(dsn=...)`.
 - **"HashableDict is no longer accepted as a credential value"**: pre-0.7 call sites wrapped credentials in `HashableDict`. The credentials path no longer accepts it; pass `Credential(...)` or a plain dict instead. `HashableDict` is not removed from the library: it still backs hashability-required internals (for example `Options` hashing and similar internals). It is simply no longer unwrapped anywhere on the database credential / data-access path.
 

@@ -6,8 +6,10 @@ handle at plan time; nothing reads the credential at run time yet.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass
+from array import array
+from collections.abc import ItemsView, KeysView, Mapping, Sequence, ValuesView
+from collections.abc import Set as AbstractSet
+from dataclasses import dataclass, fields, is_dataclass
 from difflib import get_close_matches
 from typing import TYPE_CHECKING, Any
 
@@ -19,7 +21,11 @@ from mloda.core.abstract_plugins.components.credential_leaves import (
     public_key_names,
 )
 from mloda.core.abstract_plugins.components.property_spec import NO_DEFAULT, PropertySpec
-from mloda.core.abstract_plugins.components.utils import PREFIX_OPTION_KEY_FLAG, escalate_match_abort
+from mloda.core.abstract_plugins.components.utils import (
+    PREFIX_OPTION_KEY_FLAG,
+    escalate_match_abort,
+    is_nominal_subclass,
+)
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -61,10 +67,11 @@ class CredentialHandleSpec(PropertySpec):
             or self.strict_validation is not True
             or self.caller_settable is not False
             or self.forward_to_inputs is not False
+            or self.deferred_binding is not False
         ):
             raise ValueError(
-                f"{prefix}: context=False, strict_validation=True, caller_settable=False and "
-                f"forward_to_inputs=False are fixed."
+                f"{prefix}: context=False, strict_validation=True, caller_settable=False, "
+                f"forward_to_inputs=False and deferred_binding=False are fixed."
             )
         if self.element_validator is not _handle_element_validator:
             raise ValueError(f"{prefix}: the handle element validator is fixed.")
@@ -192,17 +199,32 @@ def _check_one(
         )
 
 
-def _credential_hit(value: Any, seen: set[int]) -> str | None:
+_OPAQUE_SEQUENCES = (str, bytes, bytearray, memoryview, range, array)
+
+
+def _children(value: Any) -> list[Any]:
+    if isinstance(value, Mapping):
+        return [*value.keys(), *value.values()]
+    if isinstance(value, (KeysView, ValuesView, ItemsView, AbstractSet)) or (
+        isinstance(value, Sequence) and not isinstance(value, _OPAQUE_SEQUENCES)
+    ):
+        return list(value)
+    if is_dataclass(value) and not isinstance(value, type):
+        return [getattr(value, f.name, None) for f in fields(value)]
+    return []
+
+
+def _credential_hit(value: Any, seen: dict[int, Any]) -> str | None:
     """The credential type name found in value, descending containers, or None."""
     from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
+    from mloda.core.abstract_plugins.components.credential_access import ResolvedCredential
 
-    if isinstance(value, (Credential, RegisteredCredential)):
+    if isinstance(value, (Credential, RegisteredCredential, ResolvedCredential)):
         return type(value).__name__
-    if not isinstance(value, (Mapping, list, tuple, set, frozenset)) or id(value) in seen:
+    if id(value) in seen:
         return None
-    seen.add(id(value))
-    children = [*value.keys(), *value.values()] if isinstance(value, Mapping) else list(value)
-    for child in children:
+    seen[id(value)] = value
+    for child in _children(value):
         hit = _credential_hit(child, seen)
         if hit is not None:
             return hit
@@ -210,22 +232,23 @@ def _credential_hit(value: Any, seen: set[int]) -> str | None:
 
 
 def refuse_credential_option_values(options: Options) -> None:
-    """Refuse a Credential or RegisteredCredential in any non-pointer option value, naming key and type only."""
+    """Refuse a credential in any non-pointer option value, walking containers; names key and type only."""
     # Function-local: avoids an import cycle through the source feature group module.
     from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
 
     from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
+    from mloda.core.abstract_plugins.components.credential_access import ResolvedCredential
 
     pointer_keys: Any = None
     for key, value in [*options.group.items(), *options.context.items()]:
-        hit = _credential_hit(value, set())
+        hit = _credential_hit(value, {})
         if hit is None:
             continue
         if pointer_keys is None:
             pointer_keys = concrete_source_groups().keys()
         if key in pointer_keys:
             continue
-        direct = isinstance(value, (Credential, RegisteredCredential))
+        direct = isinstance(value, (Credential, RegisteredCredential, ResolvedCredential))
         where = "" if direct else " nested in its value"
         raise _refuse(
             f"Option '{key}' holds a {hit}{where}. A credential is never an option value: register it in the "
@@ -234,26 +257,56 @@ def refuse_credential_option_values(options: Options) -> None:
         )
 
 
-def missing_credential_handle_abort(feature_group: type[FeatureGroup], options: Options) -> ValueError | None:
-    """The marked abort for a required handle key that is absent, naming a close undeclared option key, or None."""
+def refuse_unread_pointer_credentials(feature_group: type[FeatureGroup], options: Options) -> None:
+    """Refuse a self-set pointer-key credential on a group that is not that source; never names the value."""
+    # Function-local: avoids an import cycle through the source feature group module.
+    from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
+
+    sources = concrete_source_groups()
+    for key, value in [*options.group.items(), *options.context.items()]:
+        source = sources.get(key)
+        if source is None or not options.is_own(key):
+            continue
+        hit = _credential_hit(value, {})
+        if is_nominal_subclass(feature_group, source):
+            continue
+        if hit is None:
+            continue
+        what = hit or "credential"
+        holder = what if type(value).__name__ == what else f"{type(value).__name__} holding a {what}"
+        raise _refuse(
+            f"Option '{key}' holds a {holder} but {feature_group.__name__} is not the source group {key}, so the "
+            f"credential would reach a group that never reads it. Register the credential in the "
+            f"DataAccessCollection and name its handle in an option declared with credential_handle_spec."
+        )
+
+
+def _missing_sentence(feature_group: type[FeatureGroup], key: str, options: Options) -> str:
+    mapping = feature_group.PROPERTY_MAPPING or {}
+    candidates = [name for name in [*options.group, *options.context] if name not in mapping]
+    close = get_close_matches(key, candidates, n=1, cutoff=0.8)
+    hint = f" (did you mean '{close[0]}'?)" if close else ""
+    return f"{feature_group.__name__} requires credential handle option '{key}', which is not set{hint}."
+
+
+def missing_credential_handle_keys(feature_group: type[FeatureGroup], options: Options) -> tuple[str, ...]:
+    """The group's declared handle keys that are required and absent from the options."""
     # Function-local: avoids an import cycle through the feature chain parser.
     from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 
     keys = credential_handle_keys(feature_group)
     if not keys:
-        return None
+        return ()
     mapping = feature_group.PROPERTY_MAPPING or {}
     absent = FeatureChainParser._name_path_missing_required_keys(feature_group.options_with_defaults(options), mapping)
-    missing = [key for key in absent if key in keys]
-    if not missing:
-        return None
-    candidates = [key for key in [*options.group, *options.context] if key not in mapping]
-    sentences = []
-    for key in missing:
-        close = get_close_matches(key, candidates, n=1, cutoff=0.8)
-        hint = f" (did you mean '{close[0]}'?)" if close else ""
-        sentences.append(f"{feature_group.__name__} requires credential handle option '{key}', which is not set{hint}.")
-    return _refuse(" ".join(sentences))
+    return tuple(key for key in absent if key in keys)
+
+
+def missing_credential_handle_abort(
+    feature_group: type[FeatureGroup], options: Options, missing: tuple[str, ...]
+) -> ValueError:
+    """The marked abort for absent required handle keys, naming a close undeclared option key."""
+    return _refuse(" ".join(_missing_sentence(feature_group, key, options) for key in missing))
 
 
 def validate_credential_handles(
@@ -271,5 +324,7 @@ def validate_credential_handles(
             )
     for key, handle in _declared(feature_group, options).items():
         if handle is None:
+            if keys[key].default is NO_DEFAULT:
+                raise _refuse(_missing_sentence(feature_group, key, options))
             continue
         _check_one(feature_group, key, keys[key], handle, dac)

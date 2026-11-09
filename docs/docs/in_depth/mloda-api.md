@@ -115,8 +115,8 @@ save and load modes across calls; keys must be artifact inputs of the plan (`ses
 
 `run(api_data=...)` needs the same set keys and the same column names per set as `prepare()` (order may differ); otherwise it raises a `ValueError` before the run starts. Each set must be a mapping of column to values. A set whose step loads natively as a dict must stay a dict of lists.
 
-One prepared session may be shared by threads. Each `run()` returns its own results, `artifacts` and `failed_rows`
-(`stream.artifacts` and `stream.failed_rows` are complete once the stream is exhausted), and the session keeps no
+One prepared session may be shared by threads. Each `run()` returns its own results, `artifacts`, `failed_rows` and `step_durations`
+(`stream.artifacts`, `stream.failed_rows` and `stream.step_durations` are complete once the stream is exhausted), and the session keeps no
 per-run state. Extender hooks of concurrent runs may run concurrently. Connection objects in the `DataAccessCollection` are shared by concurrent runs. A run that raises returns nothing, so its
 artifacts are not readable. The prepared plan is shared by every run and frozen: a write to its steps, FeatureSets, Features or Options from `calculate_feature` raises `FrozenPlanError`; per-run values go through `api_data` or `run(artifacts=...)`. The plan holds its own copies of the requested Features, so planning never writes into the caller's Feature objects.
 
@@ -175,6 +175,17 @@ for step in results.plan:
 `RunResult.frame_for(feature)` returns the frame that holds a requested feature, matched by name, or by a `Feature` whose group options (and pinned compute framework) are a subset of the step's; the closest step wins. It raises `ValueError` if none or several match (the error notes a feature that was computed but not requested).
 
 `run_id` and `plan_id` on `RunResult` and `ResultStream` (from `run_all`, `stream_all`, `run()` and `stream_run()`) are the run's `HookContext.run_id` and `plan_id`, so a result can be matched to the records extenders wrote for its run; a `ResultStream` has them before its first element.
+
+`step_durations` on `RunResult` and `ResultStream` (from `run_all`, `stream_all`, `run()` and `stream_run()`) holds one `StepDuration(feature_group, step_uuid, duration_seconds)` per feature group step that completed `calculate_feature`, in the order the steps finished. A group can appear more than once; `step_uuid` is `PlanStep.step_uuid`, so join on it to tell steps apart. The field is provisional and may grow into a broader per-step metrics record, so read fields by name.
+
+It times the `calculate_feature` call only, not a `FEATURE_GROUP_CALCULATE_FEATURE` extender's own time, filters, transforms or joins. A nested `INPUT_DATA_LOAD` counts (with its extenders); a file the framework reads after a source group returned an `InputDataDescriptor` does not. A lazy framework measures building the frame, not executing it. A calculate extender that returns without calling `func` leaves no entry, and one that calls `func` more than once reports its last successful call.
+
+```python
+budget_seconds = 5.0
+assert results.step_durations
+for entry in results.step_durations:
+    assert entry.duration_seconds < budget_seconds, f"{entry.feature_group} took {entry.duration_seconds:.3f}s"
+```
 
 To pin a resolved plan, see [Plan Lock](plan-lock.md).
 

@@ -41,6 +41,8 @@ import pytest
 # with the ``mloda`` mlodaAPI alias imported below.
 import mloda.user as mloda_user
 from mloda.core.api.request import Engine
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.provider import ComputeFramework, FeatureSet, DataCreatorFeatureGroup, PropertySpec
 from mloda.user import Feature, Options, ParallelizationMode, PlanStep, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -84,6 +86,94 @@ class RunResultProbe(DataCreatorFeatureGroup):
 
 
 _PROBE_PLUGINS = PluginCollector.enabled_feature_groups({RunResultProbe})
+
+
+class RunResultSleepProbe(DataCreatorFeatureGroup):
+    """Root source whose calculate_feature sleeps a short, fixed time."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"run_result_sleep_value"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        time.sleep(_SLEEP_SECONDS)
+        return pd.DataFrame({"run_result_sleep_value": [1]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+_SLEEP_SECONDS = 0.05
+_SLEEP_LOWER_BOUND = 0.04
+_SLEEP_PLUGINS = PluginCollector.enabled_feature_groups({RunResultSleepProbe})
+
+
+def _run_sleep(mode: ParallelizationMode = ParallelizationMode.SYNC, extenders: set[Extender] | None = None) -> Any:
+    return mlodaAPI.run_all(
+        ["run_result_sleep_value"],
+        compute_frameworks=[PandasDataFrame],
+        parallelization_modes={mode},
+        plugin_collector=_SLEEP_PLUGINS,
+        function_extender=extenders,
+    )
+
+
+class _CalcExtender(Extender):
+    """Calculate-hook extender with an optional pre-sleep, a post-call duration write, and a skip switch."""
+
+    def __init__(self, pre_sleep: float = 0.0, write_duration: float | None = None, call_func: bool = True) -> None:
+        self.priority = 100
+        self.pre_sleep = pre_sleep
+        self.write_duration = write_duration
+        self.call_func = call_func
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        time.sleep(self.pre_sleep)
+        if not self.call_func:
+            return pd.DataFrame({"run_result_sleep_value": [1]})
+        result = func(*args, **kwargs)
+        if self.write_duration is not None:
+            context = HookContext.current()
+            assert context is not None
+            context.duration_seconds = self.write_duration
+        return result
+
+
+class _LoadOnlyExtender(Extender):
+    """Wraps only INPUT_DATA_LOAD, so the calculate hook has no extender."""
+
+    def __init__(self) -> None:
+        self.priority = 100
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_LOAD}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
+class RunResultNestedOuter(DataCreatorFeatureGroup):
+    """Outer source that runs the sleeping probe inside its own calculate_feature."""
+
+    inner_durations: list[Any] = []
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"run_result_nested_outer_value"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        cls.inner_durations.append(_run_sleep().step_durations)
+        return pd.DataFrame({"run_result_nested_outer_value": [1]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
 
 
 class RunResultOrderProbe(DataCreatorFeatureGroup):
@@ -201,7 +291,7 @@ class TestRunResultPlan:
 
         assert results.plan == results.plan
 
-    @pytest.mark.parametrize("name", ["plan", "run_id", "plan_id"])
+    @pytest.mark.parametrize("name", ["plan", "run_id", "plan_id", "step_durations"])
     def test_plan_and_ids_are_read_only(self, name: str) -> None:
         results = _run_all()
 
@@ -272,6 +362,78 @@ class TestRunResultArtifacts:
         loaded = pickle.loads(pickle.dumps(RunResult([], [], artifacts={"a": {"b": 1}})))  # nosec B301
 
         assert loaded.artifacts == {"a": {"b": 1}}
+
+
+class TestRunResultStepDurations:
+    """One StepDuration per feature group step that completed calculate_feature, timed around that call only."""
+
+    def test_step_durations_default_to_an_empty_tuple(self) -> None:
+        from mloda.user import RunResult
+
+        assert RunResult([], []).step_durations == ()
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    def test_one_entry_per_step_with_plan_uuid_and_lower_bound(self, mode: ParallelizationMode) -> None:
+        from mloda.user import StepDuration
+
+        results = _run_sleep(mode)
+
+        assert isinstance(results.step_durations, tuple)
+        [entry] = results.step_durations
+        assert isinstance(entry, StepDuration)
+        assert entry.feature_group == RunResultSleepProbe.get_class_name()
+        [step] = [s for s in results.plan if s.step_kind == "compute"]
+        assert entry.step_uuid == step.step_uuid
+        assert entry.duration_seconds >= _SLEEP_LOWER_BOUND
+
+    def test_prepared_session_runs_do_not_accumulate(self) -> None:
+        session = mloda.prepare(
+            ["run_result_sleep_value"],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_SLEEP_PLUGINS,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+        first = session.run(parallelization_modes={ParallelizationMode.SYNC})
+        second = session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert len(first.step_durations) == 1
+        assert len(second.step_durations) == 1
+        assert second.step_durations[0].duration_seconds >= _SLEEP_LOWER_BOUND
+
+    def test_extender_own_time_is_not_counted(self) -> None:
+        [entry] = _run_sleep(extenders={_CalcExtender(pre_sleep=1.0)}).step_durations
+
+        assert entry.duration_seconds < 1.0
+
+    def test_extender_cannot_overwrite_the_reported_value(self) -> None:
+        [entry] = _run_sleep(extenders={_CalcExtender(write_duration=999)}).step_durations
+
+        assert entry.duration_seconds >= _SLEEP_LOWER_BOUND
+        assert entry.duration_seconds < 999
+
+    def test_present_without_a_calculate_extender(self) -> None:
+        [entry] = _run_sleep(extenders={_LoadOnlyExtender()}).step_durations
+
+        assert entry.feature_group == RunResultSleepProbe.get_class_name()
+        assert entry.duration_seconds >= _SLEEP_LOWER_BOUND
+
+    def test_extender_that_skips_func_leaves_no_entry(self) -> None:
+        assert _run_sleep(extenders={_CalcExtender(call_func=False)}).step_durations == ()
+
+    def test_nested_run_is_not_counted_in_the_outer_result(self) -> None:
+        RunResultNestedOuter.inner_durations.clear()
+
+        results = mlodaAPI.run_all(
+            ["run_result_nested_outer_value"],
+            compute_frameworks=[PandasDataFrame],
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=PluginCollector.enabled_feature_groups({RunResultNestedOuter, RunResultSleepProbe}),
+        )
+
+        assert [d.feature_group for d in results.step_durations] == [RunResultNestedOuter.get_class_name()]
+        [inner] = RunResultNestedOuter.inner_durations
+        assert [d.feature_group for d in inner] == [RunResultSleepProbe.get_class_name()]
 
 
 class TestSinglePlanningPass:
@@ -358,18 +520,20 @@ class TestStreamEarlyClose:
 
 
 class TestResultStreamArtifactsAndFailedRows:
-    """ResultStream.artifacts and failed_rows are empty until the stream is exhausted or closed."""
+    """ResultStream.artifacts, failed_rows and step_durations are empty until the stream is exhausted or closed."""
 
     def test_defaults_before_consumption_and_after_exhaustion(self) -> None:
         stream = _stream_all()
 
         assert stream.artifacts == {}
         assert stream.failed_rows == ()
+        assert stream.step_durations == ()
 
         list(stream)
 
         assert stream.artifacts == {}
         assert stream.failed_rows == ()
+        assert len(stream.step_durations) == 2
 
     def test_readable_after_early_close(self) -> None:
         stream = _stream_all(_TWO_GROUP_FEATURES)
@@ -379,6 +543,7 @@ class TestResultStreamArtifactsAndFailedRows:
 
         assert isinstance(stream.artifacts, dict)
         assert stream.failed_rows == ()
+        assert len(stream.step_durations) >= 1
 
     def test_properties_are_read_only(self) -> None:
         stream = _stream_all()
@@ -387,6 +552,8 @@ class TestResultStreamArtifactsAndFailedRows:
             stream.artifacts = {}
         with pytest.raises(AttributeError):
             stream.failed_rows = ()
+        with pytest.raises(AttributeError):
+            stream.step_durations = ()
 
     def test_stream_run_exposes_them_and_session_does_not(self) -> None:
         session = mloda.prepare(_CHAINED_FEATURES, compute_frameworks=[PandasDataFrame], plugin_collector=_PLUGINS)
@@ -411,6 +578,28 @@ class TestPublicExports:
         assert ResultStream is ModuleResultStream
         assert "RunResult" in mloda_user.__all__
         assert "ResultStream" in mloda_user.__all__
+
+    # The API is provisional: when this fails because the shape changed, update
+    # docs/docs/in_depth/mloda-api.md and the registry testing guide example.
+    def test_step_duration_is_exported_and_a_frozen_dataclass(self) -> None:
+        from mloda.core.abstract_plugins.components.step_duration import StepDuration as ModuleStepDuration
+        from mloda.user import ResultStream, RunResult, StepDuration
+
+        msg = "StepDuration changed: update docs/docs/in_depth/mloda-api.md and the registry testing guide example"
+
+        assert StepDuration is ModuleStepDuration
+        assert "StepDuration" in mloda_user.__all__
+        assert dataclasses.is_dataclass(StepDuration)
+        assert [f.name for f in dataclasses.fields(StepDuration)] == [
+            "feature_group",
+            "step_uuid",
+            "duration_seconds",
+        ], msg
+        for cls in (RunResult, ResultStream):
+            assert isinstance(getattr(cls, "step_durations"), property), msg
+        entry = StepDuration("g", uuid4(), 0.1)
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            entry.duration_seconds = 1.0  # type: ignore[misc]
 
     def test_entry_points_return_the_exported_classes(self) -> None:
         from mloda.user import ResultStream, RunResult
@@ -451,6 +640,8 @@ class TestRunResultIsPlainData:
         assert results.run_id is not None
         assert loaded.run_id == results.run_id
         assert loaded.plan_id == results.plan_id
+        assert results.step_durations
+        assert loaded.step_durations == results.step_durations
 
     def test_deepcopy_preserves_content(self) -> None:
         results = _run_all()

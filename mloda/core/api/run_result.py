@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
+from mloda.core.abstract_plugins.components.step_duration import StepDuration
 from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
 from mloda.core.abstract_plugins.components.credential_handle import credential_handle_keys
@@ -35,9 +36,11 @@ class RunResult(list[Any]):
         connection_handles: dict[int, str] | None = None,
         failed_rows: tuple[FailedRows, ...] = (),
         artifacts: dict[str, Any] | None = None,
+        step_durations: tuple[StepDuration, ...] = (),
     ) -> None:
         super().__init__(results)
         self._failed_rows = failed_rows
+        self._step_durations = step_durations
         self._artifacts: dict[str, Any] = {} if artifacts is None else artifacts
         self._connection_handles = connection_handles or {}
         self._plan = plan
@@ -49,6 +52,11 @@ class RunResult(list[Any]):
     def failed_rows(self) -> tuple[FailedRows, ...]:
         """Rows feature groups reported as valueless in this run; empty when none."""
         return self._failed_rows
+
+    @property
+    def step_durations(self) -> tuple[StepDuration, ...]:
+        """calculate_feature seconds per completed feature group step, in completion order."""
+        return self._step_durations
 
     @property
     def artifacts(self) -> dict[str, Any]:
@@ -151,10 +159,11 @@ def _redacted(group: Any) -> dict[Any, Any]:
 
 @dataclass
 class _StreamOutcome:
-    """Per-run artifacts and failed rows, filled when the stream's runner context exits."""
+    """Per-run artifacts, failed rows and step durations, filled when the stream's runner context exits."""
 
     artifacts: dict[str, Any] = field(default_factory=dict)
     failed_rows: tuple[FailedRows, ...] = ()
+    step_durations: tuple[StepDuration, ...] = ()
 
 
 class ResultStream(Generator[Any, None, None]):
@@ -184,6 +193,11 @@ class ResultStream(Generator[Any, None, None]):
     def failed_rows(self) -> tuple[FailedRows, ...]:
         """Valueless rows reported by the run; empty until the stream is exhausted or closed."""
         return self._outcome.failed_rows
+
+    @property
+    def step_durations(self) -> tuple[StepDuration, ...]:
+        """calculate_feature seconds per completed step; empty until the stream is exhausted or closed."""
+        return self._outcome.step_durations
 
     @property
     def run_id(self) -> str | None:

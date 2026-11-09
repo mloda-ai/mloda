@@ -16,6 +16,7 @@ from mloda.core.api.request import mlodaAPI
 # Resolved execution plan
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.api.run_result import ResultStream, RunResult
+from mloda.core.abstract_plugins.components.step_duration import StepDuration
 
 # Features
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -86,6 +87,7 @@ __all__ = [
     "PlanStep",
     "RunResult",
     "ResultStream",
+    "StepDuration",
     # Features
     "Feature",
     "Features",

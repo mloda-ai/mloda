@@ -1,5 +1,7 @@
 import contextlib
+import functools
 import pickle  # nosec B403
+import time
 from abc import ABC
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
@@ -59,6 +61,19 @@ _registry: SubclassRegistry[type["ComputeFramework"]] = SubclassRegistry()
 _current_compute_framework: ContextVar["ComputeFramework | None"] = ContextVar(
     "_current_compute_framework", default=None
 )
+
+
+def _timed(method: Callable[..., Any], features: Any) -> Callable[..., Any]:
+    """Wrap ``method`` to stamp its wall-clock seconds on ``features`` after a successful return."""
+
+    @functools.wraps(method)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        start = time.perf_counter()
+        result = method(*args, **kwargs)
+        features._calculate_seconds = time.perf_counter() - start
+        return result
+
+    return wrapper
 
 
 def framework_rank_key(
@@ -1245,11 +1260,14 @@ class ComputeFramework(ABC):
         if isinstance(features, FeatureSet) and not features.prepared:
             features.materialize_option_defaults(feature_group)
 
+        method = readable(feature_group.calculate_feature)
+        if isinstance(features, FeatureSet):
+            method = _timed(method, features)
         try:
             return self._run_hook(
                 ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
                 feature_group,
-                readable(feature_group.calculate_feature),
+                method,
                 features,
             )
         except (CredentialReadRefused, CredentialFieldMissing):

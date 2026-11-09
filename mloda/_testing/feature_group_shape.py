@@ -13,18 +13,28 @@ from mloda._testing.suite import assert_passed
 from mloda._testing.typed_data import TypedTestData
 from mloda._testing.value_fit import value_fits
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.components.divergence import Divergence
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    ANY_OUTPUT_PART,
+    FeatureChainParser,
+)
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field_with_error
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.implementation import Implementation, current_implementations
+from mloda.core.abstract_plugins.implementation import (
+    Implementation,
+    current_implementations,
+    unallowed_variants,
+    variant_block_reason,
+)
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 
 _FOREIGN_NAME = "conformance_foreign_feature"
@@ -204,6 +214,35 @@ def _run(
     return safe_field_with_error(go, None)
 
 
+def _compared(columns: list[str], names: list[str]) -> list[tuple[str, str, frozenset[str]]]:
+    unique = list(dict.fromkeys(names))
+    found = []
+    for column in columns:
+        if column in unique:
+            found.append((column, column, frozenset[str]()))
+            continue
+        prefixed = [n for n in unique if column.startswith(f"{n}~")]
+        if prefixed:
+            name = max(prefixed, key=len)
+            found.append((column, name, frozenset({column[len(name) + 1 :]})))
+    return found
+
+
+def _written(
+    adapter: FrameworkAdapter, data: TypedTestData, result: Any, names: list[str]
+) -> list[tuple[str, str, frozenset[str]]]:
+    """The result columns mapped to a requested name; columns that came in with input_data never count."""
+    return _compared([c for c in adapter.column_names(result) if c not in data.types], names)
+
+
+def _concrete_parts(cls: type[FeatureGroup], name: str, base: Options) -> tuple[str, ...] | None:
+    """The declared output parts when they are a concrete tuple; None when undeclared or named at run time."""
+    if cls.split_output_part(name) is not None:
+        return None
+    parts, _ = safe_field_with_error(lambda: cls.output_parts(name, base), None)
+    return None if parts is None or ANY_OUTPUT_PART in parts else tuple(parts)
+
+
 def _declared_inputs(cls: type[FeatureGroup], names: list[str], base: Options) -> set[str]:
     if cls.input_features is FeatureGroup.input_features:
         return set()
@@ -224,10 +263,24 @@ def _expected_types(cls: type[FeatureGroup], names: list[str], base: Options) ->
 
 
 def _check_outputs(
-    cls: type[FeatureGroup], adapter: FrameworkAdapter, data: TypedTestData, names: list[str], result: Any
+    cls: type[FeatureGroup],
+    adapter: FrameworkAdapter,
+    data: TypedTestData,
+    names: list[str],
+    base: Options,
+    result: Any,
 ) -> list[str]:
     present = adapter.column_names(result)
-    failures = [f"outputs: '{n}' is missing from the result" for n in names if n not in present]
+    found = _written(adapter, data, result, names)
+    columns = {c for c, _, _ in found}
+    written = {n for _, n, _ in found}
+    failures = [f"outputs: '{n}' is missing from the result" for n in names if n not in written]
+    for name in names:
+        if name in columns:
+            continue
+        for part in _concrete_parts(cls, name, base) or ():
+            if f"{name}~{part}" not in columns:
+                failures.append(f"outputs: declared part '{name}~{part}' is missing from the result")
     if cls.replaces_rows():
         return failures
     for column, values in data.to_python_dict().items():
@@ -277,12 +330,23 @@ def _check_zero_rows(
     failures = []
     if adapter.row_count(out) != 0:
         failures.append(f"zero_rows: {adapter.row_count(out)} rows came back for zero input rows")
+    run_time = {n for n in names if _concrete_parts(cls, n, base) is None}
+
+    def named(frame: Any) -> list[str]:
+        columns = adapter.column_names(frame)
+        hidden = {c for c, n, parts in _compared(columns, names) if parts and n in run_time}
+        return sorted(c for c in columns if c not in hidden)
+
     columns = adapter.column_names(result)
-    if sorted(adapter.column_names(out)) != sorted(columns):
-        failures.append("zero_rows: column names differ from the run with rows")
+    out_columns = adapter.column_names(out)
+    if named(out) != named(result):
+        differing = sorted(c for c in set(named(out)) ^ set(named(result)) if _compared([c], names))
+        listed = f": {differing}" if differing else ""
+        failures.append(f"zero_rows: column names differ from the run with rows{listed}")
     elif adapter.capabilities.typed_columns:
-        for column in columns:
-            data_type = expected.get(column)
+        for column in (c for c in columns if c in out_columns):
+            mapped = _compared([column], names)
+            data_type = expected.get(mapped[0][1]) if mapped else None
             exact = None if data_type is None else adapter.has_type(result, column, data_type)
             if exact is False:
                 continue
@@ -337,30 +401,74 @@ def _check_determinism(
     again, error = _run(cls, adapter, data, names, base)
     if error is not None:
         return [f"determinism: second run raised: {error}"]
-    first, second = adapter.column_names(result), adapter.column_names(again)
-    return [
-        f"determinism: '{n}' differs between two runs"
-        for n in names
-        if n in first and n in second and not _same(adapter.column_values(result, n), adapter.column_values(again, n))
-    ]
+    first = {c for c, _, _ in _written(adapter, data, result, names)}
+    second = {c for c, _, _ in _written(adapter, data, again, names)}
+    failures = []
+    for column in sorted(first | second):
+        if column not in first or column not in second:
+            failures.append(f"determinism: '{column}' is written in only one of two runs")
+        elif not _same(adapter.column_values(result, column), adapter.column_values(again, column)):
+            failures.append(f"determinism: '{column}' differs between two runs")
+    return failures
 
 
-def _no_calculate_reason(cls: type[FeatureGroup]) -> str | None:
+def _not_applicable_reason(cls: type[FeatureGroup]) -> str | None:
+    if is_nominal_subclass(cls, SourceFeatureGroup):
+        return "not applicable to source groups"
     if inspect.getattr_static(cls, "calculate_feature") is inspect.getattr_static(FeatureGroup, "calculate_feature"):
         return "not applicable, the group has no calculate_feature"
     return None
 
 
-def _framework_gate_reason(cls: type[FeatureGroup], adapter: FrameworkAdapter) -> str | None:
+def _rule_reason(cls: type[FeatureGroup], adapter: FrameworkAdapter) -> str | None:
     framework = adapter.compute_framework()
     rule = cls.compute_framework_rule()
     if rule is not None and framework not in rule:
         return f"{framework.__name__} excluded by compute_framework_rule"
-    if not adapter.is_available():
-        return f"{framework.__name__} is not available"
-    if is_nominal_subclass(cls, OperationFeatureGroup) and _serving_implementation(cls, adapter) is None:
-        return f"no implementation of {cls.__name__} serves {framework.__name__}"
     return None
+
+
+def _availability_reason(adapter: FrameworkAdapter) -> str | None:
+    if not adapter.is_available():
+        framework = adapter.compute_framework()
+        return f"{framework.__name__} is not available"
+    return None
+
+
+def _no_implementation_reason(cls: type[FeatureGroup], adapter: FrameworkAdapter) -> str | None:
+    if is_nominal_subclass(cls, OperationFeatureGroup) and _serving_implementation(cls, adapter) is None:
+        return f"no implementation of {cls.__name__} serves {adapter.compute_framework().__name__}"
+    return None
+
+
+def _framework_gate_reason(cls: type[FeatureGroup], adapter: FrameworkAdapter) -> str | None:
+    return _rule_reason(cls, adapter) or _availability_reason(adapter) or _no_implementation_reason(cls, adapter)
+
+
+def _route_block(
+    cls: type[FeatureGroup], adapter: FrameworkAdapter, name: str, options: Options
+) -> tuple[str | None, str | None]:
+    """(block, raised): why the planner would not route name to the adapter's framework; a raising hook is not a block."""
+    framework = adapter.compute_framework()
+    matched = options._fork()
+    split = probe_match_criteria(cls, name, matched, resolve_parts=True).part
+    hook_name, part = split if split is not None else (name, None)
+    routed, error = safe_field_with_error(
+        lambda: cls.supports_compute_framework(hook_name, matched, framework, part=part), True
+    )
+    if error is not None:
+        return None, f"'{name}' on {cls.__name__}: supports_compute_framework or accepts raised: {error}"
+    if not routed:
+        return f"'{name}' is not routed to {framework.__name__} by {cls.__name__}", None
+    impl = _serving_implementation(cls, adapter)
+    found, error = safe_field_with_error(
+        lambda: unallowed_variants(cls, impl, hook_name, matched, part), tuple[Divergence, ...]()
+    )
+    if error is not None:
+        return None, f"'{name}' on {cls.__name__}: variant check raised: {error}"
+    if found:
+        return f"'{name}': {variant_block_reason(cls, {framework: found}, {framework: impl}, matched)}", None
+    return None, None
 
 
 def _input_problems(cls: type[FeatureGroup], names: list[str], base: Options, data: TypedTestData) -> list[str]:
@@ -377,20 +485,47 @@ def _run_checks(
     data: TypedTestData,
     adapter: FrameworkAdapter,
     notes: list[str],
+    require_run: bool,
 ) -> list[str]:
-    reason = _no_calculate_reason(cls) or _framework_gate_reason(cls, adapter)
+    failures: list[str] = []
+
+    def note_or_fail(reason: str) -> None:
+        if require_run:
+            failures.append(f"run: {reason}")
+        else:
+            notes.append(f"run: {reason}")
+
+    reason = _not_applicable_reason(cls) or _availability_reason(adapter)
     if reason is not None:
         notes.append(f"run: {reason}")
         return []
+    reason = _rule_reason(cls, adapter) or _no_implementation_reason(cls, adapter)
+    if reason is not None:
+        note_or_fail(reason)
+        return failures
+    remaining = []
+    for name in names:
+        block, raised = _route_block(cls, adapter, name, base)
+        if raised is not None:
+            failures.append(f"run: {raised}")
+        elif block is not None:
+            note_or_fail(block)
+        else:
+            remaining.append(name)
+    if not remaining:
+        return failures
+    names = remaining
     problems = _input_problems(cls, names, base, data)
     if problems:
-        return [f"outputs: {p}" for p in problems]
+        return failures + [f"outputs: {p}" for p in problems]
     result, error = _run(cls, adapter, data, names, base)
     if error is not None:
-        return [f"outputs: run raised: {error}"]
-    failures = _check_outputs(cls, adapter, data, names, result)
+        return [*failures, f"outputs: run raised: {error}"]
+    failures += _check_outputs(cls, adapter, data, names, base, result)
     expected = _expected_types(cls, names, base)
-    failures += _check_types(adapter, expected, result, notes)
+    # A feature's declared type applies to each of its part columns.
+    typed = {column: expected[name] for column, name, _ in _written(adapter, data, result, names) if name in expected}
+    failures += _check_types(adapter, typed, result, notes)
     if data.types:
         failures += _check_zero_rows(cls, adapter, data, names, base, result, expected)
         failures += _check_error_values(cls, adapter, data, names, base, notes)
@@ -406,8 +541,12 @@ def check_feature_group_shape(
     *,
     input_data: TypedTestData | None = None,
     adapter: FrameworkAdapter | None = None,
+    require_run: bool = False,
 ) -> CheckResult:
-    """Check a FeatureGroup's match contract and, given input_data, its run; a raising matcher is a non-match."""
+    """Check a FeatureGroup's match contract and, given input_data, its run; a raising matcher is a non-match.
+
+    With require_run, a rule exclusion, a missing serving Implementation or a route block is a failure instead of a note.
+    """
     base = base_options if base_options is not None else _base_options(cls)
     if base is None:
         failures = ["names: cannot build a matching request; declare allowed_values or default, or pass base_options"]
@@ -424,7 +563,7 @@ def check_feature_group_shape(
         notes.append("run: not run (no input_data); pass input_data to check outputs, types and determinism")
     else:
         run_names = declared or [cls.get_class_name()]
-        failures += _run_checks(cls, run_names, base, input_data, adapter or PythonDictAdapter(), notes)
+        failures += _run_checks(cls, run_names, base, input_data, adapter or PythonDictAdapter(), notes, require_run)
     return CheckResult(check="feature_group_shape", subject=cls.__name__, failures=tuple(failures), notes=tuple(notes))
 
 
@@ -434,6 +573,9 @@ def assert_feature_group_shape(
     *,
     input_data: TypedTestData | None = None,
     adapter: FrameworkAdapter | None = None,
+    require_run: bool = True,
 ) -> None:
-    """Fail the running pytest test if the shape check reports failures."""
-    assert_passed(check_feature_group_shape(cls, base_options, input_data=input_data, adapter=adapter))
+    """Fail the running pytest test if the shape check reports failures; require_run defaults to True here."""
+    assert_passed(
+        check_feature_group_shape(cls, base_options, input_data=input_data, adapter=adapter, require_run=require_run)
+    )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable
 from typing import Any
 
@@ -25,7 +26,8 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
-from mloda.provider import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.divergence import Cause, Divergence, DivergenceKind
+from mloda.provider import DefaultOptionKeys, SubtypeDeclaration
 from mloda.user.python_dict import PythonDictFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.environment.installed_packages_feature_group import (
@@ -83,18 +85,72 @@ def _double_into(data: Any, out: str, src: str) -> Any:
     return data.append_column(out, pc.multiply(data[src], 2))
 
 
-def make_run_group(kind: str = "ok", rule: set[type[ComputeFramework]] | None = None) -> type[FeatureGroup]:
+_PART_KINDS = (
+    "parts_ok",
+    "parts_count_dependent",
+    "parts_never_b",
+    "nondeterministic_part",
+    "part_in_one_run",
+    "plain_in_one_run",
+    "wrong_type_part",
+    "plain_only",
+    "pivot_extra",
+)
+
+
+def _write_parts(kind: str, data: dict[str, list[Any]], counter: list[int]) -> dict[str, list[Any]]:
+    rows = len(data["rg_src"])
+    doubled = [v * 2 for v in data["rg_src"]]
+    counter[0] += 1
+    later_clean_run = bool(rows) and counter[0] > 1 and data["rg_label"][0] == "alpha-secret"
+    if kind == "parts_ok":
+        data["rg_out~a"], data["rg_out~b"] = doubled, doubled
+    elif kind == "parts_count_dependent":
+        data["rg_out~a"] = doubled
+        if rows:
+            data["rg_out~b"] = doubled
+    elif kind == "parts_never_b":
+        data["rg_out~a"] = doubled
+    elif kind == "nondeterministic_part":
+        data["rg_out~a"] = [counter[0]] * rows
+    elif kind == "part_in_one_run":
+        data["rg_out~a"] = doubled
+        if not later_clean_run:
+            data["rg_out~b"] = doubled
+    elif kind == "plain_in_one_run":
+        if not later_clean_run:
+            data["rg_out"] = doubled
+    elif kind == "wrong_type_part":
+        data["rg_out~a"] = [str(v) for v in doubled]
+    elif kind == "plain_only":
+        data["rg_out"] = doubled
+    elif kind == "pivot_extra":
+        data["rg_out"] = doubled
+        if rows:
+            data[f"pivot_{data['rg_label'][0]}"] = doubled
+    return data
+
+
+def make_run_group(
+    kind: str = "ok",
+    rule: set[type[ComputeFramework]] | None = None,
+    output_parts: tuple[str, ...] | None = None,
+    names: frozenset[str] = frozenset({"rg_out"}),
+) -> type[FeatureGroup]:
     """A group over input rg_src (INT64) and rg_label (STRING) that writes rg_out; kind injects one defect."""
     counter = [0]
 
     class RunGroup(FeatureGroup):
+        if output_parts is not None:
+            OUTPUT_PARTS = output_parts
+
         @classmethod
         def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
             return rule
 
         @classmethod
         def feature_names_supported(cls) -> set[str]:
-            return {"rg_out"}
+            return set(names)
 
         def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return {Feature("rg_src"), Feature("rg_label")}
@@ -113,7 +169,13 @@ def make_run_group(kind: str = "ok", rule: set[type[ComputeFramework]] | None = 
 
         @classmethod
         def calculate_feature(cls, data: Any, features: Any) -> Any:
+            if kind in _PART_KINDS:
+                return _write_parts(kind, data, counter)
             if kind == "drops_output":
+                return data
+            if kind == "writes_names":
+                for written in sorted(names):
+                    data[written] = [v * 2 for v in data["rg_src"]]
                 return data
             if kind == "narrow_type":
                 if hasattr(data, "iloc"):
@@ -201,11 +263,23 @@ def make_run_group(kind: str = "ok", rule: set[type[ComputeFramework]] | None = 
     return RunGroup
 
 
-def make_operation_group() -> type[FeatureGroup]:
+def make_operation_group(
+    names: frozenset[str] = frozenset({"rg_out"}),
+    variants: frozenset[str] = frozenset(),
+    subtypes: bool = False,
+) -> type[FeatureGroup]:
     class OperationGroup(OperationFeatureGroup):
+        if variants:
+            VARIANTS = variants
+        if subtypes:
+            SUBTYPES = SubtypeDeclaration(key="op_kind")
+            PROPERTY_MAPPING = {
+                "op_kind": PropertySpec("Kind.", allowed_values=("sum", "median"), strict_validation=True)
+            }
+
         @classmethod
         def feature_names_supported(cls) -> set[str]:
-            return {"rg_out"}
+            return set(names)
 
         def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return {Feature("rg_src"), Feature("rg_label")}
@@ -577,6 +651,9 @@ def test_requested_name_already_in_input_data_fails_outputs() -> None:
         ("iceberg_scan", "zero_rows:", IcebergAdapter),
         ("leaks_cell_in_error", "error_values:", PythonDictAdapter),
         ("nondeterministic", "determinism:", PythonDictAdapter),
+        ("nondeterministic_part", "determinism:", PythonDictAdapter),
+        ("part_in_one_run", "determinism:", PythonDictAdapter),
+        ("plain_in_one_run", "determinism:", PythonDictAdapter),
     ],
 )
 def test_broken_run_group_fails_only_its_sub_check(kind: str, prefix: str, adapter_cls: type[Any]) -> None:
@@ -608,20 +685,35 @@ def test_installed_packages_runs_on_pandas() -> None:
     assert result.failures == (), result.failures
 
 
-def test_source_input_feature_run_is_not_applicable() -> None:
+def _source_input_feature_case() -> tuple[type[FeatureGroup], Options, str, bool]:
     base = Options(group={DefaultOptionKeys.in_features: frozenset(["src_feature"])})
+    return SourceInputFeature, base, "not applicable", True
+
+
+def _toy_source_case() -> tuple[type[FeatureGroup], Options, str, bool]:
+    pytest.importorskip("pyarrow")
+    from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
+
+    return ToySourceFG, Options(), "not applicable to source groups", False
+
+
+@pytest.mark.parametrize("case", [_source_input_feature_case, _toy_source_case], ids=["source_input", "toy_source"])
+def test_source_group_run_is_not_applicable(case: Callable[[], tuple[type[FeatureGroup], Options, str, bool]]) -> None:
+    group, base, note, must_pass = case()
     result = check_feature_group_shape(
-        SourceInputFeature, base_options=base, input_data=TypedTestData({}), adapter=PythonDictAdapter()
+        group, base_options=base, input_data=TypedTestData({}), adapter=PythonDictAdapter()
     )
-    assert result.passed, result.failures
-    assert any("not applicable" in n for n in result.notes), result.notes
+    if must_pass:
+        assert result.passed, result.failures
+    assert any(n.startswith("run:") and note in n for n in result.notes), result.notes
+    assert not any(f.startswith("outputs:") for f in result.failures), result.failures
 
 
 def _serve_with(
     make_implementation: Callable[..., type[Implementation[Any]]], group: type[FeatureGroup], kind: str
-) -> None:
+) -> type[Implementation[Any]]:
     run_group = make_run_group(kind)
-    make_implementation(
+    return make_implementation(
         group, PythonDictFramework, lambda _, data, features: run_group.calculate_feature(data, features)
     )
 
@@ -668,6 +760,11 @@ def test_operation_group_without_serving_implementation_notes_run_skipped(
     assert f"run: no implementation of {group.__name__} serves PythonDictFramework" in result.notes, result.notes
 
 
+class _UnavailableAdapter(PythonDictAdapter):
+    def is_available(self) -> bool:
+        return False
+
+
 def test_framework_excluded_by_rule_notes_run_skipped() -> None:
     group = make_run_group("drops_output", rule={PandasDataFrame})
     result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
@@ -676,12 +773,252 @@ def test_framework_excluded_by_rule_notes_run_skipped() -> None:
 
 
 def test_unavailable_adapter_notes_run_skipped() -> None:
-    class UnavailableAdapter(PythonDictAdapter):
-        def is_available(self) -> bool:
-            return False
-
     result = check_feature_group_shape(
-        make_run_group("drops_output"), input_data=_run_data(), adapter=UnavailableAdapter()
+        make_run_group("drops_output"), input_data=_run_data(), adapter=_UnavailableAdapter()
     )
     assert result.failures == (), result.failures
     assert "run: PythonDictFramework is not available" in result.notes, result.notes
+
+
+@pytest.mark.parametrize("parts", [None, ("*",), ("a", "b")])
+def test_part_writing_run_group_conforms(parts: tuple[str, ...] | None) -> None:
+    group = make_run_group("parts_ok", output_parts=parts)
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert result.failures == (), result.failures
+
+
+@pytest.mark.parametrize("parts", [None, ("*",)])
+def test_run_time_part_count_passes_zero_rows(parts: tuple[str, ...] | None) -> None:
+    group = make_run_group("parts_count_dependent", output_parts=parts)
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert result.failures == (), result.failures
+
+
+@pytest.mark.parametrize(
+    ("kind", "prefix", "phrase"),
+    [
+        ("parts_count_dependent", "zero_rows:", "rg_out~b"),
+        ("parts_never_b", "outputs:", "declared part 'rg_out~b' is missing from the result"),
+    ],
+)
+def test_concrete_declared_parts_fail_only_their_sub_check(kind: str, prefix: str, phrase: str) -> None:
+    group = make_run_group(kind, output_parts=("a", "b"))
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert not result.passed
+    assert all(f.startswith(prefix) for f in result.failures), result.failures
+    assert any(phrase in f for f in result.failures), result.failures
+
+
+def test_wrong_typed_part_failure_names_the_column() -> None:
+    result = check_feature_group_shape(make_run_group("wrong_type_part"), input_data=_run_data())
+    assert any("rg_out~a" in f for f in result.failures), result.failures
+    assert all(f.startswith("type:") for f in result.failures), result.failures
+
+
+def test_declared_name_with_tilde_has_no_parts_of_its_own() -> None:
+    group = make_run_group("writes_names", output_parts=("a", "b"), names=frozenset({"rg~a", "rg~b"}))
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert not any("declared part" in f for f in result.failures), result.failures
+
+
+def test_plain_column_without_part_columns_satisfies_concrete_parts() -> None:
+    group = make_run_group("plain_only", output_parts=("a", "b"))
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert not any(f.startswith("outputs:") for f in result.failures), result.failures
+
+
+def test_zero_rows_failure_does_not_echo_unmapped_columns() -> None:
+    result = check_feature_group_shape(
+        make_run_group("pivot_extra"), input_data=_run_data(), adapter=PythonDictAdapter()
+    )
+    assert any(f.startswith("zero_rows:") for f in result.failures), result.failures
+    assert not any("alpha-secret" in f for f in result.failures), result.failures
+
+
+def test_input_column_with_a_part_name_cannot_fake_an_output() -> None:
+    data = TypedTestData(
+        {
+            "rg_src": (DataType.INT64, [1, 2, 3]),
+            "rg_label": (DataType.STRING, ["alpha-secret", "beta-secret", "gamma-secret"]),
+            "rg_out~x": (DataType.STRING, ["x", "y", "z"]),
+        }
+    )
+    result = check_feature_group_shape(make_run_group("drops_output"), input_data=data, adapter=PythonDictAdapter())
+    assert any(f.startswith("outputs:") and "rg_out" in f for f in result.failures), result.failures
+    assert not any(f.startswith("type:") for f in result.failures), result.failures
+
+
+def _decline(impl: type[Implementation[Any]], calls: list[tuple[str, str | None]], *, raises: bool = False) -> None:
+    def accepts(cls: Any, feature_name: str, options: Options, *, part: str | None = None) -> bool:
+        calls.append((feature_name, part))
+        if raises:
+            raise RuntimeError("accepts exploded")
+        return False
+
+    setattr(impl, "accepts", classmethod(accepts))
+
+
+def _recording(
+    make_implementation: Callable[..., type[Implementation[Any]]], group: type[FeatureGroup], ran: list[int]
+) -> type[Implementation[Any]]:
+    run_group = make_run_group("ok")
+
+    def calculate(_: Any, data: Any, features: Any) -> Any:
+        ran.append(1)
+        return run_group.calculate_feature(data, features)
+
+    return make_implementation(group, PythonDictFramework, calculate)
+
+
+VARIANT_RECORD = Divergence(kind=DivergenceKind.VARIANT, cause=Cause.BACKEND, variant="v", reason="variant changed")
+SUM = Options(group={"op_kind": "sum"})
+
+
+@pytest.mark.parametrize("how", ["accepts", "supported"])
+def test_declined_name_notes_run_skipped_and_does_not_run(
+    make_implementation: Callable[..., type[Implementation[Any]]], how: str
+) -> None:
+    group = make_operation_group(subtypes=True)
+    ran: list[int] = []
+    impl = _recording(make_implementation, group, ran)
+    if how == "accepts":
+        _decline(impl, [])
+    else:
+        setattr(impl, "supported", frozenset({"median"}))
+    result = check_feature_group_shape(group, SUM, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert result.failures == (), result.failures
+    notes = [n for n in result.notes if n.startswith("run:") and "rg_out" in n]
+    assert notes, result.notes
+    assert group.__name__ in notes[0] and "PythonDictFramework" in notes[0], notes
+    assert ran == []
+
+
+@pytest.mark.parametrize("require_run", [False, True])
+def test_raising_accepts_is_a_run_failure_and_does_not_run(
+    make_implementation: Callable[..., type[Implementation[Any]]], require_run: bool
+) -> None:
+    group = make_operation_group()
+    ran: list[int] = []
+    _decline(_recording(make_implementation, group, ran), [], raises=True)
+    result = check_feature_group_shape(
+        group, input_data=_run_data(), adapter=PythonDictAdapter(), require_run=require_run
+    )
+    assert any(f.startswith("run:") and "accepts exploded" in f for f in result.failures), result.failures
+    assert any(group.__name__ in f for f in result.failures), result.failures
+    assert ran == []
+
+
+def test_partial_decline_still_checks_the_other_name(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+) -> None:
+    group = make_operation_group(names=frozenset({"rg_a", "rg_b"}))
+
+    def accepts(cls: Any, feature_name: str, options: Options, *, part: str | None = None) -> bool:
+        return feature_name != "rg_a"
+
+    impl = make_implementation(group, PythonDictFramework, lambda _, data, features: data)
+    setattr(impl, "accepts", classmethod(accepts))
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert any(n.startswith("run:") and "rg_a" in n for n in result.notes), result.notes
+    assert any(f.startswith("outputs:") and "'rg_b'" in f for f in result.failures), result.failures
+    assert not any("'rg_a'" in f for f in result.failures), result.failures
+
+
+def test_unallowed_implementation_variant_notes_run_skipped_and_allowed_one_runs(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+) -> None:
+    group = make_operation_group(variants=frozenset({"v"}))
+    ran: list[int] = []
+    setattr(_recording(make_implementation, group, ran), "divergences", (VARIANT_RECORD,))
+    blocked = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert blocked.failures == (), blocked.failures
+    assert any(n.startswith("run:") and "allow_variants" in n for n in blocked.notes), blocked.notes
+    assert ran == []
+    allowing = Options(group={str(DefaultOptionKeys.allow_variants): "v"})
+    allowed = check_feature_group_shape(group, allowing, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert allowed.failures == (), allowed.failures
+    assert not any(n.startswith("run:") for n in allowed.notes), allowed.notes
+    assert ran != []
+
+
+def test_undeclared_part_name_reaches_accepts_whole(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+) -> None:
+    group = make_operation_group(names=frozenset({"rg_out~0"}))
+    calls: list[tuple[str, str | None]] = []
+    _decline(make_implementation(group, PythonDictFramework, lambda _, data, features: data), calls)
+    check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert ("rg_out~0", None) in calls, calls
+
+
+def _case_no_implementation(mi: Callable[..., type[Implementation[Any]]]) -> tuple[type[FeatureGroup], Any]:
+    return make_operation_group(), PythonDictAdapter()
+
+
+def _case_route_block(mi: Callable[..., type[Implementation[Any]]]) -> tuple[type[FeatureGroup], Any]:
+    group = make_operation_group()
+    _decline(_serve_with(mi, group, "ok"), [])
+    return group, PythonDictAdapter()
+
+
+def _case_rule_excluded(mi: Callable[..., type[Implementation[Any]]]) -> tuple[type[FeatureGroup], Any]:
+    return make_run_group("drops_output", rule={PandasDataFrame}), PythonDictAdapter()
+
+
+def _case_unavailable(mi: Callable[..., type[Implementation[Any]]]) -> tuple[type[FeatureGroup], Any]:
+    return make_run_group("drops_output"), _UnavailableAdapter()
+
+
+@pytest.mark.parametrize(
+    ("require_run", "case", "fails_when_required", "phrase"),
+    [
+        pytest.param(False, _case_no_implementation, True, "", id="no_implementation-optional"),
+        pytest.param(True, _case_no_implementation, True, "", id="no_implementation-required"),
+        pytest.param(False, _case_route_block, True, "", id="route_block-optional"),
+        pytest.param(True, _case_route_block, True, "", id="route_block-required"),
+        pytest.param(True, _case_rule_excluded, True, "compute_framework_rule", id="rule_excluded-required"),
+        pytest.param(True, _case_unavailable, False, "", id="unavailable-required"),
+    ],
+)
+def test_skipped_run_is_a_note_unless_required(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+    require_run: bool,
+    case: Callable[..., tuple[type[FeatureGroup], Any]],
+    fails_when_required: bool,
+    phrase: str,
+) -> None:
+    group, adapter = case(make_implementation)
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=adapter, require_run=require_run)
+    if require_run and fails_when_required:
+        assert any(f.startswith("run:") and phrase in f for f in result.failures), result.failures
+    else:
+        assert result.failures == (), result.failures
+        assert any(n.startswith("run:") for n in result.notes), result.notes
+
+
+@pytest.mark.parametrize(
+    "make",
+    [make_operation_group, functools.partial(make_run_group, "drops_output", {PandasDataFrame})],
+    ids=["no_implementation", "rule_excluded"],
+)
+def test_assert_fails_on_skipped_run_unless_run_not_required(make: Callable[[], type[FeatureGroup]]) -> None:
+    group = make()
+    with pytest.raises(pytest.fail.Exception) as excinfo:
+        assert_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert "run:" in str(excinfo.value)
+    assert_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter(), require_run=False)
+
+
+def test_encoding_feature_group_part_columns_are_found_on_pandas() -> None:
+    pytest.importorskip("pandas")
+    pytest.importorskip("sklearn")
+    from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
+    from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding  # noqa: F401
+
+    base = Options(
+        group={EncodingFeatureGroup.ENCODER_TYPE: "onehot", DefaultOptionKeys.in_features: frozenset(["cat"])}
+    )
+    data = TypedTestData({"cat": (DataType.STRING, ["a", "b", "c", "a"])})
+    result = check_feature_group_shape(EncodingFeatureGroup, base, input_data=data, adapter=PandasAdapter())
+    assert not any(f.startswith(("outputs:", "determinism:")) for f in result.failures), result.failures
+    assert not any(n.startswith("run:") for n in result.notes), result.notes

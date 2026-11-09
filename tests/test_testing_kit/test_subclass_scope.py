@@ -59,6 +59,8 @@ def make_parent(
     parts: bool = False,
     divergences: tuple[Divergence, ...] = (),
     variants: frozenset[str] = frozenset(),
+    names: frozenset[str] = frozenset({"sc_a"}),
+    writes_on_match: bool = False,
 ) -> type[FeatureGroup]:
     class ScopeParent(base):  # type: ignore[valid-type, misc]
         DIVERGENCES = divergences
@@ -66,10 +68,20 @@ def make_parent(
             VARIANTS = variants
         if parts:
             OUTPUT_PARTS = ("p",)
+        if writes_on_match:
+
+            @classmethod
+            def match_feature_group_criteria(
+                cls, feature_name: Any, options: Options, data_access_collection: Any = None
+            ) -> bool:
+                matched: bool = super().match_feature_group_criteria(feature_name, options, data_access_collection)
+                if matched:
+                    options.set("written_by_match", "yes")
+                return matched
 
         @classmethod
         def feature_names_supported(cls) -> set[str]:
-            return {"sc_a"}
+            return set(names)
 
         def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return {Feature("sc_src")}
@@ -352,6 +364,40 @@ def test_operation_group_values_use_serving_implementations(
     assert all(f.startswith("values:") for f in result.failures), result.failures
 
 
+def test_part_request_reaches_the_route_gate_as_base_name_and_part(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+) -> None:
+    parent = make_parent(base=OperationFeatureGroup, calculates=False, parts=True)
+    sub = _gated_subclass(parent, "variant")
+
+    def accepts(cls: Any, feature_name: str, options: Options, *, part: str | None = None) -> bool:
+        return feature_name == "sc_a" and part == "p"
+
+    for group in (parent, sub):
+        impl = make_implementation(group, PythonDictFramework, _calc(2, 3))
+        setattr(impl, "accepts", classmethod(accepts))
+    result = check_subclass_scope(sub, parent, SELECTING, requests=["sc_a~p"], input_data=DATA)
+    assert result.failures == (), result.failures
+    assert not any(n.startswith("values:") for n in result.notes), result.notes
+
+
+def test_route_gate_sees_options_written_by_the_match(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+) -> None:
+    parent = make_parent(base=OperationFeatureGroup, calculates=False, writes_on_match=True)
+    sub = _gated_subclass(parent, "variant")
+
+    def accepts(cls: Any, feature_name: str, options: Options, *, part: str | None = None) -> bool:
+        return bool(options.get("written_by_match") == "yes")
+
+    for group, factor in ((parent, 2), (sub, 5)):
+        impl = make_implementation(group, PythonDictFramework, _calc(factor))
+        setattr(impl, "accepts", classmethod(accepts))
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
+    assert any(f.startswith("values:") and "differs" in f for f in result.failures), result.failures
+    assert not any(n.startswith("values:") and "not routed" in n for n in result.notes), result.notes
+
+
 def test_operation_group_without_serving_implementation_notes_values_skipped(
     make_implementation: Callable[..., type[Implementation[Any]]],
 ) -> None:
@@ -449,3 +495,82 @@ def test_assert_forwards_input_data_and_raises_on_undeclared_value_change() -> N
     with pytest.raises(pytest.fail.Exception) as excinfo:
         assert_subclass_scope(sub, parent, SELECTING, input_data=DATA)
     assert "values:" in str(excinfo.value)
+
+
+Impls = tuple[type[FeatureGroup], type[FeatureGroup], type[Implementation[Any]], type[Implementation[Any]]]
+
+
+def _calc_two(a: int, b: int) -> Calc:
+    def calc(cls: Any, data: Any, features: Any) -> Any:
+        data["sc_a"] = [v * a for v in data["sc_src"]]
+        data["sc_b"] = [v * b for v in data["sc_src"]]
+        return data
+
+    return calc
+
+
+def _two_framework_pair(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+    parent_calc: Calc,
+    sub_calc: Calc,
+    *,
+    names: frozenset[str] = frozenset({"sc_a"}),
+    variants: frozenset[str] = frozenset(),
+) -> Impls:
+    """Parent and subclass resolve on Pandas; the PythonDict implementations are the ones under test."""
+    pytest.importorskip("pandas")
+    parent = make_parent(base=OperationFeatureGroup, calculates=False, names=names, variants=variants)
+    sub = _gated_subclass(parent, "variant")
+    make_implementation(parent, PandasDataFrame, parent_calc)
+    make_implementation(sub, PandasDataFrame, sub_calc)
+    parent_impl = make_implementation(parent, PythonDictFramework, parent_calc)
+    sub_impl = make_implementation(sub, PythonDictFramework, sub_calc)
+    return parent, sub, parent_impl, sub_impl
+
+
+def _declining(impl: type[Implementation[Any]], *, only: str | None = None) -> None:
+    def accepts(cls: Any, feature_name: str, options: Options, *, part: str | None = None) -> bool:
+        return only is not None and feature_name != only
+
+    setattr(impl, "accepts", classmethod(accepts))
+
+
+@pytest.mark.parametrize("who", ["parent", "subclass", "variant"])
+def test_unroutable_pair_notes_values_skipped_and_compares_nothing(
+    make_implementation: Callable[..., type[Implementation[Any]]], who: str
+) -> None:
+    parent, sub, parent_impl, sub_impl = _two_framework_pair(
+        make_implementation, _calc(2), _calc(5), variants=frozenset({"v"}) if who == "variant" else frozenset()
+    )
+    if who == "parent":
+        _declining(parent_impl)
+    elif who == "subclass":
+        _declining(sub_impl)
+    else:
+        setattr(sub_impl, "divergences", (CHANGED_VARIANT,))
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
+    assert result.failures == (), result.failures
+    assert any(n.startswith("values:") and "sc_a" in n for n in result.notes), result.notes
+
+
+def test_declined_name_does_not_stop_the_other_name_from_being_compared(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+) -> None:
+    parent, sub, _, sub_impl = _two_framework_pair(
+        make_implementation, _calc_two(2, 2), _calc_two(2, 5), names=frozenset({"sc_a", "sc_b"})
+    )
+    _declining(sub_impl, only="sc_a")
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
+    assert any(n.startswith("values:") and "sc_a" in n for n in result.notes), result.notes
+    assert any(f.startswith("values:") and "'sc_b' differs" in f for f in result.failures), result.failures
+    assert not any("'sc_a'" in f for f in result.failures), result.failures
+
+
+def test_allowed_variant_still_compares_through_the_implementation(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+) -> None:
+    parent, sub, _, sub_impl = _two_framework_pair(make_implementation, _calc(2), _calc(5), variants=frozenset({"v"}))
+    setattr(sub_impl, "divergences", (CHANGED_VARIANT,))
+    result = check_subclass_scope(sub, parent, ALLOWING, input_data=DATA)
+    assert result.failures == (), result.failures
+    assert not any(n.startswith("values:") for n in result.notes), result.notes

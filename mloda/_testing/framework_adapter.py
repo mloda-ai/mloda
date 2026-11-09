@@ -88,7 +88,7 @@ def _arrow_has_type(arrow_type: Any, data_type: DataType) -> bool:
     return bool(arrow_type == DataType.to_arrow_type(data_type))
 
 
-_SYNC_ONLY_REASON = "the framework serves SYNC only, so its steps stay in the parent process"
+_SYNC_ONLY_REASON = "The live connection is reused without thread isolation and cannot cross a process boundary."
 _ICEBERG_NO_NATIVE_TYPE = (DataType.INT8, DataType.UINT8, DataType.UINT64, DataType.TIMESTAMP_MILLIS)
 
 

@@ -28,8 +28,6 @@ from mloda.core.abstract_plugins.components.credential_grant import (
     grant_scope,
     read_recorder,
 )
-from contextvars import ContextVar
-
 from mloda.core.abstract_plugins.components.failed_rows import _COLLECTOR, FailedRowsCollector
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import _API_DATA_LOOKUP
 from mloda.core.abstract_plugins.compute_framework import _current_compute_framework
@@ -287,7 +285,7 @@ class TestReadCredential:
     )
     @pytest.mark.parametrize("raises", [False, True])
     def test_run_boundary_resets_the_step_vars_then_restores_the_outer_value(
-        self, var: ContextVar[Any], outer: Any, raises: bool
+        self, var: contextvars.ContextVar[Any], outer: Any, raises: bool
     ) -> None:
         token = var.set(outer)
         try:

@@ -1887,22 +1887,6 @@ _NESTED_SEEN: dict[str, Any] = {}
 _NESTED_GATE_LOADS: dict[str, list[str]] = {"outer": [], "inner": []}
 
 
-class _KeepContextExtender(Extender):
-    """Keeps every calculate HookContext it wraps."""
-
-    def __init__(self) -> None:
-        self.kept: list[HookContext] = []
-
-    def wraps(self) -> set[ExtenderHook]:
-        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
-
-    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        context = HookContext.current()
-        assert context is not None
-        self.kept.append(context)
-        return func(*args, **kwargs)
-
-
 class _NestedLoadGate(Extender):
     """INPUT_DATA_LOAD extender recording the loading group under a label; a gate when never_fall_back."""
 
@@ -1920,10 +1904,8 @@ class _NestedLoadGate(Extender):
         return func(*args, **kwargs)
 
 
-class ChsNestedPublishOuterFG(ChsSource):
+class ChsNestedPublishOuterFG(ChsNestedOuterFG):
     """Publishes an attribute and reports failed rows, runs a nested run, then publishes again."""
-
-    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -1957,13 +1939,14 @@ class ChsNestedInnerPublishFG(ChsSource):
         return pd.DataFrame({name: [1] for name in features.get_all_names()})
 
 
-def _run_publish_outer(mode: ParallelizationMode, flight_server: Any) -> _KeepContextExtender:
-    keep = _KeepContextExtender()
+def _run_publish_outer(mode: ParallelizationMode, flight_server: Any) -> _ReadProbeExtender:
+    _WINDOW_EVENTS.clear()
+    keep = _ReadProbeExtender({ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE})
     _grant_run(ChsNestedPublishOuterFG, "chs_nested_publish_outer_a", mode, flight_server, {keep})
     return keep
 
 
-def _outer_context(keep: _KeepContextExtender) -> HookContext:
+def _outer_context(keep: _ReadProbeExtender) -> HookContext:
     outer = [c for c in keep.kept if c.feature_names == ("chs_nested_publish_outer_a",)]
     assert len(outer) == 1
     return outer[0]

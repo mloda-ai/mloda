@@ -5,6 +5,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.credential_grant import CredentialGrant, grant_scope
 from mloda.core.abstract_plugins.components.utils import failure_report
+from mloda.core.abstract_plugins.hook_context import carried_gate_scope
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.credential_scrub import (
     current_registered_secrets,
@@ -25,8 +26,13 @@ def thread_worker(
     identity_secrets: frozenset[str] | None = None,
     grant: CredentialGrant | None = None,
     mark_done: Callable[[UUID], None] | None = None,
+    in_gate_scope: bool = False,
 ) -> None:
-    with registered_secrets_scope(registered_secrets, identity_secrets), grant_scope(grant):
+    with (
+        registered_secrets_scope(registered_secrets, identity_secrets),
+        grant_scope(grant),
+        carried_gate_scope(in_gate_scope),
+    ):
         try:
             command.execute(cfw_register, cfw, from_cfw=from_cfw)
             if mark_done is not None:

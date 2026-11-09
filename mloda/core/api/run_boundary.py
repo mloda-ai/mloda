@@ -11,6 +11,7 @@ from mloda.core.abstract_plugins.compute_framework import _current_compute_frame
 from mloda.core.abstract_plugins.hook_context import _current_hook_context
 from mloda.core.abstract_plugins.input_data_load_marker import current_input_data_load_marker
 
+# _in_gate_scope is left out on purpose: an outer gate stays closed over a nested run.
 _CLEAN: tuple[tuple[ContextVar[Any], Any], ...] = (
     (_READABLE, None),
     (_READ_RECORDERS, ()),

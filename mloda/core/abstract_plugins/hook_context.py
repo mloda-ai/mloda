@@ -55,6 +55,16 @@ def input_data_load_gate_scope() -> Generator[None, None, None]:
             _gate_scopes -= 1
 
 
+@contextlib.contextmanager
+def carried_gate_scope(active: bool) -> Generator[None, None, None]:
+    """Set the context-scoped gate flag for a worker block, leaving the process-wide count alone."""
+    token = _in_gate_scope.set(active)
+    try:
+        yield
+    finally:
+        _in_gate_scope.reset(token)
+
+
 def in_input_data_load_gate_scope() -> bool:
     """True inside a gated calculation in this context, including work nested under it."""
     return _in_gate_scope.get()

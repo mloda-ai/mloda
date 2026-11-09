@@ -21,7 +21,6 @@ and because ``MlodaRunError`` does not yet exist.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import contextvars
 import errno
 import json
@@ -1813,6 +1812,8 @@ def _inner_run(
     options: dict[str, Any],
     frameworks: list[Any] | None = None,
     dac: Any = None,
+    mode: ParallelizationMode = ParallelizationMode.SYNC,
+    flight_server: Any = None,
 ) -> list[str]:
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
@@ -1822,6 +1823,9 @@ def _inner_run(
         "plugin_collector": PluginCollector.enabled_feature_groups({group}),
         "function_extender": extenders,
     }
+    if mode != ParallelizationMode.SYNC:
+        kwargs["parallelization_modes"] = {mode}
+        kwargs["flight_server"] = flight_server
     features = [Feature(name, options=options)]
     result = (
         mloda.prepare(features, **kwargs).run() if entry == "prepare" else getattr(mloda, entry)(features, **kwargs)
@@ -1966,6 +1970,8 @@ def test_a_nested_run_does_not_see_or_write_the_outer_hook_context_or_framework(
 
     assert _NESTED_SEEN["inner_hook_context"] is None
     assert _NESTED_SEEN["inner_framework"] is None
+    assert _NESTED_SEEN["outer_same_context"] is True
+    assert _NESTED_SEEN["outer_framework_after"] is not None
     attributes = _outer_context(keep).result_attributes
     assert attributes is not None
     assert set(attributes) == {"outer_before", "outer_after"}
@@ -1993,7 +1999,9 @@ class ChsNestedLoadOuterFG(ChsNestedOuterFG):
         return {"chs_nested_load_outer_a"}
 
 
-def _nested_toy_load(extenders: set[Extender]) -> None:
+def _nested_toy_load(
+    extenders: set[Extender], mode: ParallelizationMode = ParallelizationMode.SYNC, flight_server: Any = None
+) -> None:
     _inner_run(
         ToySourceFG,
         "toyfmt_nested_col",
@@ -2002,6 +2010,8 @@ def _nested_toy_load(extenders: set[Extender]) -> None:
         {},
         frameworks=[PythonDictFramework],
         dac=toy_dac(h1={"toyfmt_nested_col": [1]}),
+        mode=mode,
+        flight_server=flight_server,
     )
 
 
@@ -2015,9 +2025,15 @@ def _run_gated_outer() -> None:
     )
 
 
+_INNER_MODES = [ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING]
+
+
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("inner_extenders", ["none", "non_gating"])
-def test_a_nested_load_under_an_outer_gate_without_its_own_gate_fails_closed(inner_extenders: str) -> None:
+@pytest.mark.parametrize("inner_mode", _INNER_MODES)
+def test_a_nested_load_under_an_outer_gate_without_its_own_gate_fails_closed(
+    inner_extenders: str, inner_mode: ParallelizationMode, flight_server: Any
+) -> None:
     _WINDOW_EVENTS.clear()
     _NESTED_GATE_LOADS.update(outer=[], inner=[])
     failures: list[BaseException] = []
@@ -2025,7 +2041,7 @@ def test_a_nested_load_under_an_outer_gate_without_its_own_gate_fails_closed(inn
 
     def inner() -> None:
         with pytest.raises(GateBypassError) as caught:
-            _nested_toy_load(extenders)
+            _nested_toy_load(extenders, inner_mode, flight_server)
         failures.append(caught.value)
 
     _NESTED_INNER.clear()
@@ -2039,11 +2055,14 @@ def test_a_nested_load_under_an_outer_gate_without_its_own_gate_fails_closed(inn
 
 
 @pytest.mark.timeout(15)
-def test_a_nested_load_under_an_outer_gate_goes_through_the_inner_runs_own_gate() -> None:
+@pytest.mark.parametrize("inner_mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+def test_a_nested_load_under_an_outer_gate_goes_through_the_inner_runs_own_gate(
+    inner_mode: ParallelizationMode,
+) -> None:
     _WINDOW_EVENTS.clear()
     _NESTED_GATE_LOADS.update(outer=[], inner=[])
     _NESTED_INNER.clear()
-    _NESTED_INNER.append(lambda: _nested_toy_load({_NestedLoadGate("inner", gate=True)}))
+    _NESTED_INNER.append(lambda: _nested_toy_load({_NestedLoadGate("inner", gate=True)}, inner_mode))
 
     _run_gated_outer()
 
@@ -2052,24 +2071,13 @@ def test_a_nested_load_under_an_outer_gate_goes_through_the_inner_runs_own_gate(
 
 
 @pytest.mark.timeout(15)
-@pytest.mark.parametrize("inner_raises", [False, True])
-def test_the_outer_hook_context_and_framework_are_back_after_a_nested_run(
-    inner_raises: bool, flight_server: Any
-) -> None:
+def test_the_outer_hook_context_and_framework_are_back_after_a_nested_run_raises(flight_server: Any) -> None:
     _NESTED_SEEN.clear()
     _NESTED_INNER.clear()
-    group, name = (
-        (ChsNestedBareFG, "chs_nested_bare_a")
-        if inner_raises
-        else (
-            ChsNestedInnerPublishFG,
-            "chs_nested_inner_publish_a",
-        )
-    )
 
     def inner() -> None:
-        with pytest.raises(Exception) if inner_raises else contextlib.nullcontext():
-            _inner_run(group, name, "run_all", set(), {})
+        with pytest.raises(Exception):
+            _inner_run(ChsNestedBareFG, "chs_nested_bare_a", "run_all", set(), {})
 
     _NESTED_INNER.append(inner)
 

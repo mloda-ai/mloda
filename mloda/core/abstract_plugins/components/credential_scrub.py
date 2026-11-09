@@ -257,7 +257,7 @@ def _mask_path_password(match: re.Match[str]) -> str:
     digits = rest.partition("/")[0]
     if not digits.isascii() or not digits.isdigit():
         return f"{scheme}://{user}:***@"
-    # 4+ digits read as a port, as on main (1-3 digits read as a password, like _DB_USERINFO_PATTERN).
+    # Four or more digits read as a port; fewer read as a password, like _DB_USERINFO_PATTERN.
     if len(digits) >= 4:
         return match[0]
     return f"{scheme}://{user}:{digits}/***@"

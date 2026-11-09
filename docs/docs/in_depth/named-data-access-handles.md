@@ -249,8 +249,9 @@ credential value) when:
 - the handle is not registered, or is registered under another kind (the message lists the named credential handles);
 - the handle is an unnamed credential (a declared handle must be named);
 - a field in `required_fields` is missing from the credential;
-- the credential holds a `bytes`, `bytearray` or `memoryview` value at any depth, unless it sits under a public key (listed connection
-  field or declared public, see `dac.redact` above) that no secret key covers. This is refused for now; store a hex or base64 `str` and decode it in the plugin.
+- the credential holds a `bytes`, `bytearray` or `memoryview` value at any depth, unless it sits under a public key
+  (listed connection field or declared public, see `dac.redact` above) that no secret key covers. This is refused for
+  now; store a hex or base64 `str` and decode it in the plugin.
 
 A `str` default is a handle declared when the option
 is unset; `default=None` declares nothing when unset. To read it at run time see [Runtime access versus match-time binding](#runtime-access-versus-match-time-binding).
@@ -259,9 +260,12 @@ Declared credential keys widen or narrow the unmasked set. A provider lists keys
 feature group and in `public_fields` of a handle spec, unioned over the loaded plugins. A data user passes `public_credential_keys` and
 `secret_credential_keys` to `DataAccessCollection`. A credential-shaped key is always masked, then a collection secret
 key, then everything public. Keys are compared lowercased with `_` and `-` removed. To mask a key a plugin declares
-public, list it in `secret_credential_keys`. Credential-shaped keys and the connection-string keys `dsn`, `url`, `uri`, `conn`, `connection_string` and `engine` can never be declared public; this includes credential-shaped names in raw or normalized form (`pass_word`, `PASS-WORD`).
+public, list it in `secret_credential_keys`. Credential-shaped keys and the connection-string keys `dsn`, `url`, `uri`, `conn`, `connection_string` and `engine` can never be declared public, nor can credential-shaped names in raw or normalized form (`pass_word`,
+`PASS-WORD`).
 
-Steward secret keys (`secret_credential_keys`) and everything under them are masked in the published data access identity (`PlanStep.data_access_identity`, `HookContext.data_access_identity`), so identity-keyed extenders can no longer tell such sources apart. Plugin-declared public keys do not change the identity.
+Steward secret keys (`secret_credential_keys`) and everything under them are masked in the published data access
+identity (`PlanStep.data_access_identity`, `HookContext.data_access_identity`), so identity-keyed extenders cannot tell
+such sources apart. Plugin-declared public keys do not change the identity.
 
 The handle name is not masked in `explain()`, `str(Options)` or the plan content hash, even under a credential-shaped
 key; other values under such a key stay masked. Name a handle by role (`pii-hmac-key`), never by environment or

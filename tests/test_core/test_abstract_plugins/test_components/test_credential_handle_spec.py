@@ -1309,7 +1309,6 @@ class TestCredentialValuesInOptionsAreRefused:
             pytest.param(lambda: Credential(token=SECRET), id="credential"),
             pytest.param(lambda: RegisteredCredential({"token": SECRET}), id="registered"),
             pytest.param(lambda: [Credential(token=SECRET)], id="list"),
-            pytest.param(lambda: {"hmac": SECRET}, id="plain-dict"),
         ],
     )
     def test_a_pointer_key_on_a_non_source_root_is_refused_naming_key_type_and_group(

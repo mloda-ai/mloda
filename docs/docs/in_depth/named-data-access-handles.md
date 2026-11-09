@@ -284,7 +284,7 @@ A credential is never an option value. A `Credential`, `RegisteredCredential` or
 non-pointer option is refused at plan time, also nested in mappings, mapping views, sets, sequences (not `str`, bytes,
 `range` or `array`) and dataclass instances. Iterators and generators are not walked. The source pointer form
 (`{"SqliteFG": Credential(...)}`) still works, except on a root feature whose group is not the owning source (or a
-subclass of it); there any pointer value is refused, a plain mapping included. A consumer holding a pointer with no source below it, and a pointer merged from an inherited copy,
+subclass of it); there a typed credential (also nested) is refused. A plain mapping under a pointer key is a routing hint and is not checked, like a bare `str` secret under an ordinary key. A consumer holding a pointer with no source below it, and a pointer merged from an inherited copy,
 are not refused.
 A bare `str` secret under an ordinary key cannot be detected, so do not do it.
 

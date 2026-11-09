@@ -270,7 +270,7 @@ def refuse_unread_pointer_credentials(feature_group: type[FeatureGroup], options
         hit = _credential_hit(value, {})
         if is_nominal_subclass(feature_group, source):
             continue
-        if hit is None and not isinstance(value, Mapping):
+        if hit is None:
             continue
         what = hit or "credential"
         holder = what if type(value).__name__ == what else f"{type(value).__name__} holding a {what}"

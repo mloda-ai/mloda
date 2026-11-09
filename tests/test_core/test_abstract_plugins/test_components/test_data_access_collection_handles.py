@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.credential import Credential
+from mloda.core.abstract_plugins.components.credential_leaves import _SAFE_CREDENTIAL_KEYS, _is_shaped
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import ReadDBFG
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
@@ -1061,6 +1062,14 @@ class TestShortSecretWarning:
 
         assert caplog.records == []
 
+    def test_declared_secret_key_short_value_warns_without_the_value(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            DataAccessCollection(credentials={"pg": {"host": "db1"}}, secret_credential_keys={"host"})
+
+        assert "pg" in caplog.text
+        assert "host" in caplog.text
+        assert "db1" not in caplog.text
+
     def test_copy_does_not_warn_again(self, caplog: pytest.LogCaptureFixture) -> None:
         dac = DataAccessCollection(credentials={"pg": {"password": "hunter"}})  # nosec B105
         caplog.clear()
@@ -1238,18 +1247,6 @@ class TestCredentialKeyPolicy:
 
         assert dac.secret_literals() == frozenset({_PW})
 
-    @pytest.mark.parametrize("shaped", ["password", "token", "client_secret", "api_key"])
-    def test_no_layer_unmasks_a_credential_shaped_key(self, shaped: str) -> None:
-        from mloda.provider import FeatureGroup
-
-        class _ShapedPublicFG(FeatureGroup):
-            PUBLIC_CREDENTIAL_KEYS = (shaped,)
-
-        dac = DataAccessCollection(credentials={"a": {shaped: _VAL}}, public_credential_keys={shaped})
-
-        assert dac.secret_literals() == frozenset({_VAL})
-        assert shaped not in dac.credential_key_policy().secret
-
     @pytest.mark.parametrize("spelling", ["Key_File", "keyfile", "KEY-FILE", "key_file"])
     def test_keys_are_normalized_when_matching(self, spelling: str) -> None:
         creds = {"a": {"key_file": _VAL, "password": _PW}}
@@ -1302,16 +1299,59 @@ class TestCredentialKeyPolicy:
         assert duplicate.credential_key_policy() == dac.credential_key_policy()
         assert duplicate.secret_literals() == frozenset({"db.internal.example"})
 
-    def test_identity_literals_and_redact_ignore_the_keys(self) -> None:
+    def test_identity_honors_the_steward_secret_key_and_ignores_public_keys_redact_unchanged(self) -> None:
         creds = {"a": {"password": _PW, "host": "db.internal.example", "zz_idn_key": _VAL}}
         plain = DataAccessCollection(credentials=creds)
+        public = DataAccessCollection(credentials=creds, public_credential_keys={"zz_idn_key"})
         keyed = DataAccessCollection(
             credentials=creds, public_credential_keys={"zz_idn_key"}, secret_credential_keys={"host"}
         )
 
-        assert keyed.identity_literals() == plain.identity_literals() == frozenset({_PW})
+        assert public.identity_literals() == plain.identity_literals() == frozenset({_PW})
+        assert keyed.identity_literals() == frozenset({_PW, "db.internal.example"})
         text = f"saw {_PW} {_VAL} db.internal.example"
         assert keyed.redact(text) == plain.redact(text)
+
+    def test_steward_secret_key_masks_nested_values_under_it(self) -> None:
+        creds = {"a": {"vault": {"host": "vault.internal.example"}}}
+        plain = DataAccessCollection(credentials=creds)
+        keyed = DataAccessCollection(credentials=creds, secret_credential_keys={"vault"})
+
+        assert plain.secret_literals() == frozenset()
+        assert keyed.secret_literals() == frozenset({"vault.internal.example"})
+        assert keyed.identity_literals() == frozenset({"vault.internal.example"})
+
+        from mloda.core.abstract_plugins.components.credential_leaves import CredentialKeyPolicy, iter_credential_leaves
+
+        policy = CredentialKeyPolicy(public=frozenset(), secret=frozenset({"vault"}))
+
+        leaves = {leaf.path: leaf for leaf in iter_credential_leaves({"vault": {"host": _VAL}, "host": _PW}, policy)}
+
+        assert leaves["vault.host"].secret and leaves["vault.host"].declared
+        assert not leaves["host"].secret and not leaves["host"].declared
+
+    @pytest.mark.parametrize("shaped", ["pass_word", "PASS-WORD", "tok_en"])
+    def test_a_normalized_shaped_key_is_secret_under_any_policy(self, shaped: str) -> None:
+        dac = DataAccessCollection(credentials={"a": {shaped: _VAL}})
+
+        assert dac.secret_literals() == frozenset({_VAL})
+        assert dac.identity_literals() == frozenset({_VAL})
+
+    @pytest.mark.parametrize("safe", sorted(_SAFE_CREDENTIAL_KEYS))
+    def test_no_base_safe_key_is_credential_shaped(self, safe: str) -> None:
+        assert not _is_shaped(safe)
+
+    @pytest.mark.parametrize("order", [("vault", "other"), ("other", "vault")])
+    def test_a_shared_dict_under_a_declared_and_a_plain_key_is_walked_under_both(self, order: tuple[str, str]) -> None:
+        from mloda.core.abstract_plugins.components.credential_leaves import CredentialKeyPolicy, iter_credential_leaves
+
+        shared = {"host": _VAL}
+        policy = CredentialKeyPolicy(public=frozenset(), secret=frozenset({"vault"}))
+
+        leaves = {leaf.path: leaf for leaf in iter_credential_leaves({k: shared for k in order}, policy)}
+
+        assert leaves["vault.host"].secret
+        assert not leaves["other.host"].secret
 
     @pytest.mark.parametrize("bad", ["zz_bare", ("",), (1,)], ids=["bare_str", "empty_item", "non_str_item"])
     def test_malformed_public_credential_keys_raise_at_class_definition(self, bad: Any) -> None:
@@ -1322,7 +1362,25 @@ class TestCredentialKeyPolicy:
             class ZzMalformedKeysFG(FeatureGroup):
                 PUBLIC_CREDENTIAL_KEYS = bad
 
-    @pytest.mark.parametrize("key", ["dsn", "url", "uri", "conn", "connection_string", "engine", "Connection-String"])
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "dsn",
+            "url",
+            "uri",
+            "conn",
+            "connection_string",
+            "engine",
+            "Connection-String",
+            "password",
+            "token",
+            "client_secret",
+            "api_key",
+            "pass_word",
+            "PASS-WORD",
+            "tok_en",
+        ],
+    )
     def test_connection_keys_cannot_be_declared_public(self, key: str) -> None:
         from mloda.provider import FeatureGroup, credential_handle_spec
 
@@ -1382,9 +1440,12 @@ class TestPolicyAwareLeafHelpers:
         assert credential_secret_literals(value, policy) == frozenset({"db.internal.example", _PW})
         assert credential_secret_literals(value, None) == credential_secret_literals(value)
 
-    def test_iter_leaves_marks_shaped_under_a_public_shaped_key(self) -> None:
+    @pytest.mark.parametrize(
+        "key", ["password", "token", "client_secret", "api_key", "pass_word", "PASS-WORD", "tok_en"]
+    )
+    def test_iter_leaves_marks_shaped_under_a_public_shaped_key(self, key: str) -> None:
         from mloda.core.abstract_plugins.components.credential_leaves import iter_credential_leaves
 
-        (leaf,) = list(iter_credential_leaves({"token": _VAL}, self._policy({"token"}, set())))
+        (leaf,) = list(iter_credential_leaves({key: _VAL}, self._policy({key.replace("_", "")}, set())))
 
         assert leaf.secret and leaf.shaped

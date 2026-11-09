@@ -492,8 +492,19 @@ class TestPlanTimeRefusals:
 
         assert results[0]["chs_vault_a"].tolist() == [1, 2, 3]
 
-    def test_bytes_under_a_safe_key_are_accepted(self) -> None:
-        dac = _dac(**{"vault-main": {"key": SECRET, "path": BYTES_SECRET}})
+    @pytest.mark.parametrize(
+        "credentials,public_keys",
+        [
+            ({"key": SECRET, "path": BYTES_SECRET}, None),
+            ({"key": SECRET, "chs_pub_blob": BYTES_SECRET}, {"chs_pub_blob"}),
+            ({"key": SECRET, "chs_pub_blob": memoryview(BYTES_SECRET)}, {"chs_pub_blob"}),
+        ],
+        ids=["safe_key", "declared_public_key", "declared_public_key_memoryview"],
+    )
+    def test_bytes_under_a_safe_or_public_key_are_accepted(
+        self, credentials: dict[str, Any], public_keys: set[str] | None
+    ) -> None:
+        dac = DataAccessCollection(credentials={"vault-main": credentials}, public_credential_keys=public_keys)
 
         results = mloda.run_all(
             [_vault("vault-main")],
@@ -503,6 +514,26 @@ class TestPlanTimeRefusals:
         )
 
         assert results[0]["chs_vault_a"].tolist() == [1, 2, 3]
+
+    def test_bytes_under_a_steward_secret_key_are_refused(self) -> None:
+        dac = DataAccessCollection(
+            credentials={"vault-main": {"key": SECRET, "host": BYTES_SECRET}}, secret_credential_keys={"host"}
+        )
+
+        message = _refusal(_prepare, [_vault("vault-main")], dac, ChsVaultFG)
+
+        assert "vault-main" in message
+        assert "at 'host'" in message
+        assert BYTES_SECRET.decode() not in message
+
+    @pytest.mark.parametrize(
+        "credential", [{"chs_blob": memoryview(BYTES_SECRET)}, {"password": [memoryview(BYTES_SECRET)]}]
+    )
+    def test_a_memoryview_leaf_is_refused_like_bytes(self, credential: dict[str, Any]) -> None:
+        message = _refusal(_prepare, [_vault("vault-main")], _dac(**{"vault-main": credential}), ChsVaultFG)
+
+        assert "vault-main" in message
+        assert "hex" in message or "base64" in message
 
     @pytest.mark.parametrize("entry", ENTRY_POINTS)
     def test_a_handle_in_context_is_refused_naming_the_key_and_the_group_placement(self, entry: Entry) -> None:

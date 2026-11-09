@@ -726,11 +726,12 @@ class TestOptionsWithCredentialValues:
         assert "'host': 'h'" in text
 
     @pytest.mark.parametrize("where", ["group", "context"])
-    def test_str_masks_a_top_level_credential_key(self, where: str) -> None:
-        options = Options(group={"api_key": "hunter2"}) if where == "group" else Options(context={"api_key": "hunter2"})
+    @pytest.mark.parametrize("key", ["api_key", "db.password", "fs.s3a.secret.key"])
+    def test_str_masks_a_top_level_credential_key(self, where: str, key: str) -> None:
+        options = Options(group={key: "hunter2"}) if where == "group" else Options(context={key: "hunter2"})
         text = str(options)
         assert "hunter2" not in text
-        assert "'api_key': '***'" in text
+        assert f"'{key}': '***'" in text
 
     @pytest.mark.parametrize("where", ["group", "context"])
     @pytest.mark.parametrize("container", [list, tuple])

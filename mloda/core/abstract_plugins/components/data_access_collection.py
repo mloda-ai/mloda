@@ -437,14 +437,20 @@ class DataAccessCollection:
         return frozenset().union(*(credential_secret_literals(value, policy) for value in self.credentials.values()))
 
     def identity_literals(self) -> frozenset[str]:
-        """The str leaves of 8+ chars under a credential-shaped key, for masking a published identity."""
-        return frozenset().union(*(credential_identity_literals(value) for value in self.credentials.values()))
+        """The str leaves of 8+ chars under a credential-shaped or steward secret key, for a published identity."""
+        policy = self.credential_key_policy()
+        return frozenset().union(*(credential_identity_literals(value, policy) for value in self.credentials.values()))
 
     def _warn_short_secrets(self, handle: str) -> None:
         shown = "<unnamed>" if handle in self._auto_handles else handle
-        for item in iter_credential_leaves(self.credentials[handle]):
+        for item in iter_credential_leaves(self.credentials[handle], self.credential_key_policy()):
             text = item.leaf
-            if item.shaped and isinstance(text, str) and text.strip() and len(text) < MIN_REDACT_LENGTH:
+            if (
+                (item.shaped or item.declared)
+                and isinstance(text, str)
+                and text.strip()
+                and len(text) < MIN_REDACT_LENGTH
+            ):
                 logger.warning(
                     "Credential '%s' value at '%s' is shorter than %d characters, so it is not masked by exact "
                     "match in errors and logs. Use %d or more characters.",

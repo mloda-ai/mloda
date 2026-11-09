@@ -419,6 +419,30 @@ class TestDataAccessIdentityHidesDictCredentialValues:
         assert identity == f"{db_path}::creds_table"
         assert fetch_context.data_access_identity_is_fallback is False
 
+    def test_a_steward_secret_key_keeps_its_value_out_of_the_hook_identity(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "steward.db"
+        conn = sqlite3.connect(db_path)
+        conn.execute("CREATE TABLE steward_table (steward_col INTEGER)")
+        conn.execute("INSERT INTO steward_table VALUES (1)")
+        conn.commit()
+        conn.close()
+        extender = _InputDataLoadCapturingExtender()
+
+        mloda.run_all(
+            ["steward_col"],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=DataAccessCollection(
+                credentials=[{"sqlite": str(db_path)}], secret_credential_keys={"sqlite"}
+            ),
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
+            function_extender={extender},
+        )
+
+        assert extender.captured is not None
+        identity = extender.captured.data_access_identity
+        assert identity is not None
+        assert str(db_path) not in identity
+
     @pytest.mark.parametrize(
         "key, masked, stream, mode",
         [

@@ -337,6 +337,34 @@ class TestUserinfoUriPlanIdentity:
                 "LITERALTOKEN2",  # nosec B105
                 {"h": {"token": "LITERALTOKEN2"}},  # nosec B105
             ),
+            ("https://h/password=LITERALX1/plan{s}", "https://h/password=***/plan{s}", "LITERALX1", None),  # nosec B105
+            ("s3://AKIA:12/LITERALX2@bucket/plan{s}", "s3://AKIA:12/***@bucket/plan{s}", "LITERALX2", None),
+            ("s3://AKIA:1234/LITERALX3@bucket/plan{s}", "s3://AKIA:1234/***@bucket/plan{s}", "LITERALX3", None),
+            ("gs://AKIA:9/LITERALX4@bucket/plan{s}", "gs://AKIA:9/***@bucket/plan{s}", "LITERALX4", None),
+            (
+                "http://h:80/dir@v2/plan{s}",
+                "http://h:80/dir@v2/plan{s}",
+                "NOSECRETHERE",  # nosec B105
+                None,
+            ),
+            (
+                "https://h:443/pkg@2024/plan{s}",
+                "https://h:443/pkg@2024/plan{s}",
+                "NOSECRETHERE",  # nosec B105
+                None,
+            ),
+            (
+                "https://evil.example:8443/x@trusted.corp/plan{s}",
+                "https://evil.example:8443/x@trusted.corp/plan{s}",
+                "NOSECRETHERE",  # nosec B105
+                None,
+            ),
+            (
+                "https://h:8443/dir@v2/plan{s}",
+                "https://h:8443/dir@v2/plan{s}",
+                "NOSECRETHERE",  # nosec B105
+                None,
+            ),
         ],
         ids=[
             "userinfo-password",
@@ -344,6 +372,14 @@ class TestUserinfoUriPlanIdentity:
             "encoded-path-param",
             "literal-path-segment",
             "literal-hive-segment",
+            "keyword-in-path",
+            "userinfo-in-path-after-port",
+            "s3-four-digit-userinfo",
+            "gs-one-digit-userinfo",
+            "http-port-dir-at-version-kept",
+            "https-port-pkg-at-year-kept",
+            "port-path-at-host-kept",
+            "port-dir-at-version-kept",
         ],
     )
     def test_plan_step_identity_and_render_hide_the_password(
@@ -498,7 +534,7 @@ class TestFileSourceUriProjection:
             ("s3://b/d;token = SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
             ("s3://b/d;token=a,b/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
             ("zip://d;token=SECRET::s3://bucket/x{s}", "zip://d;***::s3://bucket/x{s}"),  # nosec B105
-            ("s3://b/token=abc;v=1/x{s}", "s3://b/token=abc;***/x{s}"),  # nosec B105
+            ("s3://b/token=abc;v=1/x{s}", "s3://b/token=***;***/x{s}"),  # nosec B105
             ("s3://b/my.token.dir;v=1/x{s}", "s3://b/my.token.dir;***/x{s}"),
             ("s3://b/d;%74oken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
             ("s3://b/d;token%3DSECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
@@ -519,7 +555,7 @@ class TestFileSourceUriProjection:
             ("s3://b/d;%252F%74oken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
             ("s3://b/d;v%3A%3A%74oken=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
             ("s3://b/my%25252520file{s}", "s3://b/my%25252520file{s}"),
-            ("s3://b/a%2Ftoken=abc/x{s}", "s3://b/a%2Ftoken=abc/x{s}"),  # nosec B105
+            ("s3://b/a%2Ftoken=abc/x{s}", "s3://b/a%2Ftoken=***/x{s}"),  # nosec B105
             ("s3://b/d;v=1%2Fx/y{s}", "s3://b/d;***/y{s}"),
             ("https://host/x{s};auth=SECRET", "https://host/x{s};***"),  # nosec B105
             ("s3://b/d;key=SECRET/x{s}", "s3://b/d;***/x{s}"),  # nosec B105
@@ -535,7 +571,7 @@ class TestFileSourceUriProjection:
             ("https://host/x{s};", "https://host/x{s};"),
             ("s3://b/d%3F/x{s}", "s3://b/d%3F/x{s}"),
             ("s3://b/d%23/x{s}", "s3://b/d%23/x{s}"),
-            ("s3://b/year=2024/token=the/x{s}", "s3://b/year=2024/token=the/x{s}"),  # nosec B105
+            ("s3://b/year=2024/token=the/x{s}", "s3://b/year=2024/token=***/x{s}"),  # nosec B105
             ("s3://b/my%2525252520file{s}", "s3://b/my;***"),
             ("ftp://h/x{s};type=i", "ftp://h/x{s};***"),
             ("http://[::1]/d;v=1/x{s}", "http://[::1]/d;***/x{s}"),

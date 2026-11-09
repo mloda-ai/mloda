@@ -77,7 +77,7 @@ class grant_scope:  # noqa: N801
         identity: set[str] = set()
         for value in lookup._values():
             leaves |= credential_secret_literals(value, lookup.policy)
-            identity |= credential_identity_literals(value)
+            identity |= credential_identity_literals(value, lookup.policy)
         secrets = registered_secrets_scope(frozenset(leaves), frozenset(identity))
         secrets.__enter__()
         redaction = redact_escaping_exception()

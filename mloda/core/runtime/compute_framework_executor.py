@@ -395,7 +395,7 @@ class ComputeFrameworkExecutor:
             collection = self.data_access_collection
             policy = collection.credential_key_policy() if collection is not None else None
             return credential_secret_literals(access.credentials, policy), credential_identity_literals(
-                access.credentials
+                access.credentials, policy
             )
         if isinstance(access, str):
             return (

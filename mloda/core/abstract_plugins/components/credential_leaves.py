@@ -87,11 +87,13 @@ def credential_key_names(label: str, value: Any) -> tuple[str, ...]:
 
 
 def public_key_names(label: str, value: Any) -> tuple[str, ...]:
-    """credential_key_names, refusing connection-string keys that can never be declared public."""
+    """credential_key_names, refusing connection-string keys and credential-shaped names as public."""
     items = credential_key_names(label, value)
-    refused = sorted(item for item in items if normalize_credential_key(item) in NEVER_PUBLIC_CREDENTIAL_KEYS)
+    refused = sorted(
+        item for item in items if normalize_credential_key(item) in NEVER_PUBLIC_CREDENTIAL_KEYS or _is_shaped(item)
+    )
     if refused:
-        raise ValueError(f"{label} cannot declare connection keys public: {refused}.")
+        raise ValueError(f"{label} cannot declare connection or credential-shaped keys public: {refused}.")
     return items
 
 
@@ -100,10 +102,17 @@ class CredentialLeaf(NamedTuple):
     leaf: Any
     secret: bool
     shaped: bool
+    declared: bool
 
 
 def _is_shaped(key: Any) -> bool:
-    return isinstance(key, str) and _SECRET_KEY.fullmatch(key) is not None
+    if not isinstance(key, str):
+        return False
+    return _SECRET_KEY.fullmatch(key) is not None or _SECRET_KEY.fullmatch(normalize_credential_key(key)) is not None
+
+
+def _is_declared(key: Any, policy: CredentialKeyPolicy | None) -> bool:
+    return policy is not None and isinstance(key, str) and normalize_credential_key(key) in policy.secret
 
 
 def _is_safe(key: Any, policy: CredentialKeyPolicy | None) -> bool:
@@ -116,34 +125,35 @@ def _is_safe(key: Any, policy: CredentialKeyPolicy | None) -> bool:
 
 
 def iter_credential_leaves(value: Any, policy: CredentialKeyPolicy | None = None) -> Iterator[CredentialLeaf]:
-    """Yield every str/bytes leaf; secret unless its nearest key is safe and no key on the way is credential-shaped."""
-    visited: set[tuple[int, bool, bool]] = set()
-    stack: list[tuple[Any, str, Any, bool]] = [(value, "", None, False)]
+    """Yield every str/bytes leaf; secret if shaped, declared secret, or its nearest key is not safe."""
+    visited: set[tuple[int, bool, bool, bool]] = set()
+    stack: list[tuple[Any, str, Any, bool, bool]] = [(value, "", None, False, False)]
     while stack:
-        node, path, key, ancestor_shaped = stack.pop()
+        node, path, key, ancestor_shaped, ancestor_declared = stack.pop()
         shaped = ancestor_shaped or _is_shaped(key)
+        declared = ancestor_declared or _is_declared(key, policy)
         key_secret = not _is_safe(key, policy)
-        if isinstance(node, (str, bytes, bytearray)):
-            yield CredentialLeaf(path, node, shaped or key_secret, shaped)
+        if isinstance(node, (str, bytes, bytearray, memoryview)):
+            yield CredentialLeaf(path, node, shaped or declared or key_secret, shaped, declared)
             continue
         if isinstance(node, Credential):
-            guard = (id(node), shaped, key_secret)
+            guard = (id(node), shaped, declared, key_secret)
             if guard in visited:
                 continue
             visited.add(guard)
             node = node.data
         elif isinstance(node, (Mapping, list, tuple, set, frozenset)):
-            guard = (id(node), shaped, key_secret)
+            guard = (id(node), shaped, declared, key_secret)
             if guard in visited:
                 continue
             visited.add(guard)
         else:
             continue
-        children: list[tuple[Any, str, Any, bool]]
+        children: list[tuple[Any, str, Any, bool, bool]]
         if isinstance(node, Mapping):
-            children = [(v, f"{path}.{k}" if path else str(k), k, shaped) for k, v in node.items()]
+            children = [(v, f"{path}.{k}" if path else str(k), k, shaped, declared) for k, v in node.items()]
         else:
-            children = [(v, f"{path}[{i}]", key, shaped) for i, v in enumerate(node)]
+            children = [(v, f"{path}[{i}]", key, shaped, declared) for i, v in enumerate(node)]
         stack.extend(reversed(children))
 
 
@@ -162,6 +172,6 @@ def credential_secret_literals(value: Any, policy: CredentialKeyPolicy | None = 
     return _literals_where(value, lambda item: item.secret, policy)
 
 
-def credential_identity_literals(value: Any) -> frozenset[str]:
-    """The credential-shaped str leaves of one credential value that are long enough and not blank."""
-    return _literals_where(value, lambda item: item.shaped)
+def credential_identity_literals(value: Any, policy: CredentialKeyPolicy | None = None) -> frozenset[str]:
+    """The shaped or steward-declared str leaves of one credential value that are long enough and not blank."""
+    return _literals_where(value, lambda item: item.shaped or item.declared, policy)

@@ -1663,6 +1663,25 @@ class TestPlanStepDataAccessIdentity:
         safe["data_access_identity"] = step.data_access_identity
         assert "hunter2" not in json.dumps(safe, default=str)
 
+    def test_a_steward_secret_key_keeps_its_value_out_of_the_identity(self, tmp_path: Path) -> None:
+        db = str(tmp_path / "plan_info_steward.db")
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE t (plan_info_steward_col INTEGER)")
+        conn.commit()
+        conn.close()
+        dac = DataAccessCollection(credentials=Credential(sqlite=db), secret_credential_keys={"sqlite"})
+
+        explained = mloda.explain(
+            ["plan_info_steward_col"],
+            compute_frameworks=[PythonDictFramework],
+            data_access_collection=dac,
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
+        )
+
+        step = next(s for s in explained if s.step_kind == "compute" and s.data_access_identity is not None)
+        assert step.data_access_identity is not None
+        assert db not in step.data_access_identity
+
     def test_sqlite_plan_lock_keeps_credentials_and_path_out_and_has_no_reader_entry(self, tmp_path: Path) -> None:
         db, explained = self._explain_sqlite_plan(tmp_path)
 

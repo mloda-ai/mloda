@@ -12,6 +12,7 @@ from difflib import get_close_matches
 from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.components.credential_leaves import (
+    CredentialKeyPolicy,
     credential_key_names,
     iter_credential_leaves,
     normalize_credential_key,
@@ -129,9 +130,9 @@ def declared_credential_handles(feature_group: type[FeatureGroup], options: Opti
     return tuple(sorted({v for v in _declared(feature_group, options).values() if isinstance(v, str)}))
 
 
-def _bytes_path(entry: Any) -> str | None:
-    for item in iter_credential_leaves(entry):
-        if item.secret and isinstance(item.leaf, (bytes, bytearray)):
+def _bytes_path(entry: Any, policy: CredentialKeyPolicy | None) -> str | None:
+    for item in iter_credential_leaves(entry, policy):
+        if item.secret and isinstance(item.leaf, (bytes, bytearray, memoryview)):
             return item.path
     return None
 
@@ -183,7 +184,7 @@ def _check_one(
                 f"Credential handle '{handle}' for option '{key}' of {group_name} is missing required "
                 f"fields: {missing}."
             )
-    path = _bytes_path(entry)
+    path = _bytes_path(entry, None if dac is None else dac.credential_key_policy())
     if path is not None:
         raise _refuse(
             f"Credential handle '{handle}' for option '{key}' of {group_name} holds bytes at '{path}'. "
@@ -211,9 +212,8 @@ def _credential_hit(value: Any, seen: set[int]) -> str | None:
 def refuse_credential_option_values(options: Options) -> None:
     """Refuse a Credential or RegisteredCredential in any non-pointer option value, naming key and type only."""
     # Function-local: avoids an import cycle through the source feature group module.
-    from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
-
     from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
+    from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
 
     pointer_keys: Any = None
     for key, value in [*options.group.items(), *options.context.items()]:

@@ -504,6 +504,41 @@ class TestPlanTimeRefusals:
 
         assert results[0]["chs_vault_a"].tolist() == [1, 2, 3]
 
+    def test_bytes_under_a_steward_secret_key_are_refused(self) -> None:
+        dac = DataAccessCollection(
+            credentials={"vault-main": {"key": SECRET, "host": BYTES_SECRET}}, secret_credential_keys={"host"}
+        )
+
+        message = _refusal(_prepare, [_vault("vault-main")], dac, ChsVaultFG)
+
+        assert "vault-main" in message
+        assert "host" in message
+        assert BYTES_SECRET.decode() not in message
+
+    def test_bytes_under_a_declared_public_key_are_accepted(self) -> None:
+        dac = DataAccessCollection(
+            credentials={"vault-main": {"key": SECRET, "chs_pub_blob": BYTES_SECRET}},
+            public_credential_keys={"chs_pub_blob"},
+        )
+
+        results = mloda.run_all(
+            [_vault("vault-main")],
+            compute_frameworks=[PandasDataFrame],
+            data_access_collection=dac,
+            plugin_collector=_plugins(ChsVaultFG),
+        )
+
+        assert results[0]["chs_vault_a"].tolist() == [1, 2, 3]
+
+    @pytest.mark.parametrize(
+        "credential", [{"chs_blob": memoryview(BYTES_SECRET)}, {"password": [memoryview(BYTES_SECRET)]}]
+    )
+    def test_a_memoryview_leaf_is_refused_like_bytes(self, credential: dict[str, Any]) -> None:
+        message = _refusal(_prepare, [_vault("vault-main")], _dac(**{"vault-main": credential}), ChsVaultFG)
+
+        assert "vault-main" in message
+        assert "hex" in message or "base64" in message
+
     @pytest.mark.parametrize("entry", ENTRY_POINTS)
     def test_a_handle_in_context_is_refused_naming_the_key_and_the_group_placement(self, entry: Entry) -> None:
         feature = Feature("chs_vault_a", options=Options(group={}, context={HANDLE_KEY: "vault-main"}))

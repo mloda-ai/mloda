@@ -41,7 +41,7 @@ Sorted JSON with a `format` number (not in the content hash), the `requested_fea
 | `input_feature_edges` | Each output feature's input names. | always, may be empty | yes |
 | `leaves_connection` | The handle of the connection a root read or a requested result converted into another framework (including `output_framework`) leaves, `<unnamed>` for an auto-named connection. | always, may be null | no |
 | `implementation` | The serving `Implementation` (`module:qualname`), `neutral` for a source group loaded without one. | always, may be null | yes |
-| `implementation_hash` | The hash of the first-party code the implementation reaches, its group included, never dependency versions. | always, null without an implementation | yes |
+| `implementation_hash` | The hash of the first-party code the implementation reaches, its group included, never dependency versions; `unavailable` when the source cannot be read (refused by `write_plan_lock`). | always, null without an implementation | yes |
 | `implementation_specialized_from` | The winner's concrete `Implementation` ancestors that serve the step's pair. | always, may be empty | yes |
 | `feature_group_hash` | The group's code hash; `unavailable` (not refused) for a group without readable source, whose edits are then not tracked. | only when an inherited implementation serves a subclass group or a source group loads neutrally | yes |
 | `credential_handles` | Declared and bound handle names, sorted, `<unnamed>` for an auto handle, `<pointer>` for a credential not in the collection, both reserved so no handle can use them. | only when the step has any | no |

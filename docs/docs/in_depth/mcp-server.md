@@ -77,7 +77,7 @@ numbers, booleans, lists or tables (no TOML dates or times), and `in_features` i
 `[mcp.credentials.<handle>]` registers a credential for groups that read it with `read_credential` and for database
 sources. The table holds environment variable names and file paths, never values. Startup fails, naming the handle and
 the field, if a variable is unset, empty or blank or a file is missing, empty or blank. A field value must be an
-environment variable name (letters, digits and `_`, not starting with a digit); a name with `.` or `-` now fails
+environment variable name (letters, digits and `_`, not starting with a digit); a name with `.` or `-` fails
 startup, while an underscore-only token such as `sk_live_abc` still passes the rule. An empty field name is refused.
 Handle names follow the core, e.g. `pii-hmac-key`. A handle may not start with `_auto_` or equal a source alias. Secret files are read again for every request, so a rotated file takes effect without a restart; an
 environment variable needs a restart. A group declares its handle option with `credential_handle_spec`; set it in

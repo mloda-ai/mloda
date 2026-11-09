@@ -363,14 +363,14 @@ class TestRunResultArtifacts:
 
         assert loaded.artifacts == {"a": {"b": 1}}
 
+
+class TestRunResultStepDurations:
+    """One StepDuration per feature group step that completed calculate_feature, timed around that call only."""
+
     def test_step_durations_default_to_an_empty_tuple(self) -> None:
         from mloda.user import RunResult
 
         assert RunResult([], []).step_durations == ()
-
-
-class TestRunResultStepDurations:
-    """One StepDuration per feature group step that completed calculate_feature, timed around that call only."""
 
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
     def test_one_entry_per_step_with_plan_uuid_and_lower_bound(self, mode: ParallelizationMode) -> None:
@@ -539,16 +539,6 @@ class TestResultStreamArtifactsAndFailedRows:
         assert stream.failed_rows == ()
         assert len(stream.step_durations) == 2
 
-    def test_step_durations_populated_after_exhaustion_and_after_early_close(self) -> None:
-        exhausted = _stream_all(_TWO_GROUP_FEATURES)
-        list(exhausted)
-        assert len(exhausted.step_durations) == 2
-
-        closed = _stream_all(_TWO_GROUP_FEATURES)
-        next(closed)
-        closed.close()
-        assert len(closed.step_durations) >= 1
-
     def test_readable_after_early_close(self) -> None:
         stream = _stream_all(_TWO_GROUP_FEATURES)
         next(stream)
@@ -557,6 +547,7 @@ class TestResultStreamArtifactsAndFailedRows:
 
         assert isinstance(stream.artifacts, dict)
         assert stream.failed_rows == ()
+        assert len(stream.step_durations) >= 1
 
     def test_properties_are_read_only(self) -> None:
         stream = _stream_all()

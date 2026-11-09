@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable
 from typing import Any
 
@@ -10,6 +11,7 @@ import pytest
 from mloda._testing.subclass_scope import assert_subclass_scope, check_subclass_scope
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.divergence import Cause, Divergence, DivergenceKind
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -31,6 +33,8 @@ CHANGED_PART = Divergence(
     kind=DivergenceKind.VALUE, cause=Cause.BACKEND, outputs=frozenset({"p"}), reason="part changed"
 )
 GAP = Divergence(kind=DivergenceKind.GAP, cause=Cause.NOT_IMPLEMENTED)
+CHANGED_VARIANT = Divergence(kind=DivergenceKind.VARIANT, cause=Cause.BACKEND, variant="v", reason="variant changed")
+ALLOWING = Options(group={"variant": "x", str(DefaultOptionKeys.allow_variants): "v"})
 Calc = Callable[[Any, Any, Any], Any]
 
 
@@ -53,9 +57,12 @@ def make_parent(
     calculates: bool = True,
     parts: bool = False,
     divergences: tuple[Divergence, ...] = (),
+    variants: frozenset[str] = frozenset(),
 ) -> type[FeatureGroup]:
     class ScopeParent(base):  # type: ignore[valid-type, misc]
         DIVERGENCES = divergences
+        if variants:
+            VARIANTS = variants
         if parts:
             OUTPUT_PARTS = ("p",)
 
@@ -110,28 +117,16 @@ def make_changed_with_inherited_record() -> Pair:
     return parent, _gated_subclass(parent, "variant", _calc(5))
 
 
-def make_changed_with_gap() -> Pair:
-    return make_changed(divergences=(GAP,))
+def make_changed_with_variant_record() -> Pair:
+    parent = make_parent(variants=frozenset({"v"}))
+    return parent, _gated_subclass(parent, "variant", _calc(5), (CHANGED_VARIANT,))
 
 
-def make_changed_with_value_record() -> Pair:
-    return make_changed(divergences=(CHANGED,))
+def make_broken_run() -> Pair:
+    def calc(cls: Any, data: Any, features: Any) -> Any:
+        raise RuntimeError("boom")
 
-
-def make_changed_with_type_record() -> Pair:
-    return make_changed(divergences=(CHANGED_TYPE,))
-
-
-def make_part_changed_with_part_record() -> Pair:
-    return make_changed(_calc(2, 9), (CHANGED_PART,), parts=True)
-
-
-def make_main_changed_with_part_record() -> Pair:
-    return make_changed(_calc(5, 3), (CHANGED_PART,), parts=True)
-
-
-def make_dropping_column() -> Pair:
-    return make_changed(_calc(2), parts=True)
+    return make_changed(calc)
 
 
 def make_ungated() -> Pair:
@@ -270,10 +265,17 @@ def test_well_scoped_subclass_passes(data: TypedTestData | None) -> None:
         (make_gate_rejects_own_option, "misses:", None, ""),
         (make_ungated, "steals:", DATA, ""),
         (make_changed, "values:", DATA, "differs"),
-        (make_changed_with_gap, "values:", DATA, "differs"),
+        (functools.partial(make_changed, divergences=(GAP,)), "values:", DATA, "differs"),
         (make_changed_with_inherited_record, "values:", DATA, "differs"),
-        (make_main_changed_with_part_record, "values:", DATA, "differs"),
-        (make_dropping_column, "values:", DATA, "missing"),
+        (
+            functools.partial(make_changed, _calc(5, 3), (CHANGED_PART,), parts=True),
+            "values:",
+            DATA,
+            "differs",
+        ),
+        (functools.partial(make_changed, _calc(2), parts=True), "values:", DATA, "missing"),
+        (make_changed_with_variant_record, "values:", DATA, "differs"),
+        (make_broken_run, "values:", DATA, "run raised"),
     ],
 )
 def test_broken_pair_fails_only_its_sub_check(
@@ -288,11 +290,35 @@ def test_broken_pair_fails_only_its_sub_check(
 
 @pytest.mark.parametrize(
     "make",
-    [make_changed_with_value_record, make_changed_with_type_record, make_part_changed_with_part_record],
+    [
+        pytest.param(functools.partial(make_changed, divergences=(CHANGED,)), id="value"),
+        pytest.param(functools.partial(make_changed, divergences=(CHANGED_TYPE,)), id="type"),
+        pytest.param(functools.partial(make_changed, _calc(2, 9), (CHANGED_PART,), parts=True), id="part"),
+    ],
 )
 def test_declared_divergence_excuses_changed_column(make: Callable[[], Pair]) -> None:
     parent, sub = make()
     assert check_subclass_scope(sub, parent, SELECTING, input_data=DATA).failures == ()
+
+
+def test_allowed_variant_record_excuses_changed_column() -> None:
+    parent, sub = make_changed_with_variant_record()
+    assert check_subclass_scope(sub, parent, ALLOWING, input_data=DATA).failures == ()
+
+
+def test_misses_failure_skips_values_with_note() -> None:
+    parent, sub = make_gate_rejects_own_option()
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
+    assert all(f.startswith("misses:") for f in result.failures), result.failures
+    assert result.failures
+    assert any(n.startswith("values: not compared") for n in result.notes), result.notes
+
+
+def test_duplicate_request_names_fail_once() -> None:
+    parent, sub = make_changed()
+    result = check_subclass_scope(sub, parent, SELECTING, requests=["sc_a", "sc_a"], input_data=DATA)
+    values = [f for f in result.failures if f.startswith("values:") and "sc_a" in f]
+    assert len(values) == 1, result.failures
 
 
 def test_no_input_data_notes_values_not_compared() -> None:

@@ -24,6 +24,7 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.utils import safe_field_with_error
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.implementation import Implementation
 
 _FOREIGN_NAME = "conformance_foreign_feature"
 _UNKNOWN_VALUE = "conformance_unknown_value"
@@ -179,14 +180,13 @@ def _run(
     data: TypedTestData,
     names: list[str],
     base: Options,
-    implementation: Any = None,
+    implementation: type[Implementation[Any]] | None = None,
 ) -> tuple[Any, str | None]:
     """Run through the adapter's ComputeFramework like a feature group step, then validate the output."""
 
     def go() -> Any:
         features = FeatureSet()
-        if implementation is not None:
-            features.implementation = implementation
+        features.implementation = implementation
         for name in names:
             features.add(Feature(name, options=base))
         cfw = adapter.compute_framework()(mode=ParallelizationMode.SYNC, children_if_root=frozenset())

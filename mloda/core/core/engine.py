@@ -25,6 +25,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import (
 )
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.components.divergence import Divergence
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import (
     Extender,
@@ -111,6 +112,7 @@ class Engine:
         self.transformer = ComputeFrameworkTransformer()
         self.framework_positions: Mapping[type[ComputeFramework], int] = framework_preference or {}
         self.filter_ties: list[tuple[UUID, UUID]] = []
+        self.variant_blocks: dict[UUID, dict[type[ComputeFramework], tuple[Divergence, ...]]] = {}
         self.connection_dropped: dict[UUID, frozenset[type[ComputeFramework]]] = {}
         self.connection_reasons: dict[UUID, dict[type[ComputeFramework], str]] = {}
         # setup variables which track the primary sources and the compute platforms
@@ -310,7 +312,9 @@ class Engine:
         pin_frameworks: dict[UUID, frozenset[type[ComputeFramework]]] = {}
         pinned: set[UUID] = set()
         if any(node.feature.implementation_pin is not None for node in graph.nodes.values()):
-            pin_frameworks, pinned = ResolveImplementationPins(graph, self.implementations).resolve()
+            pin_frameworks, pinned = ResolveImplementationPins(
+                graph, self.implementations, variant_blocks=self.variant_blocks
+            ).resolve()
 
         # resolve graph into a queue
         resolver = ResolveGraph(
@@ -395,6 +399,8 @@ class Engine:
 
         self._set_feature_name(feature, feature_group, result.output_parts.get(feature_group_class))
         self._set_compute_framework_and_data_type(feature, compute_frameworks, feature_group_class)
+        if blocks := result.variant_blocks.get(feature_group_class):
+            self.variant_blocks[feature.uuid] = blocks
 
         feature.result_index_columns = self._result_index_columns(feature, feature_group, feature_group_class)
 
@@ -729,6 +735,8 @@ class Engine:
         new_index_feature = create_index_feature(index, feature_group, feature)
         new_index_feature.link_key_only = link is not None
         self.add_feature_to_collection(feature_group_class, new_index_feature, child_uuid, True)
+        if feature.uuid in self.variant_blocks:
+            self.variant_blocks[new_index_feature.uuid] = self.variant_blocks[feature.uuid]
         if feature.uuid in self.connection_dropped:
             self.connection_dropped[new_index_feature.uuid] = self.connection_dropped[feature.uuid]
         if feature.uuid in self.connection_reasons:

@@ -88,6 +88,7 @@ from mloda.core.abstract_plugins.components.utils import (
     safe_exc_str,
     safe_field,
 )
+from mloda.core.abstract_plugins.components.divergence import Divergence
 from mloda.core.abstract_plugins.compute_framework import (
     ComputeFramework,
     compute_framework_subclasses,
@@ -105,6 +106,7 @@ from mloda.core.abstract_plugins.implementation import (
     named_implementations,
     serving_implementation,
     unallowed_variants,
+    variant_block_reason,
 )
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 
@@ -328,6 +330,7 @@ class IdentifyFeatureGroupClass:
     _criteria_matched_feature_groups: set[type[FeatureGroup]]
     _abstract_matched_feature_groups: set[type[FeatureGroup]]
     _candidate_frameworks: dict[type[FeatureGroup], CandidateFrameworks]
+    _variant_blocks: dict[type[FeatureGroup], dict[type[ComputeFramework], tuple[Divergence, ...]]]
     _match_rejections: dict[type[FeatureGroup], MatchRejection]
     _matcher_errors: dict[type[FeatureGroup], str]
     _eliminations: dict[type[FeatureGroup], Elimination]
@@ -356,6 +359,7 @@ class IdentifyFeatureGroupClass:
         self._criteria_matched_feature_groups = set()
         self._abstract_matched_feature_groups = set()
         self._candidate_frameworks = {}
+        self._variant_blocks = {}
         # Reasons the first match pass recorded, keyed by candidate class.
         self._match_rejections = {}
         # Contained matcher raises as text, keyed by candidate class: never the exception object.
@@ -464,6 +468,7 @@ class IdentifyFeatureGroupClass:
                 criteria_matched=self._criteria_matched_feature_groups,
                 abstract_matched=self._abstract_matched_feature_groups,
                 candidate_frameworks=self._candidate_frameworks,
+                variant_blocks=self._variant_blocks,
                 eliminations=self._eliminations,
                 specialized_from=specialized_from,
                 output_parts={fg: self._output_parts[fg] for fg in identified if fg in self._output_parts},
@@ -973,33 +978,11 @@ class IdentifyFeatureGroupClass:
             and (not pinned or (impl is not None and is_nominal_subclass(impl, tuple(pinned))))
         }
         if not fitting or not fitting <= set(blocked):
+            self._variant_blocks[feature_group] = blocked
             return supported - set(blocked)
-        listed = {
-            cfw: sorted({str(r.variant) for r in found if r.variant in feature_group.VARIANTS})
-            for cfw, found in blocked.items()
-        }
-        suggested = sorted(
-            (allowed_variants(options) & feature_group.VARIANTS) | {n for v in listed.values() for n in v}
+        self._record_elimination(
+            feature_group, "variant", variant_block_reason(feature_group, blocked, served, options)
         )
-        suggestion = ", ".join(f'"{n}"' for n in suggested) + ("," if len(suggested) == 1 else "")
-        reasons = []
-        for cfw in sorted(blocked, key=lambda c: c.get_class_name()):
-            impl = served[cfw]
-            who = f"{impl.__name__ if impl else cfw.get_class_name()} on {cfw.get_class_name()} follows"
-            unlisted = sorted({str(r.variant) for r in blocked[cfw]} - set(listed[cfw]))
-            if unlisted:
-                quoted = ", ".join(f"'{n}'" for n in unlisted)
-                reasons.append(
-                    f"{who} {'variants' if len(unlisted) > 1 else 'variant'} {quoted}, which "
-                    f"{feature_group.__name__}.VARIANTS does not list, so it cannot be allowed"
-                )
-            if listed[cfw]:
-                quoted = ", ".join(f"'{n}'" for n in listed[cfw])
-                reasons.append(
-                    f"{who} {'variants' if len(listed[cfw]) > 1 else 'variant'} {quoted}, which this feature "
-                    f'does not allow; to allow it add {{"allow_variants": ({suggestion})}} to the feature\'s options'
-                )
-        self._record_elimination(feature_group, "variant", "; ".join(reasons))
         return set()
 
     def _filter_loop(

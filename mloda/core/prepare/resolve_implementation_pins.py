@@ -1,10 +1,11 @@
 """Plan-time pass turning Feature(implementation=...) pins into per-step allowed compute frameworks."""
 
 from collections import defaultdict
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from typing import Any
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.divergence import Divergence
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import (
@@ -12,6 +13,7 @@ from mloda.core.abstract_plugins.implementation import (
     loaded_implementations,
     named_implementations,
     serving_implementation,
+    variant_block_reason,
 )
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -28,7 +30,13 @@ def _qualified(cls: type) -> str:
 class ResolveImplementationPins:
     """Resolves pins on requested features over their transitive inputs; never mutates a Feature."""
 
-    def __init__(self, graph: Graph, accessible: Collection[type[Implementation[Any]]]) -> None:
+    def __init__(
+        self,
+        graph: Graph,
+        accessible: Collection[type[Implementation[Any]]],
+        variant_blocks: Mapping[UUID, Mapping[Framework, tuple[Divergence, ...]]] | None = None,
+    ) -> None:
+        self.variant_blocks = variant_blocks or {}
         self.graph = graph
         self.accessible = list(accessible)
         self.loaded = loaded_implementations()
@@ -46,7 +54,7 @@ class ResolveImplementationPins:
                 continue
             for step, impl in self._assign(uuid, pin):
                 feature = self.graph.nodes[step].feature
-                served = self._allowed(step, impl)
+                served = self._allowed(step, impl, str(node.feature.name))
                 for other, other_impl, other_request in seen:
                     twin = self.graph.nodes[other].feature
                     if (
@@ -131,7 +139,7 @@ class ResolveImplementationPins:
         stop_after = "load_neutral" if is_nominal_subclass(group, SourceFeatureGroup) else None
         return serving_implementation(group, framework, self.accessible, stop_after=stop_after)
 
-    def _allowed(self, uuid: UUID, impl: type[Implementation[Any]]) -> frozenset[Framework]:
+    def _allowed(self, uuid: UUID, impl: type[Implementation[Any]], request: str | None = None) -> frozenset[Framework]:
         node = self.graph.nodes[uuid]
         feature = node.feature
         group = node.feature_group_class
@@ -140,6 +148,20 @@ class ResolveImplementationPins:
             for fw in feature.compute_frameworks or ()
             if (served := self._serving(group, fw)) is not None and is_nominal_subclass(served, impl)
         }
+        if not serves and not feature.framework_pinned:
+            fw = impl.compute_framework
+            served = self._serving(group, fw)
+            found = (
+                self.variant_blocks.get(uuid, {}).get(fw, ())
+                if fw not in (feature.compute_frameworks or ())
+                and served is not None
+                and is_nominal_subclass(served, impl)
+                else ()
+            )
+            if found:
+                target = f"the options of {request}" if request else "the feature's options"
+                reason = variant_block_reason(group, {fw: found}, {fw: served}, feature.options, target)
+                raise ImplementationPinError(f"Step {feature.name} pins implementation {impl.__name__}: {reason}")
         if not serves:
             reason = (
                 "conflicts with the compute_framework of the feature"

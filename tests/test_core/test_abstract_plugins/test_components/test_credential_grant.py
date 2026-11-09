@@ -255,6 +255,7 @@ class TestGrantScopeExitWhenCloseRaises:
 
         monkeypatch.setattr(log_masking, "_process_wide", process_wide)
         monkeypatch.setattr(log_masking, "_union", frozenset())
+        monkeypatch.setattr(log_masking, "_union_masks", (frozenset(), frozenset()))
         monkeypatch.setattr(log_masking, "_union_counts", {})
         before = current_registered_secrets()
 
@@ -264,4 +265,5 @@ class TestGrantScopeExitWhenCloseRaises:
 
         assert current_registered_secrets() == before
         assert log_masking._union == frozenset()
+        assert log_masking._union_masks == (frozenset(), frozenset())
         assert log_masking._union_counts == {}

@@ -9,6 +9,7 @@ from mloda.core.abstract_plugins.components.credential import Credential
 from mloda.core.abstract_plugins.components.credential_grant import (
     CredentialLookup,
     StaticGrant,
+    _GRANT_HOLDER,
     _read_granted,
     grant_scope,
 )
@@ -62,6 +63,8 @@ class TestCredentialLookup:
         with pytest.raises(Exception, match="granted") as info:
             lookup.credential("granted")
         assert _HMAC not in str(info.value)
+        assert lookup._values() == []
+        assert lookup.declared() == ()
 
     def test_close_and_leaving_the_scope_do_not_mutate_the_nested_values(self) -> None:
         value = _credential()
@@ -97,6 +100,10 @@ class TestGrantScope:
         with pytest.raises(RuntimeError, match="no longer available") as info:
             captured.run(_read_granted, "h")
         assert _HMAC not in str(info.value)
+        held = captured.run(_GRANT_HOLDER.get)
+        assert held is not None
+        assert held._values() == []
+        assert held.declared() == ()
 
     def test_ungranted_handle_inside_the_scope_names_the_handle(self) -> None:
         with grant_scope(StaticGrant({"h": _credential()})):

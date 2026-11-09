@@ -73,11 +73,13 @@ def dispatch_input_data_load(
         marker = features._load_marker
         if marker is not None:
             active = marker.active
+            secrets = marker.secrets
+            identity_secrets = marker.identity_secrets
             if active is not None and marker.has_extender:
                 with (
                     active[0].activate(),
                     active[1].activate(),
-                    registered_secrets_scope(marker.secrets, marker.identity_secrets),
+                    registered_secrets_scope(secrets, identity_secrets),
                 ):
                     return dispatch_input_data_load(
                         owner,

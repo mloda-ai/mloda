@@ -21,8 +21,10 @@ from mloda.core.abstract_plugins.components.credential_access import (
     read_credential,
     readable,
     readable_credentials,
+    restore_readable,
 )
 from mloda.core.abstract_plugins.components.credential_grant import (
+    CredentialLookup,
     StaticGrant,
     _read_granted,
     grant_scope,
@@ -39,6 +41,35 @@ from datetime import UTC
 _HOST = "access-host.internal.example"
 _HMAC = "hmac-access-Qv7Lk2Xz9"  # nosec B105
 _KEY = "key-access-Wn4Rt8Bm3"  # nosec B105
+_WINDOW_TEXT = "can only be read inside calculate_feature or an artifact saver"
+
+
+class _ClosingAfterReturn(CredentialLookup):
+    """A lookup that closes right after the named method returns, as a concurrent close would."""
+
+    def __init__(self, values: dict[str, Any], method: str) -> None:
+        super().__init__(values)
+        self._method = method
+
+    def __getattribute__(self, name: str) -> Any:
+        attr = super().__getattribute__(name)
+        if name != super().__getattribute__("_method") or not callable(attr):
+            return attr
+
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            result = attr(*args, **kwargs)
+            self.close()
+            return result
+
+        return wrapper
+
+
+class _ClosingGrant:
+    def __init__(self, method: str) -> None:
+        self._method = method
+
+    def open(self) -> CredentialLookup:
+        return _ClosingAfterReturn({"h": _credential()}, self._method)
 
 
 def _credential() -> dict[str, Any]:
@@ -123,6 +154,18 @@ class TestResolvedCredential:
         assert "nope" in text
         assert _HMAC not in text
         assert _HOST not in text
+
+    def test_deleting_a_missing_field_raises_the_typed_key_error_naming_handle_and_field(self) -> None:
+        cred = ResolvedCredential("h", _credential())
+
+        for remove in (lambda: cred.__delitem__("nope"), lambda: cred.pop("nope")):
+            with pytest.raises(CredentialFieldMissing) as info:
+                remove()
+            text = str(info.value)
+            assert "h" in text
+            assert "nope" in text
+            assert _HMAC not in text
+        assert set(cred) == {"host", "hmac", "key"}
 
     def test_repr_and_str_redact_values(self) -> None:
         cred = ResolvedCredential("h", _credential())
@@ -220,8 +263,60 @@ class TestReadCredential:
         with _scope():
             captured = contextvars.copy_context()
 
-        with pytest.raises(CredentialReadRefused, match="h"):
+        with pytest.raises(CredentialReadRefused, match=_WINDOW_TEXT):
             captured.run(read_credential, "h")
+
+    def test_a_copied_context_is_refused_once_its_window_closes_while_the_grant_is_held(self) -> None:
+        with grant_scope(StaticGrant({"h": _credential()})):
+            with readable_credentials():
+                captured = contextvars.copy_context()
+                assert captured.run(read_credential, "h")["host"] == _HOST
+
+            with pytest.raises(CredentialReadRefused, match=_WINDOW_TEXT) as info:
+                captured.run(read_credential, "h")
+
+        assert _HMAC not in str(info.value)
+
+    def test_a_window_opened_in_a_copy_taken_outside_any_window_is_refused_after_the_grant_exits(self) -> None:
+        with grant_scope(StaticGrant({"h": _credential()})):
+            captured = contextvars.copy_context()
+
+        def read_in_a_new_window() -> None:
+            with readable_credentials():
+                read_credential("h")
+
+        with pytest.raises(CredentialReadRefused, match=_WINDOW_TEXT):
+            captured.run(read_in_a_new_window)
+
+    @pytest.mark.parametrize("method", ["declared", "snapshot"])
+    def test_a_lookup_closing_right_after_a_read_step_yields_a_credential_or_a_refusal(self, method: str) -> None:
+        with grant_scope(_ClosingGrant(method)):
+            with readable_credentials():
+                try:
+                    outcome: Any = read_credential("h")
+                except CredentialReadRefused as refused:
+                    outcome = refused
+
+        assert isinstance(outcome, ResolvedCredential | CredentialReadRefused)
+        assert _HMAC not in str(outcome)
+
+    def test_a_restore_readable_wrapper_called_after_its_window_exited_is_refused(self) -> None:
+        with grant_scope(StaticGrant({"h": _credential()})):
+            with readable_credentials():
+                wrapped = restore_readable(_Reader.calculate_feature)
+                assert wrapped(None, None) == _HOST
+
+            with pytest.raises(CredentialReadRefused, match=_WINDOW_TEXT):
+                wrapped(None, None)
+
+    def test_a_restore_readable_wrapper_still_reads_after_an_inner_window_exits_inside_the_outer_one(self) -> None:
+        with grant_scope(StaticGrant({"h": _credential()})):
+            with readable_credentials():
+                wrapped = restore_readable(_Reader.calculate_feature)
+                with readable_credentials():
+                    pass
+
+                assert wrapped(None, None) == _HOST
 
     def test_the_same_scope_instance_entered_twice_in_sequence_reads_both_times(self) -> None:
         scope = _scope()

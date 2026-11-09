@@ -1392,6 +1392,40 @@ class ChsRcMissingFieldFG(ChsSource):
         return read_credential(features.get_options_key(HANDLE_KEY))["no_such_field"]
 
 
+class ChsRcDeleteMissingFieldFG(ChsSource):
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_delete_missing_field_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        credential = read_credential(features.get_options_key(HANDLE_KEY))
+        del credential["no_such_field"]
+        return pd.DataFrame({name: [1] for name in features.get_all_names()})
+
+
+class ChsCopiedContextFG(ChsSource):
+    """Copies the context inside calculate_feature and reads through the copy in validate_output_features."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+    _copies: list[contextvars.Context] = []
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_copied_context_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        cls._copies.append(contextvars.copy_context())
+        return pd.DataFrame({name: [1] for name in features.get_all_names()})
+
+    @classmethod
+    def validate_output_features(cls, data: Any, features: FeatureSet) -> None:
+        cls._copies[-1].run(read_credential, features.get_options_key(HANDLE_KEY))
+
+
 class ChsRcUndeclaredFG(ChsSource):
     PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
 
@@ -1802,11 +1836,29 @@ def test_read_credential_raises_after_save_artifact_returns(flight_server: Any) 
 
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("mode", _GRANT_MODES)
-def test_a_missing_field_raises_the_typed_error_not_the_missing_column_message(
+def test_a_copied_context_is_refused_once_the_window_closes_in_every_mode(
     mode: ParallelizationMode, flight_server: Any
 ) -> None:
+    with pytest.raises(CredentialReadRefused, match="can only be read inside calculate_feature") as excinfo:
+        _grant_run(ChsCopiedContextFG, "chs_copied_context_a", mode, flight_server)
+
+    assert _E2E_HMAC not in str(excinfo.value)
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+@pytest.mark.parametrize(
+    ("group", "name"),
+    [
+        pytest.param(ChsRcMissingFieldFG, "chs_rc_missing_field_a", id="read"),
+        pytest.param(ChsRcDeleteMissingFieldFG, "chs_rc_delete_missing_field_a", id="delete"),
+    ],
+)
+def test_a_missing_field_raises_the_typed_error_not_the_missing_column_message(
+    group: type[ChsSource], name: str, mode: ParallelizationMode, flight_server: Any
+) -> None:
     with pytest.raises(CredentialFieldMissing) as excinfo:
-        _grant_run(ChsRcMissingFieldFG, "chs_rc_missing_field_a", mode, flight_server)
+        _grant_run(group, name, mode, flight_server)
 
     text = str(excinfo.value)
     assert _E2E_HANDLE in text

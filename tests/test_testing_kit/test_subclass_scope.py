@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from mloda._testing.framework_adapter import PythonDictAdapter
 from mloda._testing.subclass_scope import assert_subclass_scope, check_subclass_scope
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -61,9 +62,16 @@ def make_parent(
     variants: frozenset[str] = frozenset(),
     names: frozenset[str] = frozenset({"sc_a"}),
     writes_on_match: bool = False,
+    rule: set[type[ComputeFramework]] | None = None,
 ) -> type[FeatureGroup]:
     class ScopeParent(base):  # type: ignore[valid-type, misc]
         DIVERGENCES = divergences
+        if rule is not None:
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+                return rule
+
         if variants:
             VARIANTS = variants
         if parts:
@@ -341,10 +349,11 @@ def test_no_input_data_notes_values_not_compared() -> None:
     assert any(n.startswith("values:") and "no input_data" in n for n in result.notes), result.notes
 
 
-def test_parent_without_calculate_feature_notes_and_skips_values() -> None:
+@pytest.mark.parametrize("require_run", [False, True])
+def test_parent_without_calculate_feature_notes_and_skips_values(require_run: bool) -> None:
     parent = make_parent(calculates=False)
     sub = _gated_subclass(parent, "variant", _calc(5))
-    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA, require_run=require_run)
     assert result.failures == ()
     assert any(n.startswith("values:") for n in result.notes), result.notes
 
@@ -398,15 +407,52 @@ def test_route_gate_sees_options_written_by_the_match(
     assert not any(n.startswith("values:") and "not routed" in n for n in result.notes), result.notes
 
 
-def test_operation_group_without_serving_implementation_notes_values_skipped(
-    make_implementation: Callable[..., type[Implementation[Any]]],
+@pytest.mark.parametrize("require_run", [False, True])
+def test_operation_group_without_serving_implementation_skips_values_comparison(
+    make_implementation: Callable[..., type[Implementation[Any]]], require_run: bool
 ) -> None:
     parent = make_parent(base=OperationFeatureGroup, calculates=False)
     sub = _gated_subclass(parent, "variant")
     make_implementation(parent, PandasDataFrame, lambda _, data, features: data)
-    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA, require_run=require_run)
+    message = f"values: no implementation of {parent.__name__} serves PythonDictFramework"
+    if require_run:
+        assert message in result.failures, result.failures
+        assert message not in result.notes, result.notes
+    else:
+        assert result.failures == (), result.failures
+        assert message in result.notes, result.notes
+
+
+@pytest.mark.parametrize("require_run", [False, True])
+def test_rule_excluded_adapter_framework_skips_values_comparison(require_run: bool) -> None:
+    pytest.importorskip("pandas")
+    parent = make_parent(rule={PandasDataFrame})
+    sub = _gated_subclass(parent, "variant", _calc(5))
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA, require_run=require_run)
+    values = [f for f in (*result.failures, *result.notes) if f.startswith("values:")]
+    assert values, result
+    assert all("excluded by compute_framework_rule" in v for v in values), values
+    if require_run:
+        assert not any(n.startswith("values:") for n in result.notes), result.notes
+        assert result.failures, result
+    else:
+        assert result.failures == (), result.failures
+
+
+class _UnavailableAdapter(PythonDictAdapter):
+    def is_available(self) -> bool:
+        return False
+
+
+@pytest.mark.parametrize("require_run", [False, True])
+def test_unavailable_adapter_stays_a_note(require_run: bool) -> None:
+    parent, sub = make_changed()
+    result = check_subclass_scope(
+        sub, parent, SELECTING, input_data=DATA, adapter=_UnavailableAdapter(), require_run=require_run
+    )
     assert result.failures == (), result.failures
-    assert f"values: no implementation of {parent.__name__} serves PythonDictFramework" in result.notes, result.notes
+    assert any(n.startswith("values:") for n in result.notes), result.notes
 
 
 def test_not_a_subclass_is_a_setup_failure() -> None:
@@ -535,9 +581,10 @@ def _declining(impl: type[Implementation[Any]], *, only: str | None = None) -> N
     setattr(impl, "accepts", classmethod(accepts))
 
 
+@pytest.mark.parametrize("require_run", [False, True])
 @pytest.mark.parametrize("who", ["parent", "subclass", "variant"])
-def test_unroutable_pair_notes_values_skipped_and_compares_nothing(
-    make_implementation: Callable[..., type[Implementation[Any]]], who: str
+def test_unroutable_pair_skips_values_comparison_and_compares_nothing(
+    make_implementation: Callable[..., type[Implementation[Any]]], who: str, require_run: bool
 ) -> None:
     parent, sub, parent_impl, sub_impl = _two_framework_pair(
         make_implementation, _calc(2), _calc(5), variants=frozenset({"v"}) if who == "variant" else frozenset()
@@ -548,9 +595,13 @@ def test_unroutable_pair_notes_values_skipped_and_compares_nothing(
         _declining(sub_impl)
     else:
         setattr(sub_impl, "divergences", (CHANGED_VARIANT,))
-    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
-    assert result.failures == (), result.failures
-    assert any(n.startswith("values:") and "sc_a" in n for n in result.notes), result.notes
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA, require_run=require_run)
+    if require_run:
+        assert any(f.startswith("values:") and "sc_a" in f for f in result.failures), result.failures
+        assert not any(n.startswith("values:") for n in result.notes), result.notes
+    else:
+        assert result.failures == (), result.failures
+        assert any(n.startswith("values:") and "sc_a" in n for n in result.notes), result.notes
 
 
 def test_declined_name_does_not_stop_the_other_name_from_being_compared(
@@ -564,6 +615,44 @@ def test_declined_name_does_not_stop_the_other_name_from_being_compared(
     assert any(n.startswith("values:") and "sc_a" in n for n in result.notes), result.notes
     assert any(f.startswith("values:") and "'sc_b' differs" in f for f in result.failures), result.failures
     assert not any("'sc_a'" in f for f in result.failures), result.failures
+
+
+def test_required_declined_name_fails_and_the_other_name_is_still_compared(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+) -> None:
+    parent, sub, _, sub_impl = _two_framework_pair(
+        make_implementation, _calc_two(2, 2), _calc_two(2, 5), names=frozenset({"sc_a", "sc_b"})
+    )
+    _declining(sub_impl, only="sc_a")
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA, require_run=True)
+    assert any(f.startswith("values:") and "sc_a" in f and "differs" not in f for f in result.failures), result.failures
+    assert any(f.startswith("values:") and "'sc_b' differs" in f for f in result.failures), result.failures
+    assert not any(n.startswith("values:") for n in result.notes), result.notes
+
+
+def test_parent_writing_no_requested_column_is_a_setup_failure(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+) -> None:
+    parent, sub, _, _ = _two_framework_pair(make_implementation, _calc(None), _calc(5))
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=DATA)
+    assert any(f.startswith("setup:") and "did not produce" in f for f in result.failures), result.failures
+
+
+@pytest.mark.parametrize("case", ["declined", "rule_excluded"])
+def test_assert_fails_on_skipped_comparison_unless_not_required(
+    make_implementation: Callable[..., type[Implementation[Any]]], case: str
+) -> None:
+    if case == "declined":
+        parent, sub, parent_impl, _ = _two_framework_pair(make_implementation, _calc(2), _calc(5))
+        _declining(parent_impl)
+    else:
+        pytest.importorskip("pandas")
+        parent = make_parent(rule={PandasDataFrame})
+        sub = _gated_subclass(parent, "variant", _calc(5))
+    with pytest.raises(pytest.fail.Exception) as excinfo:
+        assert_subclass_scope(sub, parent, SELECTING, input_data=DATA)
+    assert "values:" in str(excinfo.value)
+    assert_subclass_scope(sub, parent, SELECTING, input_data=DATA, require_run=False)
 
 
 def test_allowed_variant_still_compares_through_the_implementation(

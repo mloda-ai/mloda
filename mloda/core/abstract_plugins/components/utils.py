@@ -21,6 +21,7 @@ MATCH_ABORT_FLAG = "_mloda_match_abort"
 PREFIX_OPTION_KEY_FLAG = "prefix_option_key"
 DEFERRED_MATCH_ABORT_FLAG = "_mloda_deferred_match_abort"
 DECLINE_CODE_FLAG = "_mloda_decline_code"
+CREDENTIAL_ABORT_FLAG = "_mloda_credential_abort"
 
 # Exception classes a user callable raises when it merely cannot judge a value.
 _EXPECTED_JUDGMENT_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError, AttributeError)
@@ -53,6 +54,17 @@ def is_match_abort(exc: BaseException) -> bool:
     """
     # __dict__, not getattr: a custom __getattr__ could raise inside the seam's except block or fake the marker.
     return exc.__dict__.get(MATCH_ABORT_FLAG, False) is True
+
+
+def mark_credential_abort(exc: E) -> E:
+    """Mark a refusal that names only handles and keys, never a value, so a trusted caller may be shown it."""
+    exc.__dict__[CREDENTIAL_ABORT_FLAG] = True
+    return exc
+
+
+def is_credential_abort(exc: BaseException) -> bool:
+    """Is this raise a marked credential handle refusal."""
+    return exc.__dict__.get(CREDENTIAL_ABORT_FLAG, False) is True
 
 
 def defer_match_abort(exc: E) -> E:

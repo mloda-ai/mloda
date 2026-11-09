@@ -458,6 +458,9 @@ def test_load_does_not_check_the_environment(tmp_path: Path) -> None:
         ("[mcp.credentials.db]\ntoken = {}\n", ["db", "token"]),
         ('[mcp.credentials._auto_credentials_1]\ntoken = "VAR"\n', ["_auto_credentials_1"]),
         ('[mcp.credentials.""]\ntoken = "VAR"\n', []),
+        ('[mcp.credentials.db]\ntoken = "A=B C"\n', ["db", "token"]),
+        ('[mcp.credentials.db]\ntoken = "1VAR"\n', ["db", "token"]),
+        ('[mcp.credentials.db]\n"" = "VAR"\n', ["db"]),
         ('[mcp.credentials.db]\ntoken = "VAR"\n[mcp.sources.db]\nfiles = ["a.csv"]\n', ["db"]),
     ],
 )
@@ -469,6 +472,29 @@ def test_bad_credentials_table_is_config_error_naming_handle_and_field(
 
     for name in names:
         assert name in str(raised.value)
+
+
+PASTED = "sk-live-aaaaBBBBccccDDDD1234"  # nosec B105
+
+
+def test_a_pasted_value_is_refused_without_echoing_it(tmp_path: Path) -> None:
+    path = _write(tmp_path, f'[mcp.credentials.db]\ntoken = "{PASTED}"\n')
+
+    with pytest.raises(ConfigError) as raised:
+        load_settings(path, env={})
+    with pytest.raises(ConfigError) as direct:
+        Settings(credentials={"db": {"token": PASTED}})
+
+    for error in (raised, direct):
+        assert "db" in str(error.value)
+        assert "token" in str(error.value)
+        assert PASTED not in str(error.value)
+
+
+def test_a_role_style_handle_parses(tmp_path: Path) -> None:
+    settings = load_settings(_write(tmp_path, '[mcp.credentials."pii-hmac-key"]\nkey = "HMAC_VAR"\n'), env={})
+
+    assert settings.credentials["pii-hmac-key"]["key"] == "HMAC_VAR"
 
 
 def test_credential_handle_equal_to_a_source_alias_is_config_error() -> None:

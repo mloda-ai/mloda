@@ -26,7 +26,9 @@ from mloda.core.abstract_plugins.components.utils import (
     contained_raise_reason,
     PREFIX_OPTION_KEY_FLAG,
     escalate_match_abort,
+    is_credential_abort,
     is_match_abort,
+    mark_credential_abort,
     safe_field,
     safe_value_text,
 )
@@ -174,7 +176,10 @@ class FeatureChainParser:
             except Exception as exc:
                 if is_match_abort(exc):  # a marked abort must escape, not become a rejection
                     if exc.__dict__.get(PREFIX_OPTION_KEY_FLAG) is True:
-                        raise escalate_match_abort(ValueError(f"Option '{property_name}': {exc}")) from exc
+                        wrapped = ValueError(f"Option '{property_name}': {exc}")
+                        if is_credential_abort(exc):
+                            mark_credential_abort(wrapped)
+                        raise escalate_match_abort(wrapped) from exc
                     raise
                 # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
                 level = contained_raise_log_level(exc)

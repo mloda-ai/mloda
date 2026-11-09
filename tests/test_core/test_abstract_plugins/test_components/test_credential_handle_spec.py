@@ -417,6 +417,35 @@ def _abort(entry: Entry, features: list[Feature], dac: DataAccessCollection | No
     return str(exc.value)
 
 
+def _abort_refusal(
+    entry: Entry, features: list[Feature], dac: DataAccessCollection | None, *groups: type[FeatureGroup]
+) -> str:
+    """Like _refusal, and the raised error carries the credential abort mark."""
+    from mloda.core.abstract_plugins.components.utils import is_credential_abort
+
+    with pytest.raises(ValueError) as exc:
+        entry(features, dac, _plugins(*groups))
+    assert is_credential_abort(exc.value)
+    return str(exc.value)
+
+
+def test_the_credential_abort_mark_survives_a_pickle_round_trip() -> None:
+    import pickle  # nosec B403
+
+    from mloda.core.abstract_plugins.components.utils import is_credential_abort, mark_credential_abort
+
+    marked = mark_credential_abort(ValueError("x"))
+
+    assert is_credential_abort(pickle.loads(pickle.dumps(marked)))  # nosec B301
+    assert not is_credential_abort(ValueError("x"))
+
+
+def test_credential_abort_flag_is_a_dict_marker() -> None:
+    from mloda.core.abstract_plugins.components.utils import CREDENTIAL_ABORT_FLAG, mark_credential_abort
+
+    assert mark_credential_abort(ValueError("x")).__dict__[CREDENTIAL_ABORT_FLAG] is True
+
+
 def _steps(session: Any, group: type[FeatureGroup]) -> list[FeatureGroupStep]:
     return [s for s in session.engine.execution_planner if isinstance(s, FeatureGroupStep) and s.feature_group is group]
 
@@ -517,7 +546,7 @@ class TestPlanTimeRefusals:
     def test_unknown_handle_names_the_handle_and_the_available_ones(self, entry: Entry) -> None:
         dac = _dac(**{"vault-main": {"key": SECRET}, "vault-extra": {"key": OTHER_SECRET}})
 
-        message = _refusal(entry, [_vault("vault-typo")], dac, ChsVaultFG)
+        message = _abort_refusal(entry, [_vault("vault-typo")], dac, ChsVaultFG)
 
         assert "vault-typo" in message
         assert "vault-main" in message
@@ -528,13 +557,13 @@ class TestPlanTimeRefusals:
 
     @pytest.mark.parametrize("entry", ENTRY_POINTS)
     def test_unknown_handle_without_a_collection_names_the_handle(self, entry: Entry) -> None:
-        message = _refusal(entry, [_vault("vault-typo")], None, ChsVaultFG)
+        message = _abort_refusal(entry, [_vault("vault-typo")], None, ChsVaultFG)
 
         assert "vault-typo" in message
 
     @pytest.mark.parametrize("entry", ENTRY_POINTS)
     def test_a_typo_ends_planning_even_when_another_group_matches_the_name(self, entry: Entry) -> None:
-        message = _refusal(
+        message = _abort_refusal(
             entry, [_vault("vault-typo")], _dac(**{"vault-main": {"key": SECRET}}), ChsVaultFG, ChsFallbackFG
         )
 
@@ -543,7 +572,7 @@ class TestPlanTimeRefusals:
     def test_a_handle_registered_under_another_kind_names_both_kinds(self) -> None:
         dac = DataAccessCollection(files={"vault-main": "chs-file.csv"})
 
-        message = _refusal(_prepare, [_vault("vault-main")], dac, ChsVaultFG)
+        message = _abort_refusal(_prepare, [_vault("vault-main")], dac, ChsVaultFG)
 
         assert "vault-main" in message
         assert "file" in message
@@ -552,7 +581,7 @@ class TestPlanTimeRefusals:
     def test_auto_named_credentials_are_counted_not_named(self) -> None:
         dac = DataAccessCollection(credentials=Credential(host="chs-auto-host-1"))
 
-        message = _refusal(_prepare, [_vault("vault-main")], dac, ChsVaultFG)
+        message = _abort_refusal(_prepare, [_vault("vault-main")], dac, ChsVaultFG)
 
         assert "unnamed" in message
         assert "_auto_credentials_0" not in message
@@ -561,7 +590,7 @@ class TestPlanTimeRefusals:
     def test_an_auto_handle_cannot_be_declared(self) -> None:
         dac = DataAccessCollection(credentials=Credential(host="chs-auto-host-1"))
 
-        message = _refusal(_prepare, [_vault("_auto_credentials_0")], dac, ChsVaultFG)
+        message = _abort_refusal(_prepare, [_vault("_auto_credentials_0")], dac, ChsVaultFG)
 
         assert "unnamed" in message
         assert "chs-auto-host-1" not in message
@@ -570,7 +599,9 @@ class TestPlanTimeRefusals:
     def test_a_non_str_or_empty_handle_aborts_naming_the_key(self, value: Any) -> None:
         feature = Feature("chs_vault_a", options={HANDLE_KEY: value})
 
-        message = _refusal(_prepare, [feature], _dac(**{"vault-main": {"key": SECRET}}), ChsVaultFG, ChsFallbackFG)
+        message = _abort_refusal(
+            _prepare, [feature], _dac(**{"vault-main": {"key": SECRET}}), ChsVaultFG, ChsFallbackFG
+        )
 
         assert HANDLE_KEY in message
         assert "987654321" not in message
@@ -579,7 +610,7 @@ class TestPlanTimeRefusals:
         dac = _dac(**{"vault-main": {"chs_user": SECRET}})
         feature = Feature("chs_fields_a", options={"chs_fields_handle": "vault-main"})
 
-        message = _refusal(_prepare, [feature], dac, ChsFieldsFG)
+        message = _abort_refusal(_prepare, [feature], dac, ChsFieldsFG)
 
         assert "vault-main" in message
         assert "chs_pass" in message
@@ -610,7 +641,7 @@ class TestPlanTimeRefusals:
     def test_a_bytes_leaf_is_refused_naming_the_handle_and_key_path(
         self, credential: dict[str, Any], path_part: str
     ) -> None:
-        message = _refusal(_prepare, [_vault("vault-main")], _dac(**{"vault-main": credential}), ChsVaultFG)
+        message = _abort_refusal(_prepare, [_vault("vault-main")], _dac(**{"vault-main": credential}), ChsVaultFG)
 
         assert "vault-main" in message
         assert path_part in message
@@ -668,7 +699,7 @@ class TestPlanTimeRefusals:
             credentials={"vault-main": {"key": SECRET, "host": BYTES_SECRET}}, secret_credential_keys={"host"}
         )
 
-        message = _refusal(_prepare, [_vault("vault-main")], dac, ChsVaultFG)
+        message = _abort_refusal(_prepare, [_vault("vault-main")], dac, ChsVaultFG)
 
         assert "vault-main" in message
         assert "at 'host'" in message
@@ -678,7 +709,7 @@ class TestPlanTimeRefusals:
         "credential", [{"chs_blob": memoryview(BYTES_SECRET)}, {"password": [memoryview(BYTES_SECRET)]}]
     )
     def test_a_memoryview_leaf_is_refused_like_bytes(self, credential: dict[str, Any]) -> None:
-        message = _refusal(_prepare, [_vault("vault-main")], _dac(**{"vault-main": credential}), ChsVaultFG)
+        message = _abort_refusal(_prepare, [_vault("vault-main")], _dac(**{"vault-main": credential}), ChsVaultFG)
 
         assert "vault-main" in message
         assert "hex" in message or "base64" in message
@@ -687,7 +718,7 @@ class TestPlanTimeRefusals:
     def test_a_handle_in_context_is_refused_naming_the_key_and_the_group_placement(self, entry: Entry) -> None:
         feature = Feature("chs_vault_a", options=Options(group={}, context={HANDLE_KEY: "vault-main"}))
 
-        message = _refusal(entry, [feature], _dac(**{"vault-main": {"key": SECRET}}), ChsVaultFG)
+        message = _abort_refusal(entry, [feature], _dac(**{"vault-main": {"key": SECRET}}), ChsVaultFG)
 
         assert HANDLE_KEY in message
         assert "group" in message
@@ -696,7 +727,7 @@ class TestPlanTimeRefusals:
     def test_a_custom_matcher_override_is_still_validated(self) -> None:
         feature = Feature("chs_custom_a", options={"chs_custom_handle": "vault-typo"})
 
-        message = _refusal(_prepare, [feature], _dac(**{"vault-main": {"key": SECRET}}), ChsCustomMatchFG)
+        message = _abort_refusal(_prepare, [feature], _dac(**{"vault-main": {"key": SECRET}}), ChsCustomMatchFG)
 
         assert "vault-typo" in message
 
@@ -717,7 +748,7 @@ class TestPlanTimeRefusals:
     def test_a_candidate_that_later_loses_on_a_framework_still_refuses(self) -> None:
         feature = Feature("chs_loser_a", options={"chs_loser_handle": "vault-typo"})
 
-        message = _refusal(_prepare, [feature], None, ChsFrameworkLoserFG, ChsLoserWinnerFG)
+        message = _abort_refusal(_prepare, [feature], None, ChsFrameworkLoserFG, ChsLoserWinnerFG)
 
         assert "vault-typo" in message
 
@@ -745,7 +776,9 @@ class TestPlanTimeRefusals:
         assert "vault-typo" in message
 
     def test_a_refused_default_names_the_default_handle(self) -> None:
-        message = _refusal(_prepare, [Feature("chs_default_a")], _dac(**{"vault-main": {"key": SECRET}}), ChsDefaultFG)
+        message = _abort_refusal(
+            _prepare, [Feature("chs_default_a")], _dac(**{"vault-main": {"key": SECRET}}), ChsDefaultFG
+        )
 
         assert "vault-default" in message
         assert SECRET not in message
@@ -1037,7 +1070,7 @@ class TestMissingHandleKeyAborts:
 
     @pytest.mark.parametrize("entry", ENTRY_POINTS)
     def test_a_missing_handle_key_aborts_despite_a_fallback_group(self, entry: Entry) -> None:
-        message = _refusal(entry, [Feature("chs_vault_a")], None, ChsVaultFG, ChsFallbackFG)
+        message = _abort_refusal(entry, [Feature("chs_vault_a")], None, ChsVaultFG, ChsFallbackFG)
 
         assert HANDLE_KEY in message
         assert "ChsVaultFG" in message
@@ -1048,7 +1081,7 @@ class TestMissingHandleKeyAborts:
         feature = Feature("chs_vault_a", options={typo: "vault-main"})
         groups: tuple[type[FeatureGroup], ...] = (ChsVaultFG, ChsFallbackFG) if with_fallback else (ChsVaultFG,)
 
-        message = _refusal(_prepare, [feature], _dac(**{"vault-main": {"key": SECRET}}), *groups)
+        message = _abort_refusal(_prepare, [feature], _dac(**{"vault-main": {"key": SECRET}}), *groups)
 
         assert HANDLE_KEY in message
         assert "ChsVaultFG" in message
@@ -1058,13 +1091,13 @@ class TestMissingHandleKeyAborts:
     def test_a_missing_handle_key_without_a_close_match_has_no_suggestion(self) -> None:
         feature = Feature("chs_vault_a", options={"chs_unrelated": "x"})
 
-        message = _refusal(_prepare, [feature], None, ChsVaultFG, ChsFallbackFG)
+        message = _abort_refusal(_prepare, [feature], None, ChsVaultFG, ChsFallbackFG)
 
         assert HANDLE_KEY in message
         assert "did you mean" not in message
 
     def test_a_group_missing_a_handle_and_a_plain_key_names_the_handle_key(self) -> None:
-        message = _refusal(_prepare, [Feature("chs_both_a")], None, ChsBothMissingFG, ChsFallbackFG)
+        message = _abort_refusal(_prepare, [Feature("chs_both_a")], None, ChsBothMissingFG, ChsFallbackFG)
 
         assert "chs_both_handle" in message
 
@@ -1119,7 +1152,7 @@ class TestMissingHandleKeyAborts:
         assert "ChsPatternFG" in message
 
     def test_a_group_missing_two_handle_keys_names_both(self) -> None:
-        message = _refusal(_prepare, [Feature("chs_two_a")], None, ChsTwoHandleFG)
+        message = _abort_refusal(_prepare, [Feature("chs_two_a")], None, ChsTwoHandleFG)
 
         assert "chs_two_a_handle" in message
         assert "chs_two_z_handle" in message
@@ -1245,7 +1278,7 @@ class TestCredentialValuesInOptionsAreRefused:
         value = {_CRED_OPTION_KEY: make_value()}
         options = Options(group=value) if placement == "group" else Options(group={}, context=value)
 
-        message = _refusal(_prepare, [Feature("chs_vault_a", options=options)], None, ChsFallbackFG)
+        message = _abort_refusal(_prepare, [Feature("chs_vault_a", options=options)], None, ChsFallbackFG)
 
         _assert_credential_refusal(message, _CRED_OPTION_KEY)
         assert ("nested in its value" in message) == nested
@@ -1254,7 +1287,7 @@ class TestCredentialValuesInOptionsAreRefused:
     def test_a_credential_is_refused_at_every_entry_point(self, entry: Entry) -> None:
         feature = Feature("chs_vault_a", options={_CRED_OPTION_KEY: Credential(token=SECRET)})
 
-        _assert_credential_refusal(_refusal(entry, [feature], None, ChsFallbackFG), _CRED_OPTION_KEY)
+        _assert_credential_refusal(_abort_refusal(entry, [feature], None, ChsFallbackFG), _CRED_OPTION_KEY)
 
     def test_a_cyclic_list_holding_a_credential_is_refused(self) -> None:
         cyclic: list[Any] = []
@@ -1264,6 +1297,9 @@ class TestCredentialValuesInOptionsAreRefused:
         with pytest.raises(ValueError) as exc:
             refuse_credential_option_values(Options({_CRED_OPTION_KEY: cyclic}))
 
+        from mloda.core.abstract_plugins.components.utils import is_credential_abort
+
+        assert is_credential_abort(exc.value)
         _assert_credential_refusal(str(exc.value), _CRED_OPTION_KEY)
 
     def test_a_cyclic_list_without_a_credential_returns(self) -> None:
@@ -1431,7 +1467,7 @@ class TestCredentialValuesInOptionsAreRefused:
         assert "DataAccessCollection" not in message
 
     def test_a_credential_property_default_is_refused(self) -> None:
-        message = _refusal(_prepare, [Feature("chs_creddef_a")], None, ChsCredDefaultFG)
+        message = _abort_refusal(_prepare, [Feature("chs_creddef_a")], None, ChsCredDefaultFG)
 
         _assert_credential_refusal(message, "chs_default_auth")
 

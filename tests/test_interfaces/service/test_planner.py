@@ -1722,8 +1722,9 @@ class TestCredentialTable:
             ('token = "TOK_VAR"\nother = "OTHER_VAR"', {"TOK_VAR": TOKEN, "OTHER_VAR": ""}, ["db", "other"]),
             ('token = "TOK_VAR"\nother = { file = "nope.txt" }', {"TOK_VAR": TOKEN}, ["db", "other", "nope.txt"]),
             ('token = "TOK_VAR"\nother = { file = "empty.txt" }', {"TOK_VAR": TOKEN}, ["db", "other"]),
+            ('token = "TOK_VAR"\nother = "OTHER_VAR"', {"TOK_VAR": TOKEN, "OTHER_VAR": " \t "}, ["db", "other"]),
         ],
-        ids=["unset_var", "empty_var", "missing_file", "empty_file"],
+        ids=["unset_var", "empty_var", "missing_file", "empty_file", "blank_var"],
     )
     def test_check_names_handle_and_field_never_a_value(
         self, tmp_path: Path, credentials: str, env: dict[str, str], message_has: list[str]
@@ -2185,3 +2186,33 @@ class TestCredentialRuns:
             _preview_rows(runner.run(explained["plan_id"]))
 
         assert sorted(reads) == ["other", "token"]
+
+
+class TestCredentialHandleDiagnostics:
+    @staticmethod
+    def _explain(tmp_path: Path, handle: str | None, trusted: bool) -> dict[str, Any]:
+        overrides: dict[str, Any] = {} if handle is None else {"options": {CRED_KEY: handle}}
+        settings = dataclasses.replace(_cred_settings(tmp_path, **overrides), trusted_caller=trusted)
+        planner, _ = _cred_services(settings, {"TOK_VAR": TOKEN})
+        return planner.explain({"features": [CRED_FEATURE]})
+
+    @pytest.mark.parametrize(
+        ("handle", "named"), [("dbx", ["dbx"]), (None, [CRED_KEY, "is not set"])], ids=["misspelled", "unset"]
+    )
+    def test_a_trusted_caller_is_told_what_is_wrong(self, tmp_path: Path, handle: str | None, named: list[str]) -> None:
+        error = _error(self._explain(tmp_path, handle, True), "internal")
+
+        for needle in named:
+            assert needle in error["message"]
+        assert TOKEN not in json.dumps(error)
+
+    @pytest.mark.parametrize("handle", ["dbx", None], ids=["misspelled", "unset"])
+    def test_an_untrusted_caller_gets_the_generic_message(self, tmp_path: Path, handle: str | None) -> None:
+        result = self._explain(tmp_path, handle, False)
+
+        error = _error(result, "internal")
+        assert error["message"] == "Planning failed with ValueError."
+        dumped = json.dumps({**result, "error": {**error, "audit_id": None}})
+        for name in ("dbx", "db"):
+            _assert_value_absent(name, dumped)
+        _assert_value_absent(TOKEN, dumped)

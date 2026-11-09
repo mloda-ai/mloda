@@ -386,5 +386,6 @@ def main(
     else:
         _write_result(result, output_format, out, full=args.command == "run" and args.full, stderr=err)
     if is_error(result):
+        err.write(f"mloda: error: {' '.join(str(result['error']['message']).split())}\n")
         return FAILED
     return FAILED_ROWS if result.get("failed_rows") else 0

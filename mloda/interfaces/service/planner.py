@@ -277,7 +277,7 @@ class Planner:
                         raise
                     failure = error
         except Exception as error:
-            return failure_result("Planning", error)
+            return failure_result("Planning", error, trusted=self._settings.trusted_caller)
         if missing and (
             failure is not None
             or diagnosis is None

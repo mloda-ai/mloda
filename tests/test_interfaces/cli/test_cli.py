@@ -32,6 +32,7 @@ from mloda.user import PluginCollector, PluginLoader
 from tests.helpers.docs_scope import shipped_feature_group_registry
 from tests.test_interfaces.source_groups import (
     CRED_FEATURE,
+    CRED_KEY,
     FAILED,
     FILE_SOURCE_GROUPS,
     MISSING,
@@ -656,7 +657,24 @@ class TestCredentials:
         assert table["preview"]["rows"] == [{CRED_FEATURE: cred_digest(CRED_TOKEN)}] * 5
         assert CRED_TOKEN not in outcome.out + outcome.err
 
-    @pytest.mark.parametrize(("command", "value"), [("explain", None), ("run", "")])
+    def test_a_pasted_value_in_the_config_exits_2_without_echoing_it(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        pasted = "sk-live-aaaaBBBBccccDDDD1234"  # nosec B105
+        config = _config(tmp_path, CRED_CONFIG.replace("TOK_VAR", pasted))
+        _elsewhere(tmp_path, monkeypatch)
+        request = _request_file(tmp_path, {"features": [CRED_FEATURE]})
+
+        with caplog.at_level(logging.DEBUG):
+            outcome = _cli(["explain", str(request), "--config", str(config)], extra_groups=[CredentialReadMcp8])
+
+        assert outcome.code == 2
+        assert outcome.out == ""
+        assert outcome.err.startswith("mloda: error:")
+        assert pasted not in outcome.out + outcome.err
+        assert all(pasted not in record.getMessage() for record in caplog.records)
+
+    @pytest.mark.parametrize(("command", "value"), [("explain", None), ("run", ""), ("explain", "   ")])
     def test_unset_or_empty_variable_exits_2_naming_handle_and_field(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str, value: str | None
     ) -> None:
@@ -671,6 +689,32 @@ class TestCredentials:
         assert outcome.out == ""
         assert outcome.err.startswith("mloda: error:")
         assert "[mcp.credentials.db] field 'token'" in outcome.err
+
+    @pytest.mark.parametrize("command", ["explain", "run"])
+    @pytest.mark.parametrize(
+        ("handle", "named"), [("dbx", ["dbx"]), (None, [CRED_KEY, "is not set"])], ids=["misspelled", "unset"]
+    )
+    def test_a_bad_handle_is_explained_in_the_message_and_on_stderr(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str, handle: str | None, named: list[str]
+    ) -> None:
+        config = _config(tmp_path, credential_config(CONFIG, 'order_id = "public"', handle=handle))
+        _elsewhere(tmp_path, monkeypatch)
+        request = _request_file(tmp_path, {"features": [CRED_FEATURE]})
+
+        outcome = _cli(
+            [command, str(request), "--config", str(config)],
+            env={**ENV, "TOK_VAR": CRED_TOKEN},
+            extra_groups=[CredentialReadMcp8],
+        )
+
+        assert outcome.code == 2
+        error = outcome.json()["error"]
+        assert error["code"] == "internal"
+        for needle in named:
+            assert needle in error["message"]
+            assert needle in outcome.err
+        assert outcome.err.startswith("mloda: error:")
+        assert CRED_TOKEN not in outcome.out + outcome.err
 
     def test_services_check_credentials_before_building(self, tmp_path: Path) -> None:
         settings = load_settings(_config(tmp_path, CRED_CONFIG), ENV)

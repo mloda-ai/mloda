@@ -733,6 +733,28 @@ class TestRunStartRefusals:
         assert repr(session.data_access_collection.credentials) == before
         assert _FRESH["key"] not in repr(session.data_access_collection.credentials)
 
+    @pytest.mark.parametrize(
+        "edit",
+        [
+            pytest.param(lambda credentials: credentials["vault-a"].update(key="edited-later"), id="field_edit"),
+            pytest.param(lambda credentials: credentials.update({"vault-a": {"key": "edited-later"}}), id="replace"),
+            pytest.param(lambda credentials: credentials.pop("vault-a"), id="delete"),
+            pytest.param(lambda credentials: credentials.update({"vault-c": {"key": "added-later"}}), id="add"),
+        ],
+    )
+    def test_a_later_edit_of_the_callers_collection_does_not_reach_the_session(
+        self, edit: Callable[[dict[str, Any]], Any]
+    ) -> None:
+        dac = _dac(**{"vault-a": {"key": SECRET}, "vault-b": {"key": OTHER_SECRET}})
+        session = _vault_session(dac=dac)
+        before = {handle: dict(value) for handle, value in session.data_access_collection.credentials.items()}
+
+        edit(dac.credentials)
+
+        after = {handle: dict(value) for handle, value in session.data_access_collection.credentials.items()}
+        assert after == before
+        assert session.data_access_collection is not dac
+
     @pytest.mark.parametrize("entry", ["run", "stream_run"])
     def test_the_fresh_value_is_not_reachable_from_the_runner_after_the_run(
         self, entry: str, monkeypatch: pytest.MonkeyPatch

@@ -3,7 +3,7 @@ import functools
 import pickle  # nosec B403
 import time
 from abc import ABC
-from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from contextvars import ContextVar
 from typing import Any, ClassVar, NoReturn, final, get_origin
@@ -27,6 +27,7 @@ from mloda.core.abstract_plugins.components.declared_attributes import read_decl
 from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
 from mloda.core.abstract_plugins.components.utils import as_str, is_nominal_subclass, safe_field
+from mloda.core.abstract_plugins.components.var_scope import VarScope
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import (
     InputCheck,
     MissingInputFeatureError,
@@ -864,14 +865,9 @@ class ComputeFramework(ABC):
         """Return the ComputeFramework active in the current activate() scope, else None."""
         return _current_compute_framework.get()
 
-    @contextlib.contextmanager
-    def activate(self) -> Generator["ComputeFramework", None, None]:
+    def activate(self) -> VarScope["ComputeFramework | None"]:
         """Make this instance the current() compute framework for the scope, restoring the previous one on exit."""
-        token = _current_compute_framework.set(self)
-        try:
-            yield self
-        finally:
-            _current_compute_framework.reset(token)
+        return VarScope(_current_compute_framework, self)
 
     @final
     def _run_hook(self, hook: ExtenderHook, feature_group: Any, method: Callable[..., Any], features: Any) -> Any:

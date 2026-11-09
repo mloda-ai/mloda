@@ -1,7 +1,6 @@
 """Hold the credentials a step declared for the duration of its execution, masked in errors and logs."""
 
-from collections.abc import Generator, Mapping
-from contextlib import contextmanager
+from collections.abc import Mapping
 from contextvars import ContextVar, Token
 from typing import Any, Protocol
 
@@ -11,6 +10,7 @@ from mloda.core.abstract_plugins.components.credential_leaves import (
     credential_secret_literals,
 )
 from mloda.core.abstract_plugins.components.credential_scrub import redact_escaping_exception, registered_secrets_scope
+from mloda.core.abstract_plugins.components.var_scope import VarScope
 
 
 class CredentialLookup:
@@ -102,15 +102,16 @@ class grant_scope:  # noqa: N801
 _READ_RECORDERS: ContextVar[tuple[set[str], ...]] = ContextVar("mloda_credential_read_recorders", default=())
 
 
-@contextmanager
-def read_recorder() -> Generator[set[str], None, None]:
-    """Collect the handles read inside the block, alongside any enclosing recorders."""
-    recorder: set[str] = set()
-    token = _READ_RECORDERS.set((*_READ_RECORDERS.get(), recorder))
-    try:
-        yield recorder
-    finally:
-        _READ_RECORDERS.reset(token)
+class read_recorder(VarScope[tuple[set[str], ...]]):  # noqa: N801
+    """Collect the handles read inside the block, alongside any enclosing recorders; a fresh set per enter."""
+
+    def __init__(self) -> None:
+        super().__init__(_READ_RECORDERS, ())
+
+    def __enter__(self) -> set[str]:  # type: ignore[override]
+        recorder: set[str] = set()
+        self._tokens.append(self._var.set((*self._var.get(), recorder)))
+        return recorder
 
 
 def record_credential_read(handle: str) -> None:

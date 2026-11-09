@@ -40,6 +40,7 @@ from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep, resolve_join_source_cfw
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
+from mloda.core.runtime.validate_multiprocessing_link import refuse_unpicklable_credentials
 from mloda.core.runtime.worker_manager import WorkerManager
 from mloda.core.abstract_plugins.hook_context import in_input_data_load_gate_scope
 from mloda.core.runtime.worker.thread_worker import thread_worker
@@ -374,13 +375,16 @@ class ComputeFrameworkExecutor:
         else:
             cfw.fallback_connection_object = conn
 
-    def _credential_grant(self, step: Any) -> CredentialGrant | None:
+    def _credential_grant(self, step: Any, *, to_process: bool = False) -> CredentialGrant | None:
         """A fresh grant of the credentials the step declared, or None when it declared none."""
         collection = self.data_access_collection
         if collection is None or not isinstance(step, FeatureGroupStep) or not step.credential_handles:
             return None
         values = {h: collection.credentials[h] for h in step.credential_handles}
-        return self._grant_kind(values, collection.credential_key_policy())
+        grant = self._grant_kind(values, collection.credential_key_policy())
+        if to_process:
+            refuse_unpicklable_credentials(grant, values)
+        return grant
 
     def _step_secrets(self, step: Any) -> tuple[frozenset[str], frozenset[str]]:
         """The run literals the step's source access needs: its credential's, those in a str access, else all."""
@@ -462,6 +466,8 @@ class ComputeFrameworkExecutor:
         """
         cfw_uuid = self.prepare_execute_step(step, ParallelizationMode.MULTIPROCESSING)
 
+        grant = self._credential_grant(step, to_process=True)
+
         from_cfw = None
         if isinstance(step, TransformFrameworkStep):
             from_cfw = self.prepare_tfs_right_cfw(step)
@@ -490,7 +496,7 @@ class ComputeFrameworkExecutor:
             self.worker_manager.send_command(cfw_uuid, ENABLE_PROCESS_WIDE_LOG_MASKING_COMMAND)
         self.worker_manager.send_command(
             cfw_uuid,
-            (step, self._credential_grant(step), secrets, identity, in_input_data_load_gate_scope()),
+            (step, grant, secrets, identity, in_input_data_load_gate_scope()),
         )
         # Track by step.get_result_uuid() (== step.uuid), the id a worker reports back via
         # result_queue. get_uuids() returns feature uuids instead, a different namespace that

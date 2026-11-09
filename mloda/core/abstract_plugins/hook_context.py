@@ -9,7 +9,7 @@ import functools
 import threading
 import time
 from collections.abc import Callable, Generator, Mapping
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from dataclasses import FrozenInstanceError, dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.declared_attributes import scalar_at
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows, current_failed_rows_collector
 from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.var_scope import VarScope
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import InputCheck
 from mloda.core.abstract_plugins.function_extender import ExtenderHook
 
@@ -40,17 +41,21 @@ _result_attributes_lock = threading.Lock()
 _in_gate_scope: ContextVar[bool] = ContextVar("mloda_in_input_data_load_gate_scope", default=False)
 
 
-@contextlib.contextmanager
-def input_data_load_gate_scope() -> Generator[None, None, None]:
-    """Count one active INPUT_DATA_LOAD gate calculation process-wide, exception-safe."""
-    global _gate_scopes
-    with _gate_scopes_lock:
-        _gate_scopes += 1
-    token = _in_gate_scope.set(True)
-    try:
-        yield
-    finally:
-        _in_gate_scope.reset(token)
+class input_data_load_gate_scope:  # noqa: N801
+    """Count one active INPUT_DATA_LOAD gate calculation process-wide; a class so a frozen exception keeps its type."""
+
+    def __init__(self) -> None:
+        self._tokens: list[Token[bool]] = []
+
+    def __enter__(self) -> None:
+        global _gate_scopes
+        with _gate_scopes_lock:
+            _gate_scopes += 1
+        self._tokens.append(_in_gate_scope.set(True))
+
+    def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
+        global _gate_scopes
+        _in_gate_scope.reset(self._tokens.pop())
         with _gate_scopes_lock:
             _gate_scopes -= 1
 
@@ -191,14 +196,9 @@ class HookContext:
             merged = _frozen_dict({**(current.result_attributes or {}), **validated})
             object.__setattr__(current, "result_attributes", merged)
 
-    @contextlib.contextmanager
-    def activate(self) -> Generator["HookContext", None, None]:
+    def activate(self) -> VarScope["HookContext | None"]:
         """Make this instance the current() context for the scope, restoring the previous one on exit."""
-        token = _current_hook_context.set(self)
-        try:
-            yield self
-        finally:
-            _current_hook_context.reset(token)
+        return VarScope(_current_hook_context, self)
 
 
 def _no_schema(data: Any) -> OutputSchema | None:

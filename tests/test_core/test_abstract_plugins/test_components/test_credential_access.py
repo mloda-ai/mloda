@@ -8,6 +8,7 @@ import json
 import pickle  # nosec B403
 import threading
 from collections.abc import MutableMapping
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -24,6 +25,7 @@ from mloda.core.abstract_plugins.components.credential_access import (
     restore_readable,
 )
 from mloda.core.abstract_plugins.components.credential_grant import (
+    _READ_RECORDERS,
     CredentialLookup,
     StaticGrant,
     _read_granted,
@@ -32,8 +34,15 @@ from mloda.core.abstract_plugins.components.credential_grant import (
 )
 from mloda.core.abstract_plugins.components.failed_rows import _COLLECTOR, FailedRowsCollector
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import _API_DATA_LOOKUP
-from mloda.core.abstract_plugins.compute_framework import _current_compute_framework
-from mloda.core.abstract_plugins.hook_context import _current_hook_context
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, _current_compute_framework
+from mloda.core.abstract_plugins.function_extender import ExtenderHook
+from mloda.core.abstract_plugins.hook_context import (
+    HookContext,
+    _current_hook_context,
+    _in_gate_scope,
+    input_data_load_gate_scope,
+    input_data_load_gate_scopes_active,
+)
 from mloda.core.abstract_plugins.input_data_load_marker import current_input_data_load_marker
 from mloda.core.api.run_boundary import run_boundary
 from datetime import UTC
@@ -471,3 +480,42 @@ class TestReadCredential:
 
         with _scope():
             assert asyncio.run(main()) == _HOST
+
+
+@dataclass(frozen=True)
+class _FrozenError(Exception):
+    detail: str
+
+
+def _hook_context() -> HookContext:
+    return HookContext(
+        hook=ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+        feature_group_class="tests.FakeFeatureGroup",
+        feature_group_version="v1",
+        plugin_version=None,
+        feature_names=("x",),
+        input_features=None,
+        compute_framework_name="FakeFramework",
+    )
+
+
+@pytest.mark.parametrize(
+    ("make_scope", "var"),
+    [
+        pytest.param(read_recorder, _READ_RECORDERS, id="read_recorder"),
+        pytest.param(lambda: ComputeFramework().activate(), _current_compute_framework, id="compute_framework"),
+        pytest.param(lambda: _hook_context().activate(), _current_hook_context, id="hook_context"),
+        pytest.param(input_data_load_gate_scope, _in_gate_scope, id="input_data_load_gate_scope"),
+    ],
+)
+def test_a_frozen_exception_keeps_its_type_through_the_scope(make_scope: Any, var: contextvars.ContextVar[Any]) -> None:
+    before = var.get()
+    active_before = input_data_load_gate_scopes_active()
+
+    with pytest.raises(Exception) as excinfo:
+        with make_scope():
+            raise _FrozenError("boom")
+
+    assert type(excinfo.value) is _FrozenError
+    assert var.get() == before
+    assert input_data_load_gate_scopes_active() == active_before

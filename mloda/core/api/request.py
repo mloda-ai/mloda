@@ -299,7 +299,9 @@ class mlodaAPI:
             self.compute_framework = setup_compute_framework.compute_frameworks
             self.framework_preference = setup_compute_framework.framework_preference
             self.links = links
-            self.data_access_collection = data_access_collection
+            self.data_access_collection = (
+                None if data_access_collection is None else data_access_collection.with_copied_credentials()
+            )
             self.global_filter = global_filter
             self.api_data = api_data
             self.output_framework = setup_compute_framework.output_framework

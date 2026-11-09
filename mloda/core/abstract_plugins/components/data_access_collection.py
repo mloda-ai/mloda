@@ -26,6 +26,29 @@ logger = logging.getLogger(__name__)
 CONNECTION_HANDLE_OPTION = "connection_handle"
 
 
+def _copy_containers(value: Any, memo: dict[int, Any]) -> Any:
+    """Copy dict, RegisteredCredential, list, tuple and set containers; every other object is shared."""
+    kind = type(value)
+    if kind not in (dict, RegisteredCredential, list, tuple, set):
+        return value
+    if id(value) in memo:
+        return memo[id(value)]
+    if kind is tuple:
+        result: Any = tuple(_copy_containers(item, memo) for item in value)
+    elif kind is list:
+        result = memo[id(value)] = []
+        result.extend(_copy_containers(item, memo) for item in value)
+    elif kind is set:
+        result = memo[id(value)] = set()
+        result.update(_copy_containers(item, memo) for item in value)
+    else:
+        result = memo[id(value)] = kind()
+        for key, item in value.items():
+            result[key] = _copy_containers(item, memo)
+    memo[id(value)] = result
+    return result
+
+
 _KIND_TO_ATTR: dict[str, str] = {
     "connection": "connections",
     "file": "files",
@@ -153,6 +176,13 @@ class DataAccessCollection:
         duplicate.column_to_file = None if self.column_to_file is None else dict(self.column_to_file)
         duplicate._api_data_columns = dict(self._api_data_columns)
         duplicate._api_data_types = dict(self._api_data_types)
+        return duplicate
+
+    def with_copied_credentials(self) -> "DataAccessCollection":
+        """A copy whose credential containers are copied too; connections and other leaves stay shared."""
+        duplicate = self.copy()
+        memo: dict[int, Any] = {}
+        duplicate.credentials = {handle: _copy_containers(value, memo) for handle, value in self.credentials.items()}
         return duplicate
 
     def with_credentials(self, credentials: Mapping[str, Any]) -> "DataAccessCollection":

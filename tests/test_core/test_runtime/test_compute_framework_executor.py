@@ -9,6 +9,7 @@ and CFW initialization logic from the Runner class.
 from __future__ import annotations
 
 import pickle  # nosec B403
+import threading
 from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any
@@ -1918,6 +1919,12 @@ def _grant_executor(step: Mock, collection: Any = None) -> tuple[ComputeFramewor
     return executor, cfw_register, worker_manager, cfw_uuid
 
 
+def _lock_collection(lock: Any) -> Any:
+    from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+
+    return DataAccessCollection(credentials={"declared": {"host": _GRANT_HOST, "hmac": _GRANT_HMAC, "lock": lock}})
+
+
 class _RecordingGrantKind:
     instances: list[_RecordingGrantKind] = []
 
@@ -2011,6 +2018,16 @@ class TestCredentialGrantHelper:
         executor._credential_grant(_grant_step(("declared",)))
 
         assert seen == [collection.credential_key_policy()]
+
+    def test_a_credential_that_does_not_pickle_still_builds_a_grant_without_to_process(self) -> None:
+        lock = threading.Lock()
+        collection = _lock_collection(lock)
+        executor, *_ = _grant_executor(_grant_step(("declared",)), collection)
+
+        grant = executor._credential_grant(_grant_step(("declared",)))
+
+        assert grant is not None
+        assert grant.open().credential("declared")["lock"] is lock
 
     def test_each_dispatch_gets_a_fresh_grant(self) -> None:
         executor, *_ = _grant_executor(_grant_step(("declared",)), _grant_collection())
@@ -2134,6 +2151,40 @@ class TestGrantDispatch:
         with input_data_load_gate_scope():
             executor.multi_execute_step(step)
         assert worker_manager.send_command.call_args.args[1][4] is True
+
+    @pytest.mark.parametrize("grant_kind", ["default", "custom_unpicklable"])
+    def test_multi_execute_step_refuses_an_unpicklable_credential_before_any_dispatch(
+        self, grant_kind: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from mloda.core.abstract_plugins.components.credential_grant import StaticGrant
+
+        if grant_kind == "custom_unpicklable":
+
+            class _UnpicklableGrant(StaticGrant):
+                def __init__(self, values: Any, policy: Any = None) -> None:
+                    super().__init__(values, policy)
+                    self.guard = threading.Lock()
+
+            monkeypatch.setattr(ComputeFrameworkExecutor, "_grant_kind", _UnpicklableGrant)
+            collection = _grant_collection()
+        else:
+            collection = _lock_collection(threading.Lock())
+        step = _grant_step(("declared",))
+        executor, _, worker_manager, _ = _grant_executor(step, collection)
+        worker_manager.get_process_queues.return_value = None
+        worker_manager.create_worker_process.return_value = (Mock(), Mock(), Mock())
+
+        with pytest.raises(ValueError) as excinfo:
+            executor.multi_execute_step(step)
+
+        message = str(excinfo.value)
+        if grant_kind == "default":
+            assert "declared" in message
+        assert _GRANT_HMAC not in message
+        assert _GRANT_HOST not in message
+        assert excinfo.value.__context__ is None
+        worker_manager.send_command.assert_not_called()
+        worker_manager.create_worker_process.assert_not_called()
 
     @patch("mloda.core.runtime.compute_framework_executor.worker")
     def test_multi_execute_step_sends_only_the_steps_secrets_and_none_in_the_worker_args(

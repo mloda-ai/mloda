@@ -1813,6 +1813,45 @@ def test_a_saver_that_reads_then_raises_still_shows_the_read_on_the_calculate_co
     assert [context.credentials_read for context in probe.kept] == [(_VAULT_A, _VAULT_B)]
 
 
+class ChsRcFrozenArtifact(BaseArtifact):
+    @classmethod
+    def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
+        _read_host(features.get_options_key("chs_two_z_handle"))
+        raise FrozenTokenError("saver failed")
+
+
+class ChsRcFrozenSaverFG(ChsRcCalcAndSaverFG):
+    """Calculate reads the first handle, the saver reads the second and raises a frozen-dataclass exception."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_frozen_saver_a"}
+
+    @staticmethod
+    def artifact() -> type[BaseArtifact] | None:
+        return ChsRcFrozenArtifact
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+def test_a_saver_raising_a_frozen_dataclass_exception_keeps_its_type(
+    mode: ParallelizationMode, flight_server: Any
+) -> None:
+    from mloda.user import mloda as mloda_api
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    api = mloda_api(
+        [Feature("chs_rc_frozen_saver_a", options={"chs_two_a_handle": _VAULT_A, "chs_two_z_handle": _VAULT_B})],
+        [PandasDataFrame],
+        data_access_collection=_vault_dac(_TWO_VAULTS),
+        plugin_collector=PluginCollector.enabled_feature_groups({ChsRcFrozenSaverFG}),
+    )
+    with pytest.raises(Exception) as excinfo:
+        api.run(parallelization_modes={mode}, flight_server=flight_server)
+
+    assert type(excinfo.value) is FrozenTokenError
+
+
 @pytest.mark.timeout(15)
 def test_read_credential_raises_after_save_artifact_returns(flight_server: Any) -> None:
     from mloda.user import mloda as mloda_api
@@ -2497,14 +2536,20 @@ def _row(value: Mapping[str, Any]) -> str:
     return f"{value['host']}|{len(str(value['hmac']))}"
 
 
-def _prepare_vault(group: Any, name: str, mode: ParallelizationMode, extenders: set[Extender] | None = None) -> Any:
+def _prepare_vault(
+    group: Any,
+    name: str,
+    mode: ParallelizationMode,
+    extenders: set[Extender] | None = None,
+    dac: Any | None = None,
+) -> Any:
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
     return mloda.prepare(
         [Feature(name, options={HANDLE_KEY: _E2E_HANDLE})],
         compute_frameworks=[PandasDataFrame],
         parallelization_modes={mode},
-        data_access_collection=_vault_dac(),
+        data_access_collection=_vault_dac() if dac is None else dac,
         plugin_collector=PluginCollector.enabled_feature_groups({group}),
         function_extender=extenders,
     )
@@ -2586,6 +2631,33 @@ def test_error_echoing_a_fresh_credential_is_masked_in_every_mode(
     _assert_token_gone(exc, ChsRcFailingFG, caplog, secrets)
     for secret in secrets:
         assert secret not in seen.read_text()
+
+
+@pytest.mark.timeout(15)
+def test_a_credential_edited_after_prepare_does_not_reach_the_session_read() -> None:
+    dac = _vault_dac()
+    session = _prepare_vault(ChsRcReadingFG, "chs_rc_a", ParallelizationMode.SYNC, dac=dac)
+
+    dac.credentials[_E2E_HANDLE]["host"] = "edited-after-prepare.example"
+    dac.credentials[_E2E_HANDLE]["hmac"] = "edited-after-prepare-hmac"  # nosec B105
+
+    rows = _run_rows(session, "chs_rc_a", parallelization_modes={ParallelizationMode.SYNC})
+
+    assert rows == [f"{_E2E_HOST}|{len(_E2E_HMAC)}"]
+
+
+@pytest.mark.timeout(15)
+def test_an_unpicklable_credential_is_refused_naming_the_handle_in_multiprocessing(flight_server: Any) -> None:
+    import threading
+
+    credential = {**_vault_values(), "lock": threading.Lock()}
+    dac = _vault_dac({_E2E_HANDLE: credential})
+
+    with pytest.raises(ValueError) as excinfo:
+        _grant_run(ChsRcReadingFG, "chs_rc_a", ParallelizationMode.MULTIPROCESSING, flight_server, dac=dac)
+
+    assert _E2E_HANDLE in str(excinfo.value)
+    assert _E2E_HMAC not in str(excinfo.value)
 
 
 @pytest.mark.timeout(15)

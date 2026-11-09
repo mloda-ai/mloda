@@ -4,6 +4,7 @@ See ``docs/docs/in_depth/named-data-access-handles.md`` for the user-facing guid
 """
 
 import logging
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -884,6 +885,81 @@ class TestCopy:
         assert original._auto_handles == before_auto
         assert duplicate._auto_handles is not original._auto_handles
         assert len(duplicate._auto_handles) == len(before_auto) + 2
+
+    def test_with_copied_credentials_copies_nested_containers_are_not_shared_and_edits_do_not_cross(self) -> None:
+        original = DataAccessCollection(
+            credentials={"h": {"host": "h.example", "opts": {"a": [1, {"b": 2}]}, "t": (1, [2]), "s": {1, 2}}}
+        )
+
+        duplicate = original.with_copied_credentials()
+        copied = duplicate.credentials["h"]
+        source = original.credentials["h"]
+
+        assert copied == source
+        assert copied is not source
+        assert copied["opts"] is not source["opts"]
+        assert copied["opts"]["a"] is not source["opts"]["a"]
+        assert copied["opts"]["a"][1] is not source["opts"]["a"][1]
+        assert copied["t"][1] is not source["t"][1]
+        assert copied["s"] is not source["s"]
+
+        copied["opts"]["a"][1]["b"] = 3
+        copied["host"] = "changed"
+        duplicate.credentials["new"] = {"k": "v"}
+        assert source["opts"]["a"][1]["b"] == 2
+        assert source["host"] == "h.example"
+        assert "new" not in original.credentials
+
+    def test_with_copied_credentials_keeps_the_registered_type_and_its_repr_redacts(self) -> None:
+        original = DataAccessCollection(credentials={"h": {"password": "copy-secret-value-Qw3Er5"}})  # nosec B105
+
+        copied = original.with_copied_credentials().credentials["h"]
+
+        assert type(copied) is type(original.credentials["h"])
+        assert copied is not original.credentials["h"]
+        assert "copy-secret-value-Qw3Er5" not in repr(copied)  # nosec B105
+        assert copied["password"] == "copy-secret-value-Qw3Er5"  # nosec B105
+
+    def test_with_copied_credentials_shares_a_leaf_object_such_as_a_lock(self) -> None:
+        lock = threading.Lock()
+        original = DataAccessCollection(credentials={"h": {"lock": lock, "nested": {"lock": lock}}})
+
+        copied = original.with_copied_credentials().credentials["h"]
+
+        assert copied["lock"] is lock
+        assert copied["nested"]["lock"] is lock
+
+    def test_with_copied_credentials_copies_a_cycle_and_keeps_it(self) -> None:
+        cycle: dict[str, Any] = {"host": "cycle.example"}
+        cycle["self"] = cycle
+        original = DataAccessCollection(credentials={"h": cycle})
+
+        copied = original.with_copied_credentials().credentials["h"]
+
+        assert copied is not original.credentials["h"]
+        assert copied["self"]["self"] is copied["self"]
+        assert copied["self"] is not original.credentials["h"]["self"]
+
+    def test_with_copied_credentials_shares_connections_and_leaves_the_original(self) -> None:
+        import sqlite3
+
+        conn = sqlite3.connect(":memory:")
+        original = DataAccessCollection(connections={"c": conn}, credentials={"h": {"k": ["v"]}})
+
+        duplicate = original.with_copied_credentials()
+
+        assert duplicate is not original
+        assert duplicate.connections["c"] is conn
+        assert original.credentials["h"]["k"] == ["v"]
+
+    def test_with_copied_credentials_does_not_warn_again(self, caplog: pytest.LogCaptureFixture) -> None:
+        original = DataAccessCollection(credentials={"h": {"password": "short"}})  # nosec B105
+        caplog.clear()
+
+        with caplog.at_level(logging.WARNING):
+            original.with_copied_credentials()
+
+        assert not caplog.records
 
 
 class TestSecretLiterals:

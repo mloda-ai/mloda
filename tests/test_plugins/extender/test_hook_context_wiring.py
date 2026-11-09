@@ -27,8 +27,8 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
-from tests.helpers.bound_credential_cases import BOUND_KINDS, bound_case, csv_file_source
-from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsConsumerFG, ChsRawSecretFG
+from tests.helpers.bound_credential_cases import BOUND_KINDS, bound_case, csv_file_source, write_bound_sqlite
+from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsConsumerFG, ChsRawSecretFG, ChsVaultFG
 from tests.mixins.neutral_csv_source import neutral_csv_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     toy_dac,
@@ -67,6 +67,31 @@ class _ContextCapturingExtender(Extender):
         result = func(*args, **kwargs)
         self.captured = HookContext.current()
         return result
+
+
+class _UnusedCredentials(_ContextCapturingExtender):
+    """Reports (feature group, handle) declarations no step of that group binds or reads."""
+
+    def __init__(self) -> None:
+        super().__init__(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        self.contexts: list[HookContext] = []
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = super().__call__(func, *args, **kwargs)
+        if self.captured is not None:
+            self.contexts.append(self.captured)
+        return result
+
+    def unused(self) -> set[tuple[str, str]]:
+        used: set[tuple[str | None, str]] = set()
+        for c in self.contexts:
+            used |= {(c.feature_group_class, h) for h in (*c.credentials_read, c.bound_credential_handle) if h}
+        return {
+            (c.feature_group_class, h)
+            for c in self.contexts
+            for h in c.credential_handles
+            if c.feature_group_class and (c.feature_group_class, h) not in used
+        }
 
 
 class _OldStyleExtender(Extender):
@@ -1065,13 +1090,16 @@ class TestHookContextBoundCredentialHandle:
         dac: DataAccessCollection | None,
         options: dict[str, Any],
         group: type[FeatureGroup] = SqliteFG,
+        extender: _ContextCapturingExtender | None = None,
+        extra_features: list[Feature] | None = None,
+        extra_groups: set[type[FeatureGroup]] | None = None,
     ) -> HookContext | None:
-        extender = _ContextCapturingExtender(hook)
+        extender = extender or _ContextCapturingExtender(hook)
         mloda.run_all(
-            [Feature("bound_col", options=options)],
-            compute_frameworks=[PyArrowTable],
+            [Feature("bound_col", options=options), *(extra_features or [])],
+            compute_frameworks=[PyArrowTable, PandasDataFrame],
             data_access_collection=dac,
-            plugin_collector=PluginCollector.enabled_feature_groups({group}),
+            plugin_collector=PluginCollector.enabled_feature_groups({group, *(extra_groups or set())}),
             parallelization_modes={ParallelizationMode.SYNC},
             function_extender={extender},
         )
@@ -1110,51 +1138,45 @@ class TestHookContextBoundCredentialHandle:
         assert captured.credential_handles == ("db-main",)
         assert captured.bound_credential_handle == "db-main"
 
-    def test_an_unused_credentials_extender_flags_only_declared_unread_handles(self, tmp_path: Path) -> None:
-        dac, _, _ = bound_case(tmp_path, "named")
+    @pytest.mark.parametrize("kind", ["bound-only", "declared-unread", "declared-and-bound", "cross-step"])
+    def test_an_unused_credentials_extender_flags_only_declared_unread_handles(self, tmp_path: Path, kind: str) -> None:
+        credentials: dict[str, Any] = {"db-main": {"sqlite": str(write_bound_sqlite(tmp_path))}}
 
         class _DeclaredSqliteFG(SqliteFG):
             PROPERTY_MAPPING = {"unused_vault_handle": credential_handle_spec("Vault handle.")}
 
-        class _Unused(_ContextCapturingExtender):
-            def __init__(self) -> None:
-                super().__init__(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
-                self.contexts: list[HookContext] = []
+        class _BoundHandleSqliteFG(SqliteFG):
+            PROPERTY_MAPPING = {"bound_vault_handle": credential_handle_spec("Vault handle.")}
 
-            def wraps(self) -> set[ExtenderHook]:
-                return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+        def name(group: type[FeatureGroup]) -> str:
+            return f"{group.__module__}.{group.__qualname__}"
 
-            def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-                result = super().__call__(func, *args, **kwargs)
-                if self.captured is not None:
-                    self.contexts.append(self.captured)
-                return result
+        group: type[FeatureGroup] = SqliteFG
+        options: dict[str, Any] = {}
+        extra: list[Feature] = []
+        extra_groups: set[type[FeatureGroup]] = set()
+        expected: set[tuple[str, str]] = set()
+        if kind == "declared-unread":
+            group, options = _DeclaredSqliteFG, {"unused_vault_handle": "vault-x"}
+            credentials["vault-x"] = {"key": "k"}
+            expected = {(name(_DeclaredSqliteFG), "vault-x")}
+        elif kind == "declared-and-bound":
+            group, options = _BoundHandleSqliteFG, {"bound_vault_handle": "db-main"}
+        elif kind == "cross-step":
+            extra = [Feature("chs_vault_a", options={HANDLE_KEY: "db-main"})]
+            extra_groups = {ChsVaultFG}
+            expected = {(name(ChsVaultFG), "db-main")}
 
-            def unused(self) -> set[str]:
-                declared = {h for c in self.contexts for h in c.credential_handles if h != c.bound_credential_handle}
-                return declared - {h for c in self.contexts for h in c.credentials_read}
-
-        bound_only = _Unused()
-        mloda.run_all(
-            [Feature("bound_col")],
-            compute_frameworks=[PyArrowTable],
-            data_access_collection=dac,
-            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
-            parallelization_modes={ParallelizationMode.SYNC},
-            function_extender={bound_only},
-        )
-        declared_unread = _Unused()
-        mloda.run_all(
-            [Feature("bound_col", options={"unused_vault_handle": "vault-x"})],
-            compute_frameworks=[PyArrowTable],
-            data_access_collection=DataAccessCollection(
-                credentials={"db-main": {"sqlite": str(tmp_path / "bound.db")}, "vault-x": {"key": "k"}}
-            ),
-            plugin_collector=PluginCollector.enabled_feature_groups({_DeclaredSqliteFG}),
-            parallelization_modes={ParallelizationMode.SYNC},
-            function_extender={declared_unread},
+        extender = _UnusedCredentials()
+        self._run(
+            ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+            DataAccessCollection(credentials=credentials),
+            options,
+            group,
+            extender,
+            extra,
+            extra_groups,
         )
 
-        assert bound_only.contexts
-        assert bound_only.unused() == set()
-        assert declared_unread.unused() == {"vault-x"}
+        assert extender.contexts
+        assert extender.unused() == expected

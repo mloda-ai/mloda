@@ -608,6 +608,7 @@ class TestOnRunStartSeesStepCredentialHandles:
 
         (start,) = [e for e in log if e[1] == "run_start"]
         assert [s.credential_handles for s in start[4] if s.step_kind == "compute"] == [("db-main",)]
+        assert [s.bound_credential_handle for s in start[4] if s.step_kind == "compute"] == ["db-main"]
 
     def test_an_extender_refuses_the_run_for_a_bound_handle_before_any_step_runs(self, tmp_path: Path) -> None:
         log: list[tuple[Any, ...]] = []

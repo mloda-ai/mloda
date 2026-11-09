@@ -112,13 +112,13 @@ class PlanStep:
     ``credential_handles``: the handles a compute step declares plus the one its source binds, else ();
     excluded from equality.
 
-    ``bound_credential_handle``: the handle a compute step's source binds ("<unnamed>", "<pointer>" for placeholders),
-    else None; excluded from equality.
-
     ``runtime_parameters``: the sorted runtime parameter keys a compute step declares, else (); excluded from equality.
 
     ``divergences``: the stamped, scrubbed records of the group and its implementation that apply, else ().
     ``contract_version``: the step's feature group CONTRACT_VERSION, else None.
+
+    ``bound_credential_handle``: the handle a compute step's source binds ("<unnamed>", "<pointer>" for placeholders),
+    else None; excluded from equality.
 
     ``implementation``: the Implementation class serving a compute step, else None.
     ``implementation_path``: its ``module:qualname``, "neutral" for a source group step without one, else None.
@@ -158,10 +158,10 @@ class PlanStep:
     feature_group_hash: str | None = field(default=None, compare=False)
     leaves_connection: str | None = None
     credential_handles: tuple[str, ...] = field(default=(), compare=False)
-    bound_credential_handle: str | None = field(default=None, compare=False)
     runtime_parameters: tuple[str, ...] = field(default=(), compare=False)
     divergences: tuple[Divergence, ...] = ()
     contract_version: int | None = None
+    bound_credential_handle: str | None = field(default=None, compare=False)
     _data_access_identity: str | None = field(default=None, compare=False)
     _data_access_identity_is_fallback: bool | None = field(default=None, compare=False)
     _neutral: bool = field(default=False, compare=False)

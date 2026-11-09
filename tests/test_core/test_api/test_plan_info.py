@@ -653,10 +653,10 @@ class TestPlanStepDataclass:
             "feature_group_hash",
             "leaves_connection",
             "credential_handles",
-            "bound_credential_handle",
             "runtime_parameters",
             "divergences",
             "contract_version",
+            "bound_credential_handle",
         ]
 
     def test_join_keys_defaults_to_none(self) -> None:

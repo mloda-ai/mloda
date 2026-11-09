@@ -11,7 +11,7 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.credential_scrub import (
     _SECRET_KEY,
     _mask_secret_keys,
-    redact_exception,
+    reraise_redacted,
     registered_secrets_scope,
     scrub_credentials,
 )
@@ -144,7 +144,7 @@ class _CredentialRedaction:
     def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
         try:
             if exc is not None:
-                redact_exception(exc, self._literals)
+                reraise_redacted(exc, self._literals)
         finally:
             self._boundary.__exit__(exc_type, exc, tb)
             self._scope.__exit__(exc_type, exc, tb)

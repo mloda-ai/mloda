@@ -569,7 +569,7 @@ _STR_FIELDS: tuple[tuple[type[BaseException], tuple[str, ...]], ...] = (
 
 
 def redact_exception(exc: BaseException, literals: frozenset[str]) -> BaseException:
-    """Mask literals and their escaped forms in place across the exception, chain, groups, notes and refusals."""
+    """Mask in place and return the exception, or a copy when a group's read-only message had to change."""
     if not literals:
         return exc
     return _redact_forms(exc, _with_escaped(literals))
@@ -578,12 +578,14 @@ def redact_exception(exc: BaseException, literals: frozenset[str]) -> BaseExcept
 def _redact_forms(exc: BaseException, literals: frozenset[str]) -> BaseException:
     """Mask the already expanded ``literals`` in place across the exception graph."""
     seen: set[int] = set()
+    visited: list[BaseException] = []
     pending: list[BaseException] = [exc]
     while pending:
         current = pending.pop()
         if id(current) in seen:
             continue
         seen.add(id(current))
+        visited.append(current)
         masked_args = _mask_item(current.args, literals)
         if masked_args is not current.args:
             object.__setattr__(current, "args", masked_args)
@@ -615,7 +617,81 @@ def _redact_forms(exc: BaseException, literals: frozenset[str]) -> BaseException
         pending.extend(
             nested for nested in (current.__cause__, current.__context__, *members) if isinstance(nested, BaseException)
         )
-    return exc
+    groups = [g for g in visited if isinstance(g, BaseExceptionGroup)]
+    if not any(mask_literals(g.message, literals) != g.message for g in groups):
+        return exc
+    memo: dict[int, BaseException] = {}
+    for group in groups:
+        _rebuilt_group(group, literals, memo, 0)
+    _rewire([*visited, *memo.values()], memo)
+    return memo.get(id(exc), exc)
+
+
+def _rebuilt_group(
+    group: BaseExceptionGroup[Any], forms: frozenset[str], memo: dict[int, BaseException], depth: int
+) -> BaseException:
+    """Return ``group`` or a copy with the forms masked in its message and nested groups."""
+    if id(group) in memo:
+        return memo[id(group)]
+    if depth > _MAX_MASK_DEPTH:
+        memo[id(group)] = RuntimeError("***")
+        return memo[id(group)]
+    original = group.exceptions
+    members = [_rebuilt_group(m, forms, memo, depth + 1) if isinstance(m, BaseExceptionGroup) else m for m in original]
+    members_changed = any(new is not old for new, old in zip(members, original))
+    message = mask_literals(group.message, forms)
+    if message == group.message and not members_changed:
+        memo[id(group)] = group
+        return group
+    copy = BaseExceptionGroup.__new__(type(group), message, members)
+    copy.__dict__.update(group.__dict__)
+    args = list(group.args)
+    for index, element in enumerate(args):
+        if (
+            isinstance(element, (list, tuple))
+            and len(element) == len(original)
+            and all(a is b for a, b in zip(element, original))
+        ):
+            args[index] = list(members)
+    object.__setattr__(copy, "args", tuple(args))
+    copy.with_traceback(group.__traceback__)
+    object.__setattr__(copy, "__cause__", group.__cause__)
+    object.__setattr__(copy, "__context__", group.__context__)
+    object.__setattr__(copy, "__suppress_context__", group.__suppress_context__)
+    memo[id(group)] = copy
+    return copy
+
+
+def _rewire(nodes: list[BaseException], memo: dict[int, BaseException]) -> None:
+    """Point causes, contexts and member containers at the rebuilt groups."""
+    for current in nodes:
+        for name in ("__cause__", "__context__"):
+            target = getattr(current, name)
+            replacement = memo.get(id(target)) if target is not None else None
+            if replacement is not None and replacement is not target:
+                suppress = current.__suppress_context__
+                object.__setattr__(current, name, replacement)
+                object.__setattr__(current, "__suppress_context__", suppress)
+        attributes = vars(current)
+        for name in ("refusals", "exceptions"):
+            value = attributes.get(name)
+            if isinstance(value, (tuple, list)):
+                swapped = [memo.get(id(item), item) for item in value]
+                if any(new is not old for new, old in zip(swapped, value)):
+                    attributes[name] = tuple(swapped) if isinstance(value, tuple) else swapped
+
+
+def reraise_redacted(exc: BaseException, literals: frozenset[str]) -> None:
+    """Mask ``exc`` and raise the masked copy when a group had to be rebuilt."""
+    masked = redact_exception(exc, literals)
+    if masked is exc:
+        return
+    context = masked.__context__
+    try:
+        raise masked
+    finally:
+        # raise in __exit__ chains the handled original, which still holds the raw message.
+        object.__setattr__(masked, "__context__", context)
 
 
 class redact_escaping_exception:  # noqa: N801
@@ -626,7 +702,7 @@ class redact_escaping_exception:  # noqa: N801
 
     def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
         if exc is not None:
-            redact_exception(exc, current_registered_secrets())
+            reraise_redacted(exc, current_registered_secrets())
 
 
 def redact_mapping(mapping: Mapping[Any, Any]) -> dict[Any, str]:

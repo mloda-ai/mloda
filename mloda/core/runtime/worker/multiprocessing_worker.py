@@ -163,11 +163,11 @@ def _handle_command_result(
 
 def _report_failure(cfw_register: CfwManager, command_queue: multiprocessing.Queue[Any], e: BaseException) -> None:
     try:
-        redact_exception(e, current_registered_secrets())
-        msg, exc_info = failure_report(e)
+        masked = redact_exception(e, current_registered_secrets())
+        msg, exc_info = failure_report(masked)
         if cfw_register:
             try:
-                cfw_register.set_error(msg, exc_info, exception=e)
+                cfw_register.set_error(msg, exc_info, exception=masked)
             except Exception:
                 # Unpicklable exception: fall back to string-only (surfaces as MlodaRunError), never skip the STOP.
                 cfw_register.set_error(msg, exc_info)

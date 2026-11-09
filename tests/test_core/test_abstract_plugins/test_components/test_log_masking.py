@@ -373,6 +373,17 @@ def test_exc_info_exception_is_masked(capture: _Capture) -> None:
     assert _SECRET not in logging.Formatter().format(record)
 
 
+def test_exc_info_exception_group_message_is_masked(capture: _Capture) -> None:
+    group = ExceptionGroup(f"bad {_SECRET}", [ValueError("m")])
+    with _scope(_SECRET):
+        capture.logger.error("x", exc_info=group)
+
+    (record,) = capture.records
+    assert record.exc_info is not None
+    assert _SECRET not in cast(ExceptionGroup[Exception], record.exc_info[1]).message
+    assert _SECRET not in logging.Formatter().format(record)
+
+
 def test_logger_exception_outside_an_except_block_does_not_raise(capture: _Capture) -> None:
     with _scope(_SECRET):
         capture.logger.exception("no active exception %s", _SECRET)
@@ -408,18 +419,23 @@ def _emit_stack_echoing(logger: logging.Logger, echoed: str, monkeypatch: pytest
     namespace["emit"](logger)
 
 
-@pytest.mark.parametrize(
-    "sink", ["redact_exception", "scrub_credentials", "msg", "arg", "extra", "exc_info", "stack_info"]
-)
-@pytest.mark.parametrize("form", list(_FORM_BUILDERS))
-@pytest.mark.parametrize("literal", list(_ECHO_LITERALS.values()), ids=list(_ECHO_LITERALS))
+_ECHO_SINKS = ["redact_exception", "scrub_credentials", "msg", "arg", "extra", "exc_info", "stack_info"]
+_ECHO_CASES = [
+    pytest.param(literal, form, sink, id=f"{lit_id}-{form}-{sink}")
+    for lit_id, literal in _ECHO_LITERALS.items()
+    for form in _FORM_BUILDERS
+    for sink in _ECHO_SINKS
+    # a source line cannot hold a raw newline, so the injected stack text would stop at the break
+    if not (sink == "stack_info" and "\n" in _FORM_BUILDERS[form](literal))
+]
+
+
+@pytest.mark.parametrize("literal, form, sink", _ECHO_CASES)
 def test_every_echoed_form_of_a_registered_literal_is_masked_by_every_sink(
     capture: _Capture, monkeypatch: pytest.MonkeyPatch, literal: str, form: str, sink: str
 ) -> None:
     echoed = _FORM_BUILDERS[form](literal)
     forms = _forms(literal)
-    if sink == "stack_info" and "\n" in echoed:
-        return  # a source line cannot hold a raw newline, so the injected stack text would stop at the break
     with _scope(literal):
         if sink == "redact_exception":
             exc = ValueError(f"x {echoed} y")

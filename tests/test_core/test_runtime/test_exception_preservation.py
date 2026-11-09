@@ -791,6 +791,33 @@ def test_plan_building_error_masks_registered_token(entry: str, caplog: pytest.L
     assert TOY_TOKEN not in caplog.text
 
 
+class TokenIdentityGroupFG(ToySourceFG):
+    """data_access_identity raises an exception group with the registered token in its message."""
+
+    @classmethod
+    def data_access_identity(cls, match: SourceMatch) -> str:
+        raise ExceptionGroup(f"username={TOY_TOKEN}", [ValueError("m")])
+
+
+@pytest.mark.parametrize("entry", ["run_all", "explain", "resolved_plan"])
+def test_plan_building_group_masks_registered_token(entry: str, caplog: pytest.LogCaptureFixture) -> None:
+    request = toy_token_request(TokenIdentityGroupFG, _TOKEN_COLUMN)
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(ExceptionGroup) as excinfo:
+            if entry == "run_all":
+                mloda.run_all([Feature(name=_TOKEN_COLUMN)], **request)
+            elif entry == "explain":
+                mloda.explain([Feature(name=_TOKEN_COLUMN)], **request)
+            else:
+                mloda.prepare([Feature(name=_TOKEN_COLUMN)], **request).resolved_plan()
+
+    exc: Any = excinfo.value
+    assert TOY_TOKEN not in exc.message
+    assert TOY_TOKEN not in str(exc)
+    assert TOY_TOKEN not in repr(exc.args)
+    assert TOY_TOKEN not in caplog.text
+
+
 def test_early_stream_close_finalizes_inside_the_redaction_scope(monkeypatch: pytest.MonkeyPatch) -> None:
     from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
     from mloda.core.runtime.run import ExecutionOrchestrator
@@ -920,7 +947,7 @@ def _grant_run(
     )
 
 
-_NATIVE_FIELDS = ("strerror", "filename", "filename2", "msg", "name", "path", "text", "reason")
+_NATIVE_FIELDS = ("strerror", "filename", "filename2", "msg", "name", "path", "text", "reason", "message", "exceptions")
 
 
 class _FileRecordingExtender(Extender):
@@ -1022,6 +1049,7 @@ _ECHO_FACTORIES: dict[str, Callable[[Mapping[str, Any]], BaseException]] = {
     "syntax_text": lambda value: SyntaxError("bad", ("f.py", 1, 1, f"x = {value['hmac']}")),
     "decode_reason": lambda value: UnicodeDecodeError("utf-8", b"\xff", 0, 1, f"bad {value['hmac']}"),
     "pem_repr_and_json": lambda value: ValueError(f"key {value['pem']!r} {json.dumps(value['pem'])}"),
+    "group": lambda value: ExceptionGroup(f"bad {value['hmac']}", [ValueError(f"m {value['hmac']}")]),
 }
 
 
@@ -1120,6 +1148,36 @@ def test_a_native_field_echoing_a_secret_is_masked_in_every_mode(
     assert _E2E_HMAC not in repr(exc.args)
     assert _E2E_HMAC not in caplog.text
     assert _E2E_HMAC not in seen.read_text()
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+@pytest.mark.parametrize("with_extender", [True, False])
+def test_an_exception_group_echoing_a_secret_is_masked_in_every_mode(
+    mode: ParallelizationMode,
+    with_extender: bool,
+    flight_server: Any,
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: Any,
+) -> None:
+    seen = tmp_path / "seen.txt"
+    extenders: set[Extender] | None = {_FileRecordingExtender(str(seen))} if with_extender else None
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(ExceptionGroup) as excinfo:
+            _echo_run("group", mode, flight_server, extenders)
+
+    exc: Any = excinfo.value
+    assert type(exc) is ExceptionGroup
+    assert _E2E_HMAC not in exc.message
+    assert _E2E_HMAC not in str(exc)
+    assert _E2E_HMAC not in repr(exc.args)
+    (member,) = exc.exceptions
+    assert type(member) is ValueError
+    assert _E2E_HMAC not in str(member)
+    assert _E2E_HMAC not in repr(member.args)
+    assert _E2E_HMAC not in caplog.text
+    if with_extender:
+        assert _E2E_HMAC not in seen.read_text()
 
 
 @pytest.mark.timeout(15)

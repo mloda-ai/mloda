@@ -131,7 +131,9 @@ def _mask_args(args: Any, literals: frozenset[str]) -> Any:
 def _mask_extras(record: logging.LogRecord, escaped: frozenset[str]) -> None:
     exc_info = record.exc_info
     if isinstance(exc_info, tuple) and len(exc_info) == 3 and isinstance(exc_info[1], BaseException):
-        _redact_forms(exc_info[1], escaped)
+        masked = _redact_forms(exc_info[1], escaped)
+        if masked is not exc_info[1]:
+            record.exc_info = (type(masked), masked, exc_info[2])
     if isinstance(record.stack_info, str):
         record.stack_info = mask_literals(record.stack_info, escaped)
 

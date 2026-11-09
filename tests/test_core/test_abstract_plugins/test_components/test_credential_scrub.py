@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import pickle  # nosec B403
 import time
+import traceback
 from collections import OrderedDict, defaultdict
 from collections.abc import Callable
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, NamedTuple
 from urllib.parse import quote
@@ -2037,6 +2040,51 @@ class _KeepList(list[Any]):
     pass
 
 
+class _CodedGroup(ExceptionGroup):
+    """A group whose __new__ takes a code, so a rebuild must not call it."""
+
+    code: int
+
+    def __new__(cls, message: str, excs: Any, code: int) -> _CodedGroup:
+        self = super().__new__(cls, message, excs)
+        self.code = code
+        self.args = (message, excs, code)
+        return self
+
+
+@dataclass(frozen=True, init=False)
+class _FrozenGroup(ExceptionGroup):
+    detail: str = "d"
+
+
+def cast_group(exc: BaseException) -> Any:
+    assert isinstance(exc, BaseExceptionGroup)
+    return exc
+
+
+def _group_texts(root: BaseException) -> list[str]:
+    """Every message and str arg reachable through members, causes and contexts, walked iteratively."""
+    texts: list[str] = []
+    seen: set[int] = set()
+    pending: list[BaseException] = [root]
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, BaseExceptionGroup):
+            texts.append(current.message)
+            pending.extend(current.exceptions)
+        for arg in current.args:
+            if isinstance(arg, str):
+                texts.append(arg)
+            if isinstance(arg, (list, tuple)):
+                pending.extend(item for item in arg if isinstance(item, BaseException))
+                texts.extend(item for item in arg if isinstance(item, str))
+        pending.extend(n for n in (current.__cause__, current.__context__) if n is not None)
+    return texts
+
+
 class TestRedactException:
     """redact_exception rewrites registered literals in place, across the chain, keeping identity."""
 
@@ -2554,3 +2602,302 @@ class TestRedactException:
         redact_exception(exc, frozenset({_LITERAL}))
 
         assert _LITERAL not in repr(exc.args)
+
+    @pytest.mark.parametrize(
+        "build",
+        [
+            lambda s: s,
+            lambda s: repr(s)[1:-1],
+            lambda s: json.dumps(s)[1:-1],
+            lambda s: json.dumps(s, ensure_ascii=False)[1:-1],
+        ],
+        ids=["raw", "repr", "json_ascii", "json_utf8"],
+    )
+    def test_a_group_message_holding_any_form_returns_a_masked_copy(self, build: Callable[[str], str]) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        group = ExceptionGroup(f"bad {build(_FORM_LITERAL)} end", [ValueError("m")])
+
+        result = redact_exception(group, frozenset({_FORM_LITERAL}))
+
+        assert result is not group
+        assert type(result) is ExceptionGroup
+        masked = cast_group(result)
+        for form in (_FORM_LITERAL, build(_FORM_LITERAL)):
+            assert form not in masked.message
+            assert form not in str(masked)
+            assert form not in masked.args[0]
+        assert masked.exceptions == group.exceptions
+
+    def test_a_group_with_no_message_form_keeps_identity_and_masks_members_in_place(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        member = ValueError(f"m {_LITERAL}")
+        group = ExceptionGroup("clean", [member])
+
+        result = redact_exception(group, frozenset({_LITERAL}))
+
+        assert result is group
+        assert group.exceptions[0] is member
+        assert _LITERAL not in str(member)
+
+    @pytest.mark.parametrize("flag", [True, False])
+    def test_the_copy_keeps_the_exception_state(self, flag: bool) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        member = ValueError("m")
+        group = ExceptionGroup(f"bad {_LITERAL}", [member])
+        try:
+            raise group
+        except ExceptionGroup:
+            pass
+        context = KeyError("ctx")
+        cause = LookupError("cause")
+        group.__context__ = context
+        if flag:
+            group.__cause__ = cause
+        else:
+            group.__suppress_context__ = False
+        group.add_note("note")
+        setattr(group, "extra", {"k": 1})
+        traceback_before = group.__traceback__
+
+        result = redact_exception(group, frozenset({_LITERAL}))
+
+        assert result is not group
+        assert result.__traceback__ is traceback_before
+        assert result.__context__ is context
+        assert result.__cause__ is (cause if flag else None)
+        assert result.__suppress_context__ is flag
+        assert getattr(result, "__notes__") == ["note"]
+        assert getattr(result, "extra") == {"k": 1}
+        assert result.__dict__["extra"] == {"k": 1}
+        assert isinstance(result, BaseExceptionGroup)
+        assert result.exceptions[0] is member
+
+    def test_the_copy_keeps_a_context_with_no_cause_and_a_false_flag(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        group = ExceptionGroup(f"bad {_LITERAL}", [ValueError("m")])
+        context = KeyError("ctx")
+        group.__context__ = context
+        assert group.__suppress_context__ is False
+
+        result = redact_exception(group, frozenset({_LITERAL}))
+
+        assert result is not group
+        assert result.__context__ is context
+        assert result.__cause__ is None
+        assert result.__suppress_context__ is False
+
+    @pytest.mark.parametrize("layout", ["code_first", "code_last"])
+    @pytest.mark.parametrize("member_changed", [True, False])
+    def test_the_members_arg_keeps_its_position_under_a_custom_layout(self, layout: str, member_changed: bool) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        member = ValueError(f"m {_LITERAL}" if member_changed else "m")
+        message = f"bad {_LITERAL}"
+        group = ExceptionGroup(message, [member])
+        original_members = group.exceptions
+        group.args = (7, message, original_members) if layout == "code_first" else (message, original_members, 7)
+
+        result = redact_exception(group, frozenset({_LITERAL}))
+
+        assert result is not group
+        code_at, message_at, members_at = (0, 1, 2) if layout == "code_first" else (2, 0, 1)
+        assert result.args[code_at] == 7
+        assert _LITERAL not in result.args[message_at]
+        copied_members = result.args[members_at]
+        assert len(result.args) == 3
+        assert copied_members is not original_members
+        assert tuple(copied_members) == cast_group(result).exceptions
+        assert all(_LITERAL not in str(item) for item in copied_members)
+
+    def test_a_custom_new_group_is_rebuilt_without_calling_new_and_pickles_masked(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        group = _CodedGroup(f"bad {_LITERAL}", [ValueError("m")], 42)
+
+        result = redact_exception(group, frozenset({_LITERAL}))
+
+        assert result is not group
+        assert type(result) is _CodedGroup
+        assert getattr(result, "code") == 42
+        assert _LITERAL not in cast_group(result).message
+        restored = pickle.loads(pickle.dumps(result))  # nosec B301
+        assert type(restored) is _CodedGroup
+        assert _LITERAL not in restored.message
+        assert restored.code == 42
+
+    def test_a_frozen_dataclass_group_does_not_raise(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        group = _FrozenGroup(f"bad {_LITERAL}", [ValueError("m")])
+
+        result = redact_exception(group, frozenset({_LITERAL}))
+
+        assert type(result) is _FrozenGroup
+        assert _LITERAL not in cast_group(result).message
+
+    def test_a_nested_secret_group_rebuilds_a_clean_parent(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        inner = ExceptionGroup(f"in {_LITERAL}", [ValueError("m")])
+        parent = ExceptionGroup("clean", [inner])
+
+        result = cast_group(redact_exception(parent, frozenset({_LITERAL})))
+
+        assert result is not parent
+        assert result.exceptions[0] is not inner
+        assert _LITERAL not in cast_group(result.exceptions[0]).message
+        assert tuple(result.args[1]) == result.exceptions
+        assert _LITERAL not in "".join(_group_texts(result))
+
+    def test_a_group_shared_by_two_parents_maps_to_one_copy(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        shared = ExceptionGroup(f"s {_LITERAL}", [ValueError("m")])
+        root = ExceptionGroup("root", [ExceptionGroup("a", [shared]), ExceptionGroup("b", [shared])])
+
+        result = cast_group(redact_exception(root, frozenset({_LITERAL})))
+
+        first, second = (cast_group(item) for item in result.exceptions)
+        assert first.exceptions[0] is second.exceptions[0]
+        assert first.exceptions[0] is not shared
+        assert _LITERAL not in "".join(_group_texts(result))
+
+    @pytest.mark.parametrize("link", ["__cause__", "__context__"])
+    def test_a_group_in_a_chain_slot_is_swapped_keeping_the_plain_exception(self, link: str) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        group = ExceptionGroup(f"bad {_LITERAL}", [ValueError("m")])
+        plain = RuntimeError("plain")
+        setattr(plain, link, group)
+        flag = plain.__suppress_context__
+
+        result = redact_exception(plain, frozenset({_LITERAL}))
+
+        assert result is plain
+        swapped = getattr(plain, link)
+        assert swapped is not group
+        assert _LITERAL not in swapped.message
+        assert plain.__suppress_context__ is flag
+
+    def test_a_chain_cycle_through_a_group_terminates(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        group = ExceptionGroup(f"bad {_LITERAL}", [ValueError("m")])
+        plain = RuntimeError("plain")
+        plain.__cause__ = group
+        group.__context__ = plain
+
+        result = redact_exception(plain, frozenset({_LITERAL}))
+
+        assert result is plain
+        assert _LITERAL not in "".join(_group_texts(plain))
+
+    def test_a_group_in_refusals_and_in_a_plain_exceptions_attribute_is_swapped(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+        from mloda.core.prepare.identify_feature_group import FeatureResolutionError
+
+        group = ExceptionGroup(f"bad {_LITERAL}", [ValueError("m")])
+        error = FeatureResolutionError("msg", "f", None, refusals=[group])  # type: ignore[arg-type]
+        redact_exception(error, frozenset({_LITERAL}))
+        assert error.refusals[0] is not group
+        assert _LITERAL not in cast_group(error.refusals[0]).message
+
+        other = ExceptionGroup(f"bad {_LITERAL}", [ValueError("m")])
+        holder = RuntimeError("h")
+        setattr(holder, "exceptions", [other])
+        result = redact_exception(holder, frozenset({_LITERAL}))
+        assert result is holder
+        swapped = getattr(holder, "exceptions")[0]
+        assert swapped is not other
+        assert _LITERAL not in swapped.message
+
+    def test_nesting_deeper_than_the_depth_bound_leaves_no_secret(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import _MAX_MASK_DEPTH, redact_exception
+
+        node: BaseException = ExceptionGroup(f"deep {_LITERAL}", [ValueError(f"m {_LITERAL}")])
+        for _ in range(_MAX_MASK_DEPTH + 8):
+            node = BaseExceptionGroup("clean", [node])
+
+        result = redact_exception(node, frozenset({_LITERAL}))
+
+        assert all(_LITERAL not in text for text in _group_texts(result))
+
+    def test_except_star_still_splits_the_rebuilt_group(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        member = ValueError("m")
+        result = redact_exception(ExceptionGroup(f"bad {_LITERAL}", [member, KeyError("k")]), frozenset({_LITERAL}))
+
+        caught: list[Any] = []
+        try:
+            raise result
+        except* ValueError as split:
+            caught.append(split)
+        except* KeyError:
+            pass
+
+        assert caught[0].exceptions == (member,)
+        assert _LITERAL not in caught[0].message
+
+    def test_reraise_redacted_does_not_raise_when_nothing_was_rebuilt(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import (  # type: ignore[attr-defined,unused-ignore]
+            reraise_redacted,
+        )
+
+        group = ExceptionGroup("clean", [ValueError(f"m {_LITERAL}")])
+        plain = ValueError(_LITERAL)
+
+        reraise_redacted(group, frozenset({_LITERAL}))
+        reraise_redacted(plain, frozenset({_LITERAL}))
+
+        assert all(_LITERAL not in str(member) for member in group.exceptions)
+        assert all(_LITERAL not in str(arg) for arg in plain.args)
+
+    @pytest.mark.parametrize("outer", [False, True])
+    @pytest.mark.parametrize("frozen", [False, True])
+    def test_redact_escaping_exception_raises_the_masked_copy(self, outer: bool, frozen: bool) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import (
+            redact_escaping_exception,
+            registered_secrets_scope,
+        )
+
+        def make() -> BaseException:
+            args = (f"bad {_LITERAL}", [ValueError("m")])
+            return _FrozenGroup(*args) if frozen else ExceptionGroup(*args)
+
+        original_context = KeyError("ctx")
+        raised: list[BaseException] = []
+        caught: BaseException | None = None
+
+        def body() -> None:
+            try:
+                with registered_secrets_scope(frozenset({_LITERAL})):
+                    with redact_escaping_exception():
+                        group = make()
+                        raised.append(group)
+                        if outer:
+                            object.__setattr__(group, "__context__", original_context)
+                        raise group
+            except BaseException as error:
+                nonlocal caught
+                caught = error
+
+        if outer:
+            try:
+                raise original_context
+            except KeyError:
+                body()
+        else:
+            body()
+
+        assert caught is not None
+        assert caught is not raised[0]
+        assert type(caught) is type(raised[0])
+        assert _LITERAL not in cast_group(caught).message
+        assert caught.__context__ is raised[0].__context__
+        assert caught.__context__ is not raised[0]
+        assert _LITERAL not in "".join(traceback.format_exception(caught))

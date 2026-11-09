@@ -30,6 +30,7 @@ from mloda.core.prepare.resolution_failure_renderer import (
 from mloda.core.abstract_plugins.components.credential_handle import (
     credential_handle_keys,
     missing_credential_handle_abort,
+    missing_credential_handle_keys,
     refuse_credential_option_values,
     validate_credential_handles,
 )
@@ -355,7 +356,8 @@ class IdentifyFeatureGroupClass:
 
     def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
         self._excluded = {}
-        self._missing_handle_abort: ValueError | None = None
+        self._missing_handle_aborts: dict[type[FeatureGroup], tuple[tuple[str, ...], ValueError]] = {}
+        self._validated_handles: set[type[FeatureGroup]] = set()
         self._criteria_matched_feature_groups = set()
         self._abstract_matched_feature_groups = set()
         self._candidate_frameworks = {}
@@ -846,9 +848,12 @@ class IdentifyFeatureGroupClass:
                     and self._filter_feature_group_by_domain(feature_group, feature)
                     and not inspect.isabstract(feature_group)
                 ):
-                    if self._missing_handle_abort is None:
-                        self._missing_handle_abort = missing_credential_handle_abort(
-                            feature_group, self._matched_options.get(feature_group, feature.options)
+                    absent_options = self._matched_options.get(feature_group, feature.options)
+                    absent = missing_credential_handle_keys(feature_group, absent_options)
+                    if absent:
+                        self._missing_handle_aborts[feature_group] = (
+                            absent,
+                            missing_credential_handle_abort(feature_group, absent_options, absent),
                         )
                 if rejection is not None:
                     # The shared mapper owns the projection, so both seams spell the taxonomy the same way.
@@ -866,8 +871,6 @@ class IdentifyFeatureGroupClass:
             if inspect.isabstract(feature_group):
                 self._abstract_matched_feature_groups.add(feature_group)
                 continue
-
-            validate_credential_handles(feature_group, self._matched_options[feature_group], data_access_collection)
 
             self._criteria_matched_feature_groups.add(feature_group)
             options = self._matched_options[feature_group]
@@ -943,6 +946,30 @@ class IdentifyFeatureGroupClass:
 
             identified[feature_group] = supported_frameworks
 
+    def _validate_new_handles(
+        self, identified: FeatureGroupEnvironmentMapping, data_access_collection: DataAccessCollection | None
+    ) -> None:
+        """Validate matched groups not yet checked, skipping an ancestor a surviving strict subclass replaces."""
+        for fg in sorted(self._criteria_matched_feature_groups - self._validated_handles, key=_candidate_sort_key):
+            if any(other is not fg and is_nominal_subclass(other, fg) for other in identified):
+                continue
+            self._validated_handles.add(fg)
+            validate_credential_handles(fg, self._matched_options[fg], data_access_collection)
+
+    def _raise_uncovered_missing_handle_abort(self, feature: Feature) -> None:
+        """Raise the first missing-handle abort no matched group covers (subclass, same key, or requested handle)."""
+        requested = feature.options.group.keys()
+        matched = self._criteria_matched_feature_groups
+        for fg in sorted(self._missing_handle_aborts, key=_candidate_sort_key):
+            absent, abort = self._missing_handle_aborts[fg]
+            covered = any(
+                (other is not fg and is_nominal_subclass(other, fg))
+                or any(key in absent or key in requested for key in credential_handle_keys(other))
+                for other in matched
+            )
+            if not covered:
+                raise abort
+
     def _allowed_variant_frameworks(
         self,
         feature_group: type[FeatureGroup],
@@ -1001,6 +1028,7 @@ class IdentifyFeatureGroupClass:
         sources = [item for item in items if is_nominal_subclass(item[0], SourceFeatureGroup)]
         # Non-source candidates go first so a searched source route can step aside for a name one of them computes.
         self._collect_candidates(feature, others, links, data_access_collection, identified)
+        self._validate_new_handles(identified, data_access_collection)
         if sources:
             computing = [fg for fg in identified if fg not in self._output_parts]
             narrowed = self.filter_subclasses({fg: identified[fg] for fg in computing})
@@ -1015,9 +1043,8 @@ class IdentifyFeatureGroupClass:
                         raise
                     # Outside the scope, so the chain check stacks like an eager one and a cycle cannot see it unanswered.
                     check.answer = any(self._computes(fg, feature) for fg in sorted(narrowed, key=_candidate_sort_key))
-        if self._missing_handle_abort is not None:
-            if not any(credential_handle_keys(group) for group in self._criteria_matched_feature_groups):
-                raise self._missing_handle_abort
+        self._validate_new_handles(identified, data_access_collection)
+        self._raise_uncovered_missing_handle_abort(feature)
         _identified_feature_groups = identified
 
         candidates = set(_identified_feature_groups)

@@ -1148,16 +1148,25 @@ class TestHookContextBoundCredentialHandle:
         assert captured.bound_credential_handle is None
 
     @pytest.mark.parametrize("hook", _HOOKS)
-    def test_a_handle_declared_and_bound_is_listed_once(self, tmp_path: Path, hook: ExtenderHook) -> None:
+    @pytest.mark.parametrize(
+        ("declared", "expected"),
+        [("db-main", ("db-main",)), ("zz-vault", ("db-main", "zz-vault")), ("aa-vault", ("aa-vault", "db-main"))],
+    )
+    def test_a_handle_declared_and_bound_is_listed_once(
+        self, tmp_path: Path, hook: ExtenderHook, declared: str, expected: tuple[str, ...]
+    ) -> None:
         dac, _, _ = bound_case(tmp_path, "named")
+        assert dac is not None
+        if declared != "db-main":
+            dac = dac.with_credentials({declared: {"token": "hook-sort-token"}})  # nosec B105
 
         class _BoundHandleSqliteFG(SqliteFG):
             PROPERTY_MAPPING = {"bound_vault_handle": credential_handle_spec("Vault handle.")}
 
-        captured = self._run(hook, dac, {"bound_vault_handle": "db-main"}, _BoundHandleSqliteFG)
+        captured = self._run(hook, dac, {"bound_vault_handle": declared}, _BoundHandleSqliteFG)
 
         assert captured is not None
-        assert captured.credential_handles == ("db-main",)
+        assert captured.credential_handles == expected
         assert captured.bound_credential_handle == "db-main"
 
     @pytest.mark.parametrize("kind", ["bound-only", "declared-unread", "declared-and-bound", "cross-step"])

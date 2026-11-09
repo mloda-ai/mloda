@@ -4,16 +4,22 @@ import dataclasses
 import inspect
 import re
 import types
+from collections import UserList, deque
 from pathlib import Path
 from abc import abstractmethod
 from collections.abc import Callable, Mapping
 from typing import Any
 
+import pandas as pd
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
+from mloda.core.abstract_plugins.components.credential_access import ResolvedCredential, credentials_scope
 from mloda.core.abstract_plugins.components.credential_handle import refuse_credential_option_values
+from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
+from mloda.core.abstract_plugins.components.utils import is_match_abort
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
@@ -27,6 +33,7 @@ from tests.test_core.test_tooling.runner_recorder import record_runners
 from mloda.provider import (
     ComputeFramework,
     CredentialReadRefused,
+    DataCreatorFeatureGroup,
     SourceMatch,
     read_credential,
     FeatureGroup,
@@ -227,6 +234,98 @@ class ChsNoneDefaultFG(ChsSource):
         return {"chs_none_a"}
 
 
+class ChsReqParentFG(ChsSource):
+    PROPERTY_MAPPING = {"chs_req_handle": credential_handle_spec("Required handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rq_a"}
+
+
+class ChsReqUnrelatedOptFG(ChsSource):
+    PROPERTY_MAPPING = {"chs_unrelated_handle": credential_handle_spec("Unrelated optional handle.", default=None)}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rq_a"}
+
+
+class ChsReqOptChildFG(ChsReqParentFG):
+    PROPERTY_MAPPING = {"chs_req_handle": credential_handle_spec("Optional handle.", default=None)}
+
+
+class ChsReqSameOptFG(ChsSource):
+    PROPERTY_MAPPING = {"chs_req_handle": credential_handle_spec("Same key, optional.", default=None)}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rq_a"}
+
+
+class ChsFieldsParentFG(ChsSource):
+    PROPERTY_MAPPING = {"chs_fp_handle": credential_handle_spec("Needs fields.", required_fields=("chs_user",))}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_fp_a"}
+
+
+class ChsFieldsChildFG(ChsFieldsParentFG):
+    PROPERTY_MAPPING = {"chs_fp_handle": credential_handle_spec("Needs no fields.")}
+
+
+class ChsTypoParentFG(ChsSource):
+    PROPERTY_MAPPING = {"chs_typo_handle": credential_handle_spec("Typo handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_typo_a"}
+
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
+    ) -> bool:
+        return False
+
+
+class ChsTypoChildFG(ChsTypoParentFG):
+    pass
+
+
+class ChsTypoWinnerFG(ChsSource):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_typo_a"}
+
+
+class ChsDecliningFG(ChsSource):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_dec_a"}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return False
+
+
+class ChsDecBadHandleFG(ChsSource):
+    PROPERTY_MAPPING = {"chs_dec_handle": credential_handle_spec("Bad handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_dec_a"}
+
+
 def _plugins(*groups: type[FeatureGroup]) -> PluginCollector:
     return PluginCollector.enabled_feature_groups(set(groups))
 
@@ -266,6 +365,15 @@ def _refusal(
 ) -> str:
     with pytest.raises(ValueError) as exc:
         entry(features, dac, _plugins(*groups))
+    return str(exc.value)
+
+
+def _abort(entry: Entry, features: list[Feature], dac: DataAccessCollection | None, *groups: type[FeatureGroup]) -> str:
+    """Like _refusal, and the error must be a marked match abort that is not a FeatureResolutionError."""
+    with pytest.raises(ValueError) as exc:
+        entry(features, dac, _plugins(*groups))
+    assert is_match_abort(exc.value)
+    assert not isinstance(exc.value, FeatureResolutionError)
     return str(exc.value)
 
 
@@ -570,6 +678,29 @@ class TestPlanTimeRefusals:
         feature = Feature("chs_loser_a", options={"chs_loser_handle": "vault-typo"})
 
         message = _refusal(_prepare, [feature], None, ChsFrameworkLoserFG, ChsLoserWinnerFG)
+
+        assert "vault-typo" in message
+
+    def test_a_parent_required_field_does_not_abort_a_subclass_that_wins(self) -> None:
+        feature = Feature("chs_fp_a", options={"chs_fp_handle": "vault-main"})
+
+        session = _prepare(
+            [feature], _dac(**{"vault-main": {"key": SECRET}}), _plugins(ChsFieldsParentFG, ChsFieldsChildFG)
+        )
+
+        assert _steps(session, ChsFieldsChildFG)
+
+    def test_a_parent_with_a_bad_handle_still_aborts_when_its_subclass_loses_on_a_framework(self) -> None:
+        feature = Feature("chs_typo_a", options={"chs_typo_handle": "vault-typo"})
+
+        message = _abort(_prepare, [feature], None, ChsTypoParentFG, ChsTypoChildFG, ChsTypoWinnerFG)
+
+        assert "vault-typo" in message
+
+    def test_a_declining_matcher_beside_a_bad_handle_still_gets_the_handle_refusal(self) -> None:
+        feature = Feature("chs_dec_a", options={"chs_dec_handle": "vault-typo"})
+
+        message = _abort(_prepare, [feature], None, ChsDecliningFG, ChsDecBadHandleFG)
 
         assert "vault-typo" in message
 
@@ -880,11 +1011,81 @@ class TestMissingHandleKeyAborts:
         assert _steps(session, ChsPairSecondFG)
         assert not _steps(session, ChsPairFirstFG)
 
+    def test_an_unrelated_group_with_another_optional_handle_does_not_suppress_the_abort(self) -> None:
+        feature = Feature("chs_rq_a", options={"chs_req_handel": "good"})
+
+        message = _abort(_prepare, [feature], None, ChsReqParentFG, ChsReqUnrelatedOptFG)
+
+        assert "chs_req_handle" in message
+        assert "ChsReqParentFG" in message
+        assert "did you mean 'chs_req_handel'" in message
+
+    def test_a_subclass_making_the_key_optional_wins_over_the_abort(self) -> None:
+        session = _prepare([Feature("chs_rq_a")], None, _plugins(ChsReqParentFG, ChsReqOptChildFG))
+
+        assert _steps(session, ChsReqOptChildFG)
+        assert not _steps(session, ChsReqParentFG)
+
+    def test_a_group_declaring_the_same_key_optionally_wins_over_the_abort(self) -> None:
+        session = _prepare([Feature("chs_rq_a")], None, _plugins(ChsReqParentFG, ChsReqSameOptFG))
+
+        assert _steps(session, ChsReqSameOptFG)
+        assert not _steps(session, ChsReqParentFG)
+
     def test_a_group_missing_two_handle_keys_names_both(self) -> None:
         message = _refusal(_prepare, [Feature("chs_two_a")], None, ChsTwoHandleFG)
 
         assert "chs_two_a_handle" in message
         assert "chs_two_z_handle" in message
+
+    @staticmethod
+    def _absent_handle_group(route: str) -> type[FeatureGroup]:
+        if route == "late-mapping":
+
+            class ChsLateMappingFG(ChsSource):
+                @classmethod
+                def feature_names_supported(cls) -> set[str]:
+                    return {"chs_absent_a"}
+
+            ChsLateMappingFG.PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Late handle.")}
+            return ChsLateMappingFG
+
+        class ChsAbsentMixinFG(FeatureChainParserMixin, ChsSource):
+            MIN_IN_FEATURES = 0
+            PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Mixin handle.")}
+
+            @classmethod
+            def feature_names_supported(cls) -> set[str]:
+                return {"chs_absent_a"}
+
+            @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: FeatureName | str,
+                options: Options,
+                data_access_collection: DataAccessCollection | None = None,
+            ) -> bool:
+                return str(feature_name) == "chs_absent_a"
+
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+                return None
+
+        return ChsAbsentMixinFG
+
+    @pytest.mark.parametrize("entry", ENTRY_POINTS)
+    @pytest.mark.parametrize("route", ["late-mapping", "mixin-matcher"])
+    def test_an_absent_required_handle_is_refused_on_every_route(self, entry: Entry, route: str) -> None:
+        group = self._absent_handle_group(route)
+
+        message = _abort(entry, [Feature("chs_absent_a")], None, group)
+
+        assert HANDLE_KEY in message
+        assert group.__name__ in message
+        assert "requires credential handle option" in message
+
+    def test_deferred_binding_is_fixed_on_a_credential_handle_spec(self) -> None:
+        with pytest.raises(ValueError, match="deferred_binding"):
+            dataclasses.replace(credential_handle_spec("Handle."), deferred_binding=True)
 
     def test_a_missing_plain_required_key_keeps_the_fallback(self) -> None:
         session = _prepare([Feature("chs_plain_a")], None, _plugins(ChsPlainRequiredFG, ChsFallbackFG))
@@ -910,8 +1111,25 @@ class ChsCredDefaultFG(ChsSource):
         return {"chs_creddef_a"}
 
 
+@dataclasses.dataclass(frozen=True)
+class _ChsHolder:
+    auth: Any
+
+
+@dataclasses.dataclass
+class _ChsClassHolder:
+    auth: Any = Credential(token=SECRET)
+
+
 _CRED_OPTION_KEY = "chs_api_auth"
 _VALUE_SHAPES = [
+    pytest.param(lambda: ResolvedCredential("vault-main", {"token": SECRET}), False, id="resolved"),
+    pytest.param(lambda: [ResolvedCredential("vault-main", {"token": SECRET})], True, id="resolved-list"),
+    pytest.param(lambda: deque([Credential(token=SECRET)]), True, id="deque"),
+    pytest.param(lambda: _ChsHolder(auth=Credential(token=SECRET)), True, id="dataclass"),
+    pytest.param(lambda: DBTable(credentials=Credential(token=SECRET), table="t"), True, id="db-table"),
+    pytest.param(lambda: {"inner": Credential(token=SECRET)}.values(), True, id="dict-values"),
+    pytest.param(lambda: UserList([Credential(token=SECRET)]), True, id="user-list"),
     pytest.param(lambda: Credential(token=SECRET), False, id="direct"),
     pytest.param(lambda: RegisteredCredential({"token": SECRET}), False, id="registered"),
     pytest.param(lambda: [Credential(token=SECRET)], True, id="list"),
@@ -966,8 +1184,155 @@ class TestCredentialValuesInOptionsAreRefused:
 
         refuse_credential_option_values(Options({_CRED_OPTION_KEY: cyclic}))
 
+    def test_a_read_credential_value_in_options_is_refused(self) -> None:
+        with credentials_scope({"vault-main": {"token": SECRET}}):
+            read_value = read_credential("vault-main")
+        feature = Feature("chs_vault_a", options={_CRED_OPTION_KEY: read_value})
+
+        message = _abort(_prepare, [feature], None, ChsFallbackFG)
+
+        _assert_credential_refusal(message, _CRED_OPTION_KEY)
+        assert "ResolvedCredential" in message
+
+    def test_str_options_shows_the_redacting_repr_of_a_read_credential(self) -> None:
+        with credentials_scope({"vault-main": {"token": SECRET}}):
+            read_value = read_credential("vault-main")
+
+        text = str(Options({"chs_holder": read_value}))
+
+        assert SECRET not in text
+        assert "ResolvedCredential(handle='vault-main'" in text
+
+    def test_a_read_credential_registered_in_a_nested_run_is_read_by_handle(self) -> None:
+        class ChsNestedReadFG(ChsSource):
+            PROPERTY_MAPPING = {"chs_nested_handle": credential_handle_spec("Nested vault handle.")}
+
+            @classmethod
+            def feature_names_supported(cls) -> set[str]:
+                return {"chs_nested_read"}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: Any) -> Any:
+                return pd.DataFrame({"chs_nested_read": [read_credential("nested-vault")["token"]]})
+
+        with credentials_scope({"vault-main": {"token": SECRET}}):
+            read_value = read_credential("vault-main")
+        dac = DataAccessCollection(credentials={"nested-vault": read_value})
+        feature = Feature("chs_nested_read", options={"chs_nested_handle": "nested-vault"})
+
+        result = _run_all([feature], dac, _plugins(ChsNestedReadFG))
+
+        assert result[0]["chs_nested_read"].iloc[0] == SECRET
+
+    def test_a_generator_option_is_not_consumed(self) -> None:
+        generator = (item for item in (1, 2))
+
+        refuse_credential_option_values(Options({_CRED_OPTION_KEY: generator}))
+
+        assert list(generator) == [1, 2]
+
+    def test_a_dataclass_class_in_an_option_is_not_walked(self) -> None:
+        refuse_credential_option_values(Options({_CRED_OPTION_KEY: _ChsClassHolder}))
+
     def test_a_source_pointer_key_accepts_a_credential(self) -> None:
         refuse_credential_option_values(Options({"SqliteFG": Credential(sqlite="/x.db")}))
+
+    @pytest.mark.parametrize(
+        "make_value",
+        [
+            pytest.param(lambda: Credential(token=SECRET), id="credential"),
+            pytest.param(lambda: RegisteredCredential({"token": SECRET}), id="registered"),
+            pytest.param(lambda: [Credential(token=SECRET)], id="list"),
+        ],
+    )
+    def test_a_pointer_key_on_a_non_source_root_is_refused_naming_key_type_and_group(
+        self, make_value: Callable[[], Any]
+    ) -> None:
+        value = make_value()
+        feature = Feature("chs_vault_a", options={"SqliteFG": value})
+
+        message = _abort(_prepare, [feature], None, ChsFallbackFG, SqliteFG)
+
+        assert "SqliteFG" in message
+        assert "ChsFallbackFG" in message
+        assert type(value).__name__ in message
+        assert SECRET not in message
+
+    @staticmethod
+    def _pointer_consumer() -> type[FeatureGroup]:
+        class ChsPointerConsumerFG(FeatureGroup):
+            @classmethod
+            def feature_names_supported(cls) -> set[str]:
+                return {"chs_ptr_consumer"}
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+                return {PyArrowTable}
+
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+                return {Feature("bound_col")}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: Any) -> Any:
+                return data
+
+        return ChsPointerConsumerFG
+
+    def test_a_consumer_over_a_sqlite_bound_column_keeps_the_pointer(self, tmp_path: Path) -> None:
+        dac, options, _ = bound_case(tmp_path, "pointer")
+        consumer = self._pointer_consumer()
+
+        session = mloda.prepare(
+            [Feature("chs_ptr_consumer", options=options)],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=dac,
+            plugin_collector=_plugins(consumer, SqliteFG),
+        )
+
+        (step,) = _steps(session, SqliteFG)
+        assert step.features.credential_handles == ("<pointer>",)
+
+    def test_a_consumer_holding_the_pointer_plans_beside_a_non_source_root_sibling(self, tmp_path: Path) -> None:
+        dac, options, _ = bound_case(tmp_path, "pointer")
+        consumer = self._pointer_consumer()
+
+        class ChsPointerSiblingFG(DataCreatorFeatureGroup):
+            @classmethod
+            def feature_names_supported(cls) -> set[str]:
+                return {"chs_ptr_sibling"}
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+                return {PyArrowTable}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: Any) -> Any:
+                return data
+
+        session = mloda.prepare(
+            [Feature("chs_ptr_consumer", options=options), Feature("chs_ptr_sibling")],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=dac,
+            plugin_collector=_plugins(consumer, SqliteFG, ChsPointerSiblingFG),
+        )
+
+        assert _steps(session, SqliteFG)
+        assert _steps(session, ChsPointerSiblingFG)
+
+    def test_a_winning_subclass_of_a_source_owning_the_pointer_key_is_not_refused(self, tmp_path: Path) -> None:
+        dac, options, _ = bound_case(tmp_path, "pointer")
+
+        class ChsSqliteSubFG(SqliteFG):
+            pass
+
+        session = mloda.prepare(
+            [Feature("bound_col", options=options)],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=dac,
+            plugin_collector=_plugins(ChsSqliteSubFG),
+        )
+
+        assert _steps(session, ChsSqliteSubFG)
 
     def test_a_case_typo_pointer_key_gets_the_pointer_hint(self) -> None:
         feature = Feature("chs_vault_a", options={"sqlitefg": Credential(sqlite="/x.db")})
@@ -1092,6 +1457,23 @@ class TestDisplay:
         assert step.feature_set_options.group[HANDLE_KEY] == "vault-main"
         for text in (str(step.feature_set_options), repr(step), str(plan)):
             assert SECRET not in text
+        assert "vault-main" in str(step.feature_set_options)
+
+    def test_the_snapshot_mark_does_not_change_the_content_hash(self) -> None:
+        plan = mloda.explain(
+            [_vault("vault-main")],
+            compute_frameworks=[PandasDataFrame],
+            data_access_collection=_dac(**{"vault-main": {"key": SECRET}}),
+            plugin_collector=_plugins(ChsVaultFG),
+        )
+        unmarked = []
+        for step in plan:
+            options = step.feature_set_options
+            if options is not None:
+                step = dataclasses.replace(step, feature_set_options=Options(group=dict(options.group)))
+            unmarked.append(step)
+
+        assert plan_content_hash(plan) == plan_content_hash(unmarked)
 
     def test_the_content_hash_and_the_lock_text_change_with_the_handle_name(self) -> None:
         def explain(handle: str) -> Any:
@@ -1226,6 +1608,39 @@ class ChsRequiredUpstreamFG(ChsSource):
         return {"chs_up_req"}
 
 
+class ChsNonDeclConsumerFG(ChsConsumerFG):
+    PROPERTY_MAPPING = {"chs_nd_plain": property_spec("Plain option.", default=None)}
+    INPUT_NAME = "chs_up_opt"
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_consumer_nodecl"}
+
+
+class ChsNonDeclFwdConsumerFG(ChsNonDeclConsumerFG):
+    INPUT_NAME = "chs_fwd_in"
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_consumer_fwd"}
+
+
+class ChsFwdRequiredOtherFG(ChsSource):
+    PROPERTY_MAPPING = {"chs_fwd_other_handle": credential_handle_spec("Unrelated required handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_fwd_in"}
+
+
+class ChsFwdDeclaringFG(ChsSource):
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Forwarded handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_fwd_in"}
+
+
 def _consumer(name: str, handle: str | None = "vault-a") -> Feature:
     return Feature(name, options={} if handle is None else {HANDLE_KEY: handle})
 
@@ -1235,7 +1650,7 @@ def _reader_group_keys(session: Any, group: type[FeatureGroup]) -> set[str]:
 
 
 class TestHandleStaysOnTheConsumer:
-    """A handle option is never forwarded to input features."""
+    """A declared handle stays on the declaring feature; a non-declaring consumer forwards it like any option."""
 
     def test_the_reader_step_carries_no_handle_and_the_consumer_records_it(self) -> None:
         dac = _dac(**{"vault-a": {"key": SECRET}})
@@ -1289,6 +1704,28 @@ class TestHandleStaysOnTheConsumer:
             match=r"ChsRequiredUpstreamFG requires credential handle option 'chs_vault_token'",
         ):
             _prepare([_consumer("chs_consumer_req")], dac, _plugins(ChsConsumerReqUpFG, ChsRequiredUpstreamFG))
+
+    def test_a_non_declaring_consumer_forwards_the_handle_to_a_declaring_input(self) -> None:
+        dac = _dac(**{"vault-a": {"key": SECRET}})
+
+        session = _prepare(
+            [_consumer("chs_consumer_nodecl")], dac, _plugins(ChsNonDeclConsumerFG, ChsOptionalUpstreamFG)
+        )
+
+        assert [s.credential_handles for s in _steps(session, ChsNonDeclConsumerFG)] == [()]
+        assert [s.credential_handles for s in _steps(session, ChsOptionalUpstreamFG)] == [("vault-a",)]
+
+    def test_a_forwarded_handle_beats_an_unrelated_required_handle_group_without_aborting(self) -> None:
+        dac = _dac(**{"vault-a": {"key": SECRET}})
+
+        session = _prepare(
+            [_consumer("chs_consumer_fwd")],
+            dac,
+            _plugins(ChsNonDeclFwdConsumerFG, ChsFwdRequiredOtherFG, ChsFwdDeclaringFG),
+        )
+
+        assert _steps(session, ChsFwdDeclaringFG)
+        assert not _steps(session, ChsFwdRequiredOtherFG)
 
     def test_an_explicit_allowlist_on_the_input_feature_forwards_it(self) -> None:
         dac = _dac(**{"vault-a": {"key": SECRET}})

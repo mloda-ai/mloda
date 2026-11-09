@@ -111,6 +111,52 @@ class TestMutatorsRaiseOnDuplicateHandle:
         assert dac.connections["analytics"] is analytics
 
 
+_RESERVED_REASONS = {"<pointer>": "outside the collection", "<unnamed>": "auto-named"}
+_KIND_VALUES: dict[str, Any] = {
+    "connections": object(),
+    "files": "/data/a.csv",
+    "folders": "/data/raw",
+    "credentials": {"host": "h"},
+}
+_ADDERS = {
+    "connections": "add_connection",
+    "files": "add_file",
+    "folders": "add_folder",
+    "credentials": "add_credentials",
+}
+
+
+class TestReservedHandleNames:
+    """The plan record shows <pointer> and <unnamed> as placeholders, so no handle may carry those names."""
+
+    @pytest.mark.parametrize("name", list(_RESERVED_REASONS))
+    @pytest.mark.parametrize("kind", list(_KIND_VALUES))
+    def test_the_constructor_refuses_a_reserved_name(self, kind: str, name: str) -> None:
+        with pytest.raises(ValueError, match="reserved") as exc:
+            DataAccessCollection(**{kind: {name: _KIND_VALUES[kind]}})
+
+        assert name in str(exc.value)
+        assert _RESERVED_REASONS[name] in str(exc.value)
+
+    @pytest.mark.parametrize("name", list(_RESERVED_REASONS))
+    @pytest.mark.parametrize("kind", list(_KIND_VALUES))
+    def test_an_add_method_refuses_a_reserved_name(self, kind: str, name: str) -> None:
+        dac = DataAccessCollection()
+
+        with pytest.raises(ValueError, match="reserved") as exc:
+            getattr(dac, _ADDERS[kind])(name, _KIND_VALUES[kind])
+
+        assert name in str(exc.value)
+        assert _RESERVED_REASONS[name] in str(exc.value)
+        assert name not in dac.handles()
+
+    def test_an_ordinary_name_is_still_accepted(self) -> None:
+        dac = DataAccessCollection(credentials={"pointer": {"host": "h"}})
+        dac.add_connection("unnamed", object())
+
+        assert set(dac.handles()) == {"pointer", "unnamed"}
+
+
 class TestHandles:
     """``handles()`` enumerates every registered handle and its kind."""
 

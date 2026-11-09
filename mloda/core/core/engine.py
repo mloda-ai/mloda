@@ -78,6 +78,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import scrub_creden
 from mloda.core.abstract_plugins.components.credential_handle import (
     credential_handle_keys,
     refuse_credential_option_values,
+    refuse_unread_pointer_credentials,
     validate_credential_handles,
 )
 from mloda.core.abstract_plugins.components.link import JoinType, Link
@@ -418,7 +419,7 @@ class Engine:
         if added:
             self._cascade_keys_at_resolution[feature.uuid] = feature.options.cascade_context_keys
             parent_domain = feature.domain.name if feature.domain else None
-            self.resolved_input_feature_names[feature.uuid] = self._handle_input_features_recursion(
+            input_names = self._handle_input_features_recursion(
                 feature_group_class,
                 feature.uuid,
                 declared_options,
@@ -427,6 +428,9 @@ class Engine:
                 depth=depth,
                 path=feature.resolving_path,
             )
+            self.resolved_input_feature_names[feature.uuid] = input_names
+            if input_names is None:
+                refuse_unread_pointer_credentials(feature_group_class, declared_options)
 
         if self.global_filter:
             self._add_filter_feature(feature_group_class, feature_group, feature, features)

@@ -852,8 +852,9 @@ _SECRET_KEY = re.compile(r"[\w.-]*" + _SECRET_NAME, re.IGNORECASE)
 def _mask_secret_keys(value: Any, ancestors: frozenset[int] = frozenset()) -> Any:
     """Replace the value under every credential-shaped key with ``'***'``, walking mappings, lists and tuples."""
     from mloda.core.abstract_plugins.components.credential import RegisteredCredential  # credential imports us
+    from mloda.core.abstract_plugins.components.credential_access import ResolvedCredential
 
-    if isinstance(value, RegisteredCredential):
+    if isinstance(value, (RegisteredCredential, ResolvedCredential)):
         return value
     if isinstance(value, (Mapping, list, tuple)):
         if id(value) in ancestors:

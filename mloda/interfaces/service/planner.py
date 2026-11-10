@@ -303,7 +303,13 @@ class Planner:
                     f"/features/{request_names.index(error.feature)}" if error.feature in request_names else "/features"
                 )
                 subject = f"One of the inputs of '{shown}' (pinned to an implementation that follows a rule variant)"
-                detail = self._variant_detail(path, subject, error.feature_group, error.variants, error.allow_variants)
+                detail = self._variant_detail(
+                    path,
+                    subject,
+                    sanitize_text(error.feature_group, MAX_NAME_LENGTH),
+                    error.variants,
+                    error.allow_variants,
+                )
                 return error_result("validation_failed", detail["message"], [detail])
             return failure_result("Planning", error, trusted=self._settings.trusted_caller)
         if missing and (
@@ -509,12 +515,13 @@ class Planner:
         path = f"/features/{names.index(name)}" if name in names else "/features"
         failed = diagnosis.failed_result
         if failed is not None and failed.failure_kind == "none":
+            variant_path = path
             subject = f"'{shown}'"
             if diagnosis.resolving_path:
                 root = diagnosis.resolving_path[0]
-                path = f"/features/{names.index(root)}" if root in names else "/features"
+                variant_path = f"/features/{names.index(root)}" if root in names else "/features"
                 subject = f"One of the inputs of '{sanitize_text(root, MAX_NAME_LENGTH)}'"
-            variant_details = self._variant_details(failed, path, subject)
+            variant_details = self._variant_details(failed, variant_path, subject)
             if variant_details:
                 headline = next((d for d in variant_details if "fix" in d), variant_details[0])
                 return error_result("validation_failed", headline["message"], variant_details)

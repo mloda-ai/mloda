@@ -1180,6 +1180,7 @@ class IdentifyFeatureGroupClass:
                         ),
                         partial_records=self._partial_records,
                         refusals=(refusal,) if isinstance(refusal, Exception) else (),
+                        resolving_path=tuple(feature.resolving_path or ()),
                     )
                 )
 

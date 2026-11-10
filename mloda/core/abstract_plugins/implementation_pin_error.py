@@ -12,10 +12,10 @@ class VariantBlockedPinError(ImplementationPinError):
         self,
         message: str,
         *,
-        feature: str,
-        feature_group: str,
-        variants: tuple[str, ...],
-        allow_variants: tuple[str, ...],
+        feature: str = "",
+        feature_group: str = "",
+        variants: tuple[str, ...] = (),
+        allow_variants: tuple[str, ...] = (),
     ) -> None:
         super().__init__(message)
         self.feature = feature

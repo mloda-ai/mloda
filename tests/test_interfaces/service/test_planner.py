@@ -841,9 +841,7 @@ class TestVariantNotAllowed:
             assert detail["fix"] == {"allow_variants": [toy.OPTOY_VARIANT]}
         else:
             assert "fix" not in detail
-        assert input_name not in json.dumps(result).replace(detail["feature_group"], "").replace(
-            getattr(toy, const), ""
-        )
+        assert input_name not in json.dumps(result).replace(getattr(toy, const), "")
 
     def test_chained_implementation_pin_is_validation_failed_not_internal(self, tmp_path: Path) -> None:
         result, detail, toy = self._blocked(
@@ -859,6 +857,23 @@ class TestVariantNotAllowed:
         assert detail["path"] == "/features/0"
         assert toy.OPTOY_VARIANT_OPEN_CONSUMER in detail["message"]
         assert detail["fix"] == {"allow_variants": [toy.OPTOY_VARIANT]}
+        assert detail["feature_group"] == "OpToyVariantFG"
+        assert detail["variants"] == [toy.OPTOY_VARIANT]
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+    def test_unresolvable_input_keeps_the_generic_unresolved_detail(self, tmp_path: Path) -> None:
+        toy = importlib.import_module(
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+        )
+        request = {"features": [{"name": toy.OPTOY_VARIANT_CONSUMER, "options": {toy.OPTOY_KEY: "sum"}}]}
+        settings = _settings(tmp_path, compute_frameworks=("PandasDataFrame",), allow_options=("optoy_kind",))
+        base = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, toy.OpToyVariantConsumerFG})
+
+        result = _planner(settings, base=base).explain(request)
+
+        error = _error(result, "validation_failed")
+        assert _has_detail(error, path="/features", problem="unresolved")
+        assert not _has_detail(error, problem="variant_not_allowed")
 
     def test_refused_allow_variants_key_gets_no_fix(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(

@@ -416,9 +416,14 @@ def _declared_records(cls: type[FeatureGroup], adapter: FrameworkAdapter) -> lis
 def _coverage(
     cls: type[FeatureGroup], base: Options, records: list[_Declared], written: list[tuple[str, str, frozenset[str]]]
 ) -> _Coverage:
+    if not records:
+        return {}
     subtypes: dict[str, str | None] = {}
     covering: _Coverage = {}
-    for column, name, parts in written if records else ():
+    for column, name, parts in written:
+        split = cls.split_output_part(name) if not parts else None
+        if split is not None:
+            name, parts = split[0], frozenset({split[1]})
         if name not in subtypes:
             subtypes[name], _ = safe_field_with_error(lambda: Implementation.canonical_subtype(cls, name, base), None)
         covering[column] = [d for d in records if d.record.applies_to(subtypes[name], parts)]
@@ -709,18 +714,19 @@ def _run_checks(
         for declared in stale:
             columns = [c for c in typed if declared in covering[c]]
             if columns and all(adapter.has_type(result, c, typed[c]) is True and c in unchanged for c in columns):
-                message = _stale_report(declared, columns[0], typed, adapter)
+                message = _stale_report(declared, columns, adapter)
                 (failures if declared.from_implementation else notes).append(message)
     return failures
 
 
-def _stale_report(declared: _Declared, column: str, typed: dict[str, DataType], adapter: FrameworkAdapter) -> str:
+def _stale_report(declared: _Declared, columns: list[str], adapter: FrameworkAdapter) -> str:
     framework = adapter.compute_framework().__name__
     reason = declared.record.describe()
     if declared.from_implementation:
+        named = ", ".join(f"'{c}'" for c in sorted(columns))
         return (
-            f"type: stale declaration: {declared.owner} declares a type divergence ('{reason}') for '{column}', "
-            f"but it is {typed[column].name} on {framework}"
+            f"type: stale declaration: {declared.owner} declares a type divergence ('{reason}') for {named}, "
+            f"but it matches the declared type on {framework}"
         )
     return f"type: {declared.owner} declares a type divergence ('{reason}') that this run on {framework} does not need"
 
@@ -740,6 +746,9 @@ def check_feature_group_shape(
     With require_run, a rule exclusion, a missing serving Implementation or a route block is a failure instead of a note.
     Secret checks cover declarations, not call sites: a secret under an undeclared benign key goes unseen;
     silence a false positive per option in NOT_SECRET_OPTIONS with a reason.
+    A TYPE or GAP record covering a type failure turns it into a note. A TYPE record on the serving Implementation
+    whose columns all match exactly on a typed framework fails as stale (scope a data-dependent one with subtypes
+    or outputs); a group-level one is only a note, since it applies on every framework.
     requests= probes those names instead of the class and declared names; a base_options value contradicting them is a failure with the abort text.
     """
     if isinstance(requests, str):

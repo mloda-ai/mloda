@@ -127,6 +127,7 @@ def _write_parts(kind: str, data: dict[str, list[Any]], counter: list[int]) -> d
             data["rg_out"] = doubled
     elif kind == "wrong_type_part":
         data["rg_out~a"] = [str(v) for v in doubled]
+        data["rg_out~b"] = doubled
     elif kind == "plain_only":
         data["rg_out"] = doubled
     elif kind == "pivot_extra":
@@ -1034,8 +1035,12 @@ def test_broken_operation_group_fails_only_its_sub_check(
     assert not any("found no implementation" in f for f in result.failures), result.failures
 
 
-def _record(kind: DivergenceKind, subtypes: frozenset[str] = frozenset()) -> Divergence:
-    return Divergence(kind=kind, cause=Cause.BACKEND, reason="stores ints as strings", subtypes=subtypes)
+def _record(
+    kind: DivergenceKind, subtypes: frozenset[str] = frozenset(), outputs: frozenset[str] = frozenset()
+) -> Divergence:
+    return Divergence(
+        kind=kind, cause=Cause.BACKEND, reason="stores ints as strings", subtypes=subtypes, outputs=outputs
+    )
 
 
 _TYPE = DivergenceKind.TYPE
@@ -1071,12 +1076,32 @@ def test_implementation_record_excuses_a_type_failure(
         assert all(f.startswith("type:") for f in result.failures), result.failures
 
 
-def test_group_record_excuses_a_type_failure() -> None:
-    group = make_run_group("wrong_type")
-    setattr(group, "DIVERGENCES", (_record(_TYPE),))
-    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
-    assert result.failures == (), result.failures
-    assert any(n.startswith("type: ") and "stores ints as strings" in n for n in result.notes), result.notes
+@pytest.mark.parametrize(
+    ("parts", "outputs", "requests", "excused"),
+    [
+        (None, frozenset(), None, True),
+        (("a", "b"), frozenset({"a"}), None, True),
+        (("a", "b"), frozenset({"a"}), ["rg_out~a"], True),
+        (("a", "b"), frozenset({"b"}), ["rg_out~a"], False),
+    ],
+    ids=["default", "part_record_whole_request", "part_record_part_request", "other_part_record_part_request"],
+)
+def test_group_record_excuses_a_type_failure(
+    parts: tuple[str, ...] | None, outputs: frozenset[str], requests: list[str] | None, excused: bool
+) -> None:
+    group = make_run_group(
+        "wrong_type_part" if parts else "wrong_type",
+        output_parts=parts,
+        names=frozenset({"rg_out", "rg_out~a"}) if requests else frozenset({"rg_out"}),
+    )
+    setattr(group, "DIVERGENCES", (_record(_TYPE, outputs=outputs),))
+    result = check_feature_group_shape(group, requests=requests, input_data=_run_data(), adapter=PythonDictAdapter())
+    if excused:
+        assert result.failures == (), result.failures
+        assert any(n.startswith("type: ") and "stores ints as strings" in n for n in result.notes), result.notes
+    else:
+        assert result.failures
+        assert all(f.startswith("type:") for f in result.failures), result.failures
 
 
 def test_type_record_is_never_stale_on_an_untyped_adapter(

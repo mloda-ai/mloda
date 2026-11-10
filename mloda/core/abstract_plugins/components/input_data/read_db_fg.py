@@ -107,8 +107,8 @@ class ReadDBFG(SourceFeatureGroup):
     The base serves table catalogs; QUERY_ROUTE opts in to query text. Third-party groups should run
     mloda._testing.source.read_db_suite (to be re-exported by mloda.testing).
 
-    A custom access type must override load_neutral; override _hidden_source if match.source names something
-    unpointed users must not see (and the other hooks to give a distinct identity or columns).
+    A custom access type must override load_neutral; override _hidden_source, data_access_identity and
+    columns to show more.
     """
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("credentials", NamePolicy.CHECKED, True),)
@@ -399,7 +399,7 @@ class ReadDBFG(SourceFeatureGroup):
     def _raw_reason(cls, match: SourceMatch) -> str | None:
         access = match.access
         if not isinstance(access, DBTable):
-            return super().unknown_columns_reason(match)
+            return None
         catalog, reason = cls._catalog(access.credentials)
         if catalog is not None and access.table is not None and access.table not in catalog:
             return "its preset table does not exist"
@@ -411,14 +411,17 @@ class ReadDBFG(SourceFeatureGroup):
             return cls.data_access_identity(match)
         if isinstance(match.access, DBTable):
             return cls.database_identity(match.access.credentials)
-        return super()._hidden_source(match)
+        return cls.get_class_name()
 
     @classmethod
     def ambiguity_fix(
         cls, feature_name: str, matches: list[SourceMatch], data_access_collection: DataAccessCollection | None
     ) -> str:
         name = cls.get_class_name()
-        credentials_seen = [c for c in (cls.match_credentials(match) for match in matches) if c is not None]
+        all_credentials = [cls.match_credentials(match) for match in matches]
+        if any(c is None for c in all_credentials):
+            return f"point {name} at one source."
+        credentials_seen = all_credentials
         identities = {cls.database_identity(c) for c in credentials_seen}
         logins = {cls.login_key(c) for c in credentials_seen}
         if len(identities) > 1 or len(logins) > 1:
@@ -432,8 +435,6 @@ class ReadDBFG(SourceFeatureGroup):
             hint = f" (credential handles: {_capped(handles)})" if handles else ""
             what = "one database" if len(identities) > 1 else "one credential handle"
             return f"select {what} with data_access_handle{hint}, or point {name} at one credential."
-        if not credentials_seen:
-            return f"select one match with data_access_handle, or point {name} at one credential."
         return (
             f"point {name} at one table with options={{{name!r}: "
             f"Credential({cls.CREDENTIAL_KEY}=<value>, {cls.TABLE_KEY}=<table>)}}, "

@@ -157,8 +157,6 @@ class ToyCustomAccessDB(ReadDBFG):
     def find_sources(
         cls, route: ClaimRoute, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
     ) -> list[SourceMatch]:
-        if feature_name != CUSTOM_FEATURE:
-            return []
         return [SourceMatch(f"toyfmt-custom-db::{handle}", _CustomAccess(handle)) for handle in ("found1", "found2")]
 
     @classmethod
@@ -411,7 +409,18 @@ class TestInheritedDefaults:
         assert ToyCustomAccessDB.columns(match) is None
         assert ToyCustomAccessDB._raw_reason(match) is None
         assert ToyCustomAccessDB.unknown_columns_reason(match) is None
-        assert ToyCustomAccessDB._hidden_source(match) == "toyfmt-custom-db::weird"
+        assert ToyCustomAccessDB._hidden_source(match) == "ToyCustomAccessDB"
+
+    def test_ambiguity_fix_for_a_mixed_table_and_custom_access_is_the_generic_point_at_one_source(self) -> None:
+        matches = [
+            SourceMatch("toyfmt-custom-db::t", DBTable({CUSTOM_KEY: "x"}, "t")),
+            SourceMatch("toyfmt-custom-db::found1", _CustomAccess("found1")),
+        ]
+
+        fix = ToyCustomAccessDB.ambiguity_fix("anything", matches, None)
+
+        assert "point ToyCustomAccessDB at one source" in fix
+        assert "table_name" not in fix
 
 
 class TestCustomAccessPlanning:
@@ -422,14 +431,18 @@ class TestCustomAccessPlanning:
         result = IdentifyFeatureGroupClass.evaluate(Feature("toyfmt_custom_absent"), self.PLUGINS, None, self.DAC)
 
         assert ToyCustomAccessDB not in result.identified
+        reason = result.eliminations[ToyCustomAccessDB].reason
+        assert "column 'toyfmt_custom_absent' is in none of the sources of ToyCustomAccessDB" in reason
+        assert "ToyCustomAccessDB has columns" not in reason
+        assert "toyfmt-custom-db::found1" not in reason
+        assert "toyfmt-custom-db::found2" not in reason
+        assert result.eliminations[ToyCustomAccessDB].code is CoreDeclineCode.COLUMN_NOT_FOUND
 
-    def test_two_custom_access_matches_raise_the_handle_ambiguity_text(self) -> None:
-        with pytest.raises(ValueError, match="data_access_handle") as excinfo:
+    def test_two_custom_access_matches_raise_the_point_at_one_source_text(self) -> None:
+        with pytest.raises(ValueError, match="point ToyCustomAccessDB at one source") as excinfo:
             IdentifyFeatureGroupClass.evaluate(Feature(CUSTOM_FEATURE), self.PLUGINS, None, self.DAC)
 
-        assert not isinstance(excinfo.value, AttributeError)
-        assert "toyfmt-custom-db::found1" in str(excinfo.value)
-        assert "toyfmt-custom-db::found2" in str(excinfo.value)
+        assert "ToyCustomAccessDB (2 sources)" in str(excinfo.value)
 
 
 class RoleConnection(FakeConnection):

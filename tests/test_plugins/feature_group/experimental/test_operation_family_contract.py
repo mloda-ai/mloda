@@ -23,10 +23,10 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     FeatureChainParserMixin,
 )
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.provider import DefaultOptionKeys, FeatureSet
-from mloda.user import Feature, Options
+from mloda.user import Feature, Options, PluginLoader
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
@@ -422,7 +422,7 @@ LOOP_INPUT_CASES: dict[str, tuple[Callable[[], TypedTestData], list[Options]]] =
     "sklearn_pipeline": (_numeric_table, [Options()]),
 }
 
-_ADAPTERS: dict[type[ComputeFramework], FrameworkAdapter] = {
+ADAPTERS: dict[type[ComputeFramework], FrameworkAdapter] = {
     PandasDataFrame: PandasAdapter(),
     PyArrowTable: PyArrowAdapter(),
     PolarsLazyDataFrame: PolarsLazyAdapter(),
@@ -455,7 +455,7 @@ def test_loop_input_cases_cover_every_operation_family() -> None:
     assert set(LOOP_INPUT_CASES) == set(OPERATION_FAMILIES)
     assert all(variants for _builder, variants in LOOP_INPUT_CASES.values())
     frameworks = {impl.compute_framework for family in OPERATION_FAMILIES.values() for impl in family[1]}
-    assert frameworks <= set(_ADAPTERS)
+    assert frameworks <= set(ADAPTERS)
 
 
 @pytest.mark.parametrize(("name", "impl", "options"), LOOP_INPUT_PARAMS)
@@ -468,7 +468,7 @@ def test_loop_runs_on_declared_inputs_only(name: str, impl: type[Any], options: 
     declared_names = {str(f.name) for f in declared}
     assert declared_names <= set(inputs.types)
     table = edit_columns(inputs, drop=[column for column in inputs.types if column not in declared_names])
-    data = _ADAPTERS[impl.compute_framework].from_typed(table)
+    data = ADAPTERS[impl.compute_framework].from_typed(table)
     feature_set = FeatureSet()
     feature_set.add(feature)
     feature_set.materialize_option_defaults(group)
@@ -500,6 +500,19 @@ def test_core_rejects_each_dropped_declared_input(name: str, impl: type[Any], op
     table = LOOP_INPUT_CASES[name][0]()
     assert dropped in table.types
     table = edit_columns(table, add={"spare": (DataType.INT64, [0] * table.row_count)}, drop=[dropped])
-    data = _ADAPTERS[impl.compute_framework].from_typed(table)
+    data = ADAPTERS[impl.compute_framework].from_typed(table)
 
     assert_core_rejects_missing_input(impl, data, feature, (dropped,))
+
+
+def test_every_shipped_implementation_is_in_the_operation_families() -> None:
+    """Covers operation groups only; source groups' Implementations are not shape-run."""
+    PluginLoader.all()
+    shipped = {
+        f"{impl.__module__}.{impl.__qualname__}"
+        for impl in loaded_implementations()
+        if impl.__module__.startswith("mloda_plugins.") and issubclass(impl.feature_group, OperationFeatureGroup)
+    }
+    tabled = {f"{impl.__module__}.{impl.__qualname__}" for family in OPERATION_FAMILIES.values() for impl in family[1]}
+    assert shipped
+    assert shipped <= tabled, f"add these to OPERATION_FAMILIES: {sorted(shipped - tabled)}"

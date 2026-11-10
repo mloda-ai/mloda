@@ -181,7 +181,7 @@ class _StreamOutcome:
 
 
 class ResultStream(_RunOutcomeFields, Generator[Any, None, None]):
-    """A ``stream_all``/``stream_run()`` stream exposing the resolved plan; outcome fields stay empty until it ends."""
+    """A ``stream_all`` or ``stream_run()`` stream exposing the resolved plan; outcome fields stay empty until it ends."""
 
     def __init__(
         self,

@@ -10,10 +10,9 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 
 class DataLifecycleManager:
     """
-    Manages data lifecycle including dropping, and result collection.
+    Manages data lifecycle: dropping and result collection.
 
-    This class handles the lifecycle of data in compute frameworks (CFWs),
-    including tracking data to drop and collecting results.
+    Tracks data to drop and collects results across compute frameworks (CFWs).
     """
 
     def __init__(

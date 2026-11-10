@@ -112,7 +112,7 @@ def check_operation_group_shape(
     alias_pairs: Sequence[tuple[str, str]] = (),
     probe: Probe | None = None,
 ) -> CheckResult:
-    """Check the group declares a CONTRACT_VERSION and its Implementations declare valid supported subtypes and divergences and decline the rest.
+    """Check a CONTRACT_VERSION, valid Implementation subtypes and divergences, and that the rest are declined.
 
     The acceptance control uses one supported subtype."""
     universe = group.subtype_universe()

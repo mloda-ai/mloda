@@ -174,7 +174,7 @@ class TestResolutionDiagnosisDataclass:
     def test_resolution_diagnosis_field_order(self) -> None:
         field_names = [field.name for field in dataclasses.fields(ResolutionDiagnosis)]
 
-        assert field_names == ["records", "complete", "feature_name", "failed_result", "message"]
+        assert field_names == ["records", "complete", "feature_name", "failed_result", "message", "resolving_path"]
 
     def test_optional_fields_default_to_none(self) -> None:
         diagnosis = ResolutionDiagnosis(records=[], complete=True)

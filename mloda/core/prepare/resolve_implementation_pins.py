@@ -15,10 +15,11 @@ from mloda.core.abstract_plugins.implementation import (
     serving_implementation,
     unregistered_named_implementations,
     variant_block_reason,
+    variant_fix,
 )
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.implementation_pin_error import ImplementationPinError
+from mloda.core.abstract_plugins.implementation_pin_error import ImplementationPinError, VariantBlockedPinError
 from mloda.core.prepare.graph.graph import Graph
 
 Framework = type[ComputeFramework]
@@ -175,7 +176,13 @@ class ResolveImplementationPins:
             if found:
                 target = f"the options of {request}" if request else "the feature's options"
                 reason = variant_block_reason(group, {fw: found}, {fw: served}, feature.options, target)
-                raise ImplementationPinError(f"Step {feature.name} pins implementation {impl.__name__}: {reason}")
+                raise VariantBlockedPinError(
+                    f"Step {feature.name} pins implementation {impl.__name__}: {reason}",
+                    feature=request or str(feature.name),
+                    feature_group=group.__name__,
+                    variants=tuple(sorted({str(r.variant) for r in found})),
+                    allow_variants=variant_fix(group, {fw: found}, feature.options),
+                )
         if not serves:
             reason = (
                 "conflicts with the compute_framework of the feature"

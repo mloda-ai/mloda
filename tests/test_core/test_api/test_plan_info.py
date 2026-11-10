@@ -1255,6 +1255,29 @@ class TestPlanStepVariantAllowOption:
         )
         assert advice in str(caught.value)
 
+    def test_a_chained_pin_error_carries_the_variant_block_attributes(self) -> None:
+        from mloda.core.abstract_plugins.implementation_pin_error import VariantBlockedPinError
+
+        toy = importlib.import_module(self.TOY)
+        with pytest.raises(VariantBlockedPinError) as caught:
+            self._chained_pin("OpToyVariantOpenConsumerFG", toy.OPTOY_VARIANT_OPEN_CONSUMER)
+
+        assert isinstance(caught.value, ImplementationPinError)
+        assert caught.value.feature == toy.OPTOY_VARIANT_OPEN_CONSUMER
+        assert caught.value.feature_group == "OpToyVariantFG"
+        assert caught.value.variants == (toy.OPTOY_VARIANT,)
+        assert caught.value.allow_variants == (toy.OPTOY_VARIANT,)
+
+    def test_diagnose_on_a_consumer_over_a_blocked_input_reports_the_resolving_path(self) -> None:
+        toy = importlib.import_module(self.TOY)
+        diagnosis = mloda.diagnose(
+            [Feature(toy.OPTOY_VARIANT_CONSUMER, {toy.OPTOY_KEY: "sum"})],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyVariantFG, toy.OpToyVariantConsumerFG}),
+        )
+
+        assert diagnosis.resolving_path == (toy.OPTOY_VARIANT_CONSUMER,)
+
     def test_the_chained_pin_advice_works_when_followed(self) -> None:
         toy = importlib.import_module(self.TOY)
         steps = self._chained_pin("OpToyVariantOpenConsumerFG", toy.OPTOY_VARIANT_OPEN_CONSUMER, allow="skip_nan")

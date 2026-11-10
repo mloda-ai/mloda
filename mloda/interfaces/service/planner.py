@@ -24,6 +24,7 @@ from mloda.core.abstract_plugins.components.default_options_key import DefaultOp
 from mloda.core.abstract_plugins.components.divergence import MAX_DOCS_LENGTH, divergence_dicts
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.implementation_pin_error import VariantBlockedPinError
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.interfaces.service.catalog import MAX_DESCRIPTION_LENGTH, Catalog, plugin_collector_for, sanitize_text
 from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig
@@ -296,6 +297,14 @@ class Planner:
                         raise
                     failure = error
         except Exception as error:
+            if isinstance(error, VariantBlockedPinError):
+                shown = sanitize_text(error.feature, MAX_NAME_LENGTH)
+                path = (
+                    f"/features/{request_names.index(error.feature)}" if error.feature in request_names else "/features"
+                )
+                subject = f"One of the inputs of '{shown}' (pinned to an implementation that follows a rule variant)"
+                detail = self._variant_detail(path, subject, error.feature_group, error.variants, error.allow_variants)
+                return error_result("validation_failed", detail["message"], [detail])
             return failure_result("Planning", error, trusted=self._settings.trusted_caller)
         if missing and (
             failure is not None
@@ -500,7 +509,12 @@ class Planner:
         path = f"/features/{names.index(name)}" if name in names else "/features"
         failed = diagnosis.failed_result
         if failed is not None and failed.failure_kind == "none":
-            variant_details = self._variant_details(failed, path, shown)
+            subject = f"'{shown}'"
+            if diagnosis.resolving_path:
+                root = diagnosis.resolving_path[0]
+                path = f"/features/{names.index(root)}" if root in names else "/features"
+                subject = f"One of the inputs of '{sanitize_text(root, MAX_NAME_LENGTH)}'"
+            variant_details = self._variant_details(failed, path, subject)
             if variant_details:
                 headline = next((d for d in variant_details if "fix" in d), variant_details[0])
                 return error_result("validation_failed", headline["message"], variant_details)
@@ -513,39 +527,44 @@ class Planner:
             detail["suggestion"] = close[0]
         return error_result("validation_failed", detail["message"], [detail])
 
-    def _variant_details(self, failed: EvaluationResult, path: str, shown: str) -> list[dict[str, Any]]:
+    def _variant_details(self, failed: EvaluationResult, path: str, subject: str) -> list[dict[str, Any]]:
         """One variant_not_allowed detail per group whose only fitting frameworks follow an unallowed variant."""
+        return [
+            self._variant_detail(path, subject, group.__name__, elimination.variants, elimination.allow_variants)
+            for group, elimination in sorted(failed.eliminations.items(), key=lambda item: item[0].__name__)
+            if elimination.stage == "variant"
+        ]
+
+    def _variant_detail(
+        self, path: str, subject: str, group: str, variants: Iterable[str], allow_variants: Iterable[str]
+    ) -> dict[str, Any]:
+        """A variant_not_allowed detail, with a fix only when the caller may set allow_variants."""
         key = str(DefaultOptionKeys.allow_variants)
         settable = self._settings.trusted_caller or (
             key in self._settings.allow_options and key not in caller_refused_option_keys()
         )
-        details: list[dict[str, Any]] = []
-        for group, elimination in sorted(failed.eliminations.items(), key=lambda item: item[0].__name__):
-            if elimination.stage != "variant":
-                continue
-            fix = [sanitize_text(v, MAX_NAME_LENGTH) for v in elimination.allow_variants]
-            if not elimination.allow_variants:
-                message = (
-                    f"'{shown}' is served only through a rule variant its FeatureGroup does not list, "
-                    "so it cannot be allowed."
-                )
-            elif settable:
-                message = (
-                    f"'{shown}' needs a rule variant the request has not allowed; add the fix to the feature's options."
-                )
-            else:
-                message = f"'{shown}' needs a rule variant the service policy does not let a request allow."
-            detail: dict[str, Any] = {
-                "path": path,
-                "problem": "variant_not_allowed",
-                "message": message,
-                "feature_group": group.__name__,
-                "variants": [sanitize_text(v, MAX_NAME_LENGTH) for v in elimination.variants],
-            }
-            if fix and settable:
-                detail["fix"] = {"allow_variants": fix}
-            details.append(detail)
-        return details
+        fix = [sanitize_text(v, MAX_NAME_LENGTH) for v in allow_variants]
+        if not fix:
+            message = (
+                f"{subject} is served only through a rule variant its FeatureGroup does not list, "
+                "so it cannot be allowed."
+            )
+        elif settable:
+            message = (
+                f"{subject} needs a rule variant the request has not allowed; add the fix to the feature's options."
+            )
+        else:
+            message = f"{subject} needs a rule variant the service policy does not let a request allow."
+        detail: dict[str, Any] = {
+            "path": path,
+            "problem": "variant_not_allowed",
+            "message": message,
+            "feature_group": group,
+            "variants": [sanitize_text(v, MAX_NAME_LENGTH) for v in variants],
+        }
+        if fix and settable:
+            detail["fix"] = {"allow_variants": fix}
+        return detail
 
     def _name_bound_refusal(self, steps: Sequence[PlanStep], request_names: Sequence[str]) -> dict[str, Any] | None:
         """Refuse a planned feature name that binds an option a plugin marks as not caller-settable."""

@@ -23,7 +23,10 @@ import pytest
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import ReadDBFG
+from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation, _registry, loaded_implementations
@@ -1184,3 +1187,171 @@ class TestDynamicFeatureGroupCacheIsRestoredBetweenTests:
     def test_b_the_next_test_no_longer_sees_it(self, request: pytest.FixtureRequest) -> None:
         assert _CACHE_RESTORE_PROBE not in DynamicFeatureGroupCreator._created_classes
         assert _CACHE_RESTORE_FIXTURE in request.fixturenames
+
+
+def _bind(module: types.ModuleType, **classes: type[Any]) -> None:
+    for name, cls in classes.items():
+        setattr(module, name, cls)
+
+
+def _sqlite_bare(m: str) -> dict[str, type[Any]]:
+    class BareSqlite(SqliteFG):
+        __module__ = m
+
+        @classmethod
+        def produce_rows(cls, connection: Any, table: str, features: Any) -> Any:
+            return super().produce_rows(connection, table, features)
+
+    return {"BareSqlite": BareSqlite}
+
+
+def _sqlite_own_key(m: str) -> dict[str, type[Any]]:
+    class KeyedSqlite(SqliteFG):
+        __module__ = m
+        CREDENTIAL_KEY = "synthetic_probe_key"
+
+    return {"KeyedSqlite": KeyedSqlite}
+
+
+def _sqlite_marker_gated(m: str) -> dict[str, type[Any]]:
+    class GatedSqlite(SqliteFG):
+        __module__ = m
+
+        @classmethod
+        def is_valid_credentials(cls, credentials: Any) -> bool:
+            return super().is_valid_credentials(credentials) and "synthetic_marker" in credentials
+
+    return {"GatedSqlite": GatedSqlite}
+
+
+def _sqlite_noop_override(m: str) -> dict[str, type[Any]]:
+    class NoopSqlite(SqliteFG):
+        __module__ = m
+
+        @classmethod
+        def is_valid_credentials(cls, credentials: Any) -> bool:
+            return super().is_valid_credentials(credentials)
+
+    return {"NoopSqlite": NoopSqlite}
+
+
+def _child_of_narrowed(m: str) -> dict[str, type[Any]]:
+    class NarrowParent(SqliteFG):
+        __module__ = m
+        CREDENTIAL_KEY = "synthetic_probe_key"
+
+    class NarrowChild(NarrowParent):
+        __module__ = m
+
+    return {"NarrowParent": NarrowParent, "NarrowChild": NarrowChild}
+
+
+def _child_of_unnarrowed(m: str) -> dict[str, type[Any]]:
+    class LooseParent(SqliteFG):
+        __module__ = m
+
+    class LooseChild(LooseParent):
+        __module__ = m
+
+    return {"LooseParent": LooseParent, "LooseChild": LooseChild}
+
+
+def _csv_bare(m: str) -> dict[str, type[Any]]:
+    class BareCsv(CsvFG):
+        __module__ = m
+
+    return {"BareCsv": BareCsv}
+
+
+def _csv_own_matcher(m: str) -> dict[str, type[Any]]:
+    class MatcherCsv(CsvFG):
+        __module__ = m
+
+        @classmethod
+        def match_feature_group_criteria(cls, *args: Any, **kwargs: Any) -> Any:
+            return super().match_feature_group_criteria(*args, **kwargs)
+
+    return {"MatcherCsv": MatcherCsv}
+
+
+def _file_group(m: str, suffix: str) -> dict[str, type[Any]]:
+    class SuffixFile(ReadFileFG):
+        __module__ = m
+
+        @classmethod
+        def suffixes(cls) -> tuple[str, ...]:
+            return (suffix,)
+
+        @classmethod
+        def column_names(cls, path: str) -> Any:
+            return []
+
+    return {"SuffixFile": SuffixFile}
+
+
+def _file_unique_suffix(m: str) -> dict[str, type[Any]]:
+    return _file_group(m, ".mlodaprobe")
+
+
+def _file_csv_suffix(m: str) -> dict[str, type[Any]]:
+    return _file_group(m, ".csv")
+
+
+def _abstract_group(m: str) -> dict[str, type[Any]]:
+    class AbstractDb(ReadDBFG):
+        __module__ = m
+
+    return {"AbstractDb": AbstractDb}
+
+
+def _unbound_group(m: str) -> dict[str, type[Any]]:
+    class UnboundSqlite(SqliteFG):
+        __module__ = m
+
+    UnboundSqlite.__name__ = "UnboundSqlite"
+    return {}
+
+
+_CLAIMER_CASES: list[Any] = [
+    pytest.param(_sqlite_bare, ["BareSqlite"], id="sqlite-bare-produce-rows"),
+    pytest.param(_sqlite_own_key, [], id="sqlite-own-credential-key"),
+    pytest.param(_sqlite_marker_gated, [], id="sqlite-marker-gated-credentials"),
+    pytest.param(_sqlite_noop_override, ["NoopSqlite"], id="sqlite-noop-credentials-override"),
+    pytest.param(_child_of_narrowed, [], id="child-of-narrowed-parent"),
+    pytest.param(_child_of_unnarrowed, ["LooseParent", "LooseChild"], id="child-of-unnarrowed-parent"),
+    pytest.param(_csv_bare, ["BareCsv"], id="csv-no-overrides"),
+    pytest.param(_csv_own_matcher, [], id="csv-own-matcher"),
+    pytest.param(_file_unique_suffix, [], id="file-unique-suffix"),
+    pytest.param(_file_csv_suffix, ["SuffixFile"], id="file-csv-suffix"),
+    pytest.param(_abstract_group, [], id="abstract-subclass"),
+    pytest.param(_unbound_group, [], id="not-bound-in-module"),
+]
+
+
+class TestUnnarrowedSourceClaimers:
+    """Module-level source groups must be narrowed so they cannot claim sources other test modules use."""
+
+    @pytest.mark.parametrize(("build", "expected"), _CLAIMER_CASES)
+    def test_flags_only_unnarrowed_claimers(
+        self, build: Callable[[str], dict[str, type[Any]]], expected: list[str]
+    ) -> None:
+        from tests.registry_isolation import unnarrowed_source_claimers
+
+        name = "tests.synthetic_claimer_case"
+        module = types.ModuleType(name)
+        _bind(module, **build(name))
+
+        flagged = {entry.split()[0] for entry in unnarrowed_source_claimers([module])}
+
+        assert flagged == {f"{name}.{n}" for n in expected}
+
+    def test_no_test_module_leaves_an_unnarrowed_source_claimer(self) -> None:
+        from tests.registry_isolation import unnarrowed_source_claimers
+
+        modules = [m for n, m in list(sys.modules.items()) if n.startswith("tests.") and m is not None]
+        flagged = unnarrowed_source_claimers(modules)
+        assert not flagged, (
+            f"module-level source groups claim sources of other test modules on the same worker: {flagged}. "
+            "Narrow each: give it its own CREDENTIAL_KEY or a marker-gated is_valid_credentials (DB), its own "
+            "suffix (file), or its own match_feature_group_criteria; or define the class inside the test."
+        )

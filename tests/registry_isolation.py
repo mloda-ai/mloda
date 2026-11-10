@@ -7,9 +7,11 @@ cyclic GC runs and a later test on the same worker trips over it. A creation log
 from __future__ import annotations
 
 import gc
+import inspect
 import sys
+import types
 import weakref
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from typing import Any, Generic, TypeVar
 
@@ -17,6 +19,9 @@ from mloda.core.abstract_plugins.components.framework_transformer.base_transform
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
+from mloda.core.abstract_plugins.components.input_data.read_db_fg import ReadDBFG
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 
@@ -175,3 +180,41 @@ def reclaim_released_implementations(mark: int, module_name: str) -> list[type[A
         (cls for cls in IMPLEMENTATIONS.live_since(mark) if cls in loaded and cls.__module__ == module_name),
         key=lambda c: c.__name__,
     )
+
+
+def _is_shipped(cls: type[Any]) -> bool:
+    return not cls.__module__.startswith("tests") and not inspect.isabstract(cls)
+
+
+def unnarrowed_source_claimers(modules: Iterable[types.ModuleType]) -> list[str]:
+    """Module-level test source groups that still claim what a shipped reader claims."""
+    shipped = [c for c in get_all_subclasses(SourceFeatureGroup) if _is_shipped(c)]
+    shipped_suffixes = {s: c for c in shipped if issubclass(c, _FileSourceFG) for s in c.suffixes()}
+    own = ("find_sources", "is_pointed", "has_column", "_candidates")
+    flagged: list[str] = []
+    for module in modules:
+        for name, cls in vars(module).items():
+            if not (isinstance(cls, type) and cls.__module__ == module.__name__):
+                continue
+            if not issubclass(cls, SourceFeatureGroup) or inspect.isabstract(cls):
+                continue
+            custom = [k for k in cls.__mro__ if k.__module__.startswith("tests")]
+            if any("match_feature_group_criteria" in vars(k) for k in custom):
+                continue
+            rival: type[Any] | None = None
+            if issubclass(cls, ReadDBFG):
+                rival = next(
+                    (
+                        s
+                        for s in shipped
+                        if issubclass(s, ReadDBFG) and cls.is_valid_credentials({s.CREDENTIAL_KEY: "probe"})
+                    ),
+                    None,
+                )
+            elif issubclass(cls, _FileSourceFG):
+                rival = next((shipped_suffixes[s] for s in cls.suffixes() if s in shipped_suffixes), None)
+            elif not any(n in vars(k) for k in custom for n in own):
+                rival = next((k for k in cls.__mro__[1:] if k in shipped), None)
+            if rival is not None:
+                flagged.append(f"{module.__name__}.{name} collides with {rival.__name__}")
+    return flagged

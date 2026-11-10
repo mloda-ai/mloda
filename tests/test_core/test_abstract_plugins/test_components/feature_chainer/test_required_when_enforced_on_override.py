@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import functools
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -128,13 +129,16 @@ def _permissive_matcher(*args: Any, **kwargs: Any) -> bool:
 class TestOverriddenMatcher:
     """A feature group that overrides the matcher keeps its required_when contract."""
 
-    def test_non_delegating_override_rejects_when_required_option_absent(self) -> None:
+    @pytest.mark.parametrize("wrap", [dict, MappingProxyType], ids=["dict", "mappingproxy"])
+    def test_non_delegating_override_rejects_when_required_option_absent(
+        self, wrap: Callable[[dict[str, PropertySpec]], Mapping[str, PropertySpec]]
+    ) -> None:
         """The override never calls the mixin, so the enforcement cannot live inside the mixin matcher."""
         predicate = CountingPredicate()
 
         class NonDelegatingOverride(FeatureChainParserMixin, FeatureGroup):
             PREFIX_PATTERN = GUARDED_PATTERN
-            PROPERTY_MAPPING = _mapping(predicate)
+            PROPERTY_MAPPING = wrap(_mapping(predicate))
 
             @classmethod
             def match_feature_group_criteria(
@@ -360,7 +364,10 @@ class TestGuardAnswersInsteadOfRaising:
 class TestStaticMethodMatcherRejected:
     """The guard reinstalls the matcher as a classmethod, so a staticmethod or plain-function matcher must not reach it."""
 
-    def test_staticmethod_matcher_with_required_when_is_rejected_at_class_definition(self) -> None:
+    @pytest.mark.parametrize("wrap", [dict, MappingProxyType], ids=["dict", "mappingproxy"])
+    def test_staticmethod_matcher_with_required_when_is_rejected_at_class_definition(
+        self, wrap: Callable[[dict[str, PropertySpec]], Mapping[str, PropertySpec]]
+    ) -> None:
         """Wrapping a staticmethod injects cls as the first argument, so the matcher would misread its own
         arguments and return a silently wrong verdict. Reject loudly, at class definition."""
         predicate = CountingPredicate()
@@ -369,7 +376,7 @@ class TestStaticMethodMatcherRejected:
 
             class StaticMatcherFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                 PREFIX_PATTERN = GUARDED_PATTERN
-                PROPERTY_MAPPING = _mapping(predicate)
+                PROPERTY_MAPPING = wrap(_mapping(predicate))
 
                 @staticmethod
                 def match_feature_group_criteria(
@@ -725,3 +732,42 @@ class TestPlainGroupEnforcement:
         presence_checks.clear()
         assert DelegatingPlainChild.match_feature_group_criteria(name, Options(context={NEEDS_KEY: "v"})) is True
         assert len(presence_checks) == 1
+
+    @pytest.mark.parametrize("wrap", [dict, MappingProxyType], ids=["dict", "mappingproxy"])
+    def test_plain_group_without_pattern_rejects_missing_required_key(
+        self, wrap: Callable[[dict[str, PropertySpec]], Mapping[str, PropertySpec]]
+    ) -> None:
+        class PlainMappingWrapped(FeatureGroup):
+            PROPERTY_MAPPING = wrap(_plain_required_mapping())
+
+        name = PlainMappingWrapped.get_class_name()
+        assert PlainMappingWrapped.match_feature_group_criteria(name, Options()) is False
+        assert PlainMappingWrapped.match_feature_group_criteria(name, Options(context={NEEDS_KEY: "v"})) is True
+
+    @pytest.mark.parametrize("wrap", [dict, MappingProxyType], ids=["dict", "mappingproxy"])
+    def test_patterned_group_rejects_missing_required_key(
+        self, wrap: Callable[[dict[str, PropertySpec]], Mapping[str, PropertySpec]]
+    ) -> None:
+        class PatternedMappingWrapped(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = r".*__([\w]+)_wrapnp$"
+            PROPERTY_MAPPING = wrap(
+                {
+                    OP_TYPE: PropertySpec(
+                        "Operation to apply", allowed_values={"sum": "Sum"}, context=True, strict_validation=True
+                    ),
+                    "missing_wrapnp": PropertySpec("required, options-only, absent on the name path", context=True),
+                }
+            )
+
+            @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: str | FeatureName,
+                options: Options,
+                data_access_collection: Any = None,
+            ) -> bool:
+                return True
+
+        assert PatternedMappingWrapped.match_feature_group_criteria("x__sum_wrapnp", Options()) is False
+        present = Options(context={"missing_wrapnp": "present"})
+        assert PatternedMappingWrapped.match_feature_group_criteria("x__sum_wrapnp", present) is True

@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import functools
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -96,15 +97,20 @@ class TestOverrideBypass:
         assert len(warnings) == 1
         assert "missing_r2353" in warnings[0].getMessage()
 
-    def test_non_delegating_true_override_is_still_a_non_match(self, caplog: pytest.LogCaptureFixture) -> None:
+    @pytest.mark.parametrize("wrap", [dict, MappingProxyType], ids=["dict", "mappingproxy"])
+    def test_non_delegating_true_override_is_still_a_non_match(
+        self, wrap: Callable[[dict[str, PropertySpec]], Mapping[str, PropertySpec]], caplog: pytest.LogCaptureFixture
+    ) -> None:
         """The override never reaches the inner rule, so the guard must reject and warn itself."""
 
         class _BypassR769pg1(FeatureChainParserMixin):
             PREFIX_PATTERN = r".*__(?P<carried_r769pg1>\w+)$"
-            PROPERTY_MAPPING = {
-                "carried_r769pg1": PropertySpec("required, carried by the name", context=True),
-                "missing_r769pg1": PropertySpec("required, options-only, absent", context=True),
-            }
+            PROPERTY_MAPPING = wrap(
+                {
+                    "carried_r769pg1": PropertySpec("required, carried by the name", context=True),
+                    "missing_r769pg1": PropertySpec("required, options-only, absent", context=True),
+                }
+            )
 
             @classmethod
             def match_feature_group_criteria(

@@ -9,7 +9,7 @@ normal path covered here is ``match_parser_criteria``. ``utils.safe_field``
 is the deliberate exception: it degrades one field in a rendering path and swallows a marked exception.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import partial
 from typing import ClassVar, TypeVar
@@ -251,7 +251,7 @@ class BothCategoriesMixin845f(FeatureChainParserMixin):
 
     PREFIX_PATTERN = BINDING_PATTERN
     # Annotated exactly as FeatureGroup declares it, so the FeatureGroup subclass below stays consistent.
-    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec] | None] = {
+    PROPERTY_MAPPING: ClassVar[Mapping[str, PropertySpec] | None] = {
         BINDING_KEY: property_spec("the key the feature name carries")
     }
 

@@ -8,6 +8,8 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
+from collections.abc import Callable, Mapping
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -70,11 +72,14 @@ class TestMissingInFeaturesWarns:
         warnings = _missing_in_features_warnings(caplog, "_SourcePatternOverrideR2353")
         assert len(warnings) == (0 if has_patterns else 1)
 
-    def test_no_pattern_group_warns_with_fix_wording(self, caplog: pytest.LogCaptureFixture) -> None:
+    @pytest.mark.parametrize("wrap", [dict, MappingProxyType], ids=["dict", "mappingproxy"])
+    def test_no_pattern_group_warns_with_fix_wording(
+        self, wrap: Callable[[dict[str, PropertySpec]], Mapping[str, PropertySpec]], caplog: pytest.LogCaptureFixture
+    ) -> None:
         with caplog.at_level(logging.WARNING):
 
             class _NoPatternM951a(FeatureChainParserMixin):
-                PROPERTY_MAPPING = {"req_m951a": PropertySpec("required", allowed_values=("v_m951a",))}
+                PROPERTY_MAPPING = wrap({"req_m951a": PropertySpec("required", allowed_values=("v_m951a",))})
 
             assert "req_m951a" in _NoPatternM951a.PROPERTY_MAPPING
 

@@ -24,6 +24,8 @@ diagnostic in scope is the universal-matcher warning, never the captureless one.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Mapping
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -80,15 +82,20 @@ def _universal_matcher_warnings(
 class TestUniversalMatcherWarns:
     """The guard warns when an inherited config matcher matches any feature name given only a source."""
 
-    def test_inherited_all_declared_default_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+    @pytest.mark.parametrize("wrap", [dict, MappingProxyType], ids=["dict", "mappingproxy"])
+    def test_inherited_all_declared_default_warns(
+        self, wrap: Callable[[dict[str, PropertySpec]], Mapping[str, PropertySpec]], caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Case 1: every key declares ``default=None``, no pattern -> universal matcher -> WARNS."""
         with caplog.at_level(logging.WARNING):
 
             class _InheritedAllDefaultU771a(FeatureChainParserMixin, FeatureGroup):
-                PROPERTY_MAPPING = {
-                    "opt_a_u771a": PropertySpec("optional a", default=None),
-                    "opt_b_u771a": PropertySpec("optional b", default=None),
-                }
+                PROPERTY_MAPPING = wrap(
+                    {
+                        "opt_a_u771a": PropertySpec("optional a", default=None),
+                        "opt_b_u771a": PropertySpec("optional b", default=None),
+                    }
+                )
 
             assert "opt_a_u771a" in _InheritedAllDefaultU771a.PROPERTY_MAPPING
 
@@ -171,7 +178,10 @@ class TestUniversalMatcherWarns:
         warnings = _universal_matcher_warnings(caplog, "_NamedOptionalPatternU771j")
         assert warnings, "a named-capture pattern with an all-optional mapping is still a universal matcher"
 
-    def test_empty_mapping_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+    @pytest.mark.parametrize("wrap", [dict, MappingProxyType], ids=["dict", "mappingproxy"])
+    def test_empty_mapping_warns(
+        self, wrap: Callable[[dict[str, PropertySpec]], Mapping[str, PropertySpec]], caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Case 11: an explicit empty PROPERTY_MAPPING validates vacuously -> universal matcher -> WARNS.
 
         An empty mapping enforces nothing, so given only a source it matches any feature name: it is the most
@@ -181,7 +191,7 @@ class TestUniversalMatcherWarns:
         with caplog.at_level(logging.WARNING):
 
             class _EmptyMappingU771k(FeatureChainParserMixin, FeatureGroup):
-                PROPERTY_MAPPING = {}
+                PROPERTY_MAPPING = wrap({})
 
             # Precondition: an empty mapping validates vacuously, so an unrelated name matches -> universal.
             assert _EmptyMappingU771k.match_feature_group_criteria("unrelatedu771k", _source_only_options()) is True

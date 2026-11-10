@@ -8,6 +8,7 @@ from typing import Any
 from mloda._testing.feature_group_shape import (
     _base_options,
     _first_value,
+    _name_bound_keys,
     _availability_reason,
     _input_problems,
     _no_implementation_reason,
@@ -27,7 +28,7 @@ from mloda.core.abstract_plugins.components.divergence import Divergence, Diverg
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
-from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field_with_error
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
@@ -47,12 +48,22 @@ def _mapping(
     return mapping, failures
 
 
+def _evaluate(feature: Feature, mapping: FeatureGroupEnvironmentMapping) -> tuple[Any, str | None, str | None]:
+    """(result, message, aborted): an escalated match abort comes back as its text instead of raising."""
+    outcome, error = safe_field_with_error(lambda: evaluate_and_render(feature, mapping), None)
+    if outcome is None:
+        return None, None, error
+    return outcome[0], outcome[1], None
+
+
 def _combined(base: Options, selecting: Options) -> Options:
     return Options(group={**base.group, **selecting.group}, context={**base.context, **selecting.context})
 
 
-def _optional_probes(parent: type[FeatureGroup], base: Options, keys: set[str]) -> list[tuple[str, Options]]:
-    taken = {*base.group, *base.context, *keys}
+def _optional_probes(
+    parent: type[FeatureGroup], base: Options, keys: set[str], bound: frozenset[str] = frozenset()
+) -> list[tuple[str, Options]]:
+    taken = {*base.group, *base.context, *keys, *bound}
     probes = []
     for key, spec in (parent.PROPERTY_MAPPING or {}).items():
         if key in taken or not isinstance(spec, PropertySpec):
@@ -71,7 +82,9 @@ def _plain_failure(
     parent: type[FeatureGroup],
     subclass: type[FeatureGroup],
 ) -> str | None:
-    result, message = evaluate_and_render(Feature(name, options), mapping)
+    result, message, aborted = _evaluate(Feature(name, options), mapping)
+    if aborted is not None:
+        return f"setup: matching '{name}' {label} aborted: {aborted}"
     found = set(result.identified)
     if found == {parent}:
         return None
@@ -88,20 +101,23 @@ def _scope_failures(
     names: list[str],
     base: Options,
     selecting: Options,
+    bound: frozenset[str] = frozenset(),
 ) -> list[str]:
     keys = {*selecting.group, *selecting.context}
     mapping, failures = _mapping(parent, subclass)
     if failures:
         return failures
     label = f"without {sorted(keys)}"
-    probes = [("", base), *_optional_probes(parent, base, keys)]
+    probes = [("", base), *_optional_probes(parent, base, keys, bound)]
     for name in names:
         for key, options in probes:
             failure = _plain_failure(name, options, f"with option '{key}'" if key else label, mapping, parent, subclass)
             if failure is not None:
                 failures.append(failure)
-        selected, selected_message = evaluate_and_render(Feature(name, _combined(base, selecting)), mapping)
-        if set(selected.identified) != {subclass}:
+        selected, selected_message, aborted = _evaluate(Feature(name, _combined(base, selecting)), mapping)
+        if aborted is not None:
+            failures.append(f"misses: matching '{name}' with {sorted(keys)} aborted: {aborted}")
+        elif set(selected.identified) != {subclass}:
             found = selected_message or ", ".join(sorted(c.__name__ for c in selected.identified))
             failures.append(f"misses: '{name}' with {sorted(keys)} resolves to {found}")
     return failures
@@ -234,12 +250,19 @@ def check_subclass_scope(
         notes.append("values: not compared (resolution failed)")
     else:
         names = list(requests) if requests is not None else sorted(parent.feature_names_supported())
-        base = _base_options(parent)
+        bound = _bound_keys(parent, names)
+        base = _base_options(parent, bound or {})
         if base is not None:
             failures += _value_failures(
                 subclass, parent, names, base, selecting, input_data, adapter or PythonDictAdapter(), notes, require_run
             )
     return CheckResult(check="subclass_scope", subject=subclass.__name__, failures=tuple(failures), notes=tuple(notes))
+
+
+def _bound_keys(parent: type[FeatureGroup], names: list[str]) -> dict[str, frozenset[str]] | None:
+    """The option keys each name binds; None when the names bind different key sets."""
+    bound = {k: v for k, v in ((n, _name_bound_keys(parent, n)) for n in names) if v is not None}
+    return bound if len(set(bound.values())) <= 1 else None
 
 
 def _run(
@@ -253,13 +276,16 @@ def _run(
         if requests is not None:
             return ["names: no requests to check"]
         return ["names: parent declares no feature names; pass requests="]
-    base = _base_options(parent)
+    bound = _bound_keys(parent, names)
+    if bound is None:
+        return ["names: the requested names bind different option keys; check them in separate calls"]
+    base = _base_options(parent, bound)
     if base is None:
         return ["setup: cannot build a request for the parent; declare allowed_values or default"]
     present = sorted({*selecting.group, *selecting.context} & {*base.group, *base.context})
     if present:
         return [f"setup: selecting keys {present} are already in the base options and would mask a steal"]
-    return _scope_failures(subclass, parent, names, base, selecting)
+    return _scope_failures(subclass, parent, names, base, selecting, frozenset().union(*bound.values()))
 
 
 def assert_subclass_scope(

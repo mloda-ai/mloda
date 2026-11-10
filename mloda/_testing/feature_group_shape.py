@@ -7,7 +7,7 @@ import math
 import re
 from collections.abc import Mapping, Sequence
 from itertools import product
-from typing import Any
+from typing import Any, NamedTuple
 
 from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter
 from mloda._testing.result import CheckResult
@@ -89,7 +89,7 @@ def _base_options(cls: type[FeatureGroup], bound_keys: Mapping[str, frozenset[st
         if value is None:
             return None
         group[key] = value
-    return cls.options_with_defaults(Options(group=group))
+    return cls.options_with_defaults(Options(group=group), dict.fromkeys(bound), fill_bindings=False)
 
 
 def _without_key(options: Options, key: str) -> Options:
@@ -106,9 +106,17 @@ def _with_value(options: Options, key: str, value: Any) -> Options:
     )
 
 
-def _probe(cls: type[FeatureGroup], name: str, options: Options) -> tuple[bool, Any]:
-    outcome = probe_match_criteria(cls, name, options)
-    return outcome.matched, outcome.rejection
+class _Probe(NamedTuple):
+    matched: bool
+    rejection: Any
+    aborted: str | None
+
+
+def _probe(cls: type[FeatureGroup], name: str, options: Options) -> _Probe:
+    outcome, error = safe_field_with_error(lambda: probe_match_criteria(cls, name, options), None)
+    if outcome is None:
+        return _Probe(False, None, error)
+    return _Probe(outcome.matched, outcome.rejection, None)
 
 
 def _foreign_name(cls: type[FeatureGroup]) -> str:
@@ -123,7 +131,10 @@ def _check_names(cls: type[FeatureGroup], names: list[str], base: Options, reque
     failures = []
     verb = "requested" if requested else "declared"
     for name in names:
-        if not _probe(cls, name, base)[0]:
+        probe = _probe(cls, name, base)
+        if probe.aborted is not None:
+            failures.append(f"names: matching '{name}' aborted: {probe.aborted}")
+        elif not probe.matched:
             failures.append(f"names: '{name}' is {verb} but {cls.__name__} does not match it")
     return failures
 
@@ -135,8 +146,10 @@ def _check_foreign(cls: type[FeatureGroup], base: Options) -> list[str]:
         undeclared = "x" + undeclared
     failures = []
     for label, options in (("base options", base), ("an undeclared option", Options(group={undeclared: "1"}))):
-        matched, rejection = _probe(cls, name, options)
-        if matched:
+        matched, rejection, aborted = _probe(cls, name, options)
+        if aborted is not None:
+            failures.append(f"foreign: matching '{name}' with {label} aborted: {aborted}")
+        elif matched:
             failures.append(f"foreign: matches the undeclared name '{name}' with {label}")
         elif rejection is not None and rejection.code is None:
             failures.append(f"foreign: rejection of '{name}' with {label} carries no decline code")
@@ -175,8 +188,10 @@ def _check_required(
     for name, key in product(names, _required_keys(cls)):
         if key in bound_keys.get(name, frozenset()):
             continue
-        matched, rejection = _probe(cls, name, _without_key(base, key))
-        if matched:
+        matched, rejection, aborted = _probe(cls, name, _without_key(base, key))
+        if aborted is not None:
+            failures.append(f"required: matching '{name}' without '{key}' aborted: {aborted}")
+        elif matched:
             failures.append(f"required: matches without required option '{key}'")
         elif rejection is None:
             failures.append(f"required: no rejection recorded without required option '{key}'")
@@ -193,8 +208,10 @@ def _check_strict(cls: type[FeatureGroup], names: list[str], base: Options) -> l
     failures = []
     strict = [(k, v) for k, v in _mapping(cls).items() if v.strict_validation and v.allowed_values]
     for name, (key, _) in product(names, strict):
-        matched, rejection = _probe(cls, name, _with_value(base, key, _UNKNOWN_VALUE))
-        if matched:
+        matched, rejection, aborted = _probe(cls, name, _with_value(base, key, _UNKNOWN_VALUE))
+        if aborted is not None:
+            failures.append(f"strict: matching '{name}' with an unknown '{key}' value aborted: {aborted}")
+        elif matched:
             failures.append(f"strict: matches an unknown value for strict option '{key}'")
         elif rejection is None or rejection.code != CoreDeclineCode.OPTION_VALUE_REJECTED:
             failures.append(f"strict: rejection of an unknown '{key}' value lacks code option_value_rejected")
@@ -533,7 +550,10 @@ def _route_block(
     """(block, raised): why the planner would not route name to the adapter's framework; a raising hook is not a block."""
     framework = adapter.compute_framework()
     matched = options._fork()
-    split = probe_match_criteria(cls, name, matched, resolve_parts=True).part
+    outcome, abort = safe_field_with_error(lambda: probe_match_criteria(cls, name, matched, resolve_parts=True), None)
+    if outcome is None:
+        return None, f"'{name}' on {cls.__name__}: matching aborted: {abort}"
+    split = outcome.part
     hook_name, part = split if split is not None else (name, None)
     routed, error = safe_field_with_error(
         lambda: cls.supports_compute_framework(hook_name, matched, framework, part=part), True
@@ -621,12 +641,13 @@ def check_feature_group_shape(
     require_run: bool = False,
     requests: Sequence[str] | None = None,
 ) -> CheckResult:
-    """Check a FeatureGroup's match contract and, given input_data, its run; a raising matcher is a non-match.
+    """Check a FeatureGroup's match contract and, given input_data, its run.
 
+    A raising matcher is a non-match; an escalated match abort is a failure with its text.
     With require_run, a rule exclusion, a missing serving Implementation or a route block is a failure instead of a note.
     Secret checks cover declarations, not call sites: a secret under an undeclared benign key goes unseen;
     silence a false positive per option in NOT_SECRET_OPTIONS with a reason.
-    requests= probes those names instead of the class and declared names; base_options must agree with them.
+    requests= probes those names instead of the class and declared names; a base_options value contradicting them is a failure with the abort text.
     """
     if isinstance(requests, str):
         return CheckResult(

@@ -73,6 +73,22 @@ CASES = {
         _text,
         {"cleaning_operations": ("normalize", "remove_punctuation")},
     ),
+    "scaling": Case(
+        f"{_ROOT}.sklearn.scaling",
+        "ScalingFeatureGroup",
+        ("x__standard_scaled", "x__minmax_scaled", "x__robust_scaled", "x__normalizer_scaled"),
+        _numbers,
+        {},
+        ("pandas", "sklearn"),
+    ),
+    "encoding": Case(
+        f"{_ROOT}.sklearn.encoding",
+        "EncodingFeatureGroup",
+        ("t__label_encoded", "t__ordinal_encoded"),
+        _text,
+        {},
+        ("pandas", "sklearn"),
+    ),
 }
 
 

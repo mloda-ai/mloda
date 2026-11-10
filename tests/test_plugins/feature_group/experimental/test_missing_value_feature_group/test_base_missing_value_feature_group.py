@@ -158,9 +158,11 @@ class TestMissingValueFeatureGroup:
         ("group_by", "expected"),
         [
             (["region"], {"income", "region"}),
+            ("region", {"income", "region"}),
             (["region", "store"], {"income", "region", "store"}),
             (None, {"income"}),
             ([], {"income"}),
+            ("", {"income"}),
             (["income"], {"income"}),
         ],
     )
@@ -251,11 +253,12 @@ class TestMissingValueFeatureGroup:
         feature = _feature("x__mean_imputed", group_by_features=["g1"])
         assert_core_rejects_missing_input(impl, make_data(), feature, ("g1", "x"), ("a", "b"))
 
-    def test_impute_hands_the_resolved_arguments_to_perform_and_add_column(self) -> None:
+    @pytest.mark.parametrize("group_by", [["b"], "b"])
+    def test_impute_hands_the_resolved_arguments_to_perform_and_add_column(self, group_by: Any) -> None:
         data = object()
         perform = Mock(return_value="result")
         add_column = Mock(return_value="done")
-        feature_set = _feature_set("a__constant_imputed", constant_value=0, group_by_features=["b"])
+        feature_set = _feature_set("a__constant_imputed", constant_value=0, group_by_features=group_by)
 
         result = MissingValueFeatureGroup.impute(
             data, feature_set, perform=perform, add_column=add_column, columns=Mock(return_value={"a", "b"})
@@ -547,6 +550,13 @@ class TestImplementationsConformToTheReferenceContract:
     def test_grouped_imputation(self, implementation: Any, method: str, columns: _Columns, group_by: list[str]) -> None:
         actual = _impute(implementation, columns, method, ["a"], _CONSTANT, group_by)
         assert not _differences(implementation, actual, _reference_grouped(method, columns, _CONSTANT, group_by))
+
+    @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
+    def test_bare_string_group_by_groups_by_the_whole_key(self, implementation: Any) -> None:
+        columns: _Columns = {"a": [_NAN, 1.0, 3.0, _NAN], "region": ["xx", "xx", "yy", "yy"]}
+        feature = _feature("a__mean_imputed", group_by_features="region")
+        result = run_through_core(implementation, _MAKE_DATA[implementation](columns), feature)
+        assert _to_list(result["a__mean_imputed"]) == [1.0, 1.0, 3.0, 3.0]
 
     @pytest.mark.parametrize(("columns", "group_by"), _GROUPING_CASES)
     @pytest.mark.parametrize("method", _ALL_METHODS)

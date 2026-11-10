@@ -24,12 +24,14 @@ from mloda.core.abstract_plugins.components.credential_handle import credential_
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.abstract_plugins.components.divergence import Cause, Divergence, DivergenceKind
+from tests.mixins.name_path_group import make_name_path_group
 from mloda.provider import DefaultOptionKeys, FeatureChainParserMixin, SubtypeDeclaration
 from mloda.user.python_dict import PythonDictFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -665,27 +667,6 @@ def test_assert_raises_pytest_failure_for_broken_group() -> None:
     assert "foreign:" in str(excinfo.value)
 
 
-def make_name_path_group(default: str | None = None, with_level: bool = False) -> type[FeatureGroup]:
-    """Pattern group binding `mode` from `<src>__tt_<mode>`; with_level adds an unbound required key."""
-    mapping: dict[str, PropertySpec] = {}
-    if default is None:
-        mapping["mode"] = PropertySpec("Name-bound mode.", context=True, allowed_values=("fast", "slow"))
-    else:
-        mapping["mode"] = PropertySpec(
-            "Name-bound mode.", context=True, allowed_values=("fast", "slow"), default=default
-        )
-    if with_level:
-        mapping["level"] = PropertySpec("Unbound level.", context=True, allowed_values=("lo", "hi"))
-    namespace: dict[str, Any] = {
-        "__module__": __name__,
-        "PREFIX_PATTERN": r".*__tt_(?P<mode>fast|slow)$",
-        "MIN_IN_FEATURES": 1,
-        "MAX_IN_FEATURES": 1,
-        "PROPERTY_MAPPING": mapping,
-    }
-    return type("NamePathToyGroup", (FeatureChainParserMixin, FeatureGroup), namespace)
-
-
 @pytest.mark.parametrize("default", [None, "fast"])
 @pytest.mark.parametrize("name", ["x__tt_fast", "x__tt_slow"])
 def test_requests_probe_a_name_path_group(default: str | None, name: str) -> None:
@@ -698,9 +679,9 @@ def test_requests_keep_an_unbound_required_key_checked(monkeypatch: pytest.Monke
     real = fgs._probe
 
     def spy(cls: type[FeatureGroup], name: str, options: Options) -> Any:
-        matched, rejection = real(cls, name, options)
-        seen.append((name, "level" in {**options.group, **options.context}, matched))
-        return matched, rejection
+        outcome = real(cls, name, options)
+        seen.append((name, "level" in {**options.group, **options.context}, outcome.matched))
+        return outcome
 
     monkeypatch.setattr(fgs, "_probe", spy)
     result = check_feature_group_shape(make_name_path_group(with_level=True), requests=["x__tt_slow"])
@@ -1328,7 +1309,8 @@ def test_encoding_feature_group_part_columns_are_found_on_pandas() -> None:
     assert not any(n.startswith("run:") for n in result.notes), result.notes
 
 
-_RouteCase = tuple[type[FeatureGroup], str, Options, Literal["routed", "capability", "variant", "raised"]]
+_RouteCase = tuple[type[FeatureGroup], str, Options, Literal["routed", "capability", "variant", "raised", "aborted"]]
+_RAISED_TEXT = {"raised": ("accepts exploded", RuntimeError), "aborted": ("match aborted", ValueError)}
 _MakeImpl = Callable[..., type[Implementation[Any]]]
 
 
@@ -1444,6 +1426,20 @@ def _route_raising_accepts(mi: _MakeImpl) -> _RouteCase:
     return group, "rg_out", Options(), "raised"
 
 
+def _route_aborting_match(mi: _MakeImpl) -> _RouteCase:
+    base = make_operation_group()
+
+    class Aborting(base):  # type: ignore[valid-type, misc]
+        @classmethod
+        def match_feature_group_criteria(
+            cls, feature_name: Any, options: Options, data_access_collection: Any = None
+        ) -> bool:
+            raise escalate_match_abort(ValueError("match aborted"))
+
+    _serve_with(mi, Aborting, "ok")
+    return Aborting, "rg_out", Options(), "aborted"
+
+
 @pytest.mark.parametrize(
     "case",
     [
@@ -1460,6 +1456,7 @@ def _route_raising_accepts(mi: _MakeImpl) -> _RouteCase:
         _route_part_variant_blocked,
         _route_matched_options,
         _route_raising_accepts,
+        _route_aborting_match,
     ],
 )
 def test_route_block_agrees_with_the_planner(
@@ -1469,11 +1466,12 @@ def test_route_block_agrees_with_the_planner(
     block, raised = _route_block(group, PythonDictAdapter(), name, options._fork())
     accessible: dict[type[FeatureGroup], set[type[ComputeFramework]]] = {group: {PythonDictFramework}}
     feature = Feature(name, options=options._fork())
-    if expected == "raised":
+    if expected in _RAISED_TEXT:
+        text, error_type = _RAISED_TEXT[expected]
         assert raised is not None
-        assert "accepts exploded" in raised
+        assert text in raised
         assert block is None
-        with pytest.raises(RuntimeError, match="accepts exploded"):
+        with pytest.raises(error_type, match=text):
             IdentifyFeatureGroupClass.evaluate(feature, accessible, None)
         return
     result = IdentifyFeatureGroupClass.evaluate(feature, accessible, None)
@@ -1485,3 +1483,64 @@ def test_route_block_agrees_with_the_planner(
         assert result.eliminations[group].stage == expected
         assert block is not None
         assert ("is not routed" if expected == "capability" else "allow_variants") in block
+
+
+def make_aborting_group() -> type[FeatureGroup]:
+    class AbortingGroup(FeatureGroup):
+        PROPERTY_MAPPING = {
+            "ab_mode": PropertySpec("Required mode.", allowed_values=("a", "b")),
+            "ab_strict": PropertySpec("Strict mode.", allowed_values=("a", "b"), strict_validation=True),
+        }
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {"ab_a"}
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls, feature_name: Any, options: Options, data_access_collection: Any = None
+        ) -> bool:
+            raise escalate_match_abort(ValueError("match aborted"))
+
+    return AbortingGroup
+
+
+@pytest.mark.parametrize(
+    ("prefix", "needle"),
+    [
+        ("names:", "does not match it"),
+        ("foreign:", "carries no decline code"),
+        ("required:", "no rejection recorded"),
+        ("strict:", "lacks code option_value_rejected"),
+    ],
+)
+def test_escalated_match_abort_is_a_failure_not_a_raise(prefix: str, needle: str) -> None:
+    result = check_feature_group_shape(make_aborting_group())
+    ours = [f for f in result.failures if f.startswith(prefix)]
+    assert ours, result.failures
+    assert all("match aborted" in f for f in ours), ours
+    assert not any(needle in f for f in ours), ours
+
+
+def _scaling_group() -> type[FeatureGroup]:
+    pytest.importorskip("sklearn")
+    from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
+
+    return ScalingFeatureGroup
+
+
+@pytest.mark.parametrize(
+    ("factory", "options", "request_name", "token"),
+    [
+        pytest.param(make_name_path_group, Options(group={"mode": "fast"}), "x__tt_slow", "encodes 'slow'", id="toy"),
+        pytest.param(
+            _scaling_group, Options(group={"scaler_type": "minmax"}), "x__standard_scaled", "standard", id="scaling"
+        ),
+    ],
+)
+def test_name_path_request_contradicting_the_options_reports_the_abort(
+    factory: Callable[[], type[FeatureGroup]], options: Options, request_name: str, token: str
+) -> None:
+    result = check_feature_group_shape(factory(), options, requests=[request_name])
+    assert any(f.startswith("names:") and token in f for f in result.failures), result.failures
+    assert not any("does not match it" in f for f in result.failures), result.failures

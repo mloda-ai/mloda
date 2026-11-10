@@ -49,6 +49,8 @@ class ScalingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     - **robust**: RobustScaler (uses median and IQR, robust to outliers)
     - **normalizer**: Normalizer (scale individual samples to unit norm)
 
+    Fitting a new scaler on a column whose rows are all missing raises a ValueError.
+
     ## Configuration-Based Creation
 
     ScalingFeatureGroup supports configuration-based. This allows features to be created
@@ -327,6 +329,8 @@ class ScalingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
 
         # Extract training data
         X_train = training_data(data, source_feature)
+        if len(X_train) == 0:
+            raise ValueError(f"Cannot fit a {scaler_type} scaler on '{source_feature}': every row is missing.")
 
         # Fit the scaler
         scaler.fit(X_train)

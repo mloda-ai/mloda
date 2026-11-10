@@ -41,7 +41,6 @@ class TestDataLifecycleManagerInit:
 
         assert manager.result_data_collection == {}
         assert manager.track_data_to_drop == {}
-        assert manager.artifacts == {}
         assert isinstance(manager.transformer, ComputeFrameworkTransformer)
 
     def test_init_accepts_transformer_argument(self) -> None:
@@ -660,48 +659,6 @@ class TestDataLifecycleManagerGetResults:
         assert "result3" in results
 
 
-class TestDataLifecycleManagerArtifacts:
-    """Test artifact management."""
-
-    def test_set_artifacts_stores_artifacts(self) -> None:
-        """Should store artifacts dictionary."""
-        manager = DataLifecycleManager()
-        artifacts = {"model": "trained_model", "scaler": "standard_scaler"}
-
-        manager.set_artifacts(artifacts)
-
-        assert manager.artifacts == artifacts
-
-    def test_get_artifacts_returns_artifacts(self) -> None:
-        """Should return stored artifacts."""
-        manager = DataLifecycleManager()
-        artifacts = {"model": "trained_model", "scaler": "standard_scaler"}
-        manager.artifacts = artifacts
-
-        result = manager.get_artifacts()
-
-        assert result == artifacts
-
-    def test_get_artifacts_returns_empty_dict_when_no_artifacts(self) -> None:
-        """Should return empty dict when no artifacts set."""
-        manager = DataLifecycleManager()
-
-        result = manager.get_artifacts()
-
-        assert result == {}
-
-    def test_set_artifacts_overwrites_existing_artifacts(self) -> None:
-        """Should overwrite existing artifacts."""
-        manager = DataLifecycleManager()
-        old_artifacts = {"old_model": "old"}
-        new_artifacts = {"new_model": "new"}
-
-        manager.artifacts = old_artifacts
-        manager.set_artifacts(new_artifacts)
-
-        assert manager.artifacts == new_artifacts
-
-
 class TestDataLifecycleManagerIntegration:
     """Integration tests for DataLifecycleManager."""
 
@@ -756,19 +713,6 @@ class TestDataLifecycleManagerIntegration:
         # Get results
         results = manager.get_results()
         assert len(results) == 2
-
-    def test_artifact_workflow(self) -> None:
-        """Test artifact storage and retrieval workflow."""
-        manager = DataLifecycleManager()
-
-        artifacts = {"model": "trained_model", "scaler": "standard_scaler", "encoder": "label_encoder"}
-
-        manager.set_artifacts(artifacts)
-        retrieved = manager.get_artifacts()
-
-        assert retrieved == artifacts
-        assert "model" in retrieved
-        assert retrieved["model"] == "trained_model"
 
     def test_mixed_location_and_local_data_workflow(self) -> None:
         """Test workflow with both local data and flight server data."""

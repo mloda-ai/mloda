@@ -20,7 +20,6 @@ import pytest
 
 from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, PluginCollector, mloda
-from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
 from tests.helpers.uuid7_assertions import assert_valid_uuid7
 from tests.helpers.plan_stubs import ReiterablePlan
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
@@ -35,6 +34,7 @@ from mloda.core.core.cfw_manager import CfwManager, shared_manager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.core.step.join_step import JoinStep
+from mloda.core.abstract_plugins.components.run_outcome import RunOutcome
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -226,13 +226,10 @@ class TestExecutionOrchestratorOrchestrationMethods:
         assert hasattr(orchestrator, "get_result")
         assert callable(orchestrator.get_result)
 
-    def test_has_get_artifacts_method(self) -> None:
-        """ExecutionOrchestrator should have a get_artifacts() method."""
-        mock_planner = Mock(spec=ExecutionPlan)
-        orchestrator = ExecutionOrchestrator(mock_planner)
+    def test_fresh_orchestrator_has_an_empty_run_outcome(self) -> None:
+        orchestrator = ExecutionOrchestrator(Mock(spec=ExecutionPlan))
 
-        assert hasattr(orchestrator, "get_artifacts")
-        assert callable(orchestrator.get_artifacts)
+        assert orchestrator.outcome == RunOutcome()
 
 
 class TestExecutionOrchestratorMethodSignatures:
@@ -498,7 +495,6 @@ class TestSyncModeSkipsSleep:
 
         orchestrator._execute_step = Mock(side_effect=fake_execute_step)  # type: ignore[method-assign]
         orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
-        orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
         orchestrator.join = Mock()  # type: ignore[method-assign]
 
         with patch("mloda.core.runtime.run.time.sleep") as mock_sleep:
@@ -532,7 +528,6 @@ class TestJoinAbandonsThreadsOnlyWhenCancelled:
 
         orchestrator._execute_step = Mock(side_effect=fake_execute_step)  # type: ignore[method-assign]
         orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
-        orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
         orchestrator.data_lifecycle_manager.pop_result_data_collection = Mock(  # type: ignore[method-assign]
             return_value=[(uuid_mod.uuid4(), 1)]
         )
@@ -580,7 +575,6 @@ class TestRegisterModesCache:
         orchestrator._execute_step = Mock()  # type: ignore[method-assign]
         orchestrator._process_step_result = Mock(side_effect=fake_process_step_result)  # type: ignore[method-assign]
         orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
-        orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
         orchestrator.join = Mock()  # type: ignore[method-assign]
 
         with patch("mloda.core.runtime.run.time.sleep") as mock_sleep:
@@ -781,7 +775,6 @@ class TestEnterPrestartsStandbyWorkers:
         )
         orchestrator._process_step_result = Mock(return_value=True)  # type: ignore[method-assign]
         orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
-        orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
         orchestrator.join = Mock()  # type: ignore[method-assign]
         return orchestrator
 
@@ -1312,9 +1305,6 @@ class TestFinalizeTouchesSharedStateOnlyInTheOwningProcess:
         orchestrator._owner_pid = os.getpid() + pid_offset
         orchestrator.location = "flight-location"
         orchestrator.cfw_register = Mock()
-        orchestrator.cfw_register.get_failed_rows.return_value = []
-        orchestrator.cfw_register.get_step_durations.return_value = []
-        orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
         orchestrator.join = Mock()  # type: ignore[method-assign]
         orchestrator.executor = Mock()
         orchestrator.executor.cfw_collection = {uuid_mod.uuid4(): Mock(get_object_ids=Mock(return_value=[]))}
@@ -1324,8 +1314,11 @@ class TestFinalizeTouchesSharedStateOnlyInTheOwningProcess:
 
         orchestrator.join.assert_called_once()
         assert drop_tables.call_count == int(owns)
-        assert orchestrator.cfw_register.get_artifacts.call_count == int(owns)
-        assert orchestrator.cfw_register.get_step_durations.call_count == int(owns)
+        assert orchestrator.cfw_register.get_run_outcome.call_count == int(owns)
+        if owns:
+            assert orchestrator.outcome is orchestrator.cfw_register.get_run_outcome.return_value
+        else:
+            assert orchestrator.outcome == RunOutcome()
 
 
 class TestExitOfANeverEnteredOrchestrator:
@@ -1419,7 +1412,7 @@ class TestRequestNotifiesExtendersOfRunCompletion:
 
         assert [label for label, _ in log] == ["join", "extender"]
 
-    @pytest.mark.parametrize("failing_call", ["join", "set_artifacts"])
+    @pytest.mark.parametrize("failing_call", ["join", "get_run_outcome"])
     def test_notifies_exactly_once_as_failed_when_finalizing_raised(
         self, failing_call: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -1430,7 +1423,7 @@ class TestRequestNotifiesExtendersOfRunCompletion:
             def on_run_complete(self, run: Any, outcome: Any) -> None:
                 outcomes.append(outcome)
 
-        owner = DataLifecycleManager if failing_call == "set_artifacts" else ExecutionOrchestrator
+        owner = CfwManager if failing_call == "get_run_outcome" else ExecutionOrchestrator
         monkeypatch.setattr(owner, failing_call, Mock(side_effect=Exception("teardown failed")))
 
         with pytest.raises(Exception, match="teardown failed"):
@@ -1543,7 +1536,6 @@ def _sync_orchestrator(plan: Any) -> ExecutionOrchestrator:
 
     orchestrator._execute_step = Mock(side_effect=fake_execute_step)  # type: ignore[method-assign]
     orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
-    orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
     orchestrator.join = Mock()  # type: ignore[method-assign]
     return orchestrator
 

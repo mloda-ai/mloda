@@ -17,6 +17,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from mloda.core.abstract_plugins.components.error_utils import MlodaRunError
+from mloda.core.abstract_plugins.components.run_outcome import RunOutcome
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.run_context import RunContext
@@ -55,7 +56,7 @@ class TestComputeStreamReturnsGenerator:
 
         mock_cfw_register = MagicMock()
         mock_cfw_register.get_error.return_value = None
-        mock_cfw_register.get_artifacts.return_value = {}
+        mock_cfw_register.get_run_outcome.return_value = RunOutcome()
         orchestrator.cfw_register = mock_cfw_register
 
         # Empty execution planner so the loop finishes immediately
@@ -78,7 +79,7 @@ class TestComputeStreamYieldsResults:
 
         mock_cfw_register = MagicMock()
         mock_cfw_register.get_error.return_value = None
-        mock_cfw_register.get_artifacts.return_value = {}
+        mock_cfw_register.get_run_outcome.return_value = RunOutcome()
         orchestrator.cfw_register = mock_cfw_register
 
         expected_uuid = uuid4()
@@ -127,7 +128,7 @@ class TestComputeStreamYieldsResults:
 
         mock_cfw_register = MagicMock()
         mock_cfw_register.get_error.return_value = None
-        mock_cfw_register.get_artifacts.return_value = {}
+        mock_cfw_register.get_run_outcome.return_value = RunOutcome()
         orchestrator.cfw_register = mock_cfw_register
 
         uuid_1 = uuid4()
@@ -163,7 +164,7 @@ class TestComputeStreamYieldsResults:
 
         mock_cfw_register = MagicMock()
         mock_cfw_register.get_error.return_value = None
-        mock_cfw_register.get_artifacts.return_value = {}
+        mock_cfw_register.get_run_outcome.return_value = RunOutcome()
         orchestrator.cfw_register = mock_cfw_register
 
         test_uuid = uuid4()
@@ -193,16 +194,16 @@ class TestComputeStreamYieldsResults:
 
 
 class TestComputeStreamCleanup:
-    """Tests that compute_stream calls set_artifacts and join in a finally block."""
+    """Tests that compute_stream stores the run outcome and calls join in a finally block."""
 
-    def test_calls_set_artifacts_after_full_consumption(self) -> None:
-        """compute_stream should call set_artifacts after generator is fully consumed."""
+    def test_stores_outcome_after_full_consumption(self) -> None:
+        """compute_stream should store the run outcome after generator is fully consumed."""
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
         mock_cfw_register = MagicMock()
         mock_cfw_register.get_error.return_value = None
-        mock_cfw_register.get_artifacts.return_value = {"key": "value"}
+        mock_cfw_register.get_run_outcome.return_value = RunOutcome(artifacts={"key": "value"})
         orchestrator.cfw_register = mock_cfw_register
 
         mock_planner.__iter__ = Mock(return_value=iter([]))
@@ -214,7 +215,8 @@ class TestComputeStreamCleanup:
         gen = orchestrator.compute_stream()
         list(gen)  # fully consume
 
-        orchestrator.data_lifecycle_manager.set_artifacts.assert_called_once_with(mock_cfw_register.get_artifacts())
+        assert orchestrator.outcome is mock_cfw_register.get_run_outcome.return_value
+        mock_cfw_register.get_run_outcome.assert_called_once()
 
     def test_calls_join_after_full_consumption(self) -> None:
         """compute_stream should call join after generator is fully consumed."""
@@ -223,7 +225,7 @@ class TestComputeStreamCleanup:
 
         mock_cfw_register = MagicMock()
         mock_cfw_register.get_error.return_value = None
-        mock_cfw_register.get_artifacts.return_value = {}
+        mock_cfw_register.get_run_outcome.return_value = RunOutcome()
         orchestrator.cfw_register = mock_cfw_register
 
         mock_planner.__iter__ = Mock(return_value=iter([]))
@@ -238,13 +240,13 @@ class TestComputeStreamCleanup:
         orchestrator.join.assert_called_once()
 
     def test_cleanup_happens_when_generator_not_fully_consumed(self) -> None:
-        """set_artifacts and join should be called even if generator is closed early."""
+        """outcome and join should be called even if generator is closed early."""
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
         mock_cfw_register = MagicMock()
         mock_cfw_register.get_error.return_value = None
-        mock_cfw_register.get_artifacts.return_value = {}
+        mock_cfw_register.get_run_outcome.return_value = RunOutcome()
         orchestrator.cfw_register = mock_cfw_register
 
         uuid_1 = uuid4()
@@ -270,7 +272,8 @@ class TestComputeStreamCleanup:
         next(gen)
         gen.close()
 
-        orchestrator.data_lifecycle_manager.set_artifacts.assert_called_once()
+        assert orchestrator.outcome is mock_cfw_register.get_run_outcome.return_value
+        mock_cfw_register.get_run_outcome.assert_called_once()
         orchestrator.join.assert_called_once()
 
 
@@ -447,7 +450,7 @@ class TestComputeStreamErrorHandling:
         mock_cfw_register.get_error_msg.return_value = "error message"
         original = ValueError("original worker failure") if has_original else None
         mock_cfw_register.take_error_exception.return_value = original
-        mock_cfw_register.get_artifacts.return_value = {}
+        mock_cfw_register.get_run_outcome.return_value = RunOutcome()
         orchestrator.cfw_register = mock_cfw_register
 
         mock_planner.__iter__ = Mock(return_value=iter([]))

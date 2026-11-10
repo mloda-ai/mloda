@@ -11,8 +11,7 @@ import logging
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, build_hook_extenders
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.failed_rows import FailedRows
-from mloda.core.abstract_plugins.components.step_duration import StepDuration
+from mloda.core.abstract_plugins.components.run_outcome import RunOutcome
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -135,6 +134,7 @@ class ExecutionOrchestrator:
     """
 
     _owner_pid: int | None = None
+    outcome: RunOutcome = RunOutcome()  # Visible to Mock(spec=...); __init__ assigns each instance its own.
 
     def __init__(
         self,
@@ -157,6 +157,7 @@ class ExecutionOrchestrator:
             flight_server: An optional flight server for data transfer.
             run_context: The default run context used when __enter__ is called without one.
         """
+        self.outcome = RunOutcome()
         self.execution_planner = execution_planner
         self._plan_steps: list[tuple[Any, set[UUID], set[UUID]]] = []
         self.data_access_collection = data_access_collection
@@ -318,9 +319,7 @@ class ExecutionOrchestrator:
         in_other_process = self._in_other_process()
         try:
             if not in_other_process:
-                self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
-                self.data_lifecycle_manager.set_failed_rows(self.cfw_register.get_failed_rows())
-                self.data_lifecycle_manager.set_step_durations(self.cfw_register.get_step_durations())
+                self.outcome = self.cfw_register.get_run_outcome()
         finally:
             self.join(abandon_threads=cancelled)
         if not in_other_process:
@@ -691,20 +690,6 @@ class ExecutionOrchestrator:
             if self.manager is not None:
                 release_shared_manager(self.manager)
                 self.manager = None
-
-    def get_artifacts(self) -> dict[str, Any]:
-        """
-        Gets the artifacts.
-        """
-        return self.data_lifecycle_manager.get_artifacts()
-
-    def get_failed_rows(self) -> tuple[FailedRows, ...]:
-        """Gets the rows feature groups reported as valueless."""
-        return self.data_lifecycle_manager.get_failed_rows()
-
-    def get_step_durations(self) -> tuple[StepDuration, ...]:
-        """Gets the calculate_feature duration of each completed feature group step."""
-        return self.data_lifecycle_manager.get_step_durations()
 
     def _cfw_to_occupy(self, step: Any) -> UUID | None:
         """Resolve the cfw a step needs exclusively, without creating one."""

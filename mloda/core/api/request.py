@@ -1048,9 +1048,7 @@ class mlodaAPI:
                 run_id=run_context.run_id,
                 plan_id=self.plan_id,
                 connection_handles=dict(self._connection_handles),
-                failed_rows=runner.get_failed_rows(),
-                step_durations=runner.get_step_durations(),
-                artifacts=runner.get_artifacts(),
+                outcome=runner.outcome,
             )
 
     def stream_run(
@@ -1191,9 +1189,7 @@ class mlodaAPI:
             finally:
                 with self._credential_redaction(literals, identity):
                     self._exit_runner_context(runner)
-                    stream_outcome.artifacts = runner.get_artifacts()
-                    stream_outcome.failed_rows = runner.get_failed_rows()
-                    stream_outcome.step_durations = runner.get_step_durations()
+                    stream_outcome.value = runner.outcome
         except GeneratorExit:
             outcome = LifecycleOutcome("cancelled")
             raise

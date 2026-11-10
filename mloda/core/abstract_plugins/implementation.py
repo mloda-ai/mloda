@@ -324,14 +324,8 @@ def unregistered_named_implementations(name: str) -> list[type[Implementation[An
     super().__init_subclass__(), so it was never registered and cannot be pinned.
     """
     registered = _registry.members()
-    return [
-        impl
-        for impl in get_all_subclasses(Implementation)
-        if impl not in registered
-        and _is_concrete(impl)
-        and _is_pair(impl)
-        and name in (impl.__name__, f"{impl.__module__}:{impl.__qualname__}")
-    ]
+    named = named_implementations(name, get_all_subclasses(Implementation))
+    return [impl for impl in named if impl not in registered and _is_concrete(impl) and _is_pair(impl)]
 
 
 _ACCESSIBLE: ContextVar[frozenset[type[Implementation[Any]]] | None] = ContextVar(

@@ -14,7 +14,7 @@ from typing import Any
 
 from mloda.core.abstract_plugins.components.credential_handle import CredentialHandleSpec
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, mark_credential_abort
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import COLUMN_SEPARATOR
 from mloda.core.abstract_plugins.components.options import Options
@@ -296,6 +296,10 @@ class Catalog:
             )
         if missing and resolved.feature_group is None:
             return failure_result("Describe", ConfigError(next(iter(missing.values()))))
+        if resolved.credential_refusal:
+            # Rebuilt from the names-only text, so the log line has no frames.
+            refusal = mark_credential_abort(ValueError(resolved.error or ""))
+            return failure_result("Describe", refusal, trusted=self._settings.trusted_caller)
         if resolved.feature_group is not None:
             return self._described(name, resolved.feature_group, resolved)
         if resolved.candidates:

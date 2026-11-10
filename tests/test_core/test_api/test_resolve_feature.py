@@ -32,6 +32,7 @@ from mloda.core.api import plugin_docs
 from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, RedefinitionConflictError
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
+from tests.test_interfaces.source_groups import CRED_FEATURE, CRED_KEY, CredentialReadMcp8
 from mloda.user import PluginLoader
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -863,6 +864,33 @@ class TestResolveFeatureIsNonThrowing:
 
         assert result.error is not None
         assert "ValueError" in result.error
+
+    def test_a_misspelled_credential_handle_is_flagged_as_a_credential_refusal(self) -> None:
+        handle = "rf_misspelled_handle_vq7w"
+        dac = DataAccessCollection(credentials={"rf_registered_handle_pn3": {"token": ABORT_ECHO_SECRET}})
+
+        result = resolve_feature(
+            CRED_FEATURE,
+            options=Options(group={CRED_KEY: handle}),
+            plugin_collector=PluginCollector.enabled_feature_groups({CredentialReadMcp8}),
+            data_access_collection=dac,
+        )
+
+        assert result.feature_group is None
+        assert result.candidates == []
+        assert result.credential_refusal is True
+        assert result.error is not None
+        assert handle in result.error
+        assert ABORT_ECHO_SECRET not in result.error
+
+    def test_an_ordinary_raising_matcher_is_not_a_credential_refusal(self) -> None:
+        result = self._resolve_abort("bad", secret_dac=False, marked=False)
+
+        assert result.error is not None
+        assert result.credential_refusal is False
+
+    def test_credential_refusal_defaults_to_false(self) -> None:
+        assert ResolvedFeature("n", None, [], None).credential_refusal is False
 
     def test_success_with_a_credential_collection_has_no_error(self) -> None:
         dac = DataAccessCollection(credentials={"vault": {"token": ABORT_ECHO_SECRET}})

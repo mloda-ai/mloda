@@ -1,6 +1,7 @@
 """Catalog search and describe over a settings-scoped set of FeatureGroups and configured sources."""
 
 import json
+import logging
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, ClassVar
@@ -677,6 +678,7 @@ class TestDescribeOptionAllowList:
 
 
 HANDLE = "mcp_vault_handle_zq"
+MISSPELLED = "mcp_misspelled_handle_wk4x"
 
 
 def _credential_catalog(tmp_path: Path, **kwargs: Any) -> Catalog:
@@ -703,7 +705,9 @@ class TestCredentialCatalog:
         assert HANDLE not in json.dumps(result)
 
     def test_describe_without_the_operator_handle_is_an_error(self, tmp_path: Path) -> None:
-        assert is_error(_credential_catalog(tmp_path).describe(CRED_FEATURE))
+        result = _credential_catalog(tmp_path).describe(CRED_FEATURE)
+
+        assert _error_code(result) == "internal"
 
     def test_describe_with_an_unavailable_credential_is_an_error_without_leaks(self, tmp_path: Path) -> None:
         (tmp_path / "gone.txt").write_text("")
@@ -716,10 +720,52 @@ class TestCredentialCatalog:
         result = catalog.describe(CRED_FEATURE)
 
         assert is_error(result), result
+        assert result["error"]["message"] == "Describe failed with ConfigError."
         text = json.dumps(result)
         assert HANDLE not in text
         assert "MISSING_TOKEN_VAR" not in text
         assert "gone.txt" not in text
+
+    @staticmethod
+    def _describe_refused(tmp_path: Path, handle: str | None, trusted: bool) -> dict[str, Any]:
+        overrides: dict[str, Any] = {} if handle is None else {"options": {CRED_KEY: handle}}
+        return _credential_catalog(tmp_path, trusted_caller=trusted, **overrides).describe(CRED_FEATURE)
+
+    @pytest.mark.parametrize(
+        ("handle", "named"),
+        [(MISSPELLED, [MISSPELLED]), (None, [CRED_KEY, "is not set"])],
+        ids=["misspelled", "unset"],
+    )
+    def test_a_trusted_caller_is_told_what_is_wrong(self, tmp_path: Path, handle: str | None, named: list[str]) -> None:
+        result = self._describe_refused(tmp_path, handle, True)
+
+        assert _error_code(result) == "internal"
+        for needle in named:
+            assert needle in result["error"]["message"]
+        assert "No FeatureGroup provides" not in json.dumps(result)
+
+    @pytest.mark.parametrize("handle", [MISSPELLED, None], ids=["misspelled", "unset"])
+    def test_an_untrusted_caller_gets_the_generic_message(self, tmp_path: Path, handle: str | None) -> None:
+        result = self._describe_refused(tmp_path, handle, False)
+
+        assert _error_code(result) == "internal"
+        assert result["error"]["message"] == "Describe failed with ValueError."
+        dumped = json.dumps({**result, "error": {**result["error"], "audit_id": None}})
+        assert MISSPELLED not in dumped
+        assert "No FeatureGroup provides" not in dumped
+
+    @pytest.mark.parametrize("trusted", [True, False], ids=["trusted", "untrusted"])
+    @pytest.mark.parametrize("handle", [MISSPELLED, None], ids=["misspelled", "unset"])
+    def test_the_refusal_is_logged_with_the_audit_id(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture, handle: str | None, trusted: bool
+    ) -> None:
+        with caplog.at_level(logging.ERROR, logger="mloda.interfaces.service"):
+            result = self._describe_refused(tmp_path, handle, trusted)
+
+        audit_id = result["error"]["audit_id"]
+        records = [r for r in caplog.records if r.name == "mloda.interfaces.service" and r.levelno == logging.ERROR]
+        assert len(records) == 1
+        assert audit_id in records[0].getMessage()
 
     def test_describe_does_not_show_a_default_handle(self, tmp_path: Path) -> None:
         result = _credential_catalog(tmp_path).describe(CRED_DEFAULT_FEATURE)

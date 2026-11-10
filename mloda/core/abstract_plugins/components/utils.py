@@ -217,17 +217,27 @@ def failure_report(exc: BaseException) -> tuple[str, str]:
     return message, tb
 
 
+def safe_field_with_abort(
+    read: Callable[[], T],
+    fallback: T,
+    catching: tuple[type[Exception], ...] = (Exception,),
+) -> tuple[T, str | None, bool]:
+    """Like safe_field_with_error, plus whether the raise was a marked credential refusal."""
+    try:
+        return read(), None, False
+    except catching as exc:
+        message = safe_exc_str(exc)
+        return fallback, message if message.strip() else type(exc).__name__, is_credential_abort(exc)
+
+
 def safe_field_with_error(
     read: Callable[[], T],
     fallback: T,
     catching: tuple[type[Exception], ...] = (Exception,),
 ) -> tuple[T, str | None]:
     """Like safe_field but returns (value, None), else (fallback, str(exc) or the exception type name when blank)."""
-    try:
-        return read(), None
-    except catching as exc:
-        message = safe_exc_str(exc)
-        return fallback, message if message.strip() else type(exc).__name__
+    value, error, _ = safe_field_with_abort(read, fallback, catching)
+    return value, error
 
 
 def as_str(value: Any) -> str:

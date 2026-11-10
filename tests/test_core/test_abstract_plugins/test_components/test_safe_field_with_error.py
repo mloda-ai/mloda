@@ -4,7 +4,11 @@ TestSbfixSafeFieldWithErrorSwallowsRaisingStr is a red-phase test: it currently 
 caught exception's own str(exc) is read eagerly and escapes the guard.
 """
 
-from mloda.core.abstract_plugins.components.utils import safe_field_with_error
+from mloda.core.abstract_plugins.components.utils import (
+    mark_credential_abort,
+    safe_field_with_abort,
+    safe_field_with_error,
+)
 
 
 def _sbfix_boom() -> int:
@@ -62,3 +66,23 @@ class TestSbfixSafeFieldWithErrorSwallowsRaisingStr:
         assert value == 0
         # Once fixed, the guarded str() degrades to the type name, same as safe_field's own guard.
         assert error == "Bad"
+
+
+def _credential_boom() -> int:
+    raise mark_credential_abort(ValueError("credential handle boom"))
+
+
+class TestSafeFieldWithAbort:
+    """safe_field_with_abort(read, fallback) returns (value, error, is_credential_abort)."""
+
+    def test_success(self) -> None:
+        assert safe_field_with_abort(lambda: 5, 0) == (5, None, False)
+
+    def test_ordinary_failure_is_not_a_credential_abort(self) -> None:
+        assert safe_field_with_abort(_sbfix_boom, 0) == (0, "sbfix boom", False)
+
+    def test_marked_failure_is_a_credential_abort(self) -> None:
+        assert safe_field_with_abort(_credential_boom, 0) == (0, "credential handle boom", True)
+
+    def test_blank_message_falls_back_to_the_type_name(self) -> None:
+        assert safe_field_with_abort(_sbfix852_blank_boom, 0) == (0, "RuntimeError", False)

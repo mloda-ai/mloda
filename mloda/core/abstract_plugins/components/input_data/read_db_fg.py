@@ -107,10 +107,8 @@ class ReadDBFG(SourceFeatureGroup):
     The base serves table catalogs; QUERY_ROUTE opts in to query text. Third-party groups should run
     mloda._testing.source.read_db_suite (to be re-exported by mloda.testing).
 
-    A subclass whose find_sources returns its own access type (not DBTable/DBQuery) does not need
-    to override _hidden_source, _raw_reason, data_access_identity or columns: those degrade to the
-    match source (identity/hidden source) or None (columns/reason). Override them only when the
-    custom access can name a distinct identity or enumerate columns.
+    A custom access type must override load_neutral; override _hidden_source if match.source names something
+    unpointed users must not see (and the other hooks to give a distinct identity or columns).
     """
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("credentials", NamePolicy.CHECKED, True),)
@@ -288,9 +286,7 @@ class ReadDBFG(SourceFeatureGroup):
     def data_access_identity(cls, match: SourceMatch) -> str:
         access = match.access
         if not isinstance(access, (DBTable, DBQuery)):
-            # A subclass find_sources may return its own access type; fall back to
-            # the match source instead of raising on access.credentials.
-            return match.source
+            return super().data_access_identity(match)
         identity = cls.database_identity(access.credentials)
         if isinstance(access, DBQuery):
             return f"{identity}::query:{sha256(access.query_text.encode()).hexdigest()[:16]}"
@@ -385,7 +381,7 @@ class ReadDBFG(SourceFeatureGroup):
     def columns(cls, match: SourceMatch) -> Collection[str] | None:
         access = match.access
         if not isinstance(access, DBTable) or access.table is None:
-            return None
+            return super().columns(match)
         catalog, _ = cls._catalog(access.credentials)
         return None if catalog is None else catalog.get(access.table)
 
@@ -403,7 +399,7 @@ class ReadDBFG(SourceFeatureGroup):
     def _raw_reason(cls, match: SourceMatch) -> str | None:
         access = match.access
         if not isinstance(access, DBTable):
-            return None
+            return super().unknown_columns_reason(match)
         catalog, reason = cls._catalog(access.credentials)
         if catalog is not None and access.table is not None and access.table not in catalog:
             return "its preset table does not exist"
@@ -415,15 +411,16 @@ class ReadDBFG(SourceFeatureGroup):
             return cls.data_access_identity(match)
         if isinstance(match.access, DBTable):
             return cls.database_identity(match.access.credentials)
-        return match.source
+        return super()._hidden_source(match)
 
     @classmethod
     def ambiguity_fix(
         cls, feature_name: str, matches: list[SourceMatch], data_access_collection: DataAccessCollection | None
     ) -> str:
         name = cls.get_class_name()
-        identities = {cls.database_identity(match.access.credentials) for match in matches}
-        logins = {cls.login_key(match.access.credentials) for match in matches}
+        credentials_seen = [c for c in (cls.match_credentials(match) for match in matches) if c is not None]
+        identities = {cls.database_identity(c) for c in credentials_seen}
+        logins = {cls.login_key(c) for c in credentials_seen}
         if len(identities) > 1 or len(logins) > 1:
             handles = sorted(
                 handle
@@ -435,6 +432,8 @@ class ReadDBFG(SourceFeatureGroup):
             hint = f" (credential handles: {_capped(handles)})" if handles else ""
             what = "one database" if len(identities) > 1 else "one credential handle"
             return f"select {what} with data_access_handle{hint}, or point {name} at one credential."
+        if not credentials_seen:
+            return f"select one match with data_access_handle, or point {name} at one credential."
         return (
             f"point {name} at one table with options={{{name!r}: "
             f"Credential({cls.CREDENTIAL_KEY}=<value>, {cls.TABLE_KEY}=<table>)}}, "

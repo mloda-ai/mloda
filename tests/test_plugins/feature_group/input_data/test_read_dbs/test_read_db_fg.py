@@ -37,6 +37,8 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 KEY = "toyfmt_basedb"
+CUSTOM_KEY = "toyfmt_customdb"
+CUSTOM_FEATURE = "toyfmt_custom_col"
 
 
 class FakeConnection:
@@ -133,6 +135,52 @@ class ToyPartialDB(ReadDBFG):
     @classmethod
     def table_columns(cls, connection: Any, table: str) -> Collection[str]:
         return ()
+
+
+@dataclass(frozen=True)
+class _CustomAccess:
+    handle: str
+
+
+class ToyCustomAccessDB(ReadDBFG):
+    """A group whose find_sources returns its own access type, not DBTable/DBQuery."""
+
+    @classmethod
+    def is_valid_credentials(cls, credentials: Any) -> bool:
+        return isinstance(credentials, Mapping) and isinstance(credentials.get(CUSTOM_KEY), str)
+
+    @classmethod
+    def database_identity(cls, credentials: Any) -> str:
+        return "toyfmt-custom-db"
+
+    @classmethod
+    def find_sources(
+        cls, route: ClaimRoute, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
+    ) -> list[SourceMatch]:
+        if feature_name != CUSTOM_FEATURE:
+            return []
+        return [SourceMatch(f"toyfmt-custom-db::{handle}", _CustomAccess(handle)) for handle in ("found1", "found2")]
+
+    @classmethod
+    def columns(cls, match: SourceMatch) -> Collection[str] | None:
+        found = isinstance(match.access, _CustomAccess) and match.access.handle.startswith("found")
+        return (CUSTOM_FEATURE,) if found else None
+
+    @classmethod
+    def connect(cls, credentials: Any) -> Any:
+        raise NotImplementedError
+
+    @classmethod
+    def list_tables(cls, connection: Any) -> Collection[str]:
+        return []
+
+    @classmethod
+    def table_columns(cls, connection: Any, table: str) -> Collection[str]:
+        return []
+
+    @classmethod
+    def produce_rows(cls, connection: Any, table: str, features: Any) -> Any:
+        raise NotImplementedError
 
 
 @pytest.fixture(autouse=True)
@@ -355,6 +403,33 @@ class TestInheritedDefaults:
         assert ToyBaseDB.data_access_identity(match) == match.source
         assert "toyfmt-secret-value" not in match.source
         assert "toyfmt-secret-value" not in repr(match)
+
+    def test_a_custom_access_match_degrades_to_the_source_and_no_columns(self) -> None:
+        match = SourceMatch("toyfmt-custom-db::weird", _CustomAccess("h1"))
+
+        assert ToyCustomAccessDB.data_access_identity(match) == "toyfmt-custom-db::weird"
+        assert ToyCustomAccessDB.columns(match) is None
+        assert ToyCustomAccessDB._raw_reason(match) is None
+        assert ToyCustomAccessDB.unknown_columns_reason(match) is None
+        assert ToyCustomAccessDB._hidden_source(match) == "toyfmt-custom-db::weird"
+
+
+class TestCustomAccessPlanning:
+    DAC = DataAccessCollection(credentials={"custom_h": {CUSTOM_KEY: "x"}})
+    PLUGINS: FeatureGroupEnvironmentMapping = {ToyCustomAccessDB: {PythonDictFramework}}
+
+    def test_a_feature_the_group_does_not_find_evaluates_without_an_attribute_error(self) -> None:
+        result = IdentifyFeatureGroupClass.evaluate(Feature("toyfmt_custom_absent"), self.PLUGINS, None, self.DAC)
+
+        assert ToyCustomAccessDB not in result.identified
+
+    def test_two_custom_access_matches_raise_the_handle_ambiguity_text(self) -> None:
+        with pytest.raises(ValueError, match="data_access_handle") as excinfo:
+            IdentifyFeatureGroupClass.evaluate(Feature(CUSTOM_FEATURE), self.PLUGINS, None, self.DAC)
+
+        assert not isinstance(excinfo.value, AttributeError)
+        assert "toyfmt-custom-db::found1" in str(excinfo.value)
+        assert "toyfmt-custom-db::found2" in str(excinfo.value)
 
 
 class RoleConnection(FakeConnection):
@@ -850,46 +925,3 @@ class TestEndToEndOnAThirdPartyGroup:
         dac = DataAccessCollection(credentials={"toy_handle": {KEY: "a"}})
         result = IdentifyFeatureGroupClass.evaluate(Feature("ReadDBFG"), {ReadDBFG: {PythonDictFramework}}, None, dac)
         assert ReadDBFG not in result.identified
-
-
-@dataclass(frozen=True)
-class _CustomAccess:
-    handle: str
-
-
-class ToyCustomAccessDB(ReadDBFG):
-    """A group whose find_sources returns its own access type, not DBTable/DBQuery."""
-
-    @classmethod
-    def is_valid_credentials(cls, credentials: Any) -> bool:
-        return True
-
-    @classmethod
-    def database_identity(cls, credentials: Any) -> str:
-        return "toyfmt-custom-db"
-
-    @classmethod
-    def connect(cls, credentials: Any) -> Any:
-        raise NotImplementedError
-
-    @classmethod
-    def list_tables(cls, connection: Any) -> Collection[str]:
-        return []
-
-    @classmethod
-    def table_columns(cls, connection: Any, table: str) -> Collection[str]:
-        return []
-
-    @classmethod
-    def produce_rows(cls, connection: Any, table: str, features: Any) -> Any:
-        raise NotImplementedError
-
-
-def test_custom_access_type_degrades_gracefully() -> None:
-    match = SourceMatch("toyfmt-custom-db::weird", _CustomAccess("h1"))
-
-    assert ToyCustomAccessDB.data_access_identity(match) == "toyfmt-custom-db::weird"
-    assert ToyCustomAccessDB.columns(match) is None
-    assert ToyCustomAccessDB._raw_reason(match) is None
-    assert ToyCustomAccessDB.unknown_columns_reason(match) is None
-    assert ToyCustomAccessDB._hidden_source(match) == "toyfmt-custom-db::weird"

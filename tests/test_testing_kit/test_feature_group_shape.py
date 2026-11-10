@@ -524,6 +524,7 @@ def _raise_boom(cls: Any) -> Any:
 
 _BROKEN_DECLARATIONS: dict[str, tuple[str, Callable[[Any], Any]]] = {
     "version_empty": ("version", lambda cls: ""),
+    "version_empty_inherited": ("inherited:version", lambda cls: ""),
     "version_non_str": ("version", lambda cls: 5),
     "version_raises": ("version", _raise_boom),
     "rule_set_of_int": ("compute_framework_rule", lambda cls: {int}),
@@ -538,6 +539,9 @@ def make_broken_declaration(broken: str) -> type[FeatureGroup]:
     if broken == "not_a_group":
         return cast("type[FeatureGroup]", type("NotAGroup", (), {}))
     attr, body = _BROKEN_DECLARATIONS[broken]
+    if attr.startswith("inherited:"):
+        middle = type("BrokenMiddle", (make_toy_group(),), {"__module__": __name__, attr[10:]: classmethod(body)})
+        return cast("type[FeatureGroup]", type("BrokenDeclaration", (middle,), {"__module__": __name__}))
     namespace = {"__module__": __name__, attr: classmethod(body)}
     return cast("type[FeatureGroup]", type("BrokenDeclaration", (make_toy_group(),), namespace))
 
@@ -824,6 +828,8 @@ def test_requests_binding_different_key_sets_fail_with_one_clear_message() -> No
     assert len(names) == 1, result.failures
     assert "separate" in names[0], names
     assert "is declared but" not in names[0]
+    assert any(n.startswith("declaration: inherited version() raised") for n in result.notes), result.notes
+    assert not any(f.startswith("declaration:") for f in result.failures), result.failures
 
 
 def test_no_requests_keeps_required_option_check_for_declared_name_bound_key() -> None:
@@ -1273,6 +1279,8 @@ def test_malformed_rule_skips_run_with_declaration_failure(broken: str) -> None:
     result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
     assert any(f.startswith("declaration:") and "compute_framework_rule" in f for f in result.failures), result.failures
     assert "run: not run (compute_framework_rule is malformed)" in result.notes, result.notes
+    if broken == "rule_list":
+        assert any("got list" in f for f in result.failures), result.failures
 
 
 def test_unavailable_adapter_notes_run_skipped() -> None:

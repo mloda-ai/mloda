@@ -10,6 +10,7 @@ from mloda._testing.feature_group_shape import (
     _UNKNOWN_VALUE,
     _probe,
     _base_options,
+    _cell_same,
     _first_value,
     _name_bound_keys,
     _availability_reason,
@@ -79,19 +80,28 @@ def _optional_probes(
 
 
 def _value_probes(
-    subclass: type[FeatureGroup], parent: type[FeatureGroup], base: Options, selecting: Options
+    subclass: type[FeatureGroup],
+    parent: type[FeatureGroup],
+    base: Options,
+    selecting: Options,
+    bound: frozenset[str] = frozenset(),
 ) -> list[tuple[str, Any, Callable[[], Options]]]:
     """(key, value, options factory) per selecting key and other value; a fresh Options per call."""
     reserved = {k.value for k in DefaultOptionKeys}
     probes: list[tuple[str, Any, Callable[[], Options]]] = []
     for section in ("group", "context"):
         for key, chosen in getattr(selecting, section).items():
-            if key in reserved:
+            if key in reserved or key in bound:
                 continue
             found = [(c.PROPERTY_MAPPING or {}).get(key) for c in (subclass, parent)]
-            spec = next((f for f in found if isinstance(f, PropertySpec)), None)
-            values = [v for v in (spec.allowed_values if spec and spec.allowed_values else ()) if v != chosen]
-            if spec is None or not spec.allowed_values or not spec.strict_validation:
+            specs = [f for f in found if isinstance(f, PropertySpec)]
+            allowed = [v for s in specs for v in (s.allowed_values or ())]
+            others = [v for v in allowed if not _cell_same(v, chosen)]
+            values = sorted(
+                {repr(v): v for v in others}.values(),
+                key=repr,
+            )
+            if not specs or not all(s.allowed_values and s.strict_validation for s in specs):
                 values.append(_UNKNOWN_VALUE)
             for value in values:
                 probes.append((key, value, functools.partial(_replaced, base, selecting, section, key, value)))
@@ -164,12 +174,13 @@ def _scope_failures(
         return failures
     label = f"without {sorted(keys)}"
     probes = [("", base), *_optional_probes(parent, base, keys, bound)]
+    value_probes = _value_probes(subclass, parent, base, selecting, bound)
     for name in names:
         for key, options in probes:
             failure = _plain_failure(name, options, f"with option '{key}'" if key else label, mapping, parent, subclass)
             if failure is not None:
                 failures.append(failure)
-        for key, value, make in _value_probes(subclass, parent, base, selecting):
+        for key, value, make in value_probes:
             failures += _value_failure(name, key, value, make, mapping, parent, subclass)
         selected, selected_message, aborted = _evaluate(Feature(name, _combined(base, selecting)), mapping)
         if aborted is not None:

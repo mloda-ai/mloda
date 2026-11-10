@@ -278,10 +278,8 @@ def _check_secrets(cls: type[FeatureGroup]) -> tuple[list[str], list[str]]:
     return failures, notes
 
 
-_RULE_MALFORMED = "declaration: compute_framework_rule() must return None or a set of ComputeFramework subclasses"
-
-
-def _check_declarations(cls: type[FeatureGroup]) -> tuple[list[str], list[str]]:
+def _check_declarations(cls: type[FeatureGroup]) -> tuple[list[str], list[str], bool]:
+    """(failures, notes, rule_valid)."""
     failures: list[str] = []
     notes: list[str] = []
     overridden = inspect.getattr_static(cls, "version") is not inspect.getattr_static(FeatureGroup, "version")
@@ -300,8 +298,12 @@ def _check_declarations(cls: type[FeatureGroup]) -> tuple[list[str], list[str]]:
         not isinstance(rule, set)
         or not all(isinstance(f, type) and is_nominal_subclass(f, ComputeFramework) for f in rule)
     ):
-        failures.append(_RULE_MALFORMED)
-    return failures, notes
+        failures.append(
+            "declaration: compute_framework_rule() must return None or a set of ComputeFramework subclasses, "
+            f"got {type(rule).__name__}"
+        )
+        return failures, notes, False
+    return failures, notes, error is None
 
 
 def _cell_same(x: Any, y: Any) -> bool:
@@ -794,7 +796,7 @@ def check_feature_group_shape(
 ) -> CheckResult:
     """Check a FeatureGroup's match contract and, given input_data, its run.
 
-    Declarations are checked too: a FeatureGroup subclass, a non-empty str version(), a set-or-None compute_framework_rule().
+    Declarations are checked too: a non-empty str version() and a set-or-None compute_framework_rule().
 
     A raising matcher is a non-match; an escalated match abort is a failure with its text.
     With require_run, a rule exclusion, a missing serving Implementation or a route block is a failure instead of a note.
@@ -813,7 +815,7 @@ def check_feature_group_shape(
             failures=(f"declaration: {name} is not a FeatureGroup subclass",),
             notes=(),
         )
-    declaration_failures, declaration_notes = _check_declarations(cls)
+    declaration_failures, declaration_notes, rule_valid = _check_declarations(cls)
     if isinstance(requests, str):
         return CheckResult(
             check="feature_group_shape",
@@ -863,7 +865,7 @@ def check_feature_group_shape(
     notes: list[str] = list(secret_notes)
     if input_data is None:
         notes.append("run: not run (no input_data); pass input_data to check outputs, types and determinism")
-    elif any("compute_framework_rule()" in f for f in declaration_failures):
+    elif not rule_valid:
         notes.append("run: not run (compute_framework_rule is malformed)")
     else:
         run_names = requested if requested is not None else declared or [cls.get_class_name()]

@@ -318,11 +318,7 @@ def loaded_implementations() -> list[type[Implementation[Any]]]:
 
 
 def unregistered_named_implementations(name: str) -> list[type[Implementation[Any]]]:
-    """Live concrete Implementation subclasses matching a pin name that the registry never saw.
-
-    A class lands here when its __init_subclass__ override (or a mixin's) skipped
-    super().__init_subclass__(), so it was never registered and cannot be pinned.
-    """
+    """Live concrete Implementation subclasses matching a pin name that skipped registration."""
     registered = _registry.members()
     named = named_implementations(name, get_all_subclasses(Implementation))
     return [impl for impl in named if impl not in registered and _is_concrete(impl) and _is_pair(impl)]

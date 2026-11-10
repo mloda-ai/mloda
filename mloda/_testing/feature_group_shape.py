@@ -6,6 +6,7 @@ import inspect
 import math
 import re
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from itertools import product
 from typing import Any, NamedTuple
 
@@ -24,7 +25,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
     strip_uri_userinfo,
 )
 from mloda.core.abstract_plugins.components.data_types import DataType
-from mloda.core.abstract_plugins.components.divergence import Divergence
+from mloda.core.abstract_plugins.components.divergence import Divergence, DivergenceKind
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     ANY_OUTPUT_PART,
@@ -394,8 +395,68 @@ def _check_outputs(
     return failures
 
 
-def _check_types(adapter: FrameworkAdapter, expected: dict[str, DataType], result: Any, notes: list[str]) -> list[str]:
+@dataclass(eq=False)
+class _Declared:
+    owner: str
+    record: Divergence
+    from_implementation: bool
+
+
+_Coverage = dict[str, list[_Declared]]
+
+
+def _declared_records(cls: type[FeatureGroup], adapter: FrameworkAdapter) -> list[_Declared]:
+    found = [_Declared(cls.__name__, r, False) for r in cls.divergence_records()]
+    impl = _serving_implementation(cls, adapter)
+    if impl is not None:
+        found += [_Declared(impl.__name__, r, True) for r in impl.divergence_records()]
+    return [d for d in found if d.record.kind in (DivergenceKind.TYPE, DivergenceKind.GAP)]
+
+
+def _coverage(
+    cls: type[FeatureGroup], base: Options, records: list[_Declared], written: list[tuple[str, str, frozenset[str]]]
+) -> _Coverage:
+    if not records:
+        return {}
+    subtypes: dict[str, str | None] = {}
+    covering: _Coverage = {}
+    for column, name, parts in written:
+        split = cls.split_output_part(name) if not parts else None
+        if split is not None:
+            name, parts = split[0], frozenset({split[1]})
+        if name not in subtypes:
+            subtypes[name], _ = safe_field_with_error(lambda: Implementation.canonical_subtype(cls, name, base), None)
+        covering[column] = [d for d in records if d.record.applies_to(subtypes[name], parts)]
+    return covering
+
+
+def _excused(text: str, covering: list[_Declared], used: set[_Declared]) -> str | None:
+    """The type note that replaces a failure when a declared record covers its column; marks the record used."""
+    if not covering:
+        return None
+    declared = covering[0]
+    used.add(declared)
+    record = declared.record
+    return f"type: {text}; declared {record.kind.value} divergence on {declared.owner}: {record.describe()}"
+
+
+def _check_types(
+    adapter: FrameworkAdapter,
+    expected: dict[str, DataType],
+    result: Any,
+    notes: list[str],
+    covering: _Coverage,
+    used: set[_Declared],
+) -> list[str]:
     failures = []
+
+    def fail(name: str, text: str) -> None:
+        note = _excused(text, covering.get(name, []), used)
+        if note is None:
+            failures.append(f"type: {text}")
+        else:
+            notes.append(note)
+
     for name, data_type in expected.items():
         if name not in adapter.column_names(result):
             continue
@@ -404,12 +465,12 @@ def _check_types(adapter: FrameworkAdapter, expected: dict[str, DataType], resul
             continue
         if exact is False:
             if adapter.lost_type(result, name):
-                failures.append(f"type: '{name}' lost its type")
+                fail(name, f"'{name}' lost its type")
             else:
-                failures.append(f"type: '{name}' is {adapter.column_type(result, name)}, expected {data_type.name}")
+                fail(name, f"'{name}' is {adapter.column_type(result, name)}, expected {data_type.name}")
             continue
         if not all(value_fits(data_type, v) for v in adapter.column_values(result, name)):
-            failures.append(f"type: '{name}' holds values that do not fit {data_type.name}")
+            fail(name, f"'{name}' holds values that do not fit {data_type.name}")
         if adapter.capabilities.typed_columns:
             notes.append(
                 f"type: '{name}' checked by value only, {type(adapter).__name__} has no exact {data_type.name} type"
@@ -425,12 +486,17 @@ def _check_zero_rows(
     base: Options,
     result: Any,
     expected: dict[str, DataType],
-) -> list[str]:
+    notes: list[str],
+    covering: _Coverage,
+    used: set[_Declared],
+) -> tuple[list[str], set[str]]:
+    """The failures and the declared-type columns compared on zero rows without a type change."""
     empty = TypedTestData({n: (t, []) for n, t in data.types.items()})
     out, error = _run(cls, adapter, empty, names, base)
     if error is not None:
-        return [f"zero_rows: run on zero rows raised: {error}"]
+        return [f"zero_rows: run on zero rows raised: {error}"], set()
     failures = []
+    unchanged: set[str] = set()
     if adapter.row_count(out) != 0:
         failures.append(f"zero_rows: {adapter.row_count(out)} rows came back for zero input rows")
     run_time = {n for n in names if _concrete_parts(cls, n, base) is None}
@@ -460,9 +526,15 @@ def _check_zero_rows(
                     changed = adapter.has_type(out, column, data_type) is not True
             else:
                 changed = adapter.column_type(out, column) != adapter.column_type(result, column)
-            if changed:
-                failures.append(f"zero_rows: column '{column}' changes type on zero rows")
-    return failures
+            text = f"column '{column}' changes type on zero rows"
+            note = _excused(text, covering.get(column, []), used) if changed else None
+            if note is not None:
+                notes.append(note)
+            elif changed:
+                failures.append(f"zero_rows: {text}")
+            elif exact is True and data_type is not None:
+                unchanged.add(column)
+    return failures, unchanged
 
 
 def _check_error_values(
@@ -621,15 +693,42 @@ def _run_checks(
     failures += _check_outputs(cls, adapter, data, names, base, result)
     expected = _expected_types(cls, names, base)
     # A feature's declared type applies to each of its part columns.
-    typed = {column: expected[name] for column, name, _ in _written(adapter, data, result, names) if name in expected}
-    failures += _check_types(adapter, typed, result, notes)
+    written = _written(adapter, data, result, names)
+    typed = {column: expected[name] for column, name, _ in written if name in expected}
+    records = _declared_records(cls, adapter)
+    covering = _coverage(cls, base, records, written)
+    used: set[_Declared] = set()
+    failures += _check_types(adapter, typed, result, notes, covering, used)
+    unchanged: set[str] = set()
     if data.types:
-        failures += _check_zero_rows(cls, adapter, data, names, base, result, expected)
+        zero_failures, unchanged = _check_zero_rows(
+            cls, adapter, data, names, base, result, expected, notes, covering, used
+        )
+        failures += zero_failures
         failures += _check_error_values(cls, adapter, data, names, base, notes)
     else:
         notes.append("run: zero_rows and error_values were not run (input_data has no columns)")
     failures += _check_determinism(cls, adapter, data, names, base, result)
+    if adapter.capabilities.typed_columns:
+        stale = [d for d in records if d.record.kind == DivergenceKind.TYPE and d not in used]
+        for declared in stale:
+            columns = [c for c in typed if declared in covering[c]]
+            if columns and all(adapter.has_type(result, c, typed[c]) is True and c in unchanged for c in columns):
+                message = _stale_report(declared, columns, adapter)
+                (failures if declared.from_implementation else notes).append(message)
     return failures
+
+
+def _stale_report(declared: _Declared, columns: list[str], adapter: FrameworkAdapter) -> str:
+    framework = adapter.compute_framework().__name__
+    reason = declared.record.describe()
+    if declared.from_implementation:
+        named = ", ".join(f"'{c}'" for c in sorted(columns))
+        return (
+            f"type: stale declaration: {declared.owner} declares a type divergence ('{reason}') for {named}, "
+            f"but it matches the declared type on {framework}"
+        )
+    return f"type: {declared.owner} declares a type divergence ('{reason}') that this run on {framework} does not need"
 
 
 def check_feature_group_shape(
@@ -647,6 +746,9 @@ def check_feature_group_shape(
     With require_run, a rule exclusion, a missing serving Implementation or a route block is a failure instead of a note.
     Secret checks cover declarations, not call sites: a secret under an undeclared benign key goes unseen;
     silence a false positive per option in NOT_SECRET_OPTIONS with a reason.
+    A TYPE or GAP record covering a type failure turns it into a note. A TYPE record on the serving Implementation
+    whose columns all match exactly on a typed framework fails as stale (scope a data-dependent one with subtypes
+    or outputs); a group-level one is only a note, since it applies on every framework.
     requests= probes those names instead of the class and declared names; a base_options value contradicting them is a failure with the abort text.
     """
     if isinstance(requests, str):

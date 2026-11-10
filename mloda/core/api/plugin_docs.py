@@ -528,11 +528,16 @@ def _resolve_feature(
 
     literals = frozenset() if data_access_collection is None else data_access_collection.secret_literals()
     with registered_secrets_scope(literals):
-        evaluation, eval_error, refused = safe_field_with_abort(_evaluate, None)
+        evaluation, eval_error, raised, refused = safe_field_with_abort(_evaluate, None)
         if evaluation is None:
             scrubbed_error = "" if eval_error is None else scrub_credentials(eval_error)
             return ResolvedFeature(
-                feature_name, None, [], error=f"{scrubbed_error}{scope_suffix}", credential_refusal=refused
+                feature_name,
+                None,
+                [],
+                error=f"{scrubbed_error}{scope_suffix}",
+                credential_refusal=refused,
+                raised=raised,
             )
     result, message = evaluation
 

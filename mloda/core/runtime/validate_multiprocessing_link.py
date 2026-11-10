@@ -204,6 +204,25 @@ def _forking_picklable(value: Any) -> bool:
     return True
 
 
+def refuse_unpicklable_command(command: Any) -> None:
+    """Raise ValueError naming the step if the worker command cannot cross the process queue."""
+    if _forking_picklable(command):
+        return
+    step = command[0] if isinstance(command, tuple) and command else command
+    uuid = getattr(step, "uuid", None)
+    names = (
+        ", ".join(fg.__name__ for fg in _step_feature_groups(step))
+        if isinstance(step, (FeatureGroupStep, TransformFrameworkStep))
+        else ""
+    )
+    raise ValueError(
+        f"The worker command for {type(step).__name__}{f' {uuid}' if uuid is not None else ''}"
+        f"{f' (feature groups: {names})' if names else ''} cannot be pickled, so mloda cannot send it to a "
+        "multiprocessing worker process.\nResolution: use only picklable values on this step, or run without "
+        "ParallelizationMode.MULTIPROCESSING."
+    )
+
+
 def refuse_unpicklable_credentials(grant: Any, values: Mapping[str, Any]) -> None:
     """Raise ValueError naming the handle if the grant cannot cross the process queue; never the pickler text."""
     if _forking_picklable(grant):

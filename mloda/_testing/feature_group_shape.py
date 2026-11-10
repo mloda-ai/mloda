@@ -515,8 +515,7 @@ def _check_zero_rows(
     elif adapter.capabilities.typed_columns:
         for column in (c for c in columns if c in out_columns):
             mapped = _compared([column], names)
-            # an adapter may build an input column with another dtype on zero rows, so compare by declared type
-            data_type = expected.get(mapped[0][1]) if mapped else data.types.get(column)
+            data_type = expected.get(mapped[0][1]) if mapped else None
             exact = None if data_type is None else adapter.has_type(result, column, data_type)
             if exact is False:
                 continue
@@ -527,6 +526,10 @@ def _check_zero_rows(
                     changed = adapter.has_type(out, column, data_type) is not True
             else:
                 changed = adapter.column_type(out, column) != adapter.column_type(result, column)
+                if changed:
+                    # a nullable dtype and its numpy twin are the same exact type
+                    twin = adapter.exact_type(result, column)
+                    changed = twin is None or twin != adapter.exact_type(out, column)
             text = f"column '{column}' changes type on zero rows"
             note = _excused(text, covering.get(column, []), used) if changed else None
             if note is not None:

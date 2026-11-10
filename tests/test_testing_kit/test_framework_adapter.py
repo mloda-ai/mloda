@@ -617,6 +617,7 @@ def test_pandas_from_arrow_matches_production_dtypes_and_nulls(rows: int | None)
         ("int64", [1, None, 3], "Int64", "float64"),
         ("bool_", [True, None, False], "boolean", "object"),
         ("int64", [2**60 + 1, None], "Int64", "float64"),
+        ("uint8", [1, None], "UInt8", "float64"),
     ],
 )
 def test_pandas_from_arrow_nullable_deliberately_diverges_from_production(

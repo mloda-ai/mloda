@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.divergence import MAX_DOCS_LENGTH, divergence_records
+from mloda.core.abstract_plugins.components.divergence import MAX_DOCS_LENGTH, divergence_dicts
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.interfaces.service.catalog import MAX_DESCRIPTION_LENGTH, Catalog, plugin_collector_for, sanitize_text
@@ -129,9 +129,11 @@ def _inputs(step: PlanStep, name: str) -> tuple[str, ...]:
 
 
 def _divergences(step: PlanStep) -> list[dict[str, Any]]:
-    records = divergence_records(step.divergences)
+    records = divergence_dicts(step.divergences)
     for record in records:
         record["reason"] = sanitize_text(record["reason"], MAX_DESCRIPTION_LENGTH)
+        for key in ("subtypes", "outputs"):
+            record[key] = sorted(sanitize_text(name, MAX_NAME_LENGTH) for name in record[key])
         if record["variant"] is not None:
             record["variant"] = sanitize_text(record["variant"], MAX_DESCRIPTION_LENGTH)
         if record["docs"] is not None:

@@ -974,7 +974,7 @@ class TestSuccess:
             Divergence(
                 kind=DivergenceKind.VALUE,
                 cause=Cause.BACKEND,
-                outputs=frozenset({"b", "a"}),
+                outputs=frozenset({"b", " c", "a"}),
                 reason="  skips   NaN  ",
             ),
             DivergenceSource.IMPLEMENTATION,
@@ -1024,7 +1024,7 @@ class TestSuccess:
                 "kind": "value",
                 "cause": "backend",
                 "subtypes": [],
-                "outputs": ["a", "b"],
+                "outputs": ["a", "b", "c"],
                 "reason": "skips NaN",
                 "variant": None,
                 "docs": None,

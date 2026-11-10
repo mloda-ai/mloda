@@ -229,7 +229,7 @@ def divergence_order(r: Divergence) -> tuple[Any, ...]:
     )
 
 
-def divergence_records(records: Iterable[Divergence]) -> list[dict[str, Any]]:
+def divergence_dicts(records: Iterable[Divergence]) -> list[dict[str, Any]]:
     """The records in deterministic order as plain dicts."""
     return [
         {

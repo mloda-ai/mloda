@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 
@@ -16,10 +16,9 @@ from mloda._testing.framework_adapter import (
     PythonDictAdapter,
 )
 from mloda._testing.typed_data import TypedTestData
-from mloda._testing.feature_group_shape import _route_block
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.abstract_plugins.components.data_types import DataType
-from mloda._testing.feature_group_shape import assert_feature_group_shape, check_feature_group_shape
+from mloda._testing.feature_group_shape import _route_block, assert_feature_group_shape, check_feature_group_shape
 from mloda.core.abstract_plugins.components.credential_handle import credential_handle_spec
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -1169,7 +1168,7 @@ def test_encoding_feature_group_part_columns_are_found_on_pandas() -> None:
     assert not any(n.startswith("run:") for n in result.notes), result.notes
 
 
-_RouteCase = tuple[type[FeatureGroup], str, Options, str]
+_RouteCase = tuple[type[FeatureGroup], str, Options, Literal["routed", "capability", "variant", "raised"]]
 _MakeImpl = Callable[..., type[Implementation[Any]]]
 
 
@@ -1180,8 +1179,7 @@ def _route_routed(mi: _MakeImpl) -> _RouteCase:
 
 
 def _route_accepts_declines(mi: _MakeImpl) -> _RouteCase:
-    group = make_operation_group()
-    _decline(_serve_with(mi, group, "ok"), [])
+    group, _ = _case_route_block(mi)
     return group, "rg_out", Options(), "capability"
 
 
@@ -1222,16 +1220,42 @@ def _route_part_declined(mi: _MakeImpl) -> _RouteCase:
     return group, "rg_out~b", Options(), "capability"
 
 
+def _exact_call_impl(mi: _MakeImpl, group: type[FeatureGroup], *, routes: bool) -> None:
+    def accepts(cls: Any, feature_name: str, options: Options, *, part: str | None = None) -> bool:
+        return (feature_name == "rg_out~x" and part is None) == routes
+
+    setattr(_serve_with(mi, group, "ok"), "accepts", classmethod(accepts))
+
+
 def _route_undeclared_part_routed(mi: _MakeImpl) -> _RouteCase:
     group = make_operation_group(names=frozenset({"rg_out~x"}))
-    _serve_with(mi, group, "ok")
+    _exact_call_impl(mi, group, routes=True)
     return group, "rg_out~x", Options(), "routed"
 
 
 def _route_undeclared_part_declined(mi: _MakeImpl) -> _RouteCase:
     group = make_operation_group(names=frozenset({"rg_out~x"}))
-    _decline(_serve_with(mi, group, "ok"), [])
+    _exact_call_impl(mi, group, routes=False)
     return group, "rg_out~x", Options(), "capability"
+
+
+_PART_B_VARIANT = Divergence(
+    kind=DivergenceKind.VARIANT, cause=Cause.BACKEND, variant="v", reason="variant changed", outputs=frozenset({"b"})
+)
+
+
+def _part_variant_group(mi: _MakeImpl) -> type[FeatureGroup]:
+    group = make_operation_group(variants=frozenset({"v"}), output_parts=("a", "b"))
+    setattr(_serve_with(mi, group, "ok"), "divergences", (_PART_B_VARIANT,))
+    return group
+
+
+def _route_part_variant_routed(mi: _MakeImpl) -> _RouteCase:
+    return _part_variant_group(mi), "rg_out~a", Options(), "routed"
+
+
+def _route_part_variant_blocked(mi: _MakeImpl) -> _RouteCase:
+    return _part_variant_group(mi), "rg_out~b", Options(), "variant"
 
 
 def _route_matched_options(mi: _MakeImpl) -> _RouteCase:
@@ -1272,6 +1296,8 @@ def _route_raising_accepts(mi: _MakeImpl) -> _RouteCase:
         _route_part_declined,
         _route_undeclared_part_routed,
         _route_undeclared_part_declined,
+        _route_part_variant_routed,
+        _route_part_variant_blocked,
         _route_matched_options,
         _route_raising_accepts,
     ],
@@ -1285,7 +1311,9 @@ def test_route_block_agrees_with_the_planner(
     feature = Feature(name, options=options._fork())
     if expected == "raised":
         assert raised is not None
-        with pytest.raises(Exception):
+        assert "accepts exploded" in raised
+        assert block is None
+        with pytest.raises(RuntimeError, match="accepts exploded"):
             IdentifyFeatureGroupClass.evaluate(feature, accessible, None)
         return
     result = IdentifyFeatureGroupClass.evaluate(feature, accessible, None)
@@ -1295,3 +1323,5 @@ def test_route_block_agrees_with_the_planner(
     assert (block is None) == routed
     if not routed:
         assert result.eliminations[group].stage == expected
+        assert block is not None
+        assert ("is not routed" if expected == "capability" else "allow_variants") in block

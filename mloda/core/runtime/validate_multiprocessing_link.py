@@ -12,6 +12,7 @@ from multiprocessing.reduction import ForkingPickler
 from typing import Any
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -203,6 +204,25 @@ def _forking_picklable(value: Any) -> bool:
     return True
 
 
+def refuse_unpicklable_command(command: Any) -> None:
+    """Raise ValueError naming the step if the worker command cannot cross the process queue."""
+    if _forking_picklable(command):
+        return
+    step = command[0] if isinstance(command, tuple) and command else command
+    uuid = getattr(step, "uuid", None)
+    names = (
+        ", ".join(fg.__name__ for fg in _step_feature_groups(step))
+        if isinstance(step, (FeatureGroupStep, TransformFrameworkStep))
+        else ""
+    )
+    raise ValueError(
+        f"The worker command for {type(step).__name__}{f' {uuid}' if uuid is not None else ''}"
+        f"{f' (feature groups: {names})' if names else ''} cannot be pickled, so mloda cannot send it to a "
+        "multiprocessing worker process.\nResolution: use only picklable values on this step, or run without "
+        "ParallelizationMode.MULTIPROCESSING."
+    )
+
+
 def refuse_unpicklable_credentials(grant: Any, values: Mapping[str, Any]) -> None:
     """Raise ValueError naming the handle if the grant cannot cross the process queue; never the pickler text."""
     if _forking_picklable(grant):
@@ -214,3 +234,20 @@ def refuse_unpicklable_credentials(grant: Any, values: Mapping[str, Any]) -> Non
         "Resolution: register only str, numbers and plain containers, build clients inside calculate_feature, "
         "or run without ParallelizationMode.MULTIPROCESSING."
     )
+
+
+def raise_on_unpicklable_step_credentials(steps: Iterable[Any], collection: DataAccessCollection | None) -> None:
+    """Raise ValueError naming the handle if a multiprocessing step's credential value cannot be pickled."""
+    if collection is None:
+        return
+    values: dict[str, Any] = {}
+    for step in steps:
+        if not isinstance(step, FeatureGroupStep) or not step.credential_handles:
+            continue
+        if ParallelizationMode.MULTIPROCESSING not in step.get_parallelization_mode():
+            continue
+        for handle in step.credential_handles:
+            if handle in collection.credentials:
+                values[handle] = collection.credentials[handle]
+    if values:
+        refuse_unpicklable_credentials(values, values)

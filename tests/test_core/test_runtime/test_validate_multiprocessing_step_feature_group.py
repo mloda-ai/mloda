@@ -5,6 +5,11 @@ queued to a multiprocessing worker would otherwise fail deep inside pickle for."
 
 from __future__ import annotations
 
+import threading
+from types import SimpleNamespace
+from typing import Any
+from unittest.mock import patch
+
 import pytest
 
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -15,7 +20,10 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda.core.runtime.validate_multiprocessing_link import raise_on_unpicklable_step_feature_group
+from mloda.core.runtime.validate_multiprocessing_link import (
+    raise_on_unpicklable_step_credentials,
+    raise_on_unpicklable_step_feature_group,
+)
 from mloda.provider import FeatureGroup
 from mloda.user import Index, JoinSpec, Link
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -172,3 +180,67 @@ def test_a_feature_group_step_with_a_dynamic_feature_group_creator_class_is_reje
 
     message = str(excinfo.value)
     assert dynamic_fg.__name__ in message, f"the dynamically created class must be named; got: {message}"
+
+
+_SECRET = "s3cr3t-Zq81-distinct"
+
+
+class _SecretHolder:
+    """Unpicklable (holds a lock) and its repr leaks the secret."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+
+    def __repr__(self) -> str:
+        return f"_SecretHolder({_SECRET})"
+
+
+def _credential_step(
+    handles: tuple[str, ...], compute_framework: type[ComputeFramework] = PandasDataFrame
+) -> FeatureGroupStep:
+    step = _feature_group_step(ValidateStepFeatureGroup, compute_framework)
+    step.credential_handles = handles
+    return step
+
+
+def _collection(credentials: dict[str, Any]) -> Any:
+    return SimpleNamespace(credentials=credentials)
+
+
+def test_credential_preflight_rejects_an_unpicklable_value_naming_the_handle_not_the_value() -> None:
+    step = _credential_step(("db-handle",))
+
+    with pytest.raises(ValueError) as excinfo:
+        raise_on_unpicklable_step_credentials([step], _collection({"db-handle": _SecretHolder()}))
+
+    message = str(excinfo.value)
+    assert "db-handle" in message
+    assert _SECRET not in message
+    assert "_SecretHolder" not in message
+
+
+@pytest.mark.parametrize(
+    "handles, framework, credentials",
+    [
+        pytest.param(("h",), SyncOnlyComputeFramework, {"h": _SecretHolder()}, id="step-without-multiprocessing"),
+        pytest.param((), PandasDataFrame, {"h": _SecretHolder()}, id="step-without-handles"),
+        pytest.param(("absent",), PandasDataFrame, {"other": _SecretHolder()}, id="handle-missing-from-collection"),
+        pytest.param(("h",), PandasDataFrame, None, id="none-collection"),
+    ],
+)
+def test_credential_preflight_skips(
+    handles: tuple[str, ...], framework: type[ComputeFramework], credentials: dict[str, Any] | None
+) -> None:
+    step = _credential_step(handles, framework)
+
+    raise_on_unpicklable_step_credentials([step], None if credentials is None else _collection(credentials))
+
+
+def test_credential_preflight_probes_a_shared_handle_once() -> None:
+    steps = [_credential_step(("shared",)), _credential_step(("shared",))]
+
+    with patch("mloda.core.runtime.validate_multiprocessing_link.refuse_unpicklable_credentials") as refuse:
+        raise_on_unpicklable_step_credentials(steps, _collection({"shared": {"k": "v"}}))
+
+    assert refuse.call_count == 1
+    assert refuse.call_args.args[1] == {"shared": {"k": "v"}}

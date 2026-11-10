@@ -13,9 +13,20 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.log_masking import (
+    DISABLE_LOG_MASKING_COMMAND,
+    ENABLE_PROCESS_WIDE_LOG_MASKING_COMMAND,
+)
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.runtime import mp_context
 from mloda.core.runtime.mp_context import mp_start_context
 from mloda.core.runtime.worker_manager import WorkerManager
+from mloda.provider import FeatureGroup
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
 def _noop_target(*args: Any, **kwargs: Any) -> None:
@@ -439,18 +450,49 @@ class TestWorkerManagerProcessRetrieval:
         assert result is None
 
 
+_SECRET = "zz-wm-secret-value-42"
+
+
+class _LeakyHolder:
+    """Unpicklable (holds a lock) and its repr is a distinctive secret."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+
+    def __repr__(self) -> str:
+        return _SECRET
+
+
+class _PlainStep:
+    def __init__(self) -> None:
+        self.uuid = uuid4()
+        self.holder = _LeakyHolder()
+
+
+def _feature_group_step_with_holder() -> FeatureGroupStep:
+    class _WmSendFeatureGroup(FeatureGroup):
+        pass
+
+    step = FeatureGroupStep(_WmSendFeatureGroup, FeatureSet([Feature("f")]), set(), PandasDataFrame)
+    step.holder = _LeakyHolder()
+    return step
+
+
 class TestWorkerManagerCommandSending:
     """Test sending commands to worker processes."""
 
-    def test_send_command_puts_command_in_queue(self) -> None:
-        """send_command should put command in process command queue."""
-        manager = WorkerManager()
-        cfw_uuid = uuid4()
-        command = {"action": "execute", "data": "test"}
-
-        mock_cmd_queue = MagicMock()
-        mock_process = Mock(spec=multiprocessing.Process)
-        manager.process_register[cfw_uuid] = (mock_process, mock_cmd_queue, MagicMock())
+    @pytest.mark.parametrize(
+        "command",
+        [
+            pytest.param({"action": "execute", "data": "test"}, id="dict"),
+            pytest.param(DISABLE_LOG_MASKING_COMMAND, id="disable-log-masking"),
+            pytest.param(ENABLE_PROCESS_WIDE_LOG_MASKING_COMMAND, id="enable-process-wide-log-masking"),
+            pytest.param(("a", 1, {"x": [1, 2]}), id="picklable-tuple"),
+        ],
+    )
+    def test_send_command_puts_command_in_queue(self, command: Any) -> None:
+        """send_command should put command in process command queue unchanged."""
+        manager, cfw_uuid, mock_cmd_queue = self._registered()
 
         manager.send_command(cfw_uuid, command)
 
@@ -464,6 +506,69 @@ class TestWorkerManagerCommandSending:
 
         with pytest.raises(ValueError, match="No process found for CFW UUID"):
             manager.send_command(unknown_uuid, command)
+
+    def _registered(self) -> tuple[WorkerManager, UUID, MagicMock]:
+        manager = WorkerManager()
+        cfw_uuid = uuid4()
+        mock_cmd_queue = MagicMock()
+        manager.process_register[cfw_uuid] = (Mock(spec=multiprocessing.Process), mock_cmd_queue, MagicMock())
+        return manager, cfw_uuid, mock_cmd_queue
+
+    @pytest.mark.parametrize(
+        "make_step, fragments",
+        [
+            pytest.param(
+                _feature_group_step_with_holder, ("FeatureGroupStep", "_WmSendFeatureGroup"), id="feature-group-step"
+            ),
+            pytest.param(_PlainStep, ("_PlainStep",), id="plain-step"),
+        ],
+    )
+    def test_send_command_refuses_an_unpicklable_step_naming_its_type(
+        self, make_step: Any, fragments: tuple[str, ...]
+    ) -> None:
+        manager, cfw_uuid, mock_cmd_queue = self._registered()
+        step = make_step()
+
+        with pytest.raises(ValueError) as excinfo:
+            manager.send_command(cfw_uuid, (step, {"k": "v"}))
+
+        message = str(excinfo.value)
+        for fragment in fragments:
+            assert fragment in message
+        assert _SECRET not in message
+        mock_cmd_queue.put.assert_not_called()
+
+    def test_send_command_refuses_an_unpicklable_grant_slot_naming_the_step_type(self) -> None:
+        manager, cfw_uuid, mock_cmd_queue = self._registered()
+        step = FeatureGroupStep(FeatureGroup, FeatureSet([Feature("f")]), set(), PandasDataFrame)
+
+        with pytest.raises(ValueError) as excinfo:
+            manager.send_command(cfw_uuid, (step, _LeakyHolder()))
+
+        message = str(excinfo.value)
+        assert "FeatureGroupStep" in message
+        assert _SECRET not in message
+        mock_cmd_queue.put.assert_not_called()
+
+    def test_send_command_refuses_an_unpicklable_transform_framework_step_naming_its_feature_groups(self) -> None:
+        class _WmFromFeatureGroup(FeatureGroup):
+            pass
+
+        class _WmToFeatureGroup(FeatureGroup):
+            pass
+
+        manager, cfw_uuid, mock_cmd_queue = self._registered()
+        step = TransformFrameworkStep(PandasDataFrame, PyArrowTable, set(), _WmFromFeatureGroup, _WmToFeatureGroup)
+        step.holder = _LeakyHolder()
+
+        with pytest.raises(ValueError) as excinfo:
+            manager.send_command(cfw_uuid, (step, {"k": "v"}))
+
+        message = str(excinfo.value)
+        for fragment in ("TransformFrameworkStep", "_WmFromFeatureGroup", "_WmToFeatureGroup"):
+            assert fragment in message
+        assert _SECRET not in message
+        mock_cmd_queue.put.assert_not_called()
 
 
 class TestWorkerManagerResultPolling:

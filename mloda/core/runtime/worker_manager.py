@@ -13,6 +13,7 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, safe_exc_str
 from mloda.core.runtime.mp_context import mp_start_context, start_daemon_process, started_by_this_process
+from mloda.core.runtime.validate_multiprocessing_link import refuse_unpicklable_command
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,7 @@ class WorkerManager:
         if result is None:
             raise ValueError(f"No process found for CFW UUID: {cfw_uuid}")
         _, command_queue, _ = result
+        refuse_unpicklable_command(command)
         command_queue.put(command)
 
     def poll_result_queues(self) -> None:

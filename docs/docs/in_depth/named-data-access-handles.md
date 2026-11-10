@@ -372,7 +372,7 @@ Limits:
 - Values under 8 characters are not masked.
 - A key outside the listed connection fields is masked unless declared public (see declared credential keys).
 - A prepared session copies the registered credentials at `prepare()` (plain dicts and `RegisteredCredential`, lists, tuples and sets, nested too; other objects, dict subclasses such as `OrderedDict` included, are shared), so later edits to the collection do not reach it; pass a rotated value per run with `run(credentials=...)`.
-- A credential sent to a process worker must pickle; one that does not is refused when its step is dispatched, naming the handle (earlier steps may already have run).
+- A credential sent to a process worker must pickle; one that does not is refused when the run starts, before any worker starts, naming the handle. A custom grant kind is still checked when its step is dispatched.
 - Log masking covers exact registered literals and their `repr` and JSON escaped forms only; see [Log record masking](#log-record-masking) for its limits.
 - In a notebook the caller reads any environment variable on its own side.
 

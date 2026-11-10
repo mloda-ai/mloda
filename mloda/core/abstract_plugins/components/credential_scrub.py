@@ -133,7 +133,22 @@ _QUOTED_KEY_PATTERN = re.compile(
 _STRING_LITERAL = r"b?(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\")"
 _STRING_ONLY = re.compile(_STRING_LITERAL)
 _CONTAINER_HEAD = re.compile(r"(?:[A-Za-z_][\w.]*)?[\[{(]")
-_CONTINUATION_LINE = re.compile(rf"[ \t]*(?P<literal>{_STRING_LITERAL})[\])}}, \t]*(?=\r?\n|\Z)")
+_CONTINUATION_LINE = re.compile(
+    rf"[ \t]*(?P<literal>{_STRING_LITERAL})[ \t,]*(?:(?P<closer>[\])}}])[\])}}, \t]*|(?=\r?\n|\Z))"
+)
+_ATOM = rf"(?:{_STRING_LITERAL}|[-+]?\.?\d[\w.+-]*|(?:true|false|null|True|False|None|NaN|-?Infinity)\b)"
+_PAIR_OR_ATOM = rf"(?:{_STRING_LITERAL}[ \t]*:[ \t]*{_ATOM}|{_ATOM})"
+_INLINE_CONTAINER = rf"[\[{{(][ \t]*(?:{_PAIR_OR_ATOM}(?:[ \t]*,[ \t]*{_PAIR_OR_ATOM})*[ \t,]*)?[\]}})]"
+_ITEM = rf"(?:{_ATOM}|{_INLINE_CONTAINER})"
+# A whole bare-item line of a list body; text may follow once a closer was seen.
+_ITEM_LINE = re.compile(rf"[ \t]*,?[ \t]*{_ITEM}(?:[ \t]*,[ \t]*{_ITEM})*[ \t,]*(?:[\])}}].*|(?=\r?\n|\Z))")
+_PAIR = rf"{_STRING_LITERAL}[ \t]*:[ \t]*{_ITEM}"
+_PAIR_LINE = re.compile(rf"[ \t]*,?[ \t]*{_PAIR}(?:[ \t]*,[ \t]*{_PAIR})*[ \t,]*(?:[\])}}}}].*|(?=\r?\n|\Z))")
+# An item line ending in an open container head followed by comma-terminated items.
+_OPEN_HEAD_LINE = re.compile(
+    rf"[ \t]*,?[ \t]*(?:{_ITEM}[ \t]*,[ \t]*)*[\[{{(][ \t]*(?:(?:{_PAIR}|{_ITEM})[ \t]*,[ \t]*)*(?=\r?\n|\Z)"
+)
+_COMMA_AHEAD = re.compile(r"[ \t\r\n]*,")
 _ESCAPED_NEWLINE = r"(?:\\+r)?\\+n"
 _ESCAPED_CONTINUATION = re.compile(
     rf"{_ESCAPED_NEWLINE}(?:[ \t]|\\+t)+(?P<literal>{_STRING_LITERAL})"
@@ -153,10 +168,13 @@ def _indent_end(text: str, start: int) -> int:
 
 def _container_end(text: str, opener: int, key_indent: int) -> int:
     """End of a multi-line container value: its closer, else the line before the first shallow line.
-    A flat body (not indented past its key) may pass value-like shallow lines."""
+    A flat body (not indented past its key) may pass value-like shallow lines.
+    Item mode also passes shallow item, pair (in a dict), closer (nested) and open-head lines."""
     size = len(text)
-    depth = 0
+    stack: list[str] = []
     flat: bool | None = None
+    items = False
+    seen_newline = False
     i = opener
     while i < size:
         char = text[i]
@@ -167,12 +185,17 @@ def _container_end(text: str, opener: int, key_indent: int) -> int:
             i = j + 1 if j < size and text[j] == char else j
             continue
         if char in "[{(":
-            depth += 1
+            stack.append(char)
         elif char in "]})":
-            depth -= 1
-            if depth == 0:
+            if stack:
+                stack.pop()
+            if not stack:
                 return i + 1
         elif char == "\n":
+            if not seen_newline:
+                seen_newline = True
+                head = text[opener + 1 : i].rstrip(" \t\r")
+                items = bool(head) and (head.endswith(",") or _COMMA_AHEAD.match(text, i + 1) is not None)
             first = _indent_end(text, i + 1)
             if first < size and text[first] not in "\r\n":
                 shallow = first - (i + 1) <= key_indent
@@ -181,9 +204,17 @@ def _container_end(text: str, opener: int, key_indent: int) -> int:
                 if not shallow:
                     i += 1
                     continue
-                if depth == 1 and text[first] in "]})":
-                    return first + 1
-                if flat and _FLAT_BODY_LINE.match(text, first):
+                if text[first] in "]})":
+                    if len(stack) == 1:
+                        return first + 1
+                    i += 1
+                    continue
+                if (
+                    (flat and _FLAT_BODY_LINE.match(text, first))
+                    or (items and _ITEM_LINE.match(text, first))
+                    or (items and _OPEN_HEAD_LINE.match(text, first))
+                    or (items and len(stack) > 1 and stack[-1] == "{" and _PAIR_LINE.match(text, first))
+                ):
                     i += 1
                     continue
                 stop = i - 1 if text[i - 1] == "\r" else i
@@ -211,6 +242,8 @@ def _string_continuation_end(text: str, end: int, key_indent: int) -> int:
             break
         end = match.end("literal")
         position = match.end()
+        if match["closer"]:
+            break
     return end
 
 

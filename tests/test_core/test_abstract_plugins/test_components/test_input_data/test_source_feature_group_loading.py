@@ -1087,6 +1087,56 @@ class TestImplementationPin:
         assert feature_name in str(caught.value)
         assert needle in str(caught.value)
 
+    def test_a_pin_naming_an_unregistered_implementation_names_the_skipped_super_call(self) -> None:
+        from mloda.provider import ImplementationPinError
+
+        class _SkipsRegistration:
+            def __init_subclass__(cls, **kwargs: Any) -> None:
+                pass
+
+        def make() -> type[Implementation[Any]]:
+            class ZzSkippedPinImpl(_SkipsRegistration, Implementation[Any]):
+                feature_group = ToySourceFG
+                compute_framework = PythonDictFramework
+
+                @classmethod
+                def calculate(cls, *args: Any) -> Any:
+                    return None
+
+            return ZzSkippedPinImpl
+
+        held = [make()]
+        ref = weakref.ref(held[0])
+
+        with pytest.raises(ImplementationPinError) as caught:
+            _run_pinned([_op_feature("ZzSkippedPinImpl")])
+
+        message = str(caught.value)
+        del caught
+        del held[:]
+        collected = collect_until_dead(ref)
+        _release_subscripted_generics()
+
+        assert "not a loaded Implementation" in message
+        assert "without reaching Implementation.__init_subclass__" in message
+        assert "ZzSkippedPinImpl" in message
+        assert "super().__init_subclass__()" in message
+        assert f"{__name__}:" in message
+        assert "<locals>.ZzSkippedPinImpl" in message
+        assert collected
+
+    def test_a_successful_pinned_run_never_walks_the_implementation_class_tree(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        toy = _toy_operation()
+        _run_pinned([_op_feature("OpToyPandas")])  # warm-up: populates caches so only the measured run is counted
+        walks = count_root_walks(monkeypatch, Implementation)
+
+        result = _run_pinned([_op_feature("OpToyPandas")])
+
+        assert column_values(result, toy.OPTOY_FEATURE) == [1]
+        assert walks == []
+
     def test_two_requests_pinning_a_shared_step_differently_raise_naming_both(self) -> None:
         from mloda.provider import ImplementationPinError
 

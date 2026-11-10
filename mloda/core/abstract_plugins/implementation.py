@@ -22,7 +22,7 @@ from mloda.core.abstract_plugins.components.divergence import (
     validate_divergences,
 )
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
-from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses, is_nominal_subclass
 from mloda.core.abstract_plugins.components.var_scope import VarScope
 from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -315,6 +315,13 @@ def serving_implementation(
 def loaded_implementations() -> list[type[Implementation[Any]]]:
     """Concrete loaded Implementation classes naming a valid pair."""
     return [impl for impl in _registry.members() if _is_concrete(impl) and _is_pair(impl)]
+
+
+def unregistered_named_implementations(name: str) -> list[type[Implementation[Any]]]:
+    """Live concrete Implementation subclasses matching a pin name that skipped registration."""
+    registered = _registry.members()
+    named = named_implementations(name, get_all_subclasses(Implementation))
+    return [impl for impl in named if impl not in registered and _is_concrete(impl) and _is_pair(impl)]
 
 
 _ACCESSIBLE: ContextVar[frozenset[type[Implementation[Any]]] | None] = ContextVar(

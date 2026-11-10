@@ -106,6 +106,9 @@ class ReadDBFG(SourceFeatureGroup):
 
     The base serves table catalogs; QUERY_ROUTE opts in to query text. Third-party groups should run
     mloda._testing.source.read_db_suite (to be re-exported by mloda.testing).
+
+    A custom access type must override load_neutral; override _hidden_source, data_access_identity and
+    columns to show more.
     """
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("credentials", NamePolicy.CHECKED, True),)
@@ -282,6 +285,8 @@ class ReadDBFG(SourceFeatureGroup):
     @classmethod
     def data_access_identity(cls, match: SourceMatch) -> str:
         access = match.access
+        if not isinstance(access, (DBTable, DBQuery)):
+            return super().data_access_identity(match)
         identity = cls.database_identity(access.credentials)
         if isinstance(access, DBQuery):
             return f"{identity}::query:{sha256(access.query_text.encode()).hexdigest()[:16]}"
@@ -375,8 +380,8 @@ class ReadDBFG(SourceFeatureGroup):
     @classmethod
     def columns(cls, match: SourceMatch) -> Collection[str] | None:
         access = match.access
-        if isinstance(access, DBQuery) or access.table is None:
-            return None
+        if not isinstance(access, DBTable) or access.table is None:
+            return super().columns(match)
         catalog, _ = cls._catalog(access.credentials)
         return None if catalog is None else catalog.get(access.table)
 
@@ -393,7 +398,7 @@ class ReadDBFG(SourceFeatureGroup):
     @classmethod
     def _raw_reason(cls, match: SourceMatch) -> str | None:
         access = match.access
-        if isinstance(access, DBQuery):
+        if not isinstance(access, DBTable):
             return None
         catalog, reason = cls._catalog(access.credentials)
         if catalog is not None and access.table is not None and access.table not in catalog:
@@ -404,15 +409,21 @@ class ReadDBFG(SourceFeatureGroup):
     def _hidden_source(cls, match: SourceMatch) -> str:
         if isinstance(match.access, DBQuery):
             return cls.data_access_identity(match)
-        return cls.database_identity(match.access.credentials)
+        if isinstance(match.access, DBTable):
+            return cls.database_identity(match.access.credentials)
+        return cls.get_class_name()
 
     @classmethod
     def ambiguity_fix(
         cls, feature_name: str, matches: list[SourceMatch], data_access_collection: DataAccessCollection | None
     ) -> str:
         name = cls.get_class_name()
-        identities = {cls.database_identity(match.access.credentials) for match in matches}
-        logins = {cls.login_key(match.access.credentials) for match in matches}
+        all_credentials = [cls.match_credentials(match) for match in matches]
+        if any(c is None for c in all_credentials):
+            return f"point {name} at one source."
+        credentials_seen = all_credentials
+        identities = {cls.database_identity(c) for c in credentials_seen}
+        logins = {cls.login_key(c) for c in credentials_seen}
         if len(identities) > 1 or len(logins) > 1:
             handles = sorted(
                 handle

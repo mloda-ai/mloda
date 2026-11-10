@@ -100,10 +100,10 @@ class SparkFramework(ComputeFramework):
     @classmethod
     def is_missing_column_error(cls, error: Exception) -> bool:
         if AnalysisException is not None and isinstance(error, AnalysisException):
-            condition = error.getCondition() if hasattr(error, "getCondition") else error.getErrorClass()
+            condition = error.getCondition()
             return condition is not None and condition.startswith(_SPARK_MISSING_COLUMN_CONDITION)
         if PySparkAttributeError is not None and isinstance(error, PySparkAttributeError):
-            condition = error.getCondition() if hasattr(error, "getCondition") else error.getErrorClass()
+            condition = error.getCondition()
             return condition == _SPARK_ATTRIBUTE_CONDITION and is_attribute_column_read(
                 error, (DataFrame,), check_message=False
             )

@@ -449,34 +449,34 @@ class TestSparkTfsConnectionInit(SparkSessionAdapter, ConnectionPickSuite):
     def test_missing_connection_error_names_the_dac_and_connection_handle(self, *args: Any, **kwargs: Any) -> None: ...
 
 
-class _Spark35AnalysisException(Exception):
-    """Stand-in for a Spark 3.5 AnalysisException, which has getErrorClass but no getCondition."""
+class _AnalysisExceptionStandIn(Exception):
+    """Stand-in for PySpark's AnalysisException carrying an error condition."""
 
-    def __init__(self, error_class: str | None) -> None:
+    def __init__(self, condition: str | None) -> None:
         super().__init__("boom")
-        self._error_class = error_class
+        self._condition = condition
 
-    def getErrorClass(self) -> str | None:
-        return self._error_class
+    def getCondition(self) -> str | None:
+        return self._condition
 
 
-class TestSparkIsMissingColumnErrorLegacyApi:
+class TestSparkIsMissingColumnErrorStandIn:
     @pytest.fixture(autouse=True)
     def _patch_analysis_exception(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             "mloda_plugins.compute_framework.base_implementations.spark.spark_framework.AnalysisException",
-            _Spark35AnalysisException,
+            _AnalysisExceptionStandIn,
         )
 
-    def test_unresolved_column_error_class_is_a_missing_column(self) -> None:
-        error = _Spark35AnalysisException("UNRESOLVED_COLUMN.WITH_SUGGESTION")
+    def test_unresolved_column_condition_is_a_missing_column(self) -> None:
+        error = _AnalysisExceptionStandIn("UNRESOLVED_COLUMN.WITH_SUGGESTION")
         assert SparkFramework.is_missing_column_error(error) is True
 
-    def test_other_error_class_is_not_a_missing_column(self) -> None:
-        assert SparkFramework.is_missing_column_error(_Spark35AnalysisException("TABLE_OR_VIEW_NOT_FOUND")) is False
+    def test_other_condition_is_not_a_missing_column(self) -> None:
+        assert SparkFramework.is_missing_column_error(_AnalysisExceptionStandIn("TABLE_OR_VIEW_NOT_FOUND")) is False
 
-    def test_missing_error_class_is_not_a_missing_column(self) -> None:
-        assert SparkFramework.is_missing_column_error(_Spark35AnalysisException(None)) is False
+    def test_missing_condition_is_not_a_missing_column(self) -> None:
+        assert SparkFramework.is_missing_column_error(_AnalysisExceptionStandIn(None)) is False
 
 
 @pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
@@ -502,21 +502,21 @@ class _FakeSparkFrame:
 
 
 class _FakePySparkAttributeError(AttributeError):
-    """Stand-in for PySparkAttributeError carrying an error class."""
+    """Stand-in for PySparkAttributeError carrying an error condition."""
 
-    def __init__(self, error_class: str, name: str | None, obj: Any) -> None:
+    def __init__(self, condition: str, name: str | None, obj: Any) -> None:
         super().__init__("boom", name=name, obj=obj)
-        self._error_class = error_class
+        self._condition = condition
 
-    def getErrorClass(self) -> str:
-        return self._error_class
+    def getCondition(self) -> str:
+        return self._condition
 
 
-def _attribute_read_error(obj: Any, name: str, error_class: str) -> _FakePySparkAttributeError:
+def _attribute_read_error(obj: Any, name: str, condition: str) -> _FakePySparkAttributeError:
     """Build the stand-in error from a real failed attribute lookup so ``name`` and ``obj`` are set."""
     with pytest.raises(AttributeError) as excinfo:
         getattr(obj, name)
-    return _FakePySparkAttributeError(error_class, excinfo.value.name, excinfo.value.obj)
+    return _FakePySparkAttributeError(condition, excinfo.value.name, excinfo.value.obj)
 
 
 class TestSparkIsMissingColumnErrorAttributeRead:

@@ -246,12 +246,16 @@ class EncodingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
                 cls._encoder_matches_type(fitted_encoder, encoder_type)
 
             if len(data) == 0:
+                # Reads the frame directly because pandas is the only Implementation.
                 if fitted_encoder is None and encoder_type == "onehot":
                     raise ValueError(
                         f"Cannot onehot encode {base_source_feature} on zero rows without a fitted artifact."
-                        " A fitted artifact is needed."
                     )
-                if fitted_encoder is None and not isinstance(features.save_artifact, dict):
+                if (
+                    features.artifact_to_save is not None
+                    and artifact is None
+                    and not isinstance(features.save_artifact, dict)
+                ):
                     features.save_artifact = {}
                 numpy = require("numpy", "empty encoder result")
                 if fitted_encoder is not None and encoder_type == "onehot":

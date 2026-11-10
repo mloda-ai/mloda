@@ -239,7 +239,7 @@ class TestScalingOnZeroInputRows:
     @staticmethod
     def _scale(kind: str, source_dtype: str, rows: int, *, artifact_to_save: bool = True) -> tuple[Any, FeatureSet]:
         pytest.importorskip("sklearn")
-        data = pd.DataFrame({"c": np.arange(rows).astype(source_dtype)})
+        data = pd.DataFrame({"c": pd.Series(np.arange(rows)).astype(source_dtype)})
         features = FeatureSet()
         features.add(Feature(f"c__{kind}_scaled"))
         if artifact_to_save:
@@ -249,25 +249,44 @@ class TestScalingOnZeroInputRows:
     @pytest.mark.parametrize("kind", SCALER_KINDS)
     @pytest.mark.parametrize(
         ("source_dtype", "expected"),
-        [("float32", "float32"), ("float64", "float64"), ("int64", "float64")],
+        [
+            ("float32", "float32"),
+            ("float64", "float64"),
+            ("int64", "float64"),
+            ("Float32", "float32"),
+            ("float32[pyarrow]", "float32"),
+        ],
     )
     def test_zero_rows_give_an_empty_column_of_the_non_empty_dtype(
         self, kind: str, source_dtype: str, expected: str
     ) -> None:
         non_empty, _ = self._scale(kind, source_dtype, 3)
-        result, _ = self._scale(kind, source_dtype, 0)
+        result, features = self._scale(kind, source_dtype, 0)
 
+        assert features.save_artifact == {}
         column = result[f"c__{kind}_scaled"]
         assert len(result) == 0
         assert str(column.dtype) == expected
         assert column.dtype == non_empty[f"c__{kind}_scaled"].dtype
 
     @pytest.mark.parametrize("kind", SCALER_KINDS)
-    def test_zero_rows_without_artifact_save_no_artifact_key(self, kind: str) -> None:
-        _, features = self._scale(kind, "float64", 0)
+    def test_zero_rows_without_artifact_to_save_leave_save_artifact_none(self, kind: str) -> None:
+        _, features = self._scale(kind, "float64", 0, artifact_to_save=False)
 
-        assert isinstance(features.save_artifact, dict)
-        assert features.save_artifact == {}
+        assert features.save_artifact is None
+
+    @pytest.mark.parametrize("kind", SCALER_KINDS)
+    def test_zero_rows_keep_another_features_save_artifact_key(self, kind: str) -> None:
+        pytest.importorskip("sklearn")
+        features = FeatureSet()
+        features.add(Feature(f"c__{kind}_scaled"))
+        features.artifact_to_save = "requested"
+        features.save_artifact = {"other": 1}
+        data = pd.DataFrame({"c": np.array([], dtype="float64")})
+
+        PandasScaling.calculate(ScalingFeatureGroup, data, features, None)
+
+        assert features.save_artifact == {"other": 1}
 
     @pytest.mark.parametrize("kind", SCALER_KINDS)
     def test_zero_rows_with_a_loaded_artifact_apply_nothing_and_keep_the_dtype(self, kind: str, tmp_path: Any) -> None:

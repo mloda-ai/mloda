@@ -116,7 +116,7 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     }
 
     @classmethod
-    def _extract_operations_and_source_feature(cls, feature: Feature) -> tuple[tuple[Any, Any], str]:
+    def _extract_operations_and_source_feature(cls, feature: Feature) -> tuple[list[Any], str]:
         """
         Extract cleaning operations and source feature name from a feature.
 
@@ -126,7 +126,7 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
             feature: The feature to extract parameters from
 
         Returns:
-            Tuple of (operations_tuple, source_feature_name)
+            Tuple of (operations_list, source_feature_name)
 
         Raises:
             ValueError: If parameters cannot be extracted

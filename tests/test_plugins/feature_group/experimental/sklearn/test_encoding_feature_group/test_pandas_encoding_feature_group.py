@@ -366,18 +366,36 @@ class TestPandasEncodingOnZeroInputRows:
     @pytest.mark.parametrize(("kind", "dtype"), ENCODER_DTYPES)
     def test_zero_rows_give_an_empty_column_of_the_non_empty_dtype(self, kind: str, dtype: str) -> None:
         non_empty, _ = _encode(kind, ["a", "b", "a"])
-        result, _ = _encode(kind, [])
+        result, features = _encode(kind, [])
 
         assert len(result) == 0
+        assert features.save_artifact == {}
         assert str(non_empty[f"c__{kind}_encoded"].dtype) == dtype
         assert str(result[f"c__{kind}_encoded"].dtype) == dtype
 
     @pytest.mark.parametrize("kind", ["label", "ordinal"])
-    def test_zero_rows_without_artifact_save_no_artifact_key(self, kind: str) -> None:
-        _, features = _encode(kind, [])
+    def test_zero_rows_without_artifact_to_save_leave_save_artifact_none(self, kind: str) -> None:
+        pytest.importorskip("sklearn")
+        features = FeatureSet()
+        features.add(Feature(f"c__{kind}_encoded"))
+        data = pd.DataFrame({"c": pd.Series([], dtype=object)})
 
-        assert isinstance(features.save_artifact, dict)
-        assert features.save_artifact == {}
+        PandasEncoding.calculate(EncodingFeatureGroup, data, features, None)
+
+        assert features.save_artifact is None
+
+    @pytest.mark.parametrize("kind", ["label", "ordinal"])
+    def test_zero_rows_keep_another_features_save_artifact_key(self, kind: str) -> None:
+        pytest.importorskip("sklearn")
+        features = FeatureSet()
+        features.add(Feature(f"c__{kind}_encoded"))
+        features.artifact_to_save = "requested"
+        features.save_artifact = {"other": 1}
+        data = pd.DataFrame({"c": pd.Series([], dtype=object)})
+
+        PandasEncoding.calculate(EncodingFeatureGroup, data, features, None)
+
+        assert features.save_artifact == {"other": 1}
 
     @pytest.mark.parametrize(("kind", "dtype"), ENCODER_DTYPES)
     def test_zero_rows_with_a_loaded_artifact_keep_the_dtype(self, kind: str, dtype: str, tmp_path: Any) -> None:
@@ -402,7 +420,7 @@ class TestPandasEncodingOnZeroInputRows:
         self, fit_values: list[str], expected_columns: list[str], tmp_path: Any
     ) -> None:
         options = Options({SklearnArtifact.ARTIFACT_STORAGE_PATH: str(tmp_path)})
-        fitted, fit_set = _encode("onehot", fit_values, options=options)
+        _, fit_set = _encode("onehot", fit_values, options=options)
         SklearnArtifact.custom_saver(fit_set, fit_set.save_artifact)
         non_empty, _ = _encode("onehot", fit_values, options=options, mode="load")
 
@@ -419,7 +437,7 @@ class TestPandasEncodingOnZeroInputRows:
         features.artifact_to_save = "requested"
         data = pd.DataFrame({"c": pd.Series([], dtype=object)})
 
-        with pytest.raises(ValueError, match="zero rows"):
+        with pytest.raises(ValueError, match=r"(?s)(?=.*zero rows)(?=.*fitted artifact)"):
             PandasEncoding.calculate(EncodingFeatureGroup, data, features, None)
 
         assert not features.save_artifact

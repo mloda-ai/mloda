@@ -232,12 +232,3 @@ class TestBareStringCleaningOperation:
         result = impl.calculate(TextCleaningFeatureGroup, make_data(), feature_set, None)
 
         assert list(result["a__cleaned_text"]) == ["y"]
-
-    def test_extract_operations_returns_the_bare_string_as_one_operation(self) -> None:
-        feature = Feature(
-            FeatureName("a__cleaned_text"), Options({TextCleaningFeatureGroup.CLEANING_OPERATIONS: "normalize"})
-        )
-
-        operations, _ = TextCleaningFeatureGroup._extract_operations_and_source_feature(feature)
-
-        assert list(operations) == ["normalize"]

@@ -82,14 +82,7 @@ def _duplicate_column_table(first_type: DataType, second_type: DataType) -> pa.T
     )
 
 
-def _arrow_has_type(arrow_type: Any, data_type: DataType) -> bool:
-    if data_type in (DataType.TIMESTAMP_MICROS_TZ, DataType.LIST):
-        return bool(DataType.from_arrow_type_safe(arrow_type) == data_type)
-    return bool(arrow_type == DataType.to_arrow_type(data_type))
-
-
 _SYNC_ONLY_REASON = "The live connection is reused without thread isolation and cannot cross a process boundary."
-_ICEBERG_NO_NATIVE_TYPE = (DataType.INT8, DataType.UINT8, DataType.UINT64, DataType.TIMESTAMP_MILLIS)
 
 
 def _plain_iceberg_type(arrow_type: Any) -> Any:
@@ -106,102 +99,16 @@ def _plain_iceberg_type(arrow_type: Any) -> Any:
     return arrow_type
 
 
-_PANDAS_NUMERIC = {
-    DataType.INT8: ("i", 1),
-    DataType.INT32: ("i", 4),
-    DataType.INT64: ("i", 8),
-    DataType.UINT8: ("u", 1),
-    DataType.UINT64: ("u", 8),
-    DataType.FLOAT: ("f", 4),
-    DataType.DOUBLE: ("f", 8),
-    DataType.BOOLEAN: ("b", 1),
-}
-_PANDAS_OBJECT_VALUE_FIT = (DataType.LIST, DataType.BINARY, DataType.DATE, DataType.DECIMAL, DataType.STRING)
-
-
-def _pandas_has_type(dtype: Any, data_type: DataType) -> bool | None:
-    pd = require("pandas", "reading pandas test frames")
-
-    if isinstance(dtype, pd.ArrowDtype):
-        return _arrow_has_type(dtype.pyarrow_dtype, data_type)
-    if isinstance(dtype, pd.DatetimeTZDtype):
-        return data_type == DataType.TIMESTAMP_MICROS_TZ
-    if isinstance(dtype, pd.StringDtype):
-        return data_type == DataType.STRING
-    numpy_dtype = getattr(dtype, "numpy_dtype", dtype)
-    if numpy_dtype.kind == "O":
-        return None if data_type in _PANDAS_OBJECT_VALUE_FIT else False
-    if numpy_dtype.kind == "M":
-        unit = str(numpy_dtype).removeprefix("datetime64[").removesuffix("]")
-        if data_type == DataType.TIMESTAMP_MICROS:
-            return unit in ("s", "us", "ns")
-        return unit == "ms" and data_type == DataType.TIMESTAMP_MILLIS
-    return _PANDAS_NUMERIC.get(data_type) == (numpy_dtype.kind, getattr(numpy_dtype, "itemsize", None))
-
-
-def _polars_has_type(dtype: Any, data_type: DataType) -> bool:
-    pl = require("polars", "reading polars test frames")
-
-    if data_type == DataType.TIMESTAMP_MICROS_TZ:
-        return isinstance(dtype, pl.Datetime) and dtype.time_zone is not None
-    if data_type == DataType.LIST:
-        return isinstance(dtype, (pl.List, pl.Array))
-    exact = {
-        DataType.INT8: pl.Int8(),
-        DataType.INT32: pl.Int32(),
-        DataType.INT64: pl.Int64(),
-        DataType.UINT8: pl.UInt8(),
-        DataType.UINT64: pl.UInt64(),
-        DataType.FLOAT: pl.Float32(),
-        DataType.DOUBLE: pl.Float64(),
-        DataType.BOOLEAN: pl.Boolean(),
-        DataType.STRING: pl.String(),
-        DataType.BINARY: pl.Binary(),
-        DataType.DATE: pl.Date(),
-        DataType.TIMESTAMP_MILLIS: pl.Datetime("ms"),
-        DataType.TIMESTAMP_MICROS: pl.Datetime("us"),
-        DataType.DECIMAL: pl.Decimal(38, 18),
-    }
-    return bool(dtype == exact[data_type])
-
-
-def _spark_has_type(spark_type: Any, data_type: DataType) -> bool | None:
-    t = require("pyspark.sql.types", "reading Spark test frames")
-
-    if data_type in (DataType.UINT8, DataType.UINT64, DataType.TIMESTAMP_MILLIS):
-        return None
-    if data_type == DataType.LIST:
-        return isinstance(spark_type, t.ArrayType)
-    if data_type == DataType.STRING:
-        return isinstance(spark_type, t.StringType)
-    if data_type == DataType.DECIMAL:
-        return bool(spark_type == t.DecimalType(38, 18))
-    if data_type == DataType.TIMESTAMP_MICROS:
-        if isinstance(spark_type, t.TimestampType):
-            # Deliberately not False: SparkFramework reads a session-zone TimestampType as TIMESTAMP_MICROS, so judge it by value.
-            return None
-        return isinstance(spark_type, t.TimestampNTZType)
-    if data_type == DataType.TIMESTAMP_MICROS_TZ:
-        return isinstance(spark_type, t.TimestampType)
-    exact = {
-        DataType.INT8: t.ByteType(),
-        DataType.INT32: t.IntegerType(),
-        DataType.INT64: t.LongType(),
-        DataType.FLOAT: t.FloatType(),
-        DataType.DOUBLE: t.DoubleType(),
-        DataType.BOOLEAN: t.BooleanType(),
-        DataType.BINARY: t.BinaryType(),
-        DataType.DATE: t.DateType(),
-    }
-    return bool(spark_type == exact[data_type])
-
-
 class FrameworkAdapter(ABC):
     """Builds frames for one compute framework from typed data and reads them back."""
 
     capabilities: ClassVar[AdapterCapabilities]
     # Set when the framework serves no THREADING, so run-all suites run it in SYNC only; the value is the reason.
     sync_only_reason: ClassVar[str | None] = None
+    # Types whose frame is lossy by construction, so has_type is None for them.
+    no_native_type: ClassVar[frozenset[DataType]] = frozenset()
+    # Types a column the framework lost the type of can still hold (has_type None instead of False).
+    untyped_may_hold: ClassVar[frozenset[DataType]] = frozenset()
 
     @abstractmethod
     def compute_framework(self) -> type[ComputeFramework]: ...
@@ -255,9 +162,29 @@ class FrameworkAdapter(ABC):
     def lost_type(self, result: Any, column: str) -> bool:
         """True when the column carries no usable type (null, object)."""
 
+    def _readback_framework(self, result: Any) -> type[ComputeFramework]:
+        return self.compute_framework()
+
     def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
-        """Whether the column's native type is exactly data_type; None when the adapter has no exact type for it."""
-        return None
+        """Whether the column's native type is exactly data_type; None when the framework has no exact type for it."""
+        from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+        from mloda.user import ParallelizationMode
+
+        if not self.capabilities.typed_columns:
+            return None
+        framework = self._readback_framework(result)
+        if framework._exact_column_data_type is ComputeFramework._exact_column_data_type:
+            return None
+        if framework is self.compute_framework() and data_type in self.no_native_type:
+            return None
+        instance = framework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        exact = instance._exact_column_data_type(result, column)
+        if exact == data_type:
+            return True
+        if exact is None:
+            return None if data_type in self.untyped_may_hold and self.lost_type(result, column) else False
+        # The framework itself reads the column as data_type (a session-zone timestamp as naive), so judge by value.
+        return None if instance._extract_column_data_type(result, column) == data_type else False
 
     @property
     def connection(self) -> Any:
@@ -327,6 +254,14 @@ class _ArrowReadAdapter(FrameworkAdapter):
     @abstractmethod
     def to_table(self, result: Any) -> pa.Table: ...
 
+    def _readback_framework(self, result: Any) -> type[ComputeFramework]:
+        pa = require("pyarrow", "reading Arrow test tables")
+        if isinstance(result, pa.Table):
+            from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+
+            return PyArrowTable
+        return self.compute_framework()
+
     def _table(self, result: Any) -> pa.Table:
         pa = require("pyarrow", "reading Arrow test tables")
         if isinstance(result, pa.Table):
@@ -368,12 +303,10 @@ class PyArrowAdapter(_ArrowReadAdapter):
     def to_table(self, result: Any) -> pa.Table:
         return result
 
-    def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
-        return _arrow_has_type(self.column_type(result, column), data_type)
-
 
 class PandasAdapter(FrameworkAdapter):
     capabilities = AdapterCapabilities(typed_columns=True)
+    untyped_may_hold = frozenset({DataType.LIST, DataType.BINARY, DataType.DATE, DataType.DECIMAL, DataType.STRING})
 
     def compute_framework(self) -> type[ComputeFramework]:
         from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -429,9 +362,6 @@ class PandasAdapter(FrameworkAdapter):
     def lost_type(self, result: Any, column: str) -> bool:
         return str(self.column_type(result, column)) == "object"
 
-    def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
-        return _pandas_has_type(self.column_type(result, column), data_type)
-
 
 class PolarsAdapter(FrameworkAdapter):
     capabilities = AdapterCapabilities(typed_columns=True)
@@ -472,9 +402,6 @@ class PolarsAdapter(FrameworkAdapter):
         pl = require("polars", "reading polars test frames")
 
         return bool(self.column_type(result, column) in (pl.Null, pl.Object))
-
-    def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
-        return _polars_has_type(self.column_type(result, column), data_type)
 
 
 class PolarsLazyAdapter(PolarsAdapter):
@@ -547,12 +474,9 @@ class DuckDBAdapter(_ArrowReadAdapter):
     def to_table(self, result: Any) -> pa.Table:
         return result.to_arrow_table()
 
-    def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
-        return _arrow_has_type(self.column_type(result, column), data_type)
-
 
 class SqliteAdapter(_ArrowReadAdapter):
-    # has_type stays None: readback types are replayed from the source Arrow schema or inferred from values.
+    # has_type stays None: SqliteFramework has no exact readback, its types are replayed from the source Arrow schema or inferred.
     capabilities = AdapterCapabilities(typed_columns=True, sql_relation=True)
     sync_only_reason: ClassVar[str | None] = _SYNC_ONLY_REASON
 
@@ -567,6 +491,9 @@ class SqliteAdapter(_ArrowReadAdapter):
         from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 
         return SqliteFramework
+
+    def _readback_framework(self, result: Any) -> type[ComputeFramework]:
+        return self.compute_framework()
 
     def open(self) -> None:
         import sqlite3
@@ -608,6 +535,7 @@ class IcebergAdapter(_ArrowReadAdapter):
     """Iceberg over a temp SQLite-backed catalog; Iceberg rejects null-typed columns and non-UTC time zones."""
 
     capabilities = AdapterCapabilities(typed_columns=True)
+    no_native_type = frozenset({DataType.INT8, DataType.UINT8, DataType.UINT64, DataType.TIMESTAMP_MILLIS})
     namespace = "mloda_test"
 
     def __init__(self) -> None:
@@ -683,24 +611,15 @@ class IcebergAdapter(_ArrowReadAdapter):
             return raw
         return _plain_iceberg_type(raw)
 
-    def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
-        if data_type in _ICEBERG_NO_NATIVE_TYPE and not isinstance(
-            result, require("pyarrow", "reading Iceberg test tables").Table
-        ):
-            return None
-        return _arrow_has_type(self.column_type(result, column), data_type)
-
 
 class SparkAdapter(_ArrowReadAdapter):
     """Borrows the caller's active SparkSession, never starts or stops one; Spark rejects unsigned integer types."""
 
     capabilities = AdapterCapabilities(typed_columns=True)
+    no_native_type = frozenset({DataType.UINT8, DataType.UINT64, DataType.TIMESTAMP_MILLIS})
 
     def __init__(self) -> None:
         self._session: Any = None
-
-    def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
-        return _spark_has_type(self.column_type(result, column), data_type)
 
     @property
     def connection(self) -> Any:

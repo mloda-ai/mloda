@@ -194,3 +194,53 @@ class TestPolarsIsMissingColumnError:
     def test_attribute_error_on_an_expression_is_not_a_missing_column(self) -> None:
         error = self._attribute_error(pl.col("a"), "x")
         assert PolarsDataFrame.is_missing_column_error(error) is False
+
+
+_POLARS_EXACT = [
+    ("Int16", None),
+    ("UInt16", None),
+    ("UInt32", None),
+    ("Datetime_ns", None),
+    ("Decimal_10_2", None),
+    ("Int32", "INT32"),
+    ("Int64", "INT64"),
+    ("Datetime_ms", "TIMESTAMP_MILLIS"),
+    ("Datetime_us", "TIMESTAMP_MICROS"),
+    ("Datetime_tz", "TIMESTAMP_MICROS_TZ"),
+    ("Decimal_38_18", "DECIMAL"),
+    ("List", "LIST"),
+]
+
+
+def polars_dtype(name: str) -> Any:
+    import polars as pl
+
+    return {
+        "Int16": pl.Int16(),
+        "UInt16": pl.UInt16(),
+        "UInt32": pl.UInt32(),
+        "Int32": pl.Int32(),
+        "Int64": pl.Int64(),
+        "Datetime_ns": pl.Datetime("ns"),
+        "Datetime_ms": pl.Datetime("ms"),
+        "Datetime_us": pl.Datetime("us"),
+        "Datetime_tz": pl.Datetime("us", "UTC"),
+        "Decimal_10_2": pl.Decimal(10, 2),
+        "Decimal_38_18": pl.Decimal(38, 18),
+        "List": pl.List(pl.Int64()),
+    }[name]
+
+
+def polars_frame(name: str) -> Any:
+    import polars as pl
+
+    return pl.DataFrame({"c": pl.Series("c", [], dtype=polars_dtype(name))})
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+@pytest.mark.parametrize("name, expected", _POLARS_EXACT)
+def test_exact_column_data_type(name: str, expected: str | None) -> None:
+    from mloda.user import DataType
+
+    framework = PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    assert framework._exact_column_data_type(polars_frame(name), "c") == (DataType[expected] if expected else None)

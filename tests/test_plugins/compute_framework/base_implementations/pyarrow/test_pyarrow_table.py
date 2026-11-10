@@ -194,3 +194,46 @@ class TestPyArrowEmptyResultGuard:
 class TestPyArrowIsMissingColumnError:
     def test_other_arrow_invalid_is_not_a_missing_column(self) -> None:
         assert PyArrowTable.is_missing_column_error(pa.ArrowInvalid("Could not convert 'a' with type str")) is False
+
+
+def _arrow_framework() -> PyArrowTable:
+    return PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+
+_ARROW_LENIENT = [
+    (pa.large_string(), "STRING"),
+    (pa.large_binary(), "BINARY"),
+]
+
+
+@pytest.mark.parametrize("arrow_type, expected", _ARROW_LENIENT, ids=[str(t) for t, _ in _ARROW_LENIENT])
+def test_extract_column_data_type_folds_inexact_arrow_types(arrow_type: pa.DataType, expected: str) -> None:
+    from mloda.user import DataType
+
+    table = pa.table({"c": pa.array([], type=arrow_type)})
+    assert _arrow_framework()._extract_column_data_type(table, "c") == DataType[expected]
+
+
+_ARROW_EXACT = [
+    (pa.int16(), None),
+    (pa.int32(), "INT32"),
+    (pa.large_string(), None),
+    (pa.timestamp("ns"), None),
+    (pa.decimal128(38, 18), "DECIMAL"),
+    (pa.decimal128(10, 2), None),
+    (pa.list_(pa.int64()), "LIST"),
+    (pa.timestamp("us", tz="UTC"), "TIMESTAMP_MICROS_TZ"),
+]
+
+
+@pytest.mark.parametrize("arrow_type, expected", _ARROW_EXACT, ids=[str(t) for t, _ in _ARROW_EXACT])
+def test_exact_column_data_type(arrow_type: pa.DataType, expected: str | None) -> None:
+    from mloda.user import DataType
+
+    table = pa.table({"c": pa.array([], type=arrow_type)})
+    result = _arrow_framework()._exact_column_data_type(table, "c")
+    assert result == (DataType[expected] if expected else None)
+
+
+def test_exact_column_data_type_missing_column_is_none() -> None:
+    assert _arrow_framework()._exact_column_data_type(pa.table({"c": [1]}), "nope") is None

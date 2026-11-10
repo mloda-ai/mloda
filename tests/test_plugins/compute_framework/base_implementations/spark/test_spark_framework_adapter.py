@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from mloda._testing.framework_adapter import SparkAdapter
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.data_types import DataType
 
@@ -112,12 +114,18 @@ _HAS_TYPE_CASES: list[tuple[Any, DataType, bool | None]] = [
 ]
 
 
+def _jvm_free_spark_frame(spark_type: Any, column: str = "c") -> Any:
+    """A JVM-free stand-in for a one-column Spark DataFrame."""
+    from pyspark.sql.types import StructField, StructType
+
+    return SimpleNamespace(columns=[column], schema=StructType([StructField(column, spark_type)]))
+
+
 @pytest.mark.parametrize("make_type, declared, expected", _HAS_TYPE_CASES)
 def test_spark_has_type_is_exact(make_type: Any, declared: DataType, expected: bool | None) -> None:
     types = pytest.importorskip("pyspark.sql.types")
-    from mloda._testing.framework_adapter import _spark_has_type
 
-    assert _spark_has_type(make_type(types), declared) is expected
+    assert SparkAdapter().has_type(_jvm_free_spark_frame(make_type(types)), "c", declared) is expected
 
 
 def test_spark_has_type_matches_adapter_schema() -> None:
@@ -127,7 +135,8 @@ def test_spark_has_type_matches_adapter_schema() -> None:
 
     from pyspark.sql.pandas.types import from_arrow_schema
 
-    from mloda._testing.framework_adapter import _spark_has_type, to_arrow_table
+    from mloda._testing.framework_adapter import to_arrow_table
+    from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
 
     data = TypedTestData(
         {
@@ -150,7 +159,9 @@ def test_spark_has_type_matches_adapter_schema() -> None:
         "l": DataType.LIST,
     }
     for name, dt in expected.items():
-        assert _spark_has_type(schema[name].dataType, dt) is True, name
+        assert SparkFramework._spark_type_to_exact_data_type(schema[name].dataType) == dt, name
+        frame = _jvm_free_spark_frame(schema[name].dataType, name)
+        assert SparkAdapter().has_type(frame, name, dt) is True, name
 
 
 def test_spark_has_type_on_zero_rows(adapter: Any) -> None:

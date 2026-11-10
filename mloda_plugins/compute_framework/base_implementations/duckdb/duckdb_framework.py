@@ -31,16 +31,12 @@ logger = logging.getLogger(__name__)
 _DUCKDB_MISSING_COLUMN_FRAGMENTS = ("not found in FROM clause", "does not have a column named")
 
 
-_DUCKDB_TYPE_MAP: dict[str, DataType] = {
+_DUCKDB_EXACT_TYPE_MAP: dict[str, DataType] = {
     "INTEGER": DataType.INT32,
     "BIGINT": DataType.INT64,
-    "SMALLINT": DataType.INT32,
     "TINYINT": DataType.INT8,
     "UTINYINT": DataType.UINT8,
-    "USMALLINT": DataType.INT32,
-    "UINTEGER": DataType.INT64,
     "UBIGINT": DataType.UINT64,
-    "HUGEINT": DataType.INT64,
     "FLOAT": DataType.FLOAT,
     "DOUBLE": DataType.DOUBLE,
     "REAL": DataType.FLOAT,
@@ -50,11 +46,18 @@ _DUCKDB_TYPE_MAP: dict[str, DataType] = {
     "DATE": DataType.DATE,
     "TIMESTAMP": DataType.TIMESTAMP_MICROS,
     "TIMESTAMP_MS": DataType.TIMESTAMP_MILLIS,
-    "TIMESTAMP_S": DataType.TIMESTAMP_MICROS,
-    "TIMESTAMP_NS": DataType.TIMESTAMP_MICROS,
     "TIMESTAMP WITH TIME ZONE": DataType.TIMESTAMP_MICROS_TZ,
     "TIMESTAMPTZ": DataType.TIMESTAMP_MICROS_TZ,
     "TIMESTAMPTZ_NS": DataType.TIMESTAMP_MICROS_TZ,
+    "DECIMAL(38,18)": DataType.DECIMAL,
+}
+_DUCKDB_FOLDS: dict[str, DataType] = {
+    "SMALLINT": DataType.INT32,
+    "USMALLINT": DataType.INT32,
+    "UINTEGER": DataType.INT64,
+    "HUGEINT": DataType.INT64,
+    "TIMESTAMP_S": DataType.TIMESTAMP_MICROS,
+    "TIMESTAMP_NS": DataType.TIMESTAMP_MICROS,
 }
 
 
@@ -201,16 +204,25 @@ class DuckDBFramework(ComputeFramework):
     def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         if column_name not in data.columns:
             return None
-        idx = data.columns.index(column_name)
-        duckdb_type = data.types[idx]
+        duckdb_type = data.types[data.columns.index(column_name)]
         type_str = str(duckdb_type).upper()
-        if type_str in _DUCKDB_TYPE_MAP:
-            return _DUCKDB_TYPE_MAP[type_str]
+        if duckdb_type.id not in ("list", "array"):
+            if type_str in _DUCKDB_FOLDS:
+                return _DUCKDB_FOLDS[type_str]
+            if type_str.startswith("DECIMAL"):
+                return DataType.DECIMAL
+        return self._duckdb_type_to_exact_data_type(duckdb_type)
+
+    def _exact_column_data_type(self, data: Any, column_name: str) -> DataType | None:
+        if column_name not in data.columns:
+            return None
+        return self._duckdb_type_to_exact_data_type(data.types[data.columns.index(column_name)])
+
+    @staticmethod
+    def _duckdb_type_to_exact_data_type(duckdb_type: Any) -> DataType | None:
         if duckdb_type.id in ("list", "array"):
             return DataType.LIST
-        if type_str.startswith("DECIMAL"):
-            return DataType.DECIMAL
-        return None
+        return _DUCKDB_EXACT_TYPE_MAP.get(str(duckdb_type).upper())
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
         """Read columns/types once and zip them; never index into columns per name.

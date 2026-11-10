@@ -52,6 +52,20 @@ except ImportError:
     TimestamptzType = None  # type: ignore[assignment,misc]
     pa = None  # type: ignore[assignment, unused-ignore]
 
+_ICEBERG_EXACT_TYPES: list[tuple[Any, DataType]] = [
+    (IntegerType, DataType.INT32),
+    (LongType, DataType.INT64),
+    (FloatType, DataType.FLOAT),
+    (DoubleType, DataType.DOUBLE),
+    (BooleanType, DataType.BOOLEAN),
+    (StringType, DataType.STRING),
+    (BinaryType, DataType.BINARY),
+    (DateType, DataType.DATE),
+    (TimestamptzType, DataType.TIMESTAMP_MICROS_TZ),
+    (TimestampType, DataType.TIMESTAMP_MICROS),
+    (ListType, DataType.LIST),
+]
+
 
 class IcebergFramework(ComputeFramework):
     """
@@ -191,44 +205,38 @@ class IcebergFramework(ComputeFramework):
 
     def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         if IcebergTable is not None and isinstance(data, IcebergTable):
-            schema = data.schema()
-            if column_name not in set(schema.column_names):
-                return None
-            field = schema.find_field(column_name)
-            if field is None:
-                return None
-            field_type = field.field_type
-            if isinstance(field_type, IntegerType):
-                return DataType.INT32
-            if isinstance(field_type, LongType):
-                return DataType.INT64
-            if isinstance(field_type, FloatType):
-                return DataType.FLOAT
-            if isinstance(field_type, DoubleType):
-                return DataType.DOUBLE
-            if isinstance(field_type, BooleanType):
-                return DataType.BOOLEAN
-            if isinstance(field_type, StringType):
-                return DataType.STRING
-            if isinstance(field_type, BinaryType):
-                return DataType.BINARY
-            if isinstance(field_type, DateType):
-                return DataType.DATE
-            if isinstance(field_type, TimestamptzType):
-                return DataType.TIMESTAMP_MICROS_TZ
-            if isinstance(field_type, TimestampType):
-                return DataType.TIMESTAMP_MICROS
-            if isinstance(field_type, ListType):
-                return DataType.LIST
+            field_type = self._native_field_type(data, column_name)
             if isinstance(field_type, DecimalType):
                 return DataType.DECIMAL
-            return None
+            return self._iceberg_type_to_exact_data_type(field_type)
         if pa is not None and isinstance(data, pa.Table):
             arrow_type = arrow_schema_field_type(data.schema, column_name)
             if arrow_type is None:
                 return None
             return DataType.from_arrow_type_safe(arrow_type)
         return None
+
+    def _exact_column_data_type(self, data: Any, column_name: str) -> DataType | None:
+        if IcebergTable is not None and isinstance(data, IcebergTable):
+            return self._iceberg_type_to_exact_data_type(self._native_field_type(data, column_name))
+        if pa is not None and isinstance(data, pa.Table):
+            arrow_type = arrow_schema_field_type(data.schema, column_name)
+            return None if arrow_type is None else DataType._from_arrow_type_exact(arrow_type)
+        return None
+
+    @staticmethod
+    def _iceberg_type_to_exact_data_type(field_type: Any) -> DataType | None:
+        if isinstance(field_type, DecimalType):
+            return DataType.DECIMAL if (field_type.precision, field_type.scale) == (38, 18) else None
+        return next((dt for t, dt in _ICEBERG_EXACT_TYPES if isinstance(field_type, t)), None)
+
+    @staticmethod
+    def _native_field_type(table: Any, column_name: str) -> Any | None:
+        schema = table.schema()
+        if column_name not in schema.column_names:
+            return None
+        field = schema.find_field(column_name)
+        return None if field is None else field.field_type
 
     def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
         if not isinstance(data, pa.Table):

@@ -145,6 +145,8 @@ the table below for how each bundled framework handles precisions its backend ca
 distinguish (it returns the widest type in the family rather than `None`, so lenient-mode
 validation still applies).
 
+A framework can also implement `_exact_column_data_type`, which returns the `DataType` the column's native type is exactly, or `None` otherwise. The mloda testing kit's type checks read it; without it they judge by value.
+
 ## Per-Framework Precision Support
 
 Not every backend's native type system can distinguish every precision mloda declares. The table below shows which precisions each bundled framework can extract from data. For the rest, the framework's `_extract_column_data_type` returns the widest type in the family (still correct under lenient mode), and strict-mode tests for the affected precision are skipped with a clear reason.

@@ -129,6 +129,8 @@ class FeatureSet:
             self.filters = ReadOnlySet(self.filters, "filters")
         if self.declared_input_feature_edges is not None:
             self.declared_input_feature_edges = _frozen_dict(self.declared_input_feature_edges)
+        if self.declared_input_columns is not None:
+            self.declared_input_columns = _frozen_dict(self.declared_input_columns)
         self.prepared = True
         self.__dict__["_frozen"] = True
 

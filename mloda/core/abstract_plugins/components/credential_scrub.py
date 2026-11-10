@@ -126,7 +126,9 @@ _STRING_LITERAL = r"b?(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\")"
 _STRING_ONLY = re.compile(_STRING_LITERAL)
 _CONTAINER_HEAD = re.compile(r"(?:[A-Za-z_][\w.]*)?[\[{(]")
 _CONTINUATION_LINE = re.compile(rf"[ \t]*(?P<literal>{_STRING_LITERAL})[\])}}, \t]*(?=\r?\n|\Z)")
-_FLAT_BODY_LINE = re.compile(r"""b?['"]|-?\d|[\])},]|(?:true|false|null|True|False|None)\b|[\[{(][ \t]*(?=\r?\n|\Z)""")
+_FLAT_BODY_LINE = re.compile(
+    r"""b?['"]|[-+.]?\d|[\])},]|(?:true|false|null|True|False|None|NaN|-?Infinity)\b|[\[{(][ \t]*(?:[\]})][ \t,]*)?(?=\r?\n|\Z)"""
+)
 _QUOTED_KEY_REPL = r"\g<lead>\g<quote>\g<keyword>\g<quote>: \g<quote>***\g<quote>"
 
 

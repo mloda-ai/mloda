@@ -720,6 +720,21 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
         '{\n"token": "***"',
     ),
     (
+        "ml_flat_empty_container_lines",
+        '{\n"password": [\n[],\n{},\n"S3CR3T"\n]\n}',
+        '{\n"password": "***"\n}',
+    ),
+    (
+        "ml_flat_empty_container_then_nested",
+        '{\n"secret": [\n[],\n[\n"S3CR3T"\n]\n],\n"zz": 1\n}',
+        '{\n"secret": "***",\n"zz": 1\n}',
+    ),
+    (
+        "ml_flat_non_finite_and_signed_numbers",
+        '{\n"password": [\nNaN,\nInfinity,\n-Infinity,\n.5,\n+1,\n"S3CR3T"\n]\n}',
+        '{\n"password": "***"\n}',
+    ),
+    (
         "ml_unterminated_opener_with_content_keeps_next_key_and_closer",
         '{\n  "token": [1, (2,\n  "user": "bob"\n}',
         '{\n  "token": "***",\n  "user": "bob"\n}',
@@ -1237,6 +1252,7 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
         (lambda k: '{\n"password": [\n' + "{\n" * k, 5000, "a long flat body of bare openers"),
         (lambda k: ('{\n"password": [\n"v"\n' + "x\n") * k, 3000, "repeated flat bodies ended by prose"),
         (lambda k: '{\n"password": [\n' + ',"password": [\n' * k, 5000, "repeated flat comma-led secret keys"),
+        (lambda k: '{\n"password": [\n' + "[],\n" * k, 5000, "a long flat body of empty containers"),
         (lambda k: "{'password': (a)," * k, 10000, "many matches on one long line"),
         (
             lambda k: "y" * (40 * k) + "{'password': (a)," * k,
@@ -1258,6 +1274,7 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
         "ml_flat_long_bare_opener_body",
         "ml_flat_repeated_bodies_ended_by_prose",
         "ml_flat_repeated_comma_led_keys",
+        "ml_flat_long_empty_container_body",
         "one_long_line_many_matches",
         "one_long_line_many_matches_long_prefix",
     ],

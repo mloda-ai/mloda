@@ -306,3 +306,34 @@ class TestScalingOnZeroInputRows:
 
         assert len(result) == 0
         assert str(result[f"c__{kind}_scaled"].dtype) == "float64"
+
+    @pytest.mark.parametrize("kind", SCALER_KINDS)
+    def test_all_nan_source_without_an_artifact_raises_a_clear_error(self, kind: str) -> None:
+        pytest.importorskip("sklearn")
+        features = FeatureSet()
+        features.add(Feature(f"c__{kind}_scaled"))
+        data = pd.DataFrame({"c": [np.nan, np.nan, np.nan]})
+
+        with pytest.raises(ValueError, match="every row is missing") as excinfo:
+            PandasScaling.calculate(ScalingFeatureGroup, data, features, None)
+
+        assert "'c'" in str(excinfo.value)
+
+    @pytest.mark.parametrize("kind", SCALER_KINDS)
+    def test_all_nan_source_with_a_loaded_artifact_still_transforms(self, kind: str, tmp_path: Any) -> None:
+        pytest.importorskip("sklearn")
+        options = Options({SklearnArtifact.ARTIFACT_STORAGE_PATH: str(tmp_path)})
+        fit_set = FeatureSet()
+        fit_set.add(Feature(f"c__{kind}_scaled", options))
+        fit_set.artifact_to_save = "requested"
+        PandasScaling.calculate(ScalingFeatureGroup, pd.DataFrame({"c": [1.0, 2.0, 3.0]}), fit_set, None)
+        SklearnArtifact.custom_saver(fit_set, fit_set.save_artifact)
+
+        load_set = FeatureSet()
+        load_set.add(Feature(f"c__{kind}_scaled", options))
+        load_set.artifact_to_load = "requested"
+        result = PandasScaling.calculate(
+            ScalingFeatureGroup, pd.DataFrame({"c": [np.nan, np.nan, np.nan]}), load_set, None
+        )
+
+        assert len(result) == 3

@@ -24,6 +24,7 @@ from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.user.python_dict import PythonDictFramework
+from tests.mixins.name_path_group import make_name_path_group
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 Pair = tuple[type[FeatureGroup], type[FeatureGroup]]
@@ -773,3 +774,32 @@ def test_allowed_variant_still_compares_through_the_implementation(
     result = check_subclass_scope(sub, parent, ALLOWING, input_data=DATA)
     assert result.failures == (), result.failures
     assert not any(n.startswith("values:") for n in result.notes), result.notes
+
+
+def _name_path_pair() -> Pair:
+    parent = make_name_path_group()
+    return parent, _gated_subclass(parent, "variant")
+
+
+def test_name_path_parent_is_probed_with_the_requested_names_bound() -> None:
+    parent, sub = _name_path_pair()
+    result = check_subclass_scope(sub, parent, SELECTING, requests=["x__tt_slow"])
+    assert result.passed, result.failures
+
+
+def test_escalating_parent_match_is_a_failure_not_a_raise() -> None:
+    from mloda.core.abstract_plugins.components.utils import escalate_match_abort
+
+    class EscalatingParent(make_parent()):  # type: ignore[misc]
+        @classmethod
+        def match_feature_group_criteria(
+            cls, feature_name: Any, options: Options, data_access_collection: Any = None
+        ) -> bool:
+            if "variant" in options.group:
+                raise escalate_match_abort(ValueError("match aborted"))
+            return str(feature_name) == "sc_a"
+
+    sub = _gated_subclass(EscalatingParent, "variant")
+    result = check_subclass_scope(sub, EscalatingParent, SELECTING)
+    assert not result.passed
+    assert any("match aborted" in f for f in result.failures), result.failures

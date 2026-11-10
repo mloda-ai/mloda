@@ -149,7 +149,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     - Input data must contain the source feature to be encoded
     - Source feature should contain categorical data
     - Scikit-learn library must be installed
-    - For OneHotEncoder, all categories must be known during fitting
+    - For OneHotEncoder, all categories must be known during fitting; zero rows without a fitted artifact raise
 
     ## Additional Notes
 

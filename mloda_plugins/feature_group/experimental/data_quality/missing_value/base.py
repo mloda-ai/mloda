@@ -7,6 +7,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from mloda.provider import FeatureChainParser
 from mloda.provider import OperationFeatureGroup
 from mloda.user import Feature
 from mloda.provider import (
@@ -220,10 +221,16 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
 
         return imputation_method
 
+    @classmethod
+    def _group_by_features(cls, options: Options) -> list[Any] | None:
+        """The group_by_features option as a list; a bare string is one key."""
+        value = options.get("group_by_features")
+        return None if value is None else FeatureChainParser._unpack_property_value(value)
+
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Source features plus the group_by_features columns."""
         sources = super().input_features(options, feature_name) or set()
-        return with_key_features(sources, options.get("group_by_features") or [])
+        return with_key_features(sources, self._group_by_features(options) or [])
 
     @classmethod
     def _extract_imputation_method(cls, feature: Feature) -> str | None:
@@ -285,7 +292,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
             resolved_columns = cls.resolve_multi_column_feature(source_feature, available)
 
             constant_value = feature.options.get("constant_value")
-            group_by_features = feature.options.get("group_by_features")
+            group_by_features = cls._group_by_features(feature.options)
 
             if imputation_method == "constant" and constant_value is None:
                 raise ValueError("Constant value must be provided for constant imputation method")

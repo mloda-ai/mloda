@@ -187,16 +187,26 @@ def _string_continuation_end(text: str, end: int, key_indent: int) -> int:
 def _quoted_key_spans(text: str) -> Iterator[tuple[int, int, re.Match[str]]]:
     """Matches of the quoted-key pattern with the span extended over a multi-line value; never shrinks a match."""
     pos = 0
+    line = 0
+    scanned = 0
     while (match := next(_QUOTED_KEY_PATTERN.finditer(text, pos), None)) is not None:
         start, end = match.span()
         value = match.span("value")[0]
         container = _CONTAINER_HEAD.match(text, value)
         closed_string = container is None and _STRING_ONLY.fullmatch(text, value, end) is not None
         if container is not None or (closed_string and text.startswith(("\n", "\r\n"), end)):
-            line = text.rfind("\n", 0, match.span("quote")[0]) + 1
+            quote = match.span("quote")[0]
+            newline = text.rfind("\n", scanned, quote)
+            if newline >= 0:
+                line = newline + 1
+            scanned = quote
             key_indent = _indent_end(text, line) - line
             if container is not None:
-                end = max(end, _container_end(text, container.end() - 1, key_indent))
+                scan_end = _container_end(text, container.end() - 1, key_indent)
+                if scan_end < end and not text[scan_end:end].strip(" \t,\r"):
+                    end = scan_end
+                else:
+                    end = max(end, scan_end)
             else:
                 end = _string_continuation_end(text, end, key_indent)
         yield start, end, match

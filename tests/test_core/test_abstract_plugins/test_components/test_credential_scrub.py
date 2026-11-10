@@ -642,6 +642,16 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
         "{'password': 'hunter2z9',\n 'user': 'x'}",
         "{'password': '***',\n 'user': 'x'}",
     ),
+    (
+        "ml_unterminated_opener_keeps_comma_lead_of_next_key",
+        '{\n  "token": [1, (2,\n  "password": "q8w7e6r5"\n}',
+        '{\n  "token": "***",\n  "password": "***"\n}',
+    ),
+    (
+        "ml_pprint_bytes_continuation",
+        "{'token': b'aaa'\n           b'q8w7bytes',\n 'user': 'x'}",
+        "{'token': '***',\n 'user': 'x'}",
+    ),
     ("closer_quote_before_colon_kept", "pwd='}':\"&", "pwd='***':\"&"),
     ("closer_brace_before_comma_kept", "pwd={,},&", "pwd={***},&"),
     ("closer_single_quote_dropped_at_end", "password='x'", "password=***"),
@@ -1139,6 +1149,12 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
             5000,
             "a long unterminated multi-line opener with deeper lines",
         ),
+        (lambda k: "{'password': (a)," * k, 10000, "many matches on one long line"),
+        (
+            lambda k: "y" * (40 * k) + "{'password': (a)," * k,
+            6000,
+            "many matches on one long line after a long prefix",
+        ),
     ],
     ids=[
         "unterminated_password_brace",
@@ -1150,6 +1166,8 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
         "ml_repeated_double_quote_opener",
         "ml_long_string_continuation",
         "ml_long_unterminated_deeper_lines",
+        "one_long_line_many_matches",
+        "one_long_line_many_matches_long_prefix",
     ],
 )
 def test_repeated_unterminated_password_brace_scrubs_fast(build: Callable[[int], str], n: int, what: str) -> None:

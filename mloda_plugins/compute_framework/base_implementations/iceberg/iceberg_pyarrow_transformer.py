@@ -9,6 +9,36 @@ except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
 
+def normalize_arrow_types(table: Any) -> Any:
+    """Cast large_string/large_binary/large_list columns to their plain Arrow types.
+
+    Iceberg's scan returns large_* types for empty results and plain types otherwise,
+    so casting keeps the schema stable regardless of row count.
+    """
+    if pa is None:
+        return table
+    fields = []
+    for field in table.schema:
+        target = _plain_type(field.type)
+        fields.append(field.with_type(target) if target is not None else field)
+    if all(f.type == n.type for f, n in zip(fields, table.schema)):
+        return table
+    return table.cast(pa.schema(fields))
+
+
+def _plain_type(arrow_type: Any) -> Any:
+    """Return the plain Arrow type for a large_* type, or None if no change is needed."""
+    if pa is None:
+        return None
+    if pa.types.is_large_string(arrow_type):
+        return pa.string()
+    if pa.types.is_large_binary(arrow_type):
+        return pa.binary()
+    if pa.types.is_large_list(arrow_type):
+        return pa.list_(arrow_type.value_type)
+    return None
+
+
 class IcebergPyArrowTransformer(BaseTransformer):
     """
     Transformer for converting between Iceberg tables and PyArrow tables.
@@ -64,7 +94,7 @@ class IcebergPyArrowTransformer(BaseTransformer):
             raise ValueError(f"Expected Iceberg table, got {type(data)}")
 
         # Use Iceberg's scan to convert to PyArrow
-        return data.scan().to_arrow()
+        return normalize_arrow_types(data.scan().to_arrow())
 
     @classmethod
     def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:

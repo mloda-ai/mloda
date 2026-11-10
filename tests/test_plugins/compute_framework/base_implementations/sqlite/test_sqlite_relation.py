@@ -269,7 +269,19 @@ class TestSqliteRelation(SqlRelationWindowSuite):
         assert built.to_arrow_table().schema.field("prev").type == pa.int64()
         assert types["prev"] == pa.int64()
 
-    @pytest.mark.parametrize("expr", ["LAG(score, 1)", "LEAD(score, 1)", "LAG(score, 2)", "LEAD(score, 2)"])
+    @pytest.mark.parametrize(
+        "expr",
+        [
+            "LAG(score, 1)",
+            "LEAD(score, 1)",
+            "LAG(score, 2)",
+            "LEAD(score, 2)",
+            "LAG(score, 3)",
+            "LEAD(score, 3)",
+            "LAG(score, 6)",
+            "LEAD(score, 6)",
+        ],
+    )
     @pytest.mark.parametrize("partition_by", [["region"], ["region", "sub"]])
     def test_offset_window_type_on_all_null_source_keeps_source_type(
         self, connection: sqlite3.Connection, expr: str, partition_by: list[str]
@@ -277,6 +289,23 @@ class TestSqliteRelation(SqlRelationWindowSuite):
         table = pa.table({"region": ["A"] * 3, "sub": ["x"] * 3, "score": pa.array([None] * 3, pa.int64())})
         source = SqliteRelation.from_arrow(connection, table)
         built = source.window(expr, "w", partition_by=partition_by, order_by=[OrderBy("score")])
+        built = built.select(_raw_sql="*, score - w AS d")
+        types = dict(zip(built.columns, built.types, strict=True))
+        schema = built.to_arrow_table().schema
+
+        assert (types["w"], types["d"]) == (pa.int64(), pa.int64())
+        assert (schema.field("w").type, schema.field("d").type) == (pa.int64(), pa.int64())
+
+    @pytest.mark.parametrize(
+        "projection",
+        ["DISTINCT region, sub, score", "MIN(region) AS region, MIN(sub) AS sub, MAX(score) AS score"],
+    )
+    def test_offset_window_type_over_collapsing_projection_keeps_source_type(
+        self, connection: sqlite3.Connection, projection: str
+    ) -> None:
+        table = pa.table({"region": ["A"] * 3, "sub": ["x"] * 3, "score": pa.array([None] * 3, pa.int64())})
+        source = SqliteRelation.from_arrow(connection, table).select(_raw_sql=projection)
+        built = source.window("LAG(score, 1)", "w", partition_by=["region"], order_by=[OrderBy("score")])
         built = built.select(_raw_sql="*, score - w AS d")
         types = dict(zip(built.columns, built.types, strict=True))
         schema = built.to_arrow_table().schema

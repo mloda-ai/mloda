@@ -33,6 +33,9 @@ sqlite3.register_adapter(datetime.date, datetime.date.isoformat)
 sqlite3.register_adapter(datetime.datetime, datetime.datetime.isoformat)
 
 
+_PROBE_ROWS = 8
+
+
 def _next_table_name() -> str:
     return f"_tmp_{uuid.uuid4().hex}"
 
@@ -306,7 +309,7 @@ class SqliteRelation(SqlBaseRelation):
         return [arrow_type for arrow_type in resolved_hints if arrow_type is not None]
 
     def _placeholder_rows(self) -> list[tuple[Any, ...]]:
-        """Synthetic rows aligned with columns, first repeated so partitions hold neighbours."""
+        """Each probe level pads to `_PROBE_ROWS` rows, so partitioned offsets up to `_PROBE_ROWS - 2` stay typed."""
         if self._probe is None:
             hints = self._type_hints_for_current_columns()
             column_types = hints if hints is not None else self.types
@@ -317,6 +320,7 @@ class SqliteRelation(SqlBaseRelation):
         source_rows = source._placeholder_rows()
         if not source_rows:
             return []
+        source_rows = source_rows + [source_rows[0]] * (_PROBE_ROWS - len(source_rows))
         width = len(source_rows[0])
         first = ", ".join(f"? AS {quote_ident(column)}" for column in source.columns)
         rest = " UNION ALL SELECT " + ", ".join("?" for _ in range(width))

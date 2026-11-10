@@ -8,8 +8,7 @@ import datetime
 from collections.abc import Callable
 from typing import Any
 
-import numpy as np
-
+from mloda.core.optional_dependency import require
 from mloda.provider import ANY_OUTPUT_PART, OperationFeatureGroup
 from mloda.user import Feature
 from mloda.provider import FeatureSet
@@ -254,10 +253,11 @@ class EncodingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
                     )
                 if fitted_encoder is None and not isinstance(features.save_artifact, dict):
                     features.save_artifact = {}
+                numpy = require("numpy", "empty encoder result")
                 if fitted_encoder is not None and encoder_type == "onehot":
-                    empty = np.empty((0, len(fitted_encoder.get_feature_names_out())), dtype=np.float64)
+                    empty = numpy.empty((0, len(fitted_encoder.get_feature_names_out())), dtype=numpy.float64)
                 else:
-                    empty = np.empty((0,), dtype=np.int64 if encoder_type == "label" else np.float64)
+                    empty = numpy.empty((0,), dtype=numpy.int64 if encoder_type == "label" else numpy.float64)
                 data = add_column(data, feature.name, empty)
                 continue
 

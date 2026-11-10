@@ -8,8 +8,7 @@ import datetime
 from collections.abc import Callable
 from typing import Any
 
-import numpy as np
-
+from mloda.core.optional_dependency import require
 from mloda.provider import OperationFeatureGroup
 from mloda.user import Feature
 from mloda.provider import FeatureSet
@@ -150,8 +149,9 @@ class ScalingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
             if len(data) == 0:
                 if artifact is None and not isinstance(features.save_artifact, dict):
                     features.save_artifact = {}
-                dtype = np.float32 if str(data[source_feature].dtype) == "float32" else np.float64
-                data = add_column(data, feature.name, np.empty((0, 1), dtype=dtype))
+                numpy = require("numpy", "empty scaler result")
+                dtype = numpy.float32 if str(data[source_feature].dtype) == "float32" else numpy.float64
+                data = add_column(data, feature.name, numpy.empty((0, 1), dtype=dtype))
                 continue
 
             # If no fitted scaler available, create and fit new one

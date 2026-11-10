@@ -114,9 +114,7 @@ When exactly one FeatureGroup resolves, `ResolvedFeature` also reports
 `subtype` (resolved from the name, the passed options, or the key's declared
 default, e.g. `"sum"` for `sales__sum_aggr`) and `subtype_family` (the
 parametric family name, `"ntile"` for `ntile_2`); both are `None` when
-nothing resolves. `credential_refusal` is `True` when resolution ended on a
-misspelled or unset credential handle; `error` then holds its text, naming
-handles only.
+nothing resolves. `credential_refusal` is `True` when resolution ended on a credential handle refusal; `error` then holds its text, naming handles and keys only.
 
 ### Inspecting Candidates
 

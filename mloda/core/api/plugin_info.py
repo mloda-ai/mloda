@@ -72,5 +72,5 @@ class ResolvedFeature:
     subtype: str | None = None
     # Family name only when the subtype is a parametric instance (e.g. "ntile" for "ntile_2"), else None.
     subtype_family: str | None = None
-    # Resolution ended on a marked credential handle refusal; error holds its names-only text.
+    # Resolution ended on a credential handle refusal; error then holds its text, naming handles and keys only.
     credential_refusal: bool = False

@@ -296,7 +296,7 @@ class Catalog:
             )
         if missing and resolved.feature_group is None:
             return failure_result("Describe", ConfigError(next(iter(missing.values()))))
-        if resolved.credential_refusal:
+        if resolved.credential_refusal and not self.is_denied(name):
             # Rebuilt from the names-only text, so the log line has no frames.
             refusal = mark_credential_abort(ValueError(resolved.error or ""))
             return failure_result("Describe", refusal, trusted=self._settings.trusted_caller)

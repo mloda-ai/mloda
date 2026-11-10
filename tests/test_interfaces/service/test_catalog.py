@@ -679,13 +679,14 @@ class TestDescribeOptionAllowList:
 
 HANDLE = "mcp_vault_handle_zq"
 MISSPELLED = "mcp_misspelled_handle_wk4x"
+CRED_SECRET = "tok-Zk9-secret-77"
 
 
 def _credential_catalog(tmp_path: Path, **kwargs: Any) -> Catalog:
     collector = PluginCollector.enabled_feature_groups({*ALLOWED, CredentialReadMcp8, CredentialDefaultMcp8})
     credentials = {HANDLE: {"token": "VAULT_TOKEN_VAR"}, CRED_DEFAULT_HANDLE: {"token": "VAULT_TOKEN_VAR"}}
     settings = _settings(tmp_path, credentials=credentials, **kwargs)
-    return Catalog.build(settings, collector, env={"VAULT_TOKEN_VAR": "tok-Zk9-secret-77"})
+    return Catalog.build(settings, collector, env={"VAULT_TOKEN_VAR": CRED_SECRET})
 
 
 class TestCredentialCatalog:
@@ -743,6 +744,27 @@ class TestCredentialCatalog:
         for needle in named:
             assert needle in result["error"]["message"]
         assert "No FeatureGroup provides" not in json.dumps(result)
+        assert CRED_SECRET not in json.dumps(result)
+
+    def test_describe_checks_the_deny_policy_before_the_credential_refusal(self, tmp_path: Path) -> None:
+        class CatalogDeniedCredLocalMcp3(StubFeatureGroup):
+            """Denied group that also supports the credential feature name."""
+
+            MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({CRED_FEATURE})
+            FRAMEWORK_RULE: ClassVar[set[type[ComputeFramework]] | None] = {PythonDictFramework}
+            SUPPORTED_NAMES: ClassVar[frozenset[str]] = MATCHED_NAMES
+
+        collector = PluginCollector.enabled_feature_groups({*ALLOWED, CredentialReadMcp8, CatalogDeniedCredLocalMcp3})
+        credentials = {HANDLE: {"token": "VAULT_TOKEN_VAR"}}
+        settings = Settings(
+            deny_feature_groups=("CatalogDeniedCredLocalMcp3",),
+            credentials=credentials,
+            options={CRED_KEY: MISSPELLED},
+            trusted_caller=True,
+        )
+        catalog = Catalog.build(settings, collector, env={"VAULT_TOKEN_VAR": CRED_SECRET})
+
+        assert _error_code(catalog.describe(CRED_FEATURE)) == "policy_denied"
 
     @pytest.mark.parametrize("handle", [MISSPELLED, None], ids=["misspelled", "unset"])
     def test_an_untrusted_caller_gets_the_generic_message(self, tmp_path: Path, handle: str | None) -> None:
@@ -751,7 +773,9 @@ class TestCredentialCatalog:
         assert _error_code(result) == "internal"
         assert result["error"]["message"] == "Describe failed with ValueError."
         dumped = json.dumps({**result, "error": {**result["error"], "audit_id": None}})
-        assert MISSPELLED not in dumped
+        if handle is not None:
+            assert MISSPELLED not in dumped
+        assert CRED_SECRET not in dumped
         assert "No FeatureGroup provides" not in dumped
 
     @pytest.mark.parametrize("trusted", [True, False], ids=["trusted", "untrusted"])
@@ -765,7 +789,10 @@ class TestCredentialCatalog:
         audit_id = result["error"]["audit_id"]
         records = [r for r in caplog.records if r.name == "mloda.interfaces.service" and r.levelno == logging.ERROR]
         assert len(records) == 1
-        assert audit_id in records[0].getMessage()
+        message = records[0].getMessage()
+        assert audit_id in message
+        assert (MISSPELLED if handle is not None else CRED_KEY) in message
+        assert CRED_SECRET not in message
 
     def test_describe_does_not_show_a_default_handle(self, tmp_path: Path) -> None:
         result = _credential_catalog(tmp_path).describe(CRED_DEFAULT_FEATURE)
@@ -785,7 +812,7 @@ class TestCredentialCatalog:
 
         free = catalog.describe("mcp3_alpha_total")
         refused = catalog.describe(CRED_FEATURE)
-        env["VAULT_TOKEN_VAR"] = "tok-Zk9-secret-77"
+        env["VAULT_TOKEN_VAR"] = CRED_SECRET
         restored = catalog.describe(CRED_FEATURE)
 
         assert not is_error(free), free

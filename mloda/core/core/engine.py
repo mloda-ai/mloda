@@ -905,19 +905,20 @@ class Engine:
                     )
             for bucket in buckets.values():
                 for host, host_cf in bucket:
-                    narrower = [
+                    exact = [
+                        (t, t_cf)
+                        for t, t_cf in bucket
+                        if t is not host and t_cf < host_cf and t.equals_ignoring_compute_frameworks(host)
+                    ]
+                    # Child-options twins only matter when no exact twin exists.
+                    narrower = exact or [
                         (t, t_cf)
                         for t, t_cf in bucket
                         if t is not host
                         and t_cf < host_cf
-                        and (
-                            t.equals_ignoring_compute_frameworks(host)
-                            or (
-                                t.child_options_differ(host)
-                                and t._equals(host, False, include_child_options=False)
-                                and self._same_merge_scope(t, host)
-                            )
-                        )
+                        and t.child_options_differ(host)
+                        and t._equals(host, False, include_child_options=False)
+                        and self._same_merge_scope(t, host)
                     ]
                     minimal = [t for t, t_cf in narrower if not any(o_cf < t_cf for _, o_cf in narrower)]
                     if len(minimal) == 1 and self._same_matched_filters(host, minimal[0], group_class):

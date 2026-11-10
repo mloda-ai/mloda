@@ -127,7 +127,6 @@ _QUOTED_KEY_REPL = r"\g<lead>\g<quote>\g<keyword>\g<quote>: \g<quote>***\g<quote
 
 
 def _indent_end(text: str, start: int) -> int:
-    """Index of the first non-space, non-tab char at or after ``start``."""
     while start < len(text) and text[start] in " \t":
         start += 1
     return start

@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from mloda._testing.framework_adapter import PythonDictAdapter
+from mloda._testing.framework_adapter import PandasAdapter, PythonDictAdapter
 from mloda._testing.subclass_scope import assert_subclass_scope, check_subclass_scope
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -18,6 +18,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
+from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
@@ -776,30 +777,58 @@ def test_allowed_variant_still_compares_through_the_implementation(
     assert not any(n.startswith("values:") for n in result.notes), result.notes
 
 
-def _name_path_pair() -> Pair:
-    parent = make_name_path_group()
+def _name_path_pair(default: str | None = None) -> Pair:
+    parent = make_name_path_group(default=default)
     return parent, _gated_subclass(parent, "variant")
 
 
-def test_name_path_parent_is_probed_with_the_requested_names_bound() -> None:
-    parent, sub = _name_path_pair()
+@pytest.mark.parametrize("default", [None, "fast"])
+def test_name_path_parent_is_probed_with_the_requested_names_bound(default: str | None) -> None:
+    parent, sub = _name_path_pair(default)
     result = check_subclass_scope(sub, parent, SELECTING, requests=["x__tt_slow"])
     assert result.passed, result.failures
 
 
-def test_escalating_parent_match_is_a_failure_not_a_raise() -> None:
-    from mloda.core.abstract_plugins.components.utils import escalate_match_abort
+def _aborts_always(feature_name: Any, options: Options) -> bool:
+    return True
 
+
+def _aborts_when_selecting_absent(feature_name: Any, options: Options) -> bool:
+    return "variant" not in options.group
+
+
+@pytest.mark.parametrize(
+    ("aborts", "prefix"),
+    [
+        pytest.param(lambda n, o: "variant" in o.group, "", id="selecting_present"),
+        pytest.param(_aborts_always, "", id="always"),
+        pytest.param(_aborts_when_selecting_absent, "setup:", id="selecting_absent"),
+    ],
+)
+def test_escalating_parent_match_is_a_failure_not_a_raise(aborts: Callable[[Any, Options], bool], prefix: str) -> None:
     class EscalatingParent(make_parent()):  # type: ignore[misc]
         @classmethod
         def match_feature_group_criteria(
             cls, feature_name: Any, options: Options, data_access_collection: Any = None
         ) -> bool:
-            if "variant" in options.group:
+            if aborts(feature_name, options):
                 raise escalate_match_abort(ValueError("match aborted"))
             return str(feature_name) == "sc_a"
 
     sub = _gated_subclass(EscalatingParent, "variant")
     result = check_subclass_scope(sub, EscalatingParent, SELECTING)
     assert not result.passed
-    assert any("match aborted" in f for f in result.failures), result.failures
+    assert any(f.startswith(prefix) and "match aborted" in f for f in result.failures), result.failures
+
+
+def test_name_path_scaling_parent_values_path_passes_for_a_non_first_scaler() -> None:
+    pytest.importorskip("sklearn")
+    from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScaling  # noqa: F401
+    from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
+
+    sub = _gated_subclass(ScalingFeatureGroup, "variant")
+    data = TypedTestData({"x": (DataType.DOUBLE, [1.0, 2.0, 3.0])})
+    result = check_subclass_scope(
+        sub, ScalingFeatureGroup, SELECTING, requests=["x__minmax_scaled"], input_data=data, adapter=PandasAdapter()
+    )
+    assert result.passed, result.failures

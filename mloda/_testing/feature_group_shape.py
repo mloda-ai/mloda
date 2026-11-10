@@ -89,7 +89,7 @@ def _base_options(cls: type[FeatureGroup], bound_keys: Mapping[str, frozenset[st
         if value is None:
             return None
         group[key] = value
-    return cls.options_with_defaults(Options(group=group))
+    return cls.options_with_defaults(Options(group=group), dict.fromkeys(bound), fill_bindings=False)
 
 
 def _without_key(options: Options, key: str) -> Options:
@@ -641,13 +641,13 @@ def check_feature_group_shape(
     require_run: bool = False,
     requests: Sequence[str] | None = None,
 ) -> CheckResult:
-    """Check a FeatureGroup's match contract and, given input_data, its run; a raising matcher is a non-match;
-    an escalated match abort is a failure with its text.
+    """Check a FeatureGroup's match contract and, given input_data, its run.
 
+    A raising matcher is a non-match; an escalated match abort is a failure with its text.
     With require_run, a rule exclusion, a missing serving Implementation or a route block is a failure instead of a note.
     Secret checks cover declarations, not call sites: a secret under an undeclared benign key goes unseen;
     silence a false positive per option in NOT_SECRET_OPTIONS with a reason.
-    requests= probes those names instead of the class and declared names; base_options must agree with them.
+    requests= probes those names instead of the class and declared names; a base_options value contradicting them is a failure with the abort text.
     """
     if isinstance(requests, str):
         return CheckResult(

@@ -225,7 +225,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     def _group_by_features(cls, options: Options) -> list[Any] | None:
         """The group_by_features option as a list; a bare string is one key."""
         value = options.get("group_by_features")
-        return None if value is None else FeatureChainParser._unpack_property_value(value)
+        return None if value is None or value == "" else FeatureChainParser._unpack_property_value(value)
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Source features plus the group_by_features columns."""

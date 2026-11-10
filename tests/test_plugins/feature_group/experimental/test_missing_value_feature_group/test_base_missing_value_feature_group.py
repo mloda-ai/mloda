@@ -162,6 +162,7 @@ class TestMissingValueFeatureGroup:
             (["region", "store"], {"income", "region", "store"}),
             (None, {"income"}),
             ([], {"income"}),
+            ("", {"income"}),
             (["income"], {"income"}),
         ],
     )

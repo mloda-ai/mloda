@@ -1487,6 +1487,11 @@ def test_route_block_agrees_with_the_planner(
 
 def make_aborting_group() -> type[FeatureGroup]:
     class AbortingGroup(FeatureGroup):
+        PROPERTY_MAPPING = {
+            "ab_mode": PropertySpec("Required mode.", allowed_values=("a", "b")),
+            "ab_strict": PropertySpec("Strict mode.", allowed_values=("a", "b"), strict_validation=True),
+        }
+
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {"ab_a"}
@@ -1502,7 +1507,12 @@ def make_aborting_group() -> type[FeatureGroup]:
 
 @pytest.mark.parametrize(
     ("prefix", "needle"),
-    [("names:", "does not match it"), ("foreign:", "carries no decline code")],
+    [
+        ("names:", "does not match it"),
+        ("foreign:", "carries no decline code"),
+        ("required:", "no rejection recorded"),
+        ("strict:", "lacks code option_value_rejected"),
+    ],
 )
 def test_escalated_match_abort_is_a_failure_not_a_raise(prefix: str, needle: str) -> None:
     result = check_feature_group_shape(make_aborting_group())
@@ -1512,20 +1522,25 @@ def test_escalated_match_abort_is_a_failure_not_a_raise(prefix: str, needle: str
     assert not any(needle in f for f in ours), ours
 
 
-def test_name_path_request_contradicting_the_options_reports_the_abort() -> None:
-    result = check_feature_group_shape(make_name_path_group(), Options(group={"mode": "fast"}), requests=["x__tt_slow"])
-    names = [f for f in result.failures if f.startswith("names:")]
-    assert names, result.failures
-    assert any("encodes 'slow'" in f for f in names), names
-    assert not any("does not match it" in f for f in names), names
-
-
-def test_shipped_scaling_group_contradicting_request_reports_the_abort() -> None:
+def _scaling_group() -> type[FeatureGroup]:
     pytest.importorskip("sklearn")
     from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
 
-    result = check_feature_group_shape(
-        ScalingFeatureGroup, Options(group={"scaler_type": "minmax"}), requests=["x__standard_scaled"]
-    )
-    assert any(f.startswith("names:") and "standard" in f for f in result.failures), result.failures
+    return ScalingFeatureGroup
+
+
+@pytest.mark.parametrize(
+    ("factory", "options", "request_name", "token"),
+    [
+        pytest.param(make_name_path_group, Options(group={"mode": "fast"}), "x__tt_slow", "encodes 'slow'", id="toy"),
+        pytest.param(
+            _scaling_group, Options(group={"scaler_type": "minmax"}), "x__standard_scaled", "standard", id="scaling"
+        ),
+    ],
+)
+def test_name_path_request_contradicting_the_options_reports_the_abort(
+    factory: Callable[[], type[FeatureGroup]], options: Options, request_name: str, token: str
+) -> None:
+    result = check_feature_group_shape(factory(), options, requests=[request_name])
+    assert any(f.startswith("names:") and token in f for f in result.failures), result.failures
     assert not any("does not match it" in f for f in result.failures), result.failures

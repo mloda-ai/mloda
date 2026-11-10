@@ -11,6 +11,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
+from mloda.core.abstract_plugins.components.run_outcome import RunOutcome
 from mloda.core.abstract_plugins.components.step_duration import StepDuration
 from mloda.core.abstract_plugins.components.feature_set import ArtifactBinding
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
@@ -441,25 +442,17 @@ class CfwManager:
 
         self.artifact_to_save[artifact_name] = artifact
 
-    def get_artifacts(self) -> dict[str, Any]:
-        """Retrieves the dictionary of saved artifacts."""
-        return self.artifact_to_save
-
     def add_failed_rows(self, entries: list[FailedRows]) -> None:
         """Appends the failed-row entries one step reported."""
         self.failed_rows.extend(entries)
-
-    def get_failed_rows(self) -> list[FailedRows]:
-        """Retrieves every reported failed-row entry."""
-        return self.failed_rows
 
     def add_step_duration(self, entry: StepDuration) -> None:
         """Appends one completed step's calculate_feature duration."""
         self.step_durations.append(entry)
 
-    def get_step_durations(self) -> list[StepDuration]:
-        """Retrieves every step duration, in completion order."""
-        return self.step_durations
+    def get_run_outcome(self) -> RunOutcome:
+        """Retrieves the artifacts, failed rows and step durations of the run."""
+        return RunOutcome(self.artifact_to_save, tuple(self.failed_rows), tuple(self.step_durations))
 
     def set_artifact_bindings(self, bindings: dict[UUID, ArtifactBinding]) -> None:
         """Sets the per-step artifact bindings resolved from run(artifacts=...)."""

@@ -1,5 +1,6 @@
 """Tests for CfwManager RunContext get/set round-trip and merge-relation cycles."""
 
+import dataclasses
 import multiprocessing.process
 import os
 import sys
@@ -16,7 +17,10 @@ from uuid import uuid4
 import pytest
 
 import mloda.core.core.cfw_manager as cfw_manager_module
+from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.feature_set import ArtifactBinding
+from mloda.core.abstract_plugins.components.run_outcome import RunOutcome
+from mloda.core.abstract_plugins.components.step_duration import StepDuration
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager, MyManager
@@ -35,6 +39,29 @@ def _hold_register_target(command_queue: Any, result_queue: Any, register: Any, 
     register.get_location()
     result_queue.put("ready")
     time.sleep(60)
+
+
+class TestCfwManagerRunOutcome:
+    def test_get_run_outcome_bundles_the_run_outputs_as_a_frozen_snapshot(self) -> None:
+        cfw_register = CfwManager({ParallelizationMode.SYNC})
+        cfw_register.set_artifact_to_save("model", "m")
+        first = FailedRows(feature_group="G", column="a", rows=(1,), reason="r1")
+        second = FailedRows(feature_group="G", column="b", rows=(2,), reason="r2")
+        cfw_register.add_failed_rows([first])
+        cfw_register.add_failed_rows([second])
+        d1 = StepDuration(feature_group="G", step_uuid=uuid4(), duration_seconds=0.1)
+        d2 = StepDuration(feature_group="H", step_uuid=uuid4(), duration_seconds=0.2)
+        cfw_register.add_step_duration(d1)
+        cfw_register.add_step_duration(d2)
+
+        outcome = cfw_register.get_run_outcome()
+
+        assert isinstance(outcome, RunOutcome)
+        assert outcome.artifacts is cfw_register.artifact_to_save
+        assert outcome.failed_rows == (first, second)
+        assert outcome.step_durations == (d1, d2)
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            outcome.artifacts = {}  # type: ignore[misc]
 
 
 class TestCfwManagerRunContextDefault:

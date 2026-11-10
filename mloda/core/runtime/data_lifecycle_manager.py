@@ -3,8 +3,6 @@ from typing import Any, Generator
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
-from mloda.core.abstract_plugins.components.failed_rows import FailedRows
-from mloda.core.abstract_plugins.components.step_duration import StepDuration
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -12,10 +10,10 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 
 class DataLifecycleManager:
     """
-    Manages data lifecycle including dropping, result collection, and artifacts.
+    Manages data lifecycle including dropping, and result collection.
 
     This class handles the lifecycle of data in compute frameworks (CFWs),
-    including tracking data to drop, collecting results, and managing artifacts.
+    including tracking data to drop and collecting results.
     """
 
     def __init__(
@@ -36,9 +34,6 @@ class DataLifecycleManager:
         """
         self.result_data_collection: dict[UUID, Any] = {}
         self.track_data_to_drop: dict[UUID, set[UUID]] = {}
-        self.artifacts: dict[str, Any] = {}
-        self.failed_rows: tuple[FailedRows, ...] = ()
-        self.step_durations: tuple[StepDuration, ...] = ()
         self._transformer = transformer
         self.column_ordering = column_ordering
         self.request_feature_order = request_feature_order
@@ -250,37 +245,3 @@ class DataLifecycleManager:
         while self.result_data_collection:
             step_uuid = next(iter(self.result_data_collection))
             yield step_uuid, self.result_data_collection.pop(step_uuid)
-
-    def set_artifacts(self, artifacts: dict[str, Any]) -> None:
-        """
-        Stores artifacts dictionary.
-
-        Args:
-            artifacts: Dictionary of artifacts to store.
-        """
-        self.artifacts = artifacts
-
-    def set_failed_rows(self, failed_rows: list[FailedRows]) -> None:
-        """Stores the failed-row entries the run reported."""
-        self.failed_rows = tuple(failed_rows)
-
-    def get_failed_rows(self) -> tuple[FailedRows, ...]:
-        """Returns the failed-row entries the run reported."""
-        return self.failed_rows
-
-    def set_step_durations(self, step_durations: list[StepDuration]) -> None:
-        """Stores the step durations the run recorded."""
-        self.step_durations = tuple(step_durations)
-
-    def get_step_durations(self) -> tuple[StepDuration, ...]:
-        """Returns the step durations the run recorded."""
-        return self.step_durations
-
-    def get_artifacts(self) -> dict[str, Any]:
-        """
-        Returns stored artifacts.
-
-        Returns:
-            Dictionary of artifacts.
-        """
-        return self.artifacts

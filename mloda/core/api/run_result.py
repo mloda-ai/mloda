@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
+from mloda.core.abstract_plugins.components.run_outcome import RunOutcome
 from mloda.core.abstract_plugins.components.step_duration import StepDuration
 from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
@@ -17,7 +18,29 @@ if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature import Feature
 
 
-class RunResult(list[Any]):
+class _RunOutcomeFields:
+    """Read-only per-run outcome properties over ``_run_outcome()``."""
+
+    def _run_outcome(self) -> RunOutcome:
+        raise NotImplementedError
+
+    @property
+    def failed_rows(self) -> tuple[FailedRows, ...]:
+        """Rows feature groups reported as valueless in this run; empty when none."""
+        return self._run_outcome().failed_rows
+
+    @property
+    def step_durations(self) -> tuple[StepDuration, ...]:
+        """calculate_feature seconds per completed feature group step, in completion order."""
+        return self._run_outcome().step_durations
+
+    @property
+    def artifacts(self) -> dict[str, Any]:
+        """Artifacts saved by this run; pass them to a later ``run(artifacts=...)``."""
+        return self._run_outcome().artifacts
+
+
+class RunResult(_RunOutcomeFields, list[Any]):
     """The results list of a ``run_all`` or ``run()`` call, plus the resolved plan of the run that produced it.
 
     Slicing and concatenation return a plain ``list`` without ``plan`` (standard list-subclass behavior).
@@ -37,31 +60,24 @@ class RunResult(list[Any]):
         failed_rows: tuple[FailedRows, ...] = (),
         artifacts: dict[str, Any] | None = None,
         step_durations: tuple[StepDuration, ...] = (),
+        outcome: RunOutcome | None = None,
     ) -> None:
         super().__init__(results)
-        self._failed_rows = failed_rows
-        self._step_durations = step_durations
-        self._artifacts: dict[str, Any] = {} if artifacts is None else artifacts
+        if outcome is not None and (failed_rows or artifacts is not None or step_durations):
+            raise TypeError("Pass either outcome or failed_rows, artifacts and step_durations, not both.")
+        self._outcome = (
+            outcome
+            if outcome is not None
+            else RunOutcome({} if artifacts is None else artifacts, failed_rows, step_durations)
+        )
         self._connection_handles = connection_handles or {}
         self._plan = plan
         self._result_items = tuple(result_items or ())
         self._run_id = run_id
         self._plan_id = plan_id
 
-    @property
-    def failed_rows(self) -> tuple[FailedRows, ...]:
-        """Rows feature groups reported as valueless in this run; empty when none."""
-        return self._failed_rows
-
-    @property
-    def step_durations(self) -> tuple[StepDuration, ...]:
-        """calculate_feature seconds per completed feature group step, in completion order."""
-        return self._step_durations
-
-    @property
-    def artifacts(self) -> dict[str, Any]:
-        """Artifacts saved by this run; pass them to a later ``run(artifacts=...)``."""
-        return self._artifacts
+    def _run_outcome(self) -> RunOutcome:
+        return self._outcome
 
     @property
     def run_id(self) -> str | None:
@@ -159,15 +175,13 @@ def _redacted(group: Any) -> dict[Any, Any]:
 
 @dataclass
 class _StreamOutcome:
-    """Per-run artifacts, failed rows and step durations, filled when the stream's runner context exits."""
+    """Mutable cell holding the run outcome, filled when the stream's runner context exits."""
 
-    artifacts: dict[str, Any] = field(default_factory=dict)
-    failed_rows: tuple[FailedRows, ...] = ()
-    step_durations: tuple[StepDuration, ...] = ()
+    value: RunOutcome = field(default_factory=RunOutcome)
 
 
-class ResultStream(Generator[Any, None, None]):
-    """A ``stream_all`` or ``stream_run()`` result stream: iterates like a generator and exposes the resolved plan."""
+class ResultStream(_RunOutcomeFields, Generator[Any, None, None]):
+    """A ``stream_all``/``stream_run()`` stream exposing the resolved plan; outcome fields stay empty until it ends."""
 
     def __init__(
         self,
@@ -182,22 +196,10 @@ class ResultStream(Generator[Any, None, None]):
         self._plan = plan
         self._run_id = run_id
         self._plan_id = plan_id
-        self._outcome = _StreamOutcome() if outcome is None else outcome
+        self._outcome_cell = _StreamOutcome() if outcome is None else outcome
 
-    @property
-    def artifacts(self) -> dict[str, Any]:
-        """Artifacts saved by the run; empty until the stream is exhausted or closed."""
-        return self._outcome.artifacts
-
-    @property
-    def failed_rows(self) -> tuple[FailedRows, ...]:
-        """Valueless rows reported by the run; empty until the stream is exhausted or closed."""
-        return self._outcome.failed_rows
-
-    @property
-    def step_durations(self) -> tuple[StepDuration, ...]:
-        """calculate_feature seconds per completed step; empty until the stream is exhausted or closed."""
-        return self._outcome.step_durations
+    def _run_outcome(self) -> RunOutcome:
+        return self._outcome_cell.value
 
     @property
     def run_id(self) -> str | None:

@@ -2,6 +2,7 @@
 Tests for PandasSklearnPipeline.
 """
 
+from pathlib import Path
 from typing import Any
 import pytest
 import pandas as pd
@@ -264,7 +265,7 @@ class TestPandasSklearnPipelineOnZeroInputRows:
         return PandasSklearnPipeline.calculate(SklearnPipelineFeatureGroup, data, features, None), features
 
     @pytest.mark.parametrize("dtype", ["float32", "float64"])
-    def test_zero_rows_with_a_loaded_artifact_keep_the_fitted_width_and_dtype(self, dtype: str, tmp_path: Any) -> None:
+    def test_zero_rows_with_a_loaded_artifact_keep_the_fitted_width_and_dtype(self, dtype: str, tmp_path: Path) -> None:
         options = Options({SklearnArtifact.ARTIFACT_STORAGE_PATH: str(tmp_path)})
         _, fit_set = self._run(4, dtype, options, "save")
         SklearnArtifact.custom_saver(fit_set, fit_set.save_artifact)
@@ -277,7 +278,7 @@ class TestPandasSklearnPipelineOnZeroInputRows:
         assert result.dtypes.to_dict() == non_empty.dtypes.to_dict()
         assert features.save_artifact is None
 
-    def test_zero_rows_without_an_artifact_raise_a_clear_error_and_save_nothing(self) -> None:
+    def test_zero_rows_without_an_artifact_raise_a_clear_error(self) -> None:
         with pytest.raises(ValueError, match=NO_ROWS_MESSAGE):
             self._run(0, mode="save")
 
@@ -289,3 +290,11 @@ class TestPandasSklearnPipelineOnZeroInputRows:
 
         with pytest.raises(ValueError, match=NO_ROWS_MESSAGE):
             PandasSklearnPipeline.calculate(SklearnPipelineFeatureGroup, data, features, None)
+
+    def test_zero_rows_with_a_fitted_non_numeric_pipeline_raise_a_clear_error(self) -> None:
+        sklearn_preprocessing = pytest.importorskip("sklearn.preprocessing")
+        fitted = sklearn_preprocessing.OneHotEncoder(sparse_output=False).fit(np.array([["x"], ["y"]], dtype=object))
+        empty = pd.DataFrame({"s": pd.Series([], dtype=object)})
+
+        with pytest.raises(ValueError, match=r"Cannot .* zero rows"):
+            PandasSklearnPipeline._apply_pipeline(empty, ["s"], fitted)

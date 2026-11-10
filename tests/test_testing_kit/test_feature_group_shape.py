@@ -902,6 +902,16 @@ def test_default_run_group_passes_with_input(kind: str, adapter_cls: type[Any], 
     assert result.failures == (), result.failures
 
 
+def test_default_run_group_passes_with_list_input_on_python_dict() -> None:
+    columns: dict[str, Any] = {
+        "rg_src": (DataType.INT64, [1, 2, 3]),
+        "rg_label": _RUN_LABELS,
+        "rg_list": (DataType.LIST, [[1, 2], [3], [4, 5]]),
+    }
+    result = check_feature_group_shape(make_run_group(), input_data=TypedTestData(columns), adapter=PythonDictAdapter())
+    assert result.failures == (), result.failures
+
+
 def test_pandas_object_date_run_notes_value_only_check() -> None:
     _require_backend(PandasAdapter)
     result = check_feature_group_shape(make_run_group("object_date"), input_data=_run_data(), adapter=PandasAdapter())

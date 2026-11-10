@@ -19,6 +19,8 @@ except ImportError:
     KMeans, AgglomerativeClustering, DBSCAN, SpectralClustering = None, None, None, None
     StandardScaler = None
     silhouette_score = None
+    check_array = None
+    FLOAT_DTYPES = None
 
 
 try:
@@ -70,7 +72,7 @@ class PandasClustering(Implementation[ClusteringFeatureGroup]):
     @classmethod
     def _empty_labels(cls, algorithm: str) -> "NDArray[Any]":
         """Zero-row labels in the dtype a run with rows gives; an unknown algorithm still raises."""
-        if algorithm not in ("kmeans", "hierarchical", "agglomerative", "dbscan", "spectral", "affinity"):
+        if algorithm not in cls.feature_group.CLUSTERING_ALGORITHMS:
             raise ValueError(f"Unsupported clustering algorithm: {algorithm}")
         return np.empty(0, dtype=np.int32 if algorithm == "kmeans" else np.int64)
 

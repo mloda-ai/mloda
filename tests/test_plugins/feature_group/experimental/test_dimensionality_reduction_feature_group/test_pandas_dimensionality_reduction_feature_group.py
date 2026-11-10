@@ -363,11 +363,19 @@ class TestPandasDimensionalityReductionOnZeroInputRows:
     """Zero input rows give empty columns of the non-empty dtype."""
 
     @staticmethod
-    def _reduce(algorithm: str, source_dtype: str, rows: int, dimension: int = 2) -> pd.DataFrame:
+    def _reduce(
+        algorithm: str, source_dtype: str, rows: int, dimension: int = 2, categorical: bool = False
+    ) -> pd.DataFrame:
         pytest.importorskip("sklearn")
         data = pd.DataFrame(
             {f"f{i}": (np.arange(rows) % (i + 3) + i * 0.5).astype(source_dtype) for i in range(3)},
         )
+        if categorical:
+            classes = np.arange(rows) % 3
+            noise = np.random.default_rng(0).normal(size=(rows, 3))
+            for i in range(3):
+                data[f"f{i}"] = (classes * (i + 1) + noise[:, i]).astype(source_dtype)
+            data["category"] = pd.Series(classes).astype(str).astype("string")
         features = FeatureSet()
         options = (
             Options({DimensionalityReductionFeatureGroup.TSNE_MAX_ITER: 250}) if algorithm == "tsne" else Options()
@@ -393,3 +401,22 @@ class TestPandasDimensionalityReductionOnZeroInputRows:
     def test_zero_rows_still_reject_a_dimension_not_below_the_source_count(self, algorithm: str) -> None:
         with pytest.raises(ValueError, match="Target dimension .* must be less than the number of source features"):
             self._reduce(algorithm, "float64", 0, dimension=3)
+
+    @pytest.mark.parametrize("source_dtype", ["float32", "float64"])
+    def test_lda_zero_rows_with_a_categorical_column_keep_the_non_empty_dtype(self, source_dtype: str) -> None:
+        non_empty = self._reduce("lda", source_dtype, 12, categorical=True)
+        result = self._reduce("lda", source_dtype, 0, categorical=True)
+
+        reduced = [c for c in non_empty.columns if "__" in c]
+        assert len(reduced) == 2
+        assert len(result) == 0
+        assert [c for c in result.columns if "__" in c] == reduced
+        for column in reduced:
+            assert result[column].dtype == non_empty[column].dtype
+
+    def test_lda_zero_rows_without_a_categorical_column_raise_like_a_run_with_rows(self) -> None:
+        match = "LDA requires a categorical target variable"
+        with pytest.raises(ValueError, match=match):
+            self._reduce("lda", "float64", 12)
+        with pytest.raises(ValueError, match=match):
+            self._reduce("lda", "float64", 0)

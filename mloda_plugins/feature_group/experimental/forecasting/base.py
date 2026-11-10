@@ -35,6 +35,8 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Opera
     """
     Base class for all forecasting feature groups.
 
+    The forecast lives on its own frame (history plus horizon rows), so combining it with input-frame features needs a Link.
+
     Forecasting feature groups generate forecasts for time series data using various algorithms.
     They allow you to predict future values based on historical patterns and trends.
     Supports both string-based feature creation and configuration-based creation with proper

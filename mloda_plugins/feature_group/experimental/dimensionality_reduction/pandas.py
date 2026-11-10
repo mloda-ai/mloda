@@ -127,14 +127,16 @@ class PandasDimensionalityReduction(Implementation[DimensionalityReductionFeatur
             )
 
         if X_array.shape[0] == 0:
+            if algorithm not in cls.feature_group.REDUCTION_ALGORITHMS:
+                raise ValueError(f"Unsupported dimensionality reduction algorithm: {algorithm}")
+            if algorithm == "lda":
+                cls._lda_target_column(df)
             # Empty result in the dtype a run with rows gives (t-SNE always returns float32).
             dtype = (
                 np.float32
                 if algorithm == "tsne"
                 else check_array(X_array, ensure_min_samples=0, dtype=FLOAT_DTYPES).dtype
             )
-            if algorithm not in ("pca", "tsne", "ica", "lda", "isomap"):
-                raise ValueError(f"Unsupported dimensionality reduction algorithm: {algorithm}")
             return np.empty((0, dimension), dtype=dtype)
 
         # Standardize the features
@@ -266,6 +268,14 @@ class PandasDimensionalityReduction(Implementation[DimensionalityReductionFeatur
         return cast("NDArray[Any]", ica.fit_transform(X))
 
     @classmethod
+    def _lda_target_column(cls, df: "pd.DataFrame") -> Any:
+        """The first categorical column, the LDA target; raises when there is none."""
+        categorical_columns = df.select_dtypes(include=["object", "string", "category"]).columns
+        if len(categorical_columns) == 0:
+            raise ValueError("LDA requires a categorical target variable, but none was found in the data")
+        return categorical_columns[0]
+
+    @classmethod
     def _perform_lda_reduction(cls, X: "NDArray[Any]", dimension: int, df: "pd.DataFrame") -> "NDArray[Any]":
         """
         Perform Linear Discriminant Analysis (LDA).
@@ -282,16 +292,8 @@ class PandasDimensionalityReduction(Implementation[DimensionalityReductionFeatur
         if not SKLEARN_AVAILABLE:
             raise ImportError("scikit-learn is required for LDA dimensionality reduction")
 
-        # LDA requires a target variable
-        # We'll try to find a categorical column in the DataFrame
-        categorical_columns = df.select_dtypes(include=["object", "string", "category"]).columns
-
-        if len(categorical_columns) == 0:
-            raise ValueError("LDA requires a categorical target variable, but none was found in the data")
-
         # Use the first categorical column as the target
-        target_column = categorical_columns[0]
-        y = df[target_column].values
+        y = df[cls._lda_target_column(df)].values
 
         # Perform LDA
         lda = LinearDiscriminantAnalysis(n_components=dimension)

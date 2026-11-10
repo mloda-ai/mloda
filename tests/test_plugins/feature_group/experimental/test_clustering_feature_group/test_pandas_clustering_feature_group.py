@@ -220,7 +220,14 @@ class TestPandasClustering:
         assert "feature1&feature2__cluster_hierarchical_2" in result.columns
 
 
-CLUSTER_KINDS = [("kmeans", "2"), ("hierarchical", "2"), ("dbscan", "auto"), ("affinity", "auto")]
+CLUSTER_KINDS = [
+    ("kmeans", "2"),
+    ("hierarchical", "2"),
+    ("dbscan", "auto"),
+    ("affinity", "auto"),
+    ("spectral", "2"),
+    ("agglomerative", "2"),
+]
 
 
 class TestPandasClusteringOnZeroInputRows:
@@ -253,7 +260,9 @@ class TestPandasClusteringOnZeroInputRows:
         assert list(result.columns) == list(non_empty.columns)
         assert result[name].dtype == non_empty[name].dtype
 
-    @pytest.mark.parametrize("kind", [("kmeans", "2"), ("hierarchical", "2")], ids=lambda k: k[0])
+    @pytest.mark.parametrize(
+        "kind", [("kmeans", "2"), ("hierarchical", "2"), ("spectral", "2"), ("agglomerative", "2")], ids=lambda k: k[0]
+    )
     @pytest.mark.parametrize("source_dtype", ["float32", "float64", "int64"])
     def test_zero_rows_with_probabilities_keep_the_fixed_k_columns_and_dtypes(
         self, kind: tuple[str, str], source_dtype: str

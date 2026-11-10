@@ -182,6 +182,7 @@ class TestResolutionDiagnosisDataclass:
         assert diagnosis.feature_name is None
         assert diagnosis.failed_result is None
         assert diagnosis.message is None
+        assert diagnosis.resolving_path == ()
 
 
 # ---------------------------------------------------------------------------

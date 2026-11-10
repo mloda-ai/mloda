@@ -216,6 +216,21 @@ class TestFeatureResolutionErrorTransport:
         assert str(restored) == str(original)
         assert restored.refusals == ()
 
+    @pytest.mark.parametrize(
+        "round_trip",
+        [lambda e: pickle.loads(pickle.dumps(e)), copy.deepcopy],  # nosec B301
+        ids=["pickle", "deepcopy"],
+    )
+    @pytest.mark.parametrize("path", [("outer_809", "inner_809"), ()])
+    def test_round_trip_preserves_the_resolving_path(self, round_trip: Any, path: tuple[str, ...]) -> None:
+        original = _raised_resolution_error_809()
+        kwargs: dict[str, Any] = {"resolving_path": path} if path else {}
+        with_path = FeatureResolutionError(str(original), original.feature_name, original.result, **kwargs)
+
+        restored = round_trip(with_path)
+
+        assert restored.resolving_path == path
+
 
 class TestFeatureResolutionErrorImportSurfaces:
     """The typed error is re-exported from the user and steward surfaces."""

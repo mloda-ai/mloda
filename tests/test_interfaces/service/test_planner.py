@@ -795,11 +795,11 @@ class TestVariantNotAllowed:
         _assert_no_paths(result, tmp_path, "sales.csv")
 
     @pytest.mark.parametrize(
-        "blocked, consumer, input_name, extra, fix, message_part",
+        "blocked, const, input_name, extra, fix, message_part",
         [
             (
                 "OpToyVariantFG",
-                "OpToyVariantConsumerFG",
+                "OPTOY_VARIANT_CONSUMER",
                 "optoyvar_value",
                 ("OpToyVariantConsumerFG",),
                 True,
@@ -807,7 +807,7 @@ class TestVariantNotAllowed:
             ),
             (
                 "OpToyVariantEmptyFG",
-                "OpToyVariantEmptyConsumerFG",
+                "OPTOY_VARIANT_EMPTY_CONSUMER",
                 "optoyvar_empty",
                 ("OpToyVariantEmptyConsumerFG",),
                 False,
@@ -819,16 +819,12 @@ class TestVariantNotAllowed:
         self,
         tmp_path: Path,
         blocked: str,
-        consumer: str,
+        const: str,
         input_name: str,
         extra: tuple[str, ...],
         fix: bool,
         message_part: str,
     ) -> None:
-        const = {
-            "OpToyVariantConsumerFG": "OPTOY_VARIANT_CONSUMER",
-            "OpToyVariantEmptyConsumerFG": "OPTOY_VARIANT_EMPTY_CONSUMER",
-        }[consumer]
         result, detail, toy = self._blocked(
             tmp_path,
             blocked,

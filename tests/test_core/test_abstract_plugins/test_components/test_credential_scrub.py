@@ -564,6 +564,26 @@ def test_scrub_credentials_drops_secrets_and_keeps_context(
 
 
 DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
+    (
+        "ml_backslash_ending_value_pformat",
+        pprint.pformat({"password": "S3CR3T\\", "token": "Z7xW", "user": "bob"}, width=20),
+        "{'password': '***',\n 'token': '***',\n 'user': 'bob'}",
+    ),
+    (
+        "ml_backslash_ending_value_json_indent2",
+        json.dumps({"user": "bob", "password": "S3CR3T\\", "token": "Z7xW"}, indent=2),
+        '{\n  "user": "bob",\n  "password": "***",\n  "token": "***"\n}',
+    ),
+    (
+        "ml_backslash_ending_value_json_indent0",
+        json.dumps({"user": "bob", "password": "S3CR3T\\", "token": "Z7xW"}, indent=0),
+        '{\n"user": "bob",\n"password": "***",\n"token": "***"\n}',
+    ),
+    (
+        "ml_backslash_ending_value_json_inner_quote",
+        json.dumps({"password": 'a"b S3CR3T\\', "token": "Z7xW"}, indent=2),
+        '{\n  "password": "***",\n  "token": "***"\n}',
+    ),
     ("dict_repr_password", "{'password': 'hunter2z9'}", "{'password': '***'}"),
     ("dict_repr_numeric_password", "{'db_password': 123456789}", "{'db_password': '***'}"),
     ("dict_repr_password_tuple", "{'password': ('a', 'hunter2z9')}", "{'password': '***'}"),
@@ -898,6 +918,150 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
         "[{'password': '***'},\n 'visible-sibling',\n 'vis2']",
     ),
     ("private_use_char_in_input_is_replaced", "a\ue001bcd rest", "a\ufffdbcd rest"),
+    (
+        "eq_repr_of_repr_str_value_with_dquote",
+        repr(repr({"password": 'a"b S3CR3T', "user": 'bo"b'})),
+        repr(repr({"password": "***", "user": 'bo"b'})),
+    ),
+    (
+        "eq_repr_of_repr_dict_value_with_dquote",
+        repr(repr({"password": {"k": 'a"b S3CR3T'}, "user": 'bo"b'})),
+        repr(repr({"password": "***", "user": 'bo"b'})),
+    ),
+    (
+        "eq_repr_of_repr_list_value",
+        repr(repr({"password": ["a", 'b"S3CR3T'], "user": 'bo"b'})),
+        repr(repr({"password": "***", "user": 'bo"b'})),
+    ),
+    (
+        "eq_double_repr_str_value_with_dquote",
+        repr(RuntimeError("wrapped: " + repr(ValueError(repr({"password": 'a"b S3CR3T', "user": 'bo"b'}))))),
+        repr(RuntimeError("wrapped: " + repr(ValueError(repr({"password": "***", "user": 'bo"b'}))))),
+    ),
+    (
+        "eq_json_in_json_keeps_sibling",
+        json.dumps({"msg": json.dumps({"password": "S3CR3T", "user": "bob"})}),
+        json.dumps({"msg": json.dumps({"password": "***", "user": "bob"})}),
+    ),
+    (
+        "eq_json_in_json_indent2_keeps_sibling",
+        json.dumps({"msg": json.dumps({"password": "S3CR3T", "user": "bob"}, indent=2)}),
+        json.dumps({"msg": json.dumps({"password": "***", "user": "bob"}, indent=2)}),
+    ),
+    (
+        "eq_json_in_json_in_json",
+        json.dumps({"msg": json.dumps({"inner": json.dumps({"password": 'a"bS3CR3T', "user": "bob"})})}),
+        json.dumps({"msg": json.dumps({"inner": json.dumps({"password": "***", "user": "bob"})})}),
+    ),
+    (
+        "eq_python_repr_inside_json_escaped_value_token",
+        json.dumps({"msg": repr({"password": "it's S3CR3T", "user": "bob"})}),
+        json.dumps({"msg": repr({"password": "***", "user": "bob"})}),
+    ),
+    (
+        "eq_bare_value_holding_escaped_quote_one_level_up",
+        repr(ValueError(json.dumps({"password": 'a"bSECRETX', "user": "bob"}))),
+        repr(ValueError(json.dumps({"password": "***", "user": "bob"}))),
+    ),
+    (
+        "eq_backslash_ending_value_repr_of_repr",
+        repr(repr({"password": "S3CR3T\\", "token": "S3CR3T2"}) + ' "x"'),
+        repr(repr({"password": "***", "token": "***"}) + ' "x"'),
+    ),
+    (
+        "eq_backslash_ending_value_double_repr",
+        repr(RuntimeError("wrapped: " + repr(ValueError(repr({"password": "S3CR3T\\", "token": "S3CR3T2"}) + ' "x"')))),
+        repr(RuntimeError("wrapped: " + repr(ValueError(repr({"password": "***", "token": "***"}) + ' "x"')))),
+    ),
+    (
+        "eq_backslash_ending_value_json_in_json",
+        json.dumps({"msg": json.dumps({"password": "S3CR3T\\", "token": "S3CR3T2"})}),
+        json.dumps({"msg": json.dumps({"password": "***", "token": "***"})}),
+    ),
+    (
+        "eq_pprint_wrapped_escaped_chunks_keeps_sibling",
+        repr(
+            ValueError(
+                pprint.pformat({"password": 'a"b ' + "word " * 12 + "TAIL", "user": 'bo"b'}, width=40),
+            )
+        ),
+        repr(ValueError("{'password': '***',\n 'user': 'bo\"b'}")),
+    ),
+    (
+        "eq_pprint_wrapped_escaped_chunks_double_repr",
+        repr(
+            RuntimeError(
+                "wrapped: "
+                + repr(
+                    ValueError(pprint.pformat({"password": 'a"b ' + "word " * 12 + "TAIL", "user": 'bo"b'}, width=40))
+                )
+            )
+        ),
+        repr(RuntimeError("wrapped: " + repr(ValueError("{'password': '***',\n 'user': 'bo\"b'}")))),
+    ),
+    (
+        "eq_pprint_wrapped_mixed_escaped_and_bare_chunks",
+        repr(
+            ValueError(
+                pprint.pformat({"password": "word " * 6 + "it's " + "word " * 6 + "TAIL", "user": 'bo"b'}, width=40)
+            )
+        ),
+        repr(ValueError("{'password': '***',\n 'user': 'bo\"b'}")),
+    ),
+    (
+        "eq_guard_bare_value_with_trailing_call_masks_sibling",
+        "{'password': 'S3CR3T'.upper(), 'token': 'S3CR3T2'}",
+        "{'password': '***'}",
+    ),
+    (
+        "eq_guard_bare_single_quote_in_value_masks_sibling",
+        "{'password': 'a'b, 'token': 'S3CR3T2'}",
+        "{'password': '***'}",
+    ),
+    (
+        "eq_guard_bare_double_quote_in_value_masks_sibling",
+        '{"password": "x"y, "api_key": "S3CR3T2"}',
+        '{"password": "***"}',
+    ),
+    (
+        "eq_bare_value_closer_followed_by_letter_is_content",
+        '{"password": "abc"x, "user": "bob"}',
+        '{"password": "***"}',
+    ),
+    (
+        "eq_bare_value_escaped_inner_quotes_masks_all_and_sibling",
+        repr(ValueError(json.dumps({"password": 'say "hi" S3CR3T', "token": "T"}))),
+        repr(ValueError(json.dumps({"password": "***", "token": "***"}))),
+    ),
+    (
+        "eq_bare_value_escaped_quote_then_comma_runs_on",
+        repr(ValueError(json.dumps({"password": 'a", S3CR3T', "user": "bob"}))),
+        repr(ValueError(json.dumps({"password": "***", "user": "bob"}))),
+    ),
+    (
+        "eq_bare_value_escaped_quote_then_brace_runs_on",
+        repr(json.dumps({"password": 'a"}S3CR3T', "user": "b"})),
+        repr(json.dumps({"password": "***", "user": "b"})),
+    ),
+    (
+        "eq_bare_value_ending_in_backslash_fails_closed_runs_on",
+        json.dumps({"password": "C:\\", "user": "bob"}),
+        '{"password": "***"}',
+    ),
+    (
+        "eq_escaped_bytes_value_repr_of_repr",
+        repr(repr({"password": b"a S3CR3T", "user": "it's"})),
+        repr(repr({"password": "***", "user": "it's"})),
+    ),
+    (
+        "eq_pprint_wrapped_escaped_bytes_chunks_keeps_sibling",
+        repr(
+            ValueError(
+                pprint.pformat({"password": b'a"b ' + b"word " * 12 + b"TAIL", "user": 'bo"b'}, width=40),
+            )
+        ),
+        repr(ValueError("{'password': '***',\n 'user': 'bo\"b'}")),
+    ),
 ]
 
 
@@ -946,6 +1110,9 @@ def test_scrub_credentials_masks_slash_dsn_password(
 
 
 UNCHANGED_LOOKALIKE_CASES: list[str] = [
+    repr(repr({"user": "bob", "note": 'a"b'})),
+    json.dumps({"msg": json.dumps({"user": "bob", "note": 'a"b'})}),
+    json.dumps({"path": "C:\\dir\\"}),
     repr(ValueError('{\n"user": "bob",\n"host": "h"\n}')),
     "sort_key=col",
     "primary_key=id",
@@ -1417,11 +1584,33 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
             5000,
             "long nested item body",
         ),
+        (lambda k: "{\\'password\\': \\'" * k, 5000, "repeated escaped-quote openers without a closer"),
+        (lambda k: "{" + "\\" * k + "'password" + "\\" * k + "': x", 5000, "a key quote with a long backslash run"),
+        (
+            lambda k: "{\\'password\\': \\'" + ("a" + "\\" * 3 + "'") * k,
+            5000,
+            "a long escaped string body with many backslash runs",
+        ),
+        (lambda k: "{\\'password\\': \\'x\\', " * k, 5000, "many escaped-key matches on one line"),
+        (lambda k: "{'password': 'a'b " * k, 5000, "repeated bare values holding a quote"),
+        (
+            lambda k: "{\\'password\\': \\'a\\'" + "\\n  \\'b\\'" * k,
+            5000,
+            "a long chain of escaped continuation chunks",
+        ),
         (lambda k: "{'password': (a)," * k, 10000, "many matches on one long line"),
         (
             lambda k: "y" * (40 * k) + "{'password': (a)," * k,
             6000,
             "many matches on one long line after a long prefix",
+        ),
+        (lambda k: "{\\'password\\': [\\'x\\'], " * k, 1000, "an escaped key with a list value repeated"),
+        (lambda k: "{\\'password\\': {\\'a\\': \\'x\\'}, " * k, 1000, "an escaped key with a dict value repeated"),
+        (lambda k: "{\\'password\\': (\\'x\\',), " * k, 1000, "an escaped key with a tuple value repeated"),
+        (
+            lambda k: json.dumps({"m": json.dumps([{"password": ["x"], "user": "u"}] * k)}),
+            1000,
+            "a json-in-json list value repeated",
         ),
     ],
     ids=[
@@ -1448,8 +1637,18 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
         "ml_cont_long_raw_continuation_closers",
         "ml_items_long_failing_item_line",
         "ml_items_long_nested_body",
+        "esc_repeated_escaped_quote_openers",
+        "esc_key_quote_long_backslash_run",
+        "esc_long_string_body_backslash_runs",
+        "esc_many_escaped_key_matches_one_line",
+        "bare_value_repeated_inner_quote",
+        "esc_long_continuation_chunk_chain",
         "one_long_line_many_matches",
         "one_long_line_many_matches_long_prefix",
+        "esc_key_list_value_many_matches",
+        "esc_key_dict_value_many_matches",
+        "esc_key_tuple_value_many_matches",
+        "json_in_json_list_value_many_matches",
     ],
 )
 def test_repeated_unterminated_password_brace_scrubs_fast(build: Callable[[int], str], n: int, what: str) -> None:

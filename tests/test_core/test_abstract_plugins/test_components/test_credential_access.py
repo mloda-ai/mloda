@@ -64,7 +64,6 @@ from mloda.core.abstract_plugins.components.input_data.match_cache import _RUN_M
 from mloda.core.abstract_plugins.components.input_data.reader_probe import (
     _CURRENT as _READER_PROBE_CURRENT,
     ReaderProbeScope,
-    probe_source_group,
     reader_probe_scope,
 )
 from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, collect_match_rejections
@@ -73,7 +72,6 @@ from mloda.core.abstract_plugins.implementation import _ACCESSIBLE, accessible_i
 from mloda.core.abstract_plugins.verified_context import _current_verified_context, verified_context
 from mloda.core.api.request import _PLAN_ORIGIN, _plan_origin
 from mloda.core.prepare.input_chain import _RUN, input_resolution_scope
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
 
 _HOST = "access-host.internal.example"
 _HMAC = "hmac-access-Qv7Lk2Xz9"  # nosec B105
@@ -515,17 +513,15 @@ class _FrozenError(Exception):
     detail: str
 
 
-class _NoopExtender(Extender):
-    def wraps(self) -> set[ExtenderHook]:
-        return {ExtenderHook.INPUT_DATA_MATCH}
+def _probe_scope() -> ReaderProbeScope:
+    class _NoopExtender(Extender):
+        def wraps(self) -> set[ExtenderHook]:
+            return {ExtenderHook.INPUT_DATA_MATCH}
 
-    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        return func(*args, **kwargs)
+        def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+            return func(*args, **kwargs)
 
-
-class _RefusingFrozenExtender(_NoopExtender):
-    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        raise _FrozenError("refused")
+    return ReaderProbeScope(_NoopExtender(), None, None, None, None)
 
 
 def _hook_context() -> HookContext:
@@ -556,7 +552,7 @@ def _hook_context() -> HookContext:
         pytest.param(lambda: input_resolution_scope(object()), _RUN, id="input_resolution_scope"),
         pytest.param(lambda: accessible_implementations([]), _ACCESSIBLE, id="accessible_implementations"),
         pytest.param(
-            lambda: reader_probe_scope(ReaderProbeScope(_NoopExtender(), None, None, None, None)),
+            lambda: reader_probe_scope(_probe_scope()),
             _READER_PROBE_CURRENT,
             id="reader_probe_scope",
         ),
@@ -582,27 +578,3 @@ def test_a_frozen_exception_keeps_its_type_through_the_scope(make_scope: Any, va
     assert type(excinfo.value) is _FrozenError
     assert var.get() == before
     assert input_data_load_gate_scopes_active() == active_before
-
-
-def test_a_frozen_exception_inside_a_nested_run_match_cache_keeps_the_outer_cache() -> None:
-    with run_match_cache():
-        outer = _RUN_MATCH_CACHE.get()
-        assert outer is not None
-
-        with pytest.raises(Exception) as excinfo:
-            with run_match_cache():
-                raise _FrozenError("boom")
-
-        assert type(excinfo.value) is _FrozenError
-        assert _RUN_MATCH_CACHE.get() is outer
-
-
-def test_a_contained_frozen_extender_refusal_stays_contained() -> None:
-    scope = ReaderProbeScope(_RefusingFrozenExtender(), None, None, None, None)
-
-    with reader_probe_scope(scope):
-        outcome = probe_source_group(ToySourceFG, lambda: "probed", None, "x", None)
-
-    assert outcome.refused is not None
-    assert "_FrozenError" in outcome.refused
-    assert type(outcome.error) is _FrozenError

@@ -20,6 +20,7 @@ from mloda.core.abstract_plugins.components.credential_leaves import (
     normalize_credential_key,
     public_key_names,
 )
+from mloda.core.abstract_plugins.components.credential_scrub import _COUNT_NAME
 from mloda.core.abstract_plugins.components.property_spec import NO_DEFAULT, PropertySpec
 from mloda.core.abstract_plugins.components.utils import (
     PREFIX_OPTION_KEY_FLAG,
@@ -272,9 +273,20 @@ def refuse_unread_pointer_credentials(feature_group: type[FeatureGroup], options
         if is_nominal_subclass(feature_group, source):
             continue
         if hit is None:
+            shaped = [
+                leaf.path
+                for leaf in iter_credential_leaves(value)
+                if leaf.shaped and not _COUNT_NAME.fullmatch(leaf.path.rpartition(".")[2])
+            ]
+            if shaped:
+                raise _refuse(
+                    f"Option '{key}' holds a mapping with secret-shaped keys ({', '.join(shaped)}) but "
+                    f"{feature_group.__name__} is not the source group {key}, so the credential would reach a group "
+                    f"that never reads it. Register the credential in the DataAccessCollection and name its handle "
+                    f"in an option declared with credential_handle_spec."
+                )
             continue
-        what = hit or "credential"
-        holder = what if type(value).__name__ == what else f"{type(value).__name__} holding a {what}"
+        holder = hit if type(value).__name__ == hit else f"{type(value).__name__} holding a {hit}"
         raise _refuse(
             f"Option '{key}' holds a {holder} but {feature_group.__name__} is not the source group {key}, so the "
             f"credential would reach a group that never reads it. Register the credential in the "
@@ -282,11 +294,16 @@ def refuse_unread_pointer_credentials(feature_group: type[FeatureGroup], options
         )
 
 
-def _missing_sentence(feature_group: type[FeatureGroup], key: str, options: Options) -> str:
+def _close_option_key(feature_group: type[FeatureGroup], key: str, options: Options) -> str | None:
     mapping = feature_group.PROPERTY_MAPPING or {}
     candidates = [name for name in [*options.group, *options.context] if name not in mapping]
     close = get_close_matches(key, candidates, n=1, cutoff=0.8)
-    hint = f" (did you mean '{close[0]}'?)" if close else ""
+    return close[0] if close else None
+
+
+def _missing_sentence(feature_group: type[FeatureGroup], key: str, options: Options) -> str:
+    close = _close_option_key(feature_group, key, options)
+    hint = f" (did you mean '{close}'?)" if close else ""
     return f"{feature_group.__name__} requires credential handle option '{key}', which is not set{hint}."
 
 
@@ -301,6 +318,23 @@ def missing_credential_handle_keys(feature_group: type[FeatureGroup], options: O
     mapping = feature_group.PROPERTY_MAPPING or {}
     absent = FeatureChainParser._name_path_missing_required_keys(feature_group.options_with_defaults(options), mapping)
     return tuple(key for key in absent if key in keys)
+
+
+def misspelled_handle_key_abort_keys(feature_group: type[FeatureGroup], options: Options) -> tuple[str, ...]:
+    """Absent handle keys with a close supplied key, when only handle keys are missing; else empty."""
+    # Function-local: avoids an import cycle through the feature chain parser.
+    from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+
+    missing = missing_credential_handle_keys(feature_group, options)
+    if not missing:
+        return ()
+    mapping = feature_group.PROPERTY_MAPPING or {}
+    absent = FeatureChainParser._name_path_missing_required_keys(feature_group.options_with_defaults(options), mapping)
+    if any(key not in missing for key in absent):
+        return ()
+    if not any(_close_option_key(feature_group, key, options) for key in missing):
+        return ()
+    return missing
 
 
 def missing_credential_handle_abort(

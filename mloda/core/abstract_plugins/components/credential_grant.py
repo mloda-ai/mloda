@@ -66,13 +66,32 @@ class StaticGrant:
 _GRANT_HOLDER: ContextVar[CredentialLookup | None] = ContextVar("mloda_credential_grant", default=None)
 
 
+class _ReadableWindow:
+    """One readable window over a lookup; copied contexts hold it and see nothing once it closes."""
+
+    __slots__ = ("_lookup",)
+
+    def __init__(self, lookup: CredentialLookup | None) -> None:
+        self._lookup: CredentialLookup | None = lookup
+
+    def values(self) -> Mapping[str, Any] | None:
+        lookup = self._lookup
+        return None if lookup is None else lookup.snapshot()
+
+    def close(self) -> None:
+        self._lookup = None
+
+
+_READABLE: ContextVar[_ReadableWindow | None] = ContextVar("mloda_credential_readable", default=None)
+
+
 class grant_scope:  # noqa: N801
     """Open a grant, mask its secret leaves and expose it for the block (a class: see registered_secrets_scope)."""
 
     def __init__(self, grant: CredentialGrant | None) -> None:
         self._grant = grant
         self._frames: list[
-            tuple[CredentialLookup, registered_secrets_scope, redact_escaping_exception, Token[Any]]
+            tuple[CredentialLookup, registered_secrets_scope, redact_escaping_exception, Token[Any], Token[Any]]
         ] = []
 
     def __enter__(self) -> None:
@@ -86,11 +105,12 @@ class grant_scope:  # noqa: N801
         secrets.__enter__()
         redaction = redact_escaping_exception()
         redaction.__enter__()
-        self._frames.append((lookup, secrets, redaction, _GRANT_HOLDER.set(lookup)))
+        self._frames.append((lookup, secrets, redaction, _GRANT_HOLDER.set(lookup), _READABLE.set(None)))
 
     def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
-        lookup, secrets, redaction, token = self._frames.pop()
+        lookup, secrets, redaction, token, window_token = self._frames.pop()
         _GRANT_HOLDER.reset(token)
+        _READABLE.reset(window_token)
         try:
             lookup.close()
             redaction.__exit__(exc_type, exc, tb)

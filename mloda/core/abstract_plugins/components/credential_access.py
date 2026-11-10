@@ -3,13 +3,14 @@
 import copy
 import functools
 from collections.abc import Callable, Iterator, Mapping, MutableMapping
-from contextvars import ContextVar, Token
+from contextvars import Token
 from typing import Any, NoReturn
 
 from mloda.core.abstract_plugins.components.credential_grant import (
     record_credential_read,
     _GRANT_HOLDER,
-    CredentialLookup,
+    _READABLE,
+    _ReadableWindow,
     StaticGrant,
     grant_scope,
 )
@@ -77,25 +78,6 @@ class ResolvedCredential(MutableMapping[str, Any]):
 
     def __reduce__(self) -> NoReturn:
         raise TypeError(f"Credential '{self.handle}' must not be pickled or copied.")
-
-
-class _ReadableWindow:
-    """One readable window over a lookup; copied contexts hold it and see nothing once it closes."""
-
-    __slots__ = ("_lookup",)
-
-    def __init__(self, lookup: CredentialLookup | None) -> None:
-        self._lookup: CredentialLookup | None = lookup
-
-    def values(self) -> Mapping[str, Any] | None:
-        lookup = self._lookup
-        return None if lookup is None else lookup.snapshot()
-
-    def close(self) -> None:
-        self._lookup = None
-
-
-_READABLE: ContextVar[_ReadableWindow | None] = ContextVar("mloda_credential_readable", default=None)
 
 
 class _ReadableScope:

@@ -19,6 +19,13 @@ if TYPE_CHECKING:
     from mloda.provider import ReadDBFG, ReadDocumentFG, ReadFileFG
 
 
+def loads_data_access(adapter: FrameworkAdapter, **kwargs: Any) -> DataAccessCollection:
+    """The run's DataAccessCollection, carrying the adapter's connection when it has one."""
+    if adapter.connection is not None:
+        kwargs["connections"] = {adapter.connection}
+    return DataAccessCollection(**kwargs)
+
+
 class LoadsIntoFrameworkTestMixin(ConformanceSuite, suite_base=True):
     """The host sets adapter_class (the inherited compute_framework hook is unused here)."""
 
@@ -61,7 +68,7 @@ class FileLoadsIntoFrameworkTestMixin(LoadsIntoFrameworkTestMixin, suite_base=Tr
             list(self.columns[:2]),
             compute_frameworks=[adapter.compute_framework()],
             plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class}),
-            data_access_collection=DataAccessCollection(files={"fwloads_handle": os.fspath(path)}),
+            data_access_collection=loads_data_access(adapter, files={"fwloads_handle": os.fspath(path)}),
         )
 
         assert len(result) == 1
@@ -82,7 +89,7 @@ class FileLoaderNameTestMixin(FileLoadsIntoFrameworkTestMixin, suite_base=True):
             list(self.columns[:2]),
             compute_frameworks=[adapter.compute_framework()],
             plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class}),
-            data_access_collection=DataAccessCollection(files={"loadername_handle": os.fspath(path)}),
+            data_access_collection=loads_data_access(adapter, files={"loadername_handle": os.fspath(path)}),
             function_extender={capture},
         )
 
@@ -112,8 +119,8 @@ class DatabaseLoadsIntoFrameworkTestMixin(LoadsIntoFrameworkTestMixin, suite_bas
             list(self.columns[:2]),
             compute_frameworks=[adapter.compute_framework()],
             plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class}),
-            data_access_collection=DataAccessCollection(
-                credentials={"dbloads_handle": {self.credential_key: str(path)}}
+            data_access_collection=loads_data_access(
+                adapter, credentials={"dbloads_handle": {self.credential_key: str(path)}}
             ),
             function_extender=None if extender is None else {extender},
         )
@@ -135,8 +142,8 @@ class DatabaseLoadsIntoFrameworkTestMixin(LoadsIntoFrameworkTestMixin, suite_bas
             list(self.columns[:2]),
             compute_frameworks=[adapter.compute_framework()],
             plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class}),
-            data_access_collection=DataAccessCollection(
-                credentials={"dbloads_handle": {self.credential_key: str(path)}}
+            data_access_collection=loads_data_access(
+                adapter, credentials={"dbloads_handle": {self.credential_key: str(path)}}
             ),
             global_filter=global_filter,
         )
@@ -177,7 +184,7 @@ class DocumentLoadsIntoFrameworkTestMixin(LoadsIntoFrameworkTestMixin, suite_bas
             features,
             compute_frameworks=[adapter.compute_framework()],
             plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class}),
-            data_access_collection=DataAccessCollection(files={"fwdoc_handle": os.fspath(path)}),
+            data_access_collection=loads_data_access(adapter, files={"fwdoc_handle": os.fspath(path)}),
         )
         return result, path
 

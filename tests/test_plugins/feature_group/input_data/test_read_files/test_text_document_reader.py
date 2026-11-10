@@ -21,7 +21,16 @@ from mloda.user import DataAccessCollection, Feature, Options, PluginCollector, 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.helpers.frame_records import records_from_frame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from mloda._testing.framework_adapter import PandasAdapter, PolarsAdapter, PyArrowAdapter, PythonDictAdapter
+from mloda._testing.framework_adapter import (
+    DuckDBAdapter,
+    IcebergAdapter,
+    PandasAdapter,
+    PolarsAdapter,
+    PolarsLazyAdapter,
+    PyArrowAdapter,
+    PythonDictAdapter,
+    SqliteAdapter,
+)
 from mloda._testing.source.loads_into_framework_suite import DocumentLoadsIntoFrameworkTestMixin
 from mloda._testing.source.read_document_suite import (
     ReadDocumentFGTestMixin,
@@ -65,6 +74,30 @@ class TestTextLoadsIntoPandas(DocumentLoadsIntoFrameworkTestMixin):
 
 class TestTextLoadsIntoPolars(DocumentLoadsIntoFrameworkTestMixin):
     adapter_class = PolarsAdapter
+    feature_group_class = lazy_document_group("text_fg", "TextFG")
+    suffix = ".txt"
+
+
+class TestTextLoadsIntoDuckDB(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = DuckDBAdapter
+    feature_group_class = lazy_document_group("text_fg", "TextFG")
+    suffix = ".txt"
+
+
+class TestTextLoadsIntoSqlite(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = SqliteAdapter
+    feature_group_class = lazy_document_group("text_fg", "TextFG")
+    suffix = ".txt"
+
+
+class TestTextLoadsIntoIceberg(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = IcebergAdapter
+    feature_group_class = lazy_document_group("text_fg", "TextFG")
+    suffix = ".txt"
+
+
+class TestTextLoadsIntoPolarsLazy(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PolarsLazyAdapter
     feature_group_class = lazy_document_group("text_fg", "TextFG")
     suffix = ".txt"
 

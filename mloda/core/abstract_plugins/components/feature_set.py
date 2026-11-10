@@ -10,6 +10,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlySet, attribute_write_error
 from mloda.core.abstract_plugins.components.validators.feature_set_validator import FeatureSetValidator
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import InputCheck
@@ -126,6 +127,8 @@ class FeatureSet:
         self.features = ReadOnlySet(self.features)
         if self.filters is not None:
             self.filters = ReadOnlySet(self.filters, "filters")
+        if self.declared_input_feature_edges is not None:
+            self.declared_input_feature_edges = _frozen_dict(self.declared_input_feature_edges)
         self.prepared = True
         self.__dict__["_frozen"] = True
 

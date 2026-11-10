@@ -735,7 +735,7 @@ def _threaded_load_feature_group(
     mode: bare/copied (FeatureSet built in the hopped thread), received (the calculate FeatureSet),
     built_in_calc (built in the calculation thread), deepcopy (copy of the received one), late (received one
     appended to `leaked` and not loaded in the calculation), late_context (a copy of the calculation's context
-    appended to `leaked`).
+    appended to `leaked`), late_forged_marker (received one with a forged active load marker appended to `leaked`).
     """
 
     class _ThreadedLoadFeatureGroup(FeatureGroup):
@@ -755,6 +755,15 @@ def _threaded_load_feature_group(
             elif mode == "late_context":
                 assert leaked is not None
                 leaked.append(contextvars.copy_context())
+                return [0]
+            elif mode == "late_forged_marker":
+                assert leaked is not None
+                cfw = ComputeFramework.current()
+                assert cfw is not None
+                marker = InputDataLoadMarker(True, True)
+                marker.active = (cfw, _forged_load_context())
+                features._load_marker = marker
+                leaked.append(features)
                 return [0]
 
             def load() -> Any:
@@ -970,13 +979,14 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
             assert result == [1, 2, 3]
             assert _CountingReader.loads == 1
 
+    @pytest.mark.parametrize("mode", ["late_context", "late_forged_marker"])
     @pytest.mark.parametrize("kind", ["gate", "non_gate"])
-    def test_load_in_a_context_that_outlived_a_sealed_calculation(self, kind: str) -> None:
+    def test_load_in_a_context_that_outlived_a_sealed_calculation(self, kind: str, mode: str) -> None:
         leaked: list[Any] = []
         extender = _InputDataLoadCapturingExtender() if kind == "non_gate" else None
         cfw = PythonDictFramework(function_extender={extender or _GateInputDataLoadExtender()})
         cfw._seal_extenders()
-        _run_calculate(cfw, _threaded_load_feature_group("late_context", leaked))
+        _run_calculate(cfw, _threaded_load_feature_group(mode, leaked))
         _CountingReader.loads = 0
 
         def load_late() -> Any:
@@ -985,7 +995,10 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
             except GateBypassError as exc:
                 return None, exc
 
-        result, error = leaked[0].run(load_late)
+        if mode == "late_context":
+            result, error = leaked[0].run(load_late)
+        else:
+            result, error = _load_in_thread(leaked[0])
 
         if kind == "gate":
             assert isinstance(error, GateBypassError)

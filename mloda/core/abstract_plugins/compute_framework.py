@@ -149,7 +149,15 @@ def _dict_output_schema(data: dict[Any, Any]) -> OutputSchema | None:
 
 _SEAL_FLAG = "_run_context_sealed"
 _SEALED_ATTRS = frozenset(
-    {"run_context", "worker_index", "function_extender", "_hook_extenders", "_calculate_context", _SEAL_FLAG}
+    {
+        "run_context",
+        "worker_index",
+        "function_extender",
+        "_hook_extenders",
+        "_calculate_context",
+        "_calculating",
+        _SEAL_FLAG,
+    }
 )
 
 
@@ -204,6 +212,7 @@ class ComputeFramework(ABC):
     _hook_extenders: dict[ExtenderHook, Extender] | None = None
     _pinned_frame: Any = None
     _calculate_context: HookContext | None = None
+    _calculating: bool = False
 
     def __init__(
         self,
@@ -963,12 +972,14 @@ class ComputeFramework(ABC):
         marker.secrets = current_registered_secrets()
         marker.identity_secrets = current_identity_secrets()
         token = current_input_data_load_marker.set(marker)
+        prior_calculating = self._calculating
         try:
             if extender is None and fetch_extender is None:
                 return method(self.data, features)
 
             context = self._build_hook_context(hook, feature_group, features, facts)
             object.__setattr__(self, "_calculate_context", context)
+            object.__setattr__(self, "_calculating", True)
             marker.active = (self, context)
             with (
                 self.activate(),
@@ -984,6 +995,7 @@ class ComputeFramework(ABC):
                     features,
                 )
         finally:
+            object.__setattr__(self, "_calculating", prior_calculating)
             marker.active = None
             marker.framework = None
             marker.secrets = frozenset()
@@ -1196,7 +1208,7 @@ class ComputeFramework(ABC):
         if not self.__dict__.get(_SEAL_FLAG):
             return ambient
         marker = current_input_data_load_marker.get()
-        if marker is not None and marker.active is None:
+        if (marker is not None and marker.active is None) or not self._calculating:
             return None
         return self._calculate_context
 

@@ -922,7 +922,7 @@ class _ValidateForgingFeatureGroup(ChsConsumerFG):
         features.bound_credential_handle = _FORGED_BOUND
         edges = features.declared_input_feature_edges
         if edges is not None:
-            edges["forged_output"] = ("forged_input",)
+            _attempt("edges", lambda: edges.__setitem__("forged_output", ("forged_input",)))
         _forge_plan_facts(features)
 
     @classmethod
@@ -1038,6 +1038,7 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
 
     def test_validate_input_features_reassignment_does_not_reach_later_hooks(self) -> None:
         extender = _ValidateInputCapturingExtender()
+        _forge_outcomes.clear()
 
         mloda.run_all(
             [Feature("chs_consumer", options={HANDLE_KEY: "vault-main"})],
@@ -1048,6 +1049,7 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
             function_extender={extender},
         )
 
+        assert _forge_outcomes["edges"] is TypeError
         forging_name = _ValidateForgingFeatureGroup.__qualname__
         planned = extender.captured[ExtenderHook.VALIDATE_INPUT_FEATURE]
         assert planned.feature_group_class is not None

@@ -1746,6 +1746,10 @@ class ChsRcClearingContextFG(ChsRcCalcAndSaverFG):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         setattr(features, "_calculate_context", None)
+        cfw = ComputeFramework.current()
+        assert cfw is not None
+        with pytest.raises(AttributeError):
+            cfw._calculate_context = None
         return super().calculate_feature(data, features)
 
 

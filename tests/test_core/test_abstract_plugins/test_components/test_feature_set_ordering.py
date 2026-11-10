@@ -217,6 +217,8 @@ class TestFeatureSetFreeze:
     def _frozen() -> FeatureSet:
         features = FeatureSet()
         features.add(Feature("a_col", options={"k": 1}))
+        features.declared_input_columns = {"a_col": ("src",)}
+        features.run_parameters = {"p": 1}
         features.freeze()
         return features
 
@@ -229,6 +231,14 @@ class TestFeatureSetFreeze:
         with pytest.raises(FrozenPlanError):
             features.features.add(Feature("b_col"))
         assert features.prepared is True
+
+    def test_in_place_writes_into_declared_input_columns_and_run_parameters_raise(self) -> None:
+        features = self._frozen()
+        assert features.declared_input_columns is not None
+        with pytest.raises(TypeError):
+            features.declared_input_columns["a_col"] = ("forged",)
+        with pytest.raises(TypeError):
+            features.run_parameters["p"] = 2  # type: ignore[index]
 
     def test_freeze_freezes_features_and_options(self) -> None:
         features = self._frozen()

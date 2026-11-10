@@ -923,6 +923,11 @@ class _ValidateForgingFeatureGroup(ChsConsumerFG):
         edges = features.declared_input_feature_edges
         if edges is not None:
             _attempt("edges", lambda: edges.__setitem__("forged_output", ("forged_input",)))
+        columns = features.declared_input_columns
+        if columns is not None:
+            _attempt("columns", lambda: columns.__setitem__("chs_consumer", ("missing_column",)))
+        run_parameters: Any = features.run_parameters
+        _attempt("run_parameters", lambda: run_parameters.__setitem__("forged_key", "forged"))
         _forge_plan_facts(features)
 
     @classmethod
@@ -1050,6 +1055,8 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
         )
 
         assert _forge_outcomes["edges"] is TypeError
+        assert _forge_outcomes["columns"] is TypeError
+        assert _forge_outcomes["run_parameters"] is TypeError
         forging_name = _ValidateForgingFeatureGroup.__qualname__
         planned = extender.captured[ExtenderHook.VALIDATE_INPUT_FEATURE]
         assert planned.feature_group_class is not None
@@ -1090,6 +1097,20 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
         second_uuid = extender.captured[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE].step_uuid
         assert first_uuid is not None
         assert second_uuid == first_uuid
+
+    def test_prepared_session_declared_input_columns_survive_forging_across_runs(self) -> None:
+        session = mloda.prepare(
+            [Feature("chs_consumer", options={HANDLE_KEY: "vault-main"})],
+            compute_frameworks=[PandasDataFrame],
+            data_access_collection=DataAccessCollection(credentials={"vault-main": {"key": "forge-2"}}),
+            plugin_collector=PluginCollector.enabled_feature_groups({ChsRawSecretFG, _ValidateForgingFeatureGroup}),
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+        for _ in range(2):
+            _forge_outcomes.clear()
+            results = session.run()
+            assert results
+            assert _forge_outcomes["columns"] is TypeError
 
 
 class TestImplementationIdentityOnCalculateFeature:

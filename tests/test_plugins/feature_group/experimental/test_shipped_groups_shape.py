@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, UTC
 from typing import Any
@@ -42,7 +43,7 @@ class Case:
     module: str
     group: str
     requests: tuple[str, ...]
-    data: Any
+    data: Callable[[], TypedTestData]
     options: dict[str, Any]
     needs: tuple[str, ...] = ("pandas",)
 
@@ -71,7 +72,6 @@ CASES = {
         ("t__cleaned_text",),
         _text,
         {"cleaning_operations": ("normalize", "remove_punctuation")},
-        ("pandas", "nltk"),
     ),
 }
 

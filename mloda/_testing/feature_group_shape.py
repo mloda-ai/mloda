@@ -70,18 +70,18 @@ def _first_value(cls: type[FeatureGroup], key: str, spec: PropertySpec) -> Any:
     return values[0] if values else None
 
 
-def _name_bound_keys(cls: type[FeatureGroup], name: str) -> frozenset[str]:
-    """The option keys the name binds on a mixin group that owns it; empty otherwise or when resolving raises."""
+def _name_bound_keys(cls: type[FeatureGroup], name: str) -> frozenset[str] | None:
+    """The option keys the name binds on a mixin group that owns it; None otherwise or when resolving raises."""
     if not is_nominal_subclass(cls, FeatureChainParserMixin):
-        return frozenset()
+        return None
     resolution, _ = safe_field_with_error(lambda: cls.resolve_feature_name(name), None)
-    return frozenset(resolution.bindings) if resolution is not None and resolution.owned else frozenset()
+    return frozenset(resolution.bindings) if resolution is not None and resolution.owned else None
 
 
-def _base_options(cls: type[FeatureGroup], requests: Sequence[str] | None = None) -> Options | None:
+def _base_options(cls: type[FeatureGroup], bound_keys: Mapping[str, frozenset[str]] = {}) -> Options | None:
     mapping = _mapping(cls)
     group: dict[str, Any] = {}
-    bound = frozenset().union(*(_name_bound_keys(cls, n) for n in requests or ()))
+    bound = frozenset[str]().union(*bound_keys.values())
     for key in _required_keys(cls):
         if key in bound:
             continue
@@ -119,11 +119,12 @@ def _foreign_name(cls: type[FeatureGroup]) -> str:
     return name
 
 
-def _check_names(cls: type[FeatureGroup], names: list[str], base: Options) -> list[str]:
+def _check_names(cls: type[FeatureGroup], names: list[str], base: Options, requested: bool = False) -> list[str]:
     failures = []
+    verb = "requested" if requested else "declared"
     for name in names:
         if not _probe(cls, name, base)[0]:
-            failures.append(f"names: '{name}' is declared but {cls.__name__} does not match it")
+            failures.append(f"names: '{name}' is {verb} but {cls.__name__} does not match it")
     return failures
 
 
@@ -166,11 +167,13 @@ def _check_inputs(cls: type[FeatureGroup], names: list[str], base: Options) -> l
     return failures
 
 
-def _check_required(cls: type[FeatureGroup], names: list[str], base: Options) -> list[str]:
+def _check_required(
+    cls: type[FeatureGroup], names: list[str], base: Options, bound_keys: Mapping[str, frozenset[str]]
+) -> list[str]:
     """Dropping each required key must record REQUIRED_OPTION_ABSENT naming it."""
     failures = []
     for name, key in product(names, _required_keys(cls)):
-        if key in _name_bound_keys(cls, name):
+        if key in bound_keys.get(name, frozenset()):
             continue
         matched, rejection = _probe(cls, name, _without_key(base, key))
         if matched:
@@ -625,15 +628,34 @@ def check_feature_group_shape(
     silence a false positive per option in NOT_SECRET_OPTIONS with a reason.
     requests= probes those names instead of the class and declared names; base_options must agree with them.
     """
-    if requests is not None and not requests:
+    if isinstance(requests, str):
         return CheckResult(
             check="feature_group_shape",
             subject=cls.__name__,
-            failures=("names: no requests to check",),
+            failures=("names: requests must be a sequence of names, not a string",),
             notes=(),
         )
-    base = base_options if base_options is not None else _base_options(cls, requests)
+    requested = None if requests is None else list(requests)
     secret_failures, secret_notes = _check_secrets(cls)
+    if requested is not None and not requested:
+        return CheckResult(
+            check="feature_group_shape",
+            subject=cls.__name__,
+            failures=("names: no requests to check", *secret_failures),
+            notes=tuple(secret_notes),
+        )
+    bound_keys = {k: v for k, v in ((n, _name_bound_keys(cls, n)) for n in requested or ()) if v is not None}
+    if len(set(bound_keys.values())) > 1:
+        return CheckResult(
+            check="feature_group_shape",
+            subject=cls.__name__,
+            failures=(
+                "names: the requested names bind different option keys; check them in separate calls",
+                *secret_failures,
+            ),
+            notes=tuple(secret_notes),
+        )
+    base = base_options if base_options is not None else _base_options(cls, bound_keys)
     if base is None:
         failures = [
             "names: cannot build a matching request; declare allowed_values or default, or pass base_options",
@@ -643,18 +665,18 @@ def check_feature_group_shape(
             check="feature_group_shape", subject=cls.__name__, failures=tuple(failures), notes=tuple(secret_notes)
         )
     declared = sorted(cls.feature_names_supported())
-    names = list(requests) if requests is not None else [cls.get_class_name(), *declared]
-    failures = _check_names(cls, names, base)
+    names = requested if requested is not None else [cls.get_class_name(), *declared]
+    failures = _check_names(cls, names, base, requested is not None)
     failures += _check_foreign(cls, base)
     failures += _check_inputs(cls, names, base)
-    failures += _check_required(cls, names, base)
+    failures += _check_required(cls, names, base, bound_keys)
     failures += _check_strict(cls, names, base)
     failures += secret_failures
     notes: list[str] = list(secret_notes)
     if input_data is None:
         notes.append("run: not run (no input_data); pass input_data to check outputs, types and determinism")
     else:
-        run_names = list(requests) if requests is not None else declared or [cls.get_class_name()]
+        run_names = requested if requested is not None else declared or [cls.get_class_name()]
         failures += _run_checks(cls, run_names, base, input_data, adapter or PythonDictAdapter(), notes, require_run)
     return CheckResult(check="feature_group_shape", subject=cls.__name__, failures=tuple(failures), notes=tuple(notes))
 

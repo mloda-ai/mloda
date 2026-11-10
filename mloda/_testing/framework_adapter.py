@@ -85,20 +85,6 @@ def _duplicate_column_table(first_type: DataType, second_type: DataType) -> pa.T
 _SYNC_ONLY_REASON = "The live connection is reused without thread isolation and cannot cross a process boundary."
 
 
-def _plain_iceberg_type(arrow_type: Any) -> Any:
-    # Iceberg string/binary/list have no width; large variants are a zero-row scan artefact of stored tables.
-    pa = require("pyarrow", "reading Iceberg test tables")
-
-    if pa.types.is_large_string(arrow_type):
-        return pa.string()
-    if pa.types.is_large_binary(arrow_type):
-        return pa.binary()
-    if pa.types.is_large_list(arrow_type):
-        field = arrow_type.value_field
-        return pa.list_(field.with_type(_plain_iceberg_type(field.type)))
-    return arrow_type
-
-
 class FrameworkAdapter(ABC):
     """Builds frames for one compute framework from typed data and reads them back."""
 
@@ -603,13 +589,11 @@ class IcebergAdapter(_ArrowReadAdapter):
         pa = require("pyarrow", "reading Iceberg test tables")
         if isinstance(result, pa.Table):
             return result
-        return result.scan().to_arrow()
+        from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_pyarrow_transformer import (
+            IcebergPyArrowTransformer,
+        )
 
-    def column_type(self, result: Any, column: str) -> Any:
-        raw = super().column_type(result, column)
-        if isinstance(result, require("pyarrow", "reading Iceberg test tables").Table):
-            return raw
-        return _plain_iceberg_type(raw)
+        return IcebergPyArrowTransformer.transform_fw_to_other_fw(result)
 
 
 class SparkAdapter(_ArrowReadAdapter):

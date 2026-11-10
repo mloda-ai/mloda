@@ -18,6 +18,8 @@ Encodes the target state where:
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -25,6 +27,9 @@ import pytest
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
+from mloda.core.abstract_plugins.components.property_spec import unforwarded_keys
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from tests.helpers.plugin_stubs import StubFeatureGroup
 from mloda.provider import DefaultOptionKeys, PropertySpec
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -305,3 +310,190 @@ class TestShieldMachineryRetirement:
 
     def test_options_has_no_forward_for_input_feature(self) -> None:
         assert not hasattr(Options, "forward_for_input_feature")
+
+
+class _PlainConsumerGroup(StubFeatureGroup):
+    """Consumer group whose mapping has no forward_to_inputs=False key."""
+
+    PROPERTY_MAPPING = {"backend": PropertySpec("Backend", context=False)}
+
+
+class _LocalKeyConsumerGroup(StubFeatureGroup):
+    """Consumer group keeping the vault key off its inputs."""
+
+    PROPERTY_MAPPING = {
+        "vault": PropertySpec("Vault", context=False, forward_to_inputs=False),
+        "backend": PropertySpec("Backend", context=False),
+    }
+
+
+class _SubOptions(Options):
+    """Options subclass for the fork type check."""
+
+
+_CONSUMER_GROUP_BASE = {"backend": "neo4j", "top_k": 5, DefaultOptionKeys.in_features: "child"}
+
+_Case = tuple[Callable[[], Feature], Callable[[], Options], type[FeatureGroup]]
+
+_FORWARDING_CASES: dict[str, _Case] = {
+    "default": (
+        lambda: Feature("child", options={"own_key": "own_value"}),
+        lambda: Options(group=dict(_CONSUMER_GROUP_BASE)),
+        _PlainConsumerGroup,
+    ),
+    "forward_group_true": (
+        lambda: Feature("child", forward_group=True),
+        lambda: Options(group=dict(_CONSUMER_GROUP_BASE)),
+        _PlainConsumerGroup,
+    ),
+    "allowlist": (
+        lambda: Feature("child", forward_group={"backend"}),
+        lambda: Options(group=dict(_CONSUMER_GROUP_BASE)),
+        _PlainConsumerGroup,
+    ),
+    "forward_group_false": (
+        lambda: Feature("child", options={"own_key": "own_value"}, forward_group=False),
+        lambda: Options(group=dict(_CONSUMER_GROUP_BASE)),
+        _PlainConsumerGroup,
+    ),
+    "forward_group_exclude": (
+        lambda: Feature("child", forward_group_exclude={"top_k"}),
+        lambda: Options(group=dict(_CONSUMER_GROUP_BASE)),
+        _PlainConsumerGroup,
+    ),
+    "inherit_context_keys_pull": (
+        lambda: Feature("child", inherit_context_keys={"trace"}),
+        lambda: Options(group={"backend": "neo4j"}, context={"trace": "abc", "other_ctx": "x"}),
+        _PlainConsumerGroup,
+    ),
+    "propagate_context_keys_push": (
+        lambda: Feature("child"),
+        lambda: Options(
+            group={"backend": "neo4j"},
+            context={"session_id": "abc", "quiet": True},
+            propagate_context_keys=frozenset({"session_id"}),
+        ),
+        _PlainConsumerGroup,
+    ),
+    "cascade_context_keys_push": (
+        lambda: Feature("child"),
+        lambda: Options(
+            group={"backend": "neo4j"},
+            context={"env": "prod", "quiet": True},
+            cascade_context_keys=frozenset({"env"}),
+        ),
+        _PlainConsumerGroup,
+    ),
+    "input_with_own_group_and_context": (
+        lambda: Feature("child", options=Options(group={"own_key": "own_value"}, context={"own_ctx": 1})),
+        lambda: Options(group={"backend": "neo4j"}, context={"trace": "abc"}),
+        _PlainConsumerGroup,
+    ),
+    "consumer_local_key": (
+        lambda: Feature("child"),
+        lambda: Options(group={"vault": "v1", "backend": "neo4j"}),
+        _LocalKeyConsumerGroup,
+    ),
+}
+
+_PARITY_FIELDS = (
+    "group",
+    "context",
+    "inherited_group_keys",
+    "inherited_context_keys",
+    "cascade_context_keys",
+    "last_forwarded_group_keys",
+    "non_forwarded_group_keys",
+)
+
+
+def _fields(options: Options) -> dict[str, Any]:
+    return {name: getattr(options, name) for name in _PARITY_FIELDS}
+
+
+class TestOptionsForwardedFrom:
+    """Feature.options_forwarded_from previews the merge without mutating anything."""
+
+    @pytest.mark.parametrize("case", list(_FORWARDING_CASES))
+    def test_preview_equals_collection_merge(self, case: str) -> None:
+        make_feature, make_consumer, group = _FORWARDING_CASES[case]
+
+        merged = Features(
+            [make_feature()],
+            child_options=make_consumer(),
+            child_uuid=uuid4(),
+            consumer_local_keys=unforwarded_keys(group.PROPERTY_MAPPING),
+        ).collection[0]
+        preview = make_feature().options_forwarded_from(make_consumer(), group)
+
+        assert _fields(preview) == _fields(merged.options)
+        if case == "consumer_local_key":
+            assert "vault" not in preview.group
+
+    def test_preview_does_not_mutate_input_or_consumer(self) -> None:
+        feature = Feature("child", options=Options(group={"own_key": "own_value"}, context={"own_ctx": 1}))
+        consumer = Options(group={"backend": "neo4j", "tags": ["a"]}, context={"trace": "abc"})
+        before_input = _fields(feature.options)
+        before_own = feature.options.own_group_keys
+        before_consumer = _fields(consumer)
+
+        preview = feature.options_forwarded_from(consumer, _PlainConsumerGroup)
+
+        assert preview is not feature.options
+        assert _fields(feature.options) == before_input
+        assert feature.options.own_group_keys == before_own
+        assert feature.options.inherited_group_keys == frozenset()
+        assert feature.forwarded_group_keys == frozenset()
+        assert _fields(consumer) == before_consumer
+        feature.options.add_to_group("later", 1)
+        assert "later" in feature.options.own_group_keys
+        preview.group["tags"].append("b")
+        assert consumer.group["tags"] == ["a"]
+
+    def test_frozen_feature_can_be_previewed_into_a_writable_options(self) -> None:
+        feature = Feature("child")
+        feature.freeze()
+
+        preview = feature.options_forwarded_from(Options(group={"backend": "neo4j"}), _PlainConsumerGroup)
+
+        assert preview.group["backend"] == "neo4j"
+        preview.add_to_group("extra", 1)
+        assert preview.group["extra"] == 1
+
+    def test_preview_keeps_the_options_subclass(self) -> None:
+        feature = Feature("child", options=_SubOptions(group={"own_key": "own_value"}))
+
+        preview = feature.options_forwarded_from(Options(group={"backend": "neo4j"}), _PlainConsumerGroup)
+
+        assert type(preview) is _SubOptions
+
+    def test_conflict_raises_the_same_error_as_the_collection_merge(self) -> None:
+        consumer = Options(group={"backend": "neo4j"})
+
+        with pytest.raises(ValueError) as merge_error:
+            _merge(Feature("child", options={"backend": "postgres"}), consumer)
+        with pytest.raises(ValueError) as preview_error:
+            Feature("child", options={"backend": "postgres"}).options_forwarded_from(consumer, _PlainConsumerGroup)
+
+        assert str(preview_error.value) == str(merge_error.value)
+
+    def test_merge_and_preview_each_go_through_inherit_consumer_options_once(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[str] = []
+        original = Feature._inherit_consumer_options
+
+        def spy(
+            self: Feature, target: Options, consumer: Options, consumer_local_keys: frozenset[str]
+        ) -> frozenset[str]:
+            calls.append(str(self.name))
+            return original(self, target, consumer, consumer_local_keys)
+
+        monkeypatch.setattr(Feature, "_inherit_consumer_options", spy)
+        consumer = Options(group={"backend": "neo4j"})
+
+        Features([Feature("merged")], child_options=consumer, child_uuid=uuid4())
+        assert calls == ["merged"]
+
+        Feature("previewed").options_forwarded_from(consumer, _PlainConsumerGroup)
+        assert calls == ["merged", "previewed"]

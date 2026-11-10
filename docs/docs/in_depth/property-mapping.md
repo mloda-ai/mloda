@@ -794,6 +794,28 @@ child `Feature`. `propagate_context_keys` (or `cascade_context_keys`) is the cal
 flows see
 [Forwarding Options to Input Features](feature-chain-parser.md#forwarding-options-to-input-features).
 
+### Previewing the forwarded options
+
+A feature group can ask what an input feature will receive from its own options:
+
+```py
+def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+    input_feature = Feature("price")
+    forwarded = input_feature.options_forwarded_from(options, type(self))
+    return {input_feature}
+```
+
+- It returns a copy and mutates nothing: the input's own values are shared, forwarded
+  values are copied as in the real merge.
+- It covers group forwarding, the `propagate_context_keys` / `cascade_context_keys` push
+  and the `inherit_context_keys` pull, and keeps `forward_to_inputs=False` keys of the
+  consumer group off the input.
+- A conflict raises the same `ValueError` as planning.
+- It reflects `options` at call time, so call it after any change you make to them.
+- For a string input, wrap it: `Feature(name).options_forwarded_from(...)`.
+- Later planning steps (name binding, declared defaults, a second consumer of the same
+  input) can still change the input's final options.
+
 A forwarded key also splits FeatureSets by value. A context key delivered via the
 push (`propagate_context_keys` or `cascade_context_keys`) or the pull
 (`inherit_context_keys`) enters the

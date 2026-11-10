@@ -27,6 +27,7 @@ from mloda.core.abstract_plugins.components.options import (
     reject_reserved_reader_key,
     validate_forwarding_directives,
 )
+from mloda.core.abstract_plugins.components.property_spec import unforwarded_keys
 from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlySet, attribute_write_error
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
@@ -258,6 +259,26 @@ class Feature:
         )
         validate_forwarding_directives(self.forward_group, self.forward_group_exclude)
         self.inherit_context_keys = self._normalize_allowlist(inherit_context_keys, "inherit_context_keys")
+
+    def _inherit_consumer_options(
+        self, target: Options, consumer: Options, consumer_local_keys: frozenset[str]
+    ) -> frozenset[str]:
+        """Apply this feature's forwarding directives, copying consumer options onto target."""
+        return target.inherit_from(
+            consumer,
+            forward_group=self.forward_group,
+            forward_group_exclude=self.forward_group_exclude,
+            inherit_context_keys=self.inherit_context_keys,
+            owner=str(self.name),
+            consumer_local_keys=consumer_local_keys,
+        )
+
+    def options_forwarded_from(self, consumer: Options, consumer_group: type[FeatureGroup]) -> Options:
+        """Return a copy of this feature's options with what the consumer would forward onto it.
+        Nothing is mutated; a conflict raises the same ValueError as planning."""
+        fork = self.options._fork()
+        self._inherit_consumer_options(fork, consumer, unforwarded_keys(consumer_group.PROPERTY_MAPPING))
+        return fork
 
     @property
     def connection(self) -> Any:

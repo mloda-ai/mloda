@@ -8,13 +8,8 @@ import yaml
 
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.mixins.compute_frameworks.framework_adapter_mixins import (
-    DocumentLoadsIntoFrameworkMixin,
-    PandasDataFrameAdapter,
-    PolarsDataFrameAdapter,
-    PyArrowTableAdapter,
-    PythonDictAdapter,
-)
+from mloda._testing.framework_adapter import PandasAdapter, PolarsAdapter, PyArrowAdapter, PythonDictAdapter
+from mloda._testing.source.loads_into_framework_suite import DocumentLoadsIntoFrameworkTestMixin
 from mloda._testing.source.read_document_suite import (
     ReadDocumentFGTestMixin,
 )
@@ -33,29 +28,33 @@ class TestYamlFG(ReadDocumentFGTestMixin):
     expected_content = CANONICAL
 
 
-class TestYamlLoadsIntoPythonDict(PythonDictAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("yaml_fg", "YamlFG")
+class TestYamlLoadsIntoPythonDict(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PythonDictAdapter
+    feature_group_class = lazy_document_group("yaml_fg", "YamlFG")
     suffix = ".yml"
     text = FLOW_STYLE
     expected_text = CANONICAL
 
 
-class TestYamlLoadsIntoPyArrowTable(PyArrowTableAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("yaml_fg", "YamlFG")
+class TestYamlLoadsIntoPyArrowTable(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PyArrowAdapter
+    feature_group_class = lazy_document_group("yaml_fg", "YamlFG")
     suffix = ".yaml"
     text = FLOW_STYLE
     expected_text = CANONICAL
 
 
-class TestYamlLoadsIntoPandas(PandasDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("yaml_fg", "YamlFG")
+class TestYamlLoadsIntoPandas(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PandasAdapter
+    feature_group_class = lazy_document_group("yaml_fg", "YamlFG")
     suffix = ".yaml"
     text = FLOW_STYLE
     expected_text = CANONICAL
 
 
-class TestYamlLoadsIntoPolars(PolarsDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("yaml_fg", "YamlFG")
+class TestYamlLoadsIntoPolars(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PolarsAdapter
+    feature_group_class = lazy_document_group("yaml_fg", "YamlFG")
     suffix = ".yaml"
     text = FLOW_STYLE
     expected_text = CANONICAL

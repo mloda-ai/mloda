@@ -19,14 +19,8 @@ import pytest
 
 from mloda.provider import ReadFileFG
 from mloda.user import DataAccessCollection, mloda
-from tests.mixins.compute_frameworks.framework_adapter_mixins import (
-    FileLoaderNameMixin,
-    FileLoadsIntoFrameworkMixin,
-    PandasDataFrameAdapter,
-    PolarsDataFrameAdapter,
-    PyArrowTableAdapter,
-    PythonDictAdapter,
-)
+from mloda._testing.framework_adapter import PandasAdapter, PolarsAdapter, PyArrowAdapter, PythonDictAdapter
+from mloda._testing.source.loads_into_framework_suite import FileLoaderNameTestMixin, FileLoadsIntoFrameworkTestMixin
 from tests.mixins.reader_feature_groups.format_file_writers import (
     write_csv,
     write_feather,
@@ -119,35 +113,35 @@ def test_csv_pointer_runs_under_duckdb_with_a_dac_connection(csv_path: str) -> N
 
 
 class _CsvFiles:
-    file_group = lazy_group("csv_fg", "CsvFG")
+    feature_group_class = lazy_group("csv_fg", "CsvFG")
 
     def write_file(self, path: Path, columns: dict[str, list[Any]]) -> None:
         write_csv(path, columns)
 
 
 class _ParquetFiles:
-    file_group = lazy_group("parquet_fg", "ParquetFG")
+    feature_group_class = lazy_group("parquet_fg", "ParquetFG")
 
     def write_file(self, path: Path, columns: dict[str, list[Any]]) -> None:
         write_parquet(path, columns)
 
 
 class _JsonFiles:
-    file_group = lazy_group("json_fg", "JsonFG")
+    feature_group_class = lazy_group("json_fg", "JsonFG")
 
     def write_file(self, path: Path, columns: dict[str, list[Any]]) -> None:
         write_json(path, columns)
 
 
 class _FeatherFiles:
-    file_group = lazy_group("feather_fg", "FeatherFG")
+    feature_group_class = lazy_group("feather_fg", "FeatherFG")
 
     def write_file(self, path: Path, columns: dict[str, list[Any]]) -> None:
         write_feather(path, columns)
 
 
 class _OrcFiles:
-    file_group = lazy_group("orc_fg", "OrcFG")
+    feature_group_class = lazy_group("orc_fg", "OrcFG")
 
     def write_file(self, path: Path, columns: dict[str, list[Any]]) -> None:
         write_orc(path, columns)
@@ -172,61 +166,69 @@ class _DefaultNeutralParquetFG(ReadFileFG):
 
 
 class _DefaultNeutralParquetFiles:
-    file_group = _DefaultNeutralParquetFG
+    feature_group_class: type[ReadFileFG] = _DefaultNeutralParquetFG
 
     def write_file(self, path: Path, columns: dict[str, list[Any]]) -> None:
         write_parquet(path, columns)
 
 
-class TestDefaultNeutralParquetIntoPythonDict(
-    _DefaultNeutralParquetFiles, PythonDictAdapter, FileLoadsIntoFrameworkMixin
-):
-    pass
+class TestDefaultNeutralParquetIntoPythonDict(_DefaultNeutralParquetFiles, FileLoadsIntoFrameworkTestMixin):
+    adapter_class = PythonDictAdapter
 
 
-class TestCsvIntoPyArrowTable(_CsvFiles, PyArrowTableAdapter, FileLoaderNameMixin):
+class TestCsvIntoPyArrowTable(_CsvFiles, FileLoaderNameTestMixin):
+    adapter_class = PyArrowAdapter
     expected_loader = "mloda_plugins.feature_group.input_data.file_formats.csv_fg:CsvPyArrowTable"
 
 
-class TestCsvIntoPandasDataFrame(_CsvFiles, PandasDataFrameAdapter, FileLoaderNameMixin):
+class TestCsvIntoPandasDataFrame(_CsvFiles, FileLoaderNameTestMixin):
+    adapter_class = PandasAdapter
     expected_loader = "neutral"
 
 
-class TestCsvIntoPolarsDataFrame(_CsvFiles, PolarsDataFrameAdapter, FileLoadsIntoFrameworkMixin):
-    pass
+class TestCsvIntoPolarsDataFrame(_CsvFiles, FileLoadsIntoFrameworkTestMixin):
+    adapter_class = PolarsAdapter
 
 
-class TestCsvIntoPythonDict(_CsvFiles, PythonDictAdapter, FileLoadsIntoFrameworkMixin):
-    pass
+class TestCsvIntoPythonDict(_CsvFiles, FileLoadsIntoFrameworkTestMixin):
+    adapter_class = PythonDictAdapter
 
 
-class TestParquetIntoPyArrowTable(_ParquetFiles, PyArrowTableAdapter, FileLoaderNameMixin):
+class TestParquetIntoPyArrowTable(_ParquetFiles, FileLoaderNameTestMixin):
+    adapter_class = PyArrowAdapter
     expected_loader = "mloda_plugins.feature_group.input_data.file_formats.parquet_fg:ParquetPyArrowTable"
 
 
-class TestParquetIntoPandasDataFrame(_ParquetFiles, PandasDataFrameAdapter, FileLoaderNameMixin):
+class TestParquetIntoPandasDataFrame(_ParquetFiles, FileLoaderNameTestMixin):
+    adapter_class = PandasAdapter
     expected_loader = "neutral"
 
 
-class TestJsonIntoPyArrowTable(_JsonFiles, PyArrowTableAdapter, FileLoaderNameMixin):
+class TestJsonIntoPyArrowTable(_JsonFiles, FileLoaderNameTestMixin):
+    adapter_class = PyArrowAdapter
     expected_loader = "mloda_plugins.feature_group.input_data.file_formats.json_fg:JsonPyArrowTable"
 
 
-class TestJsonIntoPandasDataFrame(_JsonFiles, PandasDataFrameAdapter, FileLoaderNameMixin):
+class TestJsonIntoPandasDataFrame(_JsonFiles, FileLoaderNameTestMixin):
+    adapter_class = PandasAdapter
     expected_loader = "neutral"
 
 
-class TestFeatherIntoPyArrowTable(_FeatherFiles, PyArrowTableAdapter, FileLoaderNameMixin):
+class TestFeatherIntoPyArrowTable(_FeatherFiles, FileLoaderNameTestMixin):
+    adapter_class = PyArrowAdapter
     expected_loader = "mloda_plugins.feature_group.input_data.file_formats.feather_fg:FeatherPyArrowTable"
 
 
-class TestFeatherIntoPandasDataFrame(_FeatherFiles, PandasDataFrameAdapter, FileLoaderNameMixin):
+class TestFeatherIntoPandasDataFrame(_FeatherFiles, FileLoaderNameTestMixin):
+    adapter_class = PandasAdapter
     expected_loader = "neutral"
 
 
-class TestOrcIntoPyArrowTable(_OrcFiles, PyArrowTableAdapter, FileLoaderNameMixin):
+class TestOrcIntoPyArrowTable(_OrcFiles, FileLoaderNameTestMixin):
+    adapter_class = PyArrowAdapter
     expected_loader = "mloda_plugins.feature_group.input_data.file_formats.orc_fg:OrcPyArrowTable"
 
 
-class TestOrcIntoPandasDataFrame(_OrcFiles, PandasDataFrameAdapter, FileLoaderNameMixin):
+class TestOrcIntoPandasDataFrame(_OrcFiles, FileLoaderNameTestMixin):
+    adapter_class = PandasAdapter
     expected_loader = "neutral"

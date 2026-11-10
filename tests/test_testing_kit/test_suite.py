@@ -9,6 +9,7 @@ from typing import Any, ClassVar
 import pytest
 
 import mloda._testing
+from mloda._testing.framework_adapter import PythonDictAdapter
 from mloda._testing.result import CheckResult
 from mloda.provider import Cause
 from mloda._testing.suite import ConformanceSuite, HookError, SwitchedOffError, assert_passed, check_hooks
@@ -383,6 +384,12 @@ def _read_file_mixin() -> type:
     return ReadFileFGTestMixin
 
 
+def _filter_suite() -> type:
+    from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
+
+    return FilterEngineSuite
+
+
 def _read_db_mixin() -> type:
     from mloda._testing.source.read_db_suite import ReadDBFGTestMixin
 
@@ -395,33 +402,94 @@ def _read_document_mixin() -> type:
     return ReadDocumentFGTestMixin
 
 
+def _file_loads_mixin() -> type:
+    from mloda._testing.source.loads_into_framework_suite import FileLoadsIntoFrameworkTestMixin
+
+    return FileLoadsIntoFrameworkTestMixin
+
+
+def _file_loader_name_mixin() -> type:
+    from mloda._testing.source.loads_into_framework_suite import FileLoaderNameTestMixin
+
+    return FileLoaderNameTestMixin
+
+
+def _db_loads_mixin() -> type:
+    from mloda._testing.source.loads_into_framework_suite import DatabaseLoadsIntoFrameworkTestMixin
+
+    return DatabaseLoadsIntoFrameworkTestMixin
+
+
+def _document_loads_mixin() -> type:
+    from mloda._testing.source.loads_into_framework_suite import DocumentLoadsIntoFrameworkTestMixin
+
+    return DocumentLoadsIntoFrameworkTestMixin
+
+
+_ADAPTER = {"adapter_class": PythonDictAdapter}
+
+
 @pytest.mark.parametrize(
-    ("get_mixin", "contract_test", "near_miss", "hook"),
+    ("get_mixin", "contract_test", "near_miss", "hook", "extra"),
     [
-        (_source_mixin, "test_claims_its_own_source", "feature_group_clas", "feature_group_class"),
-        (_column_discovery_mixin, "test_session_route_equals_the_group_call", "group_clss", "group_cls"),
-        (_read_file_mixin, "test_file_claims_via_a_folder_entry", "write_fiel", "write_file"),
-        (_read_db_mixin, "test_db_handle_names_one_credential", "credential_kee", "credential_key"),
-        (_read_document_mixin, "test_doc_owns_exactly_the_expected_suffixes", "expected_sufixes", "expected_suffixes"),
+        (_source_mixin, "test_claims_its_own_source", "feature_group_clas", "feature_group_class", {}),
+        (_column_discovery_mixin, "test_session_route_equals_the_group_call", "group_clss", "group_cls", {}),
+        (_read_file_mixin, "test_file_claims_via_a_folder_entry", "write_fiel", "write_file", {}),
+        (_read_db_mixin, "test_db_handle_names_one_credential", "credential_kee", "credential_key", {}),
+        (
+            _read_document_mixin,
+            "test_doc_owns_exactly_the_expected_suffixes",
+            "expected_sufixes",
+            "expected_suffixes",
+            {},
+        ),
+        (
+            _file_loads_mixin,
+            "test_loads_requested_columns",
+            "write_fiel",
+            "write_file",
+            _ADAPTER,
+        ),
+        (
+            _file_loader_name_mixin,
+            "test_input_data_load_names_the_loader",
+            "expected_loadr",
+            "expected_loader",
+            _ADAPTER,
+        ),
+        (
+            _db_loads_mixin,
+            "test_a_global_filter_returns_the_matching_rows",
+            "credential_kee",
+            "credential_key",
+            _ADAPTER,
+        ),
+        (
+            _document_loads_mixin,
+            "test_loads_only_the_requested_outputs",
+            "expected_tex",
+            "expected_text",
+            _ADAPTER,
+        ),
     ],
 )
 def test_source_mixins_are_checked_conformance_suites(
-    get_mixin: Any, contract_test: str, near_miss: str, hook: str
+    get_mixin: Any, contract_test: str, near_miss: str, hook: str, extra: dict[str, Any]
 ) -> None:
     mixin = get_mixin()
 
     with pytest.raises(SwitchedOffError) as switched:
-        type("_Blanked", (mixin,), {contract_test: None})
+        type("_Blanked", (mixin,), {contract_test: None, **extra})
 
     assert contract_test in str(switched.value)
 
     with pytest.raises(HookError) as hooked:
-        type("_Typo", (mixin,), {near_miss: _Plugin})
+        type("_Typo", (mixin,), {near_miss: _Plugin, **extra})
 
     assert _hint(near_miss, hook) in str(hooked.value)
 
 
-def test_no_testing_module_imports_a_plugin_feature_group() -> None:
+def test_no_testing_module_imports_a_plugin_feature_group_or_the_tests_tree() -> None:
     offenders = []
     for path in Path(mloda._testing.__file__).parent.rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
@@ -430,7 +498,11 @@ def test_no_testing_module_imports_a_plugin_feature_group() -> None:
                 names = [alias.name for alias in node.names]
             elif isinstance(node, ast.ImportFrom) and node.module:
                 names = [node.module]
-            offenders += [f"{path.name}: {n}" for n in names if n.startswith("mloda_plugins.feature_group")]
+            offenders += [
+                f"{path.name}: {n}"
+                for n in names
+                if n.startswith("mloda_plugins.feature_group") or n == "tests" or n.startswith("tests.")
+            ]
 
     assert offenders == []
 
@@ -510,13 +582,21 @@ def test_every_adapter_was_closed_and_each_was_opened_once():
 """
 
 
-def test_compute_framework_host_without_adapter_class_fails_at_class_creation() -> None:
-    from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
+@pytest.mark.parametrize(
+    "get_suite",
+    [
+        _filter_suite,
+        _file_loads_mixin,
+        _db_loads_mixin,
+        _document_loads_mixin,
+    ],
+    ids=["filter", "file_loads", "db_loads", "document_loads"],
+)
+def test_compute_framework_host_without_adapter_class_fails_at_class_creation(get_suite: Any) -> None:
+    suite = get_suite()
 
     with pytest.raises(HookError) as excinfo:
-
-        class _NoAdapter(FilterEngineSuite):
-            pass
+        type("_NoAdapter", (suite,), {})
 
     assert "_NoAdapter" in str(excinfo.value)
     assert "adapter_class" in str(excinfo.value)

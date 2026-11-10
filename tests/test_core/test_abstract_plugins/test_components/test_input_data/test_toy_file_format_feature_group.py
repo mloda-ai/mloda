@@ -33,11 +33,8 @@ from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.helpers.linear_scaling import assert_runs_linearly
 from tests.mixins.reader_feature_groups.lazy_source_group import load_document_group
-from tests.mixins.compute_frameworks.framework_adapter_mixins import (
-    FileLoadsIntoFrameworkMixin,
-    PyArrowTableAdapter,
-    PythonDictAdapter,
-)
+from mloda._testing.framework_adapter import PyArrowAdapter, PythonDictAdapter
+from mloda._testing.source.loads_into_framework_suite import FileLoadsIntoFrameworkTestMixin
 from mloda._testing.source.read_file_suite import ReadFileFGTestMixin
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_file_format_group import (
@@ -58,15 +55,17 @@ class TestToyFileFormatFeatureGroup(ReadFileFGTestMixin):
         write_toy_file(path, columns)
 
 
-class TestToyLoadsIntoPyArrowTable(PyArrowTableAdapter, FileLoadsIntoFrameworkMixin):
-    file_group = ToyFileFormatFG
+class TestToyLoadsIntoPyArrowTable(FileLoadsIntoFrameworkTestMixin):
+    adapter_class = PyArrowAdapter
+    feature_group_class = ToyFileFormatFG
 
     def write_file(self, path: Path, columns: dict[str, list[Any]]) -> None:
         write_toy_file(path, columns)
 
 
-class TestToyLoadsIntoPythonDict(PythonDictAdapter, FileLoadsIntoFrameworkMixin):
-    file_group = ToyFileFormatFG
+class TestToyLoadsIntoPythonDict(FileLoadsIntoFrameworkTestMixin):
+    adapter_class = PythonDictAdapter
+    feature_group_class = ToyFileFormatFG
 
     def write_file(self, path: Path, columns: dict[str, list[Any]]) -> None:
         write_toy_file(path, columns)

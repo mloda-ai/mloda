@@ -21,13 +21,8 @@ from mloda.user import DataAccessCollection, Feature, Options, PluginCollector, 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.helpers.frame_records import records_from_frame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.mixins.compute_frameworks.framework_adapter_mixins import (
-    DocumentLoadsIntoFrameworkMixin,
-    PandasDataFrameAdapter,
-    PolarsDataFrameAdapter,
-    PyArrowTableAdapter,
-    PythonDictAdapter,
-)
+from mloda._testing.framework_adapter import PandasAdapter, PolarsAdapter, PyArrowAdapter, PythonDictAdapter
+from mloda._testing.source.loads_into_framework_suite import DocumentLoadsIntoFrameworkTestMixin
 from mloda._testing.source.read_document_suite import (
     ReadDocumentFGTestMixin,
 )
@@ -50,33 +45,39 @@ class TestPyFG(ReadDocumentFGTestMixin):
     sample_text = 'print("hello")\n'
 
 
-class TestTextLoadsIntoPythonDict(PythonDictAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("text_fg", "TextFG")
+class TestTextLoadsIntoPythonDict(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PythonDictAdapter
+    feature_group_class = lazy_document_group("text_fg", "TextFG")
     suffix = ".TXT"
 
 
-class TestTextLoadsIntoPyArrowTable(PyArrowTableAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("text_fg", "TextFG")
+class TestTextLoadsIntoPyArrowTable(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PyArrowAdapter
+    feature_group_class = lazy_document_group("text_fg", "TextFG")
     suffix = ".txt"
 
 
-class TestTextLoadsIntoPandas(PandasDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("text_fg", "TextFG")
+class TestTextLoadsIntoPandas(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PandasAdapter
+    feature_group_class = lazy_document_group("text_fg", "TextFG")
     suffix = ".txt"
 
 
-class TestTextLoadsIntoPolars(PolarsDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("text_fg", "TextFG")
+class TestTextLoadsIntoPolars(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PolarsAdapter
+    feature_group_class = lazy_document_group("text_fg", "TextFG")
     suffix = ".txt"
 
 
-class TestPyLoadsIntoPythonDict(PythonDictAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("text_fg", "PyFG")
+class TestPyLoadsIntoPythonDict(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PythonDictAdapter
+    feature_group_class = lazy_document_group("text_fg", "PyFG")
     suffix = ".py"
 
 
-class TestPyLoadsIntoPyArrowTable(PyArrowTableAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("text_fg", "PyFG")
+class TestPyLoadsIntoPyArrowTable(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PyArrowAdapter
+    feature_group_class = lazy_document_group("text_fg", "PyFG")
     suffix = ".py"
 
 

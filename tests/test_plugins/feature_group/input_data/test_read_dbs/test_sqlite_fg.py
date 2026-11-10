@@ -23,6 +23,7 @@ from mloda.user import (
     DataType,
     Feature,
     FilterType,
+    GlobalFilter,
     Options,
     ParallelizationMode,
     PluginCollector,
@@ -34,13 +35,14 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
-from tests.mixins.compute_frameworks.framework_adapter_mixins import (
-    DatabaseLoadsIntoFrameworkMixin,
-    PandasDataFrameAdapter,
-    PolarsDataFrameAdapter,
-    PyArrowTableAdapter,
+from mloda._testing.framework_adapter import (
+    FrameworkAdapter,
+    PandasAdapter,
+    PolarsAdapter,
+    PyArrowAdapter,
     PythonDictAdapter,
 )
+from mloda._testing.source.loads_into_framework_suite import DatabaseLoadsIntoFrameworkTestMixin
 from mloda._testing.source.read_db_suite import (
     ReadDBFGTestMixin,
 )
@@ -105,40 +107,60 @@ class TestSqliteQueryRouteContract(ReadDBFGTestMixin):
         return f"SELECT {', '.join(quote_ident(c) for c in columns)} FROM {quote_ident(table)}"  # nosec B608  # quoted names
 
 
-class TestSqliteLoadsIntoPyArrowTable(PyArrowTableAdapter, DatabaseLoadsIntoFrameworkMixin):
-    db_group = SqliteFG
+class _SqliteLoadsHelper:
+    feature_group_class: type[ReadDBFG] = SqliteFG
     credential_key = KEY
-    expected_loader = "neutral"
 
     def write_database(self, path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
         write_sqlite(path, tables)
 
+    def test_a_global_filter_fetches_fewer_rows(
+        self, adapter: FrameworkAdapter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        columns = ("dbloads_a", "dbloads_b", "dbloads_c")
+        path = tmp_path / "dbloads_filtered.db"
+        self.write_database(path, {"dbloads_table": {name: [1, 2, 3, 4, 5, 6] for name in columns}})
+        original = SqliteFG._fetch
+        fetched: list[int] = []
 
-class TestSqliteLoadsIntoPythonDict(PythonDictAdapter, DatabaseLoadsIntoFrameworkMixin):
-    db_group = SqliteFG
-    credential_key = KEY
+        def spy(cls: Any, connection: Any, table: str, features: Any) -> Any:
+            result = original(connection, table, features)
+            fetched.append(len(result[1]))
+            return result
+
+        monkeypatch.setattr(SqliteFG, "_fetch", classmethod(spy))
+        global_filter = GlobalFilter()
+        global_filter.add_filter("dbloads_a", "range", {"min": 2, "max": 4, "max_exclusive": True})
+
+        mloda.run_all(
+            list(columns[:2]),
+            compute_frameworks=[adapter.compute_framework()],
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
+            data_access_collection=DataAccessCollection(credentials={"dbloads_handle": {KEY: str(path)}}),
+            global_filter=global_filter,
+        )
+
+        assert fetched == [2]
+
+
+class TestSqliteLoadsIntoPyArrowTable(_SqliteLoadsHelper, DatabaseLoadsIntoFrameworkTestMixin):
+    adapter_class = PyArrowAdapter
+    expected_loader = "neutral"
+
+
+class TestSqliteLoadsIntoPythonDict(_SqliteLoadsHelper, DatabaseLoadsIntoFrameworkTestMixin):
+    adapter_class = PythonDictAdapter
     expected_loader = "mloda_plugins.feature_group.input_data.db_sources.sqlite_fg:SqlitePythonDict"
 
-    def write_database(self, path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
-        write_sqlite(path, tables)
 
-
-class TestSqliteLoadsIntoPandas(PandasDataFrameAdapter, DatabaseLoadsIntoFrameworkMixin):
-    db_group = SqliteFG
-    credential_key = KEY
+class TestSqliteLoadsIntoPandas(_SqliteLoadsHelper, DatabaseLoadsIntoFrameworkTestMixin):
+    adapter_class = PandasAdapter
     expected_loader = "neutral"
 
-    def write_database(self, path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
-        write_sqlite(path, tables)
 
-
-class TestSqliteLoadsIntoPolars(PolarsDataFrameAdapter, DatabaseLoadsIntoFrameworkMixin):
-    db_group = SqliteFG
-    credential_key = KEY
+class TestSqliteLoadsIntoPolars(_SqliteLoadsHelper, DatabaseLoadsIntoFrameworkTestMixin):
+    adapter_class = PolarsAdapter
     expected_loader = "neutral"
-
-    def write_database(self, path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
-        write_sqlite(path, tables)
 
 
 @pytest.fixture()

@@ -28,6 +28,12 @@ from mloda._testing.compute_framework.run_all_suite import (
     SiblingDictRunAllSuite,
 )
 from mloda._testing.compute_framework_shape import applicable_aspects, serves_asof_merge, serves_connection
+from mloda._testing.source.loads_into_framework_suite import (
+    DatabaseLoadsIntoFrameworkTestMixin,
+    DocumentLoadsIntoFrameworkTestMixin,
+    FileLoaderNameTestMixin,
+    FileLoadsIntoFrameworkTestMixin,
+)
 from mloda._testing.source.read_db_suite import ReadDBFGTestMixin
 from mloda._testing.source.read_document_suite import ReadDocumentFGTestMixin
 from mloda._testing.source.read_file_suite import ReadFileFGTestMixin
@@ -382,6 +388,38 @@ CONTRACTS: tuple[MixinContract, ...] = (
     MixinContract(
         ReadDocumentFG,
         ReadDocumentFGTestMixin,
+        "feature_group_class",
+        (
+            f"{_INPUT_DATA}.test_read_files.test_json_document_reader",
+            f"{_INPUT_DATA}.test_read_files.test_markdown_document_reader",
+            f"{_INPUT_DATA}.test_read_files.test_text_document_reader",
+            f"{_INPUT_DATA}.test_read_files.test_yaml_document_reader",
+        ),
+    ),
+    MixinContract(
+        ReadFileFG,
+        FileLoadsIntoFrameworkTestMixin,
+        "feature_group_class",
+        (
+            f"{_INPUT_DATA}.test_read_files.test_csv_backend_neutral_regression",
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.test_toy_file_format_feature_group",
+        ),
+    ),
+    MixinContract(
+        ReadFileFG,
+        FileLoaderNameTestMixin,
+        "feature_group_class",
+        (f"{_INPUT_DATA}.test_read_files.test_csv_backend_neutral_regression",),
+    ),
+    MixinContract(
+        ReadDBFG,
+        DatabaseLoadsIntoFrameworkTestMixin,
+        "feature_group_class",
+        (f"{_INPUT_DATA}.test_read_dbs.test_sqlite_fg",),
+    ),
+    MixinContract(
+        ReadDocumentFG,
+        DocumentLoadsIntoFrameworkTestMixin,
         "feature_group_class",
         (
             f"{_INPUT_DATA}.test_read_files.test_json_document_reader",

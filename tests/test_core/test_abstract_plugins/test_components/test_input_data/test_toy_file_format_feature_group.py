@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import inspect
-import itertools
 import os
 from collections.abc import Callable, Collection
 from pathlib import Path
 from typing import Any, cast
-from urllib.parse import quote, unquote
 
 import pytest
 
@@ -32,6 +30,7 @@ from mloda.user import DataAccessCollection, Feature, FeatureName, Options, Plug
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.helpers.linear_scaling import assert_runs_linearly
+from tests.helpers.uri_region_matrix import fixpoint, region_matrix
 from tests.mixins.reader_feature_groups.lazy_source_group import load_document_group
 from mloda._testing.framework_adapter import PyArrowAdapter, PythonDictAdapter
 from mloda._testing.source.loads_into_framework_suite import FileLoadsIntoFrameworkTestMixin
@@ -691,51 +690,10 @@ class TestFileSourceUriProjection:
         assert match.access == path
 
     def test_generated_matrix(self) -> None:
-        secret = "S3CR3TVAL"  # nosec B105
-        plain = {
-            "mid": "s3://bucket/year=2024/dirA{r}/my%20dir/data" + TOY_SUFFIX,
-            "file": "s3://bucket/year=2024/my%20dir/data" + TOY_SUFFIX + "{r}",
-            "first": "s3://bucket/dirA{r}/year=2024/my%20dir/data" + TOY_SUFFIX,
-        }
-        zipped = {
-            "mid": "zip://year=2024/dirA{r}/my%20dir/a.zip::s3://bucket/inner" + TOY_SUFFIX,
-            "file": "zip://year=2024/my%20dir/a.zip{r}::s3://bucket/inner" + TOY_SUFFIX,
-            "first": "zip://dirA{r}/year=2024/my%20dir/a.zip::s3://bucket/inner" + TOY_SUFFIX,
-        }
-        chains = {"plain": plain, "zip": zipped}
-
-        def encode(sep: str, depth: int) -> str:
-            for _ in range(depth):
-                sep = quote(sep, safe="")
-            return sep
-
-        def fixpoint(text: str) -> str:
-            for _ in range(20):
-                nxt = unquote(text)
-                if nxt == text:
-                    break
-                text = nxt
-            return text
-
         failures: list[str] = []
         cases = 0
-        for key, sep, assign, depth, position, chain in itertools.product(
-            ["token", "auth", "key", "session", "jsessionid", ""],
-            [";", "?", "#"],
-            ["=", ":", "::", ""],
-            range(6),
-            ["mid", "file", "first"],
-            ["plain", "zip"],
-        ):
+        for label, uri, expected, secret in region_matrix(TOY_SUFFIX):
             cases += 1
-            template = chains[chain][position]
-            region = encode(sep, depth) + key + assign + secret
-            uri = template.format(r=region)
-            if depth == 0 and sep in "?#":
-                expected = uri[: uri.index(sep)]
-            else:
-                expected = template.format(r=";***")
-            label = f"key={key!r} sep={sep!r} assign={assign!r} depth={depth} position={position} chain={chain}"
             match = ToyFileFormatFG._source(uri)
             if match.source != expected:
                 failures.append(f"{label}: source {match.source!r} != {expected!r}")

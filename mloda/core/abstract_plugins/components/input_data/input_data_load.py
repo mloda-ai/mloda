@@ -73,8 +73,12 @@ def dispatch_input_data_load(
         marker = features._load_marker
         if marker is not None:
             snapshot = marker.context
-            # The marker check stops the recursion once the load runs inside its own calculation's context.
-            if snapshot is not None and current_input_data_load_marker.get() is not marker:
+            # Guards against recursion and against a snapshot that is not this calculation's.
+            if (
+                snapshot is not None
+                and snapshot.get(current_input_data_load_marker) is marker
+                and current_input_data_load_marker.get() is not marker
+            ):
                 return snapshot.copy().run(
                     dispatch_input_data_load,
                     owner,

@@ -13,6 +13,7 @@ from mloda.core.abstract_plugins.components.connection_requirement import Connec
 from mloda.core.abstract_plugins.components.credential_access import (
     CredentialFieldMissing,
     CredentialReadRefused,
+    hidden_credentials,
     readable,
 )
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -970,7 +971,8 @@ class ComputeFramework(ABC):
         prior_calculating = self._calculating
         try:
             if extender is None and fetch_extender is None:
-                marker.context = contextvars.copy_context()
+                with hidden_credentials():
+                    marker.context = contextvars.copy_context()
                 return method(self.data, features)
 
             context = self._build_hook_context(hook, feature_group, features, facts)
@@ -981,8 +983,9 @@ class ComputeFramework(ABC):
                 context.activate(),
                 input_data_load_gate_scope() if gated else contextlib.nullcontext(),
             ):
-                # Taken after the framework is active and before any credential window opens.
-                marker.context = contextvars.copy_context()
+                # Taken after the framework is active, with credentials hidden even inside an outer open window.
+                with hidden_credentials():
+                    marker.context = contextvars.copy_context()
                 if extender is None:
                     return method(self.data, features)
                 return _invoke_extender(

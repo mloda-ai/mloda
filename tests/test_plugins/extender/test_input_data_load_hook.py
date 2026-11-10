@@ -6,6 +6,7 @@ deny-with-fallback, and the "activate only when needed" short-circuit.
 """
 
 import concurrent.futures
+import contextlib
 import contextvars
 import copy
 import logging
@@ -20,7 +21,11 @@ from typing import Any, cast
 
 import pytest
 
-from mloda.core.abstract_plugins.components.credential_access import CredentialReadRefused, read_credential
+from mloda.core.abstract_plugins.components.credential_access import (
+    CredentialReadRefused,
+    read_credential,
+    readable_credentials,
+)
 from mloda.core.abstract_plugins.components.credential_scrub import (
     current_identity_secrets,
     current_registered_secrets,
@@ -32,7 +37,8 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.implementation import loaded_implementations
-from mloda.core.abstract_plugins.input_data_load_marker import InputDataLoadMarker
+from mloda.core.abstract_plugins.input_data_load_marker import InputDataLoadMarker, current_input_data_load_marker
+from mloda.core.api.run_boundary import run_boundary
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
@@ -771,7 +777,7 @@ def _threaded_load_feature_group(
     mode: bare/copied (FeatureSet built in the hopped thread), received (the calculate FeatureSet),
     built_in_calc (built in the calculation thread), deepcopy (copy of the received one), late (received one
     appended to `leaked` and not loaded in the calculation), late_context (a copy of the calculation's context
-    appended to `leaked`), late_forged_marker (received one with a forged active load marker appended to `leaked`).
+    appended to `leaked`), late_forged_marker (received one with a forged load marker appended to `leaked`).
     """
 
     class _ThreadedLoadFeatureGroup(FeatureGroup):
@@ -1115,7 +1121,7 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
         assert len(extender.all_captured) == 2
 
     @pytest.mark.parametrize("path", ["hop", "same_thread"])
-    @pytest.mark.parametrize("inner_kind", ["non_gate", "calculate_only"])
+    @pytest.mark.parametrize("inner_kind", ["non_gate", "calculate_only", "none"])
     def test_nested_run_without_its_own_gate_refuses_the_load(self, inner_kind: str, path: str) -> None:
         outcome: list[BaseException | None] = []
         inner_group = _threaded_load_feature_group("received")
@@ -1131,10 +1137,13 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
                 inner = (
                     _framework_for("non_gate")
                     if inner_kind == "non_gate"
+                    else PythonDictFramework()
+                    if inner_kind == "none"
                     else PythonDictFramework(function_extender={_CalcContextCapturingExtender()})
                 )
                 try:
-                    inner.run_calculate_feature(inner_group if path == "hop" else _SameThreadGroup, FeatureSet())
+                    with run_boundary() if inner_kind == "none" else contextlib.nullcontext():
+                        inner.run_calculate_feature(inner_group if path == "hop" else _SameThreadGroup, FeatureSet())
                     outcome.append(None)
                 except GateBypassError as exc:
                     outcome.append(exc)
@@ -1149,7 +1158,8 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
         assert _CountingReader.loads == 0
 
     @pytest.mark.parametrize("kind", ["gate", "non_gate", "none"])
-    def test_a_hopped_reader_cannot_read_a_credential(self, kind: str) -> None:
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_a_hopped_reader_cannot_read_a_credential(self, kind: str, nested: bool) -> None:
         class _CredentialReader(_CountingReader):
             @classmethod
             def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
@@ -1158,8 +1168,19 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
 
         _CountingReader.loads = 0
 
+        group = _threaded_load_feature_group("received", reader=_CredentialReader)
+
+        class _OuterWindowGroup(FeatureGroup):
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                with readable_credentials():
+                    return _framework_for(kind).run_calculate_feature(group, FeatureSet())
+
         with pytest.raises(CredentialReadRefused):
-            _run_calculate(_framework_for(kind), _threaded_load_feature_group("received", reader=_CredentialReader))
+            if nested:
+                _run_calculate(_framework_for("non_gate"), _OuterWindowGroup)
+            else:
+                _run_calculate(_framework_for(kind), group)
 
         assert _CountingReader.loads == 0
 
@@ -1806,11 +1827,12 @@ def _forged_marker() -> InputDataLoadMarker:
     marker = InputDataLoadMarker(True)
     with cfw.activate(), _forged_load_context().activate():
         marker.context = contextvars.copy_context()
+    marker.context.run(current_input_data_load_marker.set, marker)
     return marker
 
 
 class _ForgingHandleThreadedLoadFG(_HandleThreadedLoadFG):
-    """Reassigns the per-step facts on its FeatureSet and swaps the load marker's active context."""
+    """Reassigns the per-step facts on its FeatureSet and swaps the load marker's context snapshot."""
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

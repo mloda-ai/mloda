@@ -278,8 +278,22 @@ def _run_direct_and_chained(
     )
 
 
-def _dict_columns(frame: Any) -> list[str]:
-    return list(frame) if isinstance(frame, dict) else list(frame[0])
+def _frame_columns(frame: Any) -> list[str]:
+    """Column names of an Arrow table, columnar dict, or list of row dicts."""
+    if isinstance(frame, dict):
+        return list(frame)
+    if isinstance(frame, list):
+        return list(frame[0])
+    return list(frame.column_names)
+
+
+def _column_values(frame: Any, name: str) -> list[Any]:
+    """Values of one column of an Arrow table, columnar dict, or list of row dicts."""
+    if isinstance(frame, dict):
+        return list(frame[name])
+    if isinstance(frame, list):
+        return [row[name] for row in frame]
+    return list(frame[name].to_pylist())
 
 
 def _single_row(frame: Any, column: str) -> Any:
@@ -508,23 +522,14 @@ class TestRuntimeDefaultMaterializationEndToEnd:
             direct_data_type=direct_data_type,
             direct_compute_framework="PyArrowTable" if two else None,
         )
-        names = [
-            name
-            for frame in results
-            for name in (frame.column_names if not isinstance(frame, (dict, list)) else _dict_columns(frame))
-        ]
+        names = [name for frame in results for name in _frame_columns(frame)]
         assert names.count(MDB_DIRECT) == 1
         assert names.count(MDB_CHAINED) == 1
         assert sum(c.count(MDB_DIRECT) for c in calls) == 1, calls
         for name in (MDB_DIRECT, MDB_CHAINED):
-            (frame,) = [
-                f for f in results if name in (f.column_names if not isinstance(f, (dict, list)) else _dict_columns(f))
-            ]
-            if isinstance(frame, (dict, list)):
-                values = list(frame[name]) if isinstance(frame, dict) else [row[name] for row in frame]
-                assert values == [1, 2]
-            else:
-                assert frame[name].to_pylist() == [1, 2]
+            (frame,) = [f for f in results if name in _frame_columns(f)]
+            assert _column_values(frame, name) == [1, 2]
+            if not isinstance(frame, (dict, list)):
                 assert frame.schema.field(name).type == DataType.to_arrow_type(DataType.INT64)
 
     @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
@@ -739,11 +744,7 @@ class TestRuntimeDefaultMaterializationEndToEnd:
             direct_options=direct_options,
             direct_compute_framework="PyArrowTable" if two else None,
         )
-        names = [
-            name
-            for frame in results
-            for name in (frame.column_names if not isinstance(frame, (dict, list)) else _dict_columns(frame))
-        ]
+        names = [name for frame in results for name in _frame_columns(frame)]
         assert names.count(MDB_DIRECT) == 1
         assert names.count(MDB_CHAINED) == 1
 

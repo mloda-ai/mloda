@@ -274,8 +274,8 @@ class Feature:
         )
 
     def options_forwarded_from(self, consumer: Options, consumer_group: type[FeatureGroup]) -> Options:
-        """Return a copy of this feature's options with what the consumer would forward onto it.
-        Nothing is mutated; a conflict raises the same ValueError as planning."""
+        """Copy of these options as core forwards `consumer` into them; nothing is mutated, a conflict raises as in planning.
+        `consumer_group` is the consumer's class (`type(self)`); its PROPERTY_MAPPING decides the consumer-local keys."""
         fork = self.options._fork()
         self._inherit_consumer_options(fork, consumer, unforwarded_keys(consumer_group.PROPERTY_MAPPING))
         return fork

@@ -37,9 +37,11 @@ from mloda.user import Features
 from mloda.user import Options
 
 
-def _merge(input_feature: Feature, consumer: Options) -> Feature:
+def _merge(input_feature: Feature, consumer: Options, consumer_local_keys: frozenset[str] = frozenset()) -> Feature:
     """Drive the collection-level merge exactly like the engine does (engine.py:348)."""
-    features = Features([input_feature], child_options=consumer, child_uuid=uuid4())
+    features = Features(
+        [input_feature], child_options=consumer, child_uuid=uuid4(), consumer_local_keys=consumer_local_keys
+    )
     return features.collection[0]
 
 
@@ -404,6 +406,8 @@ _PARITY_FIELDS = (
     "cascade_context_keys",
     "last_forwarded_group_keys",
     "non_forwarded_group_keys",
+    "own_group_keys",
+    "own_context_keys",
 )
 
 
@@ -418,17 +422,10 @@ class TestOptionsForwardedFrom:
     def test_preview_equals_collection_merge(self, case: str) -> None:
         make_feature, make_consumer, group = _FORWARDING_CASES[case]
 
-        merged = Features(
-            [make_feature()],
-            child_options=make_consumer(),
-            child_uuid=uuid4(),
-            consumer_local_keys=unforwarded_keys(group.PROPERTY_MAPPING),
-        ).collection[0]
+        merged = _merge(make_feature(), make_consumer(), consumer_local_keys=unforwarded_keys(group.PROPERTY_MAPPING))
         preview = make_feature().options_forwarded_from(make_consumer(), group)
 
         assert _fields(preview) == _fields(merged.options)
-        if case == "consumer_local_key":
-            assert "vault" not in preview.group
 
     def test_preview_does_not_mutate_input_or_consumer(self) -> None:
         feature = Feature("child", options=Options(group={"own_key": "own_value"}, context={"own_ctx": 1}))
@@ -477,23 +474,41 @@ class TestOptionsForwardedFrom:
 
         assert str(preview_error.value) == str(merge_error.value)
 
-    def test_merge_and_preview_each_go_through_inherit_consumer_options_once(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        calls: list[str] = []
-        original = Feature._inherit_consumer_options
+    def test_preview_equals_collection_merge_for_a_string_input(self) -> None:
+        consumer_group = dict(_CONSUMER_GROUP_BASE)
+        features = Features(
+            ["child"],
+            child_options=Options(group=dict(consumer_group)),
+            child_uuid=uuid4(),
+            consumer_local_keys=unforwarded_keys(_PlainConsumerGroup.PROPERTY_MAPPING),
+        )
+        merged = features.collection[0]
+        preview = Feature("child").options_forwarded_from(Options(group=dict(consumer_group)), _PlainConsumerGroup)
 
-        def spy(
-            self: Feature, target: Options, consumer: Options, consumer_local_keys: frozenset[str]
-        ) -> frozenset[str]:
-            calls.append(str(self.name))
-            return original(self, target, consumer, consumer_local_keys)
+        assert _fields(preview) == _fields(merged.options)
 
-        monkeypatch.setattr(Feature, "_inherit_consumer_options", spy)
-        consumer = Options(group={"backend": "neo4j"})
+    def test_consumer_local_key_stays_off_the_preview(self) -> None:
+        make_feature, make_consumer, group = _FORWARDING_CASES["consumer_local_key"]
+        consumer = make_consumer()
 
-        Features([Feature("merged")], child_options=consumer, child_uuid=uuid4())
-        assert calls == ["merged"]
+        preview = make_feature().options_forwarded_from(consumer, group)
 
-        Feature("previewed").options_forwarded_from(consumer, _PlainConsumerGroup)
-        assert calls == ["merged", "previewed"]
+        assert "vault" in consumer.group
+        assert "vault" not in preview.group
+        assert "vault" not in preview.context
+
+    def test_explicit_allowlist_overrides_forward_to_inputs_false(self) -> None:
+        consumer_local_keys = unforwarded_keys(_LocalKeyConsumerGroup.PROPERTY_MAPPING)
+        assert "vault" in consumer_local_keys
+
+        merged = _merge(
+            Feature("child", forward_group={"vault"}),
+            Options(group={"vault": "v1", "backend": "neo4j"}),
+            consumer_local_keys=consumer_local_keys,
+        )
+        preview = Feature("child", forward_group={"vault"}).options_forwarded_from(
+            Options(group={"vault": "v1", "backend": "neo4j"}), _LocalKeyConsumerGroup
+        )
+
+        assert merged.options.group == {"vault": "v1"}
+        assert preview.group == {"vault": "v1"}

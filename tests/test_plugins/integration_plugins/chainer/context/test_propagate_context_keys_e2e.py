@@ -184,9 +184,10 @@ class TestForwardedOptionsPreviewE2E:
         assert preview.context["env"] == "prod"
         assert "vault" not in preview.group
         assert "vault" not in received.group
-        # Compare only forwarded keys: the engine may add unrelated keys to what the input receives.
-        assert {k: received.group[k] for k in preview.group} == dict(preview.group)
-        assert {k: received.context[k] for k in preview.context} == dict(preview.context)
+        assert received.group == preview.group
+        assert received.context == preview.context
+        assert received.inherited_group_keys == preview.inherited_group_keys
+        assert received.inherited_context_keys == preview.inherited_context_keys
         assert "env" in received.context
 
 

@@ -97,8 +97,6 @@ def test_known_failures_name_real_params() -> None:
 
 @pytest.mark.parametrize(("name", "impl", "options"), LOOP_INPUT_PARAMS)
 def test_shipped_group_passes_shape_check_for_requested_names(name: str, impl: type[Any], options: Options) -> None:
-    if not impl.compute_framework.is_available():
-        pytest.skip(f"{impl.compute_framework.__name__} not installed")
     case = CASES[name]
     for module in case.needs:
         pytest.importorskip(module)

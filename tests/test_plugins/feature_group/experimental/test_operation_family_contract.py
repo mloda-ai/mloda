@@ -385,6 +385,7 @@ def _missing_value_table() -> TypedTestData:
 
 
 # One frame builder per family (a superset of columns) and the option variants that change the declared inputs.
+# The shipped groups shape suite runs each variant too, so do not narrow one without checking it.
 LOOP_INPUT_CASES: dict[str, tuple[Callable[[], TypedTestData], list[Options]]] = {
     "aggregation": (lambda: TypedTestData({"sales": (DataType.DOUBLE, _NUMBERS)}), [Options()]),
     "time_window": (

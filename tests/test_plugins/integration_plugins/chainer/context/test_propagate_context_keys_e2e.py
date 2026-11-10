@@ -1,11 +1,19 @@
 """E2E integration tests for propagate_context_keys in chained features."""
 
-from typing import Any
+from typing import Any, ClassVar
 
+import pandas as pd
 import pytest
 
-from mloda.user import Feature, Options, PluginCollector, mloda
-from mloda.provider import DefaultOptionKeys
+from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
+from mloda.provider import (
+    ComputeFramework,
+    DataCreatorFeatureGroup,
+    DefaultOptionKeys,
+    FeatureGroup,
+    FeatureSet,
+    PropertySpec,
+)
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_plugins.integration_plugins.chainer.propagate_context_feature import (
@@ -93,6 +101,94 @@ def _run_guard(requests: list[Feature]) -> list[Any]:
             {CascadeGuardRootGroupTest, CascadeGuardSharedGroupTest, CascadeGuardConsumerGroupTest}
         ),
     )
+
+
+PREVIEW_INPUT = "pvw_input"
+PREVIEW_CONSUMER = "pvw_consumer"
+
+
+class PreviewInputGroupTest(DataCreatorFeatureGroup):
+    """Input that records the options it actually receives."""
+
+    RECEIVED: ClassVar[dict[str, Options]] = {}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {PREVIEW_INPUT}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        cls.RECEIVED[PREVIEW_INPUT] = next(iter(features.features)).options
+        return pd.DataFrame({PREVIEW_INPUT: [1, 2, 3]})
+
+
+class PreviewConsumerGroupTest(FeatureGroup):
+    """Consumer that records the preview of what core forwards into its input."""
+
+    PREVIEWED: ClassVar[dict[str, Options]] = {}
+    PROPERTY_MAPPING = {
+        "mode": PropertySpec("Mode", context=False),
+        "vault": PropertySpec("Vault", context=False, forward_to_inputs=False),
+    }
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Any | None = None,
+    ) -> bool:
+        return str(feature_name) == PREVIEW_CONSUMER
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        feature = Feature(PREVIEW_INPUT)
+        type(self).PREVIEWED[PREVIEW_CONSUMER] = feature.options_forwarded_from(options, type(self))
+        return {feature}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data[PREVIEW_CONSUMER] = data[PREVIEW_INPUT] + 1
+        return data
+
+
+class TestForwardedOptionsPreviewE2E:
+    def test_preview_matches_the_options_the_input_group_receives(self) -> None:
+        PreviewInputGroupTest.RECEIVED.clear()
+        PreviewConsumerGroupTest.PREVIEWED.clear()
+        request = Feature(
+            PREVIEW_CONSUMER,
+            options=Options(
+                group={"mode": "fast", "vault": "v1"},
+                context={"env": "prod"},
+                cascade_context_keys=frozenset({"env"}),
+            ),
+        )
+
+        mloda.run_all(
+            [request],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=PluginCollector.enabled_feature_groups({PreviewInputGroupTest, PreviewConsumerGroupTest}),
+        )
+
+        received = PreviewInputGroupTest.RECEIVED[PREVIEW_INPUT]
+        preview = PreviewConsumerGroupTest.PREVIEWED[PREVIEW_CONSUMER]
+        assert preview.group["mode"] == "fast"
+        assert preview.context["env"] == "prod"
+        assert "vault" not in preview.group
+        assert "vault" not in received.group
+        assert received.group == preview.group
+        assert received.context == preview.context
+        assert received.inherited_group_keys == preview.inherited_group_keys
+        assert received.inherited_context_keys == preview.inherited_context_keys
+        assert "env" in received.context
 
 
 class TestPropagateContextKeysE2E:

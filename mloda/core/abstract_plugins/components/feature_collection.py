@@ -78,28 +78,11 @@ class Features:
     def merge_options(self, feature: Feature, child_options: Options) -> None:
         """
         Apply forward-by-default inheritance onto the input feature and record the forwarded
-        group-key set on it.
-
-        Delegates to Options.inherit_from: the input feature inherits ALL consumer group
-        keys by default; feature.forward_group=False isolates it, an allowlist restricts
-        the copy, and feature.forward_group_exclude carves out single keys. Consumer
-        context keys flow only when listed in feature.inherit_context_keys or pushed via
-        the consumer's propagate_context_keys or cascade_context_keys. Conflict detection lives in inherit_from.
-
-        Args:
-            feature: The input feature whose options are updated in place
-            child_options: The consumer feature's options (never mutated)
-
-        Raises:
-            ValueError: If an inherited key conflicts with an existing value
+        group-key set on it. Conflict detection lives in Options.inherit_from; child_options
+        is never mutated.
         """
-        feature.forwarded_group_keys = feature.options.inherit_from(
-            child_options,
-            forward_group=feature.forward_group,
-            forward_group_exclude=feature.forward_group_exclude,
-            inherit_context_keys=feature.inherit_context_keys,
-            owner=str(feature.name),
-            consumer_local_keys=self.consumer_local_keys,
+        feature.forwarded_group_keys = feature._inherit_consumer_options(
+            feature.options, child_options, self.consumer_local_keys
         )
 
     def check_duplicate_feature(self, feature: Feature) -> None:

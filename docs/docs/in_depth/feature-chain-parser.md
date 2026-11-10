@@ -412,7 +412,9 @@ The [Context Propagation](property-mapping.md#context-propagation) docs describe
 opts specific keys in for the direct input features only (`cascade_context_keys`
 continues the push down the chain). This section describes the **author side**: what
 happens to a
-feature group's own options when it declares an input feature.
+feature group's own options when it declares an input feature. To preview what an input
+will receive, see
+[Previewing the forwarded options](property-mapping.md#previewing-the-forwarded-options).
 
 ### Forwarding is the default
 

@@ -806,6 +806,31 @@ context. A key that no feature in scope ever forwards stays metadata and does no
 split. This isolates per-value results that previously collapsed into one computation
 where a single value silently won.
 
+### Previewing the forwarded options
+
+A feature group can ask what an input feature will receive from its own options:
+
+```py
+def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+    input_feature = Feature("price")
+    forwarded = input_feature.options_forwarded_from(options, type(self))
+    if forwarded.get("window") is None:
+        return {Feature("price_daily")}
+    return {input_feature}
+```
+
+- Pass the consumer's own class, `type(self)`. It returns a copy and mutates nothing; treat
+  the result as read-only.
+- It covers group forwarding, the `propagate_context_keys` / `cascade_context_keys` push
+  and the `inherit_context_keys` pull.
+- Under default forwarding a `forward_to_inputs=False` key of the consumer group stays off
+  the input; an explicit `forward_group` allowlist that names it still forwards it.
+- A conflict raises the same `ValueError` as planning.
+- It reflects `options` at call time, so call it after any change you make to them.
+- For a string input, wrap it: `Feature(name).options_forwarded_from(...)`.
+- Later planning steps (name binding, declared defaults, a second consumer of the same
+  input) can still change the input's final options.
+
 ### `group` and `context` are independent namespaces
 
 `group` (which drives resolution and splitting) and `context` (metadata) are

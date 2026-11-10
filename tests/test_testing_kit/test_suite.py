@@ -402,15 +402,28 @@ def _read_document_mixin() -> type:
     return ReadDocumentFGTestMixin
 
 
-def _loads_mixin(name: str) -> Any:
-    def get() -> type:
-        import importlib
+def _file_loads_mixin() -> type:
+    from mloda._testing.source.loads_into_framework_suite import FileLoadsIntoFrameworkTestMixin
 
-        module = importlib.import_module("mloda._testing.source.loads_into_framework_suite")
-        mixin: type = getattr(module, name)
-        return mixin
+    return FileLoadsIntoFrameworkTestMixin
 
-    return get
+
+def _file_loader_name_mixin() -> type:
+    from mloda._testing.source.loads_into_framework_suite import FileLoaderNameTestMixin
+
+    return FileLoaderNameTestMixin
+
+
+def _db_loads_mixin() -> type:
+    from mloda._testing.source.loads_into_framework_suite import DatabaseLoadsIntoFrameworkTestMixin
+
+    return DatabaseLoadsIntoFrameworkTestMixin
+
+
+def _document_loads_mixin() -> type:
+    from mloda._testing.source.loads_into_framework_suite import DocumentLoadsIntoFrameworkTestMixin
+
+    return DocumentLoadsIntoFrameworkTestMixin
 
 
 _ADAPTER = {"adapter_class": PythonDictAdapter}
@@ -431,28 +444,28 @@ _ADAPTER = {"adapter_class": PythonDictAdapter}
             {},
         ),
         (
-            _loads_mixin("FileLoadsIntoFrameworkTestMixin"),
+            _file_loads_mixin,
             "test_loads_requested_columns",
             "write_fiel",
             "write_file",
             _ADAPTER,
         ),
         (
-            _loads_mixin("FileLoaderNameTestMixin"),
+            _file_loader_name_mixin,
             "test_input_data_load_names_the_loader",
             "expected_loadr",
             "expected_loader",
             _ADAPTER,
         ),
         (
-            _loads_mixin("DatabaseLoadsIntoFrameworkTestMixin"),
+            _db_loads_mixin,
             "test_a_global_filter_returns_the_matching_rows",
             "credential_kee",
             "credential_key",
             _ADAPTER,
         ),
         (
-            _loads_mixin("DocumentLoadsIntoFrameworkTestMixin"),
+            _document_loads_mixin,
             "test_loads_only_the_requested_outputs",
             "expected_tex",
             "expected_text",
@@ -573,9 +586,9 @@ def test_every_adapter_was_closed_and_each_was_opened_once():
     "get_suite",
     [
         _filter_suite,
-        _loads_mixin("FileLoadsIntoFrameworkTestMixin"),
-        _loads_mixin("DatabaseLoadsIntoFrameworkTestMixin"),
-        _loads_mixin("DocumentLoadsIntoFrameworkTestMixin"),
+        _file_loads_mixin,
+        _db_loads_mixin,
+        _document_loads_mixin,
     ],
     ids=["filter", "file_loads", "db_loads", "document_loads"],
 )

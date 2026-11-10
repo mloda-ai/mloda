@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 class LoadsIntoFrameworkTestMixin(ConformanceSuite, suite_base=True):
-    """Host sets adapter_class; tests run the group against that adapter's compute framework."""
+    """The host sets adapter_class (the inherited compute_framework hook is unused here)."""
 
     adapter_class: ClassVar[type[FrameworkAdapter]]
 
@@ -95,7 +95,7 @@ class FileLoaderNameTestMixin(FileLoadsIntoFrameworkTestMixin, suite_base=True):
 
 
 class DatabaseLoadsIntoFrameworkTestMixin(LoadsIntoFrameworkTestMixin, suite_base=True):
-    """A database group loads exactly the requested columns, with their values, into the adapter's framework."""
+    """A database group loads the requested columns and values into the adapter's framework; pushdown is its own concern."""
 
     feature_group_class: type[ReadDBFG]
     credential_key: str
@@ -141,6 +141,7 @@ class DatabaseLoadsIntoFrameworkTestMixin(LoadsIntoFrameworkTestMixin, suite_bas
             global_filter=global_filter,
         )
 
+        assert len(result) == 1
         assert [self.values_of(adapter, result[0], name) for name in self.columns[:2]] == [[2, 3], [2, 3]]
 
     def test_input_data_load_names_the_loader(self, adapter: FrameworkAdapter, tmp_path: Path) -> None:

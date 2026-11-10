@@ -120,3 +120,60 @@ def test_isinstance_calls_against_plugin_bases_match_the_allowlist() -> None:
             + "\n"
         )
     assert not message, message
+
+
+# Only the grant hands credential values to step code: (module, enclosing qualname, receiver name) of each
+# `.credentials` read under mloda/core/runtime and mloda/core/core.
+ALLOWED_CREDENTIAL_READS: frozenset[Site] = frozenset(
+    {
+        ("mloda/core/runtime/compute_framework_executor.py", "_credential_grant", "collection"),
+        ("mloda/core/runtime/compute_framework_executor.py", "_step_secrets", "access"),
+        ("mloda/core/runtime/validate_multiprocessing_link.py", "raise_on_unpicklable_step_credentials", "collection"),
+    }
+)
+_CREDENTIAL_ROOTS = ("mloda/core/runtime", "mloda/core/core")
+
+
+def _credential_reads(root: Path, module: str) -> set[Site]:
+    found: set[Site] = set()
+
+    def visit(node: ast.AST, scope: list[str]) -> None:
+        for child in ast.iter_child_nodes(node):
+            inner = [*scope, child.name] if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else scope
+            if isinstance(child, ast.Attribute) and child.attr == "credentials":
+                found.add((module, inner[-1] if inner else "<module>", ast.unparse(child.value)))
+            visit(child, inner)
+
+    visit(ast.parse(root.read_text(encoding="utf-8"), filename=module), [])
+    return found
+
+
+def _sweep_credential_reads(paths: list[Path], base: Path) -> set[Site]:
+    found: set[Site] = set()
+    for path in paths:
+        found |= _credential_reads(path, path.relative_to(base).as_posix())
+    return found
+
+
+def test_only_the_grant_reads_credential_values() -> None:
+    paths = [p for r in _CREDENTIAL_ROOTS for p in sorted((_REPO_ROOT / r).rglob("*.py"))]
+    assert len(paths) >= 20
+    found = _sweep_credential_reads(paths, _REPO_ROOT)
+
+    unexpected = sorted(found - ALLOWED_CREDENTIAL_READS)
+    stale = sorted(ALLOWED_CREDENTIAL_READS - found)
+    message = ""
+    if unexpected:
+        message += "New `.credentials` reads outside the grant:\n" + "\n".join(
+            f"  {m} {q} {r}.credentials" for m, q, r in unexpected
+        )
+    if stale:
+        message += "\nStale credential-read entries:\n" + "\n".join(f"  {m} {q} {r}.credentials" for m, q, r in stale)
+    assert not message, message
+
+
+def test_the_credential_read_sweep_flags_a_new_read(tmp_path: Path) -> None:
+    module = tmp_path / "leak.py"
+    module.write_text("def helper(ctx):\n    return ctx.credentials['x']\n", encoding="utf-8")
+
+    assert _sweep_credential_reads([module], tmp_path) == {("leak.py", "helper", "ctx")}

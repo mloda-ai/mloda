@@ -279,3 +279,10 @@ class CredentialDefaultMcp8(CredentialReadMcp8):
         data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == CRED_DEFAULT_FEATURE
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        from mloda.provider import read_credential
+
+        secret = str(read_credential(features.get_options_key(CRED_KEY))[CRED_FIELD])
+        return {CRED_DEFAULT_FEATURE: [cred_digest(secret) for _ in data["income"]]}

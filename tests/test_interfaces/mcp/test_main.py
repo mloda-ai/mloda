@@ -6,6 +6,9 @@ Without the ``mcp`` extra both entry points print the install hint and exit 2.
 import ast
 import importlib.util
 import io
+import json
+import subprocess  # nosec B404
+import sys
 import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -282,6 +285,37 @@ class TestMcpAvailable:
         assert asked == ["mcp"]
 
 
+_MASK_SECRET = "probe-secret-Kq9Lx2Vw"  # nosec B105
+_MASKING_SCRIPT = f"""
+import json, logging, sys, threading
+import mloda.interfaces.mcp.server as srv, mloda.interfaces.cli.main as climain
+import mloda.interfaces.mcp.main as mcp_main
+from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+climain.build_services = lambda settings, env: ()
+srv.build_server = lambda *a: type("S", (), {{"run": lambda self, t: None}})()
+code = mcp_main.main(["--config", sys.argv[1]], env={{"MLODA_MCP_SIGNING_KEY": "k" * 32}})
+secret = {_MASK_SECRET!r}
+seen = []
+
+
+class Capture(logging.Handler):
+    def emit(self, record):
+        seen.append(record.getMessage())
+
+
+log = logging.getLogger("probe")
+log.setLevel(logging.DEBUG)
+log.propagate = False
+log.addHandler(Capture())
+with registered_secrets_scope(frozenset([secret])):
+    worker = threading.Thread(target=lambda: log.info("outside %s", secret))
+    worker.start()
+    worker.join()
+print(json.dumps([code, seen]))
+"""
+
+
 class TestServe:
     def test_serve_runs_the_server_over_stdio(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         mcpserver = pytest.importorskip("mcp.server.mcpserver")
@@ -311,6 +345,23 @@ class TestServe:
         assert mcp_main.serve(load_settings(_config(tmp_path), ENV), env=ENV) == 0
 
         assert log_masking.process_wide_log_masking_enabled() is True
+
+    def test_main_entry_masks_a_scoped_secret_logged_from_a_plain_thread(self, tmp_path: Path) -> None:
+        pytest.importorskip("mcp")
+        done = subprocess.run(  # nosec B603
+            [sys.executable, "-c", _MASKING_SCRIPT, str(_config(tmp_path))],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert done.returncode == 0, done.stderr
+        code, seen = json.loads(done.stdout.strip().splitlines()[-1])
+
+        assert code == 0
+        assert len(seen) == 1
+        assert seen[0].startswith("outside ")
+        assert _MASK_SECRET not in seen[0]
 
 
 class TestMcpModule:

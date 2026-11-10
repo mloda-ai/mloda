@@ -25,6 +25,7 @@ import contextvars
 import errno
 import json
 import logging
+import os
 import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -1594,6 +1595,78 @@ def test_two_features_with_different_handles_each_read_their_own_credential(
     assert rows["chs_rc_b"] == [f"{_HOST_B}|{len('b-hmac-Xs2Kd9Lf6x')}"]
 
 
+def _own_host_and_other_refusal(handle: str) -> str:
+    other = _VAULT_B if handle == _VAULT_A else _VAULT_A
+    try:
+        read_credential(other)
+        seen = "other=readable"
+    except CredentialReadRefused:
+        seen = "other=refused"
+    value = read_credential(handle)
+    return f"{os.getpid()}|{value['host']}|{len(str(value['hmac']))}|{seen}"
+
+
+class ChsReuseSrcFG(ChsSource):
+    """Source declaring handle A, reads its own host and tries the other handle."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_reuse_src"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        row = _own_host_and_other_refusal(features.get_options_key(HANDLE_KEY))
+        return pd.DataFrame({name: [row] for name in features.get_all_names()})
+
+
+class ChsReuseConsumerFG(ChsSource):
+    """Consumer declaring handle B on top of the handle-A source."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_reuse_consumer"}
+
+    def input_features(self, options: Any, feature_name: Any) -> set[Feature] | None:
+        return {Feature("chs_reuse_src", options={HANDLE_KEY: _VAULT_A})}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        row = _own_host_and_other_refusal(features.get_options_key(HANDLE_KEY))
+        return pd.DataFrame({name: [f"{row}|src={data['chs_reuse_src'].iloc[0]}"] for name in features.get_all_names()})
+
+
+@pytest.mark.timeout(15)
+def test_a_reused_multiprocessing_worker_reads_each_steps_own_handle_and_refuses_the_other(
+    flight_server: Any,
+) -> None:
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    result = mloda.run_all(
+        [Feature("chs_reuse_consumer", options={HANDLE_KEY: _VAULT_B})],
+        compute_frameworks=[PandasDataFrame],
+        parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+        flight_server=flight_server,
+        data_access_collection=_vault_dac(_TWO_VAULTS),
+        plugin_collector=PluginCollector.enabled_feature_groups({ChsReuseSrcFG, ChsReuseConsumerFG}),
+    )
+
+    row = str(result[0]["chs_reuse_consumer"].iloc[0])
+    consumer_pid, consumer_host, consumer_len, consumer_seen, source = row.split("|", 4)
+    source_pid, source_host, source_len, source_seen = source.removeprefix("src=").split("|")
+    assert consumer_pid == source_pid
+    assert consumer_pid != str(os.getpid())
+    assert consumer_host == _HOST_B
+    assert source_host == _HOST_A
+    assert consumer_len == str(len(str(_TWO_VAULTS[_VAULT_B]["hmac"])))
+    assert source_len == str(len(str(_TWO_VAULTS[_VAULT_A]["hmac"])))
+    assert consumer_seen == "other=refused"
+    assert source_seen == "other=refused"
+
+
 class ChsRcOneOfTwoFG(ChsTwoHandleFG):
     """Declares two handles and reads only the first."""
 
@@ -1877,7 +1950,8 @@ def test_a_saver_raising_a_frozen_dataclass_exception_keeps_its_type(
 
 
 @pytest.mark.timeout(15)
-def test_read_credential_raises_after_save_artifact_returns(flight_server: Any) -> None:
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+def test_read_credential_raises_after_save_artifact_returns(mode: ParallelizationMode, flight_server: Any) -> None:
     from mloda.user import mloda as mloda_api
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
@@ -1888,7 +1962,7 @@ def test_read_credential_raises_after_save_artifact_returns(flight_server: Any) 
         data_access_collection=_vault_dac(),
         plugin_collector=PluginCollector.enabled_feature_groups({ChsRcArtifactFG}),
     )
-    api.run(parallelization_modes={ParallelizationMode.SYNC}, flight_server=flight_server)
+    api.run(parallelization_modes={mode}, flight_server=flight_server)
 
     assert len(_SAVER_CONTEXTS) == 1
     with pytest.raises(CredentialReadRefused, match=_E2E_HANDLE):
@@ -2012,14 +2086,15 @@ def test_a_load_dispatched_while_the_window_is_closed_keeps_its_reads_refused(fl
 
 
 @pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
 @pytest.mark.parametrize("hooks", _WINDOW_SHAPES)
 def test_read_credential_is_open_in_calculate_an_awaited_task_and_the_load_but_not_in_extenders(
-    hooks: set[ExtenderHook], flight_server: Any
+    hooks: set[ExtenderHook], mode: ParallelizationMode, flight_server: Any
 ) -> None:
     _WINDOW_EVENTS.clear()
     probe = _ReadProbeExtender(hooks)
 
-    _grant_run(ChsWindowFG, "chs_win_a", ParallelizationMode.SYNC, flight_server, {probe} if hooks else None)
+    _grant_run(ChsWindowFG, "chs_win_a", mode, flight_server, {probe} if hooks else None)
 
     assert _events("calculate") == [_E2E_HOST]
     assert _events("async") == [_E2E_HOST]
@@ -2033,13 +2108,12 @@ def test_read_credential_is_open_in_calculate_an_awaited_task_and_the_load_but_n
 
 
 @pytest.mark.timeout(15)
-def test_validate_hooks_cannot_read_while_the_grant_is_held(flight_server: Any) -> None:
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+def test_validate_hooks_cannot_read_while_the_grant_is_held(mode: ParallelizationMode, flight_server: Any) -> None:
     _WINDOW_EVENTS.clear()
     probe = _ReadProbeExtender({ExtenderHook.VALIDATE_INPUT_FEATURE, ExtenderHook.VALIDATE_OUTPUT_FEATURE})
 
-    _grant_run(
-        (ChsWinConsumerFG, ChsReadSourceFG), "chs_win_consumer_a", ParallelizationMode.SYNC, flight_server, {probe}
-    )
+    _grant_run((ChsWinConsumerFG, ChsReadSourceFG), "chs_win_consumer_a", mode, flight_server, {probe})
 
     assert "refused" in _events("ext:validate_input_feature")
     assert "refused" in _events("ext:validate_output_feature")
@@ -2463,9 +2537,17 @@ class _LineCapture(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         self.lines.append(record.getMessage())
+        if record.exc_info and record.exc_info[1] is not None:
+            self.lines.append(str(record.exc_info[1]))
+        if hasattr(record, "tag"):
+            self.lines.append(str(record.tag))
 
 
 def _capture_plugin_lines(emit: Any) -> str:
+    return "|".join(_capture_lines_list(emit))
+
+
+def _capture_lines_list(emit: Any) -> list[str]:
     plugin_logger = logging.getLogger(f"mloda_test.plugin_log.{threading.get_ident()}")
     plugin_logger.setLevel(logging.DEBUG)
     plugin_logger.propagate = False
@@ -2475,7 +2557,7 @@ def _capture_plugin_lines(emit: Any) -> str:
         emit(plugin_logger)
     finally:
         plugin_logger.removeHandler(handler)
-    return "|".join(handler.lines)
+    return handler.lines
 
 
 class ChsLoggingFG(ChsSource):
@@ -2497,6 +2579,32 @@ class ChsLoggingFG(ChsSource):
             plugin_logger.info("host %s", value["host"])
 
         row = _capture_plugin_lines(emit)
+        return pd.DataFrame({name: [row] for name in features.get_all_names()})
+
+
+class ChsLogShapesFG(ChsSource):
+    """Logs the granted secrets through a dict arg, an extra field, an exc_info and a JSON-escaped form."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_log_shapes_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        value = read_credential(features.get_options_key(HANDLE_KEY))
+
+        def emit(plugin_logger: logging.Logger) -> None:
+            plugin_logger.info("cfg %(hmac)s", {"hmac": value["hmac"]})
+            plugin_logger.info("extra", extra={"tag": value["hmac"]})
+            try:
+                raise ValueError(f"boom {value['hmac']}")
+            except ValueError:
+                plugin_logger.error("failed", exc_info=True)
+            plugin_logger.info("json %s", json.dumps({"k": value["key"]}))
+
+        row = json.dumps(_capture_lines_list(emit))
         return pd.DataFrame({name: [row] for name in features.get_all_names()})
 
 
@@ -2530,6 +2638,28 @@ def test_plugin_log_lines_are_masked_in_every_mode_but_the_host_stays(
     result = _grant_run(ChsLoggingFG, "chs_log_a", mode, flight_server)
 
     assert list(result[0]["chs_log_a"]) == [f"connect ***|key is ***|host {_E2E_HOST}"]
+
+
+_ESCAPING_KEY = 'esc"key\\Qw8Rt5Yu'  # nosec B105
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_plugin_log_shapes_are_masked_in_every_mode(mode: ParallelizationMode, flight_server: Any) -> None:
+    dac = _vault_dac({_E2E_HANDLE: {**_vault_values(), "key": _ESCAPING_KEY}})
+
+    result = _grant_run(ChsLogShapesFG, "chs_log_shapes_a", mode, flight_server, dac=dac)
+
+    lines = json.loads(str(result[0]["chs_log_shapes_a"].iloc[0]))
+    assert lines[0] == "cfg ***"
+    assert lines[1:3] == ["extra", "***"]
+    assert lines[3:5] == ["failed", "boom ***"]
+    assert lines[5] == 'json {"k": "***"}'
+    assert len(lines) == 6
+    for line in lines:
+        assert _E2E_HMAC not in line
+        assert _ESCAPING_KEY not in line
+        assert json.dumps(_ESCAPING_KEY)[1:-1] not in line
 
 
 @pytest.mark.timeout(15)
@@ -2693,3 +2823,37 @@ def test_two_interleaved_stream_runs_on_one_session_each_read_their_own_value() 
 
     assert rows_1 == [_row(_FRESH_1)]
     assert rows_2 == [_row(_FRESH_2)]
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+def test_concurrent_runs_on_one_session_each_read_their_own_fresh_value(
+    mode: ParallelizationMode, flight_server: Any
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    count = 4
+    values = [
+        {"host": f"conc-{i}.internal.example", "hmac": f"conc{i}-hmac-" + "x" * (i + 3), "key": f"conc{i}-key"}  # nosec B105
+        for i in range(count)
+    ]
+    dac = _vault_dac()
+    before = {handle: dict(value) for handle, value in dac.credentials.items()}
+    session = _prepare_vault(ChsRcReadingFG, "chs_rc_a", mode, dac=dac)
+    barrier = threading.Barrier(count)
+
+    def run(index: int) -> list[str]:
+        barrier.wait(10)
+        return _run_rows(
+            session,
+            "chs_rc_a",
+            credentials={_E2E_HANDLE: values[index]},
+            parallelization_modes={mode},
+            flight_server=flight_server,
+        )
+
+    with ThreadPoolExecutor(max_workers=count) as pool:
+        rows = list(pool.map(run, range(count)))
+
+    assert rows == [[_row(value)] for value in values]
+    assert dac.credentials == before

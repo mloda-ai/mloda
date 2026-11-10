@@ -57,12 +57,15 @@ from tests.test_interfaces.source_groups import (
     PASTED_UNDERSCORE,
     CALLER_LOCKED_FEATURE,
     CALLER_LOCKED_KEY,
+    CRED_DEFAULT_FEATURE,
+    CRED_DEFAULT_HANDLE,
     CRED_FEATURE,
     CRED_KEY,
     FILE_SOURCE_GROUPS,
     PLAN_RAISE,
     PLAN_RAISE_SECRET,
     CallerLockedMcp6,
+    CredentialDefaultMcp8,
     CredentialReadMcp8,
     PlanRaiseMcp5,
     cred_digest,
@@ -1832,6 +1835,24 @@ class TestCredentialTable:
 
 
 class TestCredentialRuns:
+    def test_default_handle_is_read_and_never_shown(self, tmp_path: Path) -> None:
+        _cred_settings(tmp_path)
+        config = tmp_path / "cred.toml"
+        text = config.read_text(encoding="utf-8").replace(
+            "[mcp.credentials.db]", f"[mcp.credentials.{CRED_DEFAULT_HANDLE}]"
+        )
+        config.write_text(text, encoding="utf-8")
+        settings = load_settings(config, env={}, overrides={"default_classification": "public"})
+        planner, runner = _cred_services(settings, {"TOK_VAR": TOKEN}, extra_groups=frozenset({CredentialDefaultMcp8}))
+
+        explained = _success(planner.explain({"features": [CRED_DEFAULT_FEATURE]}))
+        result = runner.run(explained["plan_id"])
+
+        assert _preview_rows(result) == [{CRED_DEFAULT_FEATURE: cred_digest(TOKEN)}] * 5
+        _assert_value_absent(
+            CRED_DEFAULT_HANDLE, json.dumps(explained), _plan_text(explained["plan_id"]), json.dumps(result)
+        )
+
     def test_sqlite_source_runs_through_a_table_credential(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:

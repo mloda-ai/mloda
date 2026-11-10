@@ -7,7 +7,11 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef, read_api_data
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
-from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_STAGE,
+    CoreDeclineCode,
+    record_match_rejection,
+)
 from mloda.core.abstract_plugins.components.options import Options
 
 
@@ -44,7 +48,15 @@ class ApiDataFG(SourceFeatureGroup):
         pointers = [(name, value) for name, value in options.items() if name in cls.pointer_keys()]
         if pointers:
             pointer_key, key = pointers[0]
-            if not isinstance(key, str) or key not in spec:
+            if not isinstance(key, str):
+                record_match_rejection(
+                    cls.get_class_name(),
+                    f"the pointer value must be an api_data set key, got {type(key).__name__}",
+                    stage=INPUT_DATA_STAGE,
+                    code=CoreDeclineCode.POINTER_INVALID,
+                )
+                return []
+            if key not in spec:
                 cls._abort(
                     ValueError(f"{pointer_key}={key!r} is not an api_data set key; known keys: {sorted(spec)}"),
                     code=CoreDeclineCode.HANDLE_UNKNOWN,

@@ -944,6 +944,7 @@ def _shared_builder_hits() -> dict[str, str]:
 _SHARED_BUILDER_ALLOWLIST: dict[str, str] = {
     "tests.registry_isolation_probe:define_helper_subclass": "deliberate foreign-module probe for the reclaim gate",
     "tests.test_core.test_prepare.link_side_paths_probe:_sum_group": "called only at import, classes bound at module level",
+    "tests.test_testing_kit.test_framework_adapter:test_adapter_reads_a_run_all_result": "builds the class inside the _reclaimed scope that reclaims it",
     "tests.conftest:make_implementation.make": "the fixture's teardown reports every leaked Implementation it built",
 }
 

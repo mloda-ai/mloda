@@ -126,6 +126,7 @@ _STRING_LITERAL = r"b?(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\")"
 _STRING_ONLY = re.compile(_STRING_LITERAL)
 _CONTAINER_HEAD = re.compile(r"(?:[A-Za-z_][\w.]*)?[\[{(]")
 _CONTINUATION_LINE = re.compile(rf"[ \t]*(?P<literal>{_STRING_LITERAL})[\])}}, \t]*(?=\r?\n|\Z)")
+_FLAT_BODY_LINE = re.compile(r"""b?['"]|-?\d|[\])},]|(?:true|false|null|True|False|None)\b|[\[{(][ \t]*(?=\r?\n|\Z)""")
 _QUOTED_KEY_REPL = r"\g<lead>\g<quote>\g<keyword>\g<quote>: \g<quote>***\g<quote>"
 
 
@@ -136,9 +137,11 @@ def _indent_end(text: str, start: int) -> int:
 
 
 def _container_end(text: str, opener: int, key_indent: int) -> int:
-    """End of a multi-line container value: its matching closer, else the line before the first shallow line."""
+    """End of a multi-line container value: its closer, else the line before the first shallow line.
+    A flat body (not indented past its key) may pass value-like shallow lines."""
     size = len(text)
     depth = 0
+    flat: bool | None = None
     i = opener
     while i < size:
         char = text[i]
@@ -156,11 +159,20 @@ def _container_end(text: str, opener: int, key_indent: int) -> int:
                 return i + 1
         elif char == "\n":
             first = _indent_end(text, i + 1)
-            if first < size and text[first] not in "\r\n" and first - (i + 1) <= key_indent:
+            if first < size and text[first] not in "\r\n":
+                shallow = first - (i + 1) <= key_indent
+                if flat is None:
+                    flat = shallow and text[_indent_end(text, opener + 1)] in "\r\n"
+                if not shallow:
+                    i += 1
+                    continue
                 if depth == 1 and text[first] in "]})":
                     return first + 1
+                if flat and _FLAT_BODY_LINE.match(text, first):
+                    i += 1
+                    continue
                 stop = i - 1 if text[i - 1] == "\r" else i
-                while stop > opener and text[stop - 1] in " \t,":
+                while not flat and stop > opener and text[stop - 1] in " \t,":
                     stop -= 1
                 return stop
         i += 1

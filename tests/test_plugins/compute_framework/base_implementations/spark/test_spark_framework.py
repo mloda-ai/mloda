@@ -449,7 +449,7 @@ class TestSparkTfsConnectionInit(SparkSessionAdapter, ConnectionPickSuite):
     def test_missing_connection_error_names_the_dac_and_connection_handle(self, *args: Any, **kwargs: Any) -> None: ...
 
 
-class _SparkAnalysisExceptionStandIn(Exception):
+class _AnalysisExceptionStandIn(Exception):
     """Stand-in for PySpark's AnalysisException carrying an error condition."""
 
     def __init__(self, condition: str | None) -> None:
@@ -465,18 +465,18 @@ class TestSparkIsMissingColumnErrorStandIn:
     def _patch_analysis_exception(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             "mloda_plugins.compute_framework.base_implementations.spark.spark_framework.AnalysisException",
-            _SparkAnalysisExceptionStandIn,
+            _AnalysisExceptionStandIn,
         )
 
-    def test_unresolved_column_error_class_is_a_missing_column(self) -> None:
-        error = _SparkAnalysisExceptionStandIn("UNRESOLVED_COLUMN.WITH_SUGGESTION")
+    def test_unresolved_column_condition_is_a_missing_column(self) -> None:
+        error = _AnalysisExceptionStandIn("UNRESOLVED_COLUMN.WITH_SUGGESTION")
         assert SparkFramework.is_missing_column_error(error) is True
 
-    def test_other_error_class_is_not_a_missing_column(self) -> None:
-        assert SparkFramework.is_missing_column_error(_SparkAnalysisExceptionStandIn("TABLE_OR_VIEW_NOT_FOUND")) is False
+    def test_other_condition_is_not_a_missing_column(self) -> None:
+        assert SparkFramework.is_missing_column_error(_AnalysisExceptionStandIn("TABLE_OR_VIEW_NOT_FOUND")) is False
 
-    def test_missing_error_class_is_not_a_missing_column(self) -> None:
-        assert SparkFramework.is_missing_column_error(_SparkAnalysisExceptionStandIn(None)) is False
+    def test_missing_condition_is_not_a_missing_column(self) -> None:
+        assert SparkFramework.is_missing_column_error(_AnalysisExceptionStandIn(None)) is False
 
 
 @pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")

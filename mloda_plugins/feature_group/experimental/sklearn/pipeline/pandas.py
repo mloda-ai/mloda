@@ -114,8 +114,21 @@ class PandasSklearnPipeline(Implementation[SklearnPipelineFeatureGroup]):
         if X.shape[0] == 0:
             if feature_data.select_dtypes(include=["number", "bool"]).shape[1] != feature_data.shape[1]:
                 raise ValueError("Cannot apply sklearn pipeline to zero rows of non-numeric sources.")
-            # One all-zero row gives the fitted width and dtype; slice back to zero rows.
-            return fitted_pipeline.transform(feature_data.reindex(range(1), fill_value=0).values)[:0]
+
+            # Probe one all-zero row for fitted width and dtype, retry all-ones if rejected; slice to zero rows.
+            def probe(fill: int) -> Any:
+                return feature_data.reindex(range(1), fill_value=fill).values
+
+            try:
+                return fitted_pipeline.transform(probe(0))[:0]
+            except ValueError as zero_error:
+                try:
+                    return fitted_pipeline.transform(probe(1))[:0]
+                except ValueError:
+                    raise ValueError(
+                        "Cannot apply sklearn pipeline to zero rows: "
+                        "the fitted pipeline rejects the all-zero and all-ones probe rows."
+                    ) from zero_error
         result = fitted_pipeline.transform(X)
 
         return result

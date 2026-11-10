@@ -298,3 +298,28 @@ class TestPandasSklearnPipelineOnZeroInputRows:
 
         with pytest.raises(ValueError, match=r"Cannot .* zero rows"):
             PandasSklearnPipeline._apply_pipeline(empty, ["s"], fitted)
+
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    def test_zero_rows_with_a_box_cox_pipeline_keep_the_fitted_width_and_dtype(self, dtype: str) -> None:
+        sklearn_preprocessing = pytest.importorskip("sklearn.preprocessing")
+        fitted = sklearn_preprocessing.PowerTransformer(method="box-cox").fit(
+            np.array([[1.0], [2.0], [3.0], [5.0]], dtype=dtype)
+        )
+        rows = pd.DataFrame({"a": np.array([1.0, 2.0, 4.0], dtype=dtype)})
+        empty = pd.DataFrame({"a": pd.Series([], dtype=dtype)})
+
+        expected = PandasSklearnPipeline._apply_pipeline(rows, ["a"], fitted)
+        result = PandasSklearnPipeline._apply_pipeline(empty, ["a"], fitted)
+
+        assert result.shape == (0, expected.shape[1])
+        assert result.dtype == expected.dtype
+
+    def test_zero_rows_with_a_pipeline_rejecting_zero_and_one_probes_raise_a_clear_error(self) -> None:
+        sklearn_preprocessing = pytest.importorskip("sklearn.preprocessing")
+        fitted = sklearn_preprocessing.OneHotEncoder(sparse_output=False).fit(np.array([[5.0], [6.0]]))
+        empty = pd.DataFrame({"a": pd.Series([], dtype="float64")})
+
+        with pytest.raises(ValueError, match=r"Cannot .* zero rows") as exc_info:
+            PandasSklearnPipeline._apply_pipeline(empty, ["a"], fitted)
+
+        assert isinstance(exc_info.value.__cause__, ValueError)

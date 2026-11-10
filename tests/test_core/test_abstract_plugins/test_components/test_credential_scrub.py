@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import pickle  # nosec B403
+import pprint
 import time
 import traceback
 from collections import OrderedDict, defaultdict
@@ -740,6 +741,95 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
         '{\n  "token": [1, (2,\n  "user": "bob"\n}',
         '{\n  "token": "***",\n  "user": "bob"\n}',
     ),
+    (
+        "esc_issue_example_nested_object",
+        repr(ValueError('{\n"password": {\n"a": "S3CR3T"\n}\n}')),
+        repr(ValueError('{\n"password": "***"\n}')),
+    ),
+    (
+        "esc_indent2_list_keeps_sibling",
+        repr(ValueError('{\n  "password": [\n    "S3CR3T",\n    "x"\n  ],\n  "user": "bob"\n}')),
+        repr(ValueError('{\n  "password": "***",\n  "user": "bob"\n}')),
+    ),
+    (
+        "esc_single_quoted_keys_in_double_quoted_repr",
+        repr(ValueError("{'password': {'a': 'S3CR3T'},\n 'user': 'bob'}")),
+        repr(ValueError("{'password': '***',\n 'user': 'bob'}")),
+    ),
+    (
+        "esc_flat_string_keeps_sibling",
+        repr(ValueError('{\n"password": "S3CR3T",\n"user": "bob"\n}')),
+        repr(ValueError('{\n"password": "***",\n"user": "bob"\n}')),
+    ),
+    (
+        "esc_comma_led_secret_key_after_sibling",
+        repr(ValueError('{\n"user": "bob",\n"password": "S3CR3T"\n}')),
+        repr(ValueError('{\n"user": "bob",\n"password": "***"\n}')),
+    ),
+    (
+        "esc_double_escaped_wrapped_repr",
+        repr(RuntimeError("wrapped: " + repr(ValueError('{\n"password": {\n"a": "S3CR3T"\n}\n}')))),
+        repr(RuntimeError("wrapped: " + repr(ValueError('{\n"password": "***"\n}')))),
+    ),
+    (
+        "esc_crlf_lead",
+        repr(ValueError('{\r\n"password": {\r\n"a": "S3CR3T"\r\n},\r\n"user": "bob"\r\n}')),
+        repr(ValueError('{\r\n"password": "***",\r\n"user": "bob"\r\n}')),
+    ),
+    (
+        "esc_tab_indent",
+        repr(ValueError('{\n\t"password": {\n\t\t"a": "S3CR3T"\n\t},\n\t"user": "bob"\n}')),
+        repr(ValueError('{\n\t"password": "***",\n\t"user": "bob"\n}')),
+    ),
+    (
+        "esc_unclosed_container_masks_to_end_of_line",
+        repr(ValueError('{\n"password": {\n"a": "S3CR3T"\n')),
+        'ValueError(\'{\\n"password": "***"',
+    ),
+    (
+        "esc_pprint_wrapped_long_string_keeps_sibling",
+        repr(ValueError(pprint.pformat({"password": "word " * 12 + "TAIL", "user": "bob"}, width=40))),
+        repr(ValueError("{'password': '***',\n 'user': 'bob'}")),
+    ),
+    (
+        "esc_pprint_wrapped_long_bytes_keeps_sibling",
+        repr(ValueError(pprint.pformat({"password": b"word " * 12 + b"TAIL", "user": "bob"}, width=40))),
+        repr(ValueError("{'password': '***',\n 'user': 'bob'}")),
+    ),
+    (
+        "ml_unclosed_list_opener_ending_in_comma_keeps_log_line",
+        'cfg {"password": ["a",\n2024-01-01 12:00:00 INFO started\nnext',
+        'cfg {"password": "***",\n2024-01-01 12:00:00 INFO started\nnext',
+    ),
+    (
+        "esc_pprint_embedded_mid_message_keeps_text_after",
+        repr(ValueError("cfg " + pprint.pformat({"password": "word " * 12 + "TAIL"}, width=40) + " rejected")),
+        repr(ValueError("cfg {'password': '***'} rejected")),
+    ),
+    (
+        "esc_pprint_embedded_keeps_comma_and_next",
+        repr(ValueError("cfg " + pprint.pformat({"password": "word " * 12 + "TAIL"}, width=40) + ", next")),
+        repr(ValueError("cfg {'password': '***'}, next")),
+    ),
+    (
+        "esc_pprint_wrapped_value_in_list_keeps_siblings",
+        repr(ValueError(pprint.pformat([{"password": "word " * 12 + "TAIL"}, "visible-sibling", "vis2"], width=40))),
+        repr(ValueError("[{'password': '***'},\n 'visible-sibling',\n 'vis2']")),
+    ),
+    (
+        "esc_pprint_wrapped_value_tab_indent_keeps_sibling",
+        repr(
+            ValueError(
+                "\n".join(
+                    ("\t" + line.lstrip(" ")) if i else line
+                    for i, line in enumerate(
+                        pprint.pformat({"password": "word " * 12 + "TAIL", "user": "bob"}, width=40).split("\n")
+                    )
+                )
+            )
+        ),
+        repr(ValueError("{'password': '***',\n\t'user': 'bob'}")),
+    ),
     ("closer_quote_before_colon_kept", "pwd='}':\"&", "pwd='***':\"&"),
     ("closer_brace_before_comma_kept", "pwd={,},&", "pwd={***},&"),
     ("closer_single_quote_dropped_at_end", "password='x'", "password=***"),
@@ -796,6 +886,7 @@ def test_scrub_credentials_masks_slash_dsn_password(
 
 
 UNCHANGED_LOOKALIKE_CASES: list[str] = [
+    repr(ValueError('{\n"user": "bob",\n"host": "h"\n}')),
     "sort_key=col",
     "primary_key=id",
     "max_tokens=5",
@@ -990,6 +1081,7 @@ def test_text_without_url_is_unchanged() -> None:
         ";pwd={:}:",
         "pwd={pwd}x@",
         "fs.s3a.secret.key=X1234567",
+        repr(ValueError('{\n"password": {\n"a": "S3CR3T"\n}\n}')),
         '{\n  "user": "u",\n  "password": "hunter2z9"\n}',
         '{\n  "secret": {\n    "value": "hunter2z9"\n  },\n  "user": "u"\n}',
     ],
@@ -1237,6 +1329,10 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
         (lambda k: ('{\n"password": [\n"v"\n' + "x\n") * k, 3000, "repeated flat bodies ended by prose"),
         (lambda k: '{\n"password": [\n' + ',"password": [\n' * k, 5000, "repeated flat comma-led secret keys"),
         (lambda k: '{\n"password": [\n' + "[],\n" * k, 5000, "a long flat body of empty containers"),
+        (lambda k: "{" + "\\n" * k, 5000, "a long escaped newline run after a brace"),
+        (lambda k: '{\\n"password": {\\n"a": "v"\\n}\\n}' * k, 5000, "many escaped dump matches on one line"),
+        (lambda k: "," + "\\" * k, 5000, "a long backslash run after a comma"),
+        (lambda k: "{'password': 'a'" + "\\n  'b'" * k, 5000, "a repeated escaped string continuation"),
         (lambda k: "{'password': (a)," * k, 10000, "many matches on one long line"),
         (
             lambda k: "y" * (40 * k) + "{'password': (a)," * k,
@@ -1259,6 +1355,10 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
         "ml_flat_repeated_bodies_ended_by_prose",
         "ml_flat_repeated_comma_led_keys",
         "ml_flat_long_empty_container_body",
+        "esc_long_newline_run_no_key",
+        "esc_many_dump_matches_one_line",
+        "esc_long_backslash_run_after_comma",
+        "esc_repeated_string_continuation",
         "one_long_line_many_matches",
         "one_long_line_many_matches_long_prefix",
     ],

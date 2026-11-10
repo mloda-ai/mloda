@@ -316,10 +316,13 @@ class TestPandasSklearnPipelineOnZeroInputRows:
 
     def test_zero_rows_with_a_pipeline_rejecting_zero_and_one_probes_raise_a_clear_error(self) -> None:
         sklearn_preprocessing = pytest.importorskip("sklearn.preprocessing")
-        fitted = sklearn_preprocessing.OneHotEncoder(sparse_output=False).fit(np.array([[5.0], [6.0]]))
+        fitted = sklearn_preprocessing.OneHotEncoder(sparse_output=False, handle_unknown="error").fit(
+            np.array([[5.0], [6.0]])
+        )
         empty = pd.DataFrame({"a": pd.Series([], dtype="float64")})
 
         with pytest.raises(ValueError, match=r"Cannot .* zero rows") as exc_info:
             PandasSklearnPipeline._apply_pipeline(empty, ["a"], fitted)
 
         assert isinstance(exc_info.value.__cause__, ValueError)
+        assert "unknown categor" in str(exc_info.value)

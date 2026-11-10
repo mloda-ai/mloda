@@ -74,3 +74,5 @@ class ResolvedFeature:
     subtype_family: str | None = None
     # Resolution ended on a credential handle refusal; error then holds its text, naming handles and keys only.
     credential_refusal: bool = False
+    # Class name of an exception that escaped the evaluation; a contained matcher raise leaves it None.
+    raised: str | None = None

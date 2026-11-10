@@ -26,7 +26,13 @@ from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.api.plugin_docs import get_feature_group_docs, resolve_feature
 from mloda.core.api.plugin_info import FeatureGroupInfo, ResolvedFeature
 from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig
-from mloda.interfaces.service.errors import error_result, failure_result, problems_to_details, strip_control_characters
+from mloda.interfaces.service.errors import (
+    error_result,
+    failure_result,
+    problems_to_details,
+    raised_result,
+    strip_control_characters,
+)
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.request import (
     MAX_NAME_LENGTH,
@@ -300,6 +306,8 @@ class Catalog:
             # Rebuilt from the names-only text, so the log line has no frames.
             refusal = mark_credential_abort(ValueError(resolved.error or ""))
             return failure_result("Describe", refusal, trusted=self._settings.trusted_caller)
+        if resolved.raised is not None and not self.is_denied(name):
+            return raised_result("Describe", resolved.raised)
         if resolved.feature_group is not None:
             return self._described(name, resolved.feature_group, resolved)
         if resolved.candidates:

@@ -221,13 +221,14 @@ def safe_field_with_abort(
     read: Callable[[], T],
     fallback: T,
     catching: tuple[type[Exception], ...] = (Exception,),
-) -> tuple[T, str | None, bool]:
-    """Like safe_field_with_error, plus whether the raise was a marked credential refusal."""
+) -> tuple[T, str | None, str | None, bool]:
+    """Like safe_field_with_error, plus the raised class name and whether it was a marked credential refusal."""
     try:
-        return read(), None, False
+        return read(), None, None, False
     except catching as exc:
         message = safe_exc_str(exc)
-        return fallback, message if message.strip() else type(exc).__name__, is_credential_abort(exc)
+        raised_type = type(exc).__name__
+        return fallback, message if message.strip() else raised_type, raised_type, is_credential_abort(exc)
 
 
 def safe_field_with_error(
@@ -236,7 +237,7 @@ def safe_field_with_error(
     catching: tuple[type[Exception], ...] = (Exception,),
 ) -> tuple[T, str | None]:
     """Like safe_field but returns (value, None), else (fallback, str(exc) or the exception type name when blank)."""
-    value, error, _ = safe_field_with_abort(read, fallback, catching)
+    value, error, _, _ = safe_field_with_abort(read, fallback, catching)
     return value, error
 
 

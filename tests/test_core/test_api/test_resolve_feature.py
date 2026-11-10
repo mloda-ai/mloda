@@ -882,12 +882,17 @@ class TestResolveFeatureIsNonThrowing:
         assert result.error is not None
         assert handle in result.error
         assert ABORT_ECHO_SECRET not in result.error
+        assert result.raised == "ValueError"
 
     def test_an_ordinary_raising_matcher_is_not_a_credential_refusal(self) -> None:
         result = self._resolve_abort("bad", secret_dac=False, marked=False)
 
         assert result.error is not None
         assert result.credential_refusal is False
+        assert result.raised is None
+
+    def test_a_marked_match_abort_records_the_raised_class_name(self) -> None:
+        assert self._resolve_abort("bad", secret_dac=False).raised == "ValueError"
 
     def test_success_with_a_credential_collection_has_no_error(self) -> None:
         dac = DataAccessCollection(credentials={"vault": {"token": ABORT_ECHO_SECRET}})
@@ -895,6 +900,7 @@ class TestResolveFeatureIsNonThrowing:
         result = resolve_feature(SPLIT_CAP_FEATURE, data_access_collection=dac)
 
         assert result.error is None
+        assert result.raised is None
         assert result.feature_group is not None
 
     def test_unknown_compute_framework_option_does_not_raise(self) -> None:

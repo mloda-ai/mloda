@@ -73,16 +73,16 @@ def _credential_boom() -> int:
 
 
 class TestSafeFieldWithAbort:
-    """safe_field_with_abort(read, fallback) returns (value, error, is_credential_abort)."""
+    """safe_field_with_abort(read, fallback) returns (value, error, raised_type, is_credential_abort)."""
 
     def test_success(self) -> None:
-        assert safe_field_with_abort(lambda: 5, 0) == (5, None, False)
+        assert safe_field_with_abort(lambda: 5, 0) == (5, None, None, False)
 
     def test_ordinary_failure_is_not_a_credential_abort(self) -> None:
-        assert safe_field_with_abort(_sbfix_boom, 0) == (0, "sbfix boom", False)
+        assert safe_field_with_abort(_sbfix_boom, 0) == (0, "sbfix boom", "ValueError", False)
 
     def test_marked_failure_is_a_credential_abort(self) -> None:
-        assert safe_field_with_abort(_credential_boom, 0) == (0, "credential handle boom", True)
+        assert safe_field_with_abort(_credential_boom, 0) == (0, "credential handle boom", "ValueError", True)
 
     def test_blank_message_falls_back_to_the_type_name(self) -> None:
-        assert safe_field_with_abort(_sbfix852_blank_boom, 0) == (0, "RuntimeError", False)
+        assert safe_field_with_abort(_sbfix852_blank_boom, 0) == (0, "RuntimeError", "RuntimeError", False)

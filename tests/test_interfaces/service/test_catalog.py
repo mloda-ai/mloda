@@ -8,6 +8,7 @@ from typing import Any, ClassVar
 
 import pytest
 
+from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
@@ -43,6 +44,31 @@ from tests.test_interfaces.source_groups import (
     CredentialDefaultMcp8,
     CredentialReadMcp8,
 )
+
+
+class StubAbortError(RuntimeError):
+    """A non-ValueError class so the describe message names it distinguishably."""
+
+
+MCP9_RAISES_FEATURE = "mcp9_raises_feature"
+
+
+class CatalogRaisingLocalMcp9(StubFeatureGroup):
+    """Escalates StubAbortError for MCP9_RAISES_FEATURE only."""
+
+    FRAMEWORK_RULE: ClassVar[set[type[ComputeFramework]] | None] = {PythonDictFramework}
+    SUPPORTED_NAMES: ClassVar[frozenset[str]] = frozenset({MCP9_RAISES_FEATURE})
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        if str(feature_name) == MCP9_RAISES_FEATURE:
+            raise escalate_match_abort(StubAbortError("boom detail zq9"))
+        return False
 
 
 SECRET = "s3://user:pw@host/x"  # nosec B105
@@ -793,6 +819,47 @@ class TestCredentialCatalog:
         assert audit_id in message
         assert (MISSPELLED if handle is not None else CRED_KEY) in message
         assert CRED_SECRET not in message
+
+    @pytest.mark.parametrize("trusted", [True, False])
+    def test_a_non_credential_match_abort_is_internal_and_logged(
+        self, caplog: pytest.LogCaptureFixture, trusted: bool
+    ) -> None:
+        collector = PluginCollector.enabled_feature_groups({*ALLOWED, CatalogRaisingLocalMcp9})
+        catalog = Catalog.build(Settings(trusted_caller=trusted), collector)
+
+        with caplog.at_level(logging.ERROR, logger="mloda.interfaces.service"):
+            result = catalog.describe(MCP9_RAISES_FEATURE)
+
+        assert _error_code(result) == "internal"
+        assert result["error"]["message"] == "Describe failed with StubAbortError."
+        audit_id = result["error"]["audit_id"]
+        records = [r for r in caplog.records if r.name == "mloda.interfaces.service" and r.levelno == logging.ERROR]
+        assert len(records) == 1
+        logged = records[0].getMessage()
+        assert audit_id in logged
+        assert "StubAbortError" in logged
+        assert "boom detail zq9" not in logged
+        dumped = json.dumps({**result, "error": {**result["error"], "audit_id": None}})
+        assert "No FeatureGroup provides" not in dumped
+        assert "boom detail zq9" not in dumped
+        assert "suggest" not in dumped.lower()
+
+    def test_describe_checks_the_deny_policy_before_a_match_abort(self) -> None:
+        feature = MCP9_RAISES_FEATURE
+
+        class CatalogDeniedSupportingLocalMcp9(StubFeatureGroup):
+            """Denied group that also supports the raising feature name."""
+
+            MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({feature})
+            FRAMEWORK_RULE: ClassVar[set[type[ComputeFramework]] | None] = {PythonDictFramework}
+            SUPPORTED_NAMES: ClassVar[frozenset[str]] = MATCHED_NAMES
+
+        collector = PluginCollector.enabled_feature_groups(
+            {*ALLOWED, CatalogRaisingLocalMcp9, CatalogDeniedSupportingLocalMcp9}
+        )
+        catalog = Catalog.build(Settings(deny_feature_groups=("CatalogDeniedSupportingLocalMcp9",)), collector)
+
+        assert _error_code(catalog.describe(feature)) == "policy_denied"
 
     def test_describe_does_not_show_a_default_handle(self, tmp_path: Path) -> None:
         result = _credential_catalog(tmp_path).describe(CRED_DEFAULT_FEATURE)

@@ -4,11 +4,10 @@ Pins the ambient current()/activate() scope, row_count's __len__ gating,
 and instrument's timing/status bookkeeping around a wrapped call.
 """
 
-import contextlib
 import functools
 import threading
 import time
-from collections.abc import Callable, Generator, Mapping
+from collections.abc import Callable, Mapping
 from contextvars import ContextVar, Token
 from dataclasses import FrozenInstanceError, dataclass
 from typing import TYPE_CHECKING, Any
@@ -60,14 +59,9 @@ class input_data_load_gate_scope:  # noqa: N801
             _gate_scopes -= 1
 
 
-@contextlib.contextmanager
-def carried_gate_scope(active: bool) -> Generator[None, None, None]:
+def carried_gate_scope(active: bool) -> VarScope[bool]:
     """Set the context-scoped gate flag for a worker block, leaving the process-wide count alone."""
-    token = _in_gate_scope.set(active)
-    try:
-        yield
-    finally:
-        _in_gate_scope.reset(token)
+    return VarScope(_in_gate_scope, active)
 
 
 def in_input_data_load_gate_scope() -> bool:

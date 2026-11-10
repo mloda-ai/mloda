@@ -40,6 +40,7 @@ from mloda.core.abstract_plugins.hook_context import (
     HookContext,
     _current_hook_context,
     _in_gate_scope,
+    carried_gate_scope,
     input_data_load_gate_scope,
     input_data_load_gate_scopes_active,
 )
@@ -565,6 +566,7 @@ def _hook_context() -> HookContext:
             lambda: feature_group_scope("x", contain_aborts=True), _CONTAIN_ABORTS, id="feature_group_scope_contain"
         ),
         pytest.param(run_match_cache, _RUN_MATCH_CACHE, id="run_match_cache"),
+        pytest.param(lambda: carried_gate_scope(True), _in_gate_scope, id="carried_gate_scope"),
     ],
 )
 def test_a_frozen_exception_keeps_its_type_through_the_scope(make_scope: Any, var: contextvars.ContextVar[Any]) -> None:
@@ -573,6 +575,7 @@ def test_a_frozen_exception_keeps_its_type_through_the_scope(make_scope: Any, va
 
     with pytest.raises(Exception) as excinfo:
         with make_scope():
+            assert var.get() is not before
             raise _FrozenError("boom")
 
     assert type(excinfo.value) is _FrozenError

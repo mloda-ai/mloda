@@ -5,7 +5,6 @@ Not collected on its own (no Test prefix).
 """
 
 import copy
-import dataclasses
 import gc
 import importlib
 import itertools
@@ -15,7 +14,8 @@ from typing import Any, ClassVar, cast
 import pytest
 
 from mloda._testing.source import reclaim
-from mloda._testing.suite import ConformanceSuite
+from mloda._testing.feature_group_shape import check_feature_group_secrets
+from mloda._testing.suite import ConformanceSuite, assert_passed
 from mloda._testing.source_applicability import NO_POINTER, SourceApplicability, source_applicability
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
@@ -197,8 +197,8 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
 
     Required: feature_group_class, present_column, missing_column, expected_source, own_dac, foreign_dac,
     other_pointer, foreign_handle_dac, known_handles_dac, and own_pointer (return NO_POINTER for a group that
-    takes no pointer). Optional: data_access_handle (None derives it from the routes), pointed_source (None
-    claims with own_pointer), load_framework, context_options. rejection_window and make_implementation are
+    takes no pointer). expected_source is the source the own request claims (own_dac's for a searched group,
+    the pointed one otherwise). Optional: pointed_source (None claims with own_pointer), load_framework, context_options. rejection_window and make_implementation are
     fixture methods so a host in any package gets them without this repo's conftest; the suite reclaims the
     subclasses it builds, and holding one beyond its test is unsupported.
     """
@@ -209,7 +209,6 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
     expected_source: str
     load_framework: type[ComputeFramework] = PyArrowTable
     context_options: ClassVar[dict[str, Any]] = {}
-    data_access_handle: ClassVar[bool | None] = None
     pointed_source: ClassVar[str | None] = None
 
     @pytest.fixture(autouse=True)
@@ -228,10 +227,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         yield from _implementation_scope()
 
     def _applicability(self) -> SourceApplicability:
-        derived = source_applicability(self.feature_group_class, self.own_pointer() is not NO_POINTER)
-        if self.data_access_handle is None:
-            return derived
-        return dataclasses.replace(derived, data_access_handle=self.data_access_handle)
+        return source_applicability(self.feature_group_class, self.own_pointer() is not NO_POINTER)
 
     @staticmethod
     def _require(applies: bool, fact: str) -> None:
@@ -275,6 +271,16 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
 
     def _feature(self, name: str, group: dict[str, Any] | None = None, **kwargs: Any) -> Feature:
         return Feature(name, self._options(group), **kwargs)
+
+    def _own_feature(self, name: str | None = None, group: dict[str, Any] | None = None, **kwargs: Any) -> Feature:
+        """The request claiming the group's own source: unpointed if it searches, else pointed at own_pointer."""
+        name = self.present_column if name is None else name
+        if self._applicability().searched_route:
+            return self._feature(name, group, **kwargs)
+        pointer = self.own_pointer()
+        if pointer is NO_POINTER:
+            pytest.fail("the group has no searched route and takes no pointer, so it can never claim its own source")
+        return self._feature(name, {**(group or {}), self._group_name(): pointer}, **kwargs)
 
     def _with_context(self, feature: Feature) -> Feature:
         if all(feature.options.context.get(key) == value for key, value in self.context_options.items()):
@@ -333,7 +339,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         )
 
     def test_claims_its_own_source(self) -> None:
-        assert self._claims(Feature(self.present_column), self.own_dac())
+        assert self._claims(self._own_feature(), self.own_dac())
 
     def test_declines_foreign_sources(self) -> None:
         assert not self._claims(Feature(self.present_column), self.foreign_dac())
@@ -341,7 +347,8 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
     def test_leaves_collection_and_options_unchanged(self) -> None:
         dac = self.own_dac()
         state = copy.deepcopy(dac.__dict__)
-        feature = Feature(self.present_column, Options({"unrelated_option": 1}))
+        feature = self._own_feature(group={"unrelated_option": 1})
+        feature.options = Options(dict(feature.options.group))
         group = copy.deepcopy(feature.options.group)
         context = copy.deepcopy(feature.options.context)
 
@@ -368,7 +375,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
 
     def _expected_loader(self) -> str:
         """The loader the group itself selects for its own source: the implementation path, else neutral."""
-        feature = self._with_context(Feature(self.present_column))
+        feature = self._with_context(self._own_feature())
         IdentifyFeatureGroupClass.evaluate(feature, self._plugins(), None, self.own_dac())
         impl = self.feature_group_class.select_implementation(
             self.load_framework, self._claimed_match(feature), loaded_implementations()
@@ -382,7 +389,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         capture = LoadCapture()
 
         mloda.run_all(
-            [self._feature(self.present_column)],
+            [self._own_feature()],
             compute_frameworks=[self.load_framework],
             plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class}),
             data_access_collection=self.own_dac(),
@@ -408,8 +415,14 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
                 self.feature_group_class, name, _spy(name, getattr(self.feature_group_class, name), touched)
             )
 
+        feature = self._own_feature()
         with reader_probe_scope(ReaderProbeScope(MatchRefuseAll(), None, None, None, None)):
-            result = self._evaluate(Feature(self.present_column), self.own_dac())
+            if self._applicability().searched_route:
+                result = self._evaluate(feature, self.own_dac())
+            else:
+                with pytest.raises(FeatureResolutionError) as exc_info:
+                    self._evaluate(feature, self.own_dac())
+                result = exc_info.value.result
 
         assert touched == []
         assert self.feature_group_class not in result.identified
@@ -422,7 +435,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         capture = MatchCapture()
 
         with reader_probe_scope(ReaderProbeScope(capture, None, None, None, None)):
-            assert self._claims(Feature(self.present_column), self.own_dac())
+            assert self._claims(self._own_feature(), self.own_dac())
 
         contexts = [c for c in capture.contexts if c.reader_class is self.feature_group_class]
         assert contexts
@@ -493,6 +506,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         assert exc_info.value.result.eliminations[self.feature_group_class].code is CoreDeclineCode.NO_QUERY_ROUTE
 
     def test_unpointed_with_query_text_declines_naming_the_query_route_when_the_group_lists_none(self) -> None:
+        self._require(self._applicability().searched_route, "no searched route")
         self._require(not self._applicability().query_route, "the group lists a query route, so query_text is served")
         feature = self._feature(self.present_column, {"query_text": "select 1"})
         result = self._evaluate(feature, self.own_dac())
@@ -501,6 +515,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.NO_QUERY_ROUTE
 
     def test_unpointed_missing_column_declines_with_a_rejection(self) -> None:
+        self._require(self._applicability().searched_route, "no searched route")
         self._require(self._applicability().checked_route, "no checked route")
         result = self._evaluate(Feature(self.missing_column), self.own_dac())
         assert self.feature_group_class not in result.identified
@@ -537,8 +552,9 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
                 self._resolve(pointed, None)
             assert suggestion in str(exc_info.value)
 
-        unpointed = self._evaluate(Feature(typo), self.own_dac())
-        assert "did you mean" not in unpointed.eliminations[self.feature_group_class].reason
+        if applicability.searched_route:
+            unpointed = self._evaluate(Feature(typo), self.own_dac())
+            assert "did you mean" not in unpointed.eliminations[self.feature_group_class].reason
 
         if applicability.data_access_handle:
             dac = self.own_dac()
@@ -546,6 +562,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
             assert suggestion in self._evaluate(narrowed, dac).eliminations[self.feature_group_class].reason
 
     def test_chain_and_column_separated_names_that_are_not_columns_decline(self) -> None:
+        self._require(self._applicability().searched_route, "no searched route")
         self._require(self._applicability().checked_route, "no checked route")
         chained = f"{self.present_column}{CHAIN_SEPARATOR}suite_rebased"
         separated = f"{self.missing_column}{COLUMN_SEPARATOR}0"
@@ -568,6 +585,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         del sub, mapping, result, feature
 
     def test_a_pointer_key_of_another_concrete_group_makes_the_searched_routes_decline_with_a_reason(self) -> None:
+        self._require(self._applicability().searched_route, "no searched route")
         sub = self._gated_subclass()
         mapping: FeatureGroupEnvironmentMapping = {
             self.feature_group_class: {self.load_framework},
@@ -582,3 +600,6 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         assert "does not search the collection" in reason
         assert result.eliminations[self.feature_group_class].code is CoreDeclineCode.POINTED_ELSEWHERE
         del sub, mapping, result, feature
+
+    def test_declares_no_secret_shaped_option(self) -> None:
+        assert_passed(check_feature_group_secrets(self.feature_group_class))

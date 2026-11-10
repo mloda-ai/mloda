@@ -731,6 +731,14 @@ def _stale_report(declared: _Declared, columns: list[str], adapter: FrameworkAda
     return f"type: {declared.owner} declares a type divergence ('{reason}') that this run on {framework} does not need"
 
 
+def check_feature_group_secrets(cls: type[FeatureGroup]) -> CheckResult:
+    """Check only the secret-shaped option declarations of a FeatureGroup."""
+    failures, notes = _check_secrets(cls)
+    return CheckResult(
+        check="feature_group_secrets", subject=cls.__name__, failures=tuple(failures), notes=tuple(notes)
+    )
+
+
 def check_feature_group_shape(
     cls: type[FeatureGroup],
     base_options: Options | None = None,

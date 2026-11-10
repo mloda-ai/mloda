@@ -19,6 +19,7 @@ class SourceApplicability:
 
     pointer: bool
     data_access_handle: bool
+    searched_route: bool
     query_route: bool
     checked_route: bool
 
@@ -26,10 +27,11 @@ class SourceApplicability:
 def source_applicability(group: type[SourceFeatureGroup], has_pointer: bool) -> SourceApplicability:
     """Applicability of the suite rules for a group; has_pointer says whether it takes a pointer value."""
     routes = group.CLAIM_ROUTES
+    searched = any(route.searched for route in routes)
     return SourceApplicability(
         pointer=has_pointer,
-        data_access_handle=any(route.searched for route in routes)
-        and not any(CONNECTION_HANDLE_OPTION in route.required_options for route in routes),
+        data_access_handle=searched and not any(CONNECTION_HANDLE_OPTION in route.required_options for route in routes),
+        searched_route=searched,
         query_route=group.serves_query_text(),
         checked_route=any(route.names is NamePolicy.CHECKED for route in routes),
     )

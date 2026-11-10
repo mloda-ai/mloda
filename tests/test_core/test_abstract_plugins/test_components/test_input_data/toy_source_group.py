@@ -162,6 +162,12 @@ class ToyOpenFG(ToySourceBase):
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.OPEN, False),)
 
 
+class ToyPointedCheckedFG(ToySourceBase):
+    """Checked names, only when pointed at."""
+
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.CHECKED, False),)
+
+
 class ToyRequiredOptionFG(ToySourceBase):
     """Checked names; the route applies only when the toyfmt_required option is present."""
 

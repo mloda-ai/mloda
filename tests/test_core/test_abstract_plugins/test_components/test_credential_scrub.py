@@ -1002,6 +1002,9 @@ def test_repeated_jdbc_scheme_prefix_scrubs_fast(build: Callable[[int], str], n:
         pytest.param(lambda k: "a:b," * k, 20_000, id="ab_comma"),
         pytest.param(lambda k: "k=a:b;" * k, 20_000, id="kv_semicolon"),
         pytest.param(lambda k: "tags=" + ";".join(f"env{i}:prod" for i in range(k)), 6000, id="tags"),
+        pytest.param(lambda k: "zip://d;%74oken=S" + "::a" * k, 20_000, id="dropped_value_colon_run"),
+        pytest.param(lambda k: "https://h/x?password=a]" + ",(a" * k, 20_000, id="marker_comma_paren_run"),
+        pytest.param(lambda k: "https://h/x?password=a]" + ";aaa" * k, 20_000, id="marker_semicolon_run"),
     ],
 )
 def test_repeated_userinfo_shaped_prefix_scrubs_fast(build: Callable[[int], str], n: int) -> None:
@@ -1730,7 +1733,7 @@ class TestScrubUriProjection:
             pytest.param("s3://b/%74oken=SEC]RET/x.csv", "s3://b/", id="path-encoded-token-cut-at-close-bracket"),
             pytest.param(
                 "zip://d;%74oken=SEC]RET::s3://b/x.csv",
-                "zip://d://b/x.csv",
+                "zip://d::s3://b/x.csv",
                 id="host-param-encoded-token-cut-at-bracket-in-chain",
             ),
             pytest.param(
@@ -1992,13 +1995,36 @@ class TestScrubUriProjection:
                 "failed: zip://d::s3://b/x.csv",
                 id="host-param-encoded-token-chain-tail-kept",
             ),
+            pytest.param("zip://d;%74oken=SE::cret::x", "zip://d", id="host-param-lower-case-name-cut"),
+            pytest.param("https://h/x?password=a]b://c", "https://h/x", id="value-then-uri-cut-stops-at-scheme"),
             pytest.param(
-                "zip://d;%74oken=SE::cret::x",
-                "zip://d::cret::x",
-                id="host-param-lower-case-name-reads-as-chain-accepted",
+                "zip://d;%74oken=SECRET::cache::s3://b/x",
+                "zip://d::cache::s3://b/x",
+                id="host-param-encoded-token-multi-element-chain-tail-kept",
             ),
             pytest.param(
-                "https://h/x?password=a]b://c", "https://h/x://c", id="value-then-uri-cut-stops-at-scheme-accepted"
+                "https://h/x?password=a],https://other/y",
+                "https://h/x],https://other/y",
+                id="query-bracket-comma-next-uri-kept",
+            ),
+            pytest.param("https://h/x?password=a]https://other/y", "https://h/x", id="query-bracket-adjacent-uri-cut"),
+            pytest.param(
+                "zip://d;%74oken=SE::cret::x://SEC4",
+                "zip://d::cret::x://SEC4",
+                id="host-param-value-shaped-like-chain-accepted",
+            ),
+            pytest.param(
+                "zip://d;%74oken=SE::Cret://SEC5",
+                "zip://d::Cret://SEC5",
+                id="host-param-value-shaped-like-scheme-accepted",
+            ),
+            pytest.param(
+                "https://h/x?password=a]b;x://SECRET2",
+                "https://h/x;x://SECRET2",
+                id="query-value-shaped-like-new-item-accepted",
+            ),
+            pytest.param(
+                "zip://d;%74oken=S::a::b::c::d::s3://b/x", "zip://d", id="host-param-long-protocol-run-fails-closed"
             ),
         ],
     )
@@ -2121,6 +2147,8 @@ class TestScrubUriFailClosed:
             pytest.param('{"dsn": "host=h password=abc", "token": "SECRET"}', "SECRET", id="dict-dsn-then-token-json"),
             pytest.param("zip://d;%74oken=SE::CRET", "CRET", id="host-param-double-colon-fragment"),
             pytest.param("zip://d;token=SE::CRET::s3://b/x", "CRET", id="host-param-double-colon-chain-fragment"),
+            pytest.param("zip://d;%74oken=SE::cretval::x", "cretval", id="host-param-lower-case-chain-shaped-fragment"),
+            pytest.param("https://h/x?password=a]b://SECRETVAL", "SECRETVAL", id="query-value-scheme-shaped-tail"),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:
@@ -2302,6 +2330,7 @@ class TestRegisteredSecretsScope:
                 id="bracket-literal-in-query-sibling-password-gone",
             ),
             pytest.param("x'y", "'https://h/x?a=1x'y'", "x'y", id="quote-literal-after-query"),
+            pytest.param("SE::cretval", "zip://d;%74oken=SE::cretval::x", "cretval", id="literal-with-value-colon-cut"),
         ],
     )
     def test_secret_is_masked_when_the_literal_overlaps_a_pattern(self, literal: str, text: str, secret: str) -> None:

@@ -36,6 +36,9 @@ _AZURE_CONTAINER_PATTERN = re.compile(r"[a-z0-9-]{3,63}|\$(?:root|web|logs)")
 _SCHEME = r"(?<![A-Za-z0-9+.-])(?P<scheme>(?:jdbc:(?:[A-Za-z][A-Za-z0-9+.-]*:){0,3})?[A-Za-z][A-Za-z0-9+.-]*)"
 # A `::` that continues an fsspec chain: before a `<scheme>://` or a lowercase `<protocol>::` element.
 _CHAIN_COLONS = r"::(?=[A-Za-z][A-Za-z0-9+.-]*://|[a-z][a-z0-9+.-]*::)"
+# A `::` after a value continues a chain only when its protocol run reaches a `scheme://`; the run is bounded so the
+# lookahead is constant work, and a longer run reads as a value tail and is cut.
+_CHAIN_AFTER_VALUE = r"::(?=(?:[a-z][a-z0-9+.-]{0,31}::){0,3}[A-Za-z][A-Za-z0-9+.-]*://)"
 _FREE_TEXT_URI_PATTERN = re.compile(
     _SCHEME + r"://"
     r"(?:(?P<userinfo>[^/?#\s]*)@)?"
@@ -92,7 +95,10 @@ def _keyword_pattern(plain: str) -> re.Pattern[str]:
 # A quote continues the value unless it is followed by a delimiter or end, so `hun'!ter2` leaves no fragment.
 _KEYWORD_PATTERN = _keyword_pattern(r"[^;&\s'\"]*(?:['\"](?![\s,;&:)\]}>]|$)[^;&\s'\"]+)*")
 # The identity form: a plain value ends at `/` or `::` too, so one path segment is masked, not the rest of the path.
-_KEYWORD_SEGMENT_PATTERN = _keyword_pattern(r"(?:(?!::)[^;&/\s'\"])*")
+_KEYWORD_SEGMENT_PATTERN = _keyword_pattern(
+    rf"(?:(?!{_CHAIN_AFTER_VALUE})[^;&/\s'\"])*"
+    rf"(?:['\"]++(?=[^;&/\s'\"])(?:(?!{_CHAIN_AFTER_VALUE})[^;&/\s'\"])+)*"
+)
 _PATH_VALUE = re.compile(r"/[\w.-]+(?:/[\w.-]+)+/?")
 _COUNT_NAME = re.compile(r"(?:max|min|num|total)[_-]?token", re.IGNORECASE)
 
@@ -276,7 +282,13 @@ _JDBC_TAIL_PATTERN = re.compile(r"(?:(?!://)\S)*")
 # Private-use marker appended after a dropped jdbc path, and by _scrub_uri_match after a dropped query,
 # key=value path or hidden percent path; _cut_marker_tail cuts the token tail that follows it.
 _JDBC_CUT = "\ue001"
-_JDBC_CUT_PATTERN = re.compile(_JDBC_CUT + _JDBC_TAIL_PATTERN.pattern)
+# The cut runs through the token and stops only before a real chain `::` or a `,`/`;` that starts a new `scheme://` item.
+# A non-chain `::` swallows its whole protocol run, so the bounded run fails closed instead of stopping mid-run.
+_CHAIN_AFTER_VALUE_PATTERN = re.compile(_CHAIN_AFTER_VALUE)
+_JDBC_CUT_PATTERN = re.compile(
+    _JDBC_CUT + rf"(?:(?!{_CHAIN_AFTER_VALUE}|[,;][\"'(\[{{<]*[A-Za-z][A-Za-z0-9+.-]*://)"
+    r"(?:::(?:[a-z][a-z0-9+.-]{0,31}::)*+|\S))*"
+)
 # Closers then sentence punctuation then whitespace or end: the match ended a value, nothing was cut off.
 _CLOSING_END_PATTERN = re.compile(r"[\"'<>)\]}]+[,:;.!?]*(?:\s|$)")
 # Closers then a separator and an opener: a following list or dict item, if the URL itself was opened.
@@ -332,6 +344,8 @@ def _cut_dropped_tail(match: re.Match[str], scrubbed: str, dropped: bool) -> str
     if scrubbed.endswith(_JDBC_CUT) or not dropped:
         return scrubbed
     text, end, start = match.string, match.end(), match.start()
+    if text.startswith("::", end) and _CHAIN_AFTER_VALUE_PATTERN.match(text, end) is None:
+        return scrubbed + _JDBC_CUT
     if end >= len(text) or text[end] not in _MATCH_END_TERMINATORS:
         return scrubbed
     if _CLOSING_END_PATTERN.match(text, end):

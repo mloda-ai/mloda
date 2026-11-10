@@ -1120,13 +1120,16 @@ class TestImplementationPin:
         assert "not a loaded Implementation" in message
         assert "without reaching Implementation.__init_subclass__" in message
         assert "ZzSkippedPinImpl" in message
+        assert "super().__init_subclass__()" in message
+        assert f"{__name__}:" in message
+        assert "<locals>.ZzSkippedPinImpl" in message
         assert collected
 
     def test_a_successful_pinned_run_never_walks_the_implementation_class_tree(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         toy = _toy_operation()
-        _run_pinned([_op_feature("OpToyPandas")])
+        _run_pinned([_op_feature("OpToyPandas")])  # warm-up: populates caches so only the measured run is counted
         walks = count_root_walks(monkeypatch, Implementation)
 
         result = _run_pinned([_op_feature("OpToyPandas")])

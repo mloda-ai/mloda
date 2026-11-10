@@ -33,7 +33,7 @@ def _unregistered_hint(name: str) -> str:
     unregistered = unregistered_named_implementations(name)
     if not unregistered:
         return ""
-    names = sorted(c.__name__ for c in unregistered)
+    names = sorted(_qualified(c) for c in unregistered)
     return (
         f" {names} subclass Implementation without reaching Implementation.__init_subclass__: "
         "an __init_subclass__ override must call super().__init_subclass__()."

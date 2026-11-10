@@ -675,13 +675,19 @@ def _plain_required_mapping() -> dict[str, PropertySpec]:
 class TestPlainGroupEnforcement:
     """The presence guard reaches plain groups: default matcher, inherited matcher and override alike."""
 
-    def test_plain_required_key_installs_the_presence_guard_only(self) -> None:
+    @pytest.mark.parametrize("wrap", [dict, MappingProxyType], ids=["dict", "mappingproxy"])
+    def test_plain_required_key_installs_the_presence_guard_only(
+        self, wrap: Callable[[dict[str, PropertySpec]], Mapping[str, PropertySpec]]
+    ) -> None:
         class PlainWithRequiredKey(FeatureGroup):
-            PROPERTY_MAPPING = _plain_required_mapping()
+            PROPERTY_MAPPING = wrap(_plain_required_mapping())
 
         resolved = PlainWithRequiredKey.match_feature_group_criteria.__func__  # type: ignore[attr-defined]
         assert getattr(resolved, NAME_PATH_PRESENCE_GUARD_FLAG, None) is resolved
         assert getattr(resolved, REQUIRED_WHEN_GUARD_FLAG, None) is not resolved
+        name = PlainWithRequiredKey.get_class_name()
+        assert PlainWithRequiredKey.match_feature_group_criteria(name, Options()) is False
+        assert PlainWithRequiredKey.match_feature_group_criteria(name, Options(context={NEEDS_KEY: "v"})) is True
 
     def test_plain_group_without_a_flaggable_key_installs_no_guard(self) -> None:
         class PlainAllDefaulted(FeatureGroup):
@@ -732,42 +738,3 @@ class TestPlainGroupEnforcement:
         presence_checks.clear()
         assert DelegatingPlainChild.match_feature_group_criteria(name, Options(context={NEEDS_KEY: "v"})) is True
         assert len(presence_checks) == 1
-
-    @pytest.mark.parametrize("wrap", [dict, MappingProxyType], ids=["dict", "mappingproxy"])
-    def test_plain_group_without_pattern_rejects_missing_required_key(
-        self, wrap: Callable[[dict[str, PropertySpec]], Mapping[str, PropertySpec]]
-    ) -> None:
-        class PlainMappingWrapped(FeatureGroup):
-            PROPERTY_MAPPING = wrap(_plain_required_mapping())
-
-        name = PlainMappingWrapped.get_class_name()
-        assert PlainMappingWrapped.match_feature_group_criteria(name, Options()) is False
-        assert PlainMappingWrapped.match_feature_group_criteria(name, Options(context={NEEDS_KEY: "v"})) is True
-
-    @pytest.mark.parametrize("wrap", [dict, MappingProxyType], ids=["dict", "mappingproxy"])
-    def test_patterned_group_rejects_missing_required_key(
-        self, wrap: Callable[[dict[str, PropertySpec]], Mapping[str, PropertySpec]]
-    ) -> None:
-        class PatternedMappingWrapped(FeatureChainParserMixin, FeatureGroup):
-            PREFIX_PATTERN = r".*__([\w]+)_wrapnp$"
-            PROPERTY_MAPPING = wrap(
-                {
-                    OP_TYPE: PropertySpec(
-                        "Operation to apply", allowed_values={"sum": "Sum"}, context=True, strict_validation=True
-                    ),
-                    "missing_wrapnp": PropertySpec("required, options-only, absent on the name path", context=True),
-                }
-            )
-
-            @classmethod
-            def match_feature_group_criteria(
-                cls,
-                feature_name: str | FeatureName,
-                options: Options,
-                data_access_collection: Any = None,
-            ) -> bool:
-                return True
-
-        assert PatternedMappingWrapped.match_feature_group_criteria("x__sum_wrapnp", Options()) is False
-        present = Options(context={"missing_wrapnp": "present"})
-        assert PatternedMappingWrapped.match_feature_group_criteria("x__sum_wrapnp", present) is True

@@ -359,7 +359,7 @@ def check_required_when(
     owner_name: str,
     feature_name: str | FeatureName,
     prefix_patterns: list[Any],
-    property_mapping: dict[str, Any] | None,
+    property_mapping: Mapping[str, Any] | None,
     options: Options,
 ) -> bool:
     """Evaluate every required_when predicate of a mapping. False means the feature is not a match."""

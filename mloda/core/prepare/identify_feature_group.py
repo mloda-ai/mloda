@@ -30,6 +30,7 @@ from mloda.core.prepare.resolution_failure_renderer import (
 from mloda.core.abstract_plugins.components.credential_handle import (
     credential_handle_keys,
     missing_credential_handle_abort,
+    close_handle_option_keys,
     misspelled_handle_key_abort_keys,
     missing_credential_handle_keys,
     refuse_credential_option_values,
@@ -358,7 +359,7 @@ class IdentifyFeatureGroupClass:
 
     def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
         self._excluded = {}
-        self._missing_handle_aborts: dict[type[FeatureGroup], tuple[tuple[str, ...], ValueError]] = {}
+        self._missing_handle_aborts: dict[type[FeatureGroup], tuple[tuple[str, ...], ValueError, tuple[str, ...]]] = {}
         self._validated_handles: set[type[FeatureGroup]] = set()
         self._criteria_matched_feature_groups = set()
         self._abstract_matched_feature_groups = set()
@@ -862,19 +863,20 @@ class IdentifyFeatureGroupClass:
                         self._missing_handle_aborts[feature_group] = (
                             absent,
                             missing_credential_handle_abort(feature_group, absent_options, absent),
+                            (),
                         )
-                elif (
-                    rejection is None
-                    and self._is_config_path_group(feature_group)
-                    and self._filter_feature_group_by_domain(feature_group, feature)
-                    and not inspect.isabstract(feature_group)
-                ):
+                elif rejection is None and self._is_config_path_group(feature_group):
                     typo_options = self._matched_options.get(feature_group, feature.options)
                     typo_absent = misspelled_handle_key_abort_keys(feature_group, typo_options)
-                    if typo_absent:
+                    if (
+                        typo_absent
+                        and self._filter_feature_group_by_domain(feature_group, feature)
+                        and not inspect.isabstract(feature_group)
+                    ):
                         self._missing_handle_aborts[feature_group] = (
                             typo_absent,
                             missing_credential_handle_abort(feature_group, typo_options, typo_absent),
+                            close_handle_option_keys(feature_group, typo_absent, typo_options),
                         )
                 if rejection is not None:
                     # The shared mapper owns the projection, so both seams spell the taxonomy the same way.
@@ -984,10 +986,11 @@ class IdentifyFeatureGroupClass:
         requested = feature.options.group.keys()
         matched = identified
         for fg in sorted(self._missing_handle_aborts, key=_candidate_sort_key):
-            absent, abort = self._missing_handle_aborts[fg]
+            absent, abort, close = self._missing_handle_aborts[fg]
             covered = any(
                 (other is not fg and is_nominal_subclass(other, fg))
                 or any(key in absent or key in requested for key in credential_handle_keys(other))
+                or any(key in (other.PROPERTY_MAPPING or {}) for key in close)
                 for other in matched
             )
             if not covered:

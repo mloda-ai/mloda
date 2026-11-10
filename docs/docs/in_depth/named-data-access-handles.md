@@ -286,7 +286,7 @@ A credential is never an option value. A `Credential`, `RegisteredCredential` or
 non-pointer option is refused at plan time, also nested in mappings, mapping views, sets, sequences (not `str`, bytes,
 `range` or `array`) and dataclass instances. Iterators and generators are not walked. The source pointer form
 (`{"SqliteFG": Credential(...)}`) still works, except on a root feature whose group is not the owning source (or a
-subclass of it); there a typed credential (also nested) is refused. A plain mapping under a pointer key on such a root is refused when it holds a secret-shaped key (the message names the key path, never the value); a routing hint such as column names stays accepted. A bare `str` secret under an ordinary key is not checked. A consumer holding a pointer with no source below it, and a pointer merged from an inherited copy,
+subclass of it); there a typed credential (also nested) is refused. A plain mapping under a pointer key on such a root is refused when it holds a secret-shaped key (the message names the secret-shaped key, never a key below it or a value); a routing hint such as column names stays accepted, as does a count-name key such as `max_token`. A consumer holding a pointer with no source below it, and a pointer merged from an inherited copy,
 are not refused.
 A bare `str` secret under an ordinary key cannot be detected, so do not do it.
 
@@ -343,7 +343,7 @@ outside the window, or of a handle the step did not declare, raises `CredentialR
 
 A handle a source step binds at match time is reported in the plan, the lock and the hooks but grants no `read_credential`; a credential not registered in the collection renders `<pointer>`.
 
-The window is open only inside `calculate_feature` (and what it awaits) and inside an artifact saver. It is closed in
+The window is open only inside `calculate_feature` (and what it awaits) and inside an artifact saver; a step's grant closes any window still open from another grant. It is closed in
 validate hooks, in extenders, between the two, and after the step. A mloda run started inside a step starts with the
 window closed, and its reads count on its own steps only. The stewards see the handle name in `explain()` and the plan
 lock, never a value; a refused read shows as the error of the step in any extender that wraps it.
@@ -417,6 +417,7 @@ mloda changes these process-wide settings:
 - **"credentials value for handle 'X' is not a mapping"**: you passed a bare `{connector_id: slot}` dict as `credentials`, which the named form reads as `{handle: credential}`. Use `credentials=Credential(...)`, the list form `credentials=[{...}]`, or the named form `{handle: {connector_id: slot}}`. See [Typed credentials](#typed-credentials-credential).
 - **"Option 'K' holds a Credential. A credential is never an option value: ..."**: a `Credential`, `RegisteredCredential` or `ResolvedCredential` sits in an option other than a source pointer (the message says "nested in its value" when it is inside a container). Register it in the `DataAccessCollection`, name its handle in an option declared with `credential_handle_spec`, and read it with `read_credential`.
 - **"Option 'K' holds a Credential but G is not the source group K ..."**: a pointer-key credential sits on a root feature whose group never reads it. Drop the pointer, or register the credential and name its handle.
+- **"Option 'K' holds a mapping with secret-shaped keys (...) but G is not the source group K ..."**: a plain mapping under a pointer key on a group that never reads it holds a secret-shaped key (count names such as `max_token` are exempt). Register the credential and name its handle in an option declared with `credential_handle_spec`.
 - **"Handle '<pointer>' is reserved ..."**: `<pointer>` and `<unnamed>` are plan record names; pick another handle name.
 - **"credentials list entry N has type T, not a mapping"**: each list entry must be a dict or `Credential`; wrap a bare value such as a DSN as `Credential(dsn=...)`.
 - **"HashableDict is no longer accepted as a credential value"**: pre-0.7 call sites wrapped credentials in `HashableDict`. The credentials path no longer accepts it; pass `Credential(...)` or a plain dict instead. `HashableDict` is not removed from the library: it still backs hashability-required internals (for example `Options` hashing and similar internals). It is simply no longer unwrapped anywhere on the database credential / data-access path.

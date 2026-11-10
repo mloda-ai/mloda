@@ -406,7 +406,48 @@ class ChsCfgFallbackFG(ChsSource):
         options: Options,
         data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
-        return True
+        return str(feature_name) == "chs_cfg_col"
+
+
+class ChsCfgPlainSiblingFG(FeatureChainParserMixin, ChsSource):
+    """Config-path sibling declaring a plain option close to ChsCfgFG's handle key."""
+
+    RECOGNITION_ONLY_PATTERN = True
+    PREFIX_PATTERN = r".*__chscfgplainnever$"
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {
+        "chs_cfg_op": property_spec("Op.", allowed_values={"sum"}),
+        "chs_cfg_handler": property_spec("Plain handler name."),
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class ChsDomRaisingFG(FeatureChainParserMixin, ChsSource):
+    """Config-path group without handle keys whose get_domain raises."""
+
+    RECOGNITION_ONLY_PATTERN = True
+    PREFIX_PATTERN = r".*__chsdomnever$"
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {"chs_domr_op": property_spec("Op.", allowed_values={"sum"})}
+
+    @classmethod
+    def get_domain(cls) -> Domain:
+        raise RuntimeError("broken get_domain")
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class ChsDomWinnerFG(ChsSource):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_domr_col"}
+
+    @classmethod
+    def get_domain(cls) -> Domain:
+        return Domain("chs_domr")
 
 
 def _plugins(*groups: type[FeatureGroup]) -> PluginCollector:
@@ -1307,6 +1348,20 @@ class TestMissingHandleKeyAborts:
         assert _steps(session, ChsCfgSiblingFG)
         assert not _steps(session, ChsCfgFG)
 
+    def test_a_sibling_declaring_a_close_plain_option_that_wins_does_not_abort(self) -> None:
+        feature = Feature("chs_cfg_col", options={"chs_cfg_op": "sum", "chs_cfg_handler": "x"})
+
+        session = _prepare([feature], _dac(**{"vault-main": {"key": SECRET}}), _plugins(ChsCfgFG, ChsCfgPlainSiblingFG))
+
+        assert _steps(session, ChsCfgPlainSiblingFG)
+
+    def test_an_unrelated_group_without_handle_keys_whose_get_domain_raises_does_not_break_planning(self) -> None:
+        feature = Feature("chs_domr_col", domain="chs_domr")
+
+        session = _prepare([feature], None, _plugins(ChsDomRaisingFG, ChsDomWinnerFG))
+
+        assert _steps(session, ChsDomWinnerFG)
+
 
 class ChsCredDefaultFG(ChsSource):
     PROPERTY_MAPPING = {"chs_default_auth": property_spec("Credential default.", default=Credential(token=SECRET))}
@@ -1490,10 +1545,37 @@ class TestCredentialValuesInOptionsAreRefused:
         assert SECRET not in message
 
     @pytest.mark.parametrize(
+        ("make_value", "key"),
+        [
+            pytest.param(lambda: {"api_key": {SECRET: "v"}}, "api_key", id="secret-as-key-under-shaped"),
+            pytest.param(lambda: {"token": {"max_token": SECRET}}, "token", id="shaped-ancestor-of-count-name"),
+        ],
+    )
+    def test_a_secret_shaped_key_holding_a_secret_as_key_or_under_a_count_name_is_refused(
+        self, make_value: Callable[[], Any], key: str
+    ) -> None:
+        feature = Feature("chs_vault_a", options={"SqliteFG": make_value()})
+
+        message = _abort(_prepare, [feature], None, ChsFallbackFG, SqliteFG)
+
+        assert key in message
+        assert SECRET not in message
+
+    def test_a_secret_key_holding_a_list_names_the_key_once_without_indexes(self) -> None:
+        feature = Feature("chs_vault_a", options={"SqliteFG": {"token": ["a", "b"]}})
+
+        message = _abort(_prepare, [feature], None, ChsFallbackFG, SqliteFG)
+
+        assert len(re.findall(r"\btoken\b", message)) == 1
+        assert "[0]" not in message
+        assert "[1]" not in message
+
+    @pytest.mark.parametrize(
         "make_value",
         [
             pytest.param(lambda: {"col_a": [1, 2], "col_b": [3]}, id="routing-hint"),
             pytest.param(lambda: {"max_token": "x"}, id="count-name"),
+            pytest.param(lambda: {"max_token": ["x"]}, id="count-name-list"),
         ],
     )
     def test_a_routing_hint_or_count_name_mapping_under_a_pointer_key_is_accepted(

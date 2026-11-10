@@ -6,6 +6,7 @@ handle at plan time; nothing reads the credential at run time yet.
 
 from __future__ import annotations
 
+import re
 from array import array
 from collections.abc import ItemsView, KeysView, Mapping, Sequence, ValuesView
 from collections.abc import Set as AbstractSet
@@ -15,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.components.credential_leaves import (
     CredentialKeyPolicy,
+    _is_shaped,
     credential_key_names,
     iter_credential_leaves,
     normalize_credential_key,
@@ -259,6 +261,23 @@ def refuse_credential_option_values(options: Options) -> None:
         )
 
 
+_SHAPED_NAMES_SHOWN = 3
+_PATH_SEGMENT = re.compile(r"[^.\[\]]+")
+
+
+def _shaped_key_names(value: Any) -> list[str]:
+    """First secret-shaped, non-count-name key segment of each leaf path, deduplicated, in order."""
+    found: dict[str, None] = {}
+    for leaf in iter_credential_leaves(value):
+        if not leaf.shaped:
+            continue
+        names = _PATH_SEGMENT.findall(leaf.path)
+        hit = next((n for n in names if _is_shaped(n) and not _COUNT_NAME.fullmatch(n)), None)
+        if hit is not None:
+            found[hit] = None
+    return list(found)
+
+
 def refuse_unread_pointer_credentials(feature_group: type[FeatureGroup], options: Options) -> None:
     """Refuse a self-set pointer-key credential on a group that is not that source; never names the value."""
     # Function-local: avoids an import cycle through the source feature group module.
@@ -273,14 +292,12 @@ def refuse_unread_pointer_credentials(feature_group: type[FeatureGroup], options
         if is_nominal_subclass(feature_group, source):
             continue
         if hit is None:
-            shaped = [
-                leaf.path
-                for leaf in iter_credential_leaves(value)
-                if leaf.shaped and not _COUNT_NAME.fullmatch(leaf.path.rpartition(".")[2])
-            ]
-            if shaped:
+            names = _shaped_key_names(value)
+            if names:
+                shown = ", ".join(names[:_SHAPED_NAMES_SHOWN])
+                extra = f" and {len(names) - _SHAPED_NAMES_SHOWN} more" if len(names) > _SHAPED_NAMES_SHOWN else ""
                 raise _refuse(
-                    f"Option '{key}' holds a mapping with secret-shaped keys ({', '.join(shaped)}) but "
+                    f"Option '{key}' holds a mapping with secret-shaped keys ({shown}{extra}) but "
                     f"{feature_group.__name__} is not the source group {key}, so the credential would reach a group "
                     f"that never reads it. Register the credential in the DataAccessCollection and name its handle "
                     f"in an option declared with credential_handle_spec."
@@ -299,6 +316,14 @@ def _close_option_key(feature_group: type[FeatureGroup], key: str, options: Opti
     candidates = [name for name in [*options.group, *options.context] if name not in mapping]
     close = get_close_matches(key, candidates, n=1, cutoff=0.8)
     return close[0] if close else None
+
+
+def close_handle_option_keys(
+    feature_group: type[FeatureGroup], keys: tuple[str, ...], options: Options
+) -> tuple[str, ...]:
+    """The close undeclared option keys supplied in place of the given absent handle keys."""
+    close = (_close_option_key(feature_group, key, options) for key in keys)
+    return tuple(name for name in close if name)
 
 
 def _missing_sentence(feature_group: type[FeatureGroup], key: str, options: Options) -> str:

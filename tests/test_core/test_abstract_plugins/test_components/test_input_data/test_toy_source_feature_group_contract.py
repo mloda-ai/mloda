@@ -3,6 +3,7 @@
 from typing import Any
 
 from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin
+from mloda._testing.source_applicability import NO_POINTER
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.provider import SourceFeatureGroup
 from tests.test_core.test_abstract_plugins.test_components.test_input_data import toy_source_group
@@ -47,6 +48,19 @@ class TestToyOpenSourceFeatureGroupContract(_ToyHooks, SourceFeatureGroupTestMix
     missing_column = "toyfmt_missing"
     expected_source = "scoped:toy"
     pointed_source = "scoped:toy"
+
+
+class TestToyScopedOnlySourceFeatureGroupContract(_ToyHooks, SourceFeatureGroupTestMixin):
+    """A group with no searched pointer route, claiming only through feature_group= scope."""
+
+    feature_group_class: type[SourceFeatureGroup] = ToyOpenFG
+    present_column = "toyfmt_col"
+    missing_column = "toyfmt_missing"
+    expected_source = "h1:toy"
+    pointed_source = "scoped:toy"
+
+    def own_pointer(self) -> Any:
+        return NO_POINTER
 
 
 class TestToyPointedCheckedSourceFeatureGroupContract(_ToyHooks, SourceFeatureGroupTestMixin):

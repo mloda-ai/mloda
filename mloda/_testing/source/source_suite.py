@@ -274,13 +274,13 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         return Feature(name, self._options(group), **kwargs)
 
     def _own_feature(self, name: str | None = None, group: dict[str, Any] | None = None, **kwargs: Any) -> Feature:
-        """The request claiming the group's own source: unpointed if it searches, else pointed at own_pointer."""
+        """The request claiming the group's own source: unpointed if it searches, else pointed at own_pointer, else scoped to the group."""
         name = self.present_column if name is None else name
         if self._applicability().searched_route:
             return self._feature(name, group, **kwargs)
         pointer = self.own_pointer()
         if pointer is NO_POINTER:
-            pytest.fail("the group has no searched route and takes no pointer, so it can never claim its own source")
+            return self._feature(name, group, feature_group=self.feature_group_class, **kwargs)
         return self._feature(name, {**(group or {}), self._group_name(): pointer}, **kwargs)
 
     def _with_context(self, feature: Feature) -> Feature:
@@ -349,7 +349,6 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         dac = self.own_dac()
         state = copy.deepcopy(dac.__dict__)
         feature = self._own_feature(group={"unrelated_option": 1})
-        feature.options = Options(dict(feature.options.group))
         group = copy.deepcopy(feature.options.group)
         context = copy.deepcopy(feature.options.context)
 

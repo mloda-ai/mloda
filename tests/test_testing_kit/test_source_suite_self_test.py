@@ -25,11 +25,13 @@ class ToyfmtBrokenFG(ToySourceBase):
     def find_sources(cls, route, feature_name, options, data_access_collection):
         if feature_name != "toyfmt_broken_col" or data_access_collection is None:
             return []
-        options.add_to_group("toyfmt_leaked", 1)
-        return [
+        matches = [
             SourceMatch(source=f"{handle}:toy", access={"toyfmt_broken_col": [1]})
             for handle in sorted(data_access_collection.handles())
         ]
+        for match in matches:
+            options.add_to_group("toyfmt_leaked", match.source)
+        return matches
 
 
 class TestBroken(SourceFeatureGroupTestMixin):
@@ -67,14 +69,16 @@ SELECTED = (
 def test_a_broken_source_group_fails_the_suite_for_each_defect(pytester: pytest.Pytester) -> None:
     pytester.makepyfile(test_inner=INNER)
 
-    result = pytester.runpytest_inprocess("-p", "no:cacheprovider", "-p", "no:randomly", "-k", SELECTED)
+    result = pytester.runpytest_inprocess("-p", "no:cacheprovider", "-p", "no:randomly", "--tb=short", "-k", SELECTED)
 
     result.assert_outcomes(passed=1, failed=3)
     result.stdout.fnmatch_lines(
         [
-            "*FAILED test_inner.py::TestBroken::test_declines_foreign_sources*",
-            "*FAILED test_inner.py::TestBroken::test_leaves_collection_and_options_unchanged*",
-            "*FAILED test_inner.py::TestBroken::test_declares_no_secret_shaped_option*",
+            "*_ TestBroken.test_declines_foreign_sources _*",
+            "*assert not self._claims(Feature(self.present_column), self.foreign_dac())*",
+            "*_ TestBroken.test_leaves_collection_and_options_unchanged _*",
+            "*assert feature.options.group == group*",
+            "*_ TestBroken.test_declares_no_secret_shaped_option _*",
+            "*secrets: option 'password'*",
         ]
     )
-    result.stdout.fnmatch_lines(["*secrets: option 'password'*"])

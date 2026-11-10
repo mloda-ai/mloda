@@ -21,7 +21,6 @@ def normalize_arrow_types(table: Any) -> Any:
 
 
 def _plain_type(arrow_type: Any) -> Any:
-    """Return the Arrow type with large_string/large_binary/large_list replaced recursively."""
     if pa.types.is_large_string(arrow_type):
         return pa.string()
     if pa.types.is_large_binary(arrow_type):

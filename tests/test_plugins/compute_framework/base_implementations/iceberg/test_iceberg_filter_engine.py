@@ -842,7 +842,7 @@ class TestScanColumnsProjection:
     _COLS = ("s", "l", "st.x")
 
     @staticmethod
-    def _typed_table(rows: int) -> pa.Table:
+    def _typed_table(rows: int) -> "pa.Table":
         schema = pa.schema([("s", pa.string()), ("l", pa.list_(pa.string())), ("st", pa.struct([("x", pa.string())]))])
         data = {"s": ["a"] * rows, "l": [["p"]] * rows, "st": [{"x": "q"}] * rows}
         return pa.table(data, schema=schema)

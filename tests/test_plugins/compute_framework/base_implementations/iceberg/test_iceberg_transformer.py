@@ -1,5 +1,5 @@
 import pytest
-from typing import Any
+from typing import Any, Callable
 from unittest.mock import patch
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_pyarrow_transformer import (
     normalize_arrow_types,
@@ -130,13 +130,13 @@ class TestIcebergPyArrowTransformerUnavailable:
                 IcebergPyArrowTransformer.import_other_fw()
 
 
-_DRIFT_TYPES = {
-    "string": (pa.string(), "a"),
-    "binary": (pa.binary(), b"x"),
-    "list_int": (pa.list_(pa.int64()), [1, 2]),
-    "list_string": (pa.list_(pa.string()), ["a"]),
-    "struct_string": (pa.struct([("x", pa.string())]), {"x": "a"}),
-    "map_string": (pa.map_(pa.string(), pa.string()), [("k", "v")]),
+_DRIFT_TYPES: dict[str, Callable[[], tuple[Any, Any]]] = {
+    "string": lambda: (pa.string(), "a"),
+    "binary": lambda: (pa.binary(), b"x"),
+    "list_int": lambda: (pa.list_(pa.int64()), [1, 2]),
+    "list_string": lambda: (pa.list_(pa.string()), ["a"]),
+    "struct_string": lambda: (pa.struct([("x", pa.string())]), {"x": "a"}),
+    "map_string": lambda: (pa.map_(pa.string(), pa.string()), [("k", "v")]),
 }
 
 
@@ -144,8 +144,11 @@ _DRIFT_TYPES = {
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
 class TestIcebergZeroRowTypeDrift:
-    @pytest.mark.parametrize("arrow_type, value", list(_DRIFT_TYPES.values()), ids=list(_DRIFT_TYPES))
-    def test_zero_rows_and_non_empty_share_schema(self, iceberg_adapter: Any, arrow_type: Any, value: Any) -> None:
+    @pytest.mark.parametrize("factory", list(_DRIFT_TYPES.values()), ids=list(_DRIFT_TYPES))
+    def test_zero_rows_and_non_empty_share_schema(
+        self, iceberg_adapter: Any, factory: Callable[[], tuple[Any, Any]]
+    ) -> None:
+        arrow_type, value = factory()
         schema = pa.schema([("c", arrow_type)])
         full = iceberg_adapter.from_arrow(pa.table({"c": pa.array([value], type=arrow_type)}, schema=schema))
         empty = iceberg_adapter.from_arrow(schema.empty_table())

@@ -3,9 +3,12 @@ from mloda.provider import BaseTransformer
 
 try:
     from pyiceberg.table import Table as IcebergTable
-    import pyarrow as pa
 except ImportError:
     IcebergTable = None  # type: ignore[assignment,misc]
+
+try:
+    import pyarrow as pa
+except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
 

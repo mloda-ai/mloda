@@ -27,6 +27,7 @@ def make_name_bound_fg(
     capture: str = "[a-z]",
     calls: list[list[str]] | None = None,
     append_columns: bool = False,
+    replaces_rows: bool = False,
 ) -> type[FeatureGroup]:
     """Pattern group binding ``bound_keys`` from ``<name>__<tag>_<x>_<y>``; records option tuples in ``seen``.
 
@@ -34,7 +35,8 @@ def make_name_bound_fg(
     group returns ``data`` unchanged; with it, each feature gets that input column. ``converters`` maps
     key to its ``name_converter``; ``capture`` is the regex class of each captured segment. ``calls``
     gets one list of feature names (repeats kept) appended per calculate_feature call; ``append_columns``
-    makes the group append one pyarrow column per feature instead of returning a dict.
+    makes the group append one pyarrow column per feature instead of returning a dict; ``replaces_rows``
+    makes the group declare ``replaces_rows()`` True.
     """
     pattern = rf".*__{tag}_" + "_".join(rf"(?P<{key}>{capture})" for key in bound_keys) + "$"
     keys = (*bound_keys, *unbound_keys)
@@ -71,6 +73,8 @@ def make_name_bound_fg(
         "PROPERTY_MAPPING": mapping,
         "calculate_feature": classmethod(calculate_feature),
     }
+    if replaces_rows:
+        namespace["replaces_rows"] = classmethod(lambda cls: True)
     return type(f"{prefix}NameBoundFeatureGroup", (FeatureChainParserMixin, FeatureGroup), namespace)
 
 

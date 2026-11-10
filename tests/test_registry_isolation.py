@@ -22,8 +22,12 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
+from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import ReadDBFG
+from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation, _registry, loaded_implementations
@@ -46,9 +50,11 @@ from tests.registry_isolation import (
     SHARED_TEST_MODULE_PREFIX,
     TRANSFORMERS,
     SubclassLog,
+    loaded_test_modules,
     reclaim_leaked_feature_groups,
     reclaim_leaked_subclasses,
     reclaim_leaked_transformers,
+    unnarrowed_source_claimers,
 )
 
 
@@ -1184,3 +1190,190 @@ class TestDynamicFeatureGroupCacheIsRestoredBetweenTests:
     def test_b_the_next_test_no_longer_sees_it(self, request: pytest.FixtureRequest) -> None:
         assert _CACHE_RESTORE_PROBE not in DynamicFeatureGroupCreator._created_classes
         assert _CACHE_RESTORE_FIXTURE in request.fixturenames
+
+
+def _sqlite_bare(m: str) -> dict[str, type[Any]]:
+    class BareSqlite(SqliteFG):
+        __module__ = m
+
+        @classmethod
+        def produce_rows(cls, connection: Any, table: str, features: Any) -> Any:
+            return super().produce_rows(connection, table, features)
+
+    return {"BareSqlite": BareSqlite}
+
+
+def _sqlite_own_key(m: str) -> dict[str, type[Any]]:
+    class KeyedSqlite(SqliteFG):
+        __module__ = m
+        CREDENTIAL_KEY = "synthetic_probe_key"
+
+    return {"KeyedSqlite": KeyedSqlite}
+
+
+def _sqlite_marker_gated(m: str) -> dict[str, type[Any]]:
+    class GatedSqlite(SqliteFG):
+        __module__ = m
+
+        @classmethod
+        def is_valid_credentials(cls, credentials: Any) -> bool:
+            return super().is_valid_credentials(credentials) and "synthetic_marker" in credentials
+
+    return {"GatedSqlite": GatedSqlite}
+
+
+def _sqlite_noop_override(m: str) -> dict[str, type[Any]]:
+    class NoopSqlite(SqliteFG):
+        __module__ = m
+
+        @classmethod
+        def is_valid_credentials(cls, credentials: Any) -> bool:
+            return super().is_valid_credentials(credentials)
+
+    return {"NoopSqlite": NoopSqlite}
+
+
+def _child_of_narrowed(m: str) -> dict[str, type[Any]]:
+    class NarrowParent(SqliteFG):
+        __module__ = m
+        CREDENTIAL_KEY = "synthetic_probe_key"
+
+    class NarrowChild(NarrowParent):
+        __module__ = m
+
+    return {"NarrowParent": NarrowParent, "NarrowChild": NarrowChild}
+
+
+def _child_of_unnarrowed(m: str) -> dict[str, type[Any]]:
+    class LooseParent(SqliteFG):
+        __module__ = m
+
+    class LooseChild(LooseParent):
+        __module__ = m
+
+    return {"LooseParent": LooseParent, "LooseChild": LooseChild}
+
+
+def _csv_bare(m: str) -> dict[str, type[Any]]:
+    class BareCsv(CsvFG):
+        __module__ = m
+
+    return {"BareCsv": BareCsv}
+
+
+def _csv_own_matcher(m: str) -> dict[str, type[Any]]:
+    class MatcherCsv(CsvFG):
+        __module__ = m
+
+        @classmethod
+        def match_feature_group_criteria(cls, *args: Any, **kwargs: Any) -> Any:
+            return super().match_feature_group_criteria(*args, **kwargs)
+
+    return {"MatcherCsv": MatcherCsv}
+
+
+def _file_group(m: str, suffix: str) -> dict[str, type[Any]]:
+    class SuffixFile(ReadFileFG):
+        __module__ = m
+
+        @classmethod
+        def suffixes(cls) -> tuple[str, ...]:
+            return (suffix,)
+
+        @classmethod
+        def column_names(cls, path: str) -> Any:
+            return []
+
+    return {"SuffixFile": SuffixFile}
+
+
+def _abstract_group(m: str) -> dict[str, type[Any]]:
+    class AbstractDb(ReadDBFG):
+        __module__ = m
+
+    return {"AbstractDb": AbstractDb}
+
+
+def _api_bare(m: str) -> dict[str, type[Any]]:
+    class BareApi(ApiDataFG):
+        __module__ = m
+
+    return {"BareApi": BareApi}
+
+
+def _api_own_find_sources(m: str) -> dict[str, type[Any]]:
+    class SourcesApi(ApiDataFG):
+        __module__ = m
+
+        @classmethod
+        def find_sources(cls, *args: Any, **kwargs: Any) -> Any:
+            return []
+
+    return {"SourcesApi": SourcesApi}
+
+
+_CLAIMER_CASES: list[Any] = [
+    pytest.param(_sqlite_bare, ["BareSqlite"], id="sqlite-bare-produce-rows"),
+    pytest.param(_sqlite_own_key, [], id="sqlite-own-credential-key"),
+    pytest.param(_sqlite_marker_gated, [], id="sqlite-marker-gated-credentials"),
+    pytest.param(_sqlite_noop_override, ["NoopSqlite"], id="sqlite-noop-credentials-override"),
+    pytest.param(_child_of_narrowed, [], id="child-of-narrowed-parent"),
+    pytest.param(_child_of_unnarrowed, ["LooseParent", "LooseChild"], id="child-of-unnarrowed-parent"),
+    pytest.param(_csv_bare, ["BareCsv"], id="csv-no-overrides"),
+    pytest.param(_csv_own_matcher, [], id="csv-own-matcher"),
+    pytest.param(functools.partial(_file_group, suffix=".mlodaprobe"), [], id="file-unique-suffix"),
+    pytest.param(functools.partial(_file_group, suffix=".csv"), ["SuffixFile"], id="file-csv-suffix"),
+    pytest.param(functools.partial(_file_group, suffix="csv"), ["SuffixFile"], id="file-suffix-without-dot"),
+    pytest.param(functools.partial(_file_group, suffix=".data.csv"), ["SuffixFile"], id="file-compound-suffix"),
+    pytest.param(_abstract_group, [], id="abstract-subclass"),
+    pytest.param(_api_bare, ["BareApi"], id="api-bare"),
+    pytest.param(_api_own_find_sources, [], id="api-own-find-sources"),
+]
+
+
+class TestUnnarrowedSourceClaimers:
+    @pytest.mark.parametrize(("build", "expected"), _CLAIMER_CASES)
+    def test_flags_only_unnarrowed_claimers(
+        self, build: Callable[[str], dict[str, type[Any]]], expected: list[str]
+    ) -> None:
+        module = types.ModuleType(__name__)
+        for attr, cls in build(__name__).items():
+            setattr(module, attr, cls)
+
+        flagged = {entry.split()[0] for entry in unnarrowed_source_claimers([module])}
+
+        assert flagged == {f"{__name__}.{n}" for n in expected}
+
+    def test_flags_a_claimer_in_a_bare_stem_module(self) -> None:
+        name = "test_bare_stem_claimer_probe"
+        module = types.ModuleType(name)
+        for attr, cls in _sqlite_bare(name).items():
+            setattr(module, attr, cls)
+
+        assert [e.split()[0] for e in unnarrowed_source_claimers([module])] == [f"{name}.BareSqlite"]
+
+    def test_no_test_module_leaves_an_unnarrowed_source_claimer(self) -> None:
+        flagged = unnarrowed_source_claimers(loaded_test_modules(sys.modules))
+        assert not flagged, (
+            f"unnarrowed module-level source groups: {flagged}. Narrow each (see tests/README.md) "
+            "or define it inside the test."
+        )
+
+
+class TestLoadedTestModules:
+    def test_selects_modules_by_file_location_not_name(self) -> None:
+        inside = types.ModuleType("test_bare_stem_probe")
+        inside.__file__ = str(TESTS_ROOT / "some_dir" / "test_bare_stem_probe.py")
+        outside = types.ModuleType("mloda_like_probe")
+        outside.__file__ = str(TESTS_ROOT.parent / "mloda" / "mloda_like_probe.py")
+        no_file = types.ModuleType("no_file_probe")
+        modules: dict[str, object] = {
+            "test_bare_stem_probe": inside,
+            "mloda_like_probe": outside,
+            "no_file_probe": no_file,
+            "not_a_module": object(),
+            "a_string": "text",
+            "none_entry": None,
+        }
+
+        assert loaded_test_modules(modules) == [inside]

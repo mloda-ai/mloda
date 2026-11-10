@@ -7,17 +7,26 @@ cyclic GC runs and a later test on the same worker trips over it. A creation log
 from __future__ import annotations
 
 import gc
+import importlib
+import inspect
+import pkgutil
 import sys
+import types
 import weakref
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Generic, TypeVar
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
+from mloda.core.abstract_plugins.components.input_data.read_db_fg import ReadDBFG
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
+from mloda_plugins.feature_group import input_data
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 
 from tests.helpers.subclass_walks import collect_until
@@ -175,3 +184,64 @@ def reclaim_released_implementations(mark: int, module_name: str) -> list[type[A
         (cls for cls in IMPLEMENTATIONS.live_since(mark) if cls in loaded and cls.__module__ == module_name),
         key=lambda c: c.__name__,
     )
+
+
+SHIPPED_ROOTS = {"mloda", "mloda_plugins"}
+TESTS_DIR = Path(__file__).resolve().parent
+
+
+def loaded_test_modules(modules: Mapping[str, object]) -> list[types.ModuleType]:
+    """Modules whose file lives under tests/, whatever their import name (--import-mode append gives bare stems)."""
+    found = [
+        m
+        for m in list(modules.values())
+        if isinstance(m, types.ModuleType) and isinstance(vars(m).get("__file__"), str)
+    ]
+    return [m for m in found if TESTS_DIR in Path(str(m.__file__)).resolve().parents]
+
+
+def _ships(cls: type[Any]) -> bool:
+    return cls.__module__.split(".")[0] in SHIPPED_ROOTS
+
+
+def _is_shipped(cls: type[Any]) -> bool:
+    return _ships(cls) and not inspect.isabstract(cls)
+
+
+def _suffix_rival(shipped_suffixes: dict[str, type[Any]], suffixes: Iterable[str]) -> type[Any] | None:
+    hits = [c for b, c in shipped_suffixes.items() for a in suffixes if a.endswith(b) or b.endswith(a)]
+    return min(hits, key=lambda c: c.__name__, default=None)
+
+
+def unnarrowed_source_claimers(modules: Iterable[types.ModuleType]) -> list[str]:
+    """Module-level test source groups that still claim what a shipped reader claims."""
+    for info in pkgutil.walk_packages(input_data.__path__, f"{input_data.__name__}."):
+        importlib.import_module(info.name)
+    shipped = sorted((c for c in get_all_subclasses(SourceFeatureGroup) if _is_shipped(c)), key=lambda c: c.__name__)
+    shipped_suffixes = {s: c for c in shipped if issubclass(c, _FileSourceFG) for s in c.suffixes()}
+    own = ("find_sources", "is_pointed", "has_column", "_candidates")
+    flagged: list[str] = []
+    for module in modules:
+        for name, cls in vars(module).items():
+            if not (isinstance(cls, type) and cls.__module__ == module.__name__):
+                continue
+            if not issubclass(cls, SourceFeatureGroup) or inspect.isabstract(cls):
+                continue
+            custom = [k for k in cls.__mro__ if not _ships(k)]
+            if any("match_feature_group_criteria" in vars(k) for k in custom):
+                continue
+            rival: type[Any] | None = None
+            if issubclass(cls, ReadDBFG):
+                probe = (
+                    s
+                    for s in shipped
+                    if issubclass(s, ReadDBFG) and cls.is_valid_credentials({s.CREDENTIAL_KEY: "probe"})
+                )
+                rival = next(probe, None)
+            elif issubclass(cls, _FileSourceFG):
+                rival = _suffix_rival(shipped_suffixes, cls.suffixes())
+            elif not any(n in vars(k) for k in custom for n in own):
+                rival = next((k for k in cls.__mro__[1:] if _is_shipped(k)), None)
+            if rival is not None:
+                flagged.append(f"{module.__name__}.{name} collides with {rival.__name__}")
+    return flagged

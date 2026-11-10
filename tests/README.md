@@ -79,3 +79,10 @@ tests/
 ```
 
 Test dependencies are declared in the `test` extra in `pyproject.toml`.
+
+## Module-level source readers
+
+A module-level test subclass of a shipped source reader must narrow its claim (own `CREDENTIAL_KEY` or marker-gated
+`is_valid_credentials`, own suffix, or own `match_feature_group_criteria`) or be defined inside the test,
+since it stays registered for the whole worker. `test_registry_isolation.py` checks this convention over the
+modules a full run imports.

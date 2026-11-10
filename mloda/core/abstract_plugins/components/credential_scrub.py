@@ -42,11 +42,12 @@ _CHAIN_AFTER_VALUE = r"::(?=(?:[a-z][a-z0-9+.-]{0,31}::){0,3}[A-Za-z][A-Za-z0-9+
 _FREE_TEXT_URI_PATTERN = re.compile(
     _SCHEME + r"://"
     r"(?:(?P<userinfo>[^/?#\s]*)@)?"
-    r"(?P<host>(?:\[[0-9A-Fa-f:.]+\]|[\w.~-]*)(?::\d+)?)"
+    r"(?P<host>(?:\[[0-9A-Fa-f:.]+\]|[\w.~=-]*)(?::\d+)?)"
     # `;` or percent-escape parameters directly after a pathless host (stops at `/`, so the path group still owns
     # later segments, at a chain `::`, so a chained URI keeps its match; a `;` before another URI is no parameter).
-    rf"(?P<params>(?:(?:;(?![A-Za-z][\w+.:-]*://)|(?=%))(?:(?!{_CHAIN_COLONS})[^\s?#\"'<>\];/])*)+)?"
-    r"(?P<path>/[^\s?#\"'<>\]]*)?"
+    rf"(?P<params>(?:(?:;(?!(?:jdbc:(?:[A-Za-z][A-Za-z0-9+.-]*:){{0,3}})?[A-Za-z][A-Za-z0-9+.-]*://)|(?=%))(?:(?!{_CHAIN_COLONS})[^\s?#\"'<>\];/])*)+)?"
+    # Stop at `;scheme://` so `a.csv;s3://b/b.csv` is two URIs.
+    r"(?P<path>/(?:[^\s?#\"'<>\];]|;(?![A-Za-z][A-Za-z0-9+.-]*://))*)?"
     r"(?P<query>[?#][^\s\"'<>)\]]*)?"
 )
 
@@ -347,13 +348,23 @@ def _cut_key_value_path(path: str) -> str:
     return path
 
 
+def _azure_container_prefix(match: re.Match[str]) -> str:
+    """`container@` when the URI names an Azure container, else empty."""
+    userinfo = match["userinfo"]
+    if (
+        userinfo
+        and match["scheme"].lower() in _AZURE_CONTAINER_SCHEMES
+        and _AZURE_CONTAINER_PATTERN.fullmatch(userinfo)
+    ):
+        return f"{userinfo}@"
+    return ""
+
+
 def _uri_projection(match: re.Match[str]) -> str | None:
-    scheme, userinfo, host = match["scheme"], match["userinfo"], match["host"]
+    scheme, host = match["scheme"], match["host"]
     # Host parameters ride along with the path: the same key=value and hidden-percent checks apply.
     path = (match["params"] or "") + (match["path"] or "")
-    container = ""
-    if userinfo and scheme.lower() in _AZURE_CONTAINER_SCHEMES and _AZURE_CONTAINER_PATTERN.fullmatch(userinfo):
-        container = f"{userinfo}@"
+    container = _azure_container_prefix(match)
     if scheme.startswith("jdbc:"):
         tail = _JDBC_TAIL_PATTERN.search(match.string, match.end())
         if any(mark in path + (tail[0] if tail else "") for mark in "=;@"):
@@ -398,9 +409,67 @@ def _cut_marker_tail(marker: re.Match[str]) -> str:
     return tail[len(tail.rstrip(_CLOSERS)) :]
 
 
+def _keyword_run(text: str, pos: int, end: int, limit: int) -> int | None:
+    """End of the `;k=v` / `&k=v` run from pos reaching end (or the whitespace-terminated URI end) with each element masked; None if not."""
+    while pos < len(text) and text[pos] in ";&":
+        found = _KEYWORD_PATTERN.match(text, pos + 1)
+        if found is None:
+            return None
+        pos = found.end()
+        if (pos >= limit and text[limit : limit + 1].isspace()) or (
+            pos >= end and text[pos : pos + 1] not in (";", "&")
+        ):
+            return pos
+    return None
+
+
+# Up to three following tokens (each capped, so the window is constant work): enough to hold a `= value` or `Bearer value` that follows a URI match.
+_STRADDLE_WINDOW = re.compile(r"(?:[ \t]*\S{1,64}){0,3}")
+
+
+def _straddling_keyword(match: re.Match[str], start: int) -> str:
+    """`;` plus the keyword head of a keyword pass match that starts in the dropped span but ends past the URI."""
+    text, limit = match.string, match.end()
+    window = _STRADDLE_WINDOW.match(text, limit)
+    stop = window.end() if window else limit
+    for kw in _KEYWORD_PATTERN.finditer(text, start, stop):
+        if kw.start() >= limit:
+            break
+        if kw.end() > limit:
+            return ";" + text[kw.start() : limit]
+    return ""
+
+
+def _cut_at_parameter_region(match: re.Match[str], path: str) -> str | None:
+    """The URI cut back to the first parameter region the keyword pass will not mask."""
+    base = match.start("params") if match["params"] else match.start("path")
+    text = match.string
+    validated = 0
+    for start, head, end in _parameter_regions(path):
+        if base + head < validated:
+            continue
+        run_end = _keyword_run(text, base + head, base + end, match.end())
+        if run_end is not None:
+            validated = run_end
+            continue
+        if not any(c.isalnum() or c == "_" for c in path[head:end]):
+            continue
+        scheme, host = match["scheme"], match["host"]
+        cut = _cut_key_value_path(path[:start])
+        kept = _azure_container_prefix(match)
+        return f"{scheme}://{kept}{host}{_cut_hidden_percent(scheme, host, cut)}" + _straddling_keyword(
+            match, base + start
+        )
+    return None
+
+
 def _scrub_uri_match(match: re.Match[str]) -> str:
     scheme, host = match["scheme"], match["host"]
     path = (match["params"] or "") + (match["path"] or "")
+    if path and not scheme.startswith("jdbc:"):
+        cut_uri = _cut_at_parameter_region(match, path)
+        if cut_uri is not None:
+            return _cut_dropped_tail(match, cut_uri, True)
     projection = _uri_projection(match)
     if projection is not None:
         dropped = bool(match["query"]) or not projection.endswith(path)
@@ -478,14 +547,28 @@ def _clean_head(part: str) -> str:
     return part[: candidates[low - 1]] if low else ""
 
 
+def _parameter_regions(text: str) -> list[tuple[int, int, int]]:
+    """(part start, clean-head end, part end) per part holding a `;?#` region."""
+    regions: list[tuple[int, int, int]] = []
+    pos = 0
+    for i, part in enumerate(_PART_SPLIT.split(text)):
+        if i % 2 == 0:
+            decoded = _decode_to_fixpoint(part)
+            if decoded is None or _PARAMETER_REGION.search(decoded):
+                regions.append((pos, pos + len(_clean_head(part)), pos + len(part)))
+        pos += len(part)
+    return regions
+
+
 def _cut_path_parameter_regions(uri: str) -> str:
-    """Cut every `/`- or chain-`::`-separated part whose decoded form holds `;`, `?` or `#` plus text to head + `;***`."""
-    parts = _PART_SPLIT.split(uri)
-    for i in range(0, len(parts), 2):
-        decoded = _decode_to_fixpoint(parts[i])
-        if decoded is None or _PARAMETER_REGION.search(decoded):
-            parts[i] = _clean_head(parts[i]) + ";***"
-    return "".join(parts)
+    """Cut every parameter-region part to its clean head + `;***`."""
+    out: list[str] = []
+    cursor = 0
+    for start, head, end in _parameter_regions(uri):
+        out.append(uri[cursor:head] + ";***")
+        cursor = end
+    out.append(uri[cursor:])
+    return "".join(out)
 
 
 _REGISTERED_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_registered_secrets", default=frozenset())
@@ -673,7 +756,12 @@ def _uri_origins(match: re.Match[str], replacement: str, origin: list[int]) -> l
         rest += len(userinfo) + 1
     host = match.start("host") - base
     size = match.end() - base
-    result.extend(origin[host + i] if host + i < size else -1 for i in range(len(replacement) - rest))
+    text = match.string
+    at = match.start() + host
+    result.extend(
+        origin[host + i] if host + i < size and text[at + i] == replacement[rest + i] else -1
+        for i in range(len(replacement) - rest)
+    )
     return result
 
 
@@ -743,6 +831,7 @@ def _password_scheme_repl(m: re.Match[str]) -> str:
     return f"{user}:***"
 
 
+# Must run after the URI pass, which leaves secret-named `;k=v` regions to it.
 _PASSES: list[tuple[re.Pattern[str], Any]] = [
     (_DB_USERINFO_PATTERN, r"\g<scheme>://"),
     (_FREE_TEXT_USERINFO_PATTERN, r"\g<scheme>://"),

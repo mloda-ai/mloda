@@ -27,6 +27,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
 )
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, safe_value_text
 from tests.helpers.linear_scaling import assert_runs_linearly
+from tests.helpers.uri_region_matrix import fixpoint, region_matrix
 
 # (case id, input text, secret substrings that must be gone, substrings that must survive)
 SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
@@ -184,7 +185,7 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
         "sas_shared_access_key",
         "Endpoint=sb://ns.servicebus.windows.net/;SharedAccessKeyName=root;SharedAccessKey=hunter2z9",
         ["hunter2z9"],
-        ["SharedAccessKeyName=root", "SharedAccessKey=***"],
+        ["Endpoint=sb://ns.servicebus.windows.net/"],
     ),
     (
         "sas_signature",
@@ -956,6 +957,10 @@ UNCHANGED_LOOKALIKE_CASES: list[str] = [
     "PWD=/tmp/build/x",
     "OLDPWD=/var/lib/app",
     "max_token=1234567",
+    "(see s3://b/x.csv;)",
+    "wrote s3://b/x.csv;, then",
+    "s3://b/x.csv;. Next",
+    "paths=s3://b/a.csv;s3://b/b.csv",
 ]
 
 
@@ -1162,6 +1167,7 @@ def test_repeated_jdbc_scheme_prefix_scrubs_fast(build: Callable[[int], str], n:
         pytest.param(lambda k: "zip://d;%74oken=S" + "::a" * k, 20_000, id="dropped_value_colon_run"),
         pytest.param(lambda k: "https://h/x?password=a]" + ",(a" * k, 20_000, id="marker_comma_paren_run"),
         pytest.param(lambda k: "https://h/x?password=a]" + ";aaa" * k, 20_000, id="marker_semicolon_run"),
+        pytest.param(lambda k: "s3://b/" + "a;token=1/" * k, 20_000, id="secret_named_path_parts"),
     ],
 )
 def test_repeated_userinfo_shaped_prefix_scrubs_fast(build: Callable[[int], str], n: int) -> None:
@@ -1639,8 +1645,8 @@ class TestScrubUriProjection:
                 id="jdbc-derby-drops-semicolon-path",
             ),
             pytest.param("zip://d;%74oken=SECRET", "zip://d", id="host-param-encoded-token-is-cut"),
-            pytest.param("s3://b;v=2/x.csv", "s3://b;v=2/x.csv", id="host-param-benign-is-kept"),
-            pytest.param("zip://d;%76=2", "zip://d;%76=2", id="host-param-encoded-benign-is-kept"),
+            pytest.param("s3://b;v=2/x.csv", "s3://b", id="host-param-benign-is-cut"),
+            pytest.param("zip://d;%76=2", "zip://d", id="host-param-encoded-benign-is-cut"),
             pytest.param(
                 "jdbc:postgresql://h/db/hunter2@x:5432/y",
                 "jdbc:postgresql://h",
@@ -2336,14 +2342,51 @@ class TestScrubUriFailClosed:
             pytest.param("zip://d;%74oken=SE::CRET", "CRET", id="host-param-double-colon-fragment"),
             pytest.param("zip://d;token=SE::CRET::s3://b/x", "CRET", id="host-param-double-colon-chain-fragment"),
             pytest.param("zip://d;%74oken=SE::cretval::x", "cretval", id="host-param-lower-case-chain-shaped-fragment"),
+            pytest.param(
+                "zip://year=2024/dirA;token:SECRET1/a.zip::s3://b/x.csv", "SECRET1", id="archive-host-eq-chain"
+            ),
+            pytest.param("zip://d;token=SEC'RET;key=SECRETB", "SECRETB", id="host-param-quote-then-key"),
+            pytest.param("https://h/x;password=hun'ter2;key=SECRETA", "SECRETA", id="path-param-quote-then-key"),
+            pytest.param('zip://d;token=SEC"RET;key=SECRETB', "SECRETB", id="host-param-dquote-then-key"),
+            pytest.param('https://h/x;password=hun"ter2;key=SECRETA', "SECRETA", id="path-param-dquote-then-key"),
+            pytest.param("zip://d;token=SEC'RET&key=SECRETB", "SECRETB", id="host-param-quote-then-amp-key"),
+            pytest.param("https://h/x;password=hun'ter2&key=SECRETA", "SECRETA", id="path-param-quote-then-amp-key"),
+            pytest.param('zip://d;token=SEC"RET&key=SECRETB', "SECRETB", id="host-param-dquote-then-amp-key"),
+            pytest.param('https://h/x;password=hun"ter2&key=SECRETA', "SECRETA", id="path-param-dquote-then-amp-key"),
+            pytest.param("https://h/x;password={SECRETBR;ACE}", "SECRETBR", id="kept-region-braced-value"),
+            pytest.param("https://h/x;token=Bearer SECRETTOK", "SECRETTOK", id="kept-region-bearer-value"),
+            pytest.param("https://h/x;password='SECRETQ space'", "SECRETQ", id="kept-region-quoted-space-value"),
+            pytest.param("https://h/x;password=SECRETP;v=2", "SECRETP", id="kept-region-then-benign-region"),
             pytest.param("https://h/x?password=a]b://SECRETVAL", "SECRETVAL", id="query-value-scheme-shaped-tail"),
             pytest.param(
                 "jdbc:sqlserver://h;databaseName=d;password={a;ZQ://S};encrypt=true", "ZQ", id="jdbc-braced-zq"
             ),
+            pytest.param("s3://b/x;v=1;password = ZQXPASSONE", "ZQXPASSONE", id="spaced-eq-after-benign-param"),
+            pytest.param("s3://b/x;sig=Bearer ZQXBEARER2;", "ZQXBEARER2", id="bearer-sig-trailing-semicolon"),
+            pytest.param("s3://b;password =ZQXPASSTHREE;v=1", "ZQXPASSTHREE", id="host-param-space-before-eq"),
+            pytest.param("s3://b;token:ZQXCHAINONE::s3://b/y", "ZQXCHAINONE", id="host-colon-token-chain"),
+            pytest.param("zip://d;token:ZQXCHAINTWO::s3://b/y", "ZQXCHAINTWO", id="zip-colon-token-chain"),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:
         assert secret not in scrub_credentials(value)
+
+    @staticmethod
+    def _leaks(wrap: Callable[[str], str]) -> list[str]:
+        leaks = []
+        for label, uri, _, secret in region_matrix(".csv"):
+            out = scrub_credentials(wrap(uri))
+            if secret in out or secret in fixpoint(out):
+                leaks.append(f"{label}: {out!r}")
+        return leaks
+
+    def test_region_matrix_secret_is_not_kept(self) -> None:
+        leaks = self._leaks(lambda uri: uri)
+        assert not leaks, "\n".join(leaks[:20])
+
+    def test_region_matrix_secret_is_not_kept_in_quoted_free_text(self) -> None:
+        leaks = self._leaks(lambda uri: f"failed to read '{uri}' (retrying)")
+        assert not leaks, "\n".join(leaks[:20])
 
 
 def test_safe_value_text_scrubs_a_credential_str_and_keeps_the_type() -> None:

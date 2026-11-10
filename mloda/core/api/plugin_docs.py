@@ -30,6 +30,7 @@ from mloda.core.abstract_plugins.components.utils import (
     get_all_subclasses,
     is_nominal_subclass,
     safe_field,
+    safe_field_with_abort,
     safe_field_with_error,
 )
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
@@ -527,10 +528,12 @@ def _resolve_feature(
 
     literals = frozenset() if data_access_collection is None else data_access_collection.secret_literals()
     with registered_secrets_scope(literals):
-        evaluation, eval_error = safe_field_with_error(_evaluate, None)
+        evaluation, eval_error, refused = safe_field_with_abort(_evaluate, None)
         if evaluation is None:
             scrubbed_error = "" if eval_error is None else scrub_credentials(eval_error)
-            return ResolvedFeature(feature_name, None, [], error=f"{scrubbed_error}{scope_suffix}")
+            return ResolvedFeature(
+                feature_name, None, [], error=f"{scrubbed_error}{scope_suffix}", credential_refusal=refused
+            )
     result, message = evaluation
 
     candidates = sorted(result.criteria_matched, key=lambda c: c.get_class_name())

@@ -2015,12 +2015,6 @@ class TestScrubUriProjection:
     def test_scrub_keeps_host_and_path_only(self, uri: str, expected: str) -> None:
         assert scrub_credentials(uri) == expected
 
-    def test_file_line_prefix_kept_under_a_registered_scope(self) -> None:
-        from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
-
-        with registered_secrets_scope(frozenset({"unrelated-secret-123"})):
-            assert scrub_credentials("mloda.py:12:zip://d/x.csv") == "mloda.py:12:zip://d/x.csv"
-
     def test_long_uri_without_secrets_returns_quickly(self) -> None:
         value = "s3://b/" + "a" * 40000
         assert scrub_credentials(value) == value
@@ -2159,6 +2153,19 @@ class TestRegisteredSecretsScope:
         text = f"username={_LITERAL}"
         assert current_registered_secrets() == frozenset()
         assert scrub_credentials(text) == text
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            pytest.param("mloda.py:12:zip://d/x.csv", id="bare-file-line"),
+            pytest.param("at foo/bar.py:12:hf://d/x.csv", id="at-path-file-line"),
+        ],
+    )
+    def test_file_line_prefix_kept_under_a_registered_scope(self, text: str) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+        with registered_secrets_scope(frozenset({"unrelated-secret-123"})):
+            assert scrub_credentials(text) == text
 
     def test_inside_a_scope_the_literal_is_masked(self) -> None:
         from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope

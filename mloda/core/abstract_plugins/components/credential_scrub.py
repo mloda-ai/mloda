@@ -41,7 +41,7 @@ _FREE_TEXT_URI_PATTERN = re.compile(
     r"(?:(?P<userinfo>[^/?#\s]*)@)?"
     r"(?P<host>(?:\[[0-9A-Fa-f:.]+\]|[\w.~-]*)(?::\d+)?)"
     # `;` or percent-escape parameters directly after a pathless host (stops at `/`, so the path group still owns
-    # later segments, at a chain `::`, so a chained URI keeps its own match, and a `;` before another URI is no parameter).
+    # later segments, at a chain `::`, so a chained URI keeps its match; a `;` before another URI is no parameter).
     rf"(?P<params>(?:(?:;(?![A-Za-z][\w+.:-]*://)|(?=%))(?:(?!{_CHAIN_COLONS})[^\s?#\"'<>\];/])*)+)?"
     r"(?P<path>/[^\s?#\"'<>\]]*)?"
     r"(?P<query>[?#][^\s\"'<>)\]]*)?"

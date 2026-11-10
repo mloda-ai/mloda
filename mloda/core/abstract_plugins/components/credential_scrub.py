@@ -94,10 +94,10 @@ def _keyword_pattern(plain: str) -> re.Pattern[str]:
 
 # A quote continues the value unless it is followed by a delimiter or end, so `hun'!ter2` leaves no fragment.
 _KEYWORD_PATTERN = _keyword_pattern(r"[^;&\s'\"]*(?:['\"](?![\s,;&:)\]}>]|$)[^;&\s'\"]+)*")
-# The identity form: a plain value ends at `/` or `::` too, so one path segment is masked, not the rest of the path.
+# The identity form: a segment value ends at `/` or at a `::` that continues a chain; an inner quote run continues it.
 _KEYWORD_SEGMENT_PATTERN = _keyword_pattern(
-    rf"(?:(?!{_CHAIN_AFTER_VALUE})[^;&/\s'\"])*"
-    rf"(?:['\"]++(?=[^;&/\s'\"])(?:(?!{_CHAIN_AFTER_VALUE})[^;&/\s'\"])+)*"
+    rf"(?:(?!{_CHAIN_AFTER_VALUE})(?:::(?:[a-z][a-z0-9+.-]{{0,31}}::)*+|[^;&/\s'\"]))*"
+    rf"(?:['\"]++(?=[^;&/\s'\"])(?:(?!{_CHAIN_AFTER_VALUE})(?:::(?:[a-z][a-z0-9+.-]{{0,31}}::)*+|[^;&/\s'\"]))+)*"
 )
 _PATH_VALUE = re.compile(r"/[\w.-]+(?:/[\w.-]+)+/?")
 _COUNT_NAME = re.compile(r"(?:max|min|num|total)[_-]?token", re.IGNORECASE)
@@ -277,18 +277,22 @@ _PASSWORD_AS_SCHEME_PATTERN = re.compile(
 )
 
 
-# Non-whitespace text after a jdbc match, cut at the next `://` so repeated URIs scan linearly.
+# The jdbc tail (used by _uri_projection and the jdbc marker cut): non-whitespace text after a jdbc match, cut at the
+# next `://` so repeated URIs scan linearly.
 _JDBC_TAIL_PATTERN = re.compile(r"(?:(?!://)\S)*")
-# Private-use marker appended after a dropped jdbc path, and by _scrub_uri_match after a dropped query,
-# key=value path or hidden percent path; _cut_marker_tail cuts the token tail that follows it.
+# Private-use marker appended by _scrub_uri_match after a dropped query, key=value path or hidden percent path;
+# _cut_marker_tail cuts the token tail that follows it.
 _JDBC_CUT = "\ue001"
-# The cut runs through the token and stops only before a real chain `::` or a `,`/`;` that starts a new `scheme://` item.
+# The cut runs through the token, stopping only before a real chain `::` or a `,`/`;` starting a new `scheme://` item.
 # A non-chain `::` swallows its whole protocol run, so the bounded run fails closed instead of stopping mid-run.
 _CHAIN_AFTER_VALUE_PATTERN = re.compile(_CHAIN_AFTER_VALUE)
 _JDBC_CUT_PATTERN = re.compile(
     _JDBC_CUT + rf"(?:(?!{_CHAIN_AFTER_VALUE}|[,;][\"'(\[{{<]*[A-Za-z][A-Za-z0-9+.-]*://)"
     r"(?:::(?:[a-z][a-z0-9+.-]{0,31}::)*+|\S))*"
 )
+# Own marker for a dropped jdbc path: its cut runs to the next `://` (jdbc tails are never fsspec chains).
+_JDBC_PATH_CUT = "\ue002"
+_JDBC_PATH_CUT_PATTERN = re.compile(_JDBC_PATH_CUT + _JDBC_TAIL_PATTERN.pattern)
 # Closers then sentence punctuation then whitespace or end: the match ended a value, nothing was cut off.
 _CLOSING_END_PATTERN = re.compile(r"[\"'<>)\]}]+[,:;.!?]*(?:\s|$)")
 # Closers then a separator and an opener: a following list or dict item, if the URL itself was opened.
@@ -320,7 +324,7 @@ def _uri_projection(match: re.Match[str]) -> str | None:
     if scheme.startswith("jdbc:"):
         tail = _JDBC_TAIL_PATTERN.search(match.string, match.end())
         if any(mark in path + (tail[0] if tail else "") for mark in "=;@"):
-            return f"{scheme}://{container}{host}{_JDBC_CUT}"
+            return f"{scheme}://{container}{host}{_JDBC_PATH_CUT}"
     if any("=" in segment.partition(":")[2] for segment in path.split("/")):
         return None
     return f"{scheme}://{container}{host}{_cut_hidden_percent(scheme, host, path)}"
@@ -341,7 +345,7 @@ def _cut_hidden_percent(scheme: str, host: str, path: str) -> str:
 
 def _cut_dropped_tail(match: re.Match[str], scrubbed: str, dropped: bool) -> str:
     """Append the cut marker when a dropped value may continue past the match (it stops at a quote or bracket)."""
-    if scrubbed.endswith(_JDBC_CUT) or not dropped:
+    if scrubbed.endswith((_JDBC_CUT, _JDBC_PATH_CUT)) or not dropped:
         return scrubbed
     text, end, start = match.string, match.end(), match.start()
     if text.startswith("::", end) and _CHAIN_AFTER_VALUE_PATTERN.match(text, end) is None:
@@ -711,6 +715,7 @@ _PASSES: list[tuple[re.Pattern[str], Any]] = [
     (_FREE_TEXT_USERINFO_PATTERN, r"\g<scheme>://"),
     (_FREE_TEXT_URI_PATTERN, _scrub_uri_match),
     (_JDBC_CUT_PATTERN, _cut_marker_tail),
+    (_JDBC_PATH_CUT_PATTERN, _cut_marker_tail),
     (_PASSWORD_AS_SCHEME_PATTERN, _password_scheme_repl),
     (_AUTHORIZATION_PATTERN, _authorization_repl),
     (_BEARER_PATTERN, r"\g<scheme> ***"),
@@ -722,14 +727,14 @@ _PASSES: list[tuple[re.Pattern[str], Any]] = [
 
 
 def _scrub_passes(text: str) -> str:
-    text = text.replace(_JDBC_CUT, "\ufffd")
+    text = text.replace(_JDBC_CUT, "\ufffd").replace(_JDBC_PATH_CUT, "\ufffd")
     for pattern, repl in _PASSES:
         text = _sub_quoted_keys(text) if pattern is _QUOTED_KEY_PATTERN else pattern.sub(repl, text)
     return text
 
 
 def _scrub_tracked(text: str) -> tuple[str, list[int]]:
-    text = text.replace(_JDBC_CUT, "\ufffd")
+    text = text.replace(_JDBC_CUT, "\ufffd").replace(_JDBC_PATH_CUT, "\ufffd")
     origin = list(range(len(text)))
     for pattern, repl in _PASSES:
         text, origin = _sub_tracked(

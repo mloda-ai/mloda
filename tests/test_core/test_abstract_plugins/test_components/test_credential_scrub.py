@@ -2026,6 +2026,19 @@ class TestScrubUriProjection:
             pytest.param(
                 "zip://d;%74oken=S::a::b::c::d::s3://b/x", "zip://d", id="host-param-long-protocol-run-fails-closed"
             ),
+            pytest.param(
+                "jdbc:sqlserver://h;databaseName=d;password={a;ZQ://S};encrypt=true",
+                "jdbc:sqlserver://h://S};encrypt=true",
+                id="jdbc-braced-value-cut-to-next-scheme",
+            ),
+            pytest.param(
+                "jdbc:sqlserver://h;password=a::ZQ://S", "jdbc:sqlserver://h://S", id="jdbc-double-colon-cut-to-scheme"
+            ),
+            pytest.param(
+                "jdbc:sqlserver://h;password=a::zq::ZQ://S",
+                "jdbc:sqlserver://h://S",
+                id="jdbc-double-colon-chain-cut-to-scheme",
+            ),
         ],
     )
     def test_scrub_keeps_host_and_path_only(self, uri: str, expected: str) -> None:
@@ -2149,6 +2162,9 @@ class TestScrubUriFailClosed:
             pytest.param("zip://d;token=SE::CRET::s3://b/x", "CRET", id="host-param-double-colon-chain-fragment"),
             pytest.param("zip://d;%74oken=SE::cretval::x", "cretval", id="host-param-lower-case-chain-shaped-fragment"),
             pytest.param("https://h/x?password=a]b://SECRETVAL", "SECRETVAL", id="query-value-scheme-shaped-tail"),
+            pytest.param(
+                "jdbc:sqlserver://h;databaseName=d;password={a;ZQ://S};encrypt=true", "ZQ", id="jdbc-braced-zq"
+            ),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:

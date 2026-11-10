@@ -15,6 +15,8 @@ All fixture markers carry a "c772" suffix so they cannot collide in the global p
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Mapping
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -175,17 +177,22 @@ class TestCapturelessDefinitionDiagnostic:
             {} if captureless else {"operation_r2353": "sum"}
         )
 
-    def test_captureless_mapping_without_marker_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+    @pytest.mark.parametrize("wrap", [dict, MappingProxyType], ids=["dict", "mappingproxy"])
+    def test_captureless_mapping_without_marker_warns(
+        self, wrap: Callable[[dict[str, PropertySpec]], Mapping[str, PropertySpec]], caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Defining such a class without the marker emits a definition-time WARNING mentioning the marker."""
         with caplog.at_level(logging.WARNING):
 
             class _CapturelessNoMarkerC772(FeatureChainParserMixin):
                 PREFIX_PATTERN = r".*__recognize_c772$"
-                PROPERTY_MAPPING = {
-                    OPERATION_KEY_C772: PropertySpec(
-                        "op", allowed_values=("normalize",), context=True, strict_validation=True
-                    ),
-                }
+                PROPERTY_MAPPING = wrap(
+                    {
+                        OPERATION_KEY_C772: PropertySpec(
+                            "op", allowed_values=("normalize",), context=True, strict_validation=True
+                        ),
+                    }
+                )
 
             assert _CapturelessNoMarkerC772.PREFIX_PATTERN.endswith("__recognize_c772$")
 

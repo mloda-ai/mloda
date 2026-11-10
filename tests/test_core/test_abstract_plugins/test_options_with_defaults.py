@@ -12,7 +12,7 @@ Group 3 (``resolve_subtype`` delegating to this mechanism) is already pinned by
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import pytest
@@ -58,7 +58,7 @@ def _options_with_defaults(fg: type[FeatureGroup], options: Options) -> Any:
 
 def _declared_default(fg: type[FeatureGroup], key: str) -> Any:
     """The default declared for ``key`` in ``fg``'s PROPERTY_MAPPING."""
-    mapping: dict[str, PropertySpec] = fg.PROPERTY_MAPPING or {}
+    mapping: Mapping[str, PropertySpec] = fg.PROPERTY_MAPPING or {}
     return mapping[key].default
 
 

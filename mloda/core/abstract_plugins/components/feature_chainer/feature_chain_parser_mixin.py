@@ -58,7 +58,7 @@ import os
 from copy import copy
 from numbers import Number
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -659,7 +659,7 @@ class FeatureChainParserMixin:
 
     @classmethod
     def _first_rejecting_guard(
-        cls, options: Options, property_mapping: dict[str, PropertySpec] | None
+        cls, options: Options, property_mapping: Mapping[str, PropertySpec] | None
     ) -> tuple[str, Any] | None:
         """The first (key, value) a match_guard rejects, or None; see ``FeatureChainParser._first_rejecting_guard``."""
         return FeatureChainParser._first_rejecting_guard(options, property_mapping, logger)
@@ -671,7 +671,7 @@ class FeatureChainParserMixin:
 
     @classmethod
     def _validate_match_guards(
-        cls, result: bool, options: Options, property_mapping: dict[str, PropertySpec] | None
+        cls, result: bool, options: Options, property_mapping: Mapping[str, PropertySpec] | None
     ) -> bool:
         """Enforce the match_guard constraints once the parser matched; see ``FeatureChainParser``."""
         if not result:
@@ -744,11 +744,10 @@ class FeatureChainParserMixin:
         return FeatureChainParser.prefix_patterns_of(cls)
 
     @classmethod
-    def _get_property_mapping(cls) -> dict[str, PropertySpec] | None:
+    def _get_property_mapping(cls) -> Mapping[str, PropertySpec] | None:
         """Get property mapping from class attribute."""
-        if hasattr(cls, "PROPERTY_MAPPING"):
-            return cast(dict[str, PropertySpec] | None, cls.PROPERTY_MAPPING)
-        return None
+        mapping: Mapping[str, PropertySpec] | None = getattr(cls, "PROPERTY_MAPPING", None)
+        return mapping
 
     @classmethod
     def _extract_source_features(cls, feature: Feature) -> list[str]:

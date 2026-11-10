@@ -388,6 +388,12 @@ def _check_outputs(
                 failures.append(f"outputs: declared part '{name}~{part}' is missing from the result")
     if cls.replaces_rows():
         return failures
+    if data.types and adapter.row_count(result) != data.row_count:
+        failures.append(
+            f"outputs: {adapter.row_count(result)} rows came back for {data.row_count} input rows; "
+            "declare replaces_rows() when the group changes the row count"
+        )
+        return failures
     for column, values in data.to_python_dict().items():
         if column in names or column not in present:
             continue

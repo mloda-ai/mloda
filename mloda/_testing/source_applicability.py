@@ -7,7 +7,7 @@ from typing import Any, Final
 
 from mloda.core.abstract_plugins.components.data_access_collection import CONNECTION_HANDLE_OPTION
 from mloda.core.abstract_plugins.components.input_data.claim_route import NamePolicy
-from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION, SourceFeatureGroup
 
 # Sentinel returned by a pointer hook when the group takes no pointer value.
 NO_POINTER: Final[Any] = object()
@@ -30,7 +30,9 @@ def source_applicability(group: type[SourceFeatureGroup], has_pointer: bool) -> 
     searched = any(route.searched for route in routes)
     return SourceApplicability(
         pointer=has_pointer,
-        data_access_handle=searched and not any(CONNECTION_HANDLE_OPTION in route.required_options for route in routes),
+        data_access_handle=searched
+        and HANDLE_OPTION in group.declared_option_keys()
+        and not any(CONNECTION_HANDLE_OPTION in route.required_options for route in routes),
         searched_route=searched,
         query_route=group.serves_query_text(),
         checked_route=any(route.names is NamePolicy.CHECKED for route in routes),

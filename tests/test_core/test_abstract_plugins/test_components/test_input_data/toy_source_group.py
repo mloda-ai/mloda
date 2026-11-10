@@ -15,10 +15,13 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.provider import (
+    HANDLE_OPTION,
+    HANDLE_SPEC,
     INPUT_DATA_STAGE,
     ClaimRoute,
     CoreDeclineCode,
     NamePolicy,
+    PropertySpec,
     SourceFeatureGroup,
     SourceMatch,
     record_match_rejection,
@@ -72,6 +75,8 @@ def column_values(result: list[Any], column: str) -> list[Any]:
 
 class ToySourceBase(SourceFeatureGroup):
     """Implements the hooks over in-memory sources; declares no routes, so it never claims."""
+
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {HANDLE_OPTION: HANDLE_SPEC}
 
     @classmethod
     def find_sources(

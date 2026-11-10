@@ -24,11 +24,7 @@ class TestApiDataFGContract(SourceFeatureGroupTestMixin):
     expected_source = "api_data:k"
     switched_off = {
         "test_a_refusing_input_data_match_gate_keeps_the_source_untouched_and_reports_the_reason": Cause.OTHER,
-        "test_a_handle_of_another_kind_yields_no_sources": Cause.OTHER,
-        "test_an_unknown_handle_records_a_rejection_listing_the_known_handles": Cause.OTHER,
-        "test_a_non_str_handle_is_no_narrowing_and_is_rejected_by_the_option_check": Cause.OTHER,
         "test_pointed_with_a_missing_column_aborts_naming_source_and_columns": Cause.OTHER,
-        "test_missing_column_text_hides_the_columns_unless_a_handle_narrows_the_search": Cause.OTHER,
         "test_a_typo_of_a_known_column_suggests_it_only_where_the_columns_are_shown": Cause.OTHER,
         "test_a_subclass_takes_over_a_pointer_keyed_on_its_parent": Cause.OTHER,
     }
@@ -78,22 +74,10 @@ class TestApiDataFGContract(SourceFeatureGroupTestMixin):
         assert "no clearance" in elimination.reason
         assert elimination.code is CoreDeclineCode.EXTENDER_REFUSED
 
-    # Diverges: data_access_handle is not an ApiDataFG option, so any handle value is ignored.
-    def test_an_unknown_handle_records_a_rejection_listing_the_known_handles(self) -> None:
-        feature = Feature(self.present_column, self._options(context={HANDLE_OPTION: "unknown_handle_for_suite"}))
-        assert self._claims(feature, self.own_dac())
-        assert self._claimed_match(feature).source == self.expected_source
-
-    # Diverges: a handle of another kind is ignored, so the own source is still claimed.
-    def test_a_handle_of_another_kind_yields_no_sources(self) -> None:
-        _, handle = self.foreign_handle_dac()
+    # data_access_handle is not an ApiDataFG option, so any handle value is ignored.
+    @pytest.mark.parametrize("handle", ["unknown_handle_for_suite", "foreign_file", ["own_handle"]])
+    def test_any_handle_value_is_ignored_and_the_own_source_is_claimed(self, handle: Any) -> None:
         feature = Feature(self.present_column, self._options(context={HANDLE_OPTION: handle}))
-        assert self._claims(feature, self.own_dac())
-        assert self._claimed_match(feature).source == self.expected_source
-
-    # Diverges: a non-str handle is ignored too, not rejected.
-    def test_a_non_str_handle_is_no_narrowing_and_is_rejected_by_the_option_check(self) -> None:
-        feature = Feature(self.present_column, self._options(context={HANDLE_OPTION: ["own_handle"]}))
         assert self._claims(feature, self.own_dac())
         assert self._claimed_match(feature).source == self.expected_source
 
@@ -106,16 +90,12 @@ class TestApiDataFGContract(SourceFeatureGroupTestMixin):
         assert self.present_column in message
         assert exc_info.value.result.eliminations[ApiDataFG].code is CoreDeclineCode.COLUMN_NOT_FOUND
 
-    # Diverges: a pointer, not a handle, narrows the search and reveals the columns.
-    def test_missing_column_text_hides_the_columns_unless_a_handle_narrows_the_search(self) -> None:
+    # An unpointed missing column names the source but does not show the columns.
+    def test_an_unpointed_missing_column_names_the_source_and_hides_the_columns(self) -> None:
         unpointed = self._evaluate(Feature(self.missing_column), self.own_dac())
         reason = unpointed.eliminations[ApiDataFG].reason
         assert self.expected_source in reason
         assert self.present_column not in reason
-
-        with pytest.raises(FeatureResolutionError) as exc_info:
-            self._resolve(self._pointed(self.missing_column), self.own_dac())
-        assert self.present_column in str(exc_info.value)
 
     # Diverges: a pointed typo is checked against the collection's set, and no handle narrows.
     def test_a_typo_of_a_known_column_suggests_it_only_where_the_columns_are_shown(self) -> None:

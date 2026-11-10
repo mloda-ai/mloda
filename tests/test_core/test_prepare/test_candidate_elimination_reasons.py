@@ -868,8 +868,31 @@ class TestEliminationStages:
             "OpToyVariantPandas on PandasDataFrame follows variant 'skip_nan', which this feature does not allow; "
             'to allow it add {"allow_variants": ("skip_nan",)} to the feature\'s options'
         )
-        assert err.result.eliminations[toy.OpToyVariantFG] == Elimination(stage="variant", reason=reason)
+        assert err.result.eliminations[toy.OpToyVariantFG] == Elimination(
+            stage="variant", reason=reason, variants=("skip_nan",), allow_variants=("skip_nan",)
+        )
         assert f"  - OpToyVariantFG (rule variant): {reason}" in str(err)
+
+    @pytest.mark.parametrize(
+        "group_name, feature_name",
+        [("OpToyVariantEmptyFG", "optoyvar_empty"), ("OpToyVariantOtherFG", "optoyvar_other")],
+    )
+    def test_variant_stage_without_admitting_allow_variants(self, group_name: str, feature_name: str) -> None:
+        toy = _op_toy()
+        group = getattr(toy, group_name)
+        opts: dict[str, Any] = {toy.OPTOY_KEY: "sum"}
+        if group_name == "OpToyVariantOtherFG":
+            opts["allow_variants"] = ("other",)
+        feature = Feature(feature_name, opts, compute_framework="PandasDataFrame")
+        plugins: FeatureGroupEnvironmentMapping = {group: {PandasDataFrame, PyArrowTable}}
+
+        with accessible_implementations({toy.OpToyVariantPandas, toy.OpToyVariantPyArrow}):
+            err = _fail(feature, plugins)
+
+        elimination = err.result.eliminations[group]
+        assert elimination.stage == "variant"
+        assert elimination.variants == ("skip_nan",)
+        assert elimination.allow_variants == ()
 
     def test_links_stage(self) -> None:
         feature = Feature(LINKS_FEATURE)

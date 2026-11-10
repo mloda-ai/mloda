@@ -134,7 +134,7 @@ Every result is a one-line summary followed by the result as JSON, which is also
 call has `isError` set and one error shape: `{"error": {"code", "message", "details", "audit_id"}}` with the codes
 `validation_failed`, `policy_denied`, `limit_exceeded`, `plan_invalid`, `plan_stale`, `missing_input_feature` and
 `internal`. Details point at the request by JSON pointer, with a suggestion when a close name exists. A
-`missing_input_feature` detail holds `feature_group`, `feature` and `missing_inputs` (never the available columns).
+`missing_input_feature` detail holds `feature_group`, `feature` and `missing_inputs` (never the available columns). A `variant_not_allowed` detail holds `feature_group` and `variants`, plus a `fix` of `{"allow_variants": [...]}` only when the caller may set that option.
 
 ## What stays on the server
 

@@ -61,6 +61,9 @@ class Elimination:
     stage: EliminationStage
     reason: str
     code: DeclineCode | None = None
+    # Only the "variant" stage fills these: every blocked variant name, and the allow_variants value that admits it.
+    variants: tuple[str, ...] = ()
+    allow_variants: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

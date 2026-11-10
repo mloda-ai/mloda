@@ -2,6 +2,7 @@
 
 import base64
 import dataclasses
+import importlib
 import json
 import logging
 import sqlite3
@@ -30,6 +31,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plan_info import PlanStep
+from mloda.core.prepare.resolution_types import Elimination, EvaluationResult
 from mloda.interfaces.service.catalog import Catalog
 from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig, load_settings
 from mloda.interfaces.service.errors import ERROR_CODES, is_error
@@ -104,6 +106,7 @@ STEP_KEYS = {
     "join_type",
     "contract_version",
     "divergences",
+    "allowed_variants",
 }
 SUCCESS_KEYS = {"plan_id", "expires_at", "normalized_request", "steps", "lineage", "estimate", "egress", "policy"}
 DENIED_CALLS: list[str] = []
@@ -729,6 +732,71 @@ class TestUnresolved:
         _assert_no_paths(result, tmp_path, "sales.csv")
 
 
+def _variant_planner(tmp_path: Path, toy: Any, **kwargs: Any) -> Planner:
+    settings = _settings(tmp_path, compute_frameworks=("PandasDataFrame",), **kwargs)
+    base = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, toy.OpToyVariantFG})
+    return Planner(
+        settings,
+        Catalog.build(settings, base),
+        signing_key=KEY,
+        principal="alice",
+        plugin_collector=base,
+        clock=lambda: CLOCK_START,
+    )
+
+
+class TestVariantNotAllowed:
+    @pytest.mark.parametrize(
+        "kwargs, fix, message_part",
+        [
+            ({"allow_options": ("optoy_kind", "allow_variants")}, True, "add the fix"),
+            ({"allow_options": ("optoy_kind",)}, False, "service policy"),
+            ({"trusted_caller": True}, True, "add the fix"),
+        ],
+    )
+    def test_blocked_variant_is_named(
+        self, tmp_path: Path, kwargs: dict[str, Any], fix: bool, message_part: str
+    ) -> None:
+        toy = importlib.import_module(
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+        )
+        request = {"features": [{"name": toy.OPTOY_VARIANT_FEATURE, "options": {toy.OPTOY_KEY: "sum"}}]}
+
+        result = _variant_planner(tmp_path, toy, **kwargs).explain(request)
+
+        error = _error(result, "validation_failed")
+        details = [d for d in error["details"] if d.get("problem") == "variant_not_allowed"]
+        assert len(details) == 1
+        detail = details[0]
+        assert detail["path"] == "/features/0"
+        assert detail["feature_group"] == "OpToyVariantFG"
+        assert detail["variants"] == [toy.OPTOY_VARIANT]
+        assert message_part in detail["message"]
+        assert "suggestion" not in detail
+        if fix:
+            assert detail["fix"] == {"allow_variants": [toy.OPTOY_VARIANT]}
+        else:
+            assert "fix" not in detail
+        dumped = json.dumps(result)
+        assert "does not allow" not in dumped
+        assert "OpToyVariantPandas" not in dumped
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+    def test_multiple_identified_keeps_the_generic_detail(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        elimination = Elimination(stage="variant", reason="x", variants=("v",), allow_variants=("v",))
+        failed = EvaluationResult(identified={CsvFG: set(), JsonFG: set()}, eliminations={SqliteFG: elimination})
+        diagnosis = ResolutionDiagnosis(records=[], complete=False, feature_name="income", failed_result=failed)
+        monkeypatch.setattr(mloda, "diagnose", lambda *args, **kwargs: diagnosis)
+
+        result = _planner(_settings(tmp_path)).explain({"features": ["income"]})
+
+        error = _error(result, "validation_failed")
+        assert _has_detail(error, path="/features/0", problem="unresolved")
+        assert not _has_detail(error, problem="variant_not_allowed")
+
+
 class TestDiagnosisWithoutFeatureName:
     def test_scope_at_inaccessible_source_group_is_validation_failed(self, tmp_path: Path) -> None:
         request = {"features": [{"name": "income", "feature_group": "SqliteFG"}]}
@@ -1004,11 +1072,13 @@ class TestSuccess:
             source_compute_framework=None,
             contract_version=3,
             divergences=(implementation, group),
+            allowed_variants=("fast", "skip_nan"),
         )
 
         record = _step_record(1, step, None)
 
         assert record["contract_version"] == 3
+        assert record["allowed_variants"] == ["fast", "skip_nan"]
         assert record["divergences"] == [
             {
                 "source": "feature_group",

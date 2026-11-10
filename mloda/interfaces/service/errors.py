@@ -88,7 +88,7 @@ def failure_result(action: str, error: Exception, *, trusted: bool = False) -> d
 def raised_result(action: str, type_name: str) -> dict[str, dict[str, Any]]:
     """An internal error naming only the exception class; the audit id is logged."""
     result = error_result("internal", f"{action} failed with {type_name}.")
-    _LOGGER.error("%s failed audit_id=%s", action, result["error"]["audit_id"])
+    _LOGGER.error("%s failed audit_id=%s raised=%s", action, result["error"]["audit_id"], type_name)
     return result
 
 

@@ -882,31 +882,17 @@ class TestResolveFeatureIsNonThrowing:
         assert result.error is not None
         assert handle in result.error
         assert ABORT_ECHO_SECRET not in result.error
+        assert result.raised == "ValueError"
 
     def test_an_ordinary_raising_matcher_is_not_a_credential_refusal(self) -> None:
         result = self._resolve_abort("bad", secret_dac=False, marked=False)
 
         assert result.error is not None
         assert result.credential_refusal is False
+        assert result.raised is None
 
     def test_a_marked_match_abort_records_the_raised_class_name(self) -> None:
         assert self._resolve_abort("bad", secret_dac=False).raised == "ValueError"
-
-    def test_a_contained_matcher_raise_leaves_raised_unset(self) -> None:
-        assert self._resolve_abort("bad", secret_dac=False, marked=False).raised is None
-
-    def test_a_misspelled_credential_handle_is_a_credential_refusal_and_raised(self) -> None:
-        dac = DataAccessCollection(credentials={"rf_registered_handle_pn3": {"token": ABORT_ECHO_SECRET}})
-
-        result = resolve_feature(
-            "chs_vault_a",
-            options=Options(group={HANDLE_KEY: "rf_misspelled_handle_vq7w"}),
-            plugin_collector=PluginCollector.enabled_feature_groups({ChsVaultFG}),
-            data_access_collection=dac,
-        )
-
-        assert result.credential_refusal is True
-        assert result.raised is not None
 
     def test_success_with_a_credential_collection_has_no_error(self) -> None:
         dac = DataAccessCollection(credentials={"vault": {"token": ABORT_ECHO_SECRET}})

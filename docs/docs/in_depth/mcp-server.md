@@ -226,7 +226,7 @@ rules. Exit codes: `0` success, `2` an error result or nothing could run (bad co
 FeatureGroup that failed while planning or running, reported as `internal`), `3` a completed run whose result
 carries `failed_rows`, `1` any other failure. Every error result is also written to stderr as `mloda: error: <message>`.
 A credential handle refusal (a misspelled or unset handle) shows its text, naming handles and keys only, in that message
-and on stderr. The MCP server reports it as `internal` and logs the text with the audit id; `describe` does the same.
+and on stderr. The MCP server reports it as `internal` and logs the text with the audit id; `describe` does the same, and also reports a plugin raise that escaped resolution as `internal`, naming only its class.
 
 A completed run result has a `failed_rows` list only when feature groups reported rows that got no value. Each entry has
 `column`, `reason` (a short code), `row_count`, `rows` and `truncated`; `rows` holds at most 1000 positions unless

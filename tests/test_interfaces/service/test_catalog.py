@@ -820,9 +820,12 @@ class TestCredentialCatalog:
         assert (MISSPELLED if handle is not None else CRED_KEY) in message
         assert CRED_SECRET not in message
 
-    def test_a_non_credential_match_abort_is_internal_and_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+    @pytest.mark.parametrize("trusted", [True, False])
+    def test_a_non_credential_match_abort_is_internal_and_logged(
+        self, caplog: pytest.LogCaptureFixture, trusted: bool
+    ) -> None:
         collector = PluginCollector.enabled_feature_groups({*ALLOWED, CatalogRaisingLocalMcp9})
-        catalog = Catalog.build(Settings(), collector)
+        catalog = Catalog.build(Settings(trusted_caller=trusted), collector)
 
         with caplog.at_level(logging.ERROR, logger="mloda.interfaces.service"):
             result = catalog.describe(MCP9_RAISES_FEATURE)
@@ -832,7 +835,10 @@ class TestCredentialCatalog:
         audit_id = result["error"]["audit_id"]
         records = [r for r in caplog.records if r.name == "mloda.interfaces.service" and r.levelno == logging.ERROR]
         assert len(records) == 1
-        assert audit_id in records[0].getMessage()
+        logged = records[0].getMessage()
+        assert audit_id in logged
+        assert "StubAbortError" in logged
+        assert "boom detail zq9" not in logged
         dumped = json.dumps({**result, "error": {**result["error"], "audit_id": None}})
         assert "No FeatureGroup provides" not in dumped
         assert "boom detail zq9" not in dumped

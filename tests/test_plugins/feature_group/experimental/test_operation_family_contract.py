@@ -405,7 +405,7 @@ LOOP_INPUT_CASES: dict[str, tuple[Callable[[], TypedTestData], list[Options]]] =
     "missing_value": (_missing_value_table, [Options(), Options({"group_by_features": ["region"]})]),
     "text_cleaning": (
         lambda: TypedTestData({"text": (DataType.STRING, ["Hello, The World!"] * _ROWS)}),
-        [Options({"cleaning_operations": ("normalize",)})],
+        [Options({"cleaning_operations": ("normalize", "remove_punctuation")})],
     ),
     "geo_distance": (
         lambda: TypedTestData({"a": (DataType.LIST, _GEO_POINTS), "b": (DataType.LIST, list(reversed(_GEO_POINTS)))}),

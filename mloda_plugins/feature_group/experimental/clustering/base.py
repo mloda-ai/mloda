@@ -94,6 +94,8 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     - For algorithms that don't require a specific number of clusters (like DBSCAN), use 'auto' as the k_value
     """
 
+    CONTRACT_VERSION = 1
+
     # Option keys for clustering configuration
     ALGORITHM = "algorithm"
     K_VALUE = "k_value"

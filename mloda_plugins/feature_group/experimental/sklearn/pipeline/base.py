@@ -75,6 +75,8 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup
     5. **Artifact Management**: Automatic persistence and reuse of fitted pipelines
     """
 
+    CONTRACT_VERSION = 1
+
     # Option keys for pipeline configuration
     PIPELINE_NAME = "pipeline_name"
     PIPELINE_STEPS = "pipeline_steps"

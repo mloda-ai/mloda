@@ -116,6 +116,8 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Opera
     - You can specify a custom time column by setting the reference_time option in the feature group options
     """
 
+    CONTRACT_VERSION = 1
+
     # Option keys for forecasting configuration
     ALGORITHM = "algorithm"
     HORIZON = "horizon"

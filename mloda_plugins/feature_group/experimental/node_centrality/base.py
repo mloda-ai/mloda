@@ -119,6 +119,8 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup)
     the output. This is because feature groups are currently split by different options.
     """
 
+    CONTRACT_VERSION = 1
+
     # Define supported centrality types
     CENTRALITY_TYPES = {
         "degree": "Measures the number of connections a node has",

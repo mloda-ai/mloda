@@ -245,7 +245,7 @@ To test that a subclass takes over only for its own option, call `check_subclass
 
 For a name-path group, pass `requests=` to `check_feature_group_shape` to probe and run the names you request; a `base_options` value that contradicts them is reported as a failure with the abort text.
 
-For an operation group, `check_operation_group_shape` (or `assert_operation_group_shape`) from `mloda._testing.operation_group_shape` checks that each Implementation declares valid `supported` subtypes and `divergences` records and declines the rest; pass `alias_pairs=` for aliased subtypes and `probe=` for groups that resolve subtypes without an option key.
+For an operation group, `check_operation_group_shape` (or `assert_operation_group_shape`) from `mloda._testing.operation_group_shape` checks that the group declares a `CONTRACT_VERSION` and that each Implementation declares valid `supported` subtypes and `divergences` records and declines the rest; pass `alias_pairs=` for aliased subtypes and `probe=` for groups that resolve subtypes without an option key.
 
 For a source group, inherit `SourceFeatureGroupTestMixin` from `mloda._testing.source.source_suite` (pytest required) to run the shared claim, decline and abort contract (switching off an inherited contract test, by a skip mark or an override, needs a declared `switched_off` cause); `NO_POINTER` marks a group that takes no pointer, and a pointed-only group (no searched route) runs the suite unchanged, claiming through `own_pointer()`. File, database and document groups use `read_file_suite`, `read_db_suite` and `read_document_suite` in the same package.
 

@@ -17,6 +17,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.implementation import current_implementations
 from tests.test_plugins.feature_group.experimental.test_operation_family_contract import (
     ADAPTERS,
+    IMPLEMENTATION_CASES,
     LOOP_INPUT_CASES,
     OPERATION_FAMILIES,
 )
@@ -73,31 +74,24 @@ CASES = {
     ),
 }
 
-# Group defects and check limits found by this suite, pinned until fixed; divergence records cannot excuse them.
+# Known failures pinned until fixed; divergence records cannot excuse them.
+# Group defect: sklearn rejects an empty array on zero rows.
 _EMPTY_SKLEARN = r"zero_rows: run on zero rows raised: Found array with 0 sample\(s\)"
 KNOWN_FAILURES: dict[str, tuple[str, ...]] = {
     "clustering-PandasClustering": (_EMPTY_SKLEARN,),
     "dimensionality_reduction-PandasDimensionalityReduction": (_EMPTY_SKLEARN,),
     "sklearn_pipeline-PandasSklearnPipeline": (_EMPTY_SKLEARN,),
+    # Group defect: the frame grows by the forecast horizon without declaring replaces_rows(),
+    # and zero rows leave no training data.
     "forecasting-PandasForecasting": (
         r"outputs: input column '\w+' was changed",
         r"zero_rows: run on zero rows raised: No training data available",
     ),
+    # Check limit: the zero-row input drops the LIST element type.
     "geo_distance-PandasGeoDistance": (
         r"zero_rows: run on zero rows raised: column 'a': .*needs an arrow_types override",
     ),
 }
-
-_PARAMS = [
-    pytest.param(
-        name,
-        impl,
-        id=f"{name}-{impl.__name__}",
-        marks=pytest.mark.skipif(not impl.compute_framework.is_available(), reason="framework unavailable"),
-    )
-    for name, family in OPERATION_FAMILIES.items()
-    for impl in family[1]
-]
 
 
 def test_every_operation_family_has_a_shape_case() -> None:
@@ -105,11 +99,13 @@ def test_every_operation_family_has_a_shape_case() -> None:
 
 
 def test_known_failures_name_real_params() -> None:
-    assert set(KNOWN_FAILURES) <= {p.id for p in _PARAMS}
+    assert set(KNOWN_FAILURES) <= {p.id for p in IMPLEMENTATION_CASES}
 
 
-@pytest.mark.parametrize(("name", "impl"), _PARAMS)
+@pytest.mark.parametrize(("name", "impl"), IMPLEMENTATION_CASES)
 def test_shipped_group_passes_shape_check_for_requested_names(name: str, impl: type[Any]) -> None:
+    if not impl.compute_framework.is_available():
+        pytest.skip(f"{impl.compute_framework.__name__} not installed")
     case = CASES[name]
     for module in case.needs:
         pytest.importorskip(module)
@@ -124,7 +120,7 @@ def test_shipped_group_passes_shape_check_for_requested_names(name: str, impl: t
     failures = check_feature_group_shape(
         group, options, requests=case.requests, input_data=case.data(), adapter=adapter, require_run=True
     ).failures
-    unexpected = [f for f in failures if not any(re.search(p, f) for p in pinned)]
+    unexpected = [f for f in failures if not any(re.match(p, f) for p in pinned)]
     assert not unexpected, f"unexpected failures: {unexpected}"
-    fixed = [p for p in pinned if not any(re.search(p, f) for f in failures)]
+    fixed = [p for p in pinned if not any(re.match(p, f) for f in failures)]
     assert not fixed, f"fixed, drop from KNOWN_FAILURES: {fixed}"

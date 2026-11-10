@@ -1167,6 +1167,7 @@ def test_repeated_jdbc_scheme_prefix_scrubs_fast(build: Callable[[int], str], n:
         pytest.param(lambda k: "zip://d;%74oken=S" + "::a" * k, 20_000, id="dropped_value_colon_run"),
         pytest.param(lambda k: "https://h/x?password=a]" + ",(a" * k, 20_000, id="marker_comma_paren_run"),
         pytest.param(lambda k: "https://h/x?password=a]" + ";aaa" * k, 20_000, id="marker_semicolon_run"),
+        pytest.param(lambda k: "s3://b/" + "a;token=1/" * k, 20_000, id="secret_named_path_parts"),
     ],
 )
 def test_repeated_userinfo_shaped_prefix_scrubs_fast(build: Callable[[int], str], n: int) -> None:
@@ -2360,6 +2361,11 @@ class TestScrubUriFailClosed:
             pytest.param(
                 "jdbc:sqlserver://h;databaseName=d;password={a;ZQ://S};encrypt=true", "ZQ", id="jdbc-braced-zq"
             ),
+            pytest.param("s3://b/x;v=1;password = ZQXPASSONE", "ZQXPASSONE", id="spaced-eq-after-benign-param"),
+            pytest.param("s3://b/x;sig=Bearer ZQXBEARER2;", "ZQXBEARER2", id="bearer-sig-trailing-semicolon"),
+            pytest.param("s3://b;password =ZQXPASSTHREE;v=1", "ZQXPASSTHREE", id="host-param-space-before-eq"),
+            pytest.param("s3://b;token:ZQXCHAINONE::s3://b/y", "ZQXCHAINONE", id="host-colon-token-chain"),
+            pytest.param("zip://d;token:ZQXCHAINTWO::s3://b/y", "ZQXCHAINTWO", id="zip-colon-token-chain"),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:

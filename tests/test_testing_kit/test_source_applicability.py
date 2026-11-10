@@ -37,11 +37,14 @@ def _pointed_only() -> ClaimRoute:
 def test_a_group_with_no_searched_route_has_no_data_access_handle() -> None:
     result = source_applicability(_make_group(_pointed_only()), True)
     assert result.data_access_handle is False
+    assert result.searched_route is False
 
 
 def test_a_plain_searched_group_with_a_pointer() -> None:
     result = source_applicability(_make_group(_searched()), True)
-    assert result == SourceApplicability(pointer=True, data_access_handle=True, query_route=False, checked_route=False)
+    assert result == SourceApplicability(
+        pointer=True, data_access_handle=True, query_route=False, checked_route=False, searched_route=True
+    )
 
 
 def test_has_pointer_false_clears_the_pointer_flag() -> None:

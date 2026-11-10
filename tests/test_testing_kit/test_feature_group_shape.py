@@ -600,6 +600,20 @@ def test_secret_failure_suggests_handle(make: Callable[[], type[FeatureGroup]], 
         assert any("api_key" in f for f in result.failures), result.failures
 
 
+@pytest.mark.parametrize("make", [make_plain_api_key, make_env_named_key, make_bearer_default])
+def test_check_feature_group_secrets_matches_the_shape_secret_failures(make: Callable[[], type[FeatureGroup]]) -> None:
+    group = make()
+    secrets = fgs.check_feature_group_secrets(group)
+    expected = tuple(f for f in check_feature_group_shape(group).failures if f.startswith("secrets:"))
+    assert expected
+    assert secrets.failures == expected
+
+
+def test_check_feature_group_secrets_passes_a_clean_group() -> None:
+    group = make_secret_group({"agg": PropertySpec("Aggregation.", default="mean")})
+    assert fgs.check_feature_group_secrets(group).failures == ()
+
+
 def test_secret_default_failure_does_not_echo_value() -> None:
     result = check_feature_group_shape(make_bearer_default())
     assert any("auth" in f for f in result.failures), result.failures

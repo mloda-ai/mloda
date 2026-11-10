@@ -314,7 +314,7 @@ _PASSWORD_AS_SCHEME_PATTERN = re.compile(
 # The jdbc tail (used by _uri_projection and the jdbc marker cut): non-whitespace text after a jdbc match, cut at the
 # next `://` so repeated URIs scan linearly.
 _JDBC_TAIL_PATTERN = re.compile(r"(?:(?!://)\S)*")
-_PARAMETER_REGION_PATTERN = re.compile(r"[;:][^=]*=|[?#]\S")
+_PARAMETER_REGION_PATTERN = re.compile(r"[;:][^=;:]*=|[?#]\S")
 # Private-use marker appended by _scrub_uri_match after a dropped query, key=value path or hidden percent path;
 # _cut_marker_tail cuts the token tail that follows it.
 _JDBC_CUT = "\ue001"
@@ -330,7 +330,7 @@ _JDBC_CUT_PATTERN = re.compile(
 _JDBC_PATH_CUT = "\ue002"
 _JDBC_PATH_TAIL = r"(?:(?!://)\S)*+"
 _JDBC_PATH_CUT_PATTERN = re.compile(
-    _JDBC_PATH_CUT + _JDBC_PATH_TAIL + r"(?:(?:(?<==)[ \t]+|[ \t]*=[ \t]*)" + _JDBC_PATH_TAIL + ")?"
+    _JDBC_PATH_CUT + _JDBC_PATH_TAIL + r"(?:(?:(?<==)[ \t]+|[ \t]*=[ \t]*)" + _JDBC_PATH_TAIL + ")*+"
 )
 # Closers then sentence punctuation then whitespace or end: the match ended a value, nothing was cut off.
 _CLOSING_END_PATTERN = re.compile(r"[\"'<>)\]}]+[,:;.!?]*(?:\s|$)")
@@ -401,7 +401,10 @@ def _hides_parameter_region(match: re.Match[str]) -> bool:
     if end >= len(text) or text[end] not in _MATCH_END_TERMINATORS:
         return False
     if start > 0 and text[start - 1] == _OPENER_OF.get(text[end]):
-        return False
+        # A closer glued to a token character is mid-path, not the end of the opened value.
+        following = text[end + 1 : end + 2]
+        if not (following.isalnum() or following == "_"):
+            return False
     tail = _JDBC_TAIL_PATTERN.match(text, end)
     return tail is not None and _PARAMETER_REGION_PATTERN.search(tail[0]) is not None
 

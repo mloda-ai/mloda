@@ -1285,6 +1285,9 @@ def test_slash_password_host_repeat_scrubs_fast() -> None:
         (lambda k: "password=" + "a'" * k, 20_000, "a keyword value with a repeated quote run"),
         (lambda k: "zip://d;x" + "::x" * k, 20_000, "a host param followed by a repeated chain run"),
         (lambda k: "zip://d;x" + "::a://" * k, 20_000, "a host param followed by a repeated chained scheme run"),
+        (lambda k: "s3://b/x]" + ";" * k, 40_000, "a semicolon run after a mid-path closer"),
+        (lambda k: "s3://b/x]" + ":" * k, 40_000, "a colon run after a mid-path closer"),
+        (lambda k: "jdbc:sqlserver://b;x" + " = a" * k, 40_000, "repeated spaced jdbc pairs"),
     ],
     ids=[
         "dotted_prefix",
@@ -1295,6 +1298,9 @@ def test_slash_password_host_repeat_scrubs_fast() -> None:
         "keyword_quote_run",
         "host_param_chain_run",
         "host_param_chained_scheme_run",
+        "mid_path_closer_semicolon_run",
+        "mid_path_closer_colon_run",
+        "spaced_jdbc_pairs_run",
     ],
 )
 def test_dotted_and_multiline_inputs_scrub_fast(build: Callable[[int], str], n: int, what: str) -> None:
@@ -2405,6 +2411,20 @@ class TestScrubUriFailClosed:
                 "SECRETVALUE",
                 id="jdbc-password-spaces-around-equals-after-param",
             ),
+            pytest.param(
+                "jdbc:sqlserver://b;user = u;password = SECRETVALUE", "SECRETVALUE", id="jdbc-two-spaced-pairs"
+            ),
+            pytest.param(
+                "jdbc:sqlserver://b;databaseName = d;password = SECRETVALUE",
+                "SECRETVALUE",
+                id="jdbc-spaced-param-then-spaced-password",
+            ),
+            pytest.param("'s3://b/x'y;v=SECRETVALUE", "SECRETVALUE", id="opened-quote-mid-path-quote-param-region"),
+            pytest.param('"s3://b/x"y?v=SECRETVALUE', "SECRETVALUE", id="opened-double-quote-mid-path-query-region"),
+            pytest.param(
+                "[s3://b/x]y;v=SECRETVALUE]", "SECRETVALUE", id="opened-bracket-mid-path-bracket-param-region"
+            ),
+            pytest.param("<s3://b/x>y;v=SECRETVALUE", "SECRETVALUE", id="opened-angle-mid-path-angle-param-region"),
             pytest.param("s3://b/x]y;v=SECRETVALUE", "SECRETVALUE", id="mid-path-close-bracket-param-region"),
             pytest.param("s3://b/x'y;v=SECRETVALUE", "SECRETVALUE", id="mid-path-quote-param-region"),
             pytest.param('s3://b/x"y;v=SECRETVALUE', "SECRETVALUE", id="mid-path-double-quote-param-region"),

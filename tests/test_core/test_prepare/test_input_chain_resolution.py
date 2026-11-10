@@ -16,7 +16,7 @@ from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
-from mloda.core.prepare.input_chain import resolution_environment, resolution_key
+from mloda.core.prepare.input_chain import normalize_input_name, resolution_environment, resolution_key
 from mloda.provider import DefaultOptionKeys, FeatureGroup, escalate_match_abort
 from mloda.user import (
     DataAccessCollection,
@@ -529,7 +529,7 @@ def test_a_derived_chain_steps_aside_a_source_that_has_the_root_name() -> None:
     assert set(result.identified) == {groups[0]}
 
 
-class _CountingMapping(dict):  # type: ignore[type-arg]
+class _CountingMapping(dict[Any, Any]):
     walks = 0
 
     def items(self) -> Any:
@@ -565,51 +565,51 @@ def test_plugin_universe_is_walked_on_every_call_outside_a_scope() -> None:
     assert plugins.walks == 3
 
 
-def _tagged(v: Any) -> tuple[type, Any]:
-    return type(v), v
+_BIG = 100_000
 
 
-def _per_element_walk(value: Any) -> Any:
-    return [_tagged(v) for v in value]
-
-
-_BIG = 200_000
-_BIG_VALUES: list[Any] = [
-    pytest.param(list(range(_BIG)), id="list-int"),
-    pytest.param([f"s{i}" for i in range(_BIG)], id="list-str"),
-    pytest.param(tuple(range(_BIG)), id="tuple-int"),
-]
-
-
-def _assert_cheaper_than_reference(snapshot: Callable[[], Any], value: Any) -> None:
+@pytest.mark.parametrize("wrap", [lambda v: v, lambda v: Options({"big": v})], ids=["bare", "options"])
+@pytest.mark.parametrize(
+    "make",
+    [
+        pytest.param(lambda: list(range(_BIG)), id="list-int"),
+        pytest.param(lambda: [f"s{i}" for i in range(_BIG)], id="list-str"),
+        pytest.param(lambda: tuple(range(_BIG)), id="tuple-int"),
+        pytest.param(lambda: set(range(_BIG)), id="set-int"),
+        pytest.param(lambda: [i if i % 2 == 0 else i + 0.5 for i in range(_BIG)], id="list-int-float"),
+        pytest.param(lambda: [i if i % 2 == 0 else None for i in range(_BIG)], id="list-int-none"),
+    ],
+)
+def test_flat_scalar_value_is_snapshotted_cheaper_than_one_call_per_element(
+    make: Callable[[], Any], wrap: Callable[[Any], Any]
+) -> None:
+    value = make()
+    wrapped = wrap(value)
     ref_cpu = key_cpu = float("inf")
     for _ in range(3):
         start = time.process_time()
-        _per_element_walk(value)
+        [resolution_key(v) for v in value]
         ref_cpu = min(ref_cpu, time.process_time() - start)
         start = time.process_time()
-        snapshot()
+        resolution_key(wrapped)
         key_cpu = min(key_cpu, time.process_time() - start)
-        if key_cpu < ref_cpu:
+        if key_cpu * 3 < ref_cpu:
             break
-    assert key_cpu < ref_cpu, f"snapshot cpu {key_cpu:.4f}s not below per-element walk {ref_cpu:.4f}s"
+    assert key_cpu * 3 < ref_cpu, f"snapshot cpu {key_cpu:.4f}s not 3x below per-element {ref_cpu:.4f}s"
 
 
-@pytest.mark.parametrize("value", _BIG_VALUES)
-def test_flat_scalar_value_is_snapshotted_cheaper_than_a_per_element_walk(value: Any) -> None:
-    _assert_cheaper_than_reference(lambda: resolution_key(value), value)
-
-
-@pytest.mark.parametrize("value", _BIG_VALUES)
-def test_flat_scalar_option_value_is_snapshotted_cheaper_than_a_per_element_walk(value: Any) -> None:
-    options = Options({"big": value})
-
-    _assert_cheaper_than_reference(lambda: resolution_key(options), value)
-
-
-@pytest.mark.parametrize("make", [list, tuple, set, frozenset])
-def test_equal_content_in_distinct_objects_gives_equal_keys(make: Callable[[Any], Any]) -> None:
-    assert resolution_key(make([1, 2, 3])) == resolution_key(make([3, 2, 1] if make in (set, frozenset) else [1, 2, 3]))
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        ([1, 2, 3], [1, 2, 3]),
+        ((1, 2, 3), (1, 2, 3)),
+        ({1, 2, 3}, {3, 2, 1}),
+        (frozenset([1, 2, 3]), frozenset([3, 2, 1])),
+        ([0, 0.5, None], [0, 0.5, None]),
+    ],
+)
+def test_equal_content_in_distinct_objects_gives_equal_keys(left: Any, right: Any) -> None:
+    assert resolution_key(left) == resolution_key(right)
 
 
 @pytest.mark.parametrize(
@@ -625,6 +625,11 @@ def test_equal_content_in_distinct_objects_gives_equal_keys(make: Callable[[Any]
         ([1, 2], [[1, 2]]),
         ([1, 2], [(int, (1, 2))]),
         ([], ()),
+        ([0, 0.5], [0, "0.5"]),
+        ([0, 0.5], (0, 0.5)),
+        ({1, 2.0}, frozenset({1, 2.0})),
+        ([0, None], [0, 0.0]),
+        (set(), frozenset()),
         ([DefaultOptionKeys.in_features], [str(DefaultOptionKeys.in_features.value)]),
     ],
 )
@@ -653,3 +658,74 @@ def test_renaming_a_feature_inside_a_list_option_changes_the_options_key() -> No
         after = resolution_key(options)
 
     assert before != after
+
+
+def test_plugin_mapping_changed_in_place_inside_a_scope_changes_the_environment_key() -> None:
+    plugins: FeatureGroupEnvironmentMapping = {ChainA2320: {PyArrowTable}}
+
+    with run_match_cache():
+        before = resolution_environment(plugins, None, None)
+        plugins[ChainLeaf2320] = {PyArrowTable}
+        after = resolution_environment(plugins, None, None)
+
+    assert before != after
+
+
+class _IterCountingList(list[Any]):
+    iters = 0
+
+    def __iter__(self) -> Iterator[Any]:
+        type(self).iters += 1
+        return super().__iter__()
+
+
+def _counted_feature() -> Feature:
+    return Feature(LEAF, options={"values": _IterCountingList([1, 2])})
+
+
+def test_a_given_options_key_equals_the_computed_one() -> None:
+    feature = Feature(LEAF, options={"a": 1, "b": [1, 2]})
+
+    assert resolution_key(feature, options_key=resolution_key(feature.options)) == resolution_key(feature)
+
+
+def test_a_given_options_key_is_not_walked_again() -> None:
+    plugins: FeatureGroupEnvironmentMapping = {ChainLeaf2320: {PyArrowTable}}
+    _IterCountingList.iters = 0
+    feature = _counted_feature()
+
+    key = resolution_key(feature.options)
+    assert _IterCountingList.iters == 1
+
+    resolution_key(feature, options_key=key)
+    assert _IterCountingList.iters == 1
+
+    with run_match_cache():
+        environment = resolution_environment(plugins, None, None)
+        normalize_input_name(environment, feature, ChainLeaf2320(), None, options_key=key)
+        assert _IterCountingList.iters == 1
+
+        normalize_input_name(environment, _counted_feature(), ChainLeaf2320(), None)
+        assert _IterCountingList.iters == 2
+
+
+def test_the_real_flow_passes_the_options_key_to_name_normalization(monkeypatch: pytest.MonkeyPatch) -> None:
+    real = normalize_input_name
+    calls: list[tuple[Any, Any]] = []
+
+    def spy(environment: Any, feature: Feature, feature_group: Any, output_part: Any, **kwargs: Any) -> None:
+        calls.append((kwargs.get("options_key"), resolution_key(feature.options)))
+        real(environment, feature, feature_group, output_part, **kwargs)
+
+    monkeypatch.setattr("mloda.core.prepare.identify_feature_group.normalize_input_name", spy)
+    plugins: FeatureGroupEnvironmentMapping = {
+        ChainA2320: {PyArrowTable},
+        ChainB2320: {PyArrowTable},
+        ChainMiddle2320: {PyArrowTable},
+        ChainLeaf2320: {PyArrowTable},
+    }
+
+    IdentifyFeatureGroupClass.evaluate(Feature(CHOICE), plugins, None, None)
+
+    assert len(calls) >= 2
+    assert all(given is not None and given == snapshot for given, snapshot in calls)

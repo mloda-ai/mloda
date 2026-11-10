@@ -1222,7 +1222,8 @@ class IdentifyFeatureGroupClass:
         attempted = copy(feature)
         attempted.options = self._matched_options.get(feature_group, feature.options)._fork()
         output_part = self._output_parts.get(feature_group)
-        feature_key = resolution_key(attempted)
+        options_key = resolution_key(attempted.options)
+        feature_key = resolution_key(attempted, options_key=options_key)
         key = feature_group, feature_key, output_part
         state = input_chain_state(self._environment)
         if key in state.completed:
@@ -1235,7 +1236,9 @@ class IdentifyFeatureGroupClass:
             failure: InputChainOutcome | None = None
             entries: tuple[Feature | str, ...] | None = None
             try:
-                normalize_input_name(self._environment, attempted, feature_group(), output_part)
+                normalize_input_name(
+                    self._environment, attempted, feature_group(), output_part, options_key=options_key
+                )
                 try:
                     entries = declared_inputs(self._environment, feature_group, attempted.options, attempted.name)
                 except NotImplementedError as exc:

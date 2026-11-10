@@ -57,7 +57,7 @@ class _Identity:
         return isinstance(other, _Identity) and self.value is other.value
 
 
-def resolution_key(value: Any, seen: frozenset[int] = frozenset()) -> Any:
+def resolution_key(value: Any, seen: frozenset[int] = frozenset(), *, options_key: Any = None) -> Any:
     """Snapshot resolution inputs; Feature/Options equality intentionally omits some of them."""
     if isinstance(value, (Feature, Options, dict, list, tuple, set, frozenset)):
         if id(value) in seen:
@@ -65,16 +65,17 @@ def resolution_key(value: Any, seen: frozenset[int] = frozenset()) -> Any:
         seen = seen | {id(value)}
     if type(value) in _FLAT_CONTAINERS:
         element_types = set(map(type, value))
-        if len(element_types) == 1:
-            (element_type,) = element_types
-            if element_type in _SCALAR_TYPES:
-                flat = tuple(value) if type(value) in (list, tuple) else frozenset(value)
-                return type(value), element_type, flat
+        if element_types and element_types <= _SCALAR_TYPES:
+            copy = tuple if type(value) in (list, tuple) else frozenset
+            if len(element_types) == 1:
+                (element_type,) = element_types
+                return type(value), element_type, copy(value)
+            return type(value), copy(zip(map(type, value), value))
     if isinstance(value, Feature):
         return (
             Feature,
             str(value.name),
-            resolution_key(value.options, seen),
+            resolution_key(value.options, seen) if options_key is None else options_key,
             value.feature_group_scope,
             resolution_key(value.required_declarations, seen),
             value.domain,
@@ -104,7 +105,7 @@ def resolution_key(value: Any, seen: frozenset[int] = frozenset()) -> Any:
 
 
 def _plugin_universe(accessible_plugins: FeatureGroupEnvironmentMapping) -> frozenset[Any]:
-    # The mapping is fixed after pre-filtering, so one walk per run scope suffices.
+    # The mapping is fixed after pre-filtering; the length key only catches a group added or removed in place.
     return frozenset((group, frozenset(frameworks)) for group, frameworks in accessible_plugins.items())
 
 
@@ -117,7 +118,10 @@ def resolution_environment(
     """A nested or standalone resolution must not borrow another run's grants or plugin universe."""
     environment = (
         _Identity(_RUN.get()),
-        run_cached((_PLUGINS, _Identity(accessible_plugins)), lambda: _plugin_universe(accessible_plugins)),
+        run_cached(
+            (_PLUGINS, _Identity(accessible_plugins), len(accessible_plugins)),
+            lambda: _plugin_universe(accessible_plugins),
+        ),
         None if links is None else frozenset(links),
         _Identity(data_access_collection),
         _Identity(current_reader_probe_scope()),
@@ -165,9 +169,13 @@ def normalize_input_name(
     feature: Feature,
     feature_group: FeatureGroup,
     output_part: tuple[str, str] | None,
+    *,
+    options_key: Any = None,
 ) -> None:
     requested = feature.name
-    key = type(feature_group), str(requested), resolution_key(feature.options), output_part
+    if options_key is None:
+        options_key = resolution_key(feature.options)
+    key = type(feature_group), str(requested), options_key, output_part
 
     def compute() -> _NameOutcome:
         options = feature.options._fork()

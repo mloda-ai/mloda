@@ -90,10 +90,7 @@ def make_root_fg(
     append_columns: bool = False,
     calls: list[list[str]] | None = None,
 ) -> type[FeatureGroup]:
-    """Root group serving ``column``; with ``seen`` and ``observe_key`` it records that option as ``seen["child"]``.
-
-    ``append_columns`` appends one pyarrow column per requested feature; ``calls`` gets one name list per call.
-    """
+    """Root group serving ``column``; can record ``observe_key`` in ``seen``, append columns, log ``calls``."""
 
     def feature_names_supported(cls: Any) -> set[str]:
         return {column}

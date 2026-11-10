@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 from mloda.provider import ComputeFramework
 from packaging.requirements import Requirement
+from packaging.version import Version
 
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
@@ -97,7 +98,7 @@ def test_core_dependencies_stay_empty() -> None:
 
 
 def test_every_pyarrow_requirement_has_floor() -> None:
-    """Every pyarrow requirement in any extra must carry the >=14.0.1 floor."""
+    """Every pyarrow requirement in any extra must carry a >= floor of at least 14.0.1."""
     bare: dict[str, str] = {}
     found = 0
     for group, deps in _load_optional_deps().items():
@@ -108,10 +109,11 @@ def test_every_pyarrow_requirement_has_floor() -> None:
             if req.name != "pyarrow":
                 continue
             found += 1
-            if ">=14.0.1" not in {str(spec) for spec in req.specifier}:
+            floors = [Version(spec.version) for spec in req.specifier if spec.operator == ">="]
+            if not floors or max(floors) < Version("14.0.1"):
                 bare[group] = dep
     assert found > 0, "No pyarrow requirement found in any extra"
-    assert not bare, f"pyarrow requirements missing the >=14.0.1 floor: {bare}"
+    assert not bare, f"pyarrow requirements missing a >=14.0.1 (or higher) floor: {bare}"
 
 
 @pytest.mark.parametrize(
@@ -126,7 +128,8 @@ def test_every_pyarrow_requirement_has_floor() -> None:
         ("duckdb", "pyarrow>=14.0.1"),
         ("sqlite", "pyarrow>=14.0.1"),
         ("iceberg", "pyarrow>=14.0.1"),
-        ("spark", "pyarrow>=14.0.1"),
+        ("spark", "pyarrow>=15.0.0"),
+        ("spark", "pyspark>=4.0"),
     ],
 )
 def test_extra_exists_and_contains_dependency(extra: str, dependency: str) -> None:

@@ -527,6 +527,9 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
     ("quote_in_value_bare", "password=hun'ter2", ["ter2", "hun"], ["password=***"]),
     ("quote_in_value_double_quoted", '"password=hun\'ter2"', ["ter2", "hun"], ['"password=***"']),
     ("quote_in_value_single_quoted", "'password=hun'ter2'", ["ter2", "hun"], ["'password=***'"]),
+    ("quote_then_bang_in_value", "password=hun'!ter2", ["ter2", "hun"], ["password=***"]),
+    ("quote_then_backslash_in_value", "password=ab'\\cd", ["cd", "ab'"], ["password=***"]),
+    ("quote_then_at_in_value", "password=ab'@cd", ["cd", "ab'"], ["password=***"]),
     ("quote_closing_kept", "'password=abc'", ["abc"], ["'password=***'"]),
     ("quote_closing_kept_in_list", "['password=abc']", ["abc"], ["['password=***']"]),
     ("quote_then_space_kept", "password=abc' x", ["abc"], ["password=***' x"]),
@@ -1134,6 +1137,7 @@ def test_slash_password_host_repeat_scrubs_fast() -> None:
         (lambda k: ",\n" * k, 20_000, "repeated comma newline runs"),
         (lambda k: "password=" + "a'" * k, 20_000, "a keyword value with a repeated quote run"),
         (lambda k: "zip://d;x" + "::x" * k, 20_000, "a host param followed by a repeated chain run"),
+        (lambda k: "zip://d;x" + "::a://" * k, 20_000, "a host param followed by a repeated chained scheme run"),
     ],
     ids=[
         "dotted_prefix",
@@ -1143,6 +1147,7 @@ def test_slash_password_host_repeat_scrubs_fast() -> None:
         "comma_newlines",
         "keyword_quote_run",
         "host_param_chain_run",
+        "host_param_chained_scheme_run",
     ],
 )
 def test_dotted_and_multiline_inputs_scrub_fast(build: Callable[[int], str], n: int, what: str) -> None:
@@ -1983,8 +1988,12 @@ class TestScrubUriProjection:
             pytest.param(
                 "ValueError:Failed:zip://d/x.csv", "ValueError:***://d/x.csv", id="exception-prefix-masked-accepted"
             ),
-            pytest.param("password=hun'ter2", "password=***", id="quote-in-keyword-value-no-fragment-placeholder"),
             pytest.param("zip://d;token=SEC'RET", "zip://d;token=***", id="host-param-quote-in-value-no-fragment"),
+            pytest.param(
+                "zip://d;token=SEC'!RET", "zip://d;token=***", id="host-param-quote-bang-in-value-no-fragment"
+            ),
+            pytest.param("deploy.sh:12:Pa55word://host", "deploy.sh:***://host", id="file-line-upper-case-tail-masked"),
+            pytest.param("creds.json:1:Hunter2x://h", "creds.json:***://h", id="file-line-mixed-case-tail-masked"),
             pytest.param(
                 "https://h/x;password=hun'ter2", "https://h/x;password=***", id="path-param-quote-in-value-no-fragment"
             ),
@@ -2119,6 +2128,10 @@ class TestScrubUriFailClosed:
             ),
             pytest.param("password=hun'ter2", "ter2", id="keyword-quote-fragment"),
             pytest.param("zip://d;token=SEC'RET", "RET", id="host-param-quote-fragment"),
+            pytest.param("password=hun'!ter2", "ter2", id="keyword-quote-bang-fragment"),
+            pytest.param("password=ab'\\cd", "cd", id="keyword-quote-backslash-fragment"),
+            pytest.param("password=ab'@cd", "cd", id="keyword-quote-at-fragment"),
+            pytest.param("zip://d;token=SEC'!RET", "RET", id="host-param-quote-bang-fragment"),
             pytest.param("https://h/x;password=hun'ter2", "ter2", id="path-param-quote-fragment"),
             pytest.param("s3://b/token=SEC'RET/x.csv", "RET", id="key-value-path-quote-fragment"),
             pytest.param(

@@ -89,8 +89,8 @@ def _keyword_pattern(plain: str) -> re.Pattern[str]:
     )
 
 
-# A quote continues the value only when a token char follows, so `hun'ter2` leaves no fragment.
-_KEYWORD_PATTERN = _keyword_pattern(r"[^;&\s'\"]*(?:['\"](?=[\w.~+/%-])[^;&\s'\"]+)*")
+# A quote continues the value unless it is followed by a delimiter or end, so `hun'!ter2` leaves no fragment.
+_KEYWORD_PATTERN = _keyword_pattern(r"[^;&\s'\"]*(?:['\"](?![\s,;&:)\]}>]|$)[^;&\s'\"]+)*")
 # The identity form: a plain value ends at `/` or `::` too, so one path segment is masked, not the rest of the path.
 _KEYWORD_SEGMENT_PATTERN = _keyword_pattern(r"(?:(?!::)[^;&/\s'\"])*")
 _PATH_VALUE = re.compile(r"/[\w.-]+(?:/[\w.-]+)+/?")
@@ -680,11 +680,14 @@ _SOURCE_EXTENSION = re.compile(
 )
 
 
+_SCHEME_TOKEN = re.compile(r"[a-z][a-z0-9+.-]*")
+
+
 def _password_scheme_repl(m: re.Match[str]) -> str:
     """Keep a `file.py:12:` location prefix; mask any other `user:password` before a scheme."""
     user = m["user"]
     line, _, tail = m["pw"].partition(":")
-    if _SOURCE_EXTENSION.search(user) and line.isascii() and line.isdigit() and tail:
+    if _SOURCE_EXTENSION.search(user) and line.isascii() and line.isdigit() and _SCHEME_TOKEN.fullmatch(tail):
         return m[0]
     return f"{user}:***"
 

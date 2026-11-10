@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import itertools
 import os
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote, unquote
@@ -495,6 +495,17 @@ class TestFileSourceUriProjection:
         assert match.access == build(8000)
 
     @pytest.mark.parametrize(
+        "build",
+        [
+            pytest.param(lambda n: "s3://b/token=S" + "::a" * n + "/x" + TOY_SUFFIX, id="colon-run"),
+            pytest.param(lambda n: "s3://b/token=S" + "'a" * n + "/x" + TOY_SUFFIX, id="quote-run"),
+            pytest.param(lambda n: "s3://b/token=S" + "'" * n + "/x" + TOY_SUFFIX, id="bare-quote-run"),
+        ],
+    )
+    def test_long_key_value_value_projects_linearly(self, build: Callable[[int], str]) -> None:
+        assert_runs_linearly(ToyFileFormatFG._source, build, 8000, "source projection of a long key=value value")
+
+    @pytest.mark.parametrize(
         "template,expected",
         [
             ("s3://AKIA:ab/hunter2@bucket/x{s}", "s3://bucket/x{s}"),  # nosec B105
@@ -575,6 +586,14 @@ class TestFileSourceUriProjection:
             ("ftp://h/x{s};type=i", "ftp://h/x{s};***"),
             ("http://[::1]/d;v=1/x{s}", "http://[::1]/d;***/x{s}"),
             ("s3://bucket;x/y{s}", "s3://bucket;***/y{s}"),
+            ("s3://b/token=SEC'RET/x{s}", "s3://b/token=***/x{s}"),  # nosec B105
+            ("s3://b/token=SE::CRET/x{s}", "s3://b/token=***/x{s}"),  # nosec B105
+            ("s3://b/token=SE''CRET/x{s}", "s3://b/token=***/x{s}"),  # nosec B105
+            ("s3://b/token=SE'::CRET/x{s}", "s3://b/token=***/x{s}"),  # nosec B105
+            ("s3://b/token=SE::cret::x/y{s}", "s3://b/token=***/y{s}"),  # nosec B105
+            ("s3://b/token=SECRET::s3://c/x{s}", "s3://b/token=***::s3://c/x{s}"),  # nosec B105
+            ("'s3://b/token=abc{s}'", "'s3://b/token=***'"),  # nosec B105
+            ("s3://b/token=SE::c1::c2::c3::c4::s3://c/x{s}", "s3://b/token=***//c/x{s}"),  # nosec B105
         ],
         ids=[
             "slash-in-password",
@@ -655,6 +674,14 @@ class TestFileSourceUriProjection:
             "ftp-type",
             "ipv6-host",
             "host-part",
+            "key-value-quote-in-value",
+            "key-value-double-colon-in-value",
+            "key-value-quote-run-in-value",
+            "key-value-quote-then-colons-in-value",
+            "key-value-lower-case-chain-shaped-value",
+            "key-value-real-chain-tail-kept",
+            "key-value-closing-quote-kept",
+            "key-value-long-protocol-run-fails-closed",
         ],
     )
     def test_uri_projection(self, template: str, expected: str) -> None:

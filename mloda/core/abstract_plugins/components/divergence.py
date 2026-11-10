@@ -90,8 +90,8 @@ def _names(label: str, value: object) -> frozenset[str]:
     return names
 
 
-def variant_names(label: str, value: object) -> frozenset[str]:
-    """The validated variant names; raises TypeError or ValueError naming the label."""
+def checked_names(label: str, value: object) -> frozenset[str]:
+    """The validated single-line names; raises TypeError or ValueError naming the label."""
     names = _names(label, value)
     for name in names:
         problem = _single_line_problem(label, name)
@@ -119,8 +119,8 @@ class Divergence:
             raise TypeError(f"kind must be a DivergenceKind, got {self.kind!r}")
         if not isinstance(self.cause, Cause):
             raise TypeError(f"cause must be a Cause, got {self.cause!r}")
-        object.__setattr__(self, "subtypes", _names("subtypes", self.subtypes))
-        object.__setattr__(self, "outputs", _names("outputs", self.outputs))
+        object.__setattr__(self, "subtypes", checked_names("subtypes", self.subtypes))
+        object.__setattr__(self, "outputs", checked_names("outputs", self.outputs))
         for label, value in (("reason", self.reason), ("variant", self.variant), ("docs", self.docs)):
             if value is not None and not isinstance(value, str):
                 raise TypeError(f"{label} must be a string, got {value!r}")

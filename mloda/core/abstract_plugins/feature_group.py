@@ -35,8 +35,8 @@ from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDe
 from mloda.core.abstract_plugins.components.divergence import (
     Divergence,
     DivergenceSource,
+    checked_names,
     stamped,
-    variant_names,
     validate_divergences,
 )
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -150,7 +150,7 @@ class FeatureGroup(ABC):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        cls.VARIANTS = variant_names(f"{cls.__name__}.VARIANTS", cls.VARIANTS)
+        cls.VARIANTS = checked_names(f"{cls.__name__}.VARIANTS", cls.VARIANTS)
         if "contract_version" in cls.__dict__:
             raise TypeError(f"{cls.__name__} declares 'contract_version'; a FeatureGroup spells it CONTRACT_VERSION.")
         version = cls.CONTRACT_VERSION

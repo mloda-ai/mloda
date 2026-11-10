@@ -211,6 +211,32 @@ class TestConstruction:
     def test_a_reason_of_exactly_the_limit_is_accepted(self) -> None:
         assert _record(reason="x" * MAX_REASON_LENGTH).reason == "x" * MAX_REASON_LENGTH
 
+    @pytest.mark.parametrize(
+        "name",
+        ["one\ntwo", "one\rtwo", "one\r\ntwo", "one\u2028two", "one\u2029two", "one\x85two", "one\n"],
+        ids=["newline", "cr", "crlf", "line_separator", "paragraph_separator", "nel", "trailing_newline"],
+    )
+    @pytest.mark.parametrize("field", ["subtypes", "outputs"])
+    def test_a_multi_line_name_is_rejected(self, field: str, name: str) -> None:
+        with pytest.raises(ValueError, match=field):
+            _record(**{field: [name]})
+
+    @pytest.mark.parametrize("name", ["a\x00b", "a\tb", "a\x1bb"], ids=["nul", "tab", "esc"])
+    @pytest.mark.parametrize("field", ["subtypes", "outputs"])
+    def test_a_non_printable_name_is_rejected(self, field: str, name: str) -> None:
+        with pytest.raises(ValueError, match=field):
+            _record(**{field: [name]})
+
+    @pytest.mark.parametrize("field", ["subtypes", "outputs"])
+    def test_a_name_just_over_the_limit_is_rejected(self, field: str) -> None:
+        with pytest.raises(ValueError, match=field):
+            _record(**{field: ["x" * (MAX_REASON_LENGTH + 1)]})
+
+    @pytest.mark.parametrize("field", ["subtypes", "outputs"])
+    def test_a_name_of_exactly_the_limit_is_accepted(self, field: str) -> None:
+        name = "x" * MAX_REASON_LENGTH
+        assert getattr(_record(**{field: [name]}), field) == frozenset({name})
+
     def test_not_implemented_needs_no_reason(self) -> None:
         assert _record(cause=Cause.NOT_IMPLEMENTED, reason="").reason == ""
 

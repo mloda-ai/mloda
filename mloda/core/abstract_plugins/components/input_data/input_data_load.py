@@ -6,7 +6,6 @@ from typing import Any
 from mloda.core.abstract_plugins.components.credential_scrub import (
     current_identity_secrets,
     mask_literals,
-    registered_secrets_scope,
 )
 from mloda.core.abstract_plugins.components.credential_access import hidden_credentials, restore_readable
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -17,6 +16,7 @@ from mloda.core.abstract_plugins.hook_context import (
     input_data_load_gate_scopes_active,
     instrument,
 )
+from mloda.core.abstract_plugins.input_data_load_marker import current_input_data_load_marker
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
 
@@ -72,25 +72,20 @@ def dispatch_input_data_load(
     if cfw is None:
         marker = features._load_marker
         if marker is not None:
-            secrets = marker.secrets
-            identity_secrets = marker.identity_secrets
-            active = marker.active
-            if active is not None and marker.has_extender:
-                with (
-                    active[0].activate(),
-                    active[1].activate(),
-                    registered_secrets_scope(secrets, identity_secrets),
-                ):
-                    return dispatch_input_data_load(
-                        owner,
-                        owner_type,
-                        load,
-                        data_access,
-                        features,
-                        identity=identity,
-                        data_access_format=data_access_format,
-                        loader_name=loader_name,
-                    )
+            snapshot = marker.context
+            # The marker check stops the recursion once the load runs inside its own calculation's context.
+            if snapshot is not None and current_input_data_load_marker.get() is not marker:
+                return snapshot.copy().run(
+                    dispatch_input_data_load,
+                    owner,
+                    owner_type,
+                    load,
+                    data_access,
+                    features,
+                    identity=identity,
+                    data_access_format=data_access_format,
+                    loader_name=loader_name,
+                )
             if marker.gate:
                 raise GateBypassError(
                     f"{owner_type.__qualname__} loaded its source after its calculation finished under an "

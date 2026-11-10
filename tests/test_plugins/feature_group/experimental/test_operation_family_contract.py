@@ -385,6 +385,7 @@ def _missing_value_table() -> TypedTestData:
 
 
 # One frame builder per family (a superset of columns) and the option variants that change the declared inputs.
+# The shipped groups shape suite runs each variant too, so do not narrow one without checking it.
 LOOP_INPUT_CASES: dict[str, tuple[Callable[[], TypedTestData], list[Options]]] = {
     "aggregation": (lambda: TypedTestData({"sales": (DataType.DOUBLE, _NUMBERS)}), [Options()]),
     "time_window": (
@@ -405,7 +406,7 @@ LOOP_INPUT_CASES: dict[str, tuple[Callable[[], TypedTestData], list[Options]]] =
     "missing_value": (_missing_value_table, [Options(), Options({"group_by_features": ["region"]})]),
     "text_cleaning": (
         lambda: TypedTestData({"text": (DataType.STRING, ["Hello, The World!"] * _ROWS)}),
-        [Options({"cleaning_operations": ("normalize",)})],
+        [Options({"cleaning_operations": ("normalize", "remove_punctuation")})],
     ),
     "geo_distance": (
         lambda: TypedTestData({"a": (DataType.LIST, _GEO_POINTS), "b": (DataType.LIST, list(reversed(_GEO_POINTS)))}),

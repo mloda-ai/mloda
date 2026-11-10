@@ -6,7 +6,7 @@ from abc import ABC
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from contextvars import ContextVar
-from typing import Any, ClassVar, NoReturn, final, get_origin
+from typing import Any, ClassVar, NamedTuple, NoReturn, final, get_origin
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.credential_access import (
@@ -62,6 +62,14 @@ _registry: SubclassRegistry[type["ComputeFramework"]] = SubclassRegistry()
 _current_compute_framework: ContextVar["ComputeFramework | None"] = ContextVar(
     "_current_compute_framework", default=None
 )
+
+
+class _StepFacts(NamedTuple):
+    """Per-step facts fixed before the feature group's code runs."""
+
+    step_uuid: UUID | None
+    credential_handles: tuple[str, ...]
+    bound_credential_handle: str | None
 
 
 def _timed(method: Callable[..., Any], features: Any) -> Callable[..., Any]:
@@ -477,6 +485,13 @@ class ComputeFramework(ABC):
     def run_calculation(
         self, feature_group: Any, features: Any, location: str | None, data: Any | None = None
     ) -> Any | None:
+        from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+
+        facts = (
+            _StepFacts(features.step_uuid, features.credential_handles, features.bound_credential_handle)
+            if isinstance(features, FeatureSet)
+            else None
+        )
         # A worker passes its resident frame back to the next step. Its cached columns
         # still apply, but a different frame would require resolving its schema early.
         incoming_columns = set(self.column_names) if data is None or data is self.data else set()
@@ -484,7 +499,7 @@ class ComputeFramework(ABC):
         if data is not None:
             self.data = data
 
-        self.run_validate_input_features(feature_group, features)
+        self.run_validate_input_features(feature_group, features, facts)
 
         # every one does this
         features = self.set_filter_engine(features)
@@ -492,7 +507,7 @@ class ComputeFramework(ABC):
         self._adopt_connection(self.data)
         # spans to set_column_names: a lazy frame may first resolve its schema in filter validation or there
         try:
-            data = self.run_calculate_feature(feature_group, features)
+            data = self.run_calculate_feature(feature_group, features, facts)
             data = self._append_dict_to_frame(feature_group, data)
 
             names = features.get_all_names()
@@ -530,7 +545,7 @@ class ComputeFramework(ABC):
                 raise
             self._raise_helpful_missing_column_error(feature_group, e)
 
-        self.run_validate_output_features(feature_group, features)
+        self.run_validate_output_features(feature_group, features, facts)
 
         # only a worker-resident instance hands its data on through the flight server
         if not location or self.mode is not ParallelizationMode.MULTIPROCESSING:
@@ -870,14 +885,21 @@ class ComputeFramework(ABC):
         return VarScope(_current_compute_framework, self)
 
     @final
-    def _run_hook(self, hook: ExtenderHook, feature_group: Any, method: Callable[..., Any], features: Any) -> Any:
+    def _run_hook(
+        self,
+        hook: ExtenderHook,
+        feature_group: Any,
+        method: Callable[..., Any],
+        features: Any,
+        facts: _StepFacts | None = None,
+    ) -> Any:
         """Dispatch method through hook's extender (if any), instrumenting the call with a HookContext.
         For FEATURE_GROUP_CALCULATE_FEATURE, also activates self so a nested source group load call can find it via ComputeFramework.current()."""
         extender = self.get_function_extender(hook)
         if hook is not ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE:
             if extender is None:
                 return method(self.data, features)
-            context = self._build_hook_context(hook, feature_group, features)
+            context = self._build_hook_context(hook, feature_group, features, facts)
 
             def _output_schema_reader(_: Any) -> OutputSchema | None:
                 # VALIDATE_OUTPUT_FEATURE's return value carries no schema, so this reads self.data
@@ -912,7 +934,7 @@ class ComputeFramework(ABC):
             if extender is None and fetch_extender is None:
                 return method(self.data, features)
 
-            context = self._build_hook_context(hook, feature_group, features)
+            context = self._build_hook_context(hook, feature_group, features, facts)
             marker.active = (self, context)
             with (
                 self.activate(),
@@ -939,13 +961,17 @@ class ComputeFramework(ABC):
                 features._load_marker = prior_marker
 
     @final
-    def run_validate_input_features(self, feature_group: Any, features: Any) -> None:
+    def run_validate_input_features(self, feature_group: Any, features: Any, facts: _StepFacts | None = None) -> None:
         self._check_declared_inputs(feature_group, features)
         if self.data is None:
             return
 
         self._run_hook(
-            ExtenderHook.VALIDATE_INPUT_FEATURE, feature_group, feature_group.validate_input_features, features
+            ExtenderHook.VALIDATE_INPUT_FEATURE,
+            feature_group,
+            feature_group.validate_input_features,
+            features,
+            facts,
         )
 
     @final
@@ -1025,7 +1051,7 @@ class ComputeFramework(ABC):
             )
 
     @final
-    def run_validate_output_features(self, feature_group: Any, features: Any) -> None:
+    def run_validate_output_features(self, feature_group: Any, features: Any, facts: _StepFacts | None = None) -> None:
         if self.data is None:
             return
 
@@ -1050,7 +1076,11 @@ class ComputeFramework(ABC):
         )
 
         self._run_hook(
-            ExtenderHook.VALIDATE_OUTPUT_FEATURE, feature_group, feature_group.validate_output_features, features
+            ExtenderHook.VALIDATE_OUTPUT_FEATURE,
+            feature_group,
+            feature_group.validate_output_features,
+            features,
+            facts,
         )
 
     @final
@@ -1129,7 +1159,9 @@ class ComputeFramework(ABC):
         return hooks.get(wrapper_function_enum)
 
     @final
-    def _build_hook_context(self, hook: ExtenderHook, feature_group: Any, features: Any) -> HookContext:
+    def _build_hook_context(
+        self, hook: ExtenderHook, feature_group: Any, features: Any, facts: _StepFacts | None = None
+    ) -> HookContext:
         from mloda.core.abstract_plugins.components.divergence import Divergence
         from mloda.core.abstract_plugins.components.feature_set import FeatureSet
         from mloda.core.abstract_plugins.components.input_data.source_feature_group import implementation_path
@@ -1160,9 +1192,10 @@ class ComputeFramework(ABC):
                 implementation_version = safe_field(
                     lambda: as_str(impl.version()), None, field=f"{implementation}.version", warn_once_for=impl
                 )
-            step_uuid = features.step_uuid
-            credential_handles = features.credential_handles
-            bound_credential_handle = features.bound_credential_handle
+            # no snapshot (direct run_* call): read the live FeatureSet
+            if facts is None:
+                facts = _StepFacts(features.step_uuid, features.credential_handles, features.bound_credential_handle)
+            step_uuid, credential_handles, bound_credential_handle = facts
             feature_names = tuple(str(name) for name in features.get_all_names())
             input_features = self._declared_input_feature_names(feature_group_cls, features)
             input_feature_edges = getattr(features, "declared_input_feature_edges", None)
@@ -1251,7 +1284,7 @@ class ComputeFramework(ABC):
         return result
 
     @final
-    def run_calculate_feature(self, feature_group: Any, features: Any) -> Any:
+    def run_calculate_feature(self, feature_group: Any, features: Any, facts: _StepFacts | None = None) -> Any:
         # Local import: feature_set -> feature -> compute_framework would cycle at module level.
         from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 
@@ -1268,6 +1301,7 @@ class ComputeFramework(ABC):
                 feature_group,
                 method,
                 features,
+                facts,
             )
         except (CredentialReadRefused, CredentialFieldMissing):
             raise

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
@@ -227,6 +227,24 @@ def divergence_order(r: Divergence) -> tuple[Any, ...]:
         r.variant or "",
         r.docs or "",
     )
+
+
+def divergence_dicts(records: Iterable[Divergence]) -> list[dict[str, Any]]:
+    """The records in deterministic order as plain dicts."""
+    return [
+        {
+            "source": r.source.value if r.source else None,
+            "framework": r.framework,
+            "kind": r.kind.value,
+            "cause": r.cause.value,
+            "subtypes": sorted(r.subtypes),
+            "outputs": sorted(r.outputs),
+            "reason": r.reason,
+            "variant": r.variant,
+            "docs": r.docs,
+        }
+        for r in sorted(records, key=divergence_order)
+    ]
 
 
 def allowed_variants(options: Options) -> frozenset[str]:

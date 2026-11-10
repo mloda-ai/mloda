@@ -16,6 +16,13 @@ import pytest
 
 from mloda.core.abstract_plugins.components.credential import Credential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.divergence import (
+    Cause,
+    Divergence,
+    DivergenceKind,
+    DivergenceSource,
+    stamped,
+)
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
@@ -95,6 +102,8 @@ STEP_KEYS = {
     "inputs",
     "source_feature_group",
     "join_type",
+    "contract_version",
+    "divergences",
 }
 SUCCESS_KEYS = {"plan_id", "expires_at", "normalized_request", "steps", "lineage", "estimate", "egress", "policy"}
 DENIED_CALLS: list[str] = []
@@ -941,6 +950,8 @@ class TestSuccess:
         assert step["inputs"] == []
         assert step["source_feature_group"] is None
         assert step["join_type"] is None
+        assert step["contract_version"] is None
+        assert step["divergences"] == []
 
     def test_join_step_record_names_both_sides_and_join_type(self) -> None:
         step = PlanStep(
@@ -958,6 +969,70 @@ class TestSuccess:
         assert record["feature_group"] == "CsvFG"
         assert record["source_feature_group"] == "JsonFG"
         assert record["join_type"] == "inner"
+        assert record["contract_version"] is None
+        assert record["divergences"] == []
+
+    def test_step_record_carries_the_contract_version_and_bounded_divergences(self) -> None:
+        implementation = stamped(
+            Divergence(
+                kind=DivergenceKind.VALUE,
+                cause=Cause.BACKEND,
+                outputs=frozenset({"b", " c", "a"}),
+                reason="  skips   NaN  ",
+            ),
+            DivergenceSource.IMPLEMENTATION,
+            "PandasDataFrame",
+        )
+        group = stamped(
+            Divergence(
+                kind=DivergenceKind.VARIANT,
+                cause=Cause.OTHER,
+                subtypes=frozenset({"y", "x"}),
+                reason="variant reason",
+                variant="fast",
+                docs="https://example.org/x",
+            ),
+            DivergenceSource.FEATURE_GROUP,
+            None,
+        )
+        step = PlanStep(
+            step_kind="compute",
+            feature_names=("a",),
+            feature_group=CsvFG,
+            compute_framework=None,
+            source_feature_group=None,
+            source_compute_framework=None,
+            contract_version=3,
+            divergences=(implementation, group),
+        )
+
+        record = _step_record(1, step, None)
+
+        assert record["contract_version"] == 3
+        assert record["divergences"] == [
+            {
+                "source": "feature_group",
+                "framework": None,
+                "kind": "variant",
+                "cause": "other",
+                "subtypes": ["x", "y"],
+                "outputs": [],
+                "reason": "variant reason",
+                "variant": "fast",
+                "docs": "https://example.org/x",
+            },
+            {
+                "source": "implementation",
+                "framework": "PandasDataFrame",
+                "kind": "value",
+                "cause": "backend",
+                "subtypes": [],
+                "outputs": ["a", "b", "c"],
+                "reason": "skips NaN",
+                "variant": None,
+                "docs": None,
+            },
+        ]
 
     def test_step_record_omits_the_credential_handles(self) -> None:
         step = PlanStep(

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.divergence import MAX_DOCS_LENGTH, divergence_dicts
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.interfaces.service.catalog import MAX_DESCRIPTION_LENGTH, Catalog, plugin_collector_for, sanitize_text
@@ -127,6 +128,19 @@ def _inputs(step: PlanStep, name: str) -> tuple[str, ...]:
     return step.input_feature_edges.get(name, step.input_feature_names)
 
 
+def _divergences(step: PlanStep) -> list[dict[str, Any]]:
+    records = divergence_dicts(step.divergences)
+    for record in records:
+        record["reason"] = sanitize_text(record["reason"], MAX_DESCRIPTION_LENGTH)
+        for key in ("subtypes", "outputs"):
+            record[key] = sorted(sanitize_text(name, MAX_NAME_LENGTH) for name in record[key])
+        if record["variant"] is not None:
+            record["variant"] = sanitize_text(record["variant"], MAX_DESCRIPTION_LENGTH)
+        if record["docs"] is not None:
+            record["docs"] = sanitize_text(record["docs"], MAX_DOCS_LENGTH)
+    return records
+
+
 def _step_record(index: int, step: PlanStep, alias: str | None) -> dict[str, Any]:
     reason = step.compute_framework_reason
     return {
@@ -141,6 +155,8 @@ def _step_record(index: int, step: PlanStep, alias: str | None) -> dict[str, Any
         "specialized_from": [fg.get_class_name() for fg in step.specialized_from],
         "source": alias,
         "inputs": list(step.input_feature_names),
+        "contract_version": step.contract_version,
+        "divergences": _divergences(step),
     }
 
 

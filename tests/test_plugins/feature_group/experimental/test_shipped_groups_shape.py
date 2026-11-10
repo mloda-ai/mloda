@@ -74,22 +74,11 @@ CASES = {
     ),
 }
 
-# Known failures pinned until fixed; divergence records cannot excuse them.
-# Group defect: sklearn rejects an empty array on zero rows.
-_EMPTY_SKLEARN = r"zero_rows: run on zero rows raised: Found array with 0 sample\(s\)"
+# Known defects pinned until fixed and declared group decisions; divergence records cannot excuse them.
 KNOWN_FAILURES: dict[str, tuple[str, ...]] = {
-    "clustering-PandasClustering": (_EMPTY_SKLEARN,),
-    "dimensionality_reduction-PandasDimensionalityReduction": (_EMPTY_SKLEARN,),
-    "sklearn_pipeline-PandasSklearnPipeline": (_EMPTY_SKLEARN,),
-    # Group defect: the frame grows by the forecast horizon without declaring replaces_rows(),
-    # and zero rows leave no training data.
-    "forecasting-PandasForecasting": (
-        r"outputs: input column '\w+' was changed",
-        r"zero_rows: run on zero rows raised: No training data available",
-    ),
-    # Check limit: the zero-row input drops the LIST element type.
-    "geo_distance-PandasGeoDistance": (
-        r"zero_rows: run on zero rows raised: column 'a': .*needs an arrow_types override",
+    # Group decision: no fitted width without an artifact.
+    "sklearn_pipeline-PandasSklearnPipeline": (
+        r"zero_rows: run on zero rows raised: Cannot fit sklearn pipeline on zero rows",
     ),
 }
 

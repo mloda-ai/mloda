@@ -13,10 +13,14 @@ try:
     from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN, SpectralClustering
     from sklearn.preprocessing import StandardScaler
     from sklearn.metrics import silhouette_score
+    from sklearn.utils import check_array
+    from sklearn.utils.validation import FLOAT_DTYPES
 except ImportError:
     KMeans, AgglomerativeClustering, DBSCAN, SpectralClustering = None, None, None, None
     StandardScaler = None
     silhouette_score = None
+    check_array = None
+    FLOAT_DTYPES = None
 
 
 try:
@@ -66,6 +70,23 @@ class PandasClustering(Implementation[ClusteringFeatureGroup]):
         return data
 
     @classmethod
+    def _empty_labels(cls, algorithm: str) -> "NDArray[Any]":
+        """Zero-row labels in the dtype a run with rows gives; an unknown algorithm still raises."""
+        if algorithm not in cls.feature_group.CLUSTERING_ALGORITHMS:
+            raise ValueError(f"Unsupported clustering algorithm: {algorithm}")
+        return np.empty(0, dtype=np.int32 if algorithm == "kmeans" else np.int64)
+
+    @classmethod
+    def _empty_probabilities(cls, algorithm: str, k_value: int | str, X_array: "NDArray[Any]") -> "NDArray[Any]":
+        """Zero-row probabilities; the width is k where it is fixed, else 0 (a learned count)."""
+        fixed = algorithm in ("kmeans", "hierarchical", "agglomerative", "spectral")
+        width = int(k_value) if fixed and k_value != "auto" else 0
+        dtype = np.float64
+        if algorithm == "kmeans":
+            dtype = check_array(X_array, ensure_min_samples=0, dtype=FLOAT_DTYPES).dtype
+        return np.empty((0, width), dtype=dtype)
+
+    @classmethod
     def _perform_clustering(
         cls,
         data: Any,
@@ -98,6 +119,9 @@ class PandasClustering(Implementation[ClusteringFeatureGroup]):
 
         # Convert to numpy array
         X_array = X.values
+
+        if X_array.shape[0] == 0:
+            return cls._empty_labels(algorithm)
 
         # Standardize the features
         scaler = StandardScaler()
@@ -338,6 +362,9 @@ class PandasClustering(Implementation[ClusteringFeatureGroup]):
 
         # Convert to numpy array
         X_array = X.values
+
+        if X_array.shape[0] == 0:
+            return cls._empty_labels(algorithm), cls._empty_probabilities(algorithm, k_value, X_array)
 
         # Standardize the features
         scaler = StandardScaler()

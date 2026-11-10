@@ -62,13 +62,15 @@ class PandasGeoDistance(Implementation[GeoDistanceFeatureGroup]):
             The calculated distance as a Pandas Series
         """
         if distance_type == "haversine":
-            return cls._calculate_haversine_distance(data, point1_feature, point2_feature)
+            distance = cls._calculate_haversine_distance(data, point1_feature, point2_feature)
         elif distance_type == "euclidean":
-            return cls._calculate_euclidean_distance(data, point1_feature, point2_feature)
+            distance = cls._calculate_euclidean_distance(data, point1_feature, point2_feature)
         elif distance_type == "manhattan":
-            return cls._calculate_manhattan_distance(data, point1_feature, point2_feature)
+            distance = cls._calculate_manhattan_distance(data, point1_feature, point2_feature)
         else:
             raise ValueError(f"Unsupported distance type: {distance_type}")
+        # apply() on an empty object Series stays object; with rows it is float64.
+        return distance.astype("float64")
 
     @classmethod
     def _calculate_haversine_distance(cls, data: Any, point1_feature: str, point2_feature: str) -> Any:

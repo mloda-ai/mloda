@@ -879,17 +879,36 @@ def test_exact_type_run_group_passes(kind: str, adapter_cls: type[Any]) -> None:
     assert result.failures == (), result.failures
 
 
+_RUN_LABELS = (DataType.STRING, ["alpha-secret", "beta-secret", "gamma-secret"])
+
+
 @pytest.mark.parametrize("kind", ["ok", "undeclared_out"])
 @pytest.mark.parametrize("adapter_cls", [PyArrowAdapter, PandasAdapter, PolarsAdapter])
-def test_default_run_group_passes_with_nullable_int_input(kind: str, adapter_cls: type[Any]) -> None:
-    _require_backend(adapter_cls)
-    data = TypedTestData(
+@pytest.mark.parametrize(
+    "columns",
+    [
+        {"rg_src": (DataType.INT64, [1, None, 3]), "rg_label": _RUN_LABELS},
         {
-            "rg_src": (DataType.INT64, [1, None, 3]),
-            "rg_label": (DataType.STRING, ["alpha-secret", "beta-secret", "gamma-secret"]),
-        }
-    )
-    result = check_feature_group_shape(make_run_group(kind), input_data=data, adapter=adapter_cls())
+            "rg_src": (DataType.INT64, [1, 2, 3]),
+            "rg_label": _RUN_LABELS,
+            "rg_list": (DataType.LIST, [[1, 2], [3], [4, 5]]),
+        },
+    ],
+    ids=["nullable_int", "list_passthrough"],
+)
+def test_default_run_group_passes_with_input(kind: str, adapter_cls: type[Any], columns: dict[str, Any]) -> None:
+    _require_backend(adapter_cls)
+    result = check_feature_group_shape(make_run_group(kind), input_data=TypedTestData(columns), adapter=adapter_cls())
+    assert result.failures == (), result.failures
+
+
+def test_default_run_group_passes_with_list_input_on_python_dict() -> None:
+    columns: dict[str, Any] = {
+        "rg_src": (DataType.INT64, [1, 2, 3]),
+        "rg_label": _RUN_LABELS,
+        "rg_list": (DataType.LIST, [[1, 2], [3], [4, 5]]),
+    }
+    result = check_feature_group_shape(make_run_group(), input_data=TypedTestData(columns), adapter=PythonDictAdapter())
     assert result.failures == (), result.failures
 
 

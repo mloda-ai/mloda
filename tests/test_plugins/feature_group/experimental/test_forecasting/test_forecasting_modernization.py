@@ -12,12 +12,17 @@ from datetime import datetime, timedelta
 
 from mloda.user import Feature
 from mloda.user import Options
-from mloda.user import PluginCollector
+from mloda.user import PluginCollector, PluginLoader
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecasting as PandasForecasting
 from mloda.provider import DefaultOptionKeys
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
+    PandasMissingValueImputation as PandasMissingValueImputation,
+)
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
@@ -322,3 +327,33 @@ class TestForecastingModernization:
 
         # Test non-matching string-based feature
         assert ForecastingFeatureGroup.match_feature_group_criteria("not_a_forecast_feature", string_options) is False
+
+
+class TestForecastingRowGrowthInsideARun:
+    """A forecast grows its own frame by the horizon without growing a sibling feature's frame."""
+
+    @pytest.mark.parametrize("sibling", ["sales__mean_imputed", "sales__count_aggr"])
+    def test_sibling_feature_keeps_the_source_row_count(self, sibling: str) -> None:
+        PluginLoader.all()
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {
+                ForecastingModernizationTestDataCreator,
+                ForecastingFeatureGroup,
+                MissingValueFeatureGroup,
+                AggregatedFeatureGroup,
+            }
+        )
+        options = Options({DefaultOptionKeys.reference_time: "time_filter"})
+        forecast = "sales__linear_forecast_3day"
+
+        results = mloda.run_all(
+            [Feature(name, options=options) for name in (forecast, sibling)],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=plugin_collector,
+        )
+
+        sibling_frames = [r for r in results if sibling in r.columns]
+        forecast_frames = [r for r in results if forecast in r.columns]
+        assert [len(r) for r in sibling_frames] == [1000]
+        assert [len(r) for r in forecast_frames] == [1003]
+        assert forecast not in sibling_frames[0].columns

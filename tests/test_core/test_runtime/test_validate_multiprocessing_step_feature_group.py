@@ -219,26 +219,21 @@ def test_credential_preflight_rejects_an_unpicklable_value_naming_the_handle_not
     assert "_SecretHolder" not in message
 
 
-def test_credential_preflight_skips_a_step_without_multiprocessing() -> None:
-    step = _credential_step(("h",), SyncOnlyComputeFramework)
+@pytest.mark.parametrize(
+    "handles, framework, credentials",
+    [
+        pytest.param(("h",), SyncOnlyComputeFramework, {"h": _SecretHolder()}, id="step-without-multiprocessing"),
+        pytest.param((), PandasDataFrame, {"h": _SecretHolder()}, id="step-without-handles"),
+        pytest.param(("absent",), PandasDataFrame, {"other": _SecretHolder()}, id="handle-missing-from-collection"),
+        pytest.param(("h",), PandasDataFrame, None, id="none-collection"),
+    ],
+)
+def test_credential_preflight_skips(
+    handles: tuple[str, ...], framework: type[ComputeFramework], credentials: dict[str, Any] | None
+) -> None:
+    step = _credential_step(handles, framework)
 
-    raise_on_unpicklable_step_credentials([step], _collection({"h": _SecretHolder()}))
-
-
-def test_credential_preflight_skips_a_step_without_handles() -> None:
-    step = _credential_step(())
-
-    raise_on_unpicklable_step_credentials([step], _collection({"h": _SecretHolder()}))
-
-
-def test_credential_preflight_skips_a_handle_missing_from_the_collection() -> None:
-    step = _credential_step(("absent",))
-
-    raise_on_unpicklable_step_credentials([step], _collection({"other": _SecretHolder()}))
-
-
-def test_credential_preflight_returns_for_a_none_collection() -> None:
-    raise_on_unpicklable_step_credentials([_credential_step(("h",))], None)
+    raise_on_unpicklable_step_credentials([step], None if credentials is None else _collection(credentials))
 
 
 def test_credential_preflight_probes_a_shared_handle_once() -> None:

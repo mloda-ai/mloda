@@ -13,9 +13,14 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.runtime import mp_context
 from mloda.core.runtime.mp_context import mp_start_context
 from mloda.core.runtime.worker_manager import WorkerManager
+from mloda.provider import FeatureGroup
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
 def _noop_target(*args: Any, **kwargs: Any) -> None:
@@ -439,18 +444,35 @@ class TestWorkerManagerProcessRetrieval:
         assert result is None
 
 
+class _JoinShapedStep:
+    def __init__(self) -> None:
+        self.uuid = uuid4()
+        self.lock = threading.Lock()
+
+
+def _feature_group_step_with_lock() -> FeatureGroupStep:
+    class _WmSendFeatureGroup(FeatureGroup):
+        pass
+
+    step = FeatureGroupStep(_WmSendFeatureGroup, FeatureSet([Feature("f")]), set(), PandasDataFrame)
+    step.lock = threading.Lock()
+    return step
+
+
 class TestWorkerManagerCommandSending:
     """Test sending commands to worker processes."""
 
-    def test_send_command_puts_command_in_queue(self) -> None:
-        """send_command should put command in process command queue."""
-        manager = WorkerManager()
-        cfw_uuid = uuid4()
-        command = {"action": "execute", "data": "test"}
-
-        mock_cmd_queue = MagicMock()
-        mock_process = Mock(spec=multiprocessing.Process)
-        manager.process_register[cfw_uuid] = (mock_process, mock_cmd_queue, MagicMock())
+    @pytest.mark.parametrize(
+        "command",
+        [
+            pytest.param({"action": "execute", "data": "test"}, id="dict"),
+            pytest.param("MASKED_CONSTANT", id="bare-string"),
+            pytest.param(("a", 1, {"x": [1, 2]}), id="picklable-tuple"),
+        ],
+    )
+    def test_send_command_puts_command_in_queue(self, command: Any) -> None:
+        """send_command should put command in process command queue unchanged."""
+        manager, cfw_uuid, mock_cmd_queue = self._registered()
 
         manager.send_command(cfw_uuid, command)
 
@@ -472,55 +494,29 @@ class TestWorkerManagerCommandSending:
         manager.process_register[cfw_uuid] = (Mock(spec=multiprocessing.Process), mock_cmd_queue, MagicMock())
         return manager, cfw_uuid, mock_cmd_queue
 
-    def test_send_command_refuses_a_step_with_an_unpicklable_attribute(self) -> None:
-        from mloda.core.abstract_plugins.components.feature import Feature
-        from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-        from mloda.core.core.step.feature_group_step import FeatureGroupStep
-        from mloda.provider import FeatureGroup
-        from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-
-        class _WmSendFeatureGroup(FeatureGroup):
-            pass
-
+    @pytest.mark.parametrize(
+        "make_step, fragments",
+        [
+            pytest.param(
+                _feature_group_step_with_lock, ("FeatureGroupStep", "_WmSendFeatureGroup"), id="feature-group-step"
+            ),
+            pytest.param(_JoinShapedStep, ("_JoinShapedStep",), id="plain-step"),
+        ],
+    )
+    def test_send_command_refuses_an_unpicklable_step_naming_its_type(
+        self, make_step: Any, fragments: tuple[str, ...]
+    ) -> None:
         manager, cfw_uuid, mock_cmd_queue = self._registered()
-        step = FeatureGroupStep(_WmSendFeatureGroup, FeatureSet([Feature("f")]), set(), PandasDataFrame)
-        lock = threading.Lock()
-        step.held_lock = lock
+        step = make_step()
 
         with pytest.raises(ValueError) as excinfo:
             manager.send_command(cfw_uuid, (step, {"k": "v"}))
 
         message = str(excinfo.value)
-        assert "FeatureGroupStep" in message
-        assert "_WmSendFeatureGroup" in message
-        assert repr(lock) not in message
-        mock_cmd_queue.put.assert_not_called()
-
-    def test_send_command_refuses_a_plain_unpicklable_step_naming_its_type(self) -> None:
-        class _JoinShapedStep:
-            def __init__(self) -> None:
-                self.uuid = uuid4()
-                self.lock = threading.Lock()
-
-        manager, cfw_uuid, mock_cmd_queue = self._registered()
-        step = _JoinShapedStep()
-
-        with pytest.raises(ValueError) as excinfo:
-            manager.send_command(cfw_uuid, (step, set()))
-
-        message = str(excinfo.value)
-        assert "_JoinShapedStep" in message
+        for fragment in fragments:
+            assert fragment in message
         assert repr(step.lock) not in message
         mock_cmd_queue.put.assert_not_called()
-
-    def test_send_command_puts_a_bare_string_and_a_picklable_tuple_unchanged(self) -> None:
-        manager, cfw_uuid, mock_cmd_queue = self._registered()
-        picklable = ("a", 1, {"x": [1, 2]})
-
-        manager.send_command(cfw_uuid, "MASKED_CONSTANT")
-        manager.send_command(cfw_uuid, picklable)
-
-        assert [c.args[0] for c in mock_cmd_queue.put.call_args_list] == ["MASKED_CONSTANT", picklable]
 
 
 class TestWorkerManagerResultPolling:

@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 import pytest
 
+from mloda._testing import feature_group_shape as fgs
 from mloda._testing.framework_adapter import (
     IcebergAdapter,
     PandasAdapter,
@@ -29,7 +30,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.abstract_plugins.components.divergence import Cause, Divergence, DivergenceKind
-from mloda.provider import DefaultOptionKeys, SubtypeDeclaration
+from mloda.provider import DefaultOptionKeys, FeatureChainParserMixin, SubtypeDeclaration
 from mloda.user.python_dict import PythonDictFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.environment.installed_packages_feature_group import (
@@ -662,6 +663,165 @@ def test_assert_raises_pytest_failure_for_broken_group() -> None:
     with pytest.raises(pytest.fail.Exception) as excinfo:
         assert_feature_group_shape(make_always_matches())
     assert "foreign:" in str(excinfo.value)
+
+
+def make_name_path_group(default: str | None = None, with_level: bool = False) -> type[FeatureGroup]:
+    """Pattern group binding `mode` from `<src>__tt_<mode>`; with_level adds an unbound required key."""
+    mapping: dict[str, PropertySpec] = {}
+    if default is None:
+        mapping["mode"] = PropertySpec("Name-bound mode.", context=True, allowed_values=("fast", "slow"))
+    else:
+        mapping["mode"] = PropertySpec(
+            "Name-bound mode.", context=True, allowed_values=("fast", "slow"), default=default
+        )
+    if with_level:
+        mapping["level"] = PropertySpec("Unbound level.", context=True, allowed_values=("lo", "hi"))
+    namespace: dict[str, Any] = {
+        "__module__": __name__,
+        "PREFIX_PATTERN": r".*__tt_(?P<mode>fast|slow)$",
+        "MIN_IN_FEATURES": 1,
+        "MAX_IN_FEATURES": 1,
+        "PROPERTY_MAPPING": mapping,
+    }
+    return type("NamePathToyGroup", (FeatureChainParserMixin, FeatureGroup), namespace)
+
+
+@pytest.mark.parametrize("default", [None, "fast"])
+@pytest.mark.parametrize("name", ["x__tt_fast", "x__tt_slow"])
+def test_requests_probe_a_name_path_group(default: str | None, name: str) -> None:
+    result = check_feature_group_shape(make_name_path_group(default), requests=[name])
+    assert result.passed, result.failures
+
+
+def test_requests_keep_an_unbound_required_key_checked(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[tuple[str, bool, bool]] = []
+    real = fgs._probe
+
+    def spy(cls: type[FeatureGroup], name: str, options: Options) -> Any:
+        matched, rejection = real(cls, name, options)
+        seen.append((name, "level" in {**options.group, **options.context}, matched))
+        return matched, rejection
+
+    monkeypatch.setattr(fgs, "_probe", spy)
+    result = check_feature_group_shape(make_name_path_group(with_level=True), requests=["x__tt_slow"])
+    assert result.passed, result.failures
+    assert ("x__tt_slow", False, False) in seen
+
+
+def test_requests_leave_user_base_options_untouched(monkeypatch: pytest.MonkeyPatch) -> None:
+    carried: list[Any] = []
+    real = fgs._probe
+
+    def spy(cls: type[FeatureGroup], name: str, options: Options) -> Any:
+        merged = {**options.group, **options.context}
+        if "mode" in merged:
+            carried.append(merged["mode"])
+        return real(cls, name, options)
+
+    monkeypatch.setattr(fgs, "_probe", spy)
+    check_feature_group_shape(make_name_path_group(), Options(group={"mode": "fast"}), requests=["x__tt_fast"])
+    assert carried
+    assert all(m == "fast" for m in carried), carried
+    assert "slow" not in carried
+
+
+def test_requests_replace_the_probed_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    group = make_toy_group()
+    base = Options(group={"mode": "slow"})
+    probed: set[str] = set()
+    real = fgs._probe
+
+    def spy(cls: type[FeatureGroup], name: str, options: Options) -> Any:
+        probed.add(name)
+        return real(cls, name, options)
+
+    monkeypatch.setattr(fgs, "_probe", spy)
+    assert check_feature_group_shape(group, base, requests=["toy_a"]).passed
+    result = check_feature_group_shape(group, base, requests=["toy_missing"])
+    assert any(f.startswith("names:") and "toy_missing" in f for f in result.failures), result.failures
+    assert group.get_class_name() not in probed
+
+
+def test_empty_requests_fail_and_assert_forwards_requests() -> None:
+    result = check_feature_group_shape(make_toy_group(), requests=[])
+    assert result.failures == ("names: no requests to check",)
+    assert_feature_group_shape(make_name_path_group(), requests=["x__tt_slow"])
+    with pytest.raises(pytest.fail.Exception):
+        assert_feature_group_shape(make_toy_group(), requests=[])
+
+
+def test_generator_requests_behave_like_a_list() -> None:
+    group = make_name_path_group()
+    requests: Any = (n for n in ["x__tt_fast", "nonsense"])
+    result = check_feature_group_shape(group, requests=requests)
+    assert any(f.startswith("names:") and "nonsense" in f for f in result.failures), result.failures
+
+
+def test_string_requests_fail_as_not_a_sequence() -> None:
+    requests: Any = "x__tt_fast"
+    result = check_feature_group_shape(make_name_path_group(), requests=requests)
+    assert any(f.startswith("names:") and "sequence" in f and "string" in f for f in result.failures), result.failures
+
+
+def test_requests_binding_different_key_sets_fail_with_one_clear_message() -> None:
+    namespace: dict[str, Any] = {
+        "__module__": __name__,
+        "PREFIX_PATTERN": r".*__tt_(?P<mode>fast|slow)$",
+        "MIN_IN_FEATURES": 1,
+        "MAX_IN_FEATURES": 1,
+        "PROPERTY_MAPPING": {
+            "mode": PropertySpec("Name-bound mode.", context=True, allowed_values=("fast", "slow"), default="fast")
+        },
+        "_get_prefix_patterns": classmethod(lambda cls: [r".*__tt_(?P<mode>fast|slow)$", r".*__plain$"]),
+    }
+    group = type("TwoPatternGroup", (FeatureChainParserMixin, FeatureGroup), namespace)
+    result = check_feature_group_shape(group, requests=["x__tt_fast", "x__plain"])
+    names = [f for f in result.failures if f.startswith("names:")]
+    assert len(names) == 1, result.failures
+    assert "separate" in names[0], names
+    assert "is declared but" not in names[0]
+
+
+def test_no_requests_keeps_required_option_check_for_declared_name_bound_key() -> None:
+    mapping = {"mode": PropertySpec("Name-bound mode.", context=True, allowed_values=("fast", "slow"))}
+    namespace: dict[str, Any] = {
+        "__module__": __name__,
+        "PREFIX_PATTERN": r".*__tt_(?P<mode>fast|slow)$",
+        "MIN_IN_FEATURES": 1,
+        "MAX_IN_FEATURES": 1,
+        "PROPERTY_MAPPING": mapping,
+        "feature_names_supported": classmethod(lambda cls: {"x__tt_fast"}),
+    }
+    group = type("DeclaredNamePathGroup", (FeatureChainParserMixin, FeatureGroup), namespace)
+    result = check_feature_group_shape(group)
+    assert any("required: matches without required option 'mode'" in f for f in result.failures), result.failures
+
+
+def test_empty_requests_still_report_the_secret_failure() -> None:
+    group = make_secret_group({"api_key": PropertySpec("API key.", default="placeholder")})
+    result = check_feature_group_shape(group, requests=[])
+    assert any(f == "names: no requests to check" for f in result.failures), result.failures
+    assert any(f.startswith("secrets:") for f in result.failures), result.failures
+
+
+def test_unmatched_name_wording_depends_on_requests() -> None:
+    requested = check_feature_group_shape(make_toy_group(), requests=["toy_missing"])
+    assert any("is requested but" in f for f in requested.failures), requested.failures
+    assert not any("is declared but" in f for f in requested.failures), requested.failures
+    declared = check_feature_group_shape(make_rejects_declared_name())
+    assert any("is declared but" in f for f in declared.failures), declared.failures
+
+
+def test_requests_run_on_the_requested_names() -> None:
+    result = check_feature_group_shape(
+        make_run_group(), requests=["rg_out"], input_data=_run_data(), adapter=PythonDictAdapter()
+    )
+    assert result.failures == (), result.failures
+    assert not any(n.startswith("run:") and "skip" in n for n in result.notes), result.notes
+    broken = check_feature_group_shape(
+        make_run_group("drops_output"), requests=["rg_out"], input_data=_run_data(), adapter=PythonDictAdapter()
+    )
+    assert any(f.startswith("outputs:") and "rg_out" in f for f in broken.failures), broken.failures
 
 
 def _require_backend(adapter_cls: type[Any]) -> None:

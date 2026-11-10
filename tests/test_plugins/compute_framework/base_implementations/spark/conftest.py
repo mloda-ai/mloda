@@ -92,7 +92,9 @@ def spark_session() -> Any:
     # Warm up here so the first-job cold start falls outside the per-test timeout.
     import pyarrow as pa
 
-    spark.createDataFrame(pa.table({"warm_up": [1]})).toArrow()
+    warm_up_df = spark.createDataFrame(pa.table({"warm_up": [1]}))
+    warm_up_df.toArrow()
+    warm_up_df.collect()
 
     logger.info("Created shared SparkSession for all Spark tests")
 

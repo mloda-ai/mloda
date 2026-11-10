@@ -85,7 +85,8 @@ from mloda.core.abstract_plugins.components.credential_handle import (
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.match_hook import call_match_hook
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
-from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 
 
 logger = logging.getLogger(__name__)
@@ -855,11 +856,7 @@ class Engine:
                             )
                         ):
                             continue
-                        bindings = group_class.name_bindings(name)
-                        # An empty binding means the parser could not read the name, so declared keys may come from it.
-                        name_derived = (
-                            {str(k) for k in bindings} | {DefaultOptionKeys.in_features.value} if bindings else declared
-                        )
+                        name_derived = self._name_derived_keys(group_class, name, declared)
                         keys = sorted(
                             str(k)
                             for k in set(a.options.context) | set(b.options.context)
@@ -870,13 +867,31 @@ class Engine:
                             )
                         )
                         if keys:
+                            remedy = (
+                                "Give every request the same values, push context keys with cascade_context_keys so "
+                                "the inputs split too, or make them group options forwarded to the inputs."
+                                if parents
+                                else "Give every request the same values, or make the keys group options."
+                            )
                             raise ValueError(
                                 f"Feature '{name}' of {format_feature_group_class(group_class)} is reached twice with "
                                 f"differing values for context key(s) {keys}, but both copies read the same inputs on "
                                 f"{framework.get_class_name()}, so they would write the same column into one frame. "
-                                "Give every request the same values, push context keys with cascade_context_keys so "
-                                "the inputs split too, or make them group options forwarded to the inputs."
+                                + remedy
                             )
+
+    @staticmethod
+    def _name_derived_keys(group_class: type[FeatureGroup], name: str, declared: Any) -> set[str]:
+        """Keys the feature name may bind; every declared key when the group has no readable name patterns."""
+        patterns: list[Any] = safe_field(group_class._get_prefix_patterns, [])
+        unresolved: Any = object()  # a raise means the name is unreadable; no match (None) is a clean resolution
+        resolution: Any = safe_field(
+            lambda: FeatureChainParser.resolve_name(name, patterns, group_class.PROPERTY_MAPPING), unresolved
+        )
+        if not patterns or resolution is unresolved:
+            return {str(k) for k in declared}
+        bound = {str(k) for k in resolution.bindings} if resolution is not None else set()
+        return bound | {DefaultOptionKeys.in_features.value}
 
     def _fold_into_narrower_twins(self) -> None:
         """Folds each feature into its unique minimal narrower-framework twin; decided from a snapshot, order-free."""

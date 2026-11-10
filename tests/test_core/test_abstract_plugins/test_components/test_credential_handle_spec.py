@@ -925,12 +925,14 @@ class TestRunStartRefusals:
 
     def test_a_successful_fresh_run_leaves_the_session_collection_unchanged(self) -> None:
         session = _vault_session()
-        before = repr(session.data_access_collection.credentials)
+        expected = {"vault-a": {"key": SECRET}, "vault-b": {"key": OTHER_SECRET}}
+        before = {h: dict(v) for h, v in session.data_access_collection.credentials.items()}
 
         session.run(credentials={"vault-a": _FRESH})
 
-        assert repr(session.data_access_collection.credentials) == before
-        assert _FRESH["key"] not in repr(session.data_access_collection.credentials)
+        after = {h: dict(v) for h, v in session.data_access_collection.credentials.items()}
+        assert before == expected
+        assert after == expected
 
     @pytest.mark.parametrize(
         "edit",

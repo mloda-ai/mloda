@@ -2397,8 +2397,9 @@ def test_the_outer_hook_context_and_framework_are_back_after_a_nested_run_raises
     assert "outer_after" in attributes
 
 
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
 @pytest.mark.timeout(15)
-def test_no_hook_context_carries_a_credential_value(flight_server: Any) -> None:
+def test_no_hook_context_carries_a_credential_value(mode: ParallelizationMode, flight_server: Any) -> None:
     _WINDOW_EVENTS.clear()
     probe = _ReadProbeExtender(
         {
@@ -2409,9 +2410,7 @@ def test_no_hook_context_carries_a_credential_value(flight_server: Any) -> None:
         }
     )
 
-    _grant_run(
-        (ChsWinConsumerFG, ChsReadSourceFG), "chs_win_consumer_a", ParallelizationMode.SYNC, flight_server, {probe}
-    )
+    _grant_run((ChsWinConsumerFG, ChsReadSourceFG), "chs_win_consumer_a", mode, flight_server, {probe})
 
     assert {hook for hook, _, _ in probe.contexts} >= {"feature_group_calculate_feature", "input_data_load"}
     for _, _, rendered in probe.contexts:

@@ -298,18 +298,24 @@ The MCP server and the `mloda` command register credentials from a config table:
 [Configure](mcp-server.md#configure). A plan-time handle failure of `explain` and `run` appears in the `mloda`
 command's message (`describe` still reports the feature as unknown); the MCP server only logs it.
 
-```py
+```python
 import pandas as pd
-from mloda.provider import FeatureGroup, credential_handle_spec, read_credential
-from mloda.user import Credential, DataAccessCollection, Feature, mloda
+from mloda.provider import DataCreatorFeatureGroup, credential_handle_spec, read_credential
+from mloda.user import Credential, DataAccessCollection, Feature, PluginLoader, mloda
+
+PluginLoader.all()
 
 # 1. Steward: register the credential under a role name.
 dac = DataAccessCollection(credentials={"pii-hmac-key": Credential(key="s3cr3t-hmac-key")})
 
 
 # 2. Provider: declare the handle option, read it in calculate_feature (or a helper it calls).
-class SignedIdFG(FeatureGroup):
+class SignedIdFG(DataCreatorFeatureGroup):
     PROPERTY_MAPPING = {"hmac_key_handle": credential_handle_spec("Credential handle for the HMAC key.")}
+
+    @classmethod
+    def feature_names_supported(cls):
+        return {"signed_id"}
 
     @classmethod
     def calculate_feature(cls, data, features):
@@ -319,15 +325,18 @@ class SignedIdFG(FeatureGroup):
 
 # 3. User: select the handle by name.
 feature = Feature("signed_id", options={"hmac_key_handle": "pii-hmac-key"})
-mloda.run_all([feature], data_access_collection=dac)
+result = mloda.run_all([feature], data_access_collection=dac, compute_frameworks=["PandasDataFrame"])
+assert result[0]["signed_id"][0] == "signed-with-15"
 ```
 
 To pass a rotated value, prepare once and pass it per run. The value is used for that run only and is never written
 into the session; a later run without `credentials` reads the prepared value again.
 
-```py
-session = mloda.prepare([feature], data_access_collection=dac)
-session.run(credentials={"pii-hmac-key": Credential(key="rotated-hmac-key")})
+```python
+session = mloda.prepare([feature], data_access_collection=dac, compute_frameworks=["PandasDataFrame"])
+rotated = session.run(credentials={"pii-hmac-key": Credential(key="rotated-hmac-key")})
+assert rotated[0]["signed_id"][0] == "signed-with-16"
+assert session.run()[0]["signed_id"][0] == "signed-with-15"
 ```
 
 The same applies to `stream_run()`. A passed handle is refused with a `ValueError` at the call, before any step runs, if
@@ -335,11 +344,13 @@ no step declares it, if its value misses a `required_fields` entry or holds byte
 step binds it when the session is prepared (prepare a new session to change it). No message holds a value.
 `RunContext.run_inputs.credentials` carries the sorted handle names only.
 
-`read_credential` returns a `ResolvedCredential`: a mapping with item access, `get`, iteration and `**` unpacking, a
-fresh copy per read, and the attributes `handle`, `version`, `expires_at` and `store` (the last three are `None` for
-now). A missing field raises `CredentialFieldMissing` (a `KeyError`) naming handle and field, on item access and on
-`del` or `pop` alike. A nested mapping is a plain dict, so a missing nested key reports as a missing column. A read
-outside the window, or of a handle the step did not declare, raises `CredentialReadRefused` (not a `LookupError`).
+`read_credential` returns a `ResolvedCredential`. All three (`ResolvedCredential`, `CredentialFieldMissing`,
+`CredentialReadRefused`) import from `mloda.provider`; `CredentialReadRefused` also from `mloda.steward`. It is a
+mapping with item access, `get`, iteration and `**` unpacking, a fresh copy per read, and the attributes `handle`,
+`version`, `expires_at` and `store` (the last three are `None` for now). A missing field raises
+`CredentialFieldMissing` (a `KeyError`) naming handle and field, on item access and on `del` or `pop` alike. A nested
+mapping is a plain dict, so a missing nested key reports as a missing column. A read outside the window, or of a
+handle the step did not declare, raises `CredentialReadRefused` (not a `LookupError`).
 
 A handle a source step binds at match time is reported in the plan, the lock and the hooks but grants no `read_credential`; a credential not registered in the collection renders `<pointer>`.
 
@@ -360,7 +371,7 @@ with credentials_scope({"pii-hmac-key": {"key": "test-hmac-key"}}):
 
 Limits:
 
-- A plugin-started thread has no scope and logs raw unless process-wide log masking is on; run its work with `contextvars.copy_context().run` and join inside the step. A context copied inside a window cannot read once that window closes, even while the step runs (for example in validate hooks).
+- A plugin-started thread has no scope and logs raw unless process-wide log masking is on (under `-X thread_inherit_context=1`, Python 3.14+, the default in free-threaded builds, a plain thread copies the starter's context: started in the window it reads and masks like the step, and its reads are refused once the window closes); run its work with `contextvars.copy_context().run` and join inside the step. A context copied inside a window cannot read once that window closes, even while the step runs (for example in validate hooks).
 - An awaited asyncio task and `asyncio.to_thread` carry the scope; `run_in_executor` does not.
 - A value captured in a serialized UDF closure is outside every mask; read on the driver, never capture.
 - Cached or transformed values are outside the masks.
@@ -369,12 +380,12 @@ Limits:
 - `repr` redacts; pickle and deepcopy raise, and `json.dumps` raises the stdlib `TypeError`, which does not name the handle; `dict(cred)` copies the values, so never serialize it.
 - Trust boundary: code that declares a handle can read it; only the process worker is an OS boundary. A process worker holds only the secrets of the step it is running (all of them for a source whose credential cannot be derived; none during bootstrap and extender close); the parent still masks with every registered secret.
 - Verbose tracebacks show frame locals, and a reused worker may linger on a value.
-- Values under 8 characters are not masked.
+- Only `str` values of 8 or more characters are masked in run logs and exceptions; int, float and bool values are not.
 - A key outside the listed connection fields is masked unless declared public (see declared credential keys).
 - A prepared session copies the registered credentials at `prepare()` (plain dicts and `RegisteredCredential`, lists, tuples and sets, nested too; other objects, dict subclasses such as `OrderedDict` included, are shared), so later edits to the collection do not reach it; pass a rotated value per run with `run(credentials=...)`.
 - A credential sent to a process worker must pickle; one that does not is refused when the run starts, before any worker starts, naming the handle. A custom grant kind is still checked when its step is dispatched.
 - Log masking covers exact registered literals and their `repr` and JSON escaped forms only; see [Log record masking](#log-record-masking) for its limits.
-- In a notebook the caller reads any environment variable on its own side.
+- In a notebook the caller reads any environment variable on its own side, as in `Credential(key=os.environ["HMAC_KEY"])`; never paste a literal secret into a notebook.
 
 ## Log record masking
 
@@ -382,7 +393,7 @@ Inside a run with registered secrets, every log record created in that context, 
 
 Limits:
 
-- A `threading.Thread` started by a plugin has no scope and logs raw unless process-wide masking is on; join it inside the step with `contextvars.copy_context().run`.
+- A `threading.Thread` started by a plugin has no scope and logs raw unless process-wide masking is on (see the thread limit above for `-X thread_inherit_context=1`); join it inside the step with `contextvars.copy_context().run`.
 - With process-wide masking on, a thread that outlives every scope holding a literal logs it raw. An app embedding `server.create_app(...)` itself must call `enable_process_wide_log_masking()` (mloda-mcp and `mloda mcp serve` do).
 - A process worker masks only the step's own secrets; logs from worker bootstrap and extender `close()` run outside the scope.
 - A logger class that overrides `makeRecord` without calling `super()` skips the `extra` masking.

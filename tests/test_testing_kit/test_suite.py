@@ -384,6 +384,12 @@ def _read_file_mixin() -> type:
     return ReadFileFGTestMixin
 
 
+def _filter_suite() -> type:
+    from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
+
+    return FilterEngineSuite
+
+
 def _read_db_mixin() -> type:
     from mloda._testing.source.read_db_suite import ReadDBFGTestMixin
 
@@ -566,11 +572,7 @@ def test_every_adapter_was_closed_and_each_was_opened_once():
 @pytest.mark.parametrize(
     "get_suite",
     [
-        lambda: (
-            __import__(
-                "mloda._testing.compute_framework.filter_suite", fromlist=["FilterEngineSuite"]
-            ).FilterEngineSuite
-        ),
+        _filter_suite,
         _loads_mixin("FileLoadsIntoFrameworkTestMixin"),
         _loads_mixin("DatabaseLoadsIntoFrameworkTestMixin"),
         _loads_mixin("DocumentLoadsIntoFrameworkTestMixin"),

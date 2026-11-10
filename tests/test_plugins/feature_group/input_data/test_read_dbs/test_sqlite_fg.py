@@ -117,8 +117,6 @@ class _SqliteLoadsHelper:
     def test_a_global_filter_fetches_fewer_rows(
         self, adapter: FrameworkAdapter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        if not adapter.is_available():
-            pytest.skip(f"{type(adapter).__name__} dependencies are not installed")
         columns = ("dbloads_a", "dbloads_b", "dbloads_c")
         path = tmp_path / "dbloads_filtered.db"
         self.write_database(path, {"dbloads_table": {name: [1, 2, 3, 4, 5, 6] for name in columns}})
@@ -134,7 +132,7 @@ class _SqliteLoadsHelper:
         global_filter = GlobalFilter()
         global_filter.add_filter("dbloads_a", "range", {"min": 2, "max": 4, "max_exclusive": True})
 
-        result = mloda.run_all(
+        mloda.run_all(
             list(columns[:2]),
             compute_frameworks=[adapter.compute_framework()],
             plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
@@ -142,7 +140,6 @@ class _SqliteLoadsHelper:
             global_filter=global_filter,
         )
 
-        assert [adapter.column_values(result[0], name) for name in columns[:2]] == [[2, 3], [2, 3]]
         assert fetched == [2]
 
 

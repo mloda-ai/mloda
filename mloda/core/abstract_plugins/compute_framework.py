@@ -71,6 +71,10 @@ class _StepFacts(NamedTuple):
     credential_handles: tuple[str, ...]
     bound_credential_handle: str | None
 
+    @classmethod
+    def of(cls, features: Any) -> "_StepFacts":
+        return cls(features.step_uuid, features.credential_handles, features.bound_credential_handle)
+
 
 def _timed(method: Callable[..., Any], features: Any) -> Callable[..., Any]:
     """Wrap ``method`` to stamp its wall-clock seconds on ``features`` after a successful return."""
@@ -487,11 +491,7 @@ class ComputeFramework(ABC):
     ) -> Any | None:
         from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 
-        facts = (
-            _StepFacts(features.step_uuid, features.credential_handles, features.bound_credential_handle)
-            if isinstance(features, FeatureSet)
-            else None
-        )
+        facts = _StepFacts.of(features) if isinstance(features, FeatureSet) else None
         # A worker passes its resident frame back to the next step. Its cached columns
         # still apply, but a different frame would require resolving its schema early.
         incoming_columns = set(self.column_names) if data is None or data is self.data else set()
@@ -1194,7 +1194,7 @@ class ComputeFramework(ABC):
                 )
             # no snapshot (direct run_* call): read the live FeatureSet
             if facts is None:
-                facts = _StepFacts(features.step_uuid, features.credential_handles, features.bound_credential_handle)
+                facts = _StepFacts.of(features)
             step_uuid, credential_handles, bound_credential_handle = facts
             feature_names = tuple(str(name) for name in features.get_all_names())
             input_features = self._declared_input_feature_names(feature_group_cls, features)

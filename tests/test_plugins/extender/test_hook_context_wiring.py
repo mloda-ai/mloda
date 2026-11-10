@@ -21,7 +21,7 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureGroup, credential_handle_spec
-from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
+from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -31,6 +31,7 @@ from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from tests.helpers.bound_credential_cases import BOUND_KINDS, bound_case, csv_file_source, write_bound_sqlite
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsConsumerFG, ChsRawSecretFG, ChsVaultFG
 from tests.mixins.neutral_csv_source import neutral_csv_group
+from tests.test_plugins.extender.test_input_data_load_hook import _DirectLoader, _load
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     toy_dac,
 )
@@ -886,21 +887,8 @@ class _HandleForgingFeatureGroup(_ForgingFeatureGroup):
     PROPERTY_MAPPING = {"forge_vault_handle": credential_handle_spec("Vault handle.")}
 
 
-class _ValidateForgingFeatureGroup(FeatureGroup):
-    """A derived group reassigning the per-step facts in validate_input_features."""
-
-    PROPERTY_MAPPING = {"forge_vault_handle": credential_handle_spec("Vault handle.")}
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("chs_raw_a")}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"validate_forge_col"}
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
+class _ValidateForgingFeatureGroup(ChsConsumerFG):
+    """The consumer reassigning the per-step facts in validate_input_features, then loading a source."""
 
     @classmethod
     def validate_input_features(cls, data: Any, features: FeatureSet) -> None:
@@ -910,8 +898,8 @@ class _ValidateForgingFeatureGroup(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        data["validate_forge_col"] = data["chs_raw_a"]
-        return data
+        _load(_DirectLoader, "access", features)
+        return super().calculate_feature(data, features)
 
 
 class _MultiHookCapturingExtender(Extender):
@@ -933,10 +921,10 @@ class _MultiHookCapturingExtender(Extender):
 
 
 class _ValidateInputCapturingExtender(_MultiHookCapturingExtender):
-    """Also records the VALIDATE_INPUT_FEATURE context."""
+    """Also records the VALIDATE_INPUT_FEATURE and INPUT_DATA_LOAD contexts."""
 
     def wraps(self) -> set[ExtenderHook]:
-        return super().wraps() | {ExtenderHook.VALIDATE_INPUT_FEATURE}
+        return super().wraps() | {ExtenderHook.VALIDATE_INPUT_FEATURE, ExtenderHook.INPUT_DATA_LOAD}
 
 
 class TestAttachedFrameworkIsSealedDuringARealRun:
@@ -948,10 +936,13 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
     ) -> _MultiHookCapturingExtender:
         _forge_outcomes.clear()
         extender = _MultiHookCapturingExtender()
+        collection: dict[str, Any] = {}
+        if options is not None:
+            collection["data_access_collection"] = DataAccessCollection(credentials={"vault-main": {"key": "forge-1"}})
         mloda.run_all(
             [Feature(name="sealed_forge_col", options=options or {})],
             compute_frameworks=["PythonDictFramework"],
-            data_access_collection=DataAccessCollection(credentials={"vault-main": {"key": "forge-1"}}),
+            **collection,
             plugin_collector=PluginCollector.enabled_feature_groups({group}),
             parallelization_modes={mode},
             function_extender={extender},
@@ -993,14 +984,13 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
         assert validate.step_uuid is not None
         assert validate.step_uuid == calculate.step_uuid
         assert validate.step_uuid != _FORGED_STEP_UUID
-        assert validate.bound_credential_handle == calculate.bound_credential_handle
-        assert validate.bound_credential_handle != _FORGED_BOUND
+        assert validate.bound_credential_handle is None
 
     def test_validate_input_features_reassignment_does_not_reach_later_hooks(self) -> None:
         extender = _ValidateInputCapturingExtender()
 
         mloda.run_all(
-            [Feature("validate_forge_col", options={"forge_vault_handle": "vault-main"})],
+            [Feature("chs_consumer", options={HANDLE_KEY: "vault-main"})],
             compute_frameworks=[PandasDataFrame],
             data_access_collection=DataAccessCollection(credentials={"vault-main": {"key": "forge-2"}}),
             plugin_collector=PluginCollector.enabled_feature_groups({ChsRawSecretFG, _ValidateForgingFeatureGroup}),
@@ -1008,10 +998,20 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
             function_extender={extender},
         )
 
+        forging_name = _ValidateForgingFeatureGroup.__qualname__
         planned = extender.captured[ExtenderHook.VALIDATE_INPUT_FEATURE]
+        assert planned.feature_group_class is not None
+        assert planned.feature_group_class.endswith(forging_name)
         assert planned.credential_handles == ("vault-main",)
-        for hook in (ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE, ExtenderHook.VALIDATE_OUTPUT_FEATURE):
+        for hook in (
+            ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+            ExtenderHook.VALIDATE_OUTPUT_FEATURE,
+            ExtenderHook.INPUT_DATA_LOAD,
+        ):
             later = extender.captured[hook]
+            if hook != ExtenderHook.INPUT_DATA_LOAD:
+                assert later.feature_group_class is not None
+                assert later.feature_group_class.endswith(forging_name)
             assert later.step_uuid == planned.step_uuid != _FORGED_STEP_UUID
             assert later.credential_handles == planned.credential_handles != _FORGED_HANDLES
             assert later.bound_credential_handle == planned.bound_credential_handle != _FORGED_BOUND

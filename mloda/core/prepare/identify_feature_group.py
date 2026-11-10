@@ -1034,12 +1034,13 @@ class IdentifyFeatureGroupClass:
         if not fitting or not fitting <= set(blocked):
             self._variant_blocks[feature_group] = blocked
             return supported - set(blocked)
+        fitting_blocked = {cfw: blocked[cfw] for cfw in fitting}
         self._record_elimination(
             feature_group,
             "variant",
             variant_block_reason(feature_group, blocked, served, options),
-            variants=tuple(sorted({str(r.variant) for found in blocked.values() for r in found})),
-            allow_variants=variant_fix(feature_group, blocked, options),
+            variants=tuple(sorted({str(r.variant) for found in fitting_blocked.values() for r in found})),
+            allow_variants=variant_fix(feature_group, fitting_blocked, options),
         )
         return set()
 

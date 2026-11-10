@@ -255,8 +255,9 @@ def variant_fix(
     blocked: Mapping[type[ComputeFramework], tuple[Divergence, ...]],
     options: Options,
 ) -> tuple[str, ...]:
-    """The allow_variants value that admits every listed blocked variant, empty when none is listed."""
-    listed = {str(r.variant) for found in blocked.values() for r in found if r.variant in group.VARIANTS}
+    """The allow_variants value that admits a blocked framework, empty when none is fully listed."""
+    admittable = [found for found in blocked.values() if all(r.variant in group.VARIANTS for r in found)]
+    listed = {str(r.variant) for found in admittable for r in found}
     if not listed:
         return ()
     return tuple(sorted((allowed_variants(options) & group.VARIANTS) | listed))
@@ -273,7 +274,7 @@ def variant_block_reason(
     listed = {
         cfw: sorted({str(r.variant) for r in found if r.variant in group.VARIANTS}) for cfw, found in blocked.items()
     }
-    suggested = variant_fix(group, blocked, options)
+    suggested = sorted((allowed_variants(options) & group.VARIANTS) | {n for v in listed.values() for n in v})
     suggestion = ", ".join(f'"{n}"' for n in suggested) + ("," if len(suggested) == 1 else "")
     reasons = []
     for cfw in sorted(blocked, key=lambda c: c.get_class_name()):

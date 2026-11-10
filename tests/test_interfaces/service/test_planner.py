@@ -733,32 +733,38 @@ class TestUnresolved:
 
 
 class TestVariantNotAllowed:
-    @pytest.mark.parametrize(
-        "kwargs, fix, message_part",
-        [
-            ({"allow_options": ("optoy_kind", "allow_variants")}, True, "add the fix"),
-            ({"allow_options": ("optoy_kind",)}, False, "service policy"),
-            ({"trusted_caller": True}, True, "add the fix"),
-        ],
-    )
-    def test_blocked_variant_is_named(
-        self, tmp_path: Path, kwargs: dict[str, Any], fix: bool, message_part: str
-    ) -> None:
+    @staticmethod
+    def _blocked(tmp_path: Path, group_name: str, **kwargs: Any) -> tuple[dict[str, Any], dict[str, Any], Any]:
         toy = importlib.import_module(
             "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
         )
-        request = {"features": [{"name": toy.OPTOY_VARIANT_FEATURE, "options": {toy.OPTOY_KEY: "sum"}}]}
-
+        group = getattr(toy, group_name)
+        request = {"features": [{"name": group.FEATURE, "options": {toy.OPTOY_KEY: "sum"}}]}
         settings = _settings(tmp_path, compute_frameworks=("PandasDataFrame",), **kwargs)
-        base = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, toy.OpToyVariantFG})
+        base = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, group})
         result = _planner(settings, base=base).explain(request)
-
-        error = _error(result, "validation_failed")
-        details = [d for d in error["details"] if d.get("problem") == "variant_not_allowed"]
+        details = [
+            d for d in _error(result, "validation_failed")["details"] if d.get("problem") == "variant_not_allowed"
+        ]
         assert len(details) == 1
-        detail = details[0]
+        return result, details[0], toy
+
+    @pytest.mark.parametrize(
+        "group_name, kwargs, fix, message_part",
+        [
+            ("OpToyVariantFG", {"allow_options": ("optoy_kind", "allow_variants")}, True, "add the fix"),
+            ("OpToyVariantFG", {"allow_options": ("optoy_kind",)}, False, "service policy"),
+            ("OpToyVariantFG", {"trusted_caller": True}, True, "add the fix"),
+            ("OpToyVariantEmptyFG", {"allow_options": ("optoy_kind", "allow_variants")}, False, "cannot be allowed"),
+        ],
+    )
+    def test_blocked_variant_is_named(
+        self, tmp_path: Path, group_name: str, kwargs: dict[str, Any], fix: bool, message_part: str
+    ) -> None:
+        result, detail, toy = self._blocked(tmp_path, group_name, **kwargs)
+
         assert detail["path"] == "/features/0"
-        assert detail["feature_group"] == "OpToyVariantFG"
+        assert detail["feature_group"] == group_name
         assert detail["variants"] == [toy.OPTOY_VARIANT]
         assert message_part in detail["message"]
         assert "suggestion" not in detail
@@ -769,6 +775,17 @@ class TestVariantNotAllowed:
         dumped = json.dumps(result)
         assert "does not allow" not in dumped
         assert "OpToyVariantPandas" not in dumped
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+    def test_refused_allow_variants_key_gets_no_fix(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "mloda.interfaces.service.planner.caller_refused_option_keys", lambda *a, **k: frozenset({"allow_variants"})
+        )
+
+        result, detail, _ = self._blocked(tmp_path, "OpToyVariantFG", allow_options=("optoy_kind", "allow_variants"))
+
+        assert "fix" not in detail
+        assert "service policy" in detail["message"]
         _assert_no_paths(result, tmp_path, "sales.csv")
 
     def test_multiple_identified_keeps_the_generic_detail(

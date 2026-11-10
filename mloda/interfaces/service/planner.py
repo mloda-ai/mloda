@@ -502,7 +502,8 @@ class Planner:
         if failed is not None and failed.failure_kind == "none":
             variant_details = self._variant_details(failed, path, shown)
             if variant_details:
-                return error_result("validation_failed", variant_details[0]["message"], variant_details)
+                headline = next((d for d in variant_details if "fix" in d), variant_details[0])
+                return error_result("validation_failed", headline["message"], variant_details)
         detail = {
             "path": path,
             "problem": "unresolved",
@@ -514,8 +515,9 @@ class Planner:
 
     def _variant_details(self, failed: EvaluationResult, path: str, shown: str) -> list[dict[str, Any]]:
         """One variant_not_allowed detail per group whose only fitting frameworks follow an unallowed variant."""
-        settable = (
-            self._settings.trusted_caller or str(DefaultOptionKeys.allow_variants) in self._settings.allow_options
+        key = str(DefaultOptionKeys.allow_variants)
+        settable = self._settings.trusted_caller or (
+            key in self._settings.allow_options and key not in caller_refused_option_keys()
         )
         details: list[dict[str, Any]] = []
         for group, elimination in sorted(failed.eliminations.items(), key=lambda item: item[0].__name__):
@@ -523,7 +525,10 @@ class Planner:
                 continue
             fix = [sanitize_text(v, MAX_NAME_LENGTH) for v in elimination.allow_variants]
             if not elimination.allow_variants:
-                message = f"'{shown}' is served only through a rule variant its FeatureGroup does not list, so it cannot be allowed."
+                message = (
+                    f"'{shown}' is served only through a rule variant its FeatureGroup does not list, "
+                    "so it cannot be allowed."
+                )
             elif settable:
                 message = (
                     f"'{shown}' needs a rule variant the request has not allowed; add the fix to the feature's options."

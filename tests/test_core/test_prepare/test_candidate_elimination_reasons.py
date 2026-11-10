@@ -34,7 +34,8 @@ from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, unavailable_framework_message
-from mloda.core.abstract_plugins.implementation import accessible_implementations
+from mloda.core.abstract_plugins.components.divergence import Cause, Divergence, DivergenceKind
+from mloda.core.abstract_plugins.implementation import accessible_implementations, variant_fix
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
@@ -896,6 +897,29 @@ class TestEliminationStages:
         assert elimination.stage == "variant"
         assert elimination.variants == ("skip_nan",)
         assert elimination.allow_variants == ()
+
+    @pytest.mark.parametrize(
+        "blocked_names, allow, expected",
+        [
+            ({"pandas": ("other", "skip_nan")}, {}, ()),
+            ({"pandas": ("other", "skip_nan"), "arrow": ("other",)}, {}, ("other",)),
+            ({"pandas": ("other",)}, {}, ("other",)),
+            ({"pandas": ("other", "skip_nan")}, {"allow_variants": ("other",)}, ()),
+        ],
+    )
+    def test_variant_fix_admits_a_framework(
+        self, blocked_names: dict[str, tuple[str, ...]], allow: dict[str, Any], expected: tuple[str, ...]
+    ) -> None:
+        toy = _op_toy()
+        frameworks = {"pandas": PandasDataFrame, "arrow": PyArrowTable}
+        blocked = {
+            frameworks[key]: tuple(
+                Divergence(kind=DivergenceKind.VARIANT, cause=Cause.BACKEND, reason="r", variant=name) for name in names
+            )
+            for key, names in blocked_names.items()
+        }
+
+        assert variant_fix(toy.OpToyVariantOtherFG, blocked, Options(group=allow)) == expected
 
     def test_links_stage(self) -> None:
         feature = Feature(LINKS_FEATURE)

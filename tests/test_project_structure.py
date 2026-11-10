@@ -375,6 +375,15 @@ class TestToxConfig:
             f"[testenv:mcp] must default EXPECTED_SKIP_COUNT to 0: {setenv}"
         )
 
+    def test_spark_env_uses_thread_timeout_method(self) -> None:
+        """The spark env must time out via a thread, scoped to the test function only."""
+        parser = self._tox_parser()
+        sections = [name for name in parser.sections() if name.replace(" ", "") == "testenv:spark"]
+        assert len(sections) == 1, f"tox.ini needs exactly one [testenv:spark] section: {parser.sections()}"
+        commands = parser.get(sections[0], "commands", fallback="")
+        assert "--timeout-method=thread" in commands, f"[testenv:spark] must use --timeout-method=thread: {commands}"
+        assert "timeout_func_only=true" in commands, f"[testenv:spark] must set timeout_func_only=true: {commands}"
+
     @pytest.mark.parametrize(
         ("env", "python", "pins", "modules"),
         [

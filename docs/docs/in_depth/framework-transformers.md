@@ -90,7 +90,7 @@ Key features:
 - Leverages Spark's native PyArrow integration for efficient conversions
 - Can use a provided SparkSession or auto-create one if needed
 - Handles distributed data processing through Spark's execution engine
-- Requires PySpark installation and Java 8+ environment
+- Requires PySpark 4.0+ and Java 17+ environment
 
 **Note**: The Spark transformer can optionally use a SparkSession connection object. If none is provided, it will attempt to get the active session or create a new local session.
 

@@ -89,6 +89,11 @@ def spark_session() -> Any:
     # Set log level to reduce noise
     spark.sparkContext.setLogLevel("WARN")
 
+    # Warm up here so the first-job cold start falls outside the per-test timeout.
+    import pyarrow as pa
+
+    spark.createDataFrame(pa.table({"warm_up": [1]})).toArrow()
+
     logger.info("Created shared SparkSession for all Spark tests")
 
     yield spark

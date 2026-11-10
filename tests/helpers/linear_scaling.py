@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 
 def assert_runs_linearly(fn: Callable[[str], str], build: Callable[[int], str], n: int, what: str) -> str:
-    """Fail if min CPU time at n reaches 8x that at n // 4 (small floored at 2 ms) or 2 s; linear is ~4x, quadratic ~16x."""
+    """Fail if min CPU time at n hits 8x that at n // 4 (2 ms floor) or 2 s; linear ~4x, quadratic ~16x."""
     name = getattr(fn, "__name__", "function")
     small, large = build(n // 4), build(n)
     min_small = min_large = float("inf")

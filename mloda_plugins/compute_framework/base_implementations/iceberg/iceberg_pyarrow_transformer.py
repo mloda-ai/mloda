@@ -10,9 +10,9 @@ except ImportError:
 
 
 def normalize_arrow_types(table: Any) -> Any:
-    """Recast large_* types (also nested) to plain Arrow types.
+    """Recast large_* types (also nested) to plain Arrow types; Iceberg types have no width.
 
-    Assumes large types only appear as a zero-row artefact; a column over 2 GiB would fail the cast.
+    Empty scans and files written from large Arrow types return large_*; a single chunk over 2 GiB fails the cast.
     """
     target = pa.schema([field.with_type(_plain_type(field.type)) for field in table.schema], table.schema.metadata)
     if target.equals(table.schema, check_metadata=True):

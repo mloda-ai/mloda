@@ -120,9 +120,10 @@ def _container_body(closer: str, depth: int = 0) -> str:
 _NEST_DEPTH = 3
 
 
+# The lead may carry a repr-escaped newline (`\n`, `\\n`).
 # Anchored on a `{`/`,` lead so prose like `invalid password: too short` or unquoted `password: X` is left alone.
 _QUOTED_KEY_PATTERN = re.compile(
-    r"(?P<lead>[{,]\s*)(?P<quote>['\"])(?P<keyword>[\w.-]*" + _SECRET_NAME + r")(?P=quote)[ \t]*:[ \t]*"
+    r"(?P<lead>[{,](?:\s|\\+[nrt])*)(?P<quote>['\"])(?P<keyword>[\w.-]*" + _SECRET_NAME + r")(?P=quote)[ \t]*:[ \t]*"
     r"(?P<value>b?'(?:[^'\\\n]|\\.)*'|b?\"(?:[^\"\\\n]|\\.)*\""
     rf"|\[{_container_body(']', _NEST_DEPTH)}\]?|\{{{_container_body('}', _NEST_DEPTH)}\}}?"
     rf"|(?:[A-Za-z_][\w.]*)?\({_container_body(')', _NEST_DEPTH)}\)?|[^,}}\s]*)",
@@ -132,6 +133,11 @@ _STRING_LITERAL = r"b?(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\")"
 _STRING_ONLY = re.compile(_STRING_LITERAL)
 _CONTAINER_HEAD = re.compile(r"(?:[A-Za-z_][\w.]*)?[\[{(]")
 _CONTINUATION_LINE = re.compile(rf"[ \t]*(?P<literal>{_STRING_LITERAL})[\])}}, \t]*(?=\r?\n|\Z)")
+_ESCAPED_NEWLINE = r"(?:\\+r)?\\+n"
+_ESCAPED_CONTINUATION = re.compile(
+    rf"{_ESCAPED_NEWLINE}(?:[ \t]|\\+t)+(?P<literal>{_STRING_LITERAL})"
+    rf"[ \t,]*(?:(?P<closer>[\])}}])[\])}}, \t]*|(?={_ESCAPED_NEWLINE}|['\"]|\Z))"
+)
 _FLAT_BODY_LINE = re.compile(
     r"""b?['"]|[-+.]?\d|[\])},]|(?:true|false|null|True|False|None|NaN|-?Infinity)\b|[\[{(][ \t]*(?:[\]})][ \t,]*)?(?=\r?\n|\Z)"""
 )
@@ -207,6 +213,17 @@ def _string_continuation_end(text: str, end: int, key_indent: int) -> int:
     return end
 
 
+def _escaped_continuation_end(text: str, end: int) -> int:
+    """Extend a closed string value over following repr-escaped lines made of one string literal each."""
+    position = end
+    while (match := _ESCAPED_CONTINUATION.match(text, position)) is not None:
+        end = match.end("literal")
+        position = match.end()
+        if match["closer"]:
+            break
+    return end
+
+
 def _quoted_key_spans(text: str) -> Iterator[tuple[int, int, re.Match[str]]]:
     """Matches of the quoted-key pattern with the span extended over a multi-line value; never shrinks a match."""
     pos = 0
@@ -217,7 +234,9 @@ def _quoted_key_spans(text: str) -> Iterator[tuple[int, int, re.Match[str]]]:
         value = match.span("value")[0]
         container = _CONTAINER_HEAD.match(text, value)
         closed_string = container is None and _STRING_ONLY.fullmatch(text, value, end) is not None
-        if container is not None or (closed_string and text.startswith(("\n", "\r\n"), end)):
+        if closed_string and _ESCAPED_CONTINUATION.match(text, end) is not None:
+            end = _escaped_continuation_end(text, end)
+        elif container is not None or (closed_string and text.startswith(("\n", "\r\n"), end)):
             quote = match.span("quote")[0]
             newline = text.rfind("\n", scanned, quote)
             if newline >= 0:

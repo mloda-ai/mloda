@@ -11,7 +11,7 @@ from typing import Any
 
 from mloda.core.abstract_plugins.components.credential_handle import credential_handle_keys
 from mloda.core.abstract_plugins.components.credential_scrub import _mask_secret_keys
-from mloda.core.abstract_plugins.components.divergence import Divergence, divergence_order
+from mloda.core.abstract_plugins.components.divergence import divergence_records
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.prepare.stable_text import stable_text
 
@@ -32,20 +32,6 @@ def _class_path(cls: Any) -> str | None:
 
 def _sorted_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(records, key=lambda record: json.dumps(record, sort_keys=True))
-
-
-def _divergence_record(r: Divergence) -> dict[str, Any]:
-    return {
-        "source": r.source.value if r.source else None,
-        "framework": r.framework,
-        "kind": r.kind.value,
-        "cause": r.cause.value,
-        "subtypes": sorted(r.subtypes),
-        "outputs": sorted(r.outputs),
-        "reason": r.reason,
-        "variant": r.variant,
-        "docs": r.docs,
-    }
 
 
 def _masked_group(group: dict[str, Any], step: PlanStep) -> dict[str, Any]:
@@ -87,7 +73,7 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
             if step.contract_version is not None:
                 record["contract_version"] = step.contract_version
             if step.divergences:
-                record["divergences"] = [_divergence_record(r) for r in sorted(step.divergences, key=divergence_order)]
+                record["divergences"] = divergence_records(step.divergences)
             if step.allowed_variants:
                 record["allowed_variants"] = list(step.allowed_variants)
             lock["compute"].append(record)

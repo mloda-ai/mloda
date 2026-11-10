@@ -381,6 +381,30 @@ class TestReadCredential:
             with pytest.raises(CredentialReadRefused, match="h"):
                 read_credential("h")
 
+    def test_an_inner_grant_without_a_window_refuses_the_outer_handle_and_restores_after(self) -> None:
+        with credentials_scope({"outer": _credential()}):
+            with grant_scope(StaticGrant({"inner": _credential()})):
+                with pytest.raises(CredentialReadRefused):
+                    read_credential("outer")
+            assert read_credential("outer")["host"] == _HOST
+
+    def test_an_inner_grant_with_its_own_window_reads_only_the_inner_handle(self) -> None:
+        with credentials_scope({"outer": _credential()}):
+            with grant_scope(StaticGrant({"inner": _credential()})):
+                with readable_credentials():
+                    assert read_credential("inner")["host"] == _HOST
+                    with pytest.raises(CredentialReadRefused):
+                        read_credential("outer")
+            assert read_credential("outer")["host"] == _HOST
+
+    def test_the_outer_window_reads_again_after_an_inner_grant_scope_exits_through_an_exception(self) -> None:
+        with credentials_scope({"outer": _credential()}):
+            with pytest.raises(RuntimeError, match="inner boom"):
+                with grant_scope(StaticGrant({"inner": _credential()})):
+                    raise RuntimeError("inner boom")
+
+            assert read_credential("outer")["host"] == _HOST
+
     def test_hidden_credentials_refuses_inside_and_restores_after(self) -> None:
         with _scope():
             with hidden_credentials():
@@ -389,7 +413,7 @@ class TestReadCredential:
             assert read_credential("h")["host"] == _HOST
 
     def test_run_boundary_closes_the_window_and_hides_outer_recorders_then_restores(self) -> None:
-        with _scope(), grant_scope(StaticGrant({"h": _credential()})):
+        with _scope():
             with read_recorder() as outer:
                 with run_boundary():
                     with pytest.raises(CredentialReadRefused):

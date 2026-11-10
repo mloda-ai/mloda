@@ -22,6 +22,7 @@ from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda.core.abstract_plugins.components.match_rejection import collect_match_rejections
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import is_credential_abort, is_match_abort
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
@@ -365,6 +366,88 @@ class ChsDecBadHandleFG(ChsSource):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"chs_dec_a"}
+
+
+class ChsCfgFG(FeatureChainParserMixin, ChsSource):
+    """Config-path group (matches on options only) with a required handle key."""
+
+    RECOGNITION_ONLY_PATTERN = True
+    PREFIX_PATTERN = r".*__chscfgnever$"
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {
+        "chs_cfg_op": property_spec("Op.", allowed_values={"sum"}),
+        "chs_cfg_handle": credential_handle_spec("Cfg handle."),
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class ChsCfgExtraFG(ChsCfgFG):
+    PROPERTY_MAPPING = {
+        "chs_cfgx_op": property_spec("Op.", allowed_values={"sum"}),
+        "chs_cfgx_extra": property_spec("Required plain key.", allowed_values={"on"}),
+        "chs_cfgx_handle": credential_handle_spec("Cfg handle."),
+    }
+
+
+class ChsCfgSiblingFG(ChsCfgFG):
+    PROPERTY_MAPPING = {
+        "chs_cfg_op": property_spec("Op.", allowed_values={"sum"}),
+        "chs_cfg_alt_handle": credential_handle_spec("Sibling handle."),
+    }
+
+
+class ChsCfgFallbackFG(ChsSource):
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == "chs_cfg_col"
+
+
+class ChsCfgPlainSiblingFG(FeatureChainParserMixin, ChsSource):
+    """Config-path sibling declaring a plain option close to ChsCfgFG's handle key."""
+
+    RECOGNITION_ONLY_PATTERN = True
+    PREFIX_PATTERN = r".*__chscfgplainnever$"
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {
+        "chs_cfg_op": property_spec("Op.", allowed_values={"sum"}),
+        "chs_cfg_handler": property_spec("Plain handler name."),
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class ChsDomRaisingFG(FeatureChainParserMixin, ChsSource):
+    """Config-path group without handle keys whose get_domain raises."""
+
+    RECOGNITION_ONLY_PATTERN = True
+    PREFIX_PATTERN = r".*__chsdomnever$"
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {"chs_domr_op": property_spec("Op.", allowed_values={"sum"})}
+
+    @classmethod
+    def get_domain(cls) -> Domain:
+        raise RuntimeError("broken get_domain")
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class ChsDomWinnerFG(ChsSource):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_domr_col"}
+
+    @classmethod
+    def get_domain(cls) -> Domain:
+        return Domain("chs_domr")
 
 
 def _plugins(*groups: type[FeatureGroup]) -> PluginCollector:
@@ -1214,6 +1297,73 @@ class TestMissingHandleKeyAborts:
 
         assert _steps(session, ChsFallbackFG)
 
+    def test_a_config_path_group_records_no_rejection_for_a_misspelled_handle_key(self) -> None:
+        options = Options({"chs_cfg_op": "sum", "chs_cfg_handel": "vault-main"})
+
+        with collect_match_rejections() as reasons:
+            matched = ChsCfgFG.match_feature_group_criteria("chs_cfg_col", options, _dac())
+
+        assert matched is False
+        assert not reasons
+
+    @pytest.mark.parametrize("with_fallback", [True, False])
+    def test_a_config_path_group_aborts_on_a_misspelled_handle_key(self, with_fallback: bool) -> None:
+        typo = "chs_cfg_handel"
+        feature = Feature("chs_cfg_col", options={"chs_cfg_op": "sum", typo: "vault-main"})
+        groups: tuple[type[FeatureGroup], ...] = (ChsCfgFG, ChsCfgFallbackFG) if with_fallback else (ChsCfgFG,)
+
+        message = _abort(_prepare, [feature], _dac(**{"vault-main": {"key": SECRET}}), *groups)
+
+        assert "chs_cfg_handle" in message
+        assert "ChsCfgFG" in message
+        assert f"did you mean '{typo}'" in message
+        assert SECRET not in message
+
+    def test_a_config_path_group_with_the_correct_handle_key_resolves(self) -> None:
+        feature = Feature("chs_cfg_col", options={"chs_cfg_op": "sum", "chs_cfg_handle": "vault-main"})
+
+        session = _prepare([feature], _dac(**{"vault-main": {"key": SECRET}}), _plugins(ChsCfgFG))
+
+        assert _steps(session, ChsCfgFG)
+
+    def test_a_config_path_key_below_the_cutoff_keeps_the_fallback(self) -> None:
+        feature = Feature("chs_cfg_col", options={"chs_cfg_op": "sum", "chs_unrelated": "vault-main"})
+
+        session = _prepare([feature], _dac(**{"vault-main": {"key": SECRET}}), _plugins(ChsCfgFG, ChsCfgFallbackFG))
+
+        assert _steps(session, ChsCfgFallbackFG)
+
+    def test_a_config_path_group_also_missing_another_required_key_keeps_the_fallback(self) -> None:
+        feature = Feature("chs_cfg_col", options={"chs_cfgx_op": "sum", "chs_cfgx_handel": "vault-main"})
+
+        session = _prepare(
+            [feature], _dac(**{"vault-main": {"key": SECRET}}), _plugins(ChsCfgExtraFG, ChsCfgFallbackFG)
+        )
+
+        assert _steps(session, ChsCfgFallbackFG)
+
+    def test_a_sibling_handle_key_matched_by_another_config_path_group_wins_over_the_abort(self) -> None:
+        feature = Feature("chs_cfg_col", options={"chs_cfg_op": "sum", "chs_cfg_alt_handle": "vault-main"})
+
+        session = _prepare([feature], _dac(**{"vault-main": {"key": SECRET}}), _plugins(ChsCfgFG, ChsCfgSiblingFG))
+
+        assert _steps(session, ChsCfgSiblingFG)
+        assert not _steps(session, ChsCfgFG)
+
+    def test_a_sibling_declaring_a_close_plain_option_that_wins_does_not_abort(self) -> None:
+        feature = Feature("chs_cfg_col", options={"chs_cfg_op": "sum", "chs_cfg_handler": "x"})
+
+        session = _prepare([feature], _dac(**{"vault-main": {"key": SECRET}}), _plugins(ChsCfgFG, ChsCfgPlainSiblingFG))
+
+        assert _steps(session, ChsCfgPlainSiblingFG)
+
+    def test_an_unrelated_group_without_handle_keys_whose_get_domain_raises_does_not_break_planning(self) -> None:
+        feature = Feature("chs_domr_col", domain="chs_domr")
+
+        session = _prepare([feature], None, _plugins(ChsDomRaisingFG, ChsDomWinnerFG))
+
+        assert _steps(session, ChsDomWinnerFG)
+
 
 class ChsCredDefaultFG(ChsSource):
     PROPERTY_MAPPING = {"chs_default_auth": property_spec("Credential default.", default=Credential(token=SECRET))}
@@ -1376,6 +1526,68 @@ class TestCredentialValuesInOptionsAreRefused:
         assert "ChsFallbackFG" in message
         assert type(value).__name__ in message
         assert SECRET not in message
+
+    @pytest.mark.parametrize(
+        ("make_value", "key_path"),
+        [
+            pytest.param(lambda: {"password": SECRET}, "password", id="top-level"),
+            pytest.param(lambda: {"conn": {"api_key": SECRET}}, "api_key", id="nested"),
+            pytest.param(lambda: [{"host": "h"}, {"token": SECRET}], "token", id="list-of-mappings"),
+        ],
+    )
+    def test_a_secret_key_in_a_plain_mapping_under_a_pointer_key_is_refused_naming_key_path(
+        self, make_value: Callable[[], Any], key_path: str
+    ) -> None:
+        feature = Feature("chs_vault_a", options={"SqliteFG": make_value()})
+
+        message = _abort(_prepare, [feature], None, ChsFallbackFG, SqliteFG)
+
+        assert "SqliteFG" in message
+        assert key_path in message
+        assert SECRET not in message
+
+    @pytest.mark.parametrize(
+        ("make_value", "key"),
+        [
+            pytest.param(lambda: {"api_key": {SECRET: "v"}}, "api_key", id="secret-as-key-under-shaped"),
+            pytest.param(lambda: {"token": {"max_token": SECRET}}, "token", id="shaped-ancestor-of-count-name"),
+        ],
+    )
+    def test_a_secret_shaped_key_holding_a_secret_as_key_or_under_a_count_name_is_refused(
+        self, make_value: Callable[[], Any], key: str
+    ) -> None:
+        feature = Feature("chs_vault_a", options={"SqliteFG": make_value()})
+
+        message = _abort(_prepare, [feature], None, ChsFallbackFG, SqliteFG)
+
+        assert key in message
+        assert SECRET not in message
+
+    def test_a_secret_key_holding_a_list_names_the_key_once_without_indexes(self) -> None:
+        feature = Feature("chs_vault_a", options={"SqliteFG": {"token": ["a", "b"]}})
+
+        message = _abort(_prepare, [feature], None, ChsFallbackFG, SqliteFG)
+
+        assert len(re.findall(r"\btoken\b", message)) == 1
+        assert "[0]" not in message
+        assert "[1]" not in message
+
+    @pytest.mark.parametrize(
+        "make_value",
+        [
+            pytest.param(lambda: {"col_a": [1, 2], "col_b": [3]}, id="routing-hint"),
+            pytest.param(lambda: {"max_token": "x"}, id="count-name"),
+            pytest.param(lambda: {"max_token": ["x"]}, id="count-name-list"),
+        ],
+    )
+    def test_a_routing_hint_or_count_name_mapping_under_a_pointer_key_is_accepted(
+        self, make_value: Callable[[], Any]
+    ) -> None:
+        feature = Feature("chs_vault_a", options={"SqliteFG": make_value()})
+
+        session = _prepare([feature], None, _plugins(ChsFallbackFG, SqliteFG))
+
+        assert _steps(session, ChsFallbackFG)
 
     @staticmethod
     def _pointer_consumer() -> type[FeatureGroup]:

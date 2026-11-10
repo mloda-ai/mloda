@@ -199,9 +199,9 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
     other_pointer, foreign_handle_dac, known_handles_dac, and own_pointer (return NO_POINTER for a group that
     takes no pointer). expected_source is the source the own request claims (own_dac's for a searched group,
     the pointed one otherwise). Optional: pointed_source (None claims with own_pointer), load_framework,
-    context_options. rejection_window and make_implementation are fixture methods so a host in any package gets
-    them without this repo's conftest; the suite reclaims the subclasses it builds, and holding one beyond its
-    test is unsupported.
+    context_options, run_all_kwargs. rejection_window and make_implementation are fixture methods so a host in
+    any package gets them without this repo's conftest; the suite reclaims the subclasses it builds, and holding
+    one beyond its test is unsupported.
     """
 
     feature_group_class: type[SourceFeatureGroup]
@@ -211,6 +211,10 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
     load_framework: type[ComputeFramework] = PyArrowTable
     context_options: ClassVar[dict[str, Any]] = {}
     pointed_source: ClassVar[str | None] = None
+
+    def run_all_kwargs(self) -> dict[str, Any]:
+        """Extra mloda.run_all keyword arguments, e.g. api_data."""
+        return {}
 
     @pytest.fixture(autouse=True)
     # The "_a_" prefix sorts it first among autouse fixtures, so its mark is the outermost.
@@ -394,6 +398,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
             plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class}),
             data_access_collection=self.own_dac(),
             function_extender={capture},
+            **self.run_all_kwargs(),
         )
 
         assert len(capture.contexts) == 1

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 from collections.abc import Callable
 from typing import Any
 from uuid import UUID
@@ -17,8 +18,10 @@ from mloda._testing.compute_framework_shape import (
     serves_connection,
 )
 from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.filter.filter_engine import BaseFilterEngine
+from mloda.user import PluginLoader
 
 Factory = Callable[[], type[ComputeFramework]]
 
@@ -178,6 +181,22 @@ def test_built_in_framework_passes(module: str, name: str, dependency: str | Non
         pytest.skip(f"{name} is not available")
     assert check_compute_framework_shape(cls).failures == ()
     assert applicable_aspects(cls) == aspects
+
+
+# Checked by tests/test_plugins/compute_framework/base_implementations/spark/test_spark_framework_shape.py
+_SPARK_SHAPE_TESTED = {"SparkFramework"}
+
+
+def test_every_built_in_framework_is_shape_tested_and_none_is_stale() -> None:
+    PluginLoader.all()
+    discovered = {
+        cls.__name__
+        for cls in get_all_subclasses(ComputeFramework)
+        if cls.__module__.startswith("mloda_plugins.") and not inspect.isabstract(cls)
+    }
+    listed = {b[1] for b in BUILT_INS}
+    assert sorted(discovered - listed - _SPARK_SHAPE_TESTED) == []
+    assert sorted(listed - discovered) == []
 
 
 SERVES_CONNECTION = [

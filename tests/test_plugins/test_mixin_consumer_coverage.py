@@ -1,4 +1,4 @@
-"""Every concrete mloda_plugins implementation of a covered family must have a consumer of its contract mixin.
+"""Every concrete implementation under mloda_plugins or mloda.core of a covered family needs a contract mixin consumer.
 
 Plugins come from PluginLoader, which skips modules missing an optional dependency. Consumers come from listed modules
 imported explicitly (no collection-order dependence); one skipped for a missing dependency still counts."""
@@ -373,6 +373,7 @@ CONTRACTS: tuple[MixinContract, ...] = (
             "tests.test_core.test_abstract_plugins.test_components.test_input_data.test_toy_file_format_feature_group",
             "tests.test_core.test_abstract_plugins.test_components.test_input_data."
             "test_toy_source_feature_group_contract",
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.test_api_data_fg_contract",
         ),
     ),
     MixinContract(
@@ -431,6 +432,9 @@ CONTRACTS: tuple[MixinContract, ...] = (
 )
 
 
+_PLUGIN_MODULE_PREFIXES = ("mloda_plugins.", "mloda.core.")
+
+
 def _qualified_name(cls: type[Any]) -> str:
     """Compared by name, not identity: a reloaded module leaves a stale duplicate class behind."""
     return f"{cls.__module__}.{cls.__qualname__}"
@@ -439,19 +443,19 @@ def _qualified_name(cls: type[Any]) -> str:
 def concrete_plugin_classes(
     base: type[Any], aspect: str | None = None, applies: Callable[[type[Any]], bool] | None = None
 ) -> set[str]:
-    """Concrete subclasses of base defined under mloda_plugins; test-local subclasses fall out by module."""
+    """Concrete subclasses of base under mloda_plugins or mloda.core; test-local subclasses fall out by module."""
     PluginLoader.all()
     if applies is not None:
         return {
             _qualified_name(cls)
             for cls in get_all_subclasses(base)
-            if cls.__module__.startswith("mloda_plugins.") and not inspect.isabstract(cls) and applies(cls)
+            if cls.__module__.startswith(_PLUGIN_MODULE_PREFIXES) and not inspect.isabstract(cls) and applies(cls)
         }
     if aspect is not None:
         return {
             _qualified_name(cls)
             for cls in get_all_subclasses(base)
-            if cls.__module__.startswith("mloda_plugins.")
+            if cls.__module__.startswith(_PLUGIN_MODULE_PREFIXES)
             and not inspect.isabstract(cls)
             and aspect in applicable_aspects(cls)
         }
@@ -459,12 +463,12 @@ def concrete_plugin_classes(
         return {
             _qualified_name(impl)
             for impl in loaded_implementations()
-            if issubclass(impl.feature_group, base) and impl.__module__.startswith("mloda_plugins.")
+            if issubclass(impl.feature_group, base) and impl.__module__.startswith(_PLUGIN_MODULE_PREFIXES)
         }
     return {
         _qualified_name(cls)
         for cls in get_all_subclasses(base)
-        if cls.__module__.startswith("mloda_plugins.") and not inspect.isabstract(cls)
+        if cls.__module__.startswith(_PLUGIN_MODULE_PREFIXES) and not inspect.isabstract(cls)
     }
 
 
@@ -482,7 +486,9 @@ def covered_classes(contract: MixinContract) -> set[str]:
 @pytest.mark.parametrize("contract", CONTRACTS, ids=[contract.mixin.__name__ for contract in CONTRACTS])
 def test_every_concrete_implementation_has_a_mixin_consumer(contract: MixinContract) -> None:
     implementations = concrete_plugin_classes(contract.base, contract.aspect, contract.applies)
-    assert implementations, f"no concrete {contract.base.__name__} found under mloda_plugins: the plugin import broke"
+    assert implementations, (
+        f"no concrete {contract.base.__name__} found under mloda_plugins or mloda.core: the plugin import broke"
+    )
     uncovered = sorted(implementations - covered_classes(contract))
     assert uncovered == [], (
         f"{contract.base.__name__} implementations without a {contract.mixin.__name__} consumer: {uncovered}. "

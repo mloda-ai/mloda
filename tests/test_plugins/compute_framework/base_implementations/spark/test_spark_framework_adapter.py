@@ -14,10 +14,14 @@ from mloda.core.abstract_plugins.components.data_types import DataType
 
 # Reuse the shared adapter tests; the local `adapter` fixture below swaps in SparkAdapter.
 from tests.test_testing_kit.test_framework_adapter import (  # noqa: F401
+    _reclaimed,
+    test_adapter_reads_a_run_all_result,
     test_list_cells_read_back_as_lists,
     test_lost_type_false_for_numeric_columns,
     test_null_timestamp_reads_back_as_none,
     test_round_trip,
+    test_rows_reads_the_result_as_a_list_of_dicts,
+    test_rows_zero_row_result_is_empty_list,
     test_zero_row_keeps_names,
 )
 
@@ -65,6 +69,25 @@ def test_connection_lifecycle_keeps_session_alive(adapter: Any, spark_session: A
         assert adapter.connection is SparkSession.getActiveSession()
     assert adapter.connection is None
     assert spark_session.range(3).count() == 3
+
+
+@pytest.mark.parametrize(
+    "pair", [(DataType.INT64, DataType.STRING), (DataType.STRING, DataType.INT64)], ids=["int_str", "str_int"]
+)
+def test_duplicate_column_frame_keeps_both_columns_in_pair_order(adapter: Any, pair: tuple[DataType, DataType]) -> None:
+    from pyspark.sql.types import LongType, StringType
+
+    spark_types = {DataType.INT64: LongType(), DataType.STRING: StringType()}
+    with adapter:
+        frame = adapter.duplicate_column_frame(*pair)
+
+        assert adapter.column_names(frame) == ["a", "a"]
+        assert [f.dataType for f in frame.schema.fields] == [spark_types[pair[0]], spark_types[pair[1]]]
+
+
+def test_zero_column_frame_has_no_column_names(adapter: Any) -> None:
+    with adapter:
+        assert adapter.column_names(adapter.zero_column_frame()) == []
 
 
 def test_open_twice_raises(adapter: Any) -> None:

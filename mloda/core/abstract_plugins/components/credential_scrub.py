@@ -34,13 +34,15 @@ _AZURE_CONTAINER_PATTERN = re.compile(r"[a-z0-9-]{3,63}|\$(?:root|web|logs)")
 # The lookbehind (not a bare \b) avoids quadratic backtracking on long alphanumeric runs; the jdbc
 # subprotocol group is bounded (up to four words after `jdbc:`, e.g. `jdbc:h2:tcp`) for the same reason.
 _SCHEME = r"(?<![A-Za-z0-9+.-])(?P<scheme>(?:jdbc:(?:[A-Za-z][A-Za-z0-9+.-]*:){0,3})?[A-Za-z][A-Za-z0-9+.-]*)"
+# A `::` that continues an fsspec chain: before a `<scheme>://` or a lowercase `<protocol>::` element.
+_CHAIN_COLONS = r"::(?=[A-Za-z][A-Za-z0-9+.-]*://|[a-z][a-z0-9+.-]*::)"
 _FREE_TEXT_URI_PATTERN = re.compile(
     _SCHEME + r"://"
     r"(?:(?P<userinfo>[^/?#\s]*)@)?"
     r"(?P<host>(?:\[[0-9A-Fa-f:.]+\]|[\w.~-]*)(?::\d+)?)"
     # `;` or percent-escape parameters directly after a pathless host (stops at `/`, so the path group still owns
-    # later segments, at `::`, so a chained URI keeps its own match, and a `;` before another URI is no parameter).
-    r"(?P<params>(?:(?:;(?![A-Za-z][\w+.:-]*://)|(?=%))(?:(?!::)[^\s?#\"'<>\];/])*)+)?"
+    # later segments, at a chain `::`, so a chained URI keeps its own match, and a `;` before another URI is no parameter).
+    rf"(?P<params>(?:(?:;(?![A-Za-z][\w+.:-]*://)|(?=%))(?:(?!{_CHAIN_COLONS})[^\s?#\"'<>\];/])*)+)?"
     r"(?P<path>/[^\s?#\"'<>\]]*)?"
     r"(?P<query>[?#][^\s\"'<>)\]]*)?"
 )
@@ -87,7 +89,8 @@ def _keyword_pattern(plain: str) -> re.Pattern[str]:
     )
 
 
-_KEYWORD_PATTERN = _keyword_pattern(r"[^;&\s'\"]*")
+# A quote continues the value only when a token char follows, so `hun'ter2` leaves no fragment.
+_KEYWORD_PATTERN = _keyword_pattern(r"[^;&\s'\"]*(?:['\"](?=[\w.~+/%-])[^;&\s'\"]+)*")
 # The identity form: a plain value ends at `/` or `::` too, so one path segment is masked, not the rest of the path.
 _KEYWORD_SEGMENT_PATTERN = _keyword_pattern(r"(?:(?!::)[^;&/\s'\"])*")
 _PATH_VALUE = re.compile(r"/[\w.-]+(?:/[\w.-]+)+/?")
@@ -397,7 +400,7 @@ _MAX_DECODE_ROUNDS = 4
 # `::` separates parts only where an fsspec chain continues: before a new `<scheme>://`
 # element or a further lowercase `<protocol>::` element. Any other `::` (for example inside
 # a path parameter value) stays inside its part, so the region cut below removes it too.
-_PART_SPLIT = re.compile(r"(/|::(?=[A-Za-z][A-Za-z0-9+.-]*://|[a-z][a-z0-9+.-]*::))")
+_PART_SPLIT = re.compile(rf"(/|{_CHAIN_COLONS})")
 _PARAMETER_REGION = re.compile(r"[;?#].", re.DOTALL)
 
 
@@ -672,12 +675,26 @@ def _keyword_repl(m: re.Match[str]) -> str:
     return f"{keyword}{sep}***"
 
 
+_SOURCE_EXTENSION = re.compile(
+    r"\.(?:py|pyx|ipynb|js|ts|java|scala|kt|go|rs|rb|sql|yaml|yml|json|toml|cfg|ini|txt|csv|log|sh)$", re.IGNORECASE
+)
+
+
+def _password_scheme_repl(m: re.Match[str]) -> str:
+    """Keep a `file.py:12:` location prefix; mask any other `user:password` before a scheme."""
+    user = m["user"]
+    line, _, tail = m["pw"].partition(":")
+    if _SOURCE_EXTENSION.search(user) and line.isascii() and line.isdigit() and tail:
+        return m[0]
+    return f"{user}:***"
+
+
 _PASSES: list[tuple[re.Pattern[str], Any]] = [
     (_DB_USERINFO_PATTERN, r"\g<scheme>://"),
     (_FREE_TEXT_USERINFO_PATTERN, r"\g<scheme>://"),
     (_FREE_TEXT_URI_PATTERN, _scrub_uri_match),
     (_JDBC_CUT_PATTERN, _cut_marker_tail),
-    (_PASSWORD_AS_SCHEME_PATTERN, r"\g<user>:***"),
+    (_PASSWORD_AS_SCHEME_PATTERN, _password_scheme_repl),
     (_AUTHORIZATION_PATTERN, _authorization_repl),
     (_BEARER_PATTERN, r"\g<scheme> ***"),
     (_KEYWORD_PATTERN, _keyword_repl),

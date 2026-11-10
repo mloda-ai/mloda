@@ -46,7 +46,7 @@ class PandasNodeCentrality(Implementation[NodeCentralityFeatureGroup]):
         node_to_score = result.to_dict()
 
         if node_feature is not None and node_feature in data.columns:
-            data[feature_name] = data[node_feature].map(node_to_score)
+            data[feature_name] = data[node_feature].map(node_to_score).astype("float64")
             return data
 
         # Otherwise fall back to the source and target columns

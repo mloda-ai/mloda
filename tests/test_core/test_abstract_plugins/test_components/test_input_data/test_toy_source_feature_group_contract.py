@@ -14,8 +14,6 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_s
 
 
 class _ToyHooks:
-    """Hook methods shared by the toy hosts."""
-
     def own_dac(self) -> DataAccessCollection:
         return toy_source_group.toy_dac(h1={"toyfmt_col": [1, 2]})
 

@@ -198,9 +198,10 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
     Required: feature_group_class, present_column, missing_column, expected_source, own_dac, foreign_dac,
     other_pointer, foreign_handle_dac, known_handles_dac, and own_pointer (return NO_POINTER for a group that
     takes no pointer). expected_source is the source the own request claims (own_dac's for a searched group,
-    the pointed one otherwise). Optional: pointed_source (None claims with own_pointer), load_framework, context_options. rejection_window and make_implementation are
-    fixture methods so a host in any package gets them without this repo's conftest; the suite reclaims the
-    subclasses it builds, and holding one beyond its test is unsupported.
+    the pointed one otherwise). Optional: pointed_source (None claims with own_pointer), load_framework,
+    context_options. rejection_window and make_implementation are fixture methods so a host in any package gets
+    them without this repo's conftest; the suite reclaims the subclasses it builds, and holding one beyond its
+    test is unsupported.
     """
 
     feature_group_class: type[SourceFeatureGroup]

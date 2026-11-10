@@ -25,6 +25,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import (
 )
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.divergence import Divergence
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import (
@@ -813,7 +814,7 @@ class Engine:
         return existing
 
     def _reject_twins_sharing_a_frame(self) -> None:
-        """Rejects same-named copies with differing undeclared context on one framework reading the same inputs."""
+        """Rejects same-named copies with differing context not derived from the name, sharing one frame."""
         for group_class, collection in sorted(
             self.feature_group_collection.items(), key=lambda item: format_feature_group_class(item[0])
         ):
@@ -823,7 +824,8 @@ class Engine:
             for member in collection:
                 buckets[str(member.name)].append(member)
             for name, bucket in sorted(buckets.items()):
-                members = [m for m in bucket if self.feature_link_parents.get(m.uuid)]
+                # A root copy must be requested: a consumer may push context onto a root it does not read.
+                members = [m for m in bucket if self.feature_link_parents.get(m.uuid) or m.initial_requested_data]
                 if len(members) < 2:
                     continue
                 members.sort(
@@ -848,16 +850,20 @@ class Engine:
                             and a.options == b.options
                             and not _deep_equal(a.options.context, b.options.context)
                             and not (
-                                group_class.replaces_rows()
+                                (group_class.replaces_rows() or not parents)
                                 and a._split_context_hashable(split_keys) != b._split_context_hashable(split_keys)
                             )
                         ):
                             continue
-                        # Declared keys may derive from the name outside name_bindings; only undeclared ones prove it.
+                        bindings = group_class.name_bindings(name)
+                        # An empty binding means the parser could not read the name, so declared keys may come from it.
+                        name_derived = (
+                            {str(k) for k in bindings} | {DefaultOptionKeys.in_features.value} if bindings else declared
+                        )
                         keys = sorted(
                             str(k)
                             for k in set(a.options.context) | set(b.options.context)
-                            if str(k) not in declared
+                            if str(k) not in name_derived
                             and (
                                 (k in a.options.context) != (k in b.options.context)
                                 or not _deep_equal(a.options.context[k], b.options.context[k])

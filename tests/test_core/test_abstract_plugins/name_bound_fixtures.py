@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+import pyarrow as pa
+
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import FeatureChainParserMixin, DataCreatorFeatureGroup, PropertySpec
@@ -85,16 +87,28 @@ def make_root_fg(
     rows: list[Any],
     seen: dict[str, Any] | None = None,
     observe_key: str | None = None,
+    append_columns: bool = False,
+    calls: list[list[str]] | None = None,
 ) -> type[FeatureGroup]:
-    """Root group serving ``column``; with ``seen`` and ``observe_key`` it records that option as ``seen["child"]``."""
+    """Root group serving ``column``; with ``seen`` and ``observe_key`` it records that option as ``seen["child"]``.
+
+    ``append_columns`` appends one pyarrow column per requested feature; ``calls`` gets one name list per call.
+    """
 
     def feature_names_supported(cls: Any) -> set[str]:
         return {column}
 
     def calculate_feature(cls: Any, data: Any, features: FeatureSet) -> Any:
+        if calls is not None:
+            calls.append([str(feature.name) for feature in features.features])
         if seen is not None and observe_key is not None:
             for feature in features.features:
                 seen["child"] = feature.options.get(observe_key)
+        if append_columns:
+            table = pa.table({"root_base": rows})
+            for feature in features.features:
+                table = table.append_column(str(feature.name), pa.array(rows))
+            return table
         return {column: rows}
 
     namespace = {

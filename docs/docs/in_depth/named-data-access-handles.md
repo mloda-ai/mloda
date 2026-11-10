@@ -325,7 +325,8 @@ class SignedIdFG(DataCreatorFeatureGroup):
 
 # 3. User: select the handle by name.
 feature = Feature("signed_id", options={"hmac_key_handle": "pii-hmac-key"})
-mloda.run_all([feature], data_access_collection=dac, compute_frameworks=["PandasDataFrame"])
+result = mloda.run_all([feature], data_access_collection=dac, compute_frameworks=["PandasDataFrame"])
+assert result[0]["signed_id"][0] == "signed-with-15"
 ```
 
 To pass a rotated value, prepare once and pass it per run. The value is used for that run only and is never written
@@ -333,7 +334,9 @@ into the session; a later run without `credentials` reads the prepared value aga
 
 ```python
 session = mloda.prepare([feature], data_access_collection=dac, compute_frameworks=["PandasDataFrame"])
-session.run(credentials={"pii-hmac-key": Credential(key="rotated-hmac-key")})
+rotated = session.run(credentials={"pii-hmac-key": Credential(key="rotated-hmac-key")})
+assert rotated[0]["signed_id"][0] == "signed-with-16"
+assert session.run()[0]["signed_id"][0] == "signed-with-15"
 ```
 
 The same applies to `stream_run()`. A passed handle is refused with a `ValueError` at the call, before any step runs, if
@@ -341,11 +344,13 @@ no step declares it, if its value misses a `required_fields` entry or holds byte
 step binds it when the session is prepared (prepare a new session to change it). No message holds a value.
 `RunContext.run_inputs.credentials` carries the sorted handle names only.
 
-`read_credential` returns a `ResolvedCredential` (`CredentialFieldMissing` and `CredentialReadRefused` import from `mloda.provider`): a mapping with item access, `get`, iteration and `**` unpacking, a
-fresh copy per read, and the attributes `handle`, `version`, `expires_at` and `store` (the last three are `None` for
-now). A missing field raises `CredentialFieldMissing` (a `KeyError`) naming handle and field, on item access and on
-`del` or `pop` alike. A nested mapping is a plain dict, so a missing nested key reports as a missing column. A read
-outside the window, or of a handle the step did not declare, raises `CredentialReadRefused` (not a `LookupError`).
+`read_credential` returns a `ResolvedCredential`. All three (`ResolvedCredential`, `CredentialFieldMissing`,
+`CredentialReadRefused`) import from `mloda.provider`; `CredentialReadRefused` also from `mloda.steward`. It is a
+mapping with item access, `get`, iteration and `**` unpacking, a fresh copy per read, and the attributes `handle`,
+`version`, `expires_at` and `store` (the last three are `None` for now). A missing field raises
+`CredentialFieldMissing` (a `KeyError`) naming handle and field, on item access and on `del` or `pop` alike. A nested
+mapping is a plain dict, so a missing nested key reports as a missing column. A read outside the window, or of a
+handle the step did not declare, raises `CredentialReadRefused` (not a `LookupError`).
 
 A handle a source step binds at match time is reported in the plan, the lock and the hooks but grants no `read_credential`; a credential not registered in the collection renders `<pointer>`.
 
@@ -366,7 +371,7 @@ with credentials_scope({"pii-hmac-key": {"key": "test-hmac-key"}}):
 
 Limits:
 
-- A plugin-started thread has no scope and logs raw unless process-wide log masking is on (under `-X thread_inherit_context=1`, Python 3.14 and the default in free-threaded builds, a plain thread copies the starter's context: started in the window it reads and masks like the step, and its reads are refused once the window closes); run its work with `contextvars.copy_context().run` and join inside the step. A context copied inside a window cannot read once that window closes, even while the step runs (for example in validate hooks).
+- A plugin-started thread has no scope and logs raw unless process-wide log masking is on (under `-X thread_inherit_context=1`, Python 3.14+, the default in free-threaded builds, a plain thread copies the starter's context: started in the window it reads and masks like the step, and its reads are refused once the window closes); run its work with `contextvars.copy_context().run` and join inside the step. A context copied inside a window cannot read once that window closes, even while the step runs (for example in validate hooks).
 - An awaited asyncio task and `asyncio.to_thread` carry the scope; `run_in_executor` does not.
 - A value captured in a serialized UDF closure is outside every mask; read on the driver, never capture.
 - Cached or transformed values are outside the masks.

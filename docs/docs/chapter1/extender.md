@@ -249,7 +249,10 @@ class SealingExtender(Extender):
 To refuse a run when a step declares a handle, check `PlanStep.credential_handles` in `on_run_start`:
 
 ```python
-from mloda.steward import PlanContext, PlanStep
+from typing import Any
+
+from mloda.steward import Extender, ExtenderHook, PlanContext, PlanStep, RunContext
+
 
 class NoProdCredentials(Extender):
     def wraps(self) -> set[ExtenderHook]:

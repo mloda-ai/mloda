@@ -115,6 +115,7 @@ def _gated_subclass(
     required_key: str,
     calc: Calc | None = None,
     divergences: tuple[Divergence, ...] = (),
+    presence_only: bool = False,
 ) -> type[FeatureGroup]:
     class GatedChild(parent):  # type: ignore[valid-type, misc]
         if divergences:
@@ -126,7 +127,10 @@ def _gated_subclass(
         def match_feature_group_criteria(
             cls, feature_name: Any, options: Options, data_access_collection: Any = None
         ) -> bool:
-            if required_key not in options.group and required_key not in options.context:
+            if presence_only:
+                if required_key not in options.group and required_key not in options.context:
+                    return False
+            elif "x" not in (options.group.get(required_key), options.context.get(required_key)):
                 return False
             return super().match_feature_group_criteria(feature_name, options, data_access_collection)  # type: ignore[no-any-return]
 
@@ -180,6 +184,28 @@ def make_gate_rejects_own_option() -> Pair:
     return parent, _gated_subclass(parent, "other")
 
 
+TWO_KEYS = Options(group={"variant": "x", "mode": "m"})
+
+
+def make_presence_gated_pair(spec: PropertySpec | None = None, two_keys: bool = False) -> Pair:
+    base = make_parent()
+    if spec is None:
+        parent = base
+    else:
+
+        class SpecParent(base):  # type: ignore[valid-type, misc]
+            PROPERTY_MAPPING = {"variant": spec}
+
+        parent = SpecParent
+    if two_keys:
+        return parent, _gated_subclass(_gated_subclass(parent, "variant"), "mode", presence_only=True)
+    return parent, _gated_subclass(parent, "variant", presence_only=True)
+
+
+_TWO_KEYS_MAKE = functools.partial(make_presence_gated_pair, two_keys=True)
+_SELECTING_FOR: dict[Callable[[], Pair], Options] = {_TWO_KEYS_MAKE: TWO_KEYS}
+
+
 def make_unrelated() -> Pair:
     return make_parent(), make_well_scoped()[1]
 
@@ -229,7 +255,7 @@ def make_request_pair() -> Pair:
         def match_feature_group_criteria(
             cls, feature_name: Any, options: Options, data_access_collection: Any = None
         ) -> bool:
-            return str(feature_name) == "rq_a" and "variant" in options.group
+            return str(feature_name) == "rq_a" and options.group.get("variant") == "x"
 
     return RequestParent, RequestChild
 
@@ -356,13 +382,24 @@ def test_well_scoped_subclass_passes(data: TypedTestData | None) -> None:
             "missing from ScopeParent",
         ),
         (make_broken_run, "values:", DATA, "run raised"),
+        (make_presence_gated_pair, "steals:", None, "'variant'"),
+        (
+            functools.partial(
+                make_presence_gated_pair,
+                PropertySpec("Variant.", allowed_values=("x", "y"), strict_validation=True, default=None),
+            ),
+            "steals:",
+            None,
+            "'y'",
+        ),
+        (_TWO_KEYS_MAKE, "steals:", None, "'mode'"),
     ],
 )
 def test_broken_pair_fails_only_its_sub_check(
     make: Callable[[], Pair], prefix: str, data: TypedTestData | None, phrase: str
 ) -> None:
     parent, sub = make()
-    result = check_subclass_scope(sub, parent, SELECTING, input_data=data)
+    result = check_subclass_scope(sub, parent, _SELECTING_FOR.get(make, SELECTING), input_data=data)
     assert not result.passed
     assert all(f.startswith(prefix) for f in result.failures), result.failures
     assert phrase in " ".join(result.failures), result.failures
@@ -592,9 +629,16 @@ def test_parent_rejecting_its_own_request_is_a_setup_failure() -> None:
     assert any(f.startswith("setup:") for f in result.failures), result.failures
 
 
-def test_selecting_option_in_context_passes_for_gated_subclass() -> None:
-    parent, sub = make_well_scoped()
-    assert check_subclass_scope(sub, parent, Options(context={"variant": "x"})).failures == ()
+@pytest.mark.parametrize("presence_only", [False, True])
+def test_selecting_option_in_context_passes_for_gated_subclass(presence_only: bool) -> None:
+    parent = make_parent()
+    sub = _gated_subclass(parent, "variant", presence_only=presence_only)
+    failures = check_subclass_scope(sub, parent, Options(context={"variant": "x"})).failures
+    if presence_only:
+        assert failures
+        assert all(f.startswith("steals:") for f in failures), failures
+    else:
+        assert failures == ()
 
 
 def test_explicitly_empty_requests_is_a_names_failure_without_pass_requests_hint() -> None:

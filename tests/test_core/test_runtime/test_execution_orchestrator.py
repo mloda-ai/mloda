@@ -841,12 +841,13 @@ class TestEnterPrestartsStandbyWorkers:
 
         worker_manager.prestart_workers.assert_not_called()
 
-    def test_failing_preflight_does_not_prestart(self) -> None:
+    @pytest.mark.parametrize("preflight", ["raise_on_unpicklable_join_link", "raise_on_unpicklable_step_credentials"])
+    def test_failing_preflight_does_not_prestart(self, preflight: str) -> None:
         worker_manager = Mock()
         orchestrator = self._entering(worker_manager)
 
         with (
-            patch("mloda.core.runtime.run.raise_on_unpicklable_join_link", side_effect=ValueError("bad link")),
+            patch(f"mloda.core.runtime.run.{preflight}", side_effect=ValueError("bad link")),
             patch("mloda.core.runtime.run.planned_worker_count", return_value=1),
         ):
             with pytest.raises(ValueError, match="bad link"):

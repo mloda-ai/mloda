@@ -12,6 +12,7 @@ from multiprocessing.reduction import ForkingPickler
 from typing import Any
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -214,3 +215,20 @@ def refuse_unpicklable_credentials(grant: Any, values: Mapping[str, Any]) -> Non
         "Resolution: register only str, numbers and plain containers, build clients inside calculate_feature, "
         "or run without ParallelizationMode.MULTIPROCESSING."
     )
+
+
+def raise_on_unpicklable_step_credentials(steps: Iterable[Any], collection: DataAccessCollection | None) -> None:
+    """Raise ValueError naming the handle if a multiprocessing step's credential value cannot be pickled."""
+    if collection is None:
+        return
+    values: dict[str, Any] = {}
+    for step in steps:
+        if not isinstance(step, FeatureGroupStep) or not step.credential_handles:
+            continue
+        if ParallelizationMode.MULTIPROCESSING not in step.get_parallelization_mode():
+            continue
+        for handle in step.credential_handles:
+            if handle in collection.credentials:
+                values[handle] = collection.credentials[handle]
+    if values:
+        refuse_unpicklable_credentials(values, values)

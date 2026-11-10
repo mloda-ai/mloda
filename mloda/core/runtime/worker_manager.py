@@ -14,7 +14,25 @@ from mloda.core.abstract_plugins.components.credential_scrub import scrub_creden
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, safe_exc_str
 from mloda.core.runtime.mp_context import mp_start_context, start_daemon_process, started_by_this_process
 
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
+from mloda.core.runtime.validate_multiprocessing_link import _forking_picklable, _step_feature_groups
+
 logger = logging.getLogger(__name__)
+
+
+def _unpicklable_command_error(command: Any) -> str:
+    step = command[0] if isinstance(command, tuple) and command else command
+    uuid = getattr(step, "uuid", None)
+    subject = f"{type(step).__name__} (uuid={uuid})" if uuid is not None else type(step).__name__
+    if isinstance(step, (FeatureGroupStep, TransformFrameworkStep)):
+        names = ", ".join(feature_group.__name__ for feature_group in _step_feature_groups(step))
+        subject = f"{subject} for {names}"
+    return (
+        f"The worker command for {subject} cannot be pickled, so mloda cannot send it to a multiprocessing "
+        "worker process.\nResolution: use only picklable values on this step, or run without "
+        "ParallelizationMode.MULTIPROCESSING."
+    )
 
 
 class WorkerManager:
@@ -111,6 +129,8 @@ class WorkerManager:
         if result is None:
             raise ValueError(f"No process found for CFW UUID: {cfw_uuid}")
         _, command_queue, _ = result
+        if not _forking_picklable(command):
+            raise ValueError(_unpicklable_command_error(command))
         command_queue.put(command)
 
     def poll_result_queues(self) -> None:

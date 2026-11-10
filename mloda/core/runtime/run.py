@@ -39,6 +39,7 @@ from mloda.core.runtime.validate_multiprocessing_link import (
     raise_on_unpicklable_child_bootstrap,
     raise_on_unpicklable_extender,
     raise_on_unpicklable_join_link,
+    raise_on_unpicklable_step_credentials,
     raise_on_unpicklable_step_feature_group,
 )
 
@@ -625,6 +626,7 @@ class ExecutionOrchestrator:
             raise_on_multiprocessing_connection_conflict(self.execution_planner)
             raise_on_unpicklable_join_link(self.execution_planner)
             raise_on_unpicklable_step_feature_group(self.execution_planner)
+            raise_on_unpicklable_step_credentials(self.execution_planner, self.data_access_collection)
             raise_on_unpicklable_child_bootstrap(run_context.child_bootstrap)
             raise_on_unpicklable_extender(function_extender)
             # Snapshot right after the preflight, once, in this process: workers get this exact

@@ -465,6 +465,63 @@ class TestWorkerManagerCommandSending:
         with pytest.raises(ValueError, match="No process found for CFW UUID"):
             manager.send_command(unknown_uuid, command)
 
+    def _registered(self) -> tuple[WorkerManager, UUID, MagicMock]:
+        manager = WorkerManager()
+        cfw_uuid = uuid4()
+        mock_cmd_queue = MagicMock()
+        manager.process_register[cfw_uuid] = (Mock(spec=multiprocessing.Process), mock_cmd_queue, MagicMock())
+        return manager, cfw_uuid, mock_cmd_queue
+
+    def test_send_command_refuses_a_step_with_an_unpicklable_attribute(self) -> None:
+        from mloda.core.abstract_plugins.components.feature import Feature
+        from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+        from mloda.core.core.step.feature_group_step import FeatureGroupStep
+        from mloda.provider import FeatureGroup
+        from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+        class _WmSendFeatureGroup(FeatureGroup):
+            pass
+
+        manager, cfw_uuid, mock_cmd_queue = self._registered()
+        step = FeatureGroupStep(_WmSendFeatureGroup, FeatureSet([Feature("f")]), set(), PandasDataFrame)
+        lock = threading.Lock()
+        step.held_lock = lock
+
+        with pytest.raises(ValueError) as excinfo:
+            manager.send_command(cfw_uuid, (step, {"k": "v"}))
+
+        message = str(excinfo.value)
+        assert "FeatureGroupStep" in message
+        assert "_WmSendFeatureGroup" in message
+        assert repr(lock) not in message
+        mock_cmd_queue.put.assert_not_called()
+
+    def test_send_command_refuses_a_plain_unpicklable_step_naming_its_type(self) -> None:
+        class _JoinShapedStep:
+            def __init__(self) -> None:
+                self.uuid = uuid4()
+                self.lock = threading.Lock()
+
+        manager, cfw_uuid, mock_cmd_queue = self._registered()
+        step = _JoinShapedStep()
+
+        with pytest.raises(ValueError) as excinfo:
+            manager.send_command(cfw_uuid, (step, set()))
+
+        message = str(excinfo.value)
+        assert "_JoinShapedStep" in message
+        assert repr(step.lock) not in message
+        mock_cmd_queue.put.assert_not_called()
+
+    def test_send_command_puts_a_bare_string_and_a_picklable_tuple_unchanged(self) -> None:
+        manager, cfw_uuid, mock_cmd_queue = self._registered()
+        picklable = ("a", 1, {"x": [1, 2]})
+
+        manager.send_command(cfw_uuid, "MASKED_CONSTANT")
+        manager.send_command(cfw_uuid, picklable)
+
+        assert [c.args[0] for c in mock_cmd_queue.put.call_args_list] == ["MASKED_CONSTANT", picklable]
+
 
 class TestWorkerManagerResultPolling:
     """Test polling result queues for completed steps."""

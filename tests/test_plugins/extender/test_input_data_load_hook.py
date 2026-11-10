@@ -13,6 +13,7 @@ import os
 import pickle  # nosec B403
 import sqlite3
 import threading
+import uuid
 from pathlib import Path, PurePosixPath
 from collections.abc import Mapping
 from typing import Any, cast
@@ -1373,8 +1374,74 @@ class _MultiprocessingHopFeatureGroup(DataCreatorFeatureGroup):
             return {_MP_HOP_COLUMN: loaded.result()}
 
 
+_MP_FORGE_COLUMN = f"{_MARKER}_mp_forge_col"
+_MP_FORGED_UUID = uuid.UUID(int=1)
+
+
+class _FileRecordingStepFactsExtender(Extender):
+    """Appends `hook|step_uuid|credential_handles` per calculate and validate-output call to a file."""
+
+    def __init__(self, output_path: Path) -> None:
+        self.priority = 100
+        self._output_path = output_path
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE, ExtenderHook.VALIDATE_OUTPUT_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        assert context is not None
+        line = f"{context.hook.name}|{context.step_uuid}|{','.join(context.credential_handles)}"
+        with self._output_path.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+        return result
+
+
+class _MultiprocessingForgingFeatureGroup(DataCreatorFeatureGroup):
+    PROPERTY_MAPPING = {"idl_mp_vault_handle": credential_handle_spec("Vault handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {_MP_FORGE_COLUMN}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        features.step_uuid = _MP_FORGED_UUID
+        features.credential_handles = ("forged-handle",)
+        features.bound_credential_handle = "forged-bound"
+        return {_MP_FORGE_COLUMN: [1, 2, 3]}
+
+
 @pytest.mark.timeout(30)
 class TestThreadHopInASpawnedWorkerReachesTheGate:
+    def test_forged_step_facts_in_a_multiprocessing_worker_do_not_reach_validate_output(
+        self, tmp_path: Path, flight_server: Any
+    ) -> None:
+        output_path = tmp_path / "step_facts.txt"
+
+        mloda.run_all(
+            [Feature(_MP_FORGE_COLUMN, options={"idl_mp_vault_handle": "vault-main"})],
+            compute_frameworks=["PythonDictFramework"],
+            data_access_collection=DataAccessCollection(credentials={"vault-main": {"key": "idl-mp-1"}}),
+            plugin_collector=PluginCollector.enabled_feature_groups({_MultiprocessingForgingFeatureGroup}),
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+            function_extender={_FileRecordingStepFactsExtender(output_path)},
+        )
+
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+        by_hook = {line.split("|")[0]: line.split("|")[1:] for line in lines}
+        calculate = by_hook["FEATURE_GROUP_CALCULATE_FEATURE"]
+        assert calculate[1] == "vault-main"
+        assert by_hook["VALIDATE_OUTPUT_FEATURE"] == calculate
+        assert str(_MP_FORGED_UUID) not in output_path.read_text(encoding="utf-8")
+        assert "forged" not in output_path.read_text(encoding="utf-8")
+
     def test_hopped_load_in_a_multiprocessing_worker_reaches_the_gate(self, tmp_path: Path, flight_server: Any) -> None:
         output_path = tmp_path / "gate_calls.txt"
 
@@ -1517,8 +1584,38 @@ class _HandleThreadedLoadFG(_threaded_load_feature_group("received"), DataCreato
         return {"idl_handle_col": super().calculate_feature(data, features)}
 
 
+_IDL_FORGED_UUID = uuid.uuid4()
+
+
+class _ForgingHandleThreadedLoadFG(_HandleThreadedLoadFG):
+    """Reassigns the per-step facts on its FeatureSet before loading."""
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        features.step_uuid = _IDL_FORGED_UUID
+        features.credential_handles = ("forged-handle",)
+        return super().calculate_feature(data, features)
+
+
 class TestInputDataLoadHookCarriesCredentialHandles:
     """The INPUT_DATA_LOAD HookContext carries the calculate step's credential handles."""
+
+    def test_load_after_the_group_reassigns_its_step_facts_reports_the_planned_ones(self) -> None:
+        gate = _GateInputDataLoadExtender()
+
+        mloda.run_all(
+            [Feature("idl_handle_col", options={"idl_vault_handle": "vault-main"})],
+            compute_frameworks=[PythonDictFramework],
+            data_access_collection=DataAccessCollection(credentials={"vault-main": {"key": "idl-1"}}),
+            plugin_collector=PluginCollector.enabled_feature_groups({_ForgingHandleThreadedLoadFG}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={gate},
+        )
+
+        assert len(gate.all_captured) == 1
+        assert gate.all_captured[0].credential_handles == ("vault-main",)
+        assert gate.all_captured[0].step_uuid is not None
+        assert gate.all_captured[0].step_uuid != _IDL_FORGED_UUID
 
     def test_direct_path_copies_the_handles_from_the_calculate_context(self) -> None:
         extender = _InputDataLoadCapturingExtender()

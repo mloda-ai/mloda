@@ -3,7 +3,7 @@
 import io
 import json
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from contextvars import ContextVar, Token
 from typing import Any
 from urllib.parse import unquote
@@ -114,11 +114,106 @@ _NEST_DEPTH = 3
 # Anchored on a `{`/`,` lead so prose like `invalid password: too short` or unquoted `password: X` is left alone.
 _QUOTED_KEY_PATTERN = re.compile(
     r"(?P<lead>[{,]\s*)(?P<quote>['\"])(?P<keyword>[\w.-]*" + _SECRET_NAME + r")(?P=quote)[ \t]*:[ \t]*"
-    r"(?:b?'(?:[^'\\\n]|\\.)*'|b?\"(?:[^\"\\\n]|\\.)*\""
+    r"(?P<value>b?'(?:[^'\\\n]|\\.)*'|b?\"(?:[^\"\\\n]|\\.)*\""
     rf"|\[{_container_body(']', _NEST_DEPTH)}\]?|\{{{_container_body('}', _NEST_DEPTH)}\}}?"
     rf"|(?:[A-Za-z_][\w.]*)?\({_container_body(')', _NEST_DEPTH)}\)?|[^,}}\s]*)",
     re.IGNORECASE,
 )
+_STRING_LITERAL = r"b?(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\")"
+_STRING_ONLY = re.compile(_STRING_LITERAL)
+_CONTAINER_HEAD = re.compile(r"(?:[A-Za-z_][\w.]*)?[\[{(]")
+_CONTINUATION_LINE = re.compile(rf"[ \t]*(?P<literal>{_STRING_LITERAL})[\])}}, \t]*(?=\r?\n|\Z)")
+_QUOTED_KEY_REPL = r"\g<lead>\g<quote>\g<keyword>\g<quote>: \g<quote>***\g<quote>"
+
+
+def _indent_end(text: str, start: int) -> int:
+    """Index of the first non-space, non-tab char at or after ``start``."""
+    while start < len(text) and text[start] in " \t":
+        start += 1
+    return start
+
+
+def _container_end(text: str, opener: int, key_indent: int) -> int:
+    """End of a multi-line container value: its matching closer, else the line before the first shallow line."""
+    size = len(text)
+    depth = 0
+    i = opener
+    while i < size:
+        char = text[i]
+        if char in "'\"":
+            j = i + 1
+            while j < size and text[j] != "\n" and text[j] != char:
+                j += 2 if text[j] == "\\" and j + 1 < size and text[j + 1] != "\n" else 1
+            i = j + 1 if j < size and text[j] == char else j
+            continue
+        if char in "[{(":
+            depth += 1
+        elif char in "]})":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        elif char == "\n":
+            first = _indent_end(text, i + 1)
+            if first < size and text[first] not in "\r\n" and first - (i + 1) <= key_indent:
+                if depth == 1 and text[first] in "]})":
+                    return first + 1
+                stop = i - 1 if text[i - 1] == "\r" else i
+                while stop > opener and text[stop - 1] in " \t,":
+                    stop -= 1
+                return stop
+        i += 1
+    return size
+
+
+def _string_continuation_end(text: str, end: int, key_indent: int) -> int:
+    """Extend a closed string value over following deeper lines made of one string literal each."""
+    size = len(text)
+    position = end
+    while position < size:
+        if text[position] == "\r":
+            position += 1
+        if position >= size or text[position] != "\n":
+            break
+        line = position + 1
+        if _indent_end(text, line) - line <= key_indent:
+            break
+        match = _CONTINUATION_LINE.match(text, line)
+        if match is None:
+            break
+        end = match.end("literal")
+        position = match.end()
+    return end
+
+
+def _quoted_key_spans(text: str) -> Iterator[tuple[int, int, re.Match[str]]]:
+    """Matches of the quoted-key pattern with the span extended over a multi-line value; never shrinks a match."""
+    pos = 0
+    while (match := next(_QUOTED_KEY_PATTERN.finditer(text, pos), None)) is not None:
+        start, end = match.span()
+        value = match.span("value")[0]
+        container = _CONTAINER_HEAD.match(text, value)
+        closed_string = container is None and _STRING_ONLY.fullmatch(text, value, end) is not None
+        if container is not None or (closed_string and text.startswith(("\n", "\r\n"), end)):
+            line = text.rfind("\n", 0, match.span("quote")[0]) + 1
+            key_indent = _indent_end(text, line) - line
+            if container is not None:
+                end = max(end, _container_end(text, container.end() - 1, key_indent))
+            else:
+                end = _string_continuation_end(text, end, key_indent)
+        yield start, end, match
+        pos = end
+
+
+def _sub_quoted_keys(text: str) -> str:
+    out = io.StringIO()
+    cursor = 0
+    for start, end, match in _quoted_key_spans(text):
+        out.write(text[cursor:start])
+        out.write(match.expand(_QUOTED_KEY_REPL))
+        cursor = end
+    out.write(text[cursor:])
+    return out.getvalue()
+
 
 # Token-shaped (not prose): has a digit or one of -_~+/, a `.` before a token char, or is 20+ chars long.
 _TOKEN68 = r"[A-Za-z0-9\-._~+/]"
@@ -525,14 +620,16 @@ def _sub_tracked(
     out = io.StringIO()
     origins: list[int] = []
     cursor = 0
-    for match in pattern.finditer(text):
-        start, end = match.span()
+    spans = (
+        _quoted_key_spans(text) if pattern is _QUOTED_KEY_PATTERN else ((*m.span(), m) for m in pattern.finditer(text))
+    )
+    for start, end, match in spans:
         out.write(text[cursor:start])
         origins.extend(origin[cursor:start])
         replacement = _replacement(match, repl)
         out.write(replacement)
         if origin_of is None:
-            origins.extend(_align(match[0], origin[start:end], replacement))
+            origins.extend(_align(text[start:end], origin[start:end], replacement))
         else:
             origins.extend(origin_of(match, replacement, origin[start:end]))
         cursor = end
@@ -566,8 +663,6 @@ def _keyword_repl(m: re.Match[str]) -> str:
     return f"{keyword}{sep}***"
 
 
-_QUOTED_KEY_REPL = r"\g<lead>\g<quote>\g<keyword>\g<quote>: \g<quote>***\g<quote>"
-
 _PASSES: list[tuple[re.Pattern[str], Any]] = [
     (_DB_USERINFO_PATTERN, r"\g<scheme>://"),
     (_FREE_TEXT_USERINFO_PATTERN, r"\g<scheme>://"),
@@ -586,7 +681,7 @@ _PASSES: list[tuple[re.Pattern[str], Any]] = [
 def _scrub_passes(text: str) -> str:
     text = text.replace(_JDBC_CUT, "\ufffd")
     for pattern, repl in _PASSES:
-        text = pattern.sub(repl, text)
+        text = _sub_quoted_keys(text) if pattern is _QUOTED_KEY_PATTERN else pattern.sub(repl, text)
     return text
 
 

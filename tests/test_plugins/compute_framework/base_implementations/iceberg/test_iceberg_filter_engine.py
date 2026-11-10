@@ -839,6 +839,26 @@ class TestScanColumnsProjection:
 
         assert result.column_names == ["id", "b.c"]
 
+    _COLS = ("s", "l", "st.x")
+
+    @staticmethod
+    def _typed_table(rows: int) -> pa.Table:
+        schema = pa.schema([("s", pa.string()), ("l", pa.list_(pa.string())), ("st", pa.struct([("x", pa.string())]))])
+        data = {"s": ["a"] * rows, "l": [["p"]] * rows, "st": [{"x": "q"}] * rows}
+        return pa.table(data, schema=schema)
+
+    def test_row_filter_matching_nothing_keeps_schema(self, iceberg_adapter: Any) -> None:
+        table = iceberg_adapter.from_arrow(self._typed_table(1))
+        unfiltered = scan_columns(table, self._COLS)
+        filtered = scan_columns(table, self._COLS, row_filter=EqualTo("s", "zzz"))
+        assert filtered.num_rows == 0
+        assert filtered.schema == unfiltered.schema
+
+    def test_zero_row_table_keeps_schema_of_non_empty_table(self, iceberg_adapter: Any) -> None:
+        full = iceberg_adapter.from_arrow(self._typed_table(1))
+        empty = iceberg_adapter.from_arrow(self._typed_table(0))
+        assert scan_columns(empty, self._COLS).schema == scan_columns(full, self._COLS).schema
+
 
 @pytest.mark.skipif(
     pyiceberg is not None and pa is not None, reason="PyIceberg and PyArrow are installed. Skipping unavailable test."

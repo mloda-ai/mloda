@@ -10,33 +10,37 @@ except ImportError:
 
 
 def normalize_arrow_types(table: Any) -> Any:
-    """Cast large_string/large_binary/large_list columns to their plain Arrow types.
+    """Recast large_* types (also nested) to plain Arrow types.
 
-    Iceberg's scan returns large_* types for empty results and plain types otherwise,
-    so casting keeps the schema stable regardless of row count.
+    Assumes large types only appear as a zero-row artefact; a column over 2 GiB would fail the cast.
     """
-    if pa is None:
+    target = pa.schema([field.with_type(_plain_type(field.type)) for field in table.schema], table.schema.metadata)
+    if target.equals(table.schema, check_metadata=True):
         return table
-    fields = []
-    for field in table.schema:
-        target = _plain_type(field.type)
-        fields.append(field.with_type(target) if target is not None else field)
-    if all(f.type == n.type for f, n in zip(fields, table.schema)):
-        return table
-    return table.cast(pa.schema(fields))
+    return table.cast(target)
 
 
 def _plain_type(arrow_type: Any) -> Any:
-    """Return the plain Arrow type for a large_* type, or None if no change is needed."""
-    if pa is None:
-        return None
+    """Return the Arrow type with large_string/large_binary/large_list replaced recursively."""
     if pa.types.is_large_string(arrow_type):
         return pa.string()
     if pa.types.is_large_binary(arrow_type):
         return pa.binary()
     if pa.types.is_large_list(arrow_type):
-        return pa.list_(arrow_type.value_type)
-    return None
+        return pa.list_(arrow_type.value_field.with_type(_plain_type(arrow_type.value_type)))
+    if pa.types.is_fixed_size_list(arrow_type):
+        return pa.list_(arrow_type.value_field.with_type(_plain_type(arrow_type.value_type)), arrow_type.list_size)
+    if pa.types.is_list(arrow_type):
+        return pa.list_(arrow_type.value_field.with_type(_plain_type(arrow_type.value_type)))
+    if pa.types.is_struct(arrow_type):
+        return pa.struct([f.with_type(_plain_type(f.type)) for f in arrow_type])
+    if pa.types.is_map(arrow_type):
+        return pa.map_(
+            arrow_type.key_field.with_type(_plain_type(arrow_type.key_type)),
+            arrow_type.item_field.with_type(_plain_type(arrow_type.item_type)),
+            keys_sorted=arrow_type.keys_sorted,
+        )
+    return arrow_type
 
 
 class IcebergPyArrowTransformer(BaseTransformer):

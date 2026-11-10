@@ -129,3 +129,16 @@ class TestFlightServerIntegration:
 
         assert isinstance(frame, pd.DataFrame)
         assert frame.equals(table.to_pandas())
+
+    def test_upload_table_leaves_the_native_frame_data_untouched(self) -> None:
+        frame = pd.DataFrame({"a": [1, 2, 3]})
+        cfw = PandasDataFrame()
+        cfw.data = frame
+        object_id = uuid4()
+
+        cfw.upload_table(self.location, object_id)
+        downloaded = FlightServer.download_table(self.location, str(object_id))
+        FlightServer.drop_tables(self.location, {str(object_id)})
+
+        assert cfw.data is frame
+        assert downloaded.equals(pa.Table.from_pandas(frame))

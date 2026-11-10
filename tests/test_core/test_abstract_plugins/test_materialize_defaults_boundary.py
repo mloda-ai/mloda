@@ -278,6 +278,24 @@ def _run_direct_and_chained(
     )
 
 
+def _frame_columns(frame: Any) -> list[str]:
+    """Column names of an Arrow table, columnar dict, or list of row dicts."""
+    if isinstance(frame, dict):
+        return list(frame)
+    if isinstance(frame, list):
+        return list(frame[0])
+    return list(frame.column_names)
+
+
+def _column_values(frame: Any, name: str) -> list[Any]:
+    """Values of one column of an Arrow table, columnar dict, or list of row dicts."""
+    if isinstance(frame, dict):
+        return list(frame[name])
+    if isinstance(frame, list):
+        return [row[name] for row in frame]
+    return list(frame[name].to_pylist())
+
+
 def _single_row(frame: Any, column: str) -> Any:
     """Extract the single payload row, tolerant of columnar dict or list-of-row-dicts results."""
     if isinstance(frame, dict):
@@ -483,26 +501,36 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         assert len(direct_frames) == 1
 
     @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
-    @pytest.mark.parametrize("direct_data_type", [None, DataType.INT64], ids=["untyped", "typed"])
+    @pytest.mark.parametrize(
+        ("pinned", "direct_data_type"),
+        [
+            pytest.param("one_framework", None, id="untyped"),
+            pytest.param("one_framework", DataType.INT64, id="typed"),
+            pytest.param("direct_pinned_of_two", None, id="untyped_direct_pinned_of_two"),
+        ],
+    )
     def test_direct_and_chained_request_append_style_group_pyarrow(
-        self, direct_first: bool, direct_data_type: DataType | None
+        self, direct_first: bool, pinned: str, direct_data_type: DataType | None
     ) -> None:
         calls: list[list[str]] = []
+        two = pinned == "direct_pinned_of_two"
         results = _run_direct_and_chained(
             calls,
-            framework=PyArrowTable,
+            framework=[PyArrowTable, PythonDictFramework] if two else PyArrowTable,
             append_columns=True,
             direct_first=direct_first,
             direct_data_type=direct_data_type,
+            direct_compute_framework="PyArrowTable" if two else None,
         )
-        names = [name for table in results for name in table.column_names]
+        names = [name for frame in results for name in _frame_columns(frame)]
         assert names.count(MDB_DIRECT) == 1
         assert names.count(MDB_CHAINED) == 1
-        assert sum(c.count(MDB_DIRECT) for c in calls) == 1
+        assert sum(c.count(MDB_DIRECT) for c in calls) == 1, calls
         for name in (MDB_DIRECT, MDB_CHAINED):
-            (table,) = [table for table in results if name in table.column_names]
-            assert table[name].to_pylist() == [1, 2]
-            assert table.schema.field(name).type == DataType.to_arrow_type(DataType.INT64)
+            (frame,) = [f for f in results if name in _frame_columns(f)]
+            assert _column_values(frame, name) == [1, 2]
+            if not isinstance(frame, (dict, list)):
+                assert frame.schema.field(name).type == DataType.to_arrow_type(DataType.INT64)
 
     @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
     def test_typed_direct_and_untyped_input_keep_runtime_type_enforcement(self, direct_first: bool) -> None:
@@ -703,17 +731,20 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         [None, Options(context={"x": 1})],
         ids=["no_direct_ctx", "matching_direct_ctx"],
     )
-    def test_cascaded_context_succeeds(self, direct_first: bool, direct_options: Options | None) -> None:
+    @pytest.mark.parametrize("pinned", ["one_framework", "direct_pinned_of_two"])
+    def test_cascaded_context_succeeds(self, direct_first: bool, direct_options: Options | None, pinned: str) -> None:
         cascade = Options(context={"x": 1}, cascade_context_keys=frozenset({"x"}))
+        two = pinned == "direct_pinned_of_two"
         results = _run_direct_and_chained(
             [],
-            framework=PyArrowTable,
+            framework=[PyArrowTable, PythonDictFramework] if two else PyArrowTable,
             append_columns=True,
             direct_first=direct_first,
             chained_options=cascade,
             direct_options=direct_options,
+            direct_compute_framework="PyArrowTable" if two else None,
         )
-        names = [name for table in results for name in table.column_names]
+        names = [name for frame in results for name in _frame_columns(frame)]
         assert names.count(MDB_DIRECT) == 1
         assert names.count(MDB_CHAINED) == 1
 

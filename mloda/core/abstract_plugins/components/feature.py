@@ -599,7 +599,7 @@ class Feature:
     def hash_ignoring_compute_frameworks(self) -> int:
         return self._hash(False)
 
-    def _hash(self, include_compute_frameworks: bool) -> int:
+    def _hash(self, include_compute_frameworks: bool, include_child_options: bool = True) -> int:
         compute_frameworks_hashable = (
             frozenset(self.compute_frameworks)
             if include_compute_frameworks and self.compute_frameworks is not None
@@ -615,7 +615,7 @@ class Feature:
                 self.data_type,
                 self.implementation_pin,
                 self._connection_holder,
-                self._child_options_key(),
+                self._child_options_key() if include_child_options else None,
                 self._input_data_match_key(),
             )
         )

@@ -100,11 +100,7 @@ class FeatureGroupStep(Step):
         if location:
             if self.need_to_upload:
                 if not isinstance(cfw.data, str):
-                    native = cfw.data
                     cfw.upload_finished_data(location)
-                    if cfw.mode is not ParallelizationMode.MULTIPROCESSING:
-                        # a same-process consumer or the result collector reads cfw.data next; keep it native
-                        cfw.set_data(native)
                 cfw_register.add_uuid_flyway_datasets(cfw.uuid, set(self.children_if_root))
             return data
         return None

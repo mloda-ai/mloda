@@ -144,11 +144,7 @@ class JoinStep(Step):
         """Uploads the merged data to the flight server if a location is configured."""
         if location:
             if cfw_register.get_uuid_flyway_datasets(cfw.uuid):
-                native = cfw.data
                 cfw.upload_finished_data(location)
-                if cfw.mode is not ParallelizationMode.MULTIPROCESSING:
-                    # a same-process consumer or the result collector reads cfw.data next; keep it native
-                    cfw.set_data(native)
 
     def execute(
         self,

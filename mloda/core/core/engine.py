@@ -900,15 +900,25 @@ class Engine:
             buckets: dict[int, list[tuple[Feature, frozenset[type[ComputeFramework]]]]] = defaultdict(list)
             for member in collection:
                 if member.compute_frameworks is not None:
-                    buckets[member.hash_ignoring_compute_frameworks()].append(
+                    buckets[member._hash(False, include_child_options=False)].append(
                         (member, frozenset(member.compute_frameworks))
                     )
             for bucket in buckets.values():
                 for host, host_cf in bucket:
-                    narrower = [
+                    exact = [
                         (t, t_cf)
                         for t, t_cf in bucket
                         if t is not host and t_cf < host_cf and t.equals_ignoring_compute_frameworks(host)
+                    ]
+                    # Child-options twins only matter when no exact twin exists.
+                    narrower = exact or [
+                        (t, t_cf)
+                        for t, t_cf in bucket
+                        if t is not host
+                        and t_cf < host_cf
+                        and t.child_options_differ(host)
+                        and t._equals(host, False, include_child_options=False)
+                        and self._same_merge_scope(t, host)
                     ]
                     minimal = [t for t, t_cf in narrower if not any(o_cf < t_cf for _, o_cf in narrower)]
                     if len(minimal) == 1 and self._same_matched_filters(host, minimal[0], group_class):
@@ -933,6 +943,15 @@ class Engine:
                 self.global_filter.probes.pop((group_class, host.name, host.uuid), None)
         ties = [(fold_map.get(a, a), fold_map.get(b, b)) for a, b in self.filter_ties]
         self.filter_ties = list(dict.fromkeys(ties))
+
+    def _same_merge_scope(self, a: Feature, b: Feature) -> bool:
+        """True when cascade keys, requested parts and parts_only match (intake's merge guards)."""
+        return (
+            self._cascade_keys_at_resolution.get(a.uuid, a.options.cascade_context_keys)
+            == self._cascade_keys_at_resolution.get(b.uuid, b.options.cascade_context_keys)
+            and a.requested_parts == b.requested_parts
+            and a.parts_only == b.parts_only
+        )
 
     def _same_matched_filters(self, host: Feature, target: Feature, group_class: type[FeatureGroup]) -> bool:
         """True when host and target matched the same global filters."""

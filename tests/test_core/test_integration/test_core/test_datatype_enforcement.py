@@ -809,9 +809,16 @@ class TestRowReducingGroupJoins(_ReducerRunHelpers):
                 {"red_sum": [[30, 40]]},
                 [30, 30, 40],
             ),
+            (
+                "dict_sum_and_key",
+                [Feature("red_sum")],
+                RowReducer,
+                {"red_sum": [[30, 40]]},
+                [30, 30, 40],
+            ),
             ("dict_plus_one_and_key", [], DictRawPlusOne, {}, [11, 11, 21, 21, 41]),
         ],
-        ids=["arrow", "dict", "dict_with_sibling", "dict_non_reducing"],
+        ids=["arrow", "dict", "dict_with_sibling", "dict_with_unpinned_sibling", "dict_non_reducing"],
     )
     @pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
     def test_consumer_of_reduced_output_and_key_with_link(

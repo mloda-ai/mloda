@@ -1409,15 +1409,16 @@ class ComputeFramework(ABC):
         _object_id = str(object_id)
 
         # transform to pa.Table for better parquet support
-        if not isinstance(self.data, pa.Table):
-            _from_fw = type(self.data)
+        table = self.data
+        if not isinstance(table, pa.Table):
+            _from_fw = type(table)
             _to_fw = pa.Table
 
             transformer_cls = self.transformer.direct_transformer(_from_fw, _to_fw)
             if transformer_cls is not None:
-                self.data = transformer_cls.transform(_from_fw, _to_fw, self.data, self.framework_connection_object)
+                table = transformer_cls.transform(_from_fw, _to_fw, table, self.framework_connection_object)
 
-        FlightServer.upload_table(location, self.data, _object_id)
+        FlightServer.upload_table(location, table, _object_id)
         self.object_ids.append(_object_id)
         return _object_id
 

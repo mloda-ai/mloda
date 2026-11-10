@@ -1488,6 +1488,39 @@ def test_pinned_and_unpinned_consumer_inputs_share_one_read() -> None:
     assert result[0][out].to_pylist() == [1, 2, 3]
 
 
+class PinnedInputCopyConsumerFG(_PlanConsumer):
+    OUTPUT = "pinned_input_copy_consumer"
+    FW_NAME = "PyArrowTable"
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({cls.OUTPUT: [1, 2, 3]})
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(PinnedUnpinnedSharedRootFG.NAME, compute_framework="PandasDataFrame")}
+
+
+_PINNED_COPY_PLUGINS = PluginCollector.enabled_feature_groups({PinnedUnpinnedSharedRootFG, PinnedInputCopyConsumerFG})
+_COPY_ORDERS = [
+    pytest.param(["unpinned", "pa", "consumer"], id="unpinned_first"),
+    pytest.param(["pa", "unpinned", "consumer"], id="unpinned_middle"),
+    pytest.param(["consumer", "pa", "unpinned"], id="consumer_first"),
+]
+
+
+@pytest.mark.parametrize("order", _COPY_ORDERS)
+def test_unpinned_request_folds_into_exact_pinned_twin_despite_pinned_input_copy(order: list[str]) -> None:
+    by_slot: dict[str, Feature | str] = {
+        "unpinned": PinnedUnpinnedSharedRootFG.NAME,
+        "pa": Feature(PinnedUnpinnedSharedRootFG.NAME, compute_framework="PyArrowTable"),
+        "consumer": PinnedInputCopyConsumerFG.OUTPUT,
+    }
+
+    _, steps = _shared_root_steps([by_slot[slot] for slot in order], plugins=_PINNED_COPY_PLUGINS)
+
+    assert sorted(step.compute_framework.__name__ for step in steps) == ["PandasDataFrame", "PyArrowTable"]
+
+
 def test_pinned_and_unpinned_request_with_differing_options_stay_two_steps() -> None:
     pinned = Feature(PinnedUnpinnedSharedRootFG.NAME, options={"variant": "a"}, compute_framework="PyArrowTable")
 

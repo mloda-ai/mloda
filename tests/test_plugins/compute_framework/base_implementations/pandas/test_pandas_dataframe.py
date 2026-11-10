@@ -10,9 +10,8 @@ import pytest
 
 from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
 from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
+from mloda._testing.framework_adapter import PandasAdapter
 from mloda.provider import Cause
-from mloda._testing.framework_adapter import FrameworkAdapter, PandasAdapter
-from mloda._testing.typed_data import TypedTestData
 from mloda.user import DataType, FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.helpers.availability_test_helper import (
@@ -26,6 +25,9 @@ try:
 except ImportError:
     logger.warning("Pandas is not installed. Some tests will be skipped.")
     pd = None
+
+_PANDAS_2 = pd is not None and pd.__version__.startswith("2.")
+_PANDAS_2_OBJECT_STRINGS = (Cause.BACKEND, "pandas 2 reads production strings as object, which carries no type")
 
 
 class TestPandasDataFrameAvailability:
@@ -113,13 +115,15 @@ class TestPandasTransformList:
 
 class TestPandasDtypeExtractionSuite(DtypeExtractionSuite):
     adapter_class = PandasAdapter
+    switched_off = {"test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence": Cause.BACKEND}
 
-    def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
-        """PandasAdapter has no decimal mapping, so the decimal frame is built as an Arrow-backed column."""
-        if name == "decimal":
-            values = data.to_python_dict()["d"]
-            return pd.DataFrame({"d": pd.Series(values, dtype=pd.ArrowDtype(pa.decimal128(10, 2)))})
-        return super().frame(adapter, name, data)
+    @pytest.mark.xfail(_PANDAS_2, reason=_PANDAS_2_OBJECT_STRINGS[1], strict=True)
+    def test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence(
+        self, adapter: Any, framework_instance: Any
+    ) -> None:
+        super().test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence(
+            adapter, framework_instance
+        )
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
@@ -144,6 +148,18 @@ class TestPandasDataTypeValidatorSuite(DataTypeValidatorSuite):
         "list_struct_col": _NO_LIST_ELEMENT_TYPE,
         "list_fixed_col": _NO_LIST_ELEMENT_TYPE,
     }
+    switched_off = {
+        "test_str_column_int_declaration_raises_in_strict": Cause.BACKEND,
+        "test_str_column_int_declaration_raises_in_lenient": Cause.BACKEND,
+    }
+
+    @pytest.mark.xfail(_PANDAS_2, reason=_PANDAS_2_OBJECT_STRINGS[1], strict=True)
+    def test_str_column_int_declaration_raises_in_strict(self, adapter: Any, framework_instance: Any) -> None:
+        super().test_str_column_int_declaration_raises_in_strict(adapter, framework_instance)
+
+    @pytest.mark.xfail(_PANDAS_2, reason=_PANDAS_2_OBJECT_STRINGS[1], strict=True)
+    def test_str_column_int_declaration_raises_in_lenient(self, adapter: Any, framework_instance: Any) -> None:
+        super().test_str_column_int_declaration_raises_in_lenient(adapter, framework_instance)
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

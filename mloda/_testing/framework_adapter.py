@@ -303,8 +303,12 @@ class PandasAdapter(FrameworkAdapter):
         pd = require("pandas", "building pandas test frames")
         pa = require("pyarrow", "building pandas test frames")
 
-        mapping = {
-            pa.string(): pd.StringDtype(),
+        from mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer import (
+            _decimal_types_mapper,
+        )
+
+        # Keeps exact int/bool types, which production widens when a column has nulls.
+        nullable = {
             pa.bool_(): pd.BooleanDtype(),
             pa.int8(): pd.Int8Dtype(),
             pa.int16(): pd.Int16Dtype(),
@@ -315,8 +319,13 @@ class PandasAdapter(FrameworkAdapter):
             pa.uint32(): pd.UInt32Dtype(),
             pa.uint64(): pd.UInt64Dtype(),
         }
+
+        def types_mapper(t: Any) -> Any:
+            mapped = _decimal_types_mapper(t)
+            return mapped if mapped is not None else nullable.get(t)
+
         return table.to_pandas(
-            types_mapper=mapping.get,
+            types_mapper=types_mapper,
             coerce_temporal_nanoseconds=False,
         )
 

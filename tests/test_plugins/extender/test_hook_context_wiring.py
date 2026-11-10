@@ -20,7 +20,15 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureGroup, credential_handle_spec
+from mloda.provider import (
+    Cause,
+    ComputeFramework,
+    DataCreatorFeatureGroup,
+    Divergence,
+    DivergenceKind,
+    FeatureGroup,
+    credential_handle_spec,
+)
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -831,6 +839,16 @@ _FORGED_BOUND = "forged-bound"
 _forge_outcomes: dict[str, type[BaseException] | None] = {}
 
 
+def _forge_plan_facts(features: FeatureSet) -> None:
+    """Reassign the plan-derived facts on the step's FeatureSet."""
+    features.implementation = ToyWorkerPythonDict
+    features.divergences = (Divergence(kind=DivergenceKind.VALUE, cause=Cause.BACKEND, reason="forged divergence"),)
+    features.allowed_variants = ("forged_variant",)
+    features.specialized_from = ("forged_parent",)
+    features.declared_input_feature_names = frozenset({"forged_input"})
+    features.declared_input_feature_edges = {"forged_output": ("forged_input",)}
+
+
 def _attempt(name: str, assign: Any) -> None:
     try:
         assign()
@@ -869,7 +887,12 @@ class _ForgingFeatureGroup(DataCreatorFeatureGroup):
         _attempt("run_context", forge_run_context)
         _attempt("worker_index", forge_worker_index)
         _attempt("function_extender", forge_function_extender)
+
+        def forge_calculate_context() -> None:
+            cfw._calculate_context = None
+
         _attempt("_hook_extenders", forge_hook_extenders)
+        _attempt("_calculate_context", forge_calculate_context)
         hook_table: Any = cfw._hook_extenders
         function_extenders: Any = cfw.function_extender
         _attempt("_hook_extenders.pop", lambda: hook_table.pop(ExtenderHook.VALIDATE_OUTPUT_FEATURE))
@@ -878,7 +901,9 @@ class _ForgingFeatureGroup(DataCreatorFeatureGroup):
         features.step_uuid = _FORGED_STEP_UUID
         features.credential_handles = _FORGED_HANDLES
         features.bound_credential_handle = _FORGED_BOUND
-        return {"sealed_forge_col": [1, 2, 3]}
+        _forge_plan_facts(features)
+        features.features = {*features.features, Feature("sealed_forge_extra_forged")}
+        return {"sealed_forge_col": [1, 2, 3], "sealed_forge_extra_forged": [1, 2, 3]}
 
 
 class _HandleForgingFeatureGroup(_ForgingFeatureGroup):
@@ -895,11 +920,26 @@ class _ValidateForgingFeatureGroup(ChsConsumerFG):
         features.step_uuid = _FORGED_STEP_UUID
         features.credential_handles = _FORGED_HANDLES
         features.bound_credential_handle = _FORGED_BOUND
+        edges = features.declared_input_feature_edges
+        if edges is not None:
+            edges["forged_output"] = ("forged_input",)
+        _forge_plan_facts(features)
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         _load(_DirectLoader, "access", features)
         return super().calculate_feature(data, features)
+
+
+_PLAN_FIELDS = (
+    "implementation",
+    "divergences",
+    "allowed_variants",
+    "specialized_from",
+    "feature_names",
+    "input_features",
+    "input_feature_edges",
+)
 
 
 class _MultiHookCapturingExtender(Extender):
@@ -960,6 +1000,7 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
             "_hook_extenders.pop": TypeError,
             "_hook_extenders.clear": TypeError,
             "function_extender.clear": AttributeError,
+            "_calculate_context": AttributeError,
         }
 
     def test_later_hooks_keep_the_real_identity(self) -> None:
@@ -985,6 +1026,15 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
         assert validate.step_uuid == calculate.step_uuid
         assert validate.step_uuid != _FORGED_STEP_UUID
         assert validate.bound_credential_handle is None
+        for field in _PLAN_FIELDS:
+            assert getattr(validate, field) == getattr(calculate, field), field
+        assert validate.implementation is None
+        assert validate.divergences == ()
+        assert validate.allowed_variants == ()
+        assert validate.specialized_from == ()
+        assert validate.feature_names == ("sealed_forge_col",)
+        assert validate.input_features is None
+        assert validate.input_feature_edges is None
 
     def test_validate_input_features_reassignment_does_not_reach_later_hooks(self) -> None:
         extender = _ValidateInputCapturingExtender()
@@ -1015,6 +1065,8 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
             assert later.step_uuid == planned.step_uuid != _FORGED_STEP_UUID
             assert later.credential_handles == planned.credential_handles != _FORGED_HANDLES
             assert later.bound_credential_handle == planned.bound_credential_handle != _FORGED_BOUND
+            for field in _PLAN_FIELDS:
+                assert getattr(later, field) == getattr(planned, field), (hook, field)
 
     def test_prepared_session_keeps_its_extenders_across_runs(self) -> None:
         extender = _MultiHookCapturingExtender()

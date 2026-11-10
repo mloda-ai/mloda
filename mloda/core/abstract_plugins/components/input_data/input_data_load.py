@@ -110,6 +110,8 @@ def dispatch_input_data_load(
         return _load_ungated(owner_type, load, data_access, features)
 
     calc_context = HookContext.current()
+    if calc_context is not None:
+        calc_context = cfw._load_calculate_context(calc_context)
     if calc_context is None:
         if extender.never_fall_back:
             raise GateBypassError(

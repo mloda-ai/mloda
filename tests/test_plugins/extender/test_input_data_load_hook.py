@@ -27,11 +27,15 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.implementation import loaded_implementations
+from mloda.core.abstract_plugins.input_data_load_marker import InputDataLoadMarker
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
 from mloda.provider import (
     ApiDataFG,
+    Cause,
+    Divergence,
+    DivergenceKind,
     DataCreatorFeatureGroup,
     FeatureGroup,
     FileSource,
@@ -58,6 +62,9 @@ from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
 from tests.mixins.neutral_csv_source import neutral_csv_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     toy_dac,
+)
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation_impl import (
+    ToyWorkerPythonDict,
 )
 
 _MARKER = "inputload051"
@@ -721,13 +728,14 @@ class _CountingReader(_DirectLoader):
 
 
 def _threaded_load_feature_group(
-    mode: str, leaked: list[FeatureSet] | None = None, reader: type[_DirectLoader] = _CountingReader
+    mode: str, leaked: list[Any] | None = None, reader: type[_DirectLoader] = _CountingReader
 ) -> type[FeatureGroup]:
     """A FeatureGroup whose calculate_feature loads the reader from a worker thread.
 
     mode: bare/copied (FeatureSet built in the hopped thread), received (the calculate FeatureSet),
     built_in_calc (built in the calculation thread), deepcopy (copy of the received one), late (received one
-    appended to `leaked` and not loaded in the calculation).
+    appended to `leaked` and not loaded in the calculation), late_context (a copy of the calculation's context
+    appended to `leaked`).
     """
 
     class _ThreadedLoadFeatureGroup(FeatureGroup):
@@ -743,6 +751,10 @@ def _threaded_load_feature_group(
             elif mode == "late":
                 assert leaked is not None
                 leaked.append(features)
+                return [0]
+            elif mode == "late_context":
+                assert leaked is not None
+                leaked.append(contextvars.copy_context())
                 return [0]
 
             def load() -> Any:
@@ -957,6 +969,33 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
             assert error is None
             assert result == [1, 2, 3]
             assert _CountingReader.loads == 1
+
+    @pytest.mark.parametrize("kind", ["gate", "non_gate"])
+    def test_load_in_a_context_that_outlived_a_sealed_calculation(self, kind: str) -> None:
+        leaked: list[Any] = []
+        extender = _InputDataLoadCapturingExtender() if kind == "non_gate" else None
+        cfw = PythonDictFramework(function_extender={extender or _GateInputDataLoadExtender()})
+        cfw._seal_extenders()
+        _run_calculate(cfw, _threaded_load_feature_group("late_context", leaked))
+        _CountingReader.loads = 0
+
+        def load_late() -> Any:
+            try:
+                return _load(_CountingReader, "access", FeatureSet()), None
+            except GateBypassError as exc:
+                return None, exc
+
+        result, error = leaked[0].run(load_late)
+
+        if kind == "gate":
+            assert isinstance(error, GateBypassError)
+            assert _CountingReader.loads == 0
+        else:
+            assert error is None
+            assert result == [1, 2, 3]
+            assert _CountingReader.loads == 1
+            assert extender is not None
+            assert extender.all_captured == []
 
     def test_inactive_prior_marker_is_not_restored_over_a_gated_calculation_marker(self) -> None:
         leaked: list[FeatureSet] = []
@@ -1379,7 +1418,7 @@ _MP_FORGED_UUID = uuid.UUID(int=1)
 
 
 class _FileRecordingStepFactsExtender(Extender):
-    """Appends `hook|step_uuid|credential_handles` per calculate and validate-output call to a file."""
+    """Appends `hook|step_uuid|credential_handles|plan facts` per calculate and validate-output call to a file."""
 
     def __init__(self, output_path: Path) -> None:
         self.priority = 100
@@ -1392,7 +1431,10 @@ class _FileRecordingStepFactsExtender(Extender):
         result = func(*args, **kwargs)
         context = HookContext.current()
         assert context is not None
-        line = f"{context.hook.name}|{context.step_uuid}|{','.join(context.credential_handles)}"
+        line = (
+            f"{context.hook.name}|{context.step_uuid}|{','.join(context.credential_handles)}"
+            f"|{context.allowed_variants}|{context.specialized_from}|{context.divergences}|{context.implementation}"
+        )
         with self._output_path.open("a", encoding="utf-8") as handle:
             handle.write(line + "\n")
         return result
@@ -1414,6 +1456,10 @@ class _MultiprocessingForgingFeatureGroup(DataCreatorFeatureGroup):
         features.step_uuid = _MP_FORGED_UUID
         features.credential_handles = ("forged-handle",)
         features.bound_credential_handle = "forged-bound"
+        features.allowed_variants = ("forged_variant",)
+        features.specialized_from = ("forged_parent",)
+        features.divergences = (Divergence(kind=DivergenceKind.VALUE, cause=Cause.BACKEND, reason="forged divergence"),)
+        features.implementation = ToyWorkerPythonDict
         return {_MP_FORGE_COLUMN: [1, 2, 3]}
 
 
@@ -1587,35 +1633,67 @@ class _HandleThreadedLoadFG(_threaded_load_feature_group("received"), DataCreato
 _IDL_FORGED_UUID = uuid.uuid4()
 
 
+def _forged_load_context() -> HookContext:
+    return _build_calc_context(
+        "PythonDictFramework",
+        run_id="forged-run-id",
+        feature_group_class="forged.Group",
+        step_uuid=_IDL_FORGED_UUID,
+        credential_handles=("forged-handle",),
+    )
+
+
 class _ForgingHandleThreadedLoadFG(_HandleThreadedLoadFG):
-    """Reassigns the per-step facts on its FeatureSet before loading."""
+    """Reassigns the per-step facts on its FeatureSet and swaps the load marker's active context."""
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         features.step_uuid = _IDL_FORGED_UUID
         features.credential_handles = ("forged-handle",)
+        cfw = ComputeFramework.current()
+        assert cfw is not None
+        marker = InputDataLoadMarker(True, True)
+        marker.active = (cfw, _forged_load_context())
+        features._load_marker = marker
         return super().calculate_feature(data, features)
+
+
+class _ForgingActivatedLoadFG(_HandleThreadedLoadFG):
+    """Reassigns the per-step facts and loads in the same thread under a forged active HookContext."""
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        features.step_uuid = _IDL_FORGED_UUID
+        features.credential_handles = ("forged-handle",)
+        with _forged_load_context().activate():
+            return {"idl_handle_col": _load(_CountingReader, "access", features)}
 
 
 class TestInputDataLoadHookCarriesCredentialHandles:
     """The INPUT_DATA_LOAD HookContext carries the calculate step's credential handles."""
 
-    def test_load_after_the_group_reassigns_its_step_facts_reports_the_planned_ones(self) -> None:
+    @pytest.mark.parametrize("group", [_ForgingHandleThreadedLoadFG, _ForgingActivatedLoadFG])
+    def test_load_after_the_group_reassigns_its_step_facts_reports_the_planned_ones(
+        self, group: type[FeatureGroup]
+    ) -> None:
         gate = _GateInputDataLoadExtender()
 
         mloda.run_all(
             [Feature("idl_handle_col", options={"idl_vault_handle": "vault-main"})],
             compute_frameworks=[PythonDictFramework],
             data_access_collection=DataAccessCollection(credentials={"vault-main": {"key": "idl-1"}}),
-            plugin_collector=PluginCollector.enabled_feature_groups({_ForgingHandleThreadedLoadFG}),
+            plugin_collector=PluginCollector.enabled_feature_groups({group}),
             parallelization_modes={ParallelizationMode.SYNC},
             function_extender={gate},
         )
 
         assert len(gate.all_captured) == 1
-        assert gate.all_captured[0].credential_handles == ("vault-main",)
-        assert gate.all_captured[0].step_uuid is not None
-        assert gate.all_captured[0].step_uuid != _IDL_FORGED_UUID
+        load = gate.all_captured[0]
+        assert load.credential_handles == ("vault-main",)
+        assert load.step_uuid is not None
+        assert load.step_uuid != _IDL_FORGED_UUID
+        assert load.run_id != "forged-run-id"
+        assert load.feature_group_class != "forged.Group"
 
     def test_direct_path_copies_the_handles_from_the_calculate_context(self) -> None:
         extender = _InputDataLoadCapturingExtender()

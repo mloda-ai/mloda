@@ -531,6 +531,7 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
     ("quote_in_value_double_quoted", '"password=hun\'ter2"', ["ter2", "hun"], ['"password=***"']),
     ("quote_in_value_single_quoted", "'password=hun'ter2'", ["ter2", "hun"], ["'password=***'"]),
     ("quote_then_bang_in_value", "password=hun'!ter2", ["ter2", "hun"], ["password=***"]),
+    ("quote_run_in_value_bare", "password=hun''ter2", ["ter2", "hun"], ["password=***"]),
     ("quote_then_backslash_in_value", "password=ab'\\cd", ["cd", "ab'"], ["password=***"]),
     ("quote_then_at_in_value", "password=ab'@cd", ["cd", "ab'"], ["password=***"]),
     ("quote_closing_kept", "'password=abc'", ["abc"], ["'password=***'"]),

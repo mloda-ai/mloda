@@ -1736,6 +1736,23 @@ class ChsRcCalcAndSaverFG(ChsTwoHandleFG):
         return pd.DataFrame({name: [1] for name in features.get_all_names()})
 
 
+class ChsRcClearingContextFG(ChsRcCalcAndSaverFG):
+    """Calculate drops the FeatureSet's stashed calculate context before the saver runs."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_clearing_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        setattr(features, "_calculate_context", None)
+        cfw = ComputeFramework.current()
+        assert cfw is not None
+        with pytest.raises(AttributeError):
+            cfw._calculate_context = None
+        return super().calculate_feature(data, features)
+
+
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
 @pytest.mark.parametrize(
@@ -1748,6 +1765,13 @@ class ChsRcCalcAndSaverFG(ChsTwoHandleFG):
             {"chs_two_a_handle": _VAULT_A, "chs_two_z_handle": _VAULT_B},
             (_VAULT_A, _VAULT_B),
             id="calculate_and_saver",
+        ),
+        pytest.param(
+            ChsRcClearingContextFG,
+            "chs_rc_clearing_a",
+            {"chs_two_a_handle": _VAULT_A, "chs_two_z_handle": _VAULT_B},
+            (_VAULT_A, _VAULT_B),
+            id="calculate_clears_context",
         ),
     ],
 )

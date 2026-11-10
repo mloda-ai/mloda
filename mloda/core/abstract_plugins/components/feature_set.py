@@ -10,6 +10,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlySet, attribute_write_error
 from mloda.core.abstract_plugins.components.validators.feature_set_validator import FeatureSetValidator
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import InputCheck
@@ -22,7 +23,6 @@ if TYPE_CHECKING:
     from mloda.core.abstract_plugins.implementation import Implementation
     from mloda.core.abstract_plugins.components.input_data.claim_route import DataAccessReader
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
-    from mloda.core.abstract_plugins.hook_context import HookContext
 
 
 def merge_input_feature_edges(pairs: Iterable[tuple[str, Iterable[str]]]) -> dict[str, tuple[str, ...]] | None:
@@ -89,7 +89,6 @@ class FeatureSet:
         # Columns a Link reads from this step's data, stamped by the planner.
         self.link_index_columns: frozenset[str] = frozenset()
         self._load_marker: InputDataLoadMarker | None = current_input_data_load_marker.get()
-        self._calculate_context: HookContext | None = None
         self._calculate_seconds: float | None = None
         self._defaults_materialized_for: type[FeatureGroup] | None = None
         self._defaults_checked: tuple[tuple[tuple[Feature, Options], ...], Options | None] = ((), None)
@@ -115,7 +114,6 @@ class FeatureSet:
             **self.__dict__,
             "_defaults_materialized_for": None,
             "_defaults_checked": ((), None),
-            "_calculate_context": None,
         }
 
     def freeze(self) -> None:
@@ -129,6 +127,8 @@ class FeatureSet:
         self.features = ReadOnlySet(self.features)
         if self.filters is not None:
             self.filters = ReadOnlySet(self.filters, "filters")
+        if self.declared_input_feature_edges is not None:
+            self.declared_input_feature_edges = _frozen_dict(self.declared_input_feature_edges)
         self.prepared = True
         self.__dict__["_frozen"] = True
 
@@ -197,7 +197,6 @@ class FeatureSet:
             view.artifact_to_save = None
             view.artifact_value = binding.value
         view.save_artifact = None
-        view._calculate_context = None
         view._calculate_seconds = None
         return view
 

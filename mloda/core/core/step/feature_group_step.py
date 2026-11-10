@@ -90,7 +90,7 @@ class FeatureGroupStep(Step):
                 with readable_credentials():
                     self.save_artifact(features, cfw_register)
             finally:
-                calculate_context = getattr(features, "_calculate_context", None)
+                calculate_context = cfw._calculate_context
                 if calculate_context is not None:
                     merged = sorted({*calculate_context.credentials_read, *set(saver_reads)})
                     object.__setattr__(calculate_context, "credentials_read", tuple(merged))

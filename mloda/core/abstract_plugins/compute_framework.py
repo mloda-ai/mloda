@@ -70,10 +70,35 @@ class _StepFacts(NamedTuple):
     step_uuid: UUID | None
     credential_handles: tuple[str, ...]
     bound_credential_handle: str | None
+    feature_names: tuple[str, ...]
+    specialized_from: tuple[str, ...]
+    implementation: Any
+    input_data_match: Any
+    divergences: Any
+    allowed_variants: tuple[str, ...]
+    declared_inputs: tuple[frozenset[str] | None, Any] | None
 
     @classmethod
     def of(cls, features: Any) -> "_StepFacts":
-        return cls(features.step_uuid, features.credential_handles, features.bound_credential_handle)
+        declared_inputs = None
+        if features.prepared and features.declared_input_features_resolved:
+            edges = features.declared_input_feature_edges
+            declared_inputs = (
+                features.declared_input_feature_names,
+                _frozen_dict(edges) if edges is not None else None,
+            )
+        return cls(
+            features.step_uuid,
+            features.credential_handles,
+            features.bound_credential_handle,
+            tuple(str(name) for name in features.get_all_names()),
+            getattr(features, "specialized_from", ()),
+            features.implementation,
+            features.input_data_match,
+            features.divergences,
+            features.allowed_variants,
+            declared_inputs,
+        )
 
 
 def _timed(method: Callable[..., Any], features: Any) -> Callable[..., Any]:
@@ -123,7 +148,17 @@ def _dict_output_schema(data: dict[Any, Any]) -> OutputSchema | None:
 
 
 _SEAL_FLAG = "_run_context_sealed"
-_SEALED_ATTRS = frozenset({"run_context", "worker_index", "function_extender", "_hook_extenders", _SEAL_FLAG})
+_SEALED_ATTRS = frozenset(
+    {
+        "run_context",
+        "worker_index",
+        "function_extender",
+        "_hook_extenders",
+        "_calculate_context",
+        "_calculating",
+        _SEAL_FLAG,
+    }
+)
 
 
 class EmptyResultError(ValueError):
@@ -176,6 +211,8 @@ class ComputeFramework(ABC):
     _pending_extender_payload: bytes | None = None
     _hook_extenders: dict[ExtenderHook, Extender] | None = None
     _pinned_frame: Any = None
+    _calculate_context: HookContext | None = None
+    _calculating: bool = False
 
     def __init__(
         self,
@@ -491,6 +528,7 @@ class ComputeFramework(ABC):
     ) -> Any | None:
         from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 
+        object.__setattr__(self, "_calculate_context", None)
         facts = _StepFacts.of(features) if isinstance(features, FeatureSet) else None
         # A worker passes its resident frame back to the next step. Its cached columns
         # still apply, but a different frame would require resolving its schema early.
@@ -934,11 +972,14 @@ class ComputeFramework(ABC):
         marker.secrets = current_registered_secrets()
         marker.identity_secrets = current_identity_secrets()
         token = current_input_data_load_marker.set(marker)
+        prior_calculating = self._calculating
         try:
             if extender is None and fetch_extender is None:
                 return method(self.data, features)
 
             context = self._build_hook_context(hook, feature_group, features, facts)
+            object.__setattr__(self, "_calculate_context", context)
+            object.__setattr__(self, "_calculating", True)
             marker.active = (self, context)
             with (
                 self.activate(),
@@ -947,8 +988,6 @@ class ComputeFramework(ABC):
             ):
                 if extender is None:
                     return method(self.data, features)
-                if stamped:
-                    features._calculate_context = context
                 return _invoke_extender(
                     extender,
                     instrument(context, method, row_count=self._row_count, output_schema=self._output_schema),
@@ -956,6 +995,7 @@ class ComputeFramework(ABC):
                     features,
                 )
         finally:
+            object.__setattr__(self, "_calculating", prior_calculating)
             marker.active = None
             marker.framework = None
             marker.secrets = frozenset()
@@ -1163,6 +1203,16 @@ class ComputeFramework(ABC):
         return hooks.get(wrapper_function_enum)
 
     @final
+    def _load_calculate_context(self, ambient: HookContext) -> HookContext | None:
+        """The calculate context an INPUT_DATA_LOAD context inherits from: core's own on an attached framework."""
+        if not self.__dict__.get(_SEAL_FLAG):
+            return ambient
+        marker = current_input_data_load_marker.get()
+        if (marker is not None and marker.active is None) or not self._calculating:
+            return None
+        return self._calculate_context
+
+    @final
     def _build_hook_context(
         self, hook: ExtenderHook, feature_group: Any, features: Any, facts: _StepFacts | None = None
     ) -> HookContext:
@@ -1188,23 +1238,28 @@ class ComputeFramework(ABC):
         divergences: tuple[Divergence, ...] = ()
         allowed_variants: tuple[str, ...] = ()
         if isinstance(features, FeatureSet):
-            divergences = features.divergences
-            allowed_variants = features.allowed_variants
-            impl = features.implementation
-            implementation = implementation_path(feature_group_cls, impl, features.input_data_match)
+            # no snapshot (direct run_* call): read the live FeatureSet
+            if facts is None:
+                facts = _StepFacts.of(features)
+            divergences = facts.divergences
+            allowed_variants = facts.allowed_variants
+            impl = facts.implementation
+            implementation = implementation_path(feature_group_cls, impl, facts.input_data_match)
             if impl is not None:
                 implementation_version = safe_field(
                     lambda: as_str(impl.version()), None, field=f"{implementation}.version", warn_once_for=impl
                 )
-            # no snapshot (direct run_* call): read the live FeatureSet
-            if facts is None:
-                facts = _StepFacts.of(features)
-            step_uuid, credential_handles, bound_credential_handle = facts
-            feature_names = tuple(str(name) for name in features.get_all_names())
-            input_features = self._declared_input_feature_names(feature_group_cls, features)
-            input_feature_edges = getattr(features, "declared_input_feature_edges", None)
+            step_uuid = facts.step_uuid
+            credential_handles = facts.credential_handles
+            bound_credential_handle = facts.bound_credential_handle
+            feature_names = facts.feature_names
+            if facts.declared_inputs is None:
+                input_features = self._declared_input_feature_names(feature_group_cls, features)
+                input_feature_edges = getattr(features, "declared_input_feature_edges", None)
+            else:
+                input_features, input_feature_edges = facts.declared_inputs
             input_check = features.input_check
-            specialized_from = getattr(features, "specialized_from", ())
+            specialized_from = facts.specialized_from
 
         return HookContext(
             hook=hook,

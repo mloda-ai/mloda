@@ -120,3 +120,97 @@ def test_isinstance_calls_against_plugin_bases_match_the_allowlist() -> None:
             + "\n"
         )
     assert not message, message
+
+
+# Only the grant hands credential values to step code: (module, qualified function, receiver) of each credentials read.
+ALLOWED_CREDENTIAL_READS: frozenset[Site] = frozenset(
+    {
+        (
+            "mloda/core/runtime/compute_framework_executor.py",
+            "ComputeFrameworkExecutor._credential_grant",
+            "collection",
+        ),
+        ("mloda/core/runtime/compute_framework_executor.py", "ComputeFrameworkExecutor._step_secrets", "access"),
+        ("mloda/core/runtime/validate_multiprocessing_link.py", "raise_on_unpicklable_step_credentials", "collection"),
+    }
+)
+_CREDENTIAL_ROOTS = ("mloda/core/runtime", "mloda/core/core", "mloda/core/api")
+
+
+def _getter_receiver(node: ast.AST) -> str | None:
+    """Receiver text of `getattr(x, "credentials")`, "" for `attrgetter("credentials")`, else None."""
+    if not isinstance(node, ast.Call):
+        return None
+    name = node.func.id if isinstance(node.func, ast.Name) else getattr(node.func, "attr", None)
+    if name == "getattr" and len(node.args) > 1 and ast.unparse(node.args[1]) in {"'credentials'", '"credentials"'}:
+        return ast.unparse(node.args[0])
+    if name == "attrgetter" and node.args and ast.unparse(node.args[0]) in {"'credentials'", '"credentials"'}:
+        return ""
+    return None
+
+
+def _credential_reads(root: Path, module: str) -> set[Site]:
+    found: set[Site] = set()
+
+    def visit(node: ast.AST, scope: list[str]) -> None:
+        for child in ast.iter_child_nodes(node):
+            inner = (
+                [*scope, child.name]
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                else scope
+            )
+            where = ".".join(inner) or "<module>"
+            if isinstance(child, ast.Attribute) and child.attr == "credentials":
+                found.add((module, where, ast.unparse(child.value)))
+            receiver = _getter_receiver(child)
+            if receiver is not None:
+                found.add((module, where, receiver))
+            visit(child, inner)
+
+    visit(ast.parse(root.read_text(encoding="utf-8"), filename=module), [])
+    return found
+
+
+def _sweep_credential_reads(paths: list[Path], base: Path) -> set[Site]:
+    found: set[Site] = set()
+    for path in paths:
+        found |= _credential_reads(path, path.relative_to(base).as_posix())
+    return found
+
+
+def test_only_the_grant_reads_credential_values() -> None:
+    paths = [p for r in _CREDENTIAL_ROOTS for p in sorted((_REPO_ROOT / r).rglob("*.py"))]
+    assert paths
+    found = _sweep_credential_reads(paths, _REPO_ROOT)
+
+    unexpected = sorted(found - ALLOWED_CREDENTIAL_READS)
+    stale = sorted(ALLOWED_CREDENTIAL_READS - found)
+    message = ""
+    if unexpected:
+        message += "New `.credentials` reads outside the grant:\n" + "\n".join(
+            f"  {m} {q} {r}.credentials" for m, q, r in unexpected
+        )
+    if stale:
+        message += "\nStale credential-read entries:\n" + "\n".join(f"  {m} {q} {r}.credentials" for m, q, r in stale)
+    assert not message, message
+
+
+def test_the_credential_read_sweep_flags_a_new_read(tmp_path: Path) -> None:
+    module = tmp_path / "leak.py"
+    module.write_text(
+        "from operator import attrgetter\n"
+        "def helper(ctx):\n    return ctx.credentials['x']\n"
+        "def sneaky(ctx):\n    return getattr(ctx, 'credentials')\n"
+        "def getter():\n    return attrgetter('credentials')\n"
+        "class A:\n    def run(self, c):\n        return c.credentials\n"
+        "class B:\n    def run(self, c):\n        return c.credentials\n",
+        encoding="utf-8",
+    )
+
+    assert _sweep_credential_reads([module], tmp_path) == {
+        ("leak.py", "helper", "ctx"),
+        ("leak.py", "sneaky", "ctx"),
+        ("leak.py", "getter", ""),
+        ("leak.py", "A.run", "c"),
+        ("leak.py", "B.run", "c"),
+    }

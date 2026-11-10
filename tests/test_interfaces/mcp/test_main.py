@@ -352,7 +352,8 @@ class TestServe:
             [sys.executable, "-c", _MASKING_SCRIPT, str(_config(tmp_path))],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=8,
+            stdin=subprocess.DEVNULL,
             check=False,
         )
         assert done.returncode == 0, done.stderr

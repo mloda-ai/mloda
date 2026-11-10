@@ -238,6 +238,8 @@ def cred_digest(secret: str) -> str:
 class CredentialReadMcp8(FeatureGroup):
     """Reads the operator-registered credential named by its handle option."""
 
+    OUTPUT_FEATURE = CRED_FEATURE
+
     PROPERTY_MAPPING = {CRED_KEY: credential_handle_spec("Operator-registered credential handle.")}
 
     @classmethod
@@ -261,12 +263,13 @@ class CredentialReadMcp8(FeatureGroup):
         from mloda.provider import read_credential
 
         secret = str(read_credential(features.get_options_key(CRED_KEY))[CRED_FIELD])
-        return {CRED_FEATURE: [cred_digest(secret) for _ in data["income"]]}
+        return {cls.OUTPUT_FEATURE: [cred_digest(secret) for _ in data["income"]]}
 
 
 class CredentialDefaultMcp8(CredentialReadMcp8):
     """Declares the handle option with a default handle."""
 
+    OUTPUT_FEATURE = CRED_DEFAULT_FEATURE
     PROPERTY_MAPPING = {
         CRED_KEY: credential_handle_spec("Handle with a default.", default=CRED_DEFAULT_HANDLE),
     }
@@ -279,10 +282,3 @@ class CredentialDefaultMcp8(CredentialReadMcp8):
         data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == CRED_DEFAULT_FEATURE
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        from mloda.provider import read_credential
-
-        secret = str(read_credential(features.get_options_key(CRED_KEY))[CRED_FIELD])
-        return {CRED_DEFAULT_FEATURE: [cred_digest(secret) for _ in data["income"]]}

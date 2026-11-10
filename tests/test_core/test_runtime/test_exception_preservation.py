@@ -2825,10 +2825,33 @@ def test_two_interleaved_stream_runs_on_one_session_each_read_their_own_value() 
     assert rows_2 == [_row(_FRESH_2)]
 
 
+_OVERLAP_BARRIER: dict[str, threading.Barrier] = {}
+
+
+class ChsRcOverlapFG(ChsSource):
+    """Reads its handle, waits for every concurrent run to arrive, then reads again."""
+
+    PROPERTY_MAPPING = {HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_overlap_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        handle = features.get_options_key(HANDLE_KEY)
+        before = read_credential(handle)
+        shape_before = f"{before['host']}|{len(str(before['hmac']))}"
+        _OVERLAP_BARRIER["barrier"].wait()
+        after = read_credential(handle)
+        row = f"{shape_before}|{after['host']}|{len(str(after['hmac']))}"
+        return pd.DataFrame({name: [row] for name in features.get_all_names()})
+
+
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
 def test_concurrent_runs_on_one_session_each_read_their_own_fresh_value(
-    mode: ParallelizationMode, flight_server: Any
+    mode: ParallelizationMode, flight_server: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from concurrent.futures import ThreadPoolExecutor
 
@@ -2837,16 +2860,15 @@ def test_concurrent_runs_on_one_session_each_read_their_own_fresh_value(
         {"host": f"conc-{i}.internal.example", "hmac": f"conc{i}-hmac-" + "x" * (i + 3), "key": f"conc{i}-key"}  # nosec B105
         for i in range(count)
     ]
+    monkeypatch.setitem(_OVERLAP_BARRIER, "barrier", threading.Barrier(count, timeout=5))
     dac = _vault_dac()
     before = {handle: dict(value) for handle, value in dac.credentials.items()}
-    session = _prepare_vault(ChsRcReadingFG, "chs_rc_a", mode, dac=dac)
-    barrier = threading.Barrier(count)
+    session = _prepare_vault(ChsRcOverlapFG, "chs_rc_overlap_a", mode, dac=dac)
 
     def run(index: int) -> list[str]:
-        barrier.wait(10)
         return _run_rows(
             session,
-            "chs_rc_a",
+            "chs_rc_overlap_a",
             credentials={_E2E_HANDLE: values[index]},
             parallelization_modes={mode},
             flight_server=flight_server,
@@ -2855,5 +2877,9 @@ def test_concurrent_runs_on_one_session_each_read_their_own_fresh_value(
     with ThreadPoolExecutor(max_workers=count) as pool:
         rows = list(pool.map(run, range(count)))
 
-    assert rows == [[_row(value)] for value in values]
-    assert dac.credentials == before
+    assert rows == [[f"{_row(value)}|{_row(value)}"] for value in values]
+    assert session.data_access_collection.credentials == before
+    monkeypatch.setitem(_OVERLAP_BARRIER, "barrier", threading.Barrier(1, timeout=5))
+    assert _run_rows(session, "chs_rc_overlap_a", parallelization_modes={mode}, flight_server=flight_server) == [
+        f"{_row(before[_E2E_HANDLE])}|{_row(before[_E2E_HANDLE])}"
+    ]

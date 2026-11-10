@@ -71,9 +71,12 @@ def make_parent(
     writes_on_match: bool = False,
     rule: set[type[ComputeFramework]] | None = None,
     run_time_parts: bool = False,
+    property_mapping: dict[str, PropertySpec] | None = None,
 ) -> type[FeatureGroup]:
     class ScopeParent(base):  # type: ignore[valid-type, misc]
         DIVERGENCES = divergences
+        if property_mapping is not None:
+            PROPERTY_MAPPING = property_mapping
         if rule is not None:
 
             @classmethod
@@ -184,26 +187,11 @@ def make_gate_rejects_own_option() -> Pair:
     return parent, _gated_subclass(parent, "other")
 
 
-TWO_KEYS = Options(group={"variant": "x", "mode": "m"})
-
-
 def make_presence_gated_pair(spec: PropertySpec | None = None, two_keys: bool = False) -> Pair:
-    base = make_parent()
-    if spec is None:
-        parent = base
-    else:
-
-        class SpecParent(base):  # type: ignore[valid-type, misc]
-            PROPERTY_MAPPING = {"variant": spec}
-
-        parent = SpecParent
+    parent = make_parent(property_mapping=None if spec is None else {"variant": spec})
     if two_keys:
         return parent, _gated_subclass(_gated_subclass(parent, "variant"), "mode", presence_only=True)
     return parent, _gated_subclass(parent, "variant", presence_only=True)
-
-
-_TWO_KEYS_MAKE = functools.partial(make_presence_gated_pair, two_keys=True)
-_SELECTING_FOR: dict[Callable[[], Pair], Options] = {_TWO_KEYS_MAKE: TWO_KEYS}
 
 
 def make_unrelated() -> Pair:
@@ -321,6 +309,35 @@ def test_well_scoped_subclass_passes(data: TypedTestData | None) -> None:
     assert result.failures == ()
 
 
+STRICT_SPEC = PropertySpec("Variant.", allowed_values=("x", "y"), strict_validation=True, default=None)
+
+
+@pytest.mark.parametrize(
+    ("make", "selecting", "phrase"),
+    [
+        pytest.param(make_presence_gated_pair, SELECTING, "'variant'", id="free_form_group"),
+        pytest.param(make_presence_gated_pair, Options(context={"variant": "x"}), "'variant'", id="free_form_context"),
+        pytest.param(
+            functools.partial(make_presence_gated_pair, STRICT_SPEC), SELECTING, "'y'", id="strict_allowed_values"
+        ),
+        pytest.param(
+            functools.partial(make_presence_gated_pair, two_keys=True),
+            Options(group={"variant": "x", "mode": "m"}),
+            "'mode'",
+            id="two_keys_only_mode_gated",
+        ),
+    ],
+)
+def test_presence_gated_subclass_steals(make: Callable[[], Pair], selecting: Options, phrase: str) -> None:
+    parent, sub = make()
+    result = check_subclass_scope(sub, parent, selecting)
+    assert not result.passed
+    assert all(f.startswith("steals:") for f in result.failures), result.failures
+    assert phrase in " ".join(result.failures), result.failures
+    if phrase == "'mode'":
+        assert "'variant'" not in " ".join(result.failures), result.failures
+
+
 @pytest.mark.parametrize(
     ("make", "prefix", "data", "phrase"),
     [
@@ -382,24 +399,13 @@ def test_well_scoped_subclass_passes(data: TypedTestData | None) -> None:
             "missing from ScopeParent",
         ),
         (make_broken_run, "values:", DATA, "run raised"),
-        (make_presence_gated_pair, "steals:", None, "'variant'"),
-        (
-            functools.partial(
-                make_presence_gated_pair,
-                PropertySpec("Variant.", allowed_values=("x", "y"), strict_validation=True, default=None),
-            ),
-            "steals:",
-            None,
-            "'y'",
-        ),
-        (_TWO_KEYS_MAKE, "steals:", None, "'mode'"),
     ],
 )
 def test_broken_pair_fails_only_its_sub_check(
     make: Callable[[], Pair], prefix: str, data: TypedTestData | None, phrase: str
 ) -> None:
     parent, sub = make()
-    result = check_subclass_scope(sub, parent, _SELECTING_FOR.get(make, SELECTING), input_data=data)
+    result = check_subclass_scope(sub, parent, SELECTING, input_data=data)
     assert not result.passed
     assert all(f.startswith(prefix) for f in result.failures), result.failures
     assert phrase in " ".join(result.failures), result.failures
@@ -629,16 +635,9 @@ def test_parent_rejecting_its_own_request_is_a_setup_failure() -> None:
     assert any(f.startswith("setup:") for f in result.failures), result.failures
 
 
-@pytest.mark.parametrize("presence_only", [False, True])
-def test_selecting_option_in_context_passes_for_gated_subclass(presence_only: bool) -> None:
-    parent = make_parent()
-    sub = _gated_subclass(parent, "variant", presence_only=presence_only)
-    failures = check_subclass_scope(sub, parent, Options(context={"variant": "x"})).failures
-    if presence_only:
-        assert failures
-        assert all(f.startswith("steals:") for f in failures), failures
-    else:
-        assert failures == ()
+def test_selecting_option_in_context_passes_for_gated_subclass() -> None:
+    parent, sub = make_well_scoped()
+    assert check_subclass_scope(sub, parent, Options(context={"variant": "x"})).failures == ()
 
 
 def test_explicitly_empty_requests_is_a_names_failure_without_pass_requests_hint() -> None:

@@ -4,8 +4,7 @@ import inspect
 import typing
 import weakref
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Callable, Iterable, Mapping
 from contextvars import ContextVar
 from typing import Any, ClassVar, Generic, TypeVar
 
@@ -24,6 +23,7 @@ from mloda.core.abstract_plugins.components.divergence import (
 )
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
+from mloda.core.abstract_plugins.components.var_scope import VarScope
 from mloda.core.abstract_plugins.components.subclass_registry import SubclassRegistry
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -322,14 +322,11 @@ _ACCESSIBLE: ContextVar[frozenset[type[Implementation[Any]]] | None] = ContextVa
 )
 
 
-@contextmanager
-def accessible_implementations(implementations: Iterable[type[Implementation[Any]]]) -> Iterator[None]:
+def accessible_implementations(
+    implementations: Iterable[type[Implementation[Any]]],
+) -> VarScope[frozenset[type[Implementation[Any]]] | None]:
     """Make the run's accessible implementations current for capability checks inside the block."""
-    token = _ACCESSIBLE.set(frozenset(implementations))
-    try:
-        yield
-    finally:
-        _ACCESSIBLE.reset(token)
+    return VarScope(_ACCESSIBLE, frozenset(implementations))
 
 
 def current_implementations() -> Iterable[type[Implementation[Any]]]:

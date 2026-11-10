@@ -1,12 +1,12 @@
 import logging
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
 from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, is_match_abort, safe_field
+from mloda.core.abstract_plugins.components.var_scope import VarScope
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, _invoke_extender
 from mloda.core.abstract_plugins.hook_context import HookContext
 
@@ -33,14 +33,9 @@ def current_reader_probe_scope() -> ReaderProbeScope | None:
     return _CURRENT.get()
 
 
-@contextmanager
-def reader_probe_scope(scope: ReaderProbeScope | None) -> Iterator[None]:
+def reader_probe_scope(scope: ReaderProbeScope | None) -> VarScope[ReaderProbeScope | None]:
     """Make scope (or none) current for reader probes inside the block."""
-    token = _CURRENT.set(scope)
-    try:
-        yield
-    finally:
-        _CURRENT.reset(token)
+    return VarScope(_CURRENT, scope)
 
 
 @dataclass(frozen=True)
@@ -61,7 +56,7 @@ def _strip_tracebacks(exc: Exception) -> Exception:
         if current is None or id(current) in seen:
             continue
         seen.append(id(current))
-        current.__traceback__ = None
+        current.with_traceback(None)
         pending.append(current.__cause__)
         pending.append(current.__context__)
     return exc

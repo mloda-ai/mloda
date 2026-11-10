@@ -47,6 +47,34 @@ from mloda.core.abstract_plugins.input_data_load_marker import current_input_dat
 from mloda.core.api.run_boundary import run_boundary
 from datetime import UTC
 
+from mloda.core.abstract_plugins.close_context import CloseContext, _current_close_context
+from mloda.core.abstract_plugins.components.input_data.claim_route import (
+    _CHAIN_CHECK,
+    _CONTAIN_ABORTS,
+    _FEATURE_GROUP_SCOPE,
+    _OPEN_CLAIM,
+    _PIN_SCOPE,
+    ChainCheck,
+    chain_check_scope,
+    feature_group_scope,
+    open_claim_scope,
+    pin_report_scope,
+)
+from mloda.core.abstract_plugins.components.input_data.match_cache import _RUN_MATCH_CACHE, run_match_cache
+from mloda.core.abstract_plugins.components.input_data.reader_probe import (
+    _CURRENT as _READER_PROBE_CURRENT,
+    ReaderProbeScope,
+    probe_source_group,
+    reader_probe_scope,
+)
+from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, collect_match_rejections
+from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.implementation import _ACCESSIBLE, accessible_implementations
+from mloda.core.abstract_plugins.verified_context import _current_verified_context, verified_context
+from mloda.core.api.request import _PLAN_ORIGIN, _plan_origin
+from mloda.core.prepare.input_chain import _RUN, input_resolution_scope
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
+
 _HOST = "access-host.internal.example"
 _HMAC = "hmac-access-Qv7Lk2Xz9"  # nosec B105
 _KEY = "key-access-Wn4Rt8Bm3"  # nosec B105
@@ -487,6 +515,19 @@ class _FrozenError(Exception):
     detail: str
 
 
+class _NoopExtender(Extender):
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_MATCH}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
+class _RefusingFrozenExtender(_NoopExtender):
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        raise _FrozenError("refused")
+
+
 def _hook_context() -> HookContext:
     return HookContext(
         hook=ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
@@ -507,6 +548,27 @@ def _hook_context() -> HookContext:
         pytest.param(lambda: _hook_context().activate(), _current_hook_context, id="hook_context"),
         pytest.param(input_data_load_gate_scope, _in_gate_scope, id="input_data_load_gate_scope"),
         pytest.param(lambda: api_data_scope(lambda: {}, "k"), _API_DATA_LOOKUP, id="api_data_scope"),
+        pytest.param(lambda: verified_context(principal="p"), _current_verified_context, id="verified_context"),
+        pytest.param(
+            lambda: CloseContext(deadline=1.0, reason="stop").activate(), _current_close_context, id="close_context"
+        ),
+        pytest.param(lambda: _plan_origin("run_all"), _PLAN_ORIGIN, id="plan_origin"),
+        pytest.param(lambda: input_resolution_scope(object()), _RUN, id="input_resolution_scope"),
+        pytest.param(lambda: accessible_implementations([]), _ACCESSIBLE, id="accessible_implementations"),
+        pytest.param(
+            lambda: reader_probe_scope(ReaderProbeScope(_NoopExtender(), None, None, None, None)),
+            _READER_PROBE_CURRENT,
+            id="reader_probe_scope",
+        ),
+        pytest.param(lambda: chain_check_scope(ChainCheck("x")), _CHAIN_CHECK, id="chain_check_scope"),
+        pytest.param(collect_match_rejections, MATCH_REJECTION_REASONS, id="collect_match_rejections"),
+        pytest.param(open_claim_scope, _OPEN_CLAIM, id="open_claim_scope"),
+        pytest.param(lambda: pin_report_scope(set()), _PIN_SCOPE, id="pin_report_scope"),
+        pytest.param(lambda: feature_group_scope("x"), _FEATURE_GROUP_SCOPE, id="feature_group_scope"),
+        pytest.param(
+            lambda: feature_group_scope("x", contain_aborts=True), _CONTAIN_ABORTS, id="feature_group_scope_contain"
+        ),
+        pytest.param(run_match_cache, _RUN_MATCH_CACHE, id="run_match_cache"),
     ],
 )
 def test_a_frozen_exception_keeps_its_type_through_the_scope(make_scope: Any, var: contextvars.ContextVar[Any]) -> None:
@@ -520,3 +582,27 @@ def test_a_frozen_exception_keeps_its_type_through_the_scope(make_scope: Any, va
     assert type(excinfo.value) is _FrozenError
     assert var.get() == before
     assert input_data_load_gate_scopes_active() == active_before
+
+
+def test_a_frozen_exception_inside_a_nested_run_match_cache_keeps_the_outer_cache() -> None:
+    with run_match_cache():
+        outer = _RUN_MATCH_CACHE.get()
+        assert outer is not None
+
+        with pytest.raises(Exception) as excinfo:
+            with run_match_cache():
+                raise _FrozenError("boom")
+
+        assert type(excinfo.value) is _FrozenError
+        assert _RUN_MATCH_CACHE.get() is outer
+
+
+def test_a_contained_frozen_extender_refusal_stays_contained() -> None:
+    scope = ReaderProbeScope(_RefusingFrozenExtender(), None, None, None, None)
+
+    with reader_probe_scope(scope):
+        outcome = probe_source_group(ToySourceFG, lambda: "probed", None, "x", None)
+
+    assert outcome.refused is not None
+    assert "_FrozenError" in outcome.refused
+    assert type(outcome.error) is _FrozenError

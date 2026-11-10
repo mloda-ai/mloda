@@ -4,12 +4,12 @@ Pins the current()/activate() scope and the shared close-time deadline extenders
 closing in the same worker read via remaining().
 """
 
-import contextlib
 import time
-from collections.abc import Generator
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Literal
+
+from mloda.core.abstract_plugins.components.var_scope import VarScope
 
 CloseReason = Literal["stop", "error", "parent_gone"]
 
@@ -47,11 +47,6 @@ class CloseContext:
         """
         return _current_close_context.get()
 
-    @contextlib.contextmanager
-    def activate(self) -> Generator["CloseContext", None, None]:
+    def activate(self) -> VarScope["CloseContext | None"]:
         """Make this instance the current() context for the scope, restoring the previous one on exit."""
-        token = _current_close_context.set(self)
-        try:
-            yield self
-        finally:
-            _current_close_context.reset(token)
+        return VarScope(_current_close_context, self)

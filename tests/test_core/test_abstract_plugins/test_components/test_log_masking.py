@@ -483,11 +483,12 @@ def test_every_echoed_form_of_a_registered_literal_is_masked_by_every_sink(
 
 def test_str_extra_values_are_masked_and_other_values_untouched(capture: _Capture) -> None:
     holder = _Holder()
-    with _scope(_SECRET):
-        capture.logger.info("m", extra={"tag": _SECRET, "count": 5, "obj": holder})
+    with _scope(_SECRET, _BACKSLASH):
+        capture.logger.info("m", extra={"tag": _SECRET, "count": 5, "obj": holder, "cfg": str([_BACKSLASH])})
 
     (record,) = capture.records
     assert _SECRET not in getattr(record, "tag")
+    assert all(form not in getattr(record, "cfg") for form in _forms(_BACKSLASH))
     assert getattr(record, "count") == 5
     assert getattr(record, "obj") is holder
 

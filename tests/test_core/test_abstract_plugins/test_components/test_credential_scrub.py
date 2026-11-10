@@ -524,6 +524,28 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
         ["hunter2z9"],
         ["'user': 'bob'"],
     ),
+    ("quote_in_value_bare", "password=hun'ter2", ["ter2", "hun"], ["password=***"]),
+    ("quote_in_value_double_quoted", '"password=hun\'ter2"', ["ter2", "hun"], ['"password=***"']),
+    ("quote_in_value_single_quoted", "'password=hun'ter2'", ["ter2", "hun"], ["'password=***'"]),
+    ("quote_then_bang_in_value", "password=hun'!ter2", ["ter2", "hun"], ["password=***"]),
+    ("quote_then_backslash_in_value", "password=ab'\\cd", ["cd", "ab'"], ["password=***"]),
+    ("quote_then_at_in_value", "password=ab'@cd", ["cd", "ab'"], ["password=***"]),
+    ("quote_closing_kept", "'password=abc'", ["abc"], ["'password=***'"]),
+    ("quote_closing_kept_in_list", "['password=abc']", ["abc"], ["['password=***']"]),
+    ("quote_then_space_kept", "password=abc' x", ["abc"], ["password=***' x"]),
+    (
+        "quote_dsn_dict_single",
+        "{'dsn': 'host=h password=abc', 'token': 'SECRET'}",
+        ["abc", "SECRET"],
+        ["{'dsn': 'host=h password=***', 'token': '***'}"],
+    ),
+    (
+        "quote_dsn_dict_json",
+        '{"dsn": "host=h password=abc", "token": "SECRET"}',
+        ["abc", "SECRET"],
+        ['{"dsn": "host=h password=***", "token": "***"}'],
+    ),
+    ("quote_dsn_call_arg", "f('host=h password=abc')", ["abc"], ["f('host=h password=***')"]),
 ]
 
 
@@ -1113,8 +1135,20 @@ def test_slash_password_host_repeat_scrubs_fast() -> None:
         (lambda k: "password." * k, 8000, "a repeated dotted password"),
         (lambda k: "secret." * k, 8000, "a repeated dotted secret"),
         (lambda k: ",\n" * k, 20_000, "repeated comma newline runs"),
+        (lambda k: "password=" + "a'" * k, 20_000, "a keyword value with a repeated quote run"),
+        (lambda k: "zip://d;x" + "::x" * k, 20_000, "a host param followed by a repeated chain run"),
+        (lambda k: "zip://d;x" + "::a://" * k, 20_000, "a host param followed by a repeated chained scheme run"),
     ],
-    ids=["dotted_prefix", "quoted_dotted_prefix", "dotted_password", "dotted_secret", "comma_newlines"],
+    ids=[
+        "dotted_prefix",
+        "quoted_dotted_prefix",
+        "dotted_password",
+        "dotted_secret",
+        "comma_newlines",
+        "keyword_quote_run",
+        "host_param_chain_run",
+        "host_param_chained_scheme_run",
+    ],
 )
 def test_dotted_and_multiline_inputs_scrub_fast(build: Callable[[int], str], n: int, what: str) -> None:
     _assert_scrubs_linearly(build, n, what)
@@ -1944,6 +1978,47 @@ class TestScrubUriProjection:
             pytest.param("alice:jdbc:x://host", "alice:jdbc:x://host", id="label-colon-jdbc-subprotocol-kept"),
             pytest.param("alice:jdbc://host", "alice:***://host", id="password-before-bare-jdbc-scheme-masked"),
             pytest.param("alice:JDBC://host", "alice:***://host", id="password-before-upper-case-jdbc-scheme-masked"),
+            pytest.param("mloda.py:12:zip://d/x.csv", "mloda.py:12:zip://d/x.csv", id="file-line-prefix-kept"),
+            pytest.param(
+                "at foo/bar.py:12:hf://d/x.csv", "at foo/bar.py:12:hf://d/x.csv", id="file-line-prefix-with-path-kept"
+            ),
+            pytest.param("alice:12:x://host", "alice:***://host", id="name-digits-scheme-masked"),
+            pytest.param("user:pw:x://host", "user:***://host", id="name-word-scheme-masked"),
+            pytest.param("alice.cfgx:12:x://h", "alice.cfgx:***://h", id="dotted-unknown-extension-masked"),
+            pytest.param(
+                "ValueError:Failed:zip://d/x.csv", "ValueError:***://d/x.csv", id="exception-prefix-masked-accepted"
+            ),
+            pytest.param("zip://d;token=SEC'RET", "zip://d;token=***", id="host-param-quote-in-value-no-fragment"),
+            pytest.param(
+                "zip://d;token=SEC'!RET", "zip://d;token=***", id="host-param-quote-bang-in-value-no-fragment"
+            ),
+            pytest.param("deploy.sh:12:Pa55word://host", "deploy.sh:***://host", id="file-line-upper-case-tail-masked"),
+            pytest.param("creds.json:1:Hunter2x://h", "creds.json:***://h", id="file-line-mixed-case-tail-masked"),
+            pytest.param(
+                "https://h/x;password=hun'ter2", "https://h/x;password=***", id="path-param-quote-in-value-no-fragment"
+            ),
+            pytest.param(
+                "s3://b/token=SEC'RET/x.csv", "s3://b/token=***", id="key-value-path-quote-in-value-no-fragment"
+            ),
+            pytest.param("zip://d;%74oken=SE::CRET", "zip://d", id="host-param-double-colon-in-value-cut"),
+            pytest.param(
+                "zip://d;token=SE::CRET::s3://b/x",
+                "zip://d;token=***",
+                id="host-param-double-colon-in-value-accepted-chain-swallowed",
+            ),
+            pytest.param(
+                "failed: zip://d;%74oken=SECRET::s3://b/x.csv",
+                "failed: zip://d::s3://b/x.csv",
+                id="host-param-encoded-token-chain-tail-kept",
+            ),
+            pytest.param(
+                "zip://d;%74oken=SE::cret::x",
+                "zip://d::cret::x",
+                id="host-param-lower-case-name-reads-as-chain-accepted",
+            ),
+            pytest.param(
+                "https://h/x?password=a]b://c", "https://h/x://c", id="value-then-uri-cut-stops-at-scheme-accepted"
+            ),
         ],
     )
     def test_scrub_keeps_host_and_path_only(self, uri: str, expected: str) -> None:
@@ -2051,6 +2126,20 @@ class TestScrubUriFailClosed:
             pytest.param(
                 '{"url":"https://h/x?a=1","password":"s://ec"}', "s://ec", id="json-compact-password-with-scheme-shape"
             ),
+            pytest.param("password=hun'ter2", "ter2", id="keyword-quote-fragment"),
+            pytest.param("zip://d;token=SEC'RET", "RET", id="host-param-quote-fragment"),
+            pytest.param("password=hun'!ter2", "ter2", id="keyword-quote-bang-fragment"),
+            pytest.param("password=ab'\\cd", "cd", id="keyword-quote-backslash-fragment"),
+            pytest.param("password=ab'@cd", "cd", id="keyword-quote-at-fragment"),
+            pytest.param("zip://d;token=SEC'!RET", "RET", id="host-param-quote-bang-fragment"),
+            pytest.param("https://h/x;password=hun'ter2", "ter2", id="path-param-quote-fragment"),
+            pytest.param("s3://b/token=SEC'RET/x.csv", "RET", id="key-value-path-quote-fragment"),
+            pytest.param(
+                "{'dsn': 'host=h password=abc', 'token': 'SECRET'}", "SECRET", id="dict-dsn-then-token-quoted"
+            ),
+            pytest.param('{"dsn": "host=h password=abc", "token": "SECRET"}', "SECRET", id="dict-dsn-then-token-json"),
+            pytest.param("zip://d;%74oken=SE::CRET", "CRET", id="host-param-double-colon-fragment"),
+            pytest.param("zip://d;token=SE::CRET::s3://b/x", "CRET", id="host-param-double-colon-chain-fragment"),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:
@@ -2077,6 +2166,19 @@ class TestRegisteredSecretsScope:
         text = f"username={_LITERAL}"
         assert current_registered_secrets() == frozenset()
         assert scrub_credentials(text) == text
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            pytest.param("mloda.py:12:zip://d/x.csv", id="bare-file-line"),
+            pytest.param("at foo/bar.py:12:hf://d/x.csv", id="at-path-file-line"),
+        ],
+    )
+    def test_file_line_prefix_kept_under_a_registered_scope(self, text: str) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+        with registered_secrets_scope(frozenset({"unrelated-secret-123"})):
+            assert scrub_credentials(text) == text
 
     def test_inside_a_scope_the_literal_is_masked(self) -> None:
         from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope

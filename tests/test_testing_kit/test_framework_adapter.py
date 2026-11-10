@@ -153,16 +153,9 @@ def test_list_cells_read_back_as_lists(adapter: Any) -> None:
 
 
 def test_pandas_string_column_types_like_production() -> None:
-    adapter = _make("Pandas")
-    if not adapter.is_available():
-        pytest.skip("Pandas backend unavailable")
-    from mloda._testing.framework_adapter import to_arrow_table
-    from mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer import (
-        PandasPyArrowTransformer,
-    )
+    adapter = _pandas()
 
-    production = PandasPyArrowTransformer.transform_other_fw_to_fw(to_arrow_table(_data()))
-    assert adapter.lost_type(adapter.from_typed(_data()), "s") is (str(production["s"].dtype) == "object")
+    assert adapter.lost_type(adapter.from_typed(_data()), "s") is (_production_string_dtype() == "object")
 
 
 @pytest.mark.parametrize("name", _CONNECTION)
@@ -501,6 +494,16 @@ def _pandas() -> Any:
     return adapter
 
 
+def _production_string_dtype() -> str:
+    import pyarrow as pa
+
+    from mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer import (
+        PandasPyArrowTransformer,
+    )
+
+    return str(PandasPyArrowTransformer.transform_other_fw_to_fw(pa.table({"s": pa.array(["x"])}))["s"].dtype)
+
+
 def test_pandas_object_string_column_fits_by_value() -> None:
     import pandas as pd
 
@@ -544,9 +547,9 @@ def _column_types(name: str, frame: Any) -> list[str]:
     return [str(t) for t in frame.schema.types]
 
 
-_DUP_TYPES: dict[str, dict[DataType, str | None]] = {
+_DUP_TYPES: dict[str, dict[DataType, str]] = {
     "PyArrow": {DataType.INT64: "int64", DataType.STRING: "string"},
-    "Pandas": {DataType.INT64: "Int64", DataType.STRING: None},
+    "Pandas": {DataType.INT64: "Int64", DataType.STRING: ""},
     "DuckDB": {DataType.INT64: "BIGINT", DataType.STRING: "VARCHAR"},
     "Iceberg": {DataType.INT64: "int64", DataType.STRING: "string"},
 }
@@ -557,14 +560,7 @@ _DUP_TYPES: dict[str, dict[DataType, str | None]] = {
 def test_duplicate_column_frame_keeps_names_and_types(name: str, adapter: Any, pair: tuple[DataType, DataType]) -> None:
     expected = dict(_DUP_TYPES[name])
     if name == "Pandas":
-        import pyarrow as pa
-
-        from mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer import (
-            PandasPyArrowTransformer,
-        )
-
-        production = PandasPyArrowTransformer.transform_other_fw_to_fw(pa.table({"s": pa.array(["x"])}))
-        expected[DataType.STRING] = str(production["s"].dtype)
+        expected[DataType.STRING] = _production_string_dtype()
     with adapter:
         frame = adapter.duplicate_column_frame(*pair)
 
@@ -572,7 +568,8 @@ def test_duplicate_column_frame_keeps_names_and_types(name: str, adapter: Any, p
         assert _column_types(name, frame) == [expected[pair[0]], expected[pair[1]]]
 
 
-def test_pandas_from_arrow_matches_production_dtypes_and_nulls() -> None:
+@pytest.mark.parametrize("rows", [None, 0], ids=["full", "empty"])
+def test_pandas_from_arrow_matches_production_dtypes_and_nulls(rows: int | None) -> None:
     pa = pytest.importorskip("pyarrow")
     pytest.importorskip("pandas")
     from datetime import date
@@ -594,8 +591,14 @@ def test_pandas_from_arrow_matches_production_dtypes_and_nulls() -> None:
             ),
             "dt": pa.array([date(2024, 1, 1), None, date(2024, 1, 3)], type=pa.date32()),
             "l": pa.array([[1], None, [2, 3]], type=pa.list_(pa.int64())),
+            "s_null": pa.array([None, None, None], type=pa.string()),
+            "n_null": pa.array([None, None, None], type=pa.null()),
+            "ls": pa.array(["a", None, "c"], type=pa.large_string()),
+            "st": pa.array([{"x": 1}, None, {"x": 3}], type=pa.struct([("x", pa.int64())])),
         }
     )
+    if rows is not None:
+        table = table.slice(0, rows)
     adapted = _pandas().from_arrow(table)
     production = PandasPyArrowTransformer.transform_other_fw_to_fw(table)
 
@@ -604,17 +607,23 @@ def test_pandas_from_arrow_matches_production_dtypes_and_nulls() -> None:
         assert adapted[column].isna().tolist() == production[column].isna().tolist(), column
 
 
-def test_pandas_from_arrow_nullable_int_deliberately_diverges_from_production() -> None:
+@pytest.mark.parametrize(
+    ("arrow_type", "values", "adapted", "production"),
+    [("int64", [1, None, 3], "Int64", "float64"), ("bool_", [True, None, False], "boolean", "object")],
+)
+def test_pandas_from_arrow_nullable_deliberately_diverges_from_production(
+    arrow_type: str, values: list[Any], adapted: str, production: str
+) -> None:
     pa = pytest.importorskip("pyarrow")
     pytest.importorskip("pandas")
     from mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer import (
         PandasPyArrowTransformer,
     )
 
-    table = pa.table({"i": pa.array([1, None, 3], type=pa.int64())})
+    table = pa.table({"c": pa.array(values, type=getattr(pa, arrow_type)())})
 
-    assert str(_pandas().from_arrow(table)["i"].dtype) == "Int64"
-    assert str(PandasPyArrowTransformer.transform_other_fw_to_fw(table)["i"].dtype) == "float64"
+    assert str(_pandas().from_arrow(table)["c"].dtype) == adapted
+    assert str(PandasPyArrowTransformer.transform_other_fw_to_fw(table)["c"].dtype) == production
 
 
 def test_pyarrow_has_type_on_duplicate_column_frame_uses_the_first_column() -> None:

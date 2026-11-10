@@ -14,6 +14,9 @@ from mloda._testing.framework_adapter import PandasAdapter
 from mloda.provider import Cause
 from mloda.user import DataType, FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer import (
+    PandasPyArrowTransformer,
+)
 from tests.helpers.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -26,8 +29,11 @@ except ImportError:
     logger.warning("Pandas is not installed. Some tests will be skipped.")
     pd = None
 
-_PANDAS_2 = pd is not None and pd.__version__.startswith("2.")
-_PANDAS_2_OBJECT_STRINGS = (Cause.BACKEND, "pandas 2 reads production strings as object, which carries no type")
+_OBJECT_STRINGS = (
+    pd is not None
+    and str(PandasPyArrowTransformer.transform_other_fw_to_fw(pa.table({"s": pa.array(["x"])}))["s"].dtype) == "object"
+)
+_OBJECT_STRINGS_REASON = "production reads strings as object here, which carries no type"
 
 
 class TestPandasDataFrameAvailability:
@@ -117,7 +123,7 @@ class TestPandasDtypeExtractionSuite(DtypeExtractionSuite):
     adapter_class = PandasAdapter
     switched_off = {"test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence": Cause.BACKEND}
 
-    @pytest.mark.xfail(_PANDAS_2, reason=_PANDAS_2_OBJECT_STRINGS[1], strict=True)
+    @pytest.mark.xfail(_OBJECT_STRINGS, reason=_OBJECT_STRINGS_REASON, strict=True)
     def test_extract_duplicate_column_data_type_reversed_order_returns_first_occurrence(
         self, adapter: Any, framework_instance: Any
     ) -> None:
@@ -153,11 +159,11 @@ class TestPandasDataTypeValidatorSuite(DataTypeValidatorSuite):
         "test_str_column_int_declaration_raises_in_lenient": Cause.BACKEND,
     }
 
-    @pytest.mark.xfail(_PANDAS_2, reason=_PANDAS_2_OBJECT_STRINGS[1], strict=True)
+    @pytest.mark.xfail(_OBJECT_STRINGS, reason=_OBJECT_STRINGS_REASON, strict=True)
     def test_str_column_int_declaration_raises_in_strict(self, adapter: Any, framework_instance: Any) -> None:
         super().test_str_column_int_declaration_raises_in_strict(adapter, framework_instance)
 
-    @pytest.mark.xfail(_PANDAS_2, reason=_PANDAS_2_OBJECT_STRINGS[1], strict=True)
+    @pytest.mark.xfail(_OBJECT_STRINGS, reason=_OBJECT_STRINGS_REASON, strict=True)
     def test_str_column_int_declaration_raises_in_lenient(self, adapter: Any, framework_instance: Any) -> None:
         super().test_str_column_int_declaration_raises_in_lenient(adapter, framework_instance)
 

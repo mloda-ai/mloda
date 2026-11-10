@@ -134,7 +134,7 @@ class ExecutionOrchestrator:
     """
 
     _owner_pid: int | None = None
-    outcome: RunOutcome = RunOutcome()
+    outcome: RunOutcome = RunOutcome()  # Visible to Mock(spec=...); __init__ assigns each instance its own.
 
     def __init__(
         self,

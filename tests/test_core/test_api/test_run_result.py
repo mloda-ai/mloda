@@ -54,6 +54,9 @@ from tests.test_core.test_abstract_plugins.test_multi_column_auto_resolution imp
     MultiColumnTestDataCreator,
 )
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.failed_rows import FailedRows
+from mloda.core.abstract_plugins.components.run_outcome import RunOutcome
+from mloda.core.abstract_plugins.components.step_duration import StepDuration
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsVaultFG
 from tests.test_core.test_api.test_plan_info import PlanInfoPandasSource
 
@@ -362,6 +365,27 @@ class TestRunResultArtifacts:
         loaded = pickle.loads(pickle.dumps(RunResult([], [], artifacts={"a": {"b": 1}})))  # nosec B301
 
         assert loaded.artifacts == {"a": {"b": 1}}
+
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            {"failed_rows": (FailedRows("g", "c", (0,), "r"),)},
+            {"artifacts": {}},
+            {"step_durations": (StepDuration("g", uuid4(), 0.1),)},
+        ],
+    )
+    def test_outcome_with_loose_kwarg_raises(self, extra: dict[str, Any]) -> None:
+        from mloda.user import RunResult
+
+        with pytest.raises(TypeError):
+            RunResult([], [], outcome=RunOutcome(), **extra)
+
+    def test_artifacts_come_from_the_outcome(self) -> None:
+        from mloda.user import RunResult
+
+        saved: dict[str, Any] = {"feature": {"state": 1}}
+
+        assert RunResult([], [], outcome=RunOutcome(artifacts=saved)).artifacts is saved
 
 
 class TestRunResultStepDurations:

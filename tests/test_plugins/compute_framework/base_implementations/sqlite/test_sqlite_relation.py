@@ -16,6 +16,7 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import q
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import OrderBy
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity import sqlite_affinity_class
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import (
+    _PROBE_ROWS,
     SqliteRelation,
     _infer_sqlite_type_from_values,
     _sqlite_affinity_to_arrow_type,
@@ -296,16 +297,33 @@ class TestSqliteRelation(SqlRelationWindowSuite):
         assert (types["w"], types["d"]) == (pa.int64(), pa.int64())
         assert (schema.field("w").type, schema.field("d").type) == (pa.int64(), pa.int64())
 
+    @pytest.mark.parametrize("partition_by", [["region"], ["region", "sub"]])
+    def test_offset_window_type_probe_limit_is_pinned(
+        self, connection: sqlite3.Connection, partition_by: list[str]
+    ) -> None:
+        table = pa.table({"region": ["A"] * 3, "sub": ["x"] * 3, "score": pa.array([None] * 3, pa.int64())})
+        source = SqliteRelation.from_arrow(connection, table)
+        within = source.window(
+            f"LAG(score, {_PROBE_ROWS - 2})", "w", partition_by=partition_by, order_by=[OrderBy("score")]
+        )
+        beyond = source.window(
+            f"LAG(score, {_PROBE_ROWS - 1})", "w", partition_by=partition_by, order_by=[OrderBy("score")]
+        )
+
+        assert dict(zip(within.columns, within.types, strict=True))["w"] == pa.int64()
+        assert dict(zip(beyond.columns, beyond.types, strict=True))["w"] == pa.string()
+
+    @pytest.mark.parametrize("expr", ["LAG(score, 1)", "LAG(score, 6)"])
     @pytest.mark.parametrize(
         "projection",
         ["DISTINCT region, sub, score", "MIN(region) AS region, MIN(sub) AS sub, MAX(score) AS score"],
     )
     def test_offset_window_type_over_collapsing_projection_keeps_source_type(
-        self, connection: sqlite3.Connection, projection: str
+        self, connection: sqlite3.Connection, projection: str, expr: str
     ) -> None:
         table = pa.table({"region": ["A"] * 3, "sub": ["x"] * 3, "score": pa.array([None] * 3, pa.int64())})
         source = SqliteRelation.from_arrow(connection, table).select(_raw_sql=projection)
-        built = source.window("LAG(score, 1)", "w", partition_by=["region"], order_by=[OrderBy("score")])
+        built = source.window(expr, "w", partition_by=["region"], order_by=[OrderBy("score")])
         built = built.select(_raw_sql="*, score - w AS d")
         types = dict(zip(built.columns, built.types, strict=True))
         schema = built.to_arrow_table().schema

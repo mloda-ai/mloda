@@ -178,7 +178,7 @@ class ExecutionPlan:
         # since a split with no ancestors can never be the actual cause of a missing-Links error.
         # Feeds the missing-Links error's option-split hint.
         self._option_split_buckets: dict[type[FeatureGroup], dict[Any, tuple[Feature, set[UUID]]]] = {}
-        # Per root feature_group class, the union of inherited_context_keys used to hash its
+        # Per root feature_group class, the union of split_context_keys used to hash its
         # buckets (the actual split_keys `group_features_by_compute_framework_and_options` used).
         self._option_split_keys: dict[type[FeatureGroup], frozenset[Any]] = {}
 
@@ -782,7 +782,7 @@ class ExecutionPlan:
         """Two same-name features differing in data type or options, else None."""
         if feature_a.name != feature_b.name:
             return None
-        split_keys = feature_a.options.inherited_context_keys | feature_b.options.inherited_context_keys
+        split_keys = feature_a.options.split_context_keys | feature_b.options.split_context_keys
         option_keys = self._differing_option_keys([feature_a, feature_b], split_keys)
         if feature_a.data_type != feature_b.data_type or option_keys:
             return feature_a, feature_b, option_keys
@@ -822,7 +822,13 @@ class ExecutionPlan:
             memoized = direct_parents_memo.get(feature.uuid)
             if memoized is None:
                 direct = ExecutionPlan.direct_ancestors(feature.uuid, parent_to_children_mapping)
-                memoized = sorted(uuid for uuid in direct if uuid in producer_index)
+                # Twin-split root copies upstream also count, so each chain follows its own root copy.
+                twin_roots = {
+                    uuid
+                    for uuid in parent_to_children_mapping.get(feature.uuid, ())
+                    if nodes[uuid].feature.options.twin_split_keys
+                }
+                memoized = sorted(uuid for uuid in direct | twin_roots if uuid in producer_index)
                 direct_parents_memo[feature.uuid] = memoized
             return memoized
 
@@ -3853,7 +3859,7 @@ Available join types:
         # missing-Links error: a split with ancestors of its own is never the source read directly.
         is_root = not any(parent_to_children_mapping.get(feature.uuid) for feature in features)
         if is_root:
-            split_keys = frozenset(key for feature in features for key in feature.options.inherited_context_keys)
+            split_keys = frozenset(key for feature in features for key in feature.options.split_context_keys)
             self._option_split_keys[feature_group] = self._option_split_keys.get(feature_group, frozenset()) | (
                 split_keys
             )
@@ -4091,9 +4097,7 @@ Available join types:
         """
         if len(groups) < 2 or feature_group.artifact() is not None:
             return groups
-        split_keys = frozenset(
-            key for group in groups.values() for f in group for key in f.options.inherited_context_keys
-        )
+        split_keys = frozenset(key for group in groups.values() for f in group for key in f.options.split_context_keys)
         collection = global_filter.collection if global_filter is not None else {}
         filters_by_name = {
             name: single_filters for (fg, name), single_filters in collection.items() if fg == feature_group
@@ -4160,7 +4164,7 @@ Available join types:
         # effective config groups together and differing values stay isolated regardless of
         # provenance (consistent with the provenance-blind Feature dedup).
         split_keys: frozenset[str] = frozenset(
-            key for feature in features for key in feature.options.inherited_context_keys
+            key for feature in features for key in feature.options.split_context_keys
         )
 
         # First pass: group features with explicit data_type

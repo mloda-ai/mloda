@@ -337,6 +337,7 @@ class Engine:
         resolver.set_nodes_per_feature_group()
 
         planned_queue = resolver.resolve_links()
+        self._split_root_twins_by_context()
         self._reject_twins_sharing_a_frame()
         resolver.resolver_links.warn_on_unjoined_links()
 
@@ -814,12 +815,41 @@ class Engine:
         existing.framework_pinned = True
         return existing
 
+    def _split_root_twins_by_context(self) -> None:
+        """Marks differing context keys of read root copies as split keys, giving each context its own frame.
+        Twins that are all direct requests are left to _reject_twins_sharing_a_frame."""
+        linked = {parent for parents in self.feature_link_parents.values() for parent in parents}
+        for group_class, collection in self.feature_group_collection.items():
+            declared = group_class.declared_option_keys()
+            buckets: dict[str, list[Feature]] = defaultdict(list)
+            for member in collection:
+                if not self.feature_link_parents.get(member.uuid) and (
+                    member.initial_requested_data or member.uuid in linked
+                ):
+                    buckets[str(member.name)].append(member)
+            for name, members in buckets.items():
+                if len(members) < 2 or all(m.initial_requested_data for m in members):
+                    continue
+                name_derived = self._name_derived_keys(group_class, name, declared)
+                first = members[0].options.context
+                differing = frozenset(
+                    k
+                    for m in members
+                    for k in m.options.context
+                    if str(k) not in name_derived
+                    and not all(
+                        k in o.options.context and _deep_equal(o.options.context[k], first.get(k)) for o in members
+                    )
+                )
+                for member in members:
+                    member.options.twin_split_keys = member.options.twin_split_keys | differing
+
     def _reject_twins_sharing_a_frame(self) -> None:
         """Rejects same-named copies with differing context not derived from the name, sharing one frame."""
         for group_class, collection in sorted(
             self.feature_group_collection.items(), key=lambda item: format_feature_group_class(item[0])
         ):
-            split_keys = frozenset(k for f in collection for k in f.options.inherited_context_keys)
+            split_keys = frozenset(k for f in collection for k in f.options.split_context_keys)
             declared = group_class.declared_option_keys()
             buckets: dict[str, list[Feature]] = defaultdict(list)
             for member in collection:

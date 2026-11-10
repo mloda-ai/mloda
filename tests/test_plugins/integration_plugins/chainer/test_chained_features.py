@@ -48,8 +48,8 @@ class TestChainedFeatures:
             compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
-        # Currently, we duplicate here the data. This can be changed in the future.
-        assert len(result) == 2
+        # Each pushed ident reads its own Sales copy, so every chain level lands in its own frame per ident.
+        assert len(result) == 4
 
     def test_invalid_suffix_configuration(self) -> None:
         with pytest.raises(Exception) as exc_info:

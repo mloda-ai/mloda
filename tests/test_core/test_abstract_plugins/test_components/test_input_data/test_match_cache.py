@@ -1,6 +1,19 @@
 """run_match_cache scope and run_cached memoization."""
 
-from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached, run_match_cache
+from dataclasses import dataclass
+
+import pytest
+
+from mloda.core.abstract_plugins.components.input_data.match_cache import (
+    _RUN_MATCH_CACHE,
+    run_cached,
+    run_match_cache,
+)
+
+
+@dataclass(frozen=True)
+class _FrozenError(Exception):
+    detail: str
 
 
 class TestRunCached:
@@ -42,6 +55,18 @@ class TestRunCached:
             run_cached("k", compute)
 
         assert len(calls) == 1
+
+    def test_a_frozen_exception_inside_a_nested_run_match_cache_keeps_the_outer_cache(self) -> None:
+        with run_match_cache():
+            outer = _RUN_MATCH_CACHE.get()
+            assert outer is not None
+
+            with pytest.raises(Exception) as excinfo:
+                with run_match_cache():
+                    raise _FrozenError("boom")
+
+            assert type(excinfo.value) is _FrozenError
+            assert _RUN_MATCH_CACHE.get() is outer
 
     def test_a_new_scope_after_exit_starts_empty(self) -> None:
         calls: list[int] = []

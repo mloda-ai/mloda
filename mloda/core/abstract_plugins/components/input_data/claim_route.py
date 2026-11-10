@@ -1,11 +1,12 @@
 """Value objects a SourceFeatureGroup uses to declare what it claims, plus the match-time scope variable."""
 
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
+
+from mloda.core.abstract_plugins.components.var_scope import PairScope, ResultScope, VarScope
 
 
 class NamePolicy(Enum):
@@ -72,15 +73,10 @@ def note_open_claim() -> None:
         flag[:] = [True]
 
 
-@contextmanager
-def open_claim_scope() -> Iterator[list[bool]]:
+def open_claim_scope() -> ResultScope[list[bool] | None, list[bool]]:
     """Collect whether the candidate matched inside the block claimed through an open route alone."""
     flag: list[bool] = []
-    token = _OPEN_CLAIM.set(flag)
-    try:
-        yield flag
-    finally:
-        _OPEN_CLAIM.reset(token)
+    return ResultScope(_OPEN_CLAIM, flag, flag)
 
 
 @dataclass
@@ -139,14 +135,9 @@ def remembered_probe(name: str, group: type, probe: Callable[[], Any]) -> Any:
     return check.probes[group]
 
 
-@contextmanager
-def chain_check_scope(check: ChainCheck) -> Iterator[None]:
+def chain_check_scope(check: ChainCheck) -> VarScope[ChainCheck | None]:
     """Install check for the block."""
-    token = _CHAIN_CHECK.set(check)
-    try:
-        yield
-    finally:
-        _CHAIN_CHECK.reset(token)
+    return VarScope(_CHAIN_CHECK, check)
 
 
 _PIN_SCOPE: ContextVar[tuple[set[str], list[tuple[str, Any]]] | None] = ContextVar("mloda_pin_scope", default=None)
@@ -165,15 +156,12 @@ def note_pending_pin(path: str, rejection: Any) -> None:
         scope[1].append((path, rejection))
 
 
-@contextmanager
-def pin_report_scope(reported: set[str]) -> Iterator[list[tuple[str, Any]]]:
+def pin_report_scope(
+    reported: set[str],
+) -> ResultScope[tuple[set[str], list[tuple[str, Any]]] | None, list[tuple[str, Any]]]:
     """Share one reported-pins set across the candidates of a resolution; yields this candidate's pending records."""
     pending: list[tuple[str, Any]] = []
-    token = _PIN_SCOPE.set((reported, pending))
-    try:
-        yield pending
-    finally:
-        _PIN_SCOPE.reset(token)
+    return ResultScope(_PIN_SCOPE, (reported, pending), pending)
 
 
 def current_feature_group_scope() -> Any:
@@ -181,13 +169,6 @@ def current_feature_group_scope() -> Any:
     return _FEATURE_GROUP_SCOPE.get()
 
 
-@contextmanager
-def feature_group_scope(scope: Any, contain_aborts: bool = False) -> Iterator[None]:
+def feature_group_scope(scope: Any, contain_aborts: bool = False) -> PairScope:
     """Make scope (or none) current for claim matching inside the block; optionally contain match aborts."""
-    token = _FEATURE_GROUP_SCOPE.set(scope)
-    contain_token = _CONTAIN_ABORTS.set(contain_aborts)
-    try:
-        yield
-    finally:
-        _CONTAIN_ABORTS.reset(contain_token)
-        _FEATURE_GROUP_SCOPE.reset(token)
+    return PairScope(VarScope(_FEATURE_GROUP_SCOPE, scope), VarScope(_CONTAIN_ABORTS, contain_aborts))

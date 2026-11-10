@@ -7,6 +7,7 @@ in other tests.
 import inspect
 import logging
 from abc import abstractmethod
+from dataclasses import dataclass
 from typing import Any, ClassVar, NamedTuple
 
 import pyarrow as pa
@@ -23,6 +24,7 @@ from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.provider import ClaimRoute, FeatureGroup, FeatureSet, SourceFeatureGroup, NamePolicy, SourceMatch
+from mloda.core.abstract_plugins.components.input_data.reader_probe import probe_source_group
 from mloda.steward import ReaderProbeScope, reader_probe_scope
 from mloda.user import (
     Feature,
@@ -40,6 +42,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     TOY_KEY,
     ToySourceBase,
+    ToySourceFG,
 )
 
 _CRED_KEY = "imdmatch_marker"
@@ -1036,3 +1039,24 @@ class TestSourceGroupHook:
 
         assert len(recorder.for_reader(ImdMatchGateSource)) == 1
         assert len(gate.raised) == 1
+
+    def test_a_contained_frozen_extender_refusal_stays_contained(self) -> None:
+        @dataclass(frozen=True)
+        class _FrozenError(Exception):
+            detail: str
+
+        class _RefusingFrozenExtender(Extender):
+            def wraps(self) -> set[ExtenderHook]:
+                return {ExtenderHook.INPUT_DATA_MATCH}
+
+            def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+                raise _FrozenError("refused")
+
+        scope = ReaderProbeScope(_RefusingFrozenExtender(), None, None, None, None)
+
+        with reader_probe_scope(scope):
+            outcome = probe_source_group(ToySourceFG, lambda: "probed", None, "x", None)
+
+        assert outcome.refused is not None
+        assert "_FrozenError" in outcome.refused
+        assert type(outcome.error) is _FrozenError

@@ -1,4 +1,3 @@
-import contextlib
 import contextvars
 import logging
 from copy import copy, deepcopy
@@ -19,6 +18,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.api.run_boundary import run_boundary
 from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, safe_value_text
+from mloda.core.abstract_plugins.components.var_scope import VarScope
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourcePointerError
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 
@@ -83,13 +83,8 @@ from mloda.core.runtime.run_id import generate_run_id
 _PLAN_ORIGIN: contextvars.ContextVar[PlanOrigin | None] = contextvars.ContextVar("_PLAN_ORIGIN", default=None)
 
 
-@contextlib.contextmanager
-def _plan_origin(origin: PlanOrigin | None) -> Generator[None, None, None]:
-    token = _PLAN_ORIGIN.set(origin)
-    try:
-        yield
-    finally:
-        _PLAN_ORIGIN.reset(token)
+def _plan_origin(origin: PlanOrigin | None) -> VarScope[PlanOrigin | None]:
+    return VarScope(_PLAN_ORIGIN, origin)
 
 
 def _log_run_value_raise(key: str) -> Callable[[Exception], None]:

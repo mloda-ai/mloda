@@ -1,7 +1,6 @@
 """Run-scoped match and dependency facts shared by candidate attempts and graph construction."""
 
-from collections.abc import Callable, Hashable, Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Callable, Hashable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from types import TracebackType
@@ -17,6 +16,7 @@ from mloda.core.abstract_plugins.components.input_data.match_cache import run_ca
 from mloda.core.abstract_plugins.components.input_data.reader_probe import current_reader_probe_scope
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.var_scope import VarScope
 from mloda.core.abstract_plugins.components.property_spec import unforwarded_keys
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import current_implementations
@@ -34,14 +34,9 @@ _SCALAR_TYPES = frozenset({int, str, float, bool, bytes, type(None)})
 _RUN: ContextVar[Any] = ContextVar("input_chain_run", default=None)
 
 
-@contextmanager
-def input_resolution_scope(run: Any) -> Iterator[None]:
+def input_resolution_scope(run: Any) -> VarScope[Any]:
     """A nested Engine has its own collector and extenders even inside an outer match cache."""
-    token = _RUN.set(run)
-    try:
-        yield
-    finally:
-        _RUN.reset(token)
+    return VarScope(_RUN, run)
 
 
 @dataclass(frozen=True, eq=False)

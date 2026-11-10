@@ -5,10 +5,13 @@ from typing import Any
 from mloda._testing.source_applicability import SourceApplicability, source_applicability
 from mloda.core.abstract_plugins.components.data_access_collection import CONNECTION_HANDLE_OPTION
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy
-from mloda.provider import SourceFeatureGroup
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec
+from mloda.provider import HANDLE_OPTION, HANDLE_SPEC, SourceFeatureGroup
+
+_DECLARED = {HANDLE_OPTION: HANDLE_SPEC}
 
 
-def _make_group(*routes: ClaimRoute) -> type[SourceFeatureGroup]:
+def _make_group(*routes: ClaimRoute, mapping: dict[str, PropertySpec] | None = None) -> type[SourceFeatureGroup]:
     def find_sources(cls: Any, route: Any, feature_name: Any, options: Any, dac: Any = None) -> list[Any]:
         return []
 
@@ -20,6 +23,7 @@ def _make_group(*routes: ClaimRoute) -> type[SourceFeatureGroup]:
         (SourceFeatureGroup,),
         {
             "CLAIM_ROUTES": tuple(routes),
+            "PROPERTY_MAPPING": mapping or {},
             "find_sources": classmethod(find_sources),
             "load_neutral": classmethod(load_neutral),
         },
@@ -41,10 +45,16 @@ def test_a_group_with_no_searched_route_has_no_data_access_handle() -> None:
 
 
 def test_a_plain_searched_group_with_a_pointer() -> None:
-    result = source_applicability(_make_group(_searched()), True)
+    result = source_applicability(_make_group(_searched(), mapping=_DECLARED), True)
     assert result == SourceApplicability(
         pointer=True, data_access_handle=True, query_route=False, checked_route=False, searched_route=True
     )
+
+
+def test_a_searched_group_without_a_declared_handle_has_no_data_access_handle() -> None:
+    result = source_applicability(_make_group(_searched()), True)
+    assert result.data_access_handle is False
+    assert result.searched_route is True
 
 
 def test_has_pointer_false_clears_the_pointer_flag() -> None:
@@ -53,12 +63,12 @@ def test_has_pointer_false_clears_the_pointer_flag() -> None:
 
 def test_a_connection_handle_route_has_no_data_access_handle() -> None:
     route = ClaimRoute("probe", NamePolicy.DECLARED, True, (CONNECTION_HANDLE_OPTION,))
-    assert source_applicability(_make_group(route), False).data_access_handle is False
+    assert source_applicability(_make_group(route, mapping=_DECLARED), False).data_access_handle is False
 
 
 def test_one_connection_handle_route_among_others_still_disables_the_data_access_handle() -> None:
     route = ClaimRoute("probe", NamePolicy.DECLARED, True, (CONNECTION_HANDLE_OPTION,))
-    assert source_applicability(_make_group(_searched(), route), True).data_access_handle is False
+    assert source_applicability(_make_group(_searched(), route, mapping=_DECLARED), True).data_access_handle is False
 
 
 def test_a_query_text_route_sets_query_route() -> None:

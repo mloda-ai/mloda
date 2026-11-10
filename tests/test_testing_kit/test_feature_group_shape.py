@@ -181,6 +181,12 @@ def make_run_group(
                 return _write_parts(kind, data, counter)
             if kind == "drops_output":
                 return data
+            if kind in ("grows_rows", "shrinks_rows"):
+                if data["rg_src"]:
+                    for column in data:
+                        data[column] = data[column] + [data[column][-1]] if kind == "grows_rows" else data[column][:-1]
+                data["rg_out"] = [v * 2 for v in data["rg_src"]]
+                return data
             if kind == "writes_names":
                 for written in sorted(names):
                     data[written] = [v * 2 for v in data["rg_src"]]
@@ -970,6 +976,8 @@ def test_requested_name_already_in_input_data_fails_outputs() -> None:
     [
         ("drops_output", "outputs:", PythonDictAdapter),
         ("overwrites_input", "outputs:", PythonDictAdapter),
+        ("grows_rows", "outputs:", PythonDictAdapter),
+        ("shrinks_rows", "outputs:", PythonDictAdapter),
         ("wrong_type", "type:", PythonDictAdapter),
         ("wrong_type", "type:", PyArrowAdapter),
         ("wrong_type", "type:", PandasAdapter),
@@ -997,6 +1005,15 @@ def test_broken_run_group_fails_only_its_sub_check(kind: str, prefix: str, adapt
         result = check_feature_group_shape(make_run_group(kind), input_data=_run_data(), adapter=adapter)
     assert not result.passed
     assert all(f.startswith(prefix) for f in result.failures), result.failures
+
+
+@pytest.mark.parametrize("kind", ["grows_rows", "shrinks_rows"])
+def test_undeclared_row_count_change_is_named_once(kind: str) -> None:
+    result = check_feature_group_shape(make_run_group(kind), input_data=_run_data(), adapter=PythonDictAdapter())
+    outputs = [f for f in result.failures if f.startswith("outputs:")]
+    assert len(outputs) == 1, result.failures
+    assert "replaces_rows()" in outputs[0]
+    assert not any("was changed" in f for f in result.failures), result.failures
 
 
 def test_list_directory_runs_on_pandas(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:

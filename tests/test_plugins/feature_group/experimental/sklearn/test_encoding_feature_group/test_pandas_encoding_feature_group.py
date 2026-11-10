@@ -11,6 +11,8 @@ from unittest.mock import Mock, patch
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.provider import FeatureSet
 from mloda.user import Feature
+from mloda.user import Options
+from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncoding
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -339,3 +341,103 @@ class TestPandasEncoding:
             row_values = [result_data[col].iloc[i] for col in onehot_columns]
             assert sum(row_values) == 1  # Exactly one 1
             assert all(val in [0, 1] for val in row_values)  # Only 0s and 1s
+
+
+ENCODER_DTYPES = [("label", "int64"), ("ordinal", "float64")]
+
+
+def _encode(
+    kind: str, values: list[str], *, options: Options | None = None, mode: str = "save"
+) -> tuple[Any, FeatureSet]:
+    pytest.importorskip("sklearn")
+    features = FeatureSet()
+    features.add(Feature(f"c__{kind}_encoded", options or Options()))
+    if mode == "save":
+        features.artifact_to_save = "requested"
+    else:
+        features.artifact_to_load = "requested"
+    data = pd.DataFrame({"c": pd.Series(values, dtype=object)})
+    return PandasEncoding.calculate(EncodingFeatureGroup, data, features, None), features
+
+
+class TestPandasEncodingOnZeroInputRows:
+    """Zero input rows give empty columns of the non-empty dtype and never fit or save."""
+
+    @pytest.mark.parametrize(("kind", "dtype"), ENCODER_DTYPES)
+    def test_zero_rows_give_an_empty_column_of_the_non_empty_dtype(self, kind: str, dtype: str) -> None:
+        non_empty, _ = _encode(kind, ["a", "b", "a"])
+        result, features = _encode(kind, [])
+
+        assert len(result) == 0
+        assert features.save_artifact == {}
+        assert str(non_empty[f"c__{kind}_encoded"].dtype) == dtype
+        assert str(result[f"c__{kind}_encoded"].dtype) == dtype
+
+    @pytest.mark.parametrize("kind", ["label", "ordinal"])
+    def test_zero_rows_without_artifact_to_save_leave_save_artifact_none(self, kind: str) -> None:
+        pytest.importorskip("sklearn")
+        features = FeatureSet()
+        features.add(Feature(f"c__{kind}_encoded"))
+        data = pd.DataFrame({"c": pd.Series([], dtype=object)})
+
+        PandasEncoding.calculate(EncodingFeatureGroup, data, features, None)
+
+        assert features.save_artifact is None
+
+    @pytest.mark.parametrize("kind", ["label", "ordinal"])
+    def test_zero_rows_keep_another_features_save_artifact_key(self, kind: str) -> None:
+        pytest.importorskip("sklearn")
+        features = FeatureSet()
+        features.add(Feature(f"c__{kind}_encoded"))
+        features.artifact_to_save = "requested"
+        features.save_artifact = {"other": 1}
+        data = pd.DataFrame({"c": pd.Series([], dtype=object)})
+
+        PandasEncoding.calculate(EncodingFeatureGroup, data, features, None)
+
+        assert features.save_artifact == {"other": 1}
+
+    @pytest.mark.parametrize(("kind", "dtype"), ENCODER_DTYPES)
+    def test_zero_rows_with_a_loaded_artifact_keep_the_dtype(self, kind: str, dtype: str, tmp_path: Any) -> None:
+        options = Options({SklearnArtifact.ARTIFACT_STORAGE_PATH: str(tmp_path)})
+        _, fit_set = _encode(kind, ["a", "b"], options=options)
+        SklearnArtifact.custom_saver(fit_set, fit_set.save_artifact)
+
+        result, _ = _encode(kind, [], options=options, mode="load")
+
+        assert len(result) == 0
+        assert str(result[f"c__{kind}_encoded"].dtype) == dtype
+
+    @pytest.mark.parametrize(
+        ("fit_values", "expected_columns"),
+        [
+            (["a", "b", "c"], ["c__onehot_encoded~0", "c__onehot_encoded~1", "c__onehot_encoded~2"]),
+            (["a", "a"], ["c__onehot_encoded"]),
+        ],
+        ids=["many_categories", "single_category"],
+    )
+    def test_onehot_zero_rows_with_a_loaded_artifact_name_the_parts_like_a_non_empty_run(
+        self, fit_values: list[str], expected_columns: list[str], tmp_path: Any
+    ) -> None:
+        options = Options({SklearnArtifact.ARTIFACT_STORAGE_PATH: str(tmp_path)})
+        _, fit_set = _encode("onehot", fit_values, options=options)
+        SklearnArtifact.custom_saver(fit_set, fit_set.save_artifact)
+        non_empty, _ = _encode("onehot", fit_values, options=options, mode="load")
+
+        result, _ = _encode("onehot", [], options=options, mode="load")
+
+        assert [c for c in non_empty.columns if c != "c"] == expected_columns
+        assert [c for c in result.columns if c != "c"] == expected_columns
+        assert len(result) == 0
+        assert all(str(result[c].dtype) == "float64" for c in expected_columns)
+
+    def test_onehot_zero_rows_without_an_artifact_raise_naming_zero_rows(self) -> None:
+        features = FeatureSet()
+        features.add(Feature("c__onehot_encoded"))
+        features.artifact_to_save = "requested"
+        data = pd.DataFrame({"c": pd.Series([], dtype=object)})
+
+        with pytest.raises(ValueError, match=r"(?s)(?=.*zero rows)(?=.*fitted artifact)"):
+            PandasEncoding.calculate(EncodingFeatureGroup, data, features, None)
+
+        assert not features.save_artifact

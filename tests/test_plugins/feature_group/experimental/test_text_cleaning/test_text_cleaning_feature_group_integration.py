@@ -127,3 +127,22 @@ class TestTextCleaningFeatureGroupIntegration:
         # Check that the results are the same
         assert cleaned_df1.sort_index(axis=1).equals(cleaned_df1_2.sort_index(axis=1))
         assert cleaned_df2.sort_index(axis=1).equals(cleaned_df2_2.sort_index(axis=1))
+
+    def test_bare_string_operation_through_the_engine(self) -> None:
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {TextCleaningTestDataCreator, TextCleaningFeatureGroup}
+        )
+        feature = Feature(
+            "bare_op",
+            Options(
+                context={
+                    TextCleaningFeatureGroup.CLEANING_OPERATIONS: "normalize",
+                    DefaultOptionKeys.in_features: "text1",
+                }
+            ),
+        )
+
+        results = mloda.run_all([feature], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
+
+        assert len(results) == 1
+        assert results[0]["bare_op"].iloc[0] == "hello world!"

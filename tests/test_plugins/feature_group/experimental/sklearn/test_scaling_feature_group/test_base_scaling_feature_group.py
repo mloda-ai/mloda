@@ -2,9 +2,14 @@
 Tests for the base ScalingFeatureGroup class.
 """
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import pytest
+
+from mloda.provider import FeatureSet
+from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import Feature
@@ -223,3 +228,81 @@ class TestPandasScaling:
 
         assert list(updated["new_feature~0"]) == [1, 3, 5]
         assert list(updated["new_feature~1"]) == [2, 4, 6]
+
+
+SCALER_KINDS = ["standard", "minmax", "robust", "normalizer"]
+
+
+class TestScalingOnZeroInputRows:
+    """Zero input rows give an empty column of the non-empty dtype and never fit or save."""
+
+    @staticmethod
+    def _scale(kind: str, source_dtype: str, rows: int, *, artifact_to_save: bool = True) -> tuple[Any, FeatureSet]:
+        pytest.importorskip("sklearn")
+        data = pd.DataFrame({"c": pd.Series(np.arange(rows)).astype(source_dtype)})
+        features = FeatureSet()
+        features.add(Feature(f"c__{kind}_scaled"))
+        if artifact_to_save:
+            features.artifact_to_save = "requested"
+        return PandasScaling.calculate(ScalingFeatureGroup, data, features, None), features
+
+    @pytest.mark.parametrize("kind", SCALER_KINDS)
+    @pytest.mark.parametrize(
+        ("source_dtype", "expected"),
+        [
+            ("float32", "float32"),
+            ("float64", "float64"),
+            ("int64", "float64"),
+            ("Float32", "float32"),
+            ("float32[pyarrow]", "float32"),
+        ],
+    )
+    def test_zero_rows_give_an_empty_column_of_the_non_empty_dtype(
+        self, kind: str, source_dtype: str, expected: str
+    ) -> None:
+        non_empty, _ = self._scale(kind, source_dtype, 3)
+        result, features = self._scale(kind, source_dtype, 0)
+
+        assert features.save_artifact == {}
+        column = result[f"c__{kind}_scaled"]
+        assert len(result) == 0
+        assert str(column.dtype) == expected
+        assert column.dtype == non_empty[f"c__{kind}_scaled"].dtype
+
+    @pytest.mark.parametrize("kind", SCALER_KINDS)
+    def test_zero_rows_without_artifact_to_save_leave_save_artifact_none(self, kind: str) -> None:
+        _, features = self._scale(kind, "float64", 0, artifact_to_save=False)
+
+        assert features.save_artifact is None
+
+    @pytest.mark.parametrize("kind", SCALER_KINDS)
+    def test_zero_rows_keep_another_features_save_artifact_key(self, kind: str) -> None:
+        pytest.importorskip("sklearn")
+        features = FeatureSet()
+        features.add(Feature(f"c__{kind}_scaled"))
+        features.artifact_to_save = "requested"
+        features.save_artifact = {"other": 1}
+        data = pd.DataFrame({"c": np.array([], dtype="float64")})
+
+        PandasScaling.calculate(ScalingFeatureGroup, data, features, None)
+
+        assert features.save_artifact == {"other": 1}
+
+    @pytest.mark.parametrize("kind", SCALER_KINDS)
+    def test_zero_rows_with_a_loaded_artifact_apply_nothing_and_keep_the_dtype(self, kind: str, tmp_path: Any) -> None:
+        pytest.importorskip("sklearn")
+        options = Options({SklearnArtifact.ARTIFACT_STORAGE_PATH: str(tmp_path)})
+        fit_set = FeatureSet()
+        fit_set.add(Feature(f"c__{kind}_scaled", options))
+        fit_set.artifact_to_save = "requested"
+        PandasScaling.calculate(ScalingFeatureGroup, pd.DataFrame({"c": [1.0, 2.0, 3.0]}), fit_set, None)
+        SklearnArtifact.custom_saver(fit_set, fit_set.save_artifact)
+
+        load_set = FeatureSet()
+        load_set.add(Feature(f"c__{kind}_scaled", options))
+        load_set.artifact_to_load = "requested"
+        empty = pd.DataFrame({"c": np.array([], dtype="float64")})
+        result = PandasScaling.calculate(ScalingFeatureGroup, empty, load_set, None)
+
+        assert len(result) == 0
+        assert str(result[f"c__{kind}_scaled"].dtype) == "float64"

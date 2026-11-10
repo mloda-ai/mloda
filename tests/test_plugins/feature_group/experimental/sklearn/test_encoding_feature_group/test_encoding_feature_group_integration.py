@@ -371,3 +371,30 @@ class TestEncodingOutputParts:
         with pytest.raises(ValueError) as excinfo:
             self._run("category__onehot_encoded~1\n")
         assert "was not produced" not in str(excinfo.value)
+
+
+class ZeroRowEncodingTestDataCreator(ATestDataCreator):
+    """Test data creator returning zero rows."""
+
+    compute_framework = PandasDataFrame
+
+    @classmethod
+    def get_raw_data(cls) -> dict[str, Any]:
+        return {"category": pd.Series([], dtype=object)}
+
+
+class TestEncodingOnZeroRowsThroughTheEngine:
+    def test_zero_row_source_gives_an_empty_int64_label_column(self, tmp_path: Any) -> None:
+        pytest.importorskip("sklearn")
+        PluginLoader().all()
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {ZeroRowEncodingTestDataCreator, EncodingFeatureGroup}
+        )
+        feature = Feature("category__label_encoded", Options({"artifact_storage_path": str(tmp_path)}))
+
+        results = mloda.run_all([feature], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
+
+        assert len(results) == 1
+        column = results[0]["category__label_encoded"]
+        assert len(column) == 0
+        assert str(column.dtype) == "int64"

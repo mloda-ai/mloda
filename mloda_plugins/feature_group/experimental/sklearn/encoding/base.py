@@ -8,6 +8,7 @@ import datetime
 from collections.abc import Callable
 from typing import Any
 
+from mloda.core.optional_dependency import require
 from mloda.provider import ANY_OUTPUT_PART, OperationFeatureGroup
 from mloda.user import Feature
 from mloda.provider import FeatureSet
@@ -243,6 +244,26 @@ class EncodingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
             if artifact:
                 fitted_encoder = artifact["fitted_transformer"]
                 cls._encoder_matches_type(fitted_encoder, encoder_type)
+
+            if len(data) == 0:
+                # Reads the frame directly because pandas is the only Implementation.
+                if fitted_encoder is None and encoder_type == "onehot":
+                    raise ValueError(
+                        f"Cannot onehot encode {base_source_feature} on zero rows without a fitted artifact."
+                    )
+                if (
+                    features.artifact_to_save is not None
+                    and artifact is None
+                    and not isinstance(features.save_artifact, dict)
+                ):
+                    features.save_artifact = {}
+                numpy = require("numpy", "empty encoder result")
+                if fitted_encoder is not None and encoder_type == "onehot":
+                    empty = numpy.empty((0, len(fitted_encoder.get_feature_names_out())), dtype=numpy.float64)
+                else:
+                    empty = numpy.empty((0,), dtype=numpy.int64 if encoder_type == "label" else numpy.float64)
+                data = add_column(data, feature.name, empty)
+                continue
 
             # If no fitted encoder available, create and fit new one
             if fitted_encoder is None:

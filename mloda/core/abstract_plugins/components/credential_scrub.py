@@ -314,6 +314,7 @@ _PASSWORD_AS_SCHEME_PATTERN = re.compile(
 # The jdbc tail (used by _uri_projection and the jdbc marker cut): non-whitespace text after a jdbc match, cut at the
 # next `://` so repeated URIs scan linearly.
 _JDBC_TAIL_PATTERN = re.compile(r"(?:(?!://)\S)*")
+_PARAMETER_REGION_PATTERN = re.compile(r"[;:][^=]*=|[?#]\S")
 # Private-use marker appended by _scrub_uri_match after a dropped query, key=value path or hidden percent path;
 # _cut_marker_tail cuts the token tail that follows it.
 _JDBC_CUT = "\ue001"
@@ -324,9 +325,13 @@ _JDBC_CUT_PATTERN = re.compile(
     _JDBC_CUT + rf"(?:(?!{_CHAIN_AFTER_VALUE}|[,;][\"'(\[{{<]*[A-Za-z][A-Za-z0-9+.-]*://)"
     r"(?:::(?:[a-z][a-z0-9+.-]{0,31}::)*+|\S))*"
 )
-# Own marker for a dropped jdbc path: its cut runs to the next `://` (jdbc tails are never fsspec chains).
+# Own marker for a dropped jdbc path: its cut runs to the next `://` (jdbc tails are never fsspec chains), then
+# through a spaced `key = value` tail.
 _JDBC_PATH_CUT = "\ue002"
-_JDBC_PATH_CUT_PATTERN = re.compile(_JDBC_PATH_CUT + _JDBC_TAIL_PATTERN.pattern)
+_JDBC_PATH_TAIL = r"(?:(?!://)\S)*+"
+_JDBC_PATH_CUT_PATTERN = re.compile(
+    _JDBC_PATH_CUT + _JDBC_PATH_TAIL + r"(?:(?:(?<==)[ \t]+|[ \t]*=[ \t]*)" + _JDBC_PATH_TAIL + ")?"
+)
 # Closers then sentence punctuation then whitespace or end: the match ended a value, nothing was cut off.
 _CLOSING_END_PATTERN = re.compile(r"[\"'<>)\]}]+[,:;.!?]*(?:\s|$)")
 # Closers then a separator and an opener: a following list or dict item, if the URL itself was opened.
@@ -337,6 +342,8 @@ _CLOSERS = "\"'<>)]},"
 # Characters the free-text URI pattern refuses inside a query or fragment (a path refuses all but `)` too):
 # a match ending right before one of them may have stopped in the middle of a dropped value.
 _MATCH_END_TERMINATORS = frozenset("\"'<>)]")
+# The opener a terminator closes when the whole URL was quoted or bracketed.
+_OPENER_OF = {'"': '"', "'": "'", ">": "<", ")": "(", "]": "["}
 
 
 def _cut_key_value_path(path: str) -> str:
@@ -368,7 +375,8 @@ def _uri_projection(match: re.Match[str]) -> str | None:
     if scheme.startswith("jdbc:"):
         tail = _JDBC_TAIL_PATTERN.search(match.string, match.end())
         if any(mark in path + (tail[0] if tail else "") for mark in "=;@"):
-            return f"{scheme}://{container}{host}{_JDBC_PATH_CUT}"
+            # A trailing `=` stays after the marker so the cut sees a `key= value` continuation.
+            return f"{scheme}://{container}{host}{_JDBC_PATH_CUT}{'=' if path.endswith('=') else ''}"
     if any("=" in segment.partition(":")[2] for segment in path.split("/")):
         return None
     return f"{scheme}://{container}{host}{_cut_hidden_percent(scheme, host, path)}"
@@ -387,10 +395,23 @@ def _cut_hidden_percent(scheme: str, host: str, path: str) -> str:
     return head[: head.rfind("/") + 1]
 
 
+def _hides_parameter_region(match: re.Match[str]) -> bool:
+    """A mid-path closer the URL was not opened with, followed by a hidden parameter region in the same token."""
+    text, end, start = match.string, match.end(), match.start()
+    if end >= len(text) or text[end] not in _MATCH_END_TERMINATORS:
+        return False
+    if start > 0 and text[start - 1] == _OPENER_OF.get(text[end]):
+        return False
+    tail = _JDBC_TAIL_PATTERN.match(text, end)
+    return tail is not None and _PARAMETER_REGION_PATTERN.search(tail[0]) is not None
+
+
 def _cut_dropped_tail(match: re.Match[str], scrubbed: str, dropped: bool) -> str:
     """Append the cut marker when a dropped value may continue past the match (it stops at a quote or bracket)."""
-    if scrubbed.endswith((_JDBC_CUT, _JDBC_PATH_CUT)) or not dropped:
+    if scrubbed.rstrip("=").endswith((_JDBC_CUT, _JDBC_PATH_CUT)):
         return scrubbed
+    if not dropped:
+        return scrubbed + _JDBC_CUT if _hides_parameter_region(match) else scrubbed
     text, end, start = match.string, match.end(), match.start()
     if text.startswith("::", end) and _CHAIN_AFTER_VALUE_PATTERN.match(text, end) is None:
         return scrubbed + _JDBC_CUT

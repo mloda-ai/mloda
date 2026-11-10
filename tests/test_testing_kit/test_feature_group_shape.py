@@ -201,6 +201,10 @@ def make_run_group(
                 values = [i * 2 for i in range(len(data))]
                 data["rg_out"] = pd.Series(values, index=data.index, dtype="Int64" if values else "int64")
                 return data
+            if kind == "input_retyped_on_zero_rows":
+                if len(data) == 0:
+                    data["rg_src"] = data["rg_src"].astype("float64")
+                return _double_into(data, "rg_out", "rg_src")
             if kind == "object_date":
                 import pandas as pd
                 from datetime import date
@@ -934,6 +938,7 @@ def test_requested_name_already_in_input_data_fails_outputs() -> None:
         ("narrow_type", "type:", PolarsAdapter),
         ("loses_schema_on_zero_rows", "zero_rows:", PyArrowAdapter),
         ("list_null_on_zero_rows", "zero_rows:", PolarsAdapter),
+        ("input_retyped_on_zero_rows", "zero_rows:", PandasAdapter),
         ("iceberg_scan", "zero_rows:", IcebergAdapter),
         ("leaks_cell_in_error", "error_values:", PythonDictAdapter),
         ("nondeterministic", "determinism:", PythonDictAdapter),

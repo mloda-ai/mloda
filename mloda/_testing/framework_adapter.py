@@ -304,10 +304,10 @@ class PandasAdapter(FrameworkAdapter):
         pa = require("pyarrow", "building pandas test frames")
 
         from mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer import (
-            _decimal_types_mapper,
+            PandasPyArrowTransformer,
         )
 
-        # Always nullable int/bool keeps exact types; production gives int64/bool, or float64/object with nulls.
+        # Nullable dtypes only for int/bool columns with nulls; production widens those to float64/object.
         nullable = {
             pa.bool_(): pd.BooleanDtype(),
             pa.int8(): pd.Int8Dtype(),
@@ -320,11 +320,11 @@ class PandasAdapter(FrameworkAdapter):
             pa.uint64(): pd.UInt64Dtype(),
         }
 
-        def types_mapper(t: Any) -> Any:
-            mapped = _decimal_types_mapper(t)
-            return mapped if mapped is not None else nullable.get(t)
-
-        return table.to_pandas(types_mapper=types_mapper)
+        frame = PandasPyArrowTransformer.transform_other_fw_to_fw(table)
+        for i, field in enumerate(table.schema):
+            if field.type in nullable and table.column(i).null_count > 0:
+                frame.isetitem(i, table.column(i).to_pandas(types_mapper=nullable.get))
+        return frame
 
     def duplicate_column_frame(self, first_type: DataType, second_type: DataType) -> Any:
         frame = self.from_arrow(_duplicate_column_table(first_type, second_type))

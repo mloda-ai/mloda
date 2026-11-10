@@ -85,14 +85,16 @@ class PandasDataFrame(ComputeFramework):
     def extract_column_names(cls, data: Any) -> set[str]:
         return set(data.columns)
 
-    def _first_column_dtype(self, data: Any, column_name: str) -> Any | None:
-        """Return column_name's dtype from its first occurrence; indexing by a duplicated label
-        returns a DataFrame, which has no .dtype.
-        """
-        for name, dtype in zip(data.columns, data.dtypes):
+    def _first_column(self, data: Any, column_name: str) -> tuple[int, Any] | None:
+        """Return (position, dtype) of column_name's first occurrence; a duplicated label indexes to a DataFrame."""
+        for position, (name, dtype) in enumerate(zip(data.columns, data.dtypes)):
             if name == column_name:
-                return dtype
+                return position, dtype
         return None
+
+    def _first_column_dtype(self, data: Any, column_name: str) -> Any | None:
+        found = self._first_column(data, column_name)
+        return None if found is None else found[1]
 
     def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
         if not isinstance(data, pd.DataFrame):
@@ -108,9 +110,13 @@ class PandasDataFrame(ComputeFramework):
         return str(dtype)
 
     def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
-        dtype = self._first_column_dtype(data, column_name)
-        if dtype is None:
+        found = self._first_column(data, column_name)
+        if found is None:
             return None
+        position, dtype = found
+        if pd.api.types.is_object_dtype(dtype):
+            inferred = pd.api.types.infer_dtype(data.iloc[:, position], skipna=True)
+            return DataType.STRING if inferred == "string" else None
         if isinstance(dtype, pd.ArrowDtype):
             return DataType.from_arrow_type_safe(dtype.pyarrow_dtype)
         fold = _PANDAS_FOLDS.get(_kind_and_size(dtype))

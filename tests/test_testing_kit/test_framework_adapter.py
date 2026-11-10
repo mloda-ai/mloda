@@ -220,7 +220,7 @@ def test_lost_type_true_for_null_typed_column(name: str) -> None:
 
 _INT32_CHECKS: dict[str, Callable[[Any], bool]] = {
     "PyArrow": lambda t: str(t) == "int32",
-    "Pandas": lambda t: str(t) == "Int32",
+    "Pandas": lambda t: str(t) == "int32",
     "Polars": lambda t: str(t) == "Int32",
     "PolarsLazy": lambda t: str(t) == "Int32",
     "DuckDB": lambda t: str(t) == "int32",
@@ -549,7 +549,7 @@ def _column_types(name: str, frame: Any) -> list[str]:
 
 _DUP_TYPES: dict[str, dict[DataType, str]] = {
     "PyArrow": {DataType.INT64: "int64", DataType.STRING: "string"},
-    "Pandas": {DataType.INT64: "Int64", DataType.STRING: ""},
+    "Pandas": {DataType.INT64: "int64", DataType.STRING: ""},
     "DuckDB": {DataType.INT64: "BIGINT", DataType.STRING: "VARCHAR"},
     "Iceberg": {DataType.INT64: "int64", DataType.STRING: "string"},
 }
@@ -595,6 +595,10 @@ def test_pandas_from_arrow_matches_production_dtypes_and_nulls(rows: int | None)
             "n_null": pa.array([None, None, None], type=pa.null()),
             "ls": pa.array(["a", None, "c"], type=pa.large_string()),
             "st": pa.array([{"x": 1}, None, {"x": 3}], type=pa.struct([("x", pa.int64())])),
+            "i64": pa.array([1, 2, 3], type=pa.int64()),
+            "i32": pa.array([1, 2, 3], type=pa.int32()),
+            "u8": pa.array([1, 2, 3], type=pa.uint8()),
+            "b": pa.array([True, False, True], type=pa.bool_()),
         }
     )
     if rows is not None:
@@ -609,7 +613,11 @@ def test_pandas_from_arrow_matches_production_dtypes_and_nulls(rows: int | None)
 
 @pytest.mark.parametrize(
     ("arrow_type", "values", "adapted", "production"),
-    [("int64", [1, None, 3], "Int64", "float64"), ("bool_", [True, None, False], "boolean", "object")],
+    [
+        ("int64", [1, None, 3], "Int64", "float64"),
+        ("bool_", [True, None, False], "boolean", "object"),
+        ("int64", [2**60 + 1, None], "Int64", "float64"),
+    ],
 )
 def test_pandas_from_arrow_nullable_deliberately_diverges_from_production(
     arrow_type: str, values: list[Any], adapted: str, production: str
@@ -622,7 +630,9 @@ def test_pandas_from_arrow_nullable_deliberately_diverges_from_production(
 
     table = pa.table({"c": pa.array(values, type=getattr(pa, arrow_type)())})
 
-    assert str(_pandas().from_arrow(table)["c"].dtype) == adapted
+    adapter_column = _pandas().from_arrow(table)["c"]
+    assert str(adapter_column.dtype) == adapted
+    assert adapter_column.iloc[0] == values[0]
     assert str(PandasPyArrowTransformer.transform_other_fw_to_fw(table)["c"].dtype) == production
 
 

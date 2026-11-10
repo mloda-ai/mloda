@@ -178,7 +178,7 @@ A custom ComputeFramework should map tz-aware timestamp columns to `TIMESTAMP_MI
 
 | Framework | Extraction | Filter, mask, merge | PyArrow transformer |
 |---|---|---|---|
-| Pandas | `DECIMAL` for an Arrow-backed decimal dtype; `object` columns are not validated (indistinguishable from object strings) | exact | Arrow-backed decimals are kept in both directions; an `object` column of `Decimal` has its precision inferred from the values on the way out, and comes back Arrow-backed after a round trip through Arrow |
+| Pandas | `DECIMAL` for an Arrow-backed decimal dtype; an `object` column holding only strings is validated as `STRING`, other `object` columns (including `Decimal`) are not validated | exact | Arrow-backed decimals are kept in both directions; an `object` column of `Decimal` has its precision inferred from the values on the way out, and comes back Arrow-backed after a round trip through Arrow |
 | Polars (eager / lazy) | `DECIMAL` | exact (including `is_in`; values the column cannot represent never match) | exact |
 | PyArrow | `DECIMAL` | exact | native |
 | DuckDB | `DECIMAL` | exact (a `Decimal` value renders as an exact decimal literal) | exact |

@@ -806,7 +806,8 @@ context. A key that no feature in scope ever forwards stays metadata and does no
 split. This isolates per-value results that previously collapsed into one computation
 where a single value silently won. Same-named copies that differ in undeclared context keys
 but read the same inputs on one framework are rejected; use the same values,
-`cascade_context_keys`, or a forwarded group option.
+`cascade_context_keys`, or a forwarded group option. This also covers root features requested directly more than once
+and declared option keys that the feature name does not bind; context a consumer pushes onto a root input is not checked.
 
 ### Previewing the forwarded options
 

@@ -25,6 +25,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import (
 )
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.divergence import Divergence
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import (
@@ -84,7 +85,8 @@ from mloda.core.abstract_plugins.components.credential_handle import (
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.match_hook import call_match_hook
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
-from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 
 
 logger = logging.getLogger(__name__)
@@ -813,7 +815,7 @@ class Engine:
         return existing
 
     def _reject_twins_sharing_a_frame(self) -> None:
-        """Rejects same-named copies with differing undeclared context on one framework reading the same inputs."""
+        """Rejects same-named copies with differing context not derived from the name, sharing one frame."""
         for group_class, collection in sorted(
             self.feature_group_collection.items(), key=lambda item: format_feature_group_class(item[0])
         ):
@@ -823,7 +825,8 @@ class Engine:
             for member in collection:
                 buckets[str(member.name)].append(member)
             for name, bucket in sorted(buckets.items()):
-                members = [m for m in bucket if self.feature_link_parents.get(m.uuid)]
+                # A root copy must be requested: a consumer may push context onto a root it does not read.
+                members = [m for m in bucket if self.feature_link_parents.get(m.uuid) or m.initial_requested_data]
                 if len(members) < 2:
                     continue
                 members.sort(
@@ -848,29 +851,47 @@ class Engine:
                             and a.options == b.options
                             and not _deep_equal(a.options.context, b.options.context)
                             and not (
-                                group_class.replaces_rows()
+                                (group_class.replaces_rows() or not parents)
                                 and a._split_context_hashable(split_keys) != b._split_context_hashable(split_keys)
                             )
                         ):
                             continue
-                        # Declared keys may derive from the name outside name_bindings; only undeclared ones prove it.
+                        name_derived = self._name_derived_keys(group_class, name, declared)
                         keys = sorted(
                             str(k)
                             for k in set(a.options.context) | set(b.options.context)
-                            if str(k) not in declared
+                            if str(k) not in name_derived
                             and (
                                 (k in a.options.context) != (k in b.options.context)
                                 or not _deep_equal(a.options.context[k], b.options.context[k])
                             )
                         )
                         if keys:
+                            remedy = (
+                                "Give every request the same values, push context keys with cascade_context_keys so "
+                                "the inputs split too, or make them group options forwarded to the inputs."
+                                if parents
+                                else "Give every request the same values, or make the keys group options."
+                            )
                             raise ValueError(
                                 f"Feature '{name}' of {format_feature_group_class(group_class)} is reached twice with "
                                 f"differing values for context key(s) {keys}, but both copies read the same inputs on "
                                 f"{framework.get_class_name()}, so they would write the same column into one frame. "
-                                "Give every request the same values, push context keys with cascade_context_keys so "
-                                "the inputs split too, or make them group options forwarded to the inputs."
+                                + remedy
                             )
+
+    @staticmethod
+    def _name_derived_keys(group_class: type[FeatureGroup], name: str, declared: Any) -> set[str]:
+        """Keys the feature name may bind; every declared key when the group has no readable name patterns."""
+        patterns: list[Any] = safe_field(group_class._get_prefix_patterns, [])
+        unresolved: Any = object()  # a raise means the name is unreadable; no match (None) is a clean resolution
+        resolution: Any = safe_field(
+            lambda: FeatureChainParser.resolve_name(name, patterns, group_class.PROPERTY_MAPPING), unresolved
+        )
+        if not patterns or resolution is unresolved:
+            return {str(k) for k in declared}
+        bound = {str(k) for k in resolution.bindings} if resolution is not None else set()
+        return bound | {DefaultOptionKeys.in_features.value}
 
     def _fold_into_narrower_twins(self) -> None:
         """Folds each feature into its unique minimal narrower-framework twin; decided from a snapshot, order-free."""

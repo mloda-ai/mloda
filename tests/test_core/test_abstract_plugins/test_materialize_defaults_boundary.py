@@ -36,11 +36,14 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda.core.abstract_plugins.components.validators.datatype_validator import DataTypeMismatchError
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
-from mloda.provider import DataCreatorFeatureGroup, PropertySpec
+from mloda.provider import DataCreatorFeatureGroup, DefaultOptionKeys, PropertySpec
 from mloda.user import DataType, GlobalFilter, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation  # noqa: F401
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
+from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 
 # PROPERTY_MAPPING keys for the throwaway probes; the mdb_ prefix keeps them unique to this module.
@@ -198,6 +201,14 @@ def _run_two_keys(
     return seen
 
 
+class _AgreeingInFeaturesSource(ATestDataCreator):
+    compute_framework = PyArrowTable
+
+    @classmethod
+    def get_raw_data(cls) -> dict[str, Any]:
+        return {"agree_src": [1, 2, 3]}
+
+
 MDB_DIRECT = "mdb_src__mdbop_q_b"
 MDB_CHAINED = "mdb_src__mdbop_q_b__mdbop_r_c"
 
@@ -217,19 +228,26 @@ def _run_direct_and_chained(
     direct_compute_framework: str | None = None,
     include_chained: bool = True,
     replaces_rows: bool = False,
+    unbound_keys: tuple[str, ...] = (),
+    include_name_bound: bool = True,
+    root_calls: list[list[str]] | None = None,
+    root_append_columns: bool = False,
 ) -> list[Any]:
     fg = make_name_bound_fg(
         "Mdb",
         __name__,
         "mdbop",
         (MDB_FIRST, MDB_SECOND),
-        defaults={MDB_FIRST: "a", MDB_SECOND: "a"},
+        unbound_keys=unbound_keys,
+        defaults={key: "a" for key in (MDB_FIRST, MDB_SECOND, *unbound_keys)},
         input_column="mdb_src",
         calls=calls,
         append_columns=append_columns,
         replaces_rows=replaces_rows,
     )
-    source = make_root_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
+    source = make_root_fg(
+        "MdbTwoKeys", __name__, "mdb_src", [1, 2], append_columns=root_append_columns, calls=root_calls
+    )
     direct = Feature(
         MDB_DIRECT,
         direct_options if direct_options is not None else Options(),
@@ -242,6 +260,8 @@ def _run_direct_and_chained(
         requests = [chained]
     if not include_chained:
         requests = [direct]
+    if not include_name_bound:
+        requests = []
     requests = requests + (extra_requests or [])
     global_filter = None
     if filter_on is not None:
@@ -545,7 +565,7 @@ class TestRuntimeDefaultMaterializationEndToEnd:
             )
         assert calls == []
 
-    @pytest.mark.parametrize("shape", ["two_direct", "direct_and_chained_input"])
+    @pytest.mark.parametrize("shape", ["two_direct", "direct_and_chained_input", "declared_unbound_key", "root_copies"])
     @pytest.mark.parametrize(
         ("framework", "append_columns"),
         [(PyArrowTable, True), (PythonDictFramework, False)],
@@ -555,18 +575,85 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         self, framework: type[Any], append_columns: bool, shape: str
     ) -> None:
         calls: list[list[str]] = []
-        other = Options(context={"y": 1})
-        two_direct = shape == "two_direct"
-        with pytest.raises(ValueError, match=rf"{re.escape(MDB_DIRECT)}.*\by\b"):
+        root_calls: list[list[str]] = []
+        key = "u" if shape == "declared_unbound_key" else "y"
+        name = "mdb_src" if shape == "root_copies" else MDB_DIRECT
+        first, second = Options(context={key: 1}), Options(context={key: 2})
+        if shape == "two_direct":
+            kwargs: dict[str, Any] = {"include_chained": False, "extra_requests": [Feature(name, first)]}
+        elif shape == "direct_and_chained_input":
+            kwargs = {"direct_options": first, "extra_requests": None}
+        elif shape == "root_copies":
+            kwargs = {"include_name_bound": False, "extra_requests": [Feature(name, first), Feature(name, second)]}
+        else:
+            kwargs = {"include_chained": False, "direct_options": first, "extra_requests": [Feature(name, second)]}
+        with pytest.raises(ValueError, match=rf"{re.escape(name)}.*\b{key}\b") as excinfo:
             _run_direct_and_chained(
                 calls,
                 framework=framework,
                 append_columns=append_columns,
-                include_chained=not two_direct,
-                direct_options=None if two_direct else other,
-                extra_requests=[Feature(MDB_DIRECT, other)] if two_direct else None,
+                unbound_keys=("u",) if shape == "declared_unbound_key" else (),
+                root_calls=root_calls,
+                root_append_columns=append_columns,
+                **kwargs,
             )
         assert calls == []
+        assert root_calls == []
+        if shape == "root_copies":
+            assert "cascade_context_keys" not in str(excinfo.value)
+
+    @pytest.mark.parametrize(
+        ("framework", "append_columns"),
+        [(PyArrowTable, True), (PythonDictFramework, False)],
+        ids=["pyarrow_append", "python_dict"],
+    )
+    def test_requested_root_split_by_propagated_values_computes_per_value(
+        self, framework: type[Any], append_columns: bool
+    ) -> None:
+        root_calls: list[list[str]] = []
+        propagate_1 = Options(context={"x": 1}, propagate_context_keys=frozenset({"x"}))
+        propagate_2 = Options(context={"x": 2}, propagate_context_keys=frozenset({"x"}))
+        _run_direct_and_chained(
+            [],
+            framework=framework,
+            append_columns=append_columns,
+            include_chained=False,
+            direct_options=propagate_1,
+            extra_requests=[
+                Feature("mdb_src__mdbop_r_c", propagate_2),
+                Feature("mdb_src", Options(context={"x": 1})),
+                Feature("mdb_src", Options(context={"x": 2})),
+            ],
+            root_calls=root_calls,
+            root_append_columns=append_columns,
+        )
+        assert len(root_calls) >= 2
+
+    def test_in_features_agreeing_with_name_succeeds(self) -> None:
+        plugins = PluginCollector.enabled_feature_groups({_AgreeingInFeaturesSource, AggregatedFeatureGroup})
+        results = mloda.run_all(
+            [
+                Feature("agree_src__sum_aggr"),
+                Feature("agree_src__sum_aggr", Options(context={DefaultOptionKeys.in_features: "agree_src"})),
+            ],
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=plugins,
+        )
+        (table,) = results
+        assert table["agree_src__sum_aggr"].to_pylist() == [6, 6, 6]
+
+    def test_config_based_name_twins_differing_in_declared_key_raise(self) -> None:
+        plugins = PluginCollector.enabled_feature_groups({_AgreeingInFeaturesSource, AggregatedFeatureGroup})
+        in_features = DefaultOptionKeys.in_features
+        with pytest.raises(ValueError, match=r"my_agg.*aggregation_type"):
+            mloda.run_all(
+                [
+                    Feature("my_agg", Options(context={"aggregation_type": "sum", in_features: "agree_src"})),
+                    Feature("my_agg", Options(context={"aggregation_type": "max", in_features: "agree_src"})),
+                ],
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=plugins,
+            )
 
     def test_two_direct_copies_with_differing_context_on_different_frameworks_succeed(self) -> None:
         calls: list[list[str]] = []

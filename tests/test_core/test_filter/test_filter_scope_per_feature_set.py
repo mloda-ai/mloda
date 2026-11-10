@@ -14,7 +14,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.execution_plan import ExecutionPlan
-from mloda.provider import DataCreatorFeatureGroup
+from mloda.provider import DataCreatorFeatureGroup, property_spec
 from mloda.user import Feature, FeatureName, FilterType, GlobalFilter, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -40,10 +40,12 @@ def _sentinel(features: FeatureSet) -> dict[str, list[int]]:
     return {str(feature.name): [delivered] for feature in features.features}
 
 
-def _make_fg(capture: list[tuple[Feature, ...]] | None = None) -> type[FeatureGroup]:
+def _make_fg(capture: list[tuple[Feature, ...]] | None = None, declare_mode_key: bool = False) -> type[FeatureGroup]:
     """A throwaway root group whose filter-feature match depends on the probing feature's mode."""
 
     class FspScopeFG(DataCreatorFeatureGroup):
+        PROPERTY_MAPPING = {FSP_MODE_KEY: property_spec(FSP_MODE_KEY, context=True)} if declare_mode_key else {}
+
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return set(ALL_FSP_NAMES)
@@ -143,6 +145,7 @@ def _run(
     columns: tuple[str, ...],
     global_filter: GlobalFilter,
     caplog: pytest.LogCaptureFixture,
+    declare_mode_key: bool = False,
 ) -> _RunSnapshot:
     """Run the features in one session and collect the readout as plain data.
 
@@ -151,7 +154,7 @@ def _run(
     """
     caplog.clear()
     captured: list[tuple[Feature, ...]] = []
-    fg = _make_fg(captured)
+    fg = _make_fg(captured, declare_mode_key)
     collector = PluginCollector.enabled_feature_groups({fg})
 
     with caplog.at_level(logging.WARNING, logger=EP_LOGGER_NAME):
@@ -204,10 +207,19 @@ def test_every_probe_is_recorded_including_the_empty_one(caplog: pytest.LogCaptu
     assert snapshot.probe_entries.get(FSP_ACCEPT) == (1,), f"the accepting probe must record its filter: {snapshot!r}"
 
 
-def test_two_features_of_one_name_diverge_and_are_reported(caplog: pytest.LogCaptureFixture) -> None:
-    """One name requested with two context modes: the declining twin is still reported."""
+def test_two_features_of_one_name_with_differing_context_are_rejected(caplog: pytest.LogCaptureFixture) -> None:
+    """One name requested with two context modes is rejected at resolution."""
     same_name: list[Feature | str] = [Feature(FSP_SAME, _options("a")), Feature(FSP_SAME, _options("b"))]
-    snapshot = _run(same_name, (FSP_SAME,), _filter_on_fsp(), caplog)
+    with pytest.raises(ValueError, match=rf"{FSP_SAME}.*{FSP_MODE_KEY}"):
+        _run(same_name, (FSP_SAME,), _filter_on_fsp(), caplog)
+
+
+def test_two_twins_with_a_declared_exempt_key_share_one_set_and_report_the_decline(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A group declaring the mode key keeps the twins legal; the declining twin is reported once."""
+    same_name: list[Feature | str] = [Feature(FSP_SAME, _options("a")), Feature(FSP_SAME, _options("b"))]
+    snapshot = _run(same_name, (FSP_SAME,), _filter_on_fsp(), caplog, declare_mode_key=True)
 
     assert len(snapshot.set_shapes) == 1, f"the two twins must share one feature set: {snapshot.set_shapes}"
     assert snapshot.set_shapes[0].count(FSP_SAME) == 2, (

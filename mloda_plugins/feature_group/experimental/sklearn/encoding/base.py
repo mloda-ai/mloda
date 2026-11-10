@@ -159,6 +159,8 @@ class EncodingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     - OrdinalEncoder preserves ordinal relationships if categories are properly ordered
     """
 
+    CONTRACT_VERSION = 1
+
     # Option keys for encoding configuration
     ENCODER_TYPE = "encoder_type"
 

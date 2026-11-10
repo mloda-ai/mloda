@@ -72,6 +72,8 @@ class ScalingFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     ```
     """
 
+    CONTRACT_VERSION = 1
+
     # Option keys for scaling configuration
     SCALER_TYPE = "scaler_type"
 

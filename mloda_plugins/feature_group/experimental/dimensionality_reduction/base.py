@@ -90,6 +90,8 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, OperationFeat
     - The dimension parameter must be a positive integer less than the number of source features
     """
 
+    CONTRACT_VERSION = 1
+
     # Option keys for dimensionality reduction configuration
     ALGORITHM = "algorithm"
     DIMENSION = "dimension"

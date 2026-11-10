@@ -24,6 +24,7 @@ Factory = Callable[[], tuple[type[OperationFeatureGroup], dict[str, Any]]]
 
 def _make_group_a() -> type[OperationFeatureGroup]:
     class OpShapeA(OperationFeatureGroup):
+        CONTRACT_VERSION = 1
         SUBTYPES = SubtypeDeclaration(key=KEY, parametric_families={"rolling": "Rolling window"})
         PROPERTY_MAPPING = {
             KEY: property_spec("Kind.", strict=True, allowed_values={"sum": "Sum", "median": "Median", "mean": "Mean"}),
@@ -82,6 +83,13 @@ def make_group_divergence_outside_universe() -> tuple[type[OperationFeatureGroup
     return group, {"impl": impl}
 
 
+def make_no_contract_version() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
+    group = _make_group_a()
+    setattr(group, "CONTRACT_VERSION", None)
+    impl = _make_impl(group)
+    return group, {"impl": impl}
+
+
 def make_unlisted_variant() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
     group = _make_group_a()
     impl = _make_impl(group)
@@ -126,6 +134,7 @@ def make_shape_b(
     supported: frozenset[str] | None = frozenset({"up"}),
 ) -> tuple[type[OperationFeatureGroup], Callable[[str], tuple[str, Options]], type[Any]]:
     class OpShapeB(OperationFeatureGroup):
+        CONTRACT_VERSION = 1
         SUBTYPES = SubtypeDeclaration(
             universe={"up", "down"},
             resolver=lambda name, options: options.get(SHAPE_B_KEY),
@@ -182,6 +191,7 @@ def test_shape_b_group_without_probe_fails_only_declines() -> None:
         (make_unsupported_not_declining, "declines:", "does not decline"),
         (make_probe_never_accepted, "declines:", "probe not accepted"),
         (make_no_implementation, "implementations:", "no loaded Implementation"),
+        (make_no_contract_version, "contract_version:", "declares no CONTRACT_VERSION"),
     ],
 )
 def test_broken_group_fails_only_its_check(make: Factory, prefix: str, message: str) -> None:
@@ -230,7 +240,7 @@ def test_assert_raises_pytest_failure_for_broken_group() -> None:
 
 def test_plain_operation_group_without_subtypes_passes() -> None:
     class OpShapePlain(OperationFeatureGroup):
-        pass
+        CONTRACT_VERSION = 1
 
     _keep = _make_impl(OpShapePlain)
     assert check_operation_group_shape(OpShapePlain).failures == ()

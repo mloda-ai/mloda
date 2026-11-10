@@ -294,12 +294,9 @@ def test_operation_group_shape_check_passes(group: type[Any]) -> None:
     assert check_operation_group_shape(group).failures == ()
 
 
-CONTRACT_VERSIONED_FAMILIES = ["aggregation", "time_window", "missing_value", "text_cleaning", "geo_distance"]
-
-
-@pytest.mark.parametrize("name", CONTRACT_VERSIONED_FAMILIES)
-def test_core_operation_bases_pin_contract_version_one(name: str) -> None:
-    assert OPERATION_FAMILIES[name][0].CONTRACT_VERSION == 1
+@pytest.mark.parametrize("group", OPERATION_GROUPS, ids=GROUP_IDS)
+def test_core_operation_bases_pin_contract_version_one(group: type[Any]) -> None:
+    assert group.CONTRACT_VERSION == 1
 
 
 @pytest.mark.parametrize(("name", "impl"), IMPLEMENTATION_CASES)

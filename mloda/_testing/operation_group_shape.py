@@ -112,7 +112,7 @@ def check_operation_group_shape(
     alias_pairs: Sequence[tuple[str, str]] = (),
     probe: Probe | None = None,
 ) -> CheckResult:
-    """Check Implementations declare valid supported subtypes and divergences and decline the rest.
+    """Check the group declares a CONTRACT_VERSION and its Implementations declare valid supported subtypes and divergences and decline the rest.
 
     The acceptance control uses one supported subtype."""
     universe = group.subtype_universe()
@@ -120,6 +120,8 @@ def check_operation_group_shape(
     failures: list[str] = []
     if not impls:
         failures.append(f"implementations: no loaded Implementation serves {group.__name__}")
+    if group.CONTRACT_VERSION is None:
+        failures.append(f"contract_version: {group.__name__} declares no CONTRACT_VERSION")
     failures.extend(_alias_failures(list(impls), universe, alias_pairs))
     failures.extend(
         f"divergences: {p}"

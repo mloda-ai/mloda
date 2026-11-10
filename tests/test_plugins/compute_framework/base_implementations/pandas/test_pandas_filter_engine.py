@@ -2,19 +2,15 @@
 
 from typing import Any
 
-import pytest
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import pytest
 
 from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
 from mloda._testing.framework_adapter import FrameworkAdapter, PandasAdapter
 from mloda._testing.typed_data import TypedTestData
-from mloda.core.abstract_plugins.components.data_types import DataType
-from mloda.user import Feature
-from mloda.user import SingleFilter
-from mloda.user import FilterType
-
+from mloda.user import Feature, FilterType, SingleFilter
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_engine import PandasFilterEngine
 
 
@@ -24,16 +20,11 @@ class TestPandasFilterEngine(FilterEngineSuite):
     adapter_class = PandasAdapter
 
     def frame(self, adapter: FrameworkAdapter, name: str, data: TypedTestData) -> Any:
-        """Strings use pandas' default inference as in production; NaN/null and decimal survive via ArrowDtype."""
+        """The ratio column is Arrow-backed so NaN stays distinct from null."""
         frame = super().frame(adapter, name, data)
-        columns = data.to_python_dict()
-        for column, data_type in data.types.items():
-            if data_type == DataType.STRING:
-                frame[column] = pd.Series(columns[column], index=frame.index)
         if name == "nullable":
-            frame["ratio"] = pd.Series(pd.arrays.ArrowExtensionArray(pa.array(columns["ratio"], type=pa.float64())))
-        if name == "decimal":
-            frame["d"] = pd.Series(columns["d"], dtype=pd.ArrowDtype(pa.decimal128(10, 2)))
+            ratio = data.to_python_dict()["ratio"]
+            frame["ratio"] = pd.Series(pd.arrays.ArrowExtensionArray(pa.array(ratio, type=pa.float64())))
         return frame
 
     @pytest.mark.parametrize(

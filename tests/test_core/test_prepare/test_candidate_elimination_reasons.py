@@ -874,15 +874,18 @@ class TestEliminationStages:
         assert f"  - OpToyVariantFG (rule variant): {reason}" in str(err)
 
     @pytest.mark.parametrize(
-        "group_name, feature_name",
-        [("OpToyVariantEmptyFG", "optoyvar_empty"), ("OpToyVariantOtherFG", "optoyvar_other")],
+        "group_name, feature_name, extra_options",
+        [
+            ("OpToyVariantEmptyFG", "optoyvar_empty", {}),
+            ("OpToyVariantOtherFG", "optoyvar_other", {"allow_variants": ("other",)}),
+        ],
     )
-    def test_variant_stage_without_admitting_allow_variants(self, group_name: str, feature_name: str) -> None:
+    def test_variant_stage_without_admitting_allow_variants(
+        self, group_name: str, feature_name: str, extra_options: dict[str, Any]
+    ) -> None:
         toy = _op_toy()
         group = getattr(toy, group_name)
-        opts: dict[str, Any] = {toy.OPTOY_KEY: "sum"}
-        if group_name == "OpToyVariantOtherFG":
-            opts["allow_variants"] = ("other",)
+        opts: dict[str, Any] = {toy.OPTOY_KEY: "sum", **extra_options}
         feature = Feature(feature_name, opts, compute_framework="PandasDataFrame")
         plugins: FeatureGroupEnvironmentMapping = {group: {PandasDataFrame, PyArrowTable}}
 

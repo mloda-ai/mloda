@@ -365,8 +365,8 @@ def _settings(tmp_path: Path, sources: Mapping[str, SourceConfig] | None = None,
     return Settings(deny_feature_groups=(DENIED,), sources=sources, **kwargs)
 
 
-def _planner(settings: Settings) -> Planner:
-    base = _base()
+def _planner(settings: Settings, *, base: PluginCollector | None = None) -> Planner:
+    base = base if base is not None else _base()
     catalog = Catalog.build(settings, base)
     return Planner(
         settings, catalog, signing_key=KEY, principal="alice", plugin_collector=base, clock=lambda: CLOCK_START
@@ -732,19 +732,6 @@ class TestUnresolved:
         _assert_no_paths(result, tmp_path, "sales.csv")
 
 
-def _variant_planner(tmp_path: Path, toy: Any, **kwargs: Any) -> Planner:
-    settings = _settings(tmp_path, compute_frameworks=("PandasDataFrame",), **kwargs)
-    base = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, toy.OpToyVariantFG})
-    return Planner(
-        settings,
-        Catalog.build(settings, base),
-        signing_key=KEY,
-        principal="alice",
-        plugin_collector=base,
-        clock=lambda: CLOCK_START,
-    )
-
-
 class TestVariantNotAllowed:
     @pytest.mark.parametrize(
         "kwargs, fix, message_part",
@@ -762,7 +749,9 @@ class TestVariantNotAllowed:
         )
         request = {"features": [{"name": toy.OPTOY_VARIANT_FEATURE, "options": {toy.OPTOY_KEY: "sum"}}]}
 
-        result = _variant_planner(tmp_path, toy, **kwargs).explain(request)
+        settings = _settings(tmp_path, compute_frameworks=("PandasDataFrame",), **kwargs)
+        base = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, toy.OpToyVariantFG})
+        result = _planner(settings, base=base).explain(request)
 
         error = _error(result, "validation_failed")
         details = [d for d in error["details"] if d.get("problem") == "variant_not_allowed"]

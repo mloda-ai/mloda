@@ -22,6 +22,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
+from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import ReadDBFG
 from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
@@ -49,9 +50,11 @@ from tests.registry_isolation import (
     SHARED_TEST_MODULE_PREFIX,
     TRANSFORMERS,
     SubclassLog,
+    loaded_test_modules,
     reclaim_leaked_feature_groups,
     reclaim_leaked_subclasses,
     reclaim_leaked_transformers,
+    unnarrowed_source_claimers,
 )
 
 
@@ -1189,11 +1192,6 @@ class TestDynamicFeatureGroupCacheIsRestoredBetweenTests:
         assert _CACHE_RESTORE_FIXTURE in request.fixturenames
 
 
-def _bind(module: types.ModuleType, **classes: type[Any]) -> None:
-    for name, cls in classes.items():
-        setattr(module, name, cls)
-
-
 def _sqlite_bare(m: str) -> dict[str, type[Any]]:
     class BareSqlite(SqliteFG):
         __module__ = m
@@ -1289,14 +1287,6 @@ def _file_group(m: str, suffix: str) -> dict[str, type[Any]]:
     return {"SuffixFile": SuffixFile}
 
 
-def _file_unique_suffix(m: str) -> dict[str, type[Any]]:
-    return _file_group(m, ".mlodaprobe")
-
-
-def _file_csv_suffix(m: str) -> dict[str, type[Any]]:
-    return _file_group(m, ".csv")
-
-
 def _abstract_group(m: str) -> dict[str, type[Any]]:
     class AbstractDb(ReadDBFG):
         __module__ = m
@@ -1304,12 +1294,22 @@ def _abstract_group(m: str) -> dict[str, type[Any]]:
     return {"AbstractDb": AbstractDb}
 
 
-def _unbound_group(m: str) -> dict[str, type[Any]]:
-    class UnboundSqlite(SqliteFG):
+def _api_bare(m: str) -> dict[str, type[Any]]:
+    class BareApi(ApiDataFG):
         __module__ = m
 
-    UnboundSqlite.__name__ = "UnboundSqlite"
-    return {}
+    return {"BareApi": BareApi}
+
+
+def _api_own_find_sources(m: str) -> dict[str, type[Any]]:
+    class SourcesApi(ApiDataFG):
+        __module__ = m
+
+        @classmethod
+        def find_sources(cls, *args: Any, **kwargs: Any) -> Any:
+            return []
+
+    return {"SourcesApi": SourcesApi}
 
 
 _CLAIMER_CASES: list[Any] = [
@@ -1321,10 +1321,13 @@ _CLAIMER_CASES: list[Any] = [
     pytest.param(_child_of_unnarrowed, ["LooseParent", "LooseChild"], id="child-of-unnarrowed-parent"),
     pytest.param(_csv_bare, ["BareCsv"], id="csv-no-overrides"),
     pytest.param(_csv_own_matcher, [], id="csv-own-matcher"),
-    pytest.param(_file_unique_suffix, [], id="file-unique-suffix"),
-    pytest.param(_file_csv_suffix, ["SuffixFile"], id="file-csv-suffix"),
+    pytest.param(functools.partial(_file_group, suffix=".mlodaprobe"), [], id="file-unique-suffix"),
+    pytest.param(functools.partial(_file_group, suffix=".csv"), ["SuffixFile"], id="file-csv-suffix"),
+    pytest.param(functools.partial(_file_group, suffix="csv"), ["SuffixFile"], id="file-suffix-without-dot"),
+    pytest.param(functools.partial(_file_group, suffix=".data.csv"), ["SuffixFile"], id="file-compound-suffix"),
     pytest.param(_abstract_group, [], id="abstract-subclass"),
-    pytest.param(_unbound_group, [], id="not-bound-in-module"),
+    pytest.param(_api_bare, ["BareApi"], id="api-bare"),
+    pytest.param(_api_own_find_sources, [], id="api-own-find-sources"),
 ]
 
 
@@ -1333,22 +1336,44 @@ class TestUnnarrowedSourceClaimers:
     def test_flags_only_unnarrowed_claimers(
         self, build: Callable[[str], dict[str, type[Any]]], expected: list[str]
     ) -> None:
-        from tests.registry_isolation import unnarrowed_source_claimers
-
-        name = "tests.synthetic_claimer_case"
-        module = types.ModuleType(name)
-        _bind(module, **build(name))
+        module = types.ModuleType(__name__)
+        for attr, cls in build(__name__).items():
+            setattr(module, attr, cls)
 
         flagged = {entry.split()[0] for entry in unnarrowed_source_claimers([module])}
 
-        assert flagged == {f"{name}.{n}" for n in expected}
+        assert flagged == {f"{__name__}.{n}" for n in expected}
+
+    def test_flags_a_claimer_in_a_bare_stem_module(self) -> None:
+        name = "test_bare_stem_claimer_probe"
+        module = types.ModuleType(name)
+        for attr, cls in _sqlite_bare(name).items():
+            setattr(module, attr, cls)
+
+        assert [e.split()[0] for e in unnarrowed_source_claimers([module])] == [f"{name}.BareSqlite"]
 
     def test_no_test_module_leaves_an_unnarrowed_source_claimer(self) -> None:
-        from tests.registry_isolation import unnarrowed_source_claimers
-
-        modules = [m for n, m in list(sys.modules.items()) if n.startswith("tests.") and m is not None]
-        flagged = unnarrowed_source_claimers(modules)
+        flagged = unnarrowed_source_claimers(loaded_test_modules(sys.modules))
         assert not flagged, (
             f"unnarrowed module-level source groups: {flagged}. Narrow each (see tests/README.md) "
             "or define it inside the test."
         )
+
+
+class TestLoadedTestModules:
+    def test_selects_modules_by_file_location_not_name(self) -> None:
+        inside = types.ModuleType("test_bare_stem_probe")
+        inside.__file__ = str(TESTS_ROOT / "some_dir" / "test_bare_stem_probe.py")
+        outside = types.ModuleType("mloda_like_probe")
+        outside.__file__ = str(TESTS_ROOT.parent / "mloda" / "mloda_like_probe.py")
+        no_file = types.ModuleType("no_file_probe")
+        modules: dict[str, object] = {
+            "test_bare_stem_probe": inside,
+            "mloda_like_probe": outside,
+            "no_file_probe": no_file,
+            "not_a_module": object(),
+            "a_string": "text",
+            "none_entry": None,
+        }
+
+        assert loaded_test_modules(modules) == [inside]

@@ -34,7 +34,8 @@ from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, unavailable_framework_message
-from mloda.core.abstract_plugins.implementation import accessible_implementations
+from mloda.core.abstract_plugins.components.divergence import Cause, Divergence, DivergenceKind
+from mloda.core.abstract_plugins.implementation import accessible_implementations, variant_fix
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
@@ -868,8 +869,57 @@ class TestEliminationStages:
             "OpToyVariantPandas on PandasDataFrame follows variant 'skip_nan', which this feature does not allow; "
             'to allow it add {"allow_variants": ("skip_nan",)} to the feature\'s options'
         )
-        assert err.result.eliminations[toy.OpToyVariantFG] == Elimination(stage="variant", reason=reason)
+        assert err.result.eliminations[toy.OpToyVariantFG] == Elimination(
+            stage="variant", reason=reason, variants=("skip_nan",), allow_variants=("skip_nan",)
+        )
         assert f"  - OpToyVariantFG (rule variant): {reason}" in str(err)
+
+    @pytest.mark.parametrize(
+        "group_name, feature_name, extra_options",
+        [
+            ("OpToyVariantEmptyFG", "optoyvar_empty", {}),
+            ("OpToyVariantOtherFG", "optoyvar_other", {"allow_variants": ("other",)}),
+        ],
+    )
+    def test_variant_stage_without_admitting_allow_variants(
+        self, group_name: str, feature_name: str, extra_options: dict[str, Any]
+    ) -> None:
+        toy = _op_toy()
+        group = getattr(toy, group_name)
+        opts: dict[str, Any] = {toy.OPTOY_KEY: "sum", **extra_options}
+        feature = Feature(feature_name, opts, compute_framework="PandasDataFrame")
+        plugins: FeatureGroupEnvironmentMapping = {group: {PandasDataFrame, PyArrowTable}}
+
+        with accessible_implementations({toy.OpToyVariantPandas, toy.OpToyVariantPyArrow}):
+            err = _fail(feature, plugins)
+
+        elimination = err.result.eliminations[group]
+        assert elimination.stage == "variant"
+        assert elimination.variants == ("skip_nan",)
+        assert elimination.allow_variants == ()
+
+    @pytest.mark.parametrize(
+        "blocked_names, allow, expected",
+        [
+            ({"pandas": ("other", "skip_nan")}, {}, ()),
+            ({"pandas": ("other", "skip_nan"), "arrow": ("other",)}, {}, ("other",)),
+            ({"pandas": ("other",)}, {}, ("other",)),
+            ({"pandas": ("other", "skip_nan")}, {"allow_variants": ("other",)}, ()),
+        ],
+    )
+    def test_variant_fix_admits_a_framework(
+        self, blocked_names: dict[str, tuple[str, ...]], allow: dict[str, Any], expected: tuple[str, ...]
+    ) -> None:
+        toy = _op_toy()
+        frameworks = {"pandas": PandasDataFrame, "arrow": PyArrowTable}
+        blocked = {
+            frameworks[key]: tuple(
+                Divergence(kind=DivergenceKind.VARIANT, cause=Cause.BACKEND, reason="r", variant=name) for name in names
+            )
+            for key, names in blocked_names.items()
+        }
+
+        assert variant_fix(toy.OpToyVariantOtherFG, blocked, Options(group=allow)) == expected
 
     def test_links_stage(self) -> None:
         feature = Feature(LINKS_FEATURE)

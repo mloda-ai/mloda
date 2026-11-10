@@ -2,6 +2,7 @@
 
 import base64
 import dataclasses
+import importlib
 import json
 import logging
 import sqlite3
@@ -30,6 +31,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plan_info import PlanStep
+from mloda.core.prepare.resolution_types import Elimination, EvaluationResult
 from mloda.interfaces.service.catalog import Catalog
 from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig, load_settings
 from mloda.interfaces.service.errors import ERROR_CODES, is_error
@@ -104,6 +106,7 @@ STEP_KEYS = {
     "join_type",
     "contract_version",
     "divergences",
+    "allowed_variants",
 }
 SUCCESS_KEYS = {"plan_id", "expires_at", "normalized_request", "steps", "lineage", "estimate", "egress", "policy"}
 DENIED_CALLS: list[str] = []
@@ -362,8 +365,8 @@ def _settings(tmp_path: Path, sources: Mapping[str, SourceConfig] | None = None,
     return Settings(deny_feature_groups=(DENIED,), sources=sources, **kwargs)
 
 
-def _planner(settings: Settings) -> Planner:
-    base = _base()
+def _planner(settings: Settings, *, base: PluginCollector | None = None) -> Planner:
+    base = base if base is not None else _base()
     catalog = Catalog.build(settings, base)
     return Planner(
         settings, catalog, signing_key=KEY, principal="alice", plugin_collector=base, clock=lambda: CLOCK_START
@@ -729,6 +732,77 @@ class TestUnresolved:
         _assert_no_paths(result, tmp_path, "sales.csv")
 
 
+class TestVariantNotAllowed:
+    @staticmethod
+    def _blocked(tmp_path: Path, group_name: str, **kwargs: Any) -> tuple[dict[str, Any], dict[str, Any], Any]:
+        toy = importlib.import_module(
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+        )
+        group = getattr(toy, group_name)
+        request = {"features": [{"name": group.FEATURE, "options": {toy.OPTOY_KEY: "sum"}}]}
+        settings = _settings(tmp_path, compute_frameworks=("PandasDataFrame",), **kwargs)
+        base = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, group})
+        result = _planner(settings, base=base).explain(request)
+        details = [
+            d for d in _error(result, "validation_failed")["details"] if d.get("problem") == "variant_not_allowed"
+        ]
+        assert len(details) == 1
+        return result, details[0], toy
+
+    @pytest.mark.parametrize(
+        "group_name, kwargs, fix, message_part",
+        [
+            ("OpToyVariantFG", {"allow_options": ("optoy_kind", "allow_variants")}, True, "add the fix"),
+            ("OpToyVariantFG", {"allow_options": ("optoy_kind",)}, False, "service policy"),
+            ("OpToyVariantFG", {"trusted_caller": True}, True, "add the fix"),
+            ("OpToyVariantEmptyFG", {"allow_options": ("optoy_kind", "allow_variants")}, False, "cannot be allowed"),
+        ],
+    )
+    def test_blocked_variant_is_named(
+        self, tmp_path: Path, group_name: str, kwargs: dict[str, Any], fix: bool, message_part: str
+    ) -> None:
+        result, detail, toy = self._blocked(tmp_path, group_name, **kwargs)
+
+        assert detail["path"] == "/features/0"
+        assert detail["feature_group"] == group_name
+        assert detail["variants"] == [toy.OPTOY_VARIANT]
+        assert message_part in detail["message"]
+        assert "suggestion" not in detail
+        if fix:
+            assert detail["fix"] == {"allow_variants": [toy.OPTOY_VARIANT]}
+        else:
+            assert "fix" not in detail
+        dumped = json.dumps(result)
+        assert "does not allow" not in dumped
+        assert "OpToyVariantPandas" not in dumped
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+    def test_refused_allow_variants_key_gets_no_fix(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "mloda.interfaces.service.planner.caller_refused_option_keys", lambda *a, **k: frozenset({"allow_variants"})
+        )
+
+        result, detail, _ = self._blocked(tmp_path, "OpToyVariantFG", allow_options=("optoy_kind", "allow_variants"))
+
+        assert "fix" not in detail
+        assert "service policy" in detail["message"]
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+    def test_multiple_identified_keeps_the_generic_detail(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        elimination = Elimination(stage="variant", reason="x", variants=("v",), allow_variants=("v",))
+        failed = EvaluationResult(identified={CsvFG: set(), JsonFG: set()}, eliminations={SqliteFG: elimination})
+        diagnosis = ResolutionDiagnosis(records=[], complete=False, feature_name="income", failed_result=failed)
+        monkeypatch.setattr(mloda, "diagnose", lambda *args, **kwargs: diagnosis)
+
+        result = _planner(_settings(tmp_path)).explain({"features": ["income"]})
+
+        error = _error(result, "validation_failed")
+        assert _has_detail(error, path="/features/0", problem="unresolved")
+        assert not _has_detail(error, problem="variant_not_allowed")
+
+
 class TestDiagnosisWithoutFeatureName:
     def test_scope_at_inaccessible_source_group_is_validation_failed(self, tmp_path: Path) -> None:
         request = {"features": [{"name": "income", "feature_group": "SqliteFG"}]}
@@ -1004,11 +1078,13 @@ class TestSuccess:
             source_compute_framework=None,
             contract_version=3,
             divergences=(implementation, group),
+            allowed_variants=("fast", "skip_nan"),
         )
 
         record = _step_record(1, step, None)
 
         assert record["contract_version"] == 3
+        assert record["allowed_variants"] == ["fast", "skip_nan"]
         assert record["divergences"] == [
             {
                 "source": "feature_group",

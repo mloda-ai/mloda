@@ -111,6 +111,7 @@ from mloda.core.abstract_plugins.implementation import (
     serving_implementation,
     unallowed_variants,
     variant_block_reason,
+    variant_fix,
 )
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 
@@ -1033,8 +1034,13 @@ class IdentifyFeatureGroupClass:
         if not fitting or not fitting <= set(blocked):
             self._variant_blocks[feature_group] = blocked
             return supported - set(blocked)
+        fitting_blocked = {cfw: blocked[cfw] for cfw in fitting}
         self._record_elimination(
-            feature_group, "variant", variant_block_reason(feature_group, blocked, served, options)
+            feature_group,
+            "variant",
+            variant_block_reason(feature_group, blocked, served, options),
+            variants=tuple(sorted({str(r.variant) for found in fitting_blocked.values() for r in found})),
+            allow_variants=variant_fix(feature_group, fitting_blocked, options),
         )
         return set()
 
@@ -1361,10 +1367,20 @@ class IdentifyFeatureGroupClass:
         return cast("type | None", matched[0]) if matched else None
 
     def _record_elimination(
-        self, feature_group: type[FeatureGroup], stage: EliminationStage, reason: str, code: DeclineCode | None = None
+        self,
+        feature_group: type[FeatureGroup],
+        stage: EliminationStage,
+        reason: str,
+        code: DeclineCode | None = None,
+        *,
+        variants: tuple[str, ...] = (),
+        allow_variants: tuple[str, ...] = (),
     ) -> None:
         """Record the first gate a non-winning name-matching candidate failed; one entry per candidate."""
-        self._eliminations.setdefault(feature_group, Elimination(stage=stage, reason=reason, code=code))
+        self._eliminations.setdefault(
+            feature_group,
+            Elimination(stage=stage, reason=reason, code=code, variants=variants, allow_variants=allow_variants),
+        )
 
     def _value_rejection(self, feature_group: type[FeatureGroup]) -> MatchRejection | None:
         """The MatchRejection the first match pass recorded for this candidate class, if any.

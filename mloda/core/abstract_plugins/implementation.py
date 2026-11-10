@@ -250,6 +250,19 @@ def unallowed_variants(
     )
 
 
+def variant_fix(
+    group: type[FeatureGroup],
+    blocked: Mapping[type[ComputeFramework], tuple[Divergence, ...]],
+    options: Options,
+) -> tuple[str, ...]:
+    """The allow_variants value that admits a blocked framework, empty when none is fully listed."""
+    admittable = [found for found in blocked.values() if all(r.variant in group.VARIANTS for r in found)]
+    listed = {str(r.variant) for found in admittable for r in found}
+    if not listed:
+        return ()
+    return tuple(sorted((allowed_variants(options) & group.VARIANTS) | listed))
+
+
 def variant_block_reason(
     group: type[FeatureGroup],
     blocked: Mapping[type[ComputeFramework], tuple[Divergence, ...]],

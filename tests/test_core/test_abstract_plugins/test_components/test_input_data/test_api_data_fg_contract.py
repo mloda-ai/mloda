@@ -44,12 +44,6 @@ class TestApiDataFGContract(SourceFeatureGroupTestMixin):
     def other_pointer(self) -> tuple[Any, str]:
         return "k", "api_data:k"
 
-    def foreign_handle_dac(self) -> tuple[DataAccessCollection, str]:
-        return self.foreign_dac(), "foreign_file"
-
-    def known_handles_dac(self) -> tuple[DataAccessCollection, list[str]]:
-        return self.own_dac(), ["k"]
-
     def run_all_kwargs(self) -> dict[str, Any]:
         return {"api_data": {"k": {"api_col": [1, 2]}}}
 

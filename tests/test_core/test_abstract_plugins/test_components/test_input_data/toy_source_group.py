@@ -32,7 +32,6 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 TOY_KEY = "toyfmt_columns"
-TOY_HANDLE_OPTION = "data_access_handle"
 
 
 def toy_dac(**sources: dict[str, list[Any]]) -> DataAccessCollection:
@@ -100,7 +99,7 @@ class ToySourceBase(SourceFeatureGroup):
             return []
         if data_access_collection is None:
             return []
-        wanted = options.get(TOY_HANDLE_OPTION)
+        wanted = options.get(HANDLE_OPTION)
         if wanted is not None and wanted not in data_access_collection.handles():
             record_match_rejection(
                 cls.get_class_name(),

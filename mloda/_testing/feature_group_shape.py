@@ -388,9 +388,10 @@ def _check_outputs(
                 failures.append(f"outputs: declared part '{name}~{part}' is missing from the result")
     if cls.replaces_rows():
         return failures
-    if data.types and adapter.row_count(result) != data.row_count:
+    result_rows = adapter.row_count(result)
+    if data.types and result_rows != data.row_count:
         failures.append(
-            f"outputs: {adapter.row_count(result)} rows came back for {data.row_count} input rows; "
+            f"outputs: {result_rows} rows came back for {data.row_count} input rows; "
             "declare replaces_rows() when the group changes the row count"
         )
         return failures

@@ -196,8 +196,8 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
     """Contract tests of a source group.
 
     Required: feature_group_class, present_column, missing_column, expected_source, own_dac, foreign_dac,
-    other_pointer, foreign_handle_dac, known_handles_dac, and own_pointer (return NO_POINTER for a group that
-    takes no pointer). expected_source is the source the own request claims (own_dac's for a searched group,
+    other_pointer, and own_pointer (return NO_POINTER for a group that takes no pointer), plus
+    foreign_handle_dac and known_handles_dac when it declares data_access_handle. expected_source is the source the own request claims (own_dac's for a searched group,
     the pointed one otherwise). Optional: pointed_source (None claims with own_pointer), load_framework,
     context_options, run_all_kwargs. rejection_window and make_implementation are fixture methods so a host in
     any package gets them without this repo's conftest; the suite reclaims the subclasses it builds, and holding
@@ -467,13 +467,13 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
             assert "int" in result.eliminations[self.feature_group_class].reason
 
     def test_a_handle_of_another_kind_yields_no_sources(self) -> None:
-        self._require(self._applicability().data_access_handle, "data_access_handle is not an option of the group")
+        self._require(self._applicability().data_access_handle, "data_access_handle does not apply to the group")
         dac, handle = self.foreign_handle_dac()
         feature = Feature(self.present_column, self._options(context={HANDLE_OPTION: handle}))
         assert not self._claims(feature, dac)
 
     def test_an_unknown_handle_records_a_rejection_listing_the_known_handles(self) -> None:
-        self._require(self._applicability().data_access_handle, "data_access_handle is not an option of the group")
+        self._require(self._applicability().data_access_handle, "data_access_handle does not apply to the group")
         dac, known = self.known_handles_dac()
         options = self._options(context={HANDLE_OPTION: "unknown_handle_for_suite"})
         outcome = probe_match_criteria(self.feature_group_class, self.present_column, options, dac)
@@ -485,7 +485,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
             assert handle in outcome.rejection.reason
 
     def test_a_non_str_handle_is_no_narrowing_and_is_rejected_by_the_option_check(self) -> None:
-        self._require(self._applicability().data_access_handle, "data_access_handle is not an option of the group")
+        self._require(self._applicability().data_access_handle, "data_access_handle does not apply to the group")
         feature = Feature(self.present_column, self._options(context={HANDLE_OPTION: ["own_handle"]}))
         assert not self._claims(feature, self.own_dac())
 
@@ -531,7 +531,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
 
     def test_missing_column_text_hides_the_columns_unless_a_handle_narrows_the_search(self) -> None:
         self._require(self._applicability().checked_route, "no checked route")
-        self._require(self._applicability().data_access_handle, "data_access_handle is not an option of the group")
+        self._require(self._applicability().data_access_handle, "data_access_handle does not apply to the group")
         unpointed = self._evaluate(Feature(self.missing_column), self.own_dac())
         reason = unpointed.eliminations[self.feature_group_class].reason
         assert self.unpointed_source in reason

@@ -582,7 +582,8 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         assert all(c.count(MDB_DIRECT) == 1 for c in calls)
         assert len(results) == 2
 
-    def test_replaces_rows_group_with_split_context_across_frameworks_succeeds(self) -> None:
+    def test_replaces_rows_group_with_split_context_on_one_framework_succeeds(self) -> None:
+        """All copies resolve to PyArrowTable; each replaces_rows step writes its own frame, so the split copies do not collide."""
         calls: list[list[str]] = []
         propagate = Options(context={"x": 1}, propagate_context_keys=frozenset({"x"}))
         results = _run_direct_and_chained(
@@ -596,6 +597,7 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         for name in (MDB_DIRECT, MDB_CHAINED):
             (frame,) = [r for r in results if name in (r if isinstance(r, dict) else r.column_names)]
             assert list(frame[name] if isinstance(frame, dict) else frame[name].to_pylist()) == [1, 2]
+        assert len(calls) == 3
 
     def test_two_consumers_propagating_different_values_into_shared_input_raise(self) -> None:
         calls: list[list[str]] = []

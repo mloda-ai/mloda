@@ -1329,8 +1329,6 @@ _CLAIMER_CASES: list[Any] = [
 
 
 class TestUnnarrowedSourceClaimers:
-    """Module-level source groups must be narrowed so they cannot claim sources other test modules use."""
-
     @pytest.mark.parametrize(("build", "expected"), _CLAIMER_CASES)
     def test_flags_only_unnarrowed_claimers(
         self, build: Callable[[str], dict[str, type[Any]]], expected: list[str]
@@ -1351,7 +1349,6 @@ class TestUnnarrowedSourceClaimers:
         modules = [m for n, m in list(sys.modules.items()) if n.startswith("tests.") and m is not None]
         flagged = unnarrowed_source_claimers(modules)
         assert not flagged, (
-            f"module-level source groups claim sources of other test modules on the same worker: {flagged}. "
-            "Narrow each: give it its own CREDENTIAL_KEY or a marker-gated is_valid_credentials (DB), its own "
-            "suffix (file), or its own match_feature_group_criteria; or define the class inside the test."
+            f"unnarrowed module-level source groups: {flagged}. Narrow each (see tests/README.md) "
+            "or define it inside the test."
         )

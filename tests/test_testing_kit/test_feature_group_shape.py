@@ -995,12 +995,13 @@ def test_source_group_run_is_not_applicable(case: Callable[[], tuple[type[Featur
 
 
 def _serve_with(
-    make_implementation: Callable[..., type[Implementation[Any]]], group: type[FeatureGroup], kind: str
+    make_implementation: Callable[..., type[Implementation[Any]]],
+    group: type[FeatureGroup],
+    kind: str,
+    framework: type[ComputeFramework] = PythonDictFramework,
 ) -> type[Implementation[Any]]:
     run_group = make_run_group(kind)
-    return make_implementation(
-        group, PythonDictFramework, lambda _, data, features: run_group.calculate_feature(data, features)
-    )
+    return make_implementation(group, framework, lambda _, data, features: run_group.calculate_feature(data, features))
 
 
 def test_operation_group_conforms_with_serving_implementation(
@@ -1031,6 +1032,95 @@ def test_broken_operation_group_fails_only_its_sub_check(
     assert not result.passed
     assert all(f.startswith(prefix) for f in result.failures), result.failures
     assert not any("found no implementation" in f for f in result.failures), result.failures
+
+
+def _record(kind: DivergenceKind, subtypes: frozenset[str] = frozenset()) -> Divergence:
+    return Divergence(kind=kind, cause=Cause.BACKEND, reason="stores ints as strings", subtypes=subtypes)
+
+
+_TYPE = DivergenceKind.TYPE
+_SUM = Options(group={"op_kind": "sum"})
+
+
+@pytest.mark.parametrize(
+    ("kind", "subtypes", "excused"),
+    [
+        (_TYPE, frozenset(), True),
+        (DivergenceKind.GAP, frozenset(), True),
+        (DivergenceKind.VALUE, frozenset(), False),
+        (_TYPE, frozenset({"median"}), False),
+        (_TYPE, frozenset({"sum"}), True),
+    ],
+    ids=["type", "gap", "value_does_not_excuse", "other_subtype", "matching_subtype"],
+)
+def test_implementation_record_excuses_a_type_failure(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+    kind: DivergenceKind,
+    subtypes: frozenset[str],
+    excused: bool,
+) -> None:
+    group = make_operation_group(subtypes=bool(subtypes))
+    setattr(_serve_with(make_implementation, group, "wrong_type"), "divergences", (_record(kind, subtypes),))
+    base = _SUM if subtypes else None
+    result = check_feature_group_shape(group, base, input_data=_run_data(), adapter=PythonDictAdapter())
+    if excused:
+        assert result.failures == (), result.failures
+        assert any(n.startswith("type: ") and "stores ints as strings" in n for n in result.notes), result.notes
+    else:
+        assert result.failures
+        assert all(f.startswith("type:") for f in result.failures), result.failures
+
+
+def test_group_record_excuses_a_type_failure() -> None:
+    group = make_run_group("wrong_type")
+    setattr(group, "DIVERGENCES", (_record(_TYPE),))
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert result.failures == (), result.failures
+    assert any(n.startswith("type: ") and "stores ints as strings" in n for n in result.notes), result.notes
+
+
+def test_type_record_is_never_stale_on_an_untyped_adapter(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+) -> None:
+    group = make_operation_group()
+    setattr(_serve_with(make_implementation, group, "ok"), "divergences", (_record(_TYPE),))
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert not any("stale" in f for f in result.failures), result.failures
+
+
+def test_stale_type_record_on_a_typed_framework_fails(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+) -> None:
+    _require_backend(PyArrowAdapter)
+    from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+
+    group = make_operation_group()
+    setattr(_serve_with(make_implementation, group, "ok", PyArrowTable), "divergences", (_record(_TYPE),))
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PyArrowAdapter())
+    assert any(f.startswith("type:") and "stale" in f for f in result.failures), result.failures
+
+
+def test_unneeded_group_type_record_on_a_typed_framework_notes_once() -> None:
+    _require_backend(PyArrowAdapter)
+    group = make_run_group("ok")
+    setattr(group, "DIVERGENCES", (_record(_TYPE),))
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PyArrowAdapter())
+    assert result.failures == (), result.failures
+    assert len([n for n in result.notes if n.startswith("type: ") and "does not need" in n]) == 1, result.notes
+
+
+def test_zero_rows_only_type_record_excuses_and_is_not_stale(
+    make_implementation: Callable[..., type[Implementation[Any]]],
+) -> None:
+    _require_backend(PyArrowAdapter)
+    from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+
+    group = make_operation_group()
+    impl = _serve_with(make_implementation, group, "loses_schema_on_zero_rows", PyArrowTable)
+    setattr(impl, "divergences", (_record(_TYPE),))
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PyArrowAdapter())
+    assert result.failures == (), result.failures
+    assert any(n.startswith("type: ") and "stores ints as strings" in n for n in result.notes), result.notes
 
 
 @pytest.mark.parametrize("other_framework", [None, PandasDataFrame])

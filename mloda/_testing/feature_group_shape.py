@@ -526,6 +526,10 @@ def _check_zero_rows(
                     changed = adapter.has_type(out, column, data_type) is not True
             else:
                 changed = adapter.column_type(out, column) != adapter.column_type(result, column)
+                if changed:
+                    # a nullable dtype and its numpy twin are the same exact type
+                    twin = adapter.exact_type(result, column)
+                    changed = twin is None or twin != adapter.exact_type(out, column)
             text = f"column '{column}' changes type on zero rows"
             note = _excused(text, covering.get(column, []), used) if changed else None
             if note is not None:

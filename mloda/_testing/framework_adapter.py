@@ -151,8 +151,8 @@ class FrameworkAdapter(ABC):
     def _readback_framework(self, result: Any) -> type[ComputeFramework]:
         return self.compute_framework()
 
-    def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
-        """Whether the column's native type is exactly data_type; None when the framework has no exact type for it."""
+    def _exact_instance(self, result: Any) -> tuple[type[ComputeFramework], ComputeFramework] | None:
+        """The readback framework and an instance of it, None when it has no exact column readback."""
         from mloda.core.abstract_plugins.compute_framework import ComputeFramework
         from mloda.user import ParallelizationMode
 
@@ -161,9 +161,21 @@ class FrameworkAdapter(ABC):
         framework = self._readback_framework(result)
         if framework._exact_column_data_type is ComputeFramework._exact_column_data_type:
             return None
+        return framework, framework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    def exact_type(self, result: Any, column: str) -> DataType | None:
+        """The framework's exact readback of the column, None when it has none."""
+        found = self._exact_instance(result)
+        return None if found is None else found[1]._exact_column_data_type(result, column)
+
+    def has_type(self, result: Any, column: str, data_type: DataType) -> bool | None:
+        """Whether the column's native type is exactly data_type; None when the framework has no exact type for it."""
+        found = self._exact_instance(result)
+        if found is None:
+            return None
+        framework, instance = found
         if framework is self.compute_framework() and data_type in self.no_native_type:
             return None
-        instance = framework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         exact = instance._exact_column_data_type(result, column)
         if exact == data_type:
             return True
@@ -304,10 +316,10 @@ class PandasAdapter(FrameworkAdapter):
         pa = require("pyarrow", "building pandas test frames")
 
         from mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer import (
-            _decimal_types_mapper,
+            PandasPyArrowTransformer,
         )
 
-        # Always nullable int/bool keeps exact types; production gives int64/bool, or float64/object with nulls.
+        # Nullable dtypes only for int/bool columns with nulls; production widens those to float64/object.
         nullable = {
             pa.bool_(): pd.BooleanDtype(),
             pa.int8(): pd.Int8Dtype(),
@@ -320,11 +332,11 @@ class PandasAdapter(FrameworkAdapter):
             pa.uint64(): pd.UInt64Dtype(),
         }
 
-        def types_mapper(t: Any) -> Any:
-            mapped = _decimal_types_mapper(t)
-            return mapped if mapped is not None else nullable.get(t)
-
-        return table.to_pandas(types_mapper=types_mapper)
+        frame = PandasPyArrowTransformer.transform_other_fw_to_fw(table)
+        for i, field in enumerate(table.schema):
+            if field.type in nullable and table.column(i).null_count > 0:
+                frame.isetitem(i, table.column(i).to_pandas(types_mapper=nullable.get))
+        return frame
 
     def duplicate_column_frame(self, first_type: DataType, second_type: DataType) -> Any:
         frame = self.from_arrow(_duplicate_column_table(first_type, second_type))

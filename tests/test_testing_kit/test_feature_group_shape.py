@@ -163,6 +163,8 @@ def make_run_group(
 
         @classmethod
         def return_data_type_rule(cls, feature: Feature) -> DataType | None:
+            if kind == "undeclared_out":
+                return None
             if kind == "object_date":
                 return DataType.DATE
             if kind == "tz_out":
@@ -200,6 +202,14 @@ def make_run_group(
 
                 values = [i * 2 for i in range(len(data))]
                 data["rg_out"] = pd.Series(values, index=data.index, dtype="Int64" if values else "int64")
+                return data
+            if kind == "input_retyped_on_zero_rows":
+                if len(data) == 0:
+                    data["rg_src"] = data["rg_src"].astype("float64")
+                return _double_into(data, "rg_out", "rg_src")
+            if kind == "input_retyped_both":
+                data = _double_into(data, "rg_out", "rg_src")
+                data["rg_src"] = data["rg_src"].astype("float64" if len(data) else object)
                 return data
             if kind == "object_date":
                 import pandas as pd
@@ -869,8 +879,9 @@ def test_exact_type_run_group_passes(kind: str, adapter_cls: type[Any]) -> None:
     assert result.failures == (), result.failures
 
 
+@pytest.mark.parametrize("kind", ["ok", "undeclared_out"])
 @pytest.mark.parametrize("adapter_cls", [PyArrowAdapter, PandasAdapter, PolarsAdapter])
-def test_default_run_group_passes_with_nullable_int_input(adapter_cls: type[Any]) -> None:
+def test_default_run_group_passes_with_nullable_int_input(kind: str, adapter_cls: type[Any]) -> None:
     _require_backend(adapter_cls)
     data = TypedTestData(
         {
@@ -878,7 +889,7 @@ def test_default_run_group_passes_with_nullable_int_input(adapter_cls: type[Any]
             "rg_label": (DataType.STRING, ["alpha-secret", "beta-secret", "gamma-secret"]),
         }
     )
-    result = check_feature_group_shape(make_run_group(), input_data=data, adapter=adapter_cls())
+    result = check_feature_group_shape(make_run_group(kind), input_data=data, adapter=adapter_cls())
     assert result.failures == (), result.failures
 
 
@@ -948,6 +959,8 @@ def test_requested_name_already_in_input_data_fails_outputs() -> None:
         ("narrow_type", "type:", PolarsAdapter),
         ("loses_schema_on_zero_rows", "zero_rows:", PyArrowAdapter),
         ("list_null_on_zero_rows", "zero_rows:", PolarsAdapter),
+        ("input_retyped_on_zero_rows", "zero_rows:", PandasAdapter),
+        ("input_retyped_both", "zero_rows:", PandasAdapter),
         ("iceberg_scan", "zero_rows:", IcebergAdapter),
         ("leaks_cell_in_error", "error_values:", PythonDictAdapter),
         ("nondeterministic", "determinism:", PythonDictAdapter),

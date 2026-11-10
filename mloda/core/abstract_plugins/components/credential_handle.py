@@ -1,7 +1,7 @@
 """Credential handle option spec and its plan-time validation.
 
 A declared handle option names a credential registered in the DataAccessCollection. Core checks the
-handle at plan time; nothing reads the credential at run time yet.
+handle at plan time.
 """
 
 from __future__ import annotations

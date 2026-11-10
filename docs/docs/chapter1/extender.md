@@ -249,7 +249,15 @@ class SealingExtender(Extender):
 To refuse a run when a step declares a handle, check `PlanStep.credential_handles` in `on_run_start`:
 
 ```python
+from mloda.steward import PlanContext, PlanStep
+
 class NoProdCredentials(Extender):
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
     def on_run_start(self, run: RunContext, plan: PlanContext, steps: tuple[PlanStep, ...]) -> None:
         for step in steps:
             if "prod_db" in step.credential_handles:
@@ -262,11 +270,19 @@ To allow only some handles, refuse a run whose step lists one outside an allow l
 class OnlyAllowedCredentials(Extender):
     ALLOWED = frozenset({"analytics_db"})
 
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
     def on_run_start(self, run: RunContext, plan: PlanContext, steps: tuple[PlanStep, ...]) -> None:
         for step in steps:
             for handle in step.credential_handles:
                 if handle not in self.ALLOWED:
                     raise PermissionError(f"{handle} may not be used in this run")
+
+extenders = {NoProdCredentials(), OnlyAllowedCredentials()}
 ```
 
 To find over-declared handles, aggregate over the run's steps: keep the calculate contexts and report, per feature group, each declared handle that none of that group's contexts bound or read. A reported pair is a declaration to drop from that group, not a credential to remove, since another step's source may bind it.

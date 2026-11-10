@@ -117,7 +117,7 @@ class FeatureSet:
         }
 
     def freeze(self) -> None:
-        """Freeze features, options and filters, mark the set prepared; copies and run views stay writable."""
+        """Freeze features, options, filters and planned dicts, mark it prepared; copies and run views stay writable."""
         if self.__dict__.get("_frozen"):
             return
         for feature in self.features:
@@ -129,6 +129,9 @@ class FeatureSet:
             self.filters = ReadOnlySet(self.filters, "filters")
         if self.declared_input_feature_edges is not None:
             self.declared_input_feature_edges = _frozen_dict(self.declared_input_feature_edges)
+        if self.declared_input_columns is not None:
+            self.declared_input_columns = _frozen_dict(self.declared_input_columns)
+        self.run_parameters = _frozen_dict(dict(self.run_parameters))
         self.prepared = True
         self.__dict__["_frozen"] = True
 

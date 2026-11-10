@@ -28,6 +28,9 @@ EnvironmentKey = tuple[Any, ...]
 _CACHE = object()
 _ENVIRONMENT = object()
 _CYCLE = object()
+_PLUGINS = object()
+_FLAT_CONTAINERS = frozenset({list, tuple, set, frozenset})
+_SCALAR_TYPES = frozenset({int, str, float, bool, bytes, type(None)})
 _RUN: ContextVar[Any] = ContextVar("input_chain_run", default=None)
 
 
@@ -60,6 +63,13 @@ def resolution_key(value: Any, seen: frozenset[int] = frozenset()) -> Any:
         if id(value) in seen:
             return _CYCLE
         seen = seen | {id(value)}
+    if type(value) in _FLAT_CONTAINERS:
+        element_types = set(map(type, value))
+        if len(element_types) == 1:
+            (element_type,) = element_types
+            if element_type in _SCALAR_TYPES:
+                flat = tuple(value) if type(value) in (list, tuple) else frozenset(value)
+                return type(value), element_type, flat
     if isinstance(value, Feature):
         return (
             Feature,
@@ -93,6 +103,11 @@ def resolution_key(value: Any, seen: frozenset[int] = frozenset()) -> Any:
     return type(value), value
 
 
+def _plugin_universe(accessible_plugins: FeatureGroupEnvironmentMapping) -> frozenset[Any]:
+    # The mapping is fixed after pre-filtering, so one walk per run scope suffices.
+    return frozenset((group, frozenset(frameworks)) for group, frameworks in accessible_plugins.items())
+
+
 def resolution_environment(
     accessible_plugins: FeatureGroupEnvironmentMapping,
     links: set[Link] | None,
@@ -102,7 +117,7 @@ def resolution_environment(
     """A nested or standalone resolution must not borrow another run's grants or plugin universe."""
     environment = (
         _Identity(_RUN.get()),
-        frozenset((group, frozenset(frameworks)) for group, frameworks in accessible_plugins.items()),
+        run_cached((_PLUGINS, _Identity(accessible_plugins)), lambda: _plugin_universe(accessible_plugins)),
         None if links is None else frozenset(links),
         _Identity(data_access_collection),
         _Identity(current_reader_probe_scope()),

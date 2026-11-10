@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import time
 import traceback
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +16,8 @@ from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
-from mloda.provider import FeatureGroup, escalate_match_abort
+from mloda.core.prepare.input_chain import resolution_environment, resolution_key
+from mloda.provider import DefaultOptionKeys, FeatureGroup, escalate_match_abort
 from mloda.user import (
     DataAccessCollection,
     Feature,
@@ -525,3 +527,129 @@ def test_a_derived_chain_steps_aside_a_source_that_has_the_root_name() -> None:
 
     result = result_for(session.resolution_report(), "level0_chain_2320")
     assert set(result.identified) == {groups[0]}
+
+
+class _CountingMapping(dict):  # type: ignore[type-arg]
+    walks = 0
+
+    def items(self) -> Any:
+        self.walks += 1
+        return super().items()
+
+
+def _counting_plugins() -> _CountingMapping:
+    return _CountingMapping({ChainA2320: {PyArrowTable}, ChainB2320: {PyArrowTable}})
+
+
+def test_plugin_universe_is_walked_once_per_scope_and_keyed_by_value() -> None:
+    plugins = _counting_plugins()
+    twin: FeatureGroupEnvironmentMapping = {ChainA2320: {PyArrowTable}, ChainB2320: {PyArrowTable}}
+
+    with run_match_cache():
+        keys: list[Any] = [
+            resolution_environment(plugins, links, None) for links in (None, set[Link](), None, set[Link]())
+        ]
+        twin_key = resolution_environment(twin, None, None)
+
+    assert plugins.walks == 1
+    assert keys[0] == keys[2] == twin_key
+    assert keys[1] == keys[3]
+
+
+def test_plugin_universe_is_walked_on_every_call_outside_a_scope() -> None:
+    plugins = _counting_plugins()
+
+    for _ in range(3):
+        resolution_environment(plugins, None, None)
+
+    assert plugins.walks == 3
+
+
+def _tagged(v: Any) -> tuple[type, Any]:
+    return type(v), v
+
+
+def _per_element_walk(value: Any) -> Any:
+    return [_tagged(v) for v in value]
+
+
+_BIG = 200_000
+_BIG_VALUES: list[Any] = [
+    pytest.param(list(range(_BIG)), id="list-int"),
+    pytest.param([f"s{i}" for i in range(_BIG)], id="list-str"),
+    pytest.param(tuple(range(_BIG)), id="tuple-int"),
+]
+
+
+def _assert_cheaper_than_reference(snapshot: Callable[[], Any], value: Any) -> None:
+    ref_cpu = key_cpu = float("inf")
+    for _ in range(3):
+        start = time.process_time()
+        _per_element_walk(value)
+        ref_cpu = min(ref_cpu, time.process_time() - start)
+        start = time.process_time()
+        snapshot()
+        key_cpu = min(key_cpu, time.process_time() - start)
+        if key_cpu < ref_cpu:
+            break
+    assert key_cpu < ref_cpu, f"snapshot cpu {key_cpu:.4f}s not below per-element walk {ref_cpu:.4f}s"
+
+
+@pytest.mark.parametrize("value", _BIG_VALUES)
+def test_flat_scalar_value_is_snapshotted_cheaper_than_a_per_element_walk(value: Any) -> None:
+    _assert_cheaper_than_reference(lambda: resolution_key(value), value)
+
+
+@pytest.mark.parametrize("value", _BIG_VALUES)
+def test_flat_scalar_option_value_is_snapshotted_cheaper_than_a_per_element_walk(value: Any) -> None:
+    options = Options({"big": value})
+
+    _assert_cheaper_than_reference(lambda: resolution_key(options), value)
+
+
+@pytest.mark.parametrize("make", [list, tuple, set, frozenset])
+def test_equal_content_in_distinct_objects_gives_equal_keys(make: Callable[[Any], Any]) -> None:
+    assert resolution_key(make([1, 2, 3])) == resolution_key(make([3, 2, 1] if make in (set, frozenset) else [1, 2, 3]))
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        ([1], [True]),
+        ([1], [1.0]),
+        ([True], [1.0]),
+        ([1, 2], (1, 2)),
+        ({1}, frozenset({1})),
+        (["a"], [b"a"]),
+        ([1, 2], [1, "2"]),
+        ([1, 2], [[1, 2]]),
+        ([1, 2], [(int, (1, 2))]),
+        ([], ()),
+        ([DefaultOptionKeys.in_features], [str(DefaultOptionKeys.in_features.value)]),
+    ],
+)
+def test_different_type_or_shape_gives_different_keys(left: Any, right: Any) -> None:
+    assert resolution_key(left) != resolution_key(right)
+
+
+def test_an_in_place_list_change_inside_one_scope_changes_the_options_key() -> None:
+    options = Options({"values": [1, 2]})
+
+    with run_match_cache():
+        before = resolution_key(options)
+        options.group["values"].append(3)
+        after = resolution_key(options)
+
+    assert before != after
+
+
+def test_renaming_a_feature_inside_a_list_option_changes_the_options_key() -> None:
+    feature = Feature("before_rename")
+    options = Options({"features": [feature]})
+
+    with run_match_cache():
+        before = resolution_key(options)
+        feature.name = FeatureName("after_rename")
+        after = resolution_key(options)
+
+    assert before != after

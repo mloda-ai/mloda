@@ -6,7 +6,6 @@ See ``docs/docs/in_depth/named-data-access-handles.md`` for the user-facing guid
 import logging
 import sqlite3
 import threading
-import time
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +18,7 @@ from mloda.core.abstract_plugins.components.input_data.read_db_fg import ReadDBF
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
 from mloda.user import Feature
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.helpers.linear_scaling import assert_runs_linearly
 from tests.mixins.reader_feature_groups.lazy_source_group import load_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import TOY_TOKEN
 
@@ -837,29 +837,7 @@ class TestRedact:
         )
         filler = "filler text "
         secrets = f"{self._REGISTERED_VALUE} swordfishlong"
-        # Compare CPU time at the full size against a quarter size. Linear is
-        # ~4x, quadratic ~16x; wall-clock time would measure the loaded machine.
-        small_text = (filler * 5_000) + secrets
-        large_text = (filler * 20_000) + secrets
-
-        min_small = min_large = float("inf")
-        redacted = ""
-        ratio = float("inf")
-        for _ in range(3):
-            start = time.process_time()
-            dac.redact(small_text)
-            min_small = min(min_small, time.process_time() - start)
-            start = time.process_time()
-            redacted = dac.redact(large_text)
-            min_large = min(min_large, time.process_time() - start)
-            ratio = min_large / max(min_small, 2e-3)
-            if ratio < 8.0:
-                break
-        assert ratio < 8.0, (
-            f"redact scales super-linearly on a large text with secrets: "
-            f"min small {min_small:.4f}s, min large {min_large:.4f}s, ratio {ratio:.1f}"
-        )
-        assert min_large < 2.0, f"redact is too slow on a large text with secrets: min large {min_large:.4f}s"
+        redacted = assert_runs_linearly(dac.redact, lambda k: filler * k + secrets, 20_000, "a large text with secrets")
         assert self._REGISTERED_VALUE not in redacted
         assert "swordfishlong" not in redacted
 

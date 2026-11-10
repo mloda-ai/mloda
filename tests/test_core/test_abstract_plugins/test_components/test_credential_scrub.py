@@ -25,6 +25,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
     strip_uri_userinfo,
 )
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, safe_value_text
+from tests.helpers.linear_scaling import assert_runs_linearly
 
 # (case id, input text, secret substrings that must be gone, substrings that must survive)
 SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
@@ -935,27 +936,7 @@ def test_scrub_credentials_is_idempotent(text: str) -> None:
 
 
 def _assert_scrubs_linearly(build: Callable[[int], str], n: int, what: str) -> str:
-    """Fail if min CPU time at n reaches 8x that at n // 4 (small floored at 2 ms) or 2 s; linear is ~4x, quadratic ~16x."""
-    small, large = build(n // 4), build(n)
-    min_small = min_large = float("inf")
-    result = ""
-    ratio = float("inf")
-    for _ in range(3):
-        start = time.process_time()
-        scrub_credentials(small)
-        min_small = min(min_small, time.process_time() - start)
-        start = time.process_time()
-        result = scrub_credentials(large)
-        min_large = min(min_large, time.process_time() - start)
-        ratio = min_large / max(min_small, 2e-3)
-        if ratio < 8.0:
-            break
-    assert ratio < 8.0, (
-        f"scrub_credentials scales super-linearly on {what}: "
-        f"min small {min_small:.4f}s, min large {min_large:.4f}s, ratio {ratio:.1f}"
-    )
-    assert min_large < 2.0, f"scrub_credentials is too slow on {what}: min large {min_large:.4f}s"
-    return result
+    return assert_runs_linearly(scrub_credentials, build, n, what)
 
 
 def test_long_alphanumeric_run_scrubs_fast() -> None:

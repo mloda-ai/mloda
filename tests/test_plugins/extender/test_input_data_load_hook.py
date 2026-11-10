@@ -459,16 +459,38 @@ class TestDataAccessIdentityHidesDictCredentialValues:
             pytest.param("botref", False, False, ParallelizationMode.SYNC, id="botref-run_all-sync"),
             pytest.param("botref", False, True, ParallelizationMode.SYNC, id="botref-stream_all-sync"),
             pytest.param("botref", False, False, ParallelizationMode.THREADING, id="botref-run_all-threading"),
+            pytest.param(
+                "token",
+                True,
+                False,
+                ParallelizationMode.MULTIPROCESSING,
+                id="token-run_all-multiprocessing",
+                marks=pytest.mark.timeout(30),
+            ),
+            pytest.param(
+                "botref",
+                False,
+                False,
+                ParallelizationMode.MULTIPROCESSING,
+                id="botref-run_all-multiprocessing",
+                marks=pytest.mark.timeout(30),
+            ),
         ],
     )
     def test_registered_literal_in_a_file_path_is_masked_only_under_a_credential_shaped_key(
-        self, tmp_path: Path, key: str, masked: bool, stream: bool, mode: ParallelizationMode
+        self, tmp_path: Path, flight_server: Any, key: str, masked: bool, stream: bool, mode: ParallelizationMode
     ) -> None:
         folder = tmp_path / f"bot{_TOKEN}"
         folder.mkdir()
         csv_path = folder / "data.csv"
         csv_path.write_text("literal_col\n1\n2\n")
-        extender = _InputDataLoadCapturingExtender()
+        in_worker = mode == ParallelizationMode.MULTIPROCESSING
+        identity_path = tmp_path / "identity.txt"
+        extender: Extender = (
+            _FileRecordingGateExtender(identity_path, record_identity=True)
+            if in_worker
+            else _InputDataLoadCapturingExtender()
+        )
         run = mloda.stream_all if stream else mloda.run_all
 
         result = run(
@@ -478,10 +500,19 @@ class TestDataAccessIdentityHidesDictCredentialValues:
             plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
             function_extender={extender},
             parallelization_modes={mode},
+            flight_server=flight_server if in_worker else None,
         )
         list(result)
 
-        identity = extender.captured.data_access_identity if extender.captured else None
+        identity: str | None
+        if in_worker:
+            lines = identity_path.read_text(encoding="utf-8").splitlines()
+            assert len(lines) == 1
+            identity, _, reader = lines[0].rsplit("|", 2)
+            assert reader == "CsvFG"
+        else:
+            assert isinstance(extender, _InputDataLoadCapturingExtender)
+            identity = extender.captured.data_access_identity if extender.captured else None
         assert identity is not None
         assert ("***" in identity) is masked
         assert (_TOKEN not in identity) is masked

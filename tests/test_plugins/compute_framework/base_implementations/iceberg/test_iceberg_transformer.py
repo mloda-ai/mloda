@@ -1,7 +1,8 @@
 import pytest
-from typing import Any
+from typing import Any, Callable
 from unittest.mock import patch
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_pyarrow_transformer import (
+    normalize_arrow_types,
     IcebergPyArrowTransformer,
 )
 
@@ -127,3 +128,58 @@ class TestIcebergPyArrowTransformerUnavailable:
         with patch("builtins.__import__", side_effect=ImportError("No module named 'pyarrow'")):
             with pytest.raises(ImportError):
                 IcebergPyArrowTransformer.import_other_fw()
+
+
+_DRIFT_TYPES: dict[str, Callable[[], tuple[Any, Any]]] = {
+    "string": lambda: (pa.string(), "a"),
+    "binary": lambda: (pa.binary(), b"x"),
+    "list_int": lambda: (pa.list_(pa.int64()), [1, 2]),
+    "list_string": lambda: (pa.list_(pa.string()), ["a"]),
+    "struct_string": lambda: (pa.struct([("x", pa.string())]), {"x": "a"}),
+    "map_string": lambda: (pa.map_(pa.string(), pa.string()), [("k", "v")]),
+}
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
+class TestIcebergZeroRowTypeDrift:
+    @pytest.mark.parametrize("factory", list(_DRIFT_TYPES.values()), ids=list(_DRIFT_TYPES))
+    def test_zero_rows_and_non_empty_share_schema(
+        self, iceberg_adapter: Any, factory: Callable[[], tuple[Any, Any]]
+    ) -> None:
+        arrow_type, value = factory()
+        schema = pa.schema([("c", arrow_type)])
+        full = iceberg_adapter.from_arrow(pa.table({"c": pa.array([value], type=arrow_type)}, schema=schema))
+        empty = iceberg_adapter.from_arrow(schema.empty_table())
+
+        full_arrow = IcebergPyArrowTransformer.transform_fw_to_other_fw(full)
+        empty_arrow = IcebergPyArrowTransformer.transform_fw_to_other_fw(empty)
+
+        assert empty_arrow.schema == full_arrow.schema
+        assert empty_arrow.schema == schema
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
+class TestNormalizeArrowTypes:
+    def test_keeps_child_field_names_and_nullability(self) -> None:
+        large = pa.large_list(pa.field("element", pa.large_string(), nullable=False))
+        table = pa.table({"c": pa.array([["a"]], type=large)})
+        result = normalize_arrow_types(table)
+        assert result.schema.field("c").type == pa.list_(pa.field("element", pa.string(), nullable=False))
+
+    def test_keeps_keys_sorted_on_map(self) -> None:
+        map_type = pa.map_(pa.large_string(), pa.large_string(), keys_sorted=True)
+        result = normalize_arrow_types(pa.table({"c": pa.array([[("k", "v")]], type=map_type)}))
+        assert result.schema.field("c").type == pa.map_(pa.string(), pa.string(), keys_sorted=True)
+
+    def test_keeps_fixed_size_list_size(self) -> None:
+        fixed = pa.list_(pa.large_string(), 2)
+        result = normalize_arrow_types(pa.table({"c": pa.array([["a", "b"]], type=fixed)}))
+        assert result.schema.field("c").type == pa.list_(pa.string(), 2)
+
+    def test_table_without_large_types_is_returned_unchanged(self) -> None:
+        table = pa.table({"c": pa.array([["a"]], type=pa.list_(pa.string()))})
+        assert normalize_arrow_types(table) is table

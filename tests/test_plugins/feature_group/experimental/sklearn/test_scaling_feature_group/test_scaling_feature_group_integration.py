@@ -3,6 +3,7 @@ Integration test for ScalingFeatureGroup with mloda and artifact management.
 """
 
 from mloda.user import PluginLoader
+import numpy as np
 import pytest
 from typing import Any
 
@@ -102,3 +103,28 @@ class TestScalingFeatureGroupIntegration:
 
         # Values should be identical (artifact was reused)
         assert df1["Sales__sum_aggr__standard_scaled"].equals(df2["Sales__sum_aggr__standard_scaled"])
+
+
+class ZeroRowScalingTestDataCreator(ATestDataCreator):
+    """Test data creator returning zero rows."""
+
+    compute_framework = PandasDataFrame
+
+    @classmethod
+    def get_raw_data(cls) -> dict[str, Any]:
+        return {"Sales": np.array([], dtype="float64")}
+
+
+class TestScalingOnZeroRowsThroughTheEngine:
+    def test_zero_row_source_gives_an_empty_float64_column(self, tmp_path: Any) -> None:
+        pytest.importorskip("sklearn")
+        PluginLoader().all()
+        plugin_collector = PluginCollector.enabled_feature_groups({ZeroRowScalingTestDataCreator, ScalingFeatureGroup})
+        feature = Feature("Sales__standard_scaled", Options({"artifact_storage_path": str(tmp_path)}))
+
+        results = mloda.run_all([feature], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
+
+        assert len(results) == 1
+        column = results[0]["Sales__standard_scaled"]
+        assert len(column) == 0
+        assert str(column.dtype) == "float64"

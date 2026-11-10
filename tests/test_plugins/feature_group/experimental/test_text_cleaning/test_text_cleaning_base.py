@@ -216,3 +216,28 @@ class TestImplementationsConformToTheReferenceContract:
     @pytest.mark.parametrize("missing", [pd.NA, np.float64("nan")], ids=["pd_na", "numpy_nan"])
     def test_python_dict_treats_pandas_and_numpy_missing_as_an_empty_string(self, missing: Any) -> None:
         assert list(PythonDictTextCleaning._get_source_text({"t": [missing, "x"]}, "t")) == ["", "x"]
+
+
+class TestBareStringCleaningOperation:
+    """A bare string cleaning_operations value is one operation, not a sequence of characters."""
+
+    @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
+    def test_bare_string_is_one_operation(self, impl: Any, make_data: Any) -> None:
+        feature = Feature(
+            FeatureName("a__cleaned_text"), Options({TextCleaningFeatureGroup.CLEANING_OPERATIONS: "normalize"})
+        )
+        feature_set = FeatureSet()
+        feature_set.add(feature)
+
+        result = impl.calculate(TextCleaningFeatureGroup, make_data(), feature_set, None)
+
+        assert list(result["a__cleaned_text"]) == ["y"]
+
+    def test_extract_operations_returns_the_bare_string_as_one_operation(self) -> None:
+        feature = Feature(
+            FeatureName("a__cleaned_text"), Options({TextCleaningFeatureGroup.CLEANING_OPERATIONS: "normalize"})
+        )
+
+        operations, _ = TextCleaningFeatureGroup._extract_operations_and_source_feature(feature)
+
+        assert list(operations) == ["normalize"]

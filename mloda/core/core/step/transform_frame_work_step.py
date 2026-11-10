@@ -131,9 +131,6 @@ class TransformFrameworkStep(Step):
 
         if location:
             cfw.upload_finished_data(location)
-            # upload_finished_data overwrites cfw.data with the Arrow transport copy; restore the
-            # native object so a same-process consumer of this cfw does not see the transport type.
-            cfw.set_data(data)
             if self.read_by_join:
                 cfw_register.add_uuid_flyway_datasets(cfw.uuid, set(self.copy_readers))
             return data

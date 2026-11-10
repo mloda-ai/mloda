@@ -804,7 +804,9 @@ not by provenance: once any feature in that scope forwards the key, every featur
 scope splits on it, including a sibling that set the same key directly in plain
 context. A key that no feature in scope ever forwards stays metadata and does not
 split. This isolates per-value results that previously collapsed into one computation
-where a single value silently won.
+where a single value silently won. Same-named copies that differ in undeclared context keys
+but read the same inputs on one framework are rejected; use the same values,
+`cascade_context_keys`, or a forwarded group option.
 
 ### Previewing the forwarded options
 

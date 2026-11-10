@@ -205,7 +205,7 @@ MDB_CHAINED = "mdb_src__mdbop_q_b__mdbop_r_c"
 def _run_direct_and_chained(
     calls: list[list[str]],
     extender: Extender | None = None,
-    framework: type[Any] = PythonDictFramework,
+    framework: type[Any] | list[type[Any]] = PythonDictFramework,
     append_columns: bool = False,
     direct_first: bool = True,
     include_direct: bool = True,
@@ -214,6 +214,9 @@ def _run_direct_and_chained(
     chained_options: Options | None = None,
     direct_options: Options | None = None,
     extra_requests: list[Feature] | None = None,
+    direct_compute_framework: str | None = None,
+    include_chained: bool = True,
+    replaces_rows: bool = False,
 ) -> list[Any]:
     fg = make_name_bound_fg(
         "Mdb",
@@ -224,15 +227,21 @@ def _run_direct_and_chained(
         input_column="mdb_src",
         calls=calls,
         append_columns=append_columns,
+        replaces_rows=replaces_rows,
     )
     source = make_root_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
     direct = Feature(
-        MDB_DIRECT, direct_options if direct_options is not None else Options(), data_type=direct_data_type
+        MDB_DIRECT,
+        direct_options if direct_options is not None else Options(),
+        data_type=direct_data_type,
+        compute_framework=direct_compute_framework,
     )
     chained = Feature(MDB_CHAINED, chained_options if chained_options is not None else Options())
     requests = [direct, chained] if direct_first else [chained, direct]
     if not include_direct:
         requests = [chained]
+    if not include_chained:
+        requests = [direct]
     requests = requests + (extra_requests or [])
     global_filter = None
     if filter_on is not None:
@@ -242,7 +251,7 @@ def _run_direct_and_chained(
         mloda.run_all(
             requests,
             global_filter=global_filter,
-            compute_frameworks=[framework],
+            compute_frameworks=framework if isinstance(framework, list) else [framework],
             plugin_collector=PluginCollector.enabled_feature_groups({fg, source}),
             function_extender={extender} if extender is not None else None,
         )
@@ -511,20 +520,84 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         [(PyArrowTable, True), (PythonDictFramework, False)],
         ids=["pyarrow_append", "python_dict"],
     )
+    @pytest.mark.parametrize("pinned", ["one_framework", "direct_pinned_of_two"])
+    @pytest.mark.parametrize("direct_data_type", [None, DataType.INT64], ids=["untyped", "typed"])
     def test_direct_and_propagating_consumer_with_differing_context_raises(
-        self, framework: type[Any], append_columns: bool, direct_first: bool
+        self,
+        framework: type[Any],
+        append_columns: bool,
+        direct_first: bool,
+        pinned: str,
+        direct_data_type: DataType | None,
     ) -> None:
         calls: list[list[str]] = []
         propagate = Options(context={"x": 1}, propagate_context_keys=frozenset({"x"}))
+        two = pinned == "direct_pinned_of_two"
         with pytest.raises(ValueError, match=rf"{re.escape(MDB_DIRECT)}.*\bx\b"):
+            _run_direct_and_chained(
+                calls,
+                framework=[PyArrowTable, PythonDictFramework] if two else framework,
+                append_columns=append_columns,
+                direct_first=direct_first,
+                chained_options=propagate,
+                direct_data_type=direct_data_type,
+                direct_compute_framework=framework.__name__ if two else None,
+            )
+        assert calls == []
+
+    @pytest.mark.parametrize("shape", ["two_direct", "direct_and_chained_input"])
+    @pytest.mark.parametrize(
+        ("framework", "append_columns"),
+        [(PyArrowTable, True), (PythonDictFramework, False)],
+        ids=["pyarrow_append", "python_dict"],
+    )
+    def test_same_named_copies_with_differing_plain_context_raise(
+        self, framework: type[Any], append_columns: bool, shape: str
+    ) -> None:
+        calls: list[list[str]] = []
+        other = Options(context={"y": 1})
+        two_direct = shape == "two_direct"
+        with pytest.raises(ValueError, match=rf"{re.escape(MDB_DIRECT)}.*\by\b"):
             _run_direct_and_chained(
                 calls,
                 framework=framework,
                 append_columns=append_columns,
-                direct_first=direct_first,
-                chained_options=propagate,
+                include_chained=not two_direct,
+                direct_options=None if two_direct else other,
+                extra_requests=[Feature(MDB_DIRECT, other)] if two_direct else None,
             )
         assert calls == []
+
+    def test_two_direct_copies_with_differing_context_on_different_frameworks_succeed(self) -> None:
+        calls: list[list[str]] = []
+        results = _run_direct_and_chained(
+            calls,
+            framework=[PyArrowTable, PythonDictFramework],
+            append_columns=False,
+            include_chained=False,
+            direct_compute_framework="PyArrowTable",
+            extra_requests=[Feature(MDB_DIRECT, Options(context={"y": 1}), compute_framework="PythonDictFramework")],
+        )
+        assert len(calls) == 2
+        assert all(c.count(MDB_DIRECT) == 1 for c in calls)
+        assert len(results) == 2
+
+    def test_replaces_rows_group_with_split_context_on_one_framework_succeeds(self) -> None:
+        """All copies resolve to PyArrowTable; each replaces_rows step writes its own frame, so the split copies do not collide."""
+        calls: list[list[str]] = []
+        propagate = Options(context={"x": 1}, propagate_context_keys=frozenset({"x"}))
+        results = _run_direct_and_chained(
+            calls,
+            framework=[PyArrowTable, PythonDictFramework],
+            append_columns=False,
+            replaces_rows=True,
+            direct_compute_framework="PyArrowTable",
+            chained_options=propagate,
+        )
+        for name in (MDB_DIRECT, MDB_CHAINED):
+            (frame,) = [r for r in results if name in (r if isinstance(r, dict) else r.column_names)]
+            assert list(frame[name] if isinstance(frame, dict) else frame[name].to_pylist()) == [1, 2]
+        assert len(calls) == 3
 
     def test_two_consumers_propagating_different_values_into_shared_input_raise(self) -> None:
         calls: list[list[str]] = []
@@ -560,8 +633,8 @@ class TestRuntimeDefaultMaterializationEndToEnd:
     @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
     @pytest.mark.parametrize(
         "direct_data_type, direct_options",
-        [(DataType.INT64, None), (None, Options(context={"x": 1}))],
-        ids=["typed_direct", "direct_with_same_value"],
+        [(DataType.INT64, Options(context={"x": 1})), (None, Options(context={"x": 1}))],
+        ids=["typed_direct_with_same_value", "direct_with_same_value"],
     )
     def test_propagated_context_with_direct_succeeds(
         self, direct_first: bool, direct_data_type: DataType | None, direct_options: Options | None

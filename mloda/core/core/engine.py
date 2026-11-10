@@ -299,7 +299,6 @@ class Engine:
         with reader_probe_scope(probe_scope):
             self.setup_features_recursion(features)
         self._fold_into_narrower_twins()
-        self._reject_twins_sharing_a_frame()
         with reader_probe_scope(probe_scope):
             self._load_result_index_columns()
 
@@ -336,6 +335,7 @@ class Engine:
         resolver.set_nodes_per_feature_group()
 
         planned_queue = resolver.resolve_links()
+        self._reject_twins_sharing_a_frame()
         resolver.resolver_links.warn_on_unjoined_links()
 
         planned_queue = resolver.resolver_compute_framework.links(
@@ -813,46 +813,63 @@ class Engine:
         return existing
 
     def _reject_twins_sharing_a_frame(self) -> None:
-        """Rejects same-named copies split only by a pushed-down context key while reading the same inputs."""
+        """Rejects same-named copies with differing undeclared context on one framework reading the same inputs."""
         for group_class, collection in sorted(
             self.feature_group_collection.items(), key=lambda item: format_feature_group_class(item[0])
         ):
             split_keys = frozenset(k for f in collection for k in f.options.inherited_context_keys)
-            if not split_keys:
-                continue
+            declared = group_class.declared_option_keys()
             buckets: dict[str, list[Feature]] = defaultdict(list)
-            for member in sorted(
-                collection, key=lambda f: (str(f._split_context_hashable(split_keys)), str(f.data_type), str(f.uuid))
-            ):
+            for member in collection:
                 buckets[str(member.name)].append(member)
-            for name, members in sorted(buckets.items()):
+            for name, bucket in sorted(buckets.items()):
+                members = [m for m in bucket if self.feature_link_parents.get(m.uuid)]
+                if len(members) < 2:
+                    continue
+                members.sort(
+                    key=lambda f: (
+                        str(_deep_hashable(f.options.context)),
+                        str(_deep_hashable(f.options.group)),
+                        str(f.data_type),
+                        str(f.uuid),
+                    )
+                )
                 for i, a in enumerate(members):
+                    parents = self.feature_link_parents.get(a.uuid)
+                    framework = a.get_compute_framework()
                     for b in members[i + 1 :]:
-                        parents = self.feature_link_parents.get(a.uuid)
-                        if (
-                            a.options == b.options
-                            and a.compute_frameworks == b.compute_frameworks
-                            and a.data_type == b.data_type
+                        if not (
+                            parents == self.feature_link_parents.get(b.uuid)
+                            and framework is b.get_compute_framework()
                             and a._input_data_match_key() == b._input_data_match_key()
-                            and parents
-                            and parents == self.feature_link_parents.get(b.uuid)
-                            and a._split_context_hashable(split_keys) != b._split_context_hashable(split_keys)
-                        ):
-                            keys = sorted(
-                                k
-                                for k in split_keys
-                                if (k in a.options.context) != (k in b.options.context)
-                                or (
-                                    k in a.options.context
-                                    and not _deep_equal(a.options.context[k], b.options.context[k])
-                                )
+                            and a.domain == b.domain
+                            and a.requested_parts == b.requested_parts
+                            and a.parts_only == b.parts_only
+                            and a.options == b.options
+                            and not _deep_equal(a.options.context, b.options.context)
+                            and not (
+                                group_class.replaces_rows()
+                                and a._split_context_hashable(split_keys) != b._split_context_hashable(split_keys)
                             )
+                        ):
+                            continue
+                        # Declared keys may derive from the name outside name_bindings; only undeclared ones prove it.
+                        keys = sorted(
+                            str(k)
+                            for k in set(a.options.context) | set(b.options.context)
+                            if str(k) not in declared
+                            and (
+                                (k in a.options.context) != (k in b.options.context)
+                                or not _deep_equal(a.options.context[k], b.options.context[k])
+                            )
+                        )
+                        if keys:
                             raise ValueError(
                                 f"Feature '{name}' of {format_feature_group_class(group_class)} is reached twice with "
-                                f"differing values for context key(s) {keys} pushed down from a consumer, but both "
-                                "copies read the same inputs, so they would write the same column into one frame. "
-                                "Give every request the same value, push the key with cascade_context_keys so the "
-                                "inputs split too, or make it a group option."
+                                f"differing values for context key(s) {keys}, but both copies read the same inputs on "
+                                f"{framework.get_class_name()}, so they would write the same column into one frame. "
+                                "Give every request the same values, push context keys with cascade_context_keys so "
+                                "the inputs split too, or make them group options forwarded to the inputs."
                             )
 
     def _fold_into_narrower_twins(self) -> None:

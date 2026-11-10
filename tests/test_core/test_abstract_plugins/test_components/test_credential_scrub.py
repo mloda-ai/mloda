@@ -488,6 +488,42 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
     ("pwd_non_root_path_sec", "PWD=/sec/hunter2z9", ["hunter2z9"], []),
     ("pwd_non_root_path_after_space", "x PWD=/sec/hunter2z9", ["hunter2z9"], []),
     ("max_token_eight_digits", "max_token=12345678", ["12345678"], []),
+    (
+        "ml_json_nested_object_leak",
+        '{\n  "secret": {\n    "value": "hunter2z9"\n  },\n  "user": "bob"\n}\nafter',
+        ["hunter2z9"],
+        ['"user": "bob"', "\nafter"],
+    ),
+    (
+        "ml_json_list_leak",
+        '{\n  "token": [\n    "hunter2z9"\n  ],\n  "user": "bob"\n}\nafter',
+        ["hunter2z9"],
+        ['"user": "bob"', "\nafter"],
+    ),
+    (
+        "ml_pprint_wrapped_string_leak",
+        "{'password': 'aaa'\n             'hunter2z9',\n 'user': 'bob'}\nafter",
+        ["hunter2z9"],
+        ["'user': 'bob'", "\nafter"],
+    ),
+    (
+        "ml_pprint_wrapped_list_leak",
+        "{'token': ['aaa',\n           'hunter2z9'],\n 'user': 'bob'}\nafter",
+        ["hunter2z9"],
+        ["'user': 'bob'", "\nafter"],
+    ),
+    (
+        "ml_json_list_two_secret_keys_leak",
+        '{\n  "token": [\n    "hunter2z9"\n  ],\n  "password": "q8w7e6r5"\n}',
+        ["hunter2z9", "q8w7e6r5"],
+        ['"token"', '"password"'],
+    ),
+    (
+        "ml_closed_single_line_sibling_line_kept",
+        "{'password': 'hunter2z9',\n 'user': 'bob'}",
+        ["hunter2z9"],
+        ["'user': 'bob'"],
+    ),
 ]
 
 
@@ -549,6 +585,72 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
         "multiline_pprint_password_exact",
         "{'user': 'u',\n 'password': 'hunter2z9'}",
         "{'user': 'u',\n 'password': '***'}",
+    ),
+    (
+        "ml_json_nested_object_keeps_sibling",
+        '{\n  "secret": {\n    "value": "hunter2z9"\n  },\n  "user": "u"\n}',
+        '{\n  "secret": "***",\n  "user": "u"\n}',
+    ),
+    (
+        "ml_json_list_keeps_sibling",
+        '{\n  "token": [\n    "hunter2z9"\n  ],\n  "user": "u"\n}',
+        '{\n  "token": "***",\n  "user": "u"\n}',
+    ),
+    (
+        "ml_json_nested_object_crlf",
+        '{\r\n  "secret": {\r\n    "value": "hunter2z9"\r\n  },\r\n  "user": "u"\r\n}',
+        '{\r\n  "secret": "***",\r\n  "user": "u"\r\n}',
+    ),
+    (
+        "ml_json_unclosed_object_stops_at_sibling_key",
+        '{\n  "secret": {\n    "a": "hunter2z9",\n  "token": "T9x8y7"\n}',
+        '{\n  "secret": "***",\n  "token": "***"\n}',
+    ),
+    (
+        "ml_pprint_wrapped_string_first_key",
+        "{'password': 'aaa'\n             'hunter2z9',\n 'user': 'x'}",
+        "{'password': '***',\n 'user': 'x'}",
+    ),
+    (
+        "ml_pprint_wrapped_string_later_key",
+        "{'user': 'x',\n 'password': 'aaa'\n             'hunter2z9',\n 'host': 'x'}",
+        "{'user': 'x',\n 'password': '***',\n 'host': 'x'}",
+    ),
+    (
+        "ml_pprint_wrapped_string_then_secret_sibling",
+        "{'password': 'aaa'\n             'hunter2z9',\n 'token': 'zzz'}",
+        "{'password': '***',\n 'token': '***'}",
+    ),
+    (
+        "ml_pprint_wrapped_list",
+        "{'token': ['aaa',\n           'hunter2z9'],\n 'user': 'x'}",
+        "{'token': '***',\n 'user': 'x'}",
+    ),
+    (
+        "ml_pprint_continuation_with_paren_closer",
+        "{'password': 'aaa'\n             'hunter2z9')}",
+        "{'password': '***')}",
+    ),
+    (
+        "ml_pprint_continuation_with_brace_closer_and_comma",
+        "{'password': 'aaa'\n             'hunter2z9'},\n 'user': 'x'",
+        "{'password': '***'},\n 'user': 'x'",
+    ),
+    ("ml_unterminated_opener_masks_to_end", '{"password": [\n   "hunter2z9",\n   "b"', '{"password": "***"'),
+    (
+        "ml_closed_single_line_value_then_sibling_line_unchanged",
+        "{'password': 'hunter2z9',\n 'user': 'x'}",
+        "{'password': '***',\n 'user': 'x'}",
+    ),
+    (
+        "ml_unterminated_opener_keeps_comma_lead_of_next_key",
+        '{\n  "token": [1, (2,\n  "password": "q8w7e6r5"\n}',
+        '{\n  "token": "***",\n  "password": "***"\n}',
+    ),
+    (
+        "ml_pprint_bytes_continuation",
+        "{'token': b'aaa'\n           b'q8w7bytes',\n 'user': 'x'}",
+        "{'token': '***',\n 'user': 'x'}",
     ),
     ("closer_quote_before_colon_kept", "pwd='}':\"&", "pwd='***':\"&"),
     ("closer_brace_before_comma_kept", "pwd={,},&", "pwd={***},&"),
@@ -801,6 +903,7 @@ def test_text_without_url_is_unchanged() -> None:
         "pwd={pwd}x@",
         "fs.s3a.secret.key=X1234567",
         '{\n  "user": "u",\n  "password": "hunter2z9"\n}',
+        '{\n  "secret": {\n    "value": "hunter2z9"\n  },\n  "user": "u"\n}',
     ],
 )
 def test_scrub_credentials_is_idempotent(text: str) -> None:
@@ -1037,12 +1140,34 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
         (lambda k: "{'password': ((" + ",'password': ((x" * k, 5000, "repeated unterminated nested containers"),
         (lambda k: "{'password': " + "((a)," * k + ")}", 5000, "many balanced nested containers"),
         (lambda k: "{'password': " + "((((((a," * k, 5000, "repeated over-depth unterminated containers"),
+        (lambda k: "{'password': [\n" * k, 5000, "repeated multi-line single-quote openers"),
+        (lambda k: "{'password': ['\n" * k, 5000, "repeated multi-line openers with an open string"),
+        (lambda k: '{"password": ["\n' * k, 5000, "repeated multi-line double-quote openers"),
+        (lambda k: "{'password': 'a'\n" + "  'b'\n" * k, 5000, "a long string continuation"),
+        (
+            lambda k: '{\n "password": [\n' + '   "v",\n   "w\n' * k,
+            5000,
+            "a long unterminated multi-line opener with deeper lines",
+        ),
+        (lambda k: "{'password': (a)," * k, 10000, "many matches on one long line"),
+        (
+            lambda k: "y" * (40 * k) + "{'password': (a)," * k,
+            6000,
+            "many matches on one long line after a long prefix",
+        ),
     ],
     ids=[
         "unterminated_password_brace",
         "unterminated_nested_container",
         "balanced_nested_containers",
         "over_depth_unterminated_containers",
+        "ml_repeated_list_opener",
+        "ml_repeated_list_opener_open_string",
+        "ml_repeated_double_quote_opener",
+        "ml_long_string_continuation",
+        "ml_long_unterminated_deeper_lines",
+        "one_long_line_many_matches",
+        "one_long_line_many_matches_long_prefix",
     ],
 )
 def test_repeated_unterminated_password_brace_scrubs_fast(build: Callable[[int], str], n: int, what: str) -> None:
@@ -1961,6 +2086,19 @@ class TestRegisteredSecretsScope:
 
         assert _LITERAL not in masked
         assert "***" in masked
+
+    def test_a_multi_line_block_and_a_registered_literal_on_a_sibling_line_are_both_masked(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+        text = f'{{\n  "secret": {{\n    "value": "hunter2z9"\n  }},\n  "user": "{_LITERAL}"\n}}'
+        untracked = scrub_credentials(text)
+        with registered_secrets_scope(frozenset({_LITERAL})):
+            masked = scrub_credentials(text)
+
+        assert "hunter2z9" not in masked
+        assert _LITERAL not in masked
+        assert masked == '{\n  "secret": "***",\n  "user": "***"\n}'
+        assert masked == untracked.replace(_LITERAL, "***")
 
     def test_a_uri_dropping_userinfo_leaks_no_fragment_of_the_literal(self) -> None:
         from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope

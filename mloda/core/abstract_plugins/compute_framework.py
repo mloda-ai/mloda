@@ -1,4 +1,5 @@
 import contextlib
+import contextvars
 import functools
 import pickle  # nosec B403
 import time
@@ -12,11 +13,8 @@ from mloda.core.abstract_plugins.components.connection_requirement import Connec
 from mloda.core.abstract_plugins.components.credential_access import (
     CredentialFieldMissing,
     CredentialReadRefused,
+    hidden_credentials,
     readable,
-)
-from mloda.core.abstract_plugins.components.credential_scrub import (
-    current_identity_secrets,
-    current_registered_secrets,
 )
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
@@ -961,7 +959,7 @@ class ComputeFramework(ABC):
 
         fetch_extender = self.get_function_extender(ExtenderHook.INPUT_DATA_LOAD)
         gated = fetch_extender is not None and fetch_extender.never_fall_back
-        marker = InputDataLoadMarker(fetch_extender is not None, gated)
+        marker = InputDataLoadMarker(gated)
         from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 
         stamped = isinstance(features, FeatureSet)
@@ -969,23 +967,25 @@ class ComputeFramework(ABC):
         if stamped:
             features._load_marker = marker
         marker.framework = self
-        marker.secrets = current_registered_secrets()
-        marker.identity_secrets = current_identity_secrets()
         token = current_input_data_load_marker.set(marker)
         prior_calculating = self._calculating
         try:
             if extender is None and fetch_extender is None:
+                with hidden_credentials():
+                    marker.context = contextvars.copy_context()
                 return method(self.data, features)
 
             context = self._build_hook_context(hook, feature_group, features, facts)
             object.__setattr__(self, "_calculate_context", context)
             object.__setattr__(self, "_calculating", True)
-            marker.active = (self, context)
             with (
                 self.activate(),
                 context.activate(),
                 input_data_load_gate_scope() if gated else contextlib.nullcontext(),
             ):
+                # Taken after the framework is active, with credentials hidden even inside an outer open window.
+                with hidden_credentials():
+                    marker.context = contextvars.copy_context()
                 if extender is None:
                     return method(self.data, features)
                 return _invoke_extender(
@@ -996,12 +996,10 @@ class ComputeFramework(ABC):
                 )
         finally:
             object.__setattr__(self, "_calculating", prior_calculating)
-            marker.active = None
+            marker.context = None
             marker.framework = None
-            marker.secrets = frozenset()
-            marker.identity_secrets = frozenset()
             current_input_data_load_marker.reset(token)
-            if stamped and prior_marker is not None and prior_marker.active is not None:
+            if stamped and prior_marker is not None and prior_marker.context is not None:
                 features._load_marker = prior_marker
 
     @final
@@ -1208,7 +1206,7 @@ class ComputeFramework(ABC):
         if not self.__dict__.get(_SEAL_FLAG):
             return ambient
         marker = current_input_data_load_marker.get()
-        if (marker is not None and marker.active is None) or not self._calculating:
+        if (marker is not None and marker.context is None) or not self._calculating:
             return None
         return self._calculate_context
 

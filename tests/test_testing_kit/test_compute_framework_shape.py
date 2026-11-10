@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import inspect
 from collections.abc import Callable
 from typing import Any
@@ -194,9 +195,10 @@ def test_every_built_in_framework_is_shape_tested_and_none_is_stale() -> None:
         for cls in get_all_subclasses(ComputeFramework)
         if cls.__module__.startswith("mloda_plugins.") and not inspect.isabstract(cls)
     }
+    available_listed = {b[1] for b in BUILT_INS if b[2] is None or importlib.util.find_spec(b[2]) is not None}
     listed = {b[1] for b in BUILT_INS}
     assert sorted(discovered - listed - _SPARK_SHAPE_TESTED) == []
-    assert sorted(listed - discovered) == []
+    assert sorted((available_listed | _SPARK_SHAPE_TESTED) - discovered) == []
 
 
 SERVES_CONNECTION = [

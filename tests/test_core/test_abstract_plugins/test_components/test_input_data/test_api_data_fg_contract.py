@@ -14,7 +14,7 @@ from mloda.provider import ApiDataFG, Cause, SourceFeatureGroup
 from mloda.steward import ReaderProbeScope, reader_probe_scope
 from mloda.user import Feature
 
-_TWO_SETS = {"k": ("api_col",), "k2": ("api_col", "other_col")}
+_TWO_SETS = {"k": ("api_col",), "k2": ("other_col",)}
 
 
 class TestApiDataFGContract(SourceFeatureGroupTestMixin):
@@ -24,6 +24,7 @@ class TestApiDataFGContract(SourceFeatureGroupTestMixin):
     expected_source = "api_data:k"
     switched_off = {
         "test_a_refusing_input_data_match_gate_keeps_the_source_untouched_and_reports_the_reason": Cause.OTHER,
+        "test_a_handle_of_another_kind_yields_no_sources": Cause.OTHER,
         "test_an_unknown_handle_records_a_rejection_listing_the_known_handles": Cause.OTHER,
         "test_a_non_str_handle_is_no_narrowing_and_is_rejected_by_the_option_check": Cause.OTHER,
         "test_pointed_with_a_missing_column_aborts_naming_source_and_columns": Cause.OTHER,
@@ -43,6 +44,7 @@ class TestApiDataFGContract(SourceFeatureGroupTestMixin):
     def own_pointer(self) -> Any:
         return "k"
 
+    # A pointer must name a set in the collection; the second-set case is test_a_pointer_resolves_against_the_collections_sets.
     def other_pointer(self) -> tuple[Any, str]:
         return "k", "api_data:k"
 
@@ -80,11 +82,20 @@ class TestApiDataFGContract(SourceFeatureGroupTestMixin):
     def test_an_unknown_handle_records_a_rejection_listing_the_known_handles(self) -> None:
         feature = Feature(self.present_column, self._options(context={HANDLE_OPTION: "unknown_handle_for_suite"}))
         assert self._claims(feature, self.own_dac())
+        assert self._claimed_match(feature).source == self.expected_source
+
+    # Diverges: a handle of another kind is ignored, so the own source is still claimed.
+    def test_a_handle_of_another_kind_yields_no_sources(self) -> None:
+        _, handle = self.foreign_handle_dac()
+        feature = Feature(self.present_column, self._options(context={HANDLE_OPTION: handle}))
+        assert self._claims(feature, self.own_dac())
+        assert self._claimed_match(feature).source == self.expected_source
 
     # Diverges: a non-str handle is ignored too, not rejected.
     def test_a_non_str_handle_is_no_narrowing_and_is_rejected_by_the_option_check(self) -> None:
         feature = Feature(self.present_column, self._options(context={HANDLE_OPTION: ["own_handle"]}))
         assert self._claims(feature, self.own_dac())
+        assert self._claimed_match(feature).source == self.expected_source
 
     # Diverges: the pointer names a set that must be in the collection, so it resolves against own_dac.
     def test_pointed_with_a_missing_column_aborts_naming_source_and_columns(self) -> None:
@@ -137,8 +148,7 @@ class TestApiDataFGContract(SourceFeatureGroupTestMixin):
             self._resolve(self._pointed(self.present_column, "nope"), dac)
         message = str(exc_info.value)
         assert "nope" in message
-        assert "k" in message
-        assert "k2" in message
+        assert "['k', 'k2']" in message
         assert exc_info.value.result.eliminations[ApiDataFG].code is CoreDeclineCode.HANDLE_UNKNOWN
 
     def test_a_pointer_with_no_collection_aborts_with_no_known_keys(self) -> None:

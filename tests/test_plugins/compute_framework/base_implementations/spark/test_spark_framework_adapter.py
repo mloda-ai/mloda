@@ -74,7 +74,7 @@ def test_connection_lifecycle_keeps_session_alive(adapter: Any, spark_session: A
 @pytest.mark.parametrize(
     "pair", [(DataType.INT64, DataType.STRING), (DataType.STRING, DataType.INT64)], ids=["int_str", "str_int"]
 )
-def test_duplicate_column_frame_keeps_both_columns_in_pair_order(adapter: Any, pair: tuple[DataType, DataType]) -> None:
+def test_duplicate_column_frame_keeps_names_and_types(adapter: Any, pair: tuple[DataType, DataType]) -> None:
     from pyspark.sql.types import LongType, StringType
 
     spark_types = {DataType.INT64: LongType(), DataType.STRING: StringType()}
@@ -85,7 +85,7 @@ def test_duplicate_column_frame_keeps_both_columns_in_pair_order(adapter: Any, p
         assert [f.dataType for f in frame.schema.fields] == [spark_types[pair[0]], spark_types[pair[1]]]
 
 
-def test_zero_column_frame_has_no_column_names(adapter: Any) -> None:
+def test_zero_column_frame_has_no_columns(adapter: Any) -> None:
     with adapter:
         assert adapter.column_names(adapter.zero_column_frame()) == []
 

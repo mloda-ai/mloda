@@ -359,20 +359,33 @@ class TestToxConfig:
         kept = [path for path in artifacts if not excluded(path)]
         assert not kept, f"bandit must exclude artifact paths: {kept}"
 
-    def test_mcp_env_fails_when_its_smoke_test_is_skipped(self) -> None:
-        """The mcp env runs one stdio smoke test; a failed `mcp` import must not skip it into a green run."""
+    def _env_setenv_defaults(self, env: str) -> tuple[dict[str, str], dict[str, str], str]:
         parser = self._tox_parser()
-        sections = [name for name in parser.sections() if name.replace(" ", "") == "testenv:mcp"]
-        assert len(sections) == 1, f"tox.ini needs exactly one [testenv:mcp] section: {parser.sections()}"
+        sections = [name for name in parser.sections() if name.replace(" ", "") == f"testenv:{env}"]
+        assert len(sections) == 1, f"tox.ini needs exactly one [testenv:{env}] section: {parser.sections()}"
         setenv: dict[str, str] = {}
         for line in parser.get(sections[0], "setenv", fallback="").splitlines():
             key, sep, value = line.partition("=")
             if sep:
                 setenv[key.strip()] = value.strip()
         defaults = {key: re.sub(r"^\{env:.*:([^:}]*)\}$", r"\1", value) for key, value in setenv.items()}
+        return setenv, defaults, parser.get(sections[0], "commands", fallback="")
+
+    def test_mcp_env_fails_when_its_smoke_test_is_skipped(self) -> None:
+        """The mcp env runs one stdio smoke test; a failed `mcp` import must not skip it into a green run."""
+        setenv, defaults, _ = self._env_setenv_defaults("mcp")
         assert defaults.get("CHECK_SKIP_COUNT") == "1", f"[testenv:mcp] must default CHECK_SKIP_COUNT to 1: {setenv}"
         assert defaults.get("EXPECTED_SKIP_COUNT") == "0", (
             f"[testenv:mcp] must default EXPECTED_SKIP_COUNT to 0: {setenv}"
+        )
+
+    def test_spark_env_gates_on_skip_count_and_runs_the_coverage_guard(self) -> None:
+        """The spark env must gate on its skip count and run the mixin coverage guard."""
+        setenv, defaults, commands = self._env_setenv_defaults("spark")
+        assert defaults.get("CHECK_SKIP_COUNT") == "1", f"[testenv:spark] must default CHECK_SKIP_COUNT to 1: {setenv}"
+        assert "EXPECTED_SKIP_COUNT" in defaults, f"[testenv:spark] must set EXPECTED_SKIP_COUNT: {setenv}"
+        assert "tests/test_plugins/test_mixin_consumer_coverage.py" in commands, (
+            f"[testenv:spark] must run the mixin coverage guard: {commands}"
         )
 
     def test_spark_env_uses_thread_timeout_method(self) -> None:

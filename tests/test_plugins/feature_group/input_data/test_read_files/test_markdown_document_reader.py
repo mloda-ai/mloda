@@ -3,13 +3,8 @@
 from __future__ import annotations
 
 
-from tests.mixins.compute_frameworks.framework_adapter_mixins import (
-    DocumentLoadsIntoFrameworkMixin,
-    PandasDataFrameAdapter,
-    PolarsDataFrameAdapter,
-    PyArrowTableAdapter,
-    PythonDictAdapter,
-)
+from mloda._testing.framework_adapter import PandasAdapter, PolarsAdapter, PyArrowAdapter, PythonDictAdapter
+from mloda._testing.source.loads_into_framework_suite import DocumentLoadsIntoFrameworkTestMixin
 from mloda._testing.source.read_document_suite import (
     ReadDocumentFGTestMixin,
 )
@@ -43,25 +38,29 @@ class TestMarkdownFG(ReadDocumentFGTestMixin):
     sample_text = SAMPLE_MARKDOWN
 
 
-class TestMarkdownLoadsIntoPythonDict(PythonDictAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("markdown_fg", "MarkdownFG")
+class TestMarkdownLoadsIntoPythonDict(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PythonDictAdapter
+    feature_group_class = lazy_document_group("markdown_fg", "MarkdownFG")
     suffix = ".md"
     text = SAMPLE_MARKDOWN
 
 
-class TestMarkdownLoadsIntoPyArrowTable(PyArrowTableAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("markdown_fg", "MarkdownFG")
+class TestMarkdownLoadsIntoPyArrowTable(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PyArrowAdapter
+    feature_group_class = lazy_document_group("markdown_fg", "MarkdownFG")
     suffix = ".md"
     text = SAMPLE_MARKDOWN
 
 
-class TestMarkdownLoadsIntoPandas(PandasDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("markdown_fg", "MarkdownFG")
+class TestMarkdownLoadsIntoPandas(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PandasAdapter
+    feature_group_class = lazy_document_group("markdown_fg", "MarkdownFG")
     suffix = ".md"
     text = SAMPLE_MARKDOWN
 
 
-class TestMarkdownLoadsIntoPolars(PolarsDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("markdown_fg", "MarkdownFG")
+class TestMarkdownLoadsIntoPolars(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PolarsAdapter
+    feature_group_class = lazy_document_group("markdown_fg", "MarkdownFG")
     suffix = ".md"
     text = SAMPLE_MARKDOWN

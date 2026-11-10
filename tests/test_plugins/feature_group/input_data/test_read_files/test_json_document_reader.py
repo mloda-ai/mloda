@@ -7,13 +7,8 @@ from pathlib import Path
 
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.mixins.compute_frameworks.framework_adapter_mixins import (
-    DocumentLoadsIntoFrameworkMixin,
-    PandasDataFrameAdapter,
-    PolarsDataFrameAdapter,
-    PyArrowTableAdapter,
-    PythonDictAdapter,
-)
+from mloda._testing.framework_adapter import PandasAdapter, PolarsAdapter, PyArrowAdapter, PythonDictAdapter
+from mloda._testing.source.loads_into_framework_suite import DocumentLoadsIntoFrameworkTestMixin
 from mloda._testing.source.read_document_suite import (
     ReadDocumentFGTestMixin,
 )
@@ -35,32 +30,36 @@ class TestJsonDocumentFG(ReadDocumentFGTestMixin):
     expected_content = CANONICAL
 
 
-class TestJsonDocumentLoadsIntoPythonDict(PythonDictAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("json_document_fg", "JsonDocumentFG")
+class TestJsonDocumentLoadsIntoPythonDict(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PythonDictAdapter
+    feature_group_class = lazy_document_group("json_document_fg", "JsonDocumentFG")
     suffix = ".json"
     context = HANDOVER
     text = PRETTY
     expected_text = CANONICAL
 
 
-class TestJsonDocumentLoadsIntoPyArrowTable(PyArrowTableAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("json_document_fg", "JsonDocumentFG")
+class TestJsonDocumentLoadsIntoPyArrowTable(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PyArrowAdapter
+    feature_group_class = lazy_document_group("json_document_fg", "JsonDocumentFG")
     suffix = ".json"
     context = HANDOVER
     text = PRETTY
     expected_text = CANONICAL
 
 
-class TestJsonDocumentLoadsIntoPandas(PandasDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("json_document_fg", "JsonDocumentFG")
+class TestJsonDocumentLoadsIntoPandas(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PandasAdapter
+    feature_group_class = lazy_document_group("json_document_fg", "JsonDocumentFG")
     suffix = ".json"
     context = HANDOVER
     text = PRETTY
     expected_text = CANONICAL
 
 
-class TestJsonDocumentLoadsIntoPolars(PolarsDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
-    document_group = lazy_document_group("json_document_fg", "JsonDocumentFG")
+class TestJsonDocumentLoadsIntoPolars(DocumentLoadsIntoFrameworkTestMixin):
+    adapter_class = PolarsAdapter
+    feature_group_class = lazy_document_group("json_document_fg", "JsonDocumentFG")
     suffix = ".json"
     context = HANDOVER
     text = PRETTY

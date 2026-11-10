@@ -80,6 +80,8 @@ class PandasSklearnPipeline(Implementation[SklearnPipelineFeatureGroup]):
         # Handle missing values by dropping rows with NaN
         # This is a simple strategy - more sophisticated handling could be added
         feature_data = feature_data.dropna()
+        if len(feature_data) == 0:
+            raise ValueError("Cannot fit sklearn pipeline on zero rows (no complete rows) without a fitted artifact.")
 
         # Convert to numpy array for sklearn
         return feature_data.values
@@ -109,6 +111,9 @@ class PandasSklearnPipeline(Implementation[SklearnPipelineFeatureGroup]):
 
         # Convert to numpy array and apply pipeline
         X = feature_data.values
+        if X.shape[0] == 0:
+            # One all-zero row gives the fitted width and dtype; slice back to zero rows.
+            return fitted_pipeline.transform(feature_data.reindex(range(1), fill_value=0).values)[:0]
         result = fitted_pipeline.transform(X)
 
         return result

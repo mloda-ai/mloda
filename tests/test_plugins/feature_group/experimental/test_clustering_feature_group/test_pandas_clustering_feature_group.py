@@ -10,6 +10,7 @@ import numpy as np
 
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import Feature
+from mloda.user import Options
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClustering
@@ -217,3 +218,66 @@ class TestPandasClustering:
         assert "feature1&feature2__cluster_kmeans_2" in result.columns
         assert "feature1&feature2__cluster_dbscan_auto" in result.columns
         assert "feature1&feature2__cluster_hierarchical_2" in result.columns
+
+
+CLUSTER_KINDS = [("kmeans", "2"), ("hierarchical", "2"), ("dbscan", "auto"), ("affinity", "auto")]
+
+
+class TestPandasClusteringOnZeroInputRows:
+    """Zero input rows give empty columns of the non-empty dtype."""
+
+    @staticmethod
+    def _cluster(kind: tuple[str, str], source_dtype: str, rows: int, *, probabilities: bool) -> pd.DataFrame:
+        pytest.importorskip("sklearn")
+        base = np.arange(rows) % 2
+        data = pd.DataFrame({"a": (base * 5 + np.arange(rows) * 0.01).astype(source_dtype)})
+        data["b"] = (base * 5 + np.arange(rows) * 0.02).astype(source_dtype)
+        name = f"a&b__cluster_{kind[0]}_{kind[1]}"
+        options = Options(context={ClusteringFeatureGroup.OUTPUT_PROBABILITIES: True}) if probabilities else Options()
+        features = FeatureSet()
+        features.add(Feature(name, options))
+        features.materialize_option_defaults(ClusteringFeatureGroup)
+        result: pd.DataFrame = PandasClustering.calculate(ClusteringFeatureGroup, data, features, None)
+        return result
+
+    @pytest.mark.parametrize("kind", CLUSTER_KINDS, ids=lambda k: k[0])
+    @pytest.mark.parametrize("source_dtype", ["float32", "float64", "int64"])
+    def test_zero_rows_give_an_empty_label_column_of_the_non_empty_dtype(
+        self, kind: tuple[str, str], source_dtype: str
+    ) -> None:
+        name = f"a&b__cluster_{kind[0]}_{kind[1]}"
+        non_empty = self._cluster(kind, source_dtype, 20, probabilities=False)
+        result = self._cluster(kind, source_dtype, 0, probabilities=False)
+
+        assert len(result) == 0
+        assert list(result.columns) == list(non_empty.columns)
+        assert result[name].dtype == non_empty[name].dtype
+
+    @pytest.mark.parametrize("kind", [("kmeans", "2"), ("hierarchical", "2")], ids=lambda k: k[0])
+    @pytest.mark.parametrize("source_dtype", ["float32", "float64", "int64"])
+    def test_zero_rows_with_probabilities_keep_the_fixed_k_columns_and_dtypes(
+        self, kind: tuple[str, str], source_dtype: str
+    ) -> None:
+        non_empty = self._cluster(kind, source_dtype, 20, probabilities=True)
+        result = self._cluster(kind, source_dtype, 0, probabilities=True)
+
+        assert len(result) == 0
+        assert list(result.columns) == list(non_empty.columns)
+        assert result.dtypes.to_dict() == non_empty.dtypes.to_dict()
+
+    @pytest.mark.parametrize("kind", [("dbscan", "auto"), ("affinity", "auto")], ids=lambda k: k[0])
+    def test_zero_rows_with_probabilities_keep_the_label_column_for_a_learned_count(
+        self, kind: tuple[str, str]
+    ) -> None:
+        name = f"a&b__cluster_{kind[0]}_{kind[1]}"
+        non_empty = self._cluster(kind, "float64", 20, probabilities=True)
+        result = self._cluster(kind, "float64", 0, probabilities=True)
+
+        assert len(result) == 0
+        assert result[name].dtype == non_empty[name].dtype
+        assert not [c for c in result.columns if f"{name}~" in c]
+
+    def test_zero_rows_still_reject_an_unknown_algorithm(self) -> None:
+        data = pd.DataFrame({"a": np.array([], dtype="float64"), "b": np.array([], dtype="float64")})
+        with pytest.raises(ValueError, match="Unsupported clustering algorithm"):
+            PandasClustering._perform_clustering(data, "bogus", 2, ["a", "b"])

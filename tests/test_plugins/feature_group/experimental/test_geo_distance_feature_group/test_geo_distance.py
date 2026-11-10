@@ -258,6 +258,13 @@ class TestPandasGeoDistance:
         assert distance[1] == 8
         assert distance[2] == 10
 
+    @pytest.mark.parametrize("distance_type", ["haversine", "euclidean", "manhattan"])
+    def test_zero_rows_keep_the_with_rows_dtype(self, distance_type: str) -> None:
+        with_rows = PandasGeoDistance._calculate_distance(self.df, distance_type, "point1", "point2")
+        zero_rows = PandasGeoDistance._calculate_distance(self.df.iloc[:0], distance_type, "point1", "point2")
+        assert len(zero_rows) == 0
+        assert zero_rows.dtype == with_rows.dtype
+
     def test_calculate_feature(self) -> None:
         """Test calculation of features."""
         # Create a feature set with haversine distance feature

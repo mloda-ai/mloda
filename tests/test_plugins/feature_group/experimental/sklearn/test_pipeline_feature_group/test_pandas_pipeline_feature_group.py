@@ -12,6 +12,8 @@ from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import Sklea
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipeline
 from mloda.provider import FeatureSet
 from mloda.user import Feature
+from mloda.user import Options
+from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
@@ -237,3 +239,53 @@ class TestPandasSklearnPipeline:
         assert_core_rejects_missing_input(
             PandasSklearnPipeline, df, "nonexistent__sklearn_pipeline_scaling", ("nonexistent",), ("feature1",)
         )
+
+
+NO_ROWS_MESSAGE = "Cannot fit sklearn pipeline on zero rows"
+
+
+class TestPandasSklearnPipelineOnZeroInputRows:
+    """Zero input rows give empty columns of the fitted width and dtype, or a clear error without an artifact."""
+
+    NAME = "a,b__sklearn_pipeline_scaling"
+
+    @classmethod
+    def _run(
+        cls, rows: int, dtype: str = "float64", options: Options | None = None, mode: str | None = None
+    ) -> tuple[pd.DataFrame, FeatureSet]:
+        pytest.importorskip("sklearn")
+        data = pd.DataFrame({"a": np.arange(rows).astype(dtype), "b": (np.arange(rows) * 2.0).astype(dtype)})
+        features = FeatureSet()
+        features.add(Feature(cls.NAME, options or Options()))
+        if mode == "save":
+            features.artifact_to_save = "requested"
+        elif mode == "load":
+            features.artifact_to_load = "requested"
+        return PandasSklearnPipeline.calculate(SklearnPipelineFeatureGroup, data, features, None), features
+
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    def test_zero_rows_with_a_loaded_artifact_keep_the_fitted_width_and_dtype(self, dtype: str, tmp_path: Any) -> None:
+        options = Options({SklearnArtifact.ARTIFACT_STORAGE_PATH: str(tmp_path)})
+        _, fit_set = self._run(4, dtype, options, "save")
+        SklearnArtifact.custom_saver(fit_set, fit_set.save_artifact)
+        non_empty, _ = self._run(4, dtype, options, "load")
+
+        result, features = self._run(0, dtype, options, "load")
+
+        assert len(result) == 0
+        assert list(result.columns) == list(non_empty.columns)
+        assert result.dtypes.to_dict() == non_empty.dtypes.to_dict()
+        assert features.save_artifact is None
+
+    def test_zero_rows_without_an_artifact_raise_a_clear_error_and_save_nothing(self) -> None:
+        with pytest.raises(ValueError, match=NO_ROWS_MESSAGE):
+            self._run(0, mode="save")
+
+    def test_all_nan_rows_without_an_artifact_raise_a_clear_error(self) -> None:
+        pytest.importorskip("sklearn")
+        data = pd.DataFrame({"a": [np.nan, np.nan], "b": [np.nan, np.nan]})
+        features = FeatureSet()
+        features.add(Feature(self.NAME))
+
+        with pytest.raises(ValueError, match=NO_ROWS_MESSAGE):
+            PandasSklearnPipeline.calculate(SklearnPipelineFeatureGroup, data, features, None)

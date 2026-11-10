@@ -357,3 +357,39 @@ class TestPandasDimensionalityReduction:
         # Check that the result has the expected columns
         assert "feature0,feature1,feature2__isomap_2d~dim1" in result.columns
         assert "feature0,feature1,feature2__isomap_2d~dim2" in result.columns
+
+
+class TestPandasDimensionalityReductionOnZeroInputRows:
+    """Zero input rows give empty columns of the non-empty dtype."""
+
+    @staticmethod
+    def _reduce(algorithm: str, source_dtype: str, rows: int, dimension: int = 2) -> pd.DataFrame:
+        pytest.importorskip("sklearn")
+        data = pd.DataFrame(
+            {f"f{i}": (np.arange(rows) % (i + 3) + i * 0.5).astype(source_dtype) for i in range(3)},
+        )
+        features = FeatureSet()
+        options = (
+            Options({DimensionalityReductionFeatureGroup.TSNE_MAX_ITER: 250}) if algorithm == "tsne" else Options()
+        )
+        features.add(Feature(f"f0,f1,f2__{algorithm}_{dimension}d", options))
+        features.materialize_option_defaults(DimensionalityReductionFeatureGroup)
+        return PandasDimensionalityReduction.calculate(DimensionalityReductionFeatureGroup, data, features, None)
+
+    @pytest.mark.parametrize("algorithm", ["pca", "tsne", "ica", "isomap"])
+    @pytest.mark.parametrize("source_dtype", ["float32", "float64", "int64"])
+    def test_zero_rows_give_empty_columns_of_the_non_empty_dtype(self, algorithm: str, source_dtype: str) -> None:
+        non_empty = self._reduce(algorithm, source_dtype, 12)
+        result = self._reduce(algorithm, source_dtype, 0)
+
+        reduced = [c for c in non_empty.columns if "__" in c]
+        assert len(reduced) == 2
+        assert len(result) == 0
+        assert [c for c in result.columns if "__" in c] == reduced
+        for column in reduced:
+            assert result[column].dtype == non_empty[column].dtype
+
+    @pytest.mark.parametrize("algorithm", ["pca", "tsne"])
+    def test_zero_rows_still_reject_a_dimension_not_below_the_source_count(self, algorithm: str) -> None:
+        with pytest.raises(ValueError, match="Target dimension .* must be less than the number of source features"):
+            self._reduce(algorithm, "float64", 0, dimension=3)

@@ -27,6 +27,8 @@ try:
     from sklearn.manifold import TSNE, Isomap
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
     from sklearn.preprocessing import StandardScaler
+    from sklearn.utils import check_array
+    from sklearn.utils.validation import FLOAT_DTYPES
 except ImportError:
     SKLEARN_AVAILABLE = False
 
@@ -118,15 +120,26 @@ class PandasDimensionalityReduction(Implementation[DimensionalityReductionFeatur
                 "Please install it with 'pip install scikit-learn'."
             )
 
+        # Check if dimension is valid
+        if dimension >= X_array.shape[1]:
+            raise ValueError(
+                f"Target dimension ({dimension}) must be less than the number of source features ({X_array.shape[1]})"
+            )
+
+        if X_array.shape[0] == 0:
+            # Empty result in the dtype a run with rows gives (t-SNE always returns float32).
+            dtype = (
+                np.float32
+                if algorithm == "tsne"
+                else check_array(X_array, ensure_min_samples=0, dtype=FLOAT_DTYPES).dtype
+            )
+            if algorithm not in ("pca", "tsne", "ica", "lda", "isomap"):
+                raise ValueError(f"Unsupported dimensionality reduction algorithm: {algorithm}")
+            return np.empty((0, dimension), dtype=dtype)
+
         # Standardize the features
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X_array)
-
-        # Check if dimension is valid
-        if dimension >= X_scaled.shape[1]:
-            raise ValueError(
-                f"Target dimension ({dimension}) must be less than the number of source features ({X_scaled.shape[1]})"
-            )
 
         # Perform dimensionality reduction based on the algorithm
         if algorithm == "pca":

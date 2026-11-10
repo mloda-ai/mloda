@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from itertools import product
 from typing import Any, NamedTuple
 
-from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter
+from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter, to_arrow_table
 from mloda._testing.result import CheckResult
 from mloda._testing.suite import assert_passed
 from mloda._testing.typed_data import TypedTestData
@@ -302,6 +302,7 @@ def _run(
     data: TypedTestData,
     names: list[str],
     base: Options,
+    arrow_types: Mapping[str, Any] | None = None,
 ) -> tuple[Any, str | None]:
     """Run through the adapter's ComputeFramework like a feature group step, then validate the output."""
 
@@ -311,7 +312,7 @@ def _run(
         for name in names:
             features.add(Feature(name, options=base))
         cfw = adapter.compute_framework()(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-        cfw.run_calculation(cls, features, None, adapter.from_typed(data))
+        cfw.run_calculation(cls, features, None, adapter.from_typed(data, arrow_types))
         cls.validate_output_features(cfw.data, features)
         return cfw.data
 
@@ -492,7 +493,12 @@ def _check_zero_rows(
 ) -> tuple[list[str], set[str]]:
     """The failures and the declared-type columns compared on zero rows without a type change."""
     empty = TypedTestData({n: (t, []) for n, t in data.types.items()})
-    out, error = _run(cls, adapter, empty, names, base)
+    list_columns = [n for n, t in data.types.items() if t == DataType.LIST]
+    arrow_types = None
+    if list_columns and adapter.capabilities.typed_columns:
+        schema = to_arrow_table(data).schema
+        arrow_types = {n: schema.field(n).type for n in list_columns}
+    out, error = _run(cls, adapter, empty, names, base, arrow_types)
     if error is not None:
         return [f"zero_rows: run on zero rows raised: {error}"], set()
     failures = []

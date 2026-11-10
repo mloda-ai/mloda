@@ -58,8 +58,7 @@ class PandasForecasting(Implementation[ForecastingFeatureGroup]):
         # shrink it so a shorter forecast cannot truncate a longer one already in the frame.
         values = result.reset_index(drop=True).to_numpy()
         new_len = max(len(data), len(values))
-        if len(data) != new_len:
-            data = data.reset_index(drop=True).reindex(range(new_len))
+        data = data.reset_index(drop=True).reindex(range(new_len))
         if len(values) < new_len:
             values = np.concatenate([values, np.full(new_len - len(values), np.nan)])
         data[feature_name] = values
@@ -75,7 +74,7 @@ class PandasForecasting(Implementation[ForecastingFeatureGroup]):
         source_column: str,
         time_filter_feature: str,
         model_artifact: Any | None = None,
-    ) -> tuple[pd.Series, dict[str, Any]]:
+    ) -> tuple[pd.Series, dict[str, Any] | None]:
         """
         Perform forecasting using scikit-learn models.
 
@@ -105,6 +104,9 @@ class PandasForecasting(Implementation[ForecastingFeatureGroup]):
 
         # Cast data to pandas DataFrame
         df = cast(pd.DataFrame, data)
+
+        if len(df) == 0:
+            return pd.Series([], dtype=float), None
 
         # Sort data by time
         df = df.sort_values(by=time_filter_feature).copy()
@@ -457,7 +459,7 @@ class PandasForecasting(Implementation[ForecastingFeatureGroup]):
         source_column: str,
         time_filter_feature: str,
         model_artifact: Any | None = None,
-    ) -> tuple[pd.Series, pd.Series, pd.Series, dict[str, Any]]:
+    ) -> tuple[pd.Series, pd.Series, pd.Series, dict[str, Any] | None]:
         """
         Perform forecasting with confidence intervals.
 
@@ -487,6 +489,9 @@ class PandasForecasting(Implementation[ForecastingFeatureGroup]):
 
         # Cast data to pandas DataFrame
         df = cast(pd.DataFrame, data)
+
+        if len(df) == 0:
+            return pd.Series([], dtype=float), pd.Series([], dtype=float), pd.Series([], dtype=float), None
 
         # Sort data by time
         df = df.sort_values(by=time_filter_feature).copy()

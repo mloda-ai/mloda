@@ -198,6 +198,7 @@ class TestForecastingFeatureGroup:
         assert isinstance(result, pd.Series)
 
         # Check that the artifact contains the expected keys
+        assert artifact is not None
         assert "model" in artifact
         assert "scaler" in artifact
         assert "last_trained_timestamp" in artifact
@@ -215,6 +216,7 @@ class TestForecastingFeatureGroup:
         assert isinstance(result2, pd.Series)
 
         # Check that the artifact contains the expected keys
+        assert artifact2 is not None
         assert "model" in artifact2
         assert "scaler" in artifact2
         assert "last_trained_timestamp" in artifact2
@@ -240,6 +242,7 @@ class TestForecastingFeatureGroup:
             assert isinstance(result, pd.Series)
 
             # Check that the artifact contains the expected keys
+            assert artifact is not None
             assert "model" in artifact
             assert "scaler" in artifact
             assert "last_trained_timestamp" in artifact
@@ -351,6 +354,41 @@ class TestForecastingFeatureGroup:
 
         assert np.allclose(result_df["sales__linear_forecast_14day"].to_numpy()[:30], self.df["sales"].to_numpy())
         assert np.allclose(result_df["sales__linear_forecast_7day"].to_numpy()[:30], self.df["sales"].to_numpy())
+
+    def test_replaces_rows_is_declared(self) -> None:
+        assert ForecastingFeatureGroup.replaces_rows() is True
+
+    @pytest.mark.parametrize("confidence_intervals", [False, True])
+    def test_zero_rows_give_zero_rows_with_float_forecast_columns_and_no_artifact(
+        self, confidence_intervals: bool
+    ) -> None:
+        name = "sales__linear_forecast_7day"
+        options = Options(group=self.options.group.copy(), context=self.options.context.copy())
+        if confidence_intervals:
+            options.add_to_group(ForecastingFeatureGroup.OUTPUT_CONFIDENCE_INTERVALS, True)
+        feature_set = FeatureSet()
+        feature_set.add(Feature(name, options))
+        feature_set.artifact_to_save = name
+        empty = self.df.iloc[:0].copy()
+
+        result = PandasForecasting.calculate(ForecastingFeatureGroup, empty, feature_set, None)
+
+        columns = [name, f"{name}~lower", f"{name}~upper"] if confidence_intervals else [name]
+        assert len(result) == 0
+        for column in columns:
+            assert pd.api.types.is_float_dtype(result[column].dtype), column
+        assert not feature_set.save_artifact
+
+    def test_calculate_does_not_mutate_its_input_frame_on_zero_rows(self) -> None:
+        empty = self.df.iloc[:0].copy()
+        before = empty.copy()
+        feature_set = FeatureSet()
+        feature_set.add(Feature("sales__linear_forecast_7day", self.options))
+
+        PandasForecasting.calculate(ForecastingFeatureGroup, empty, feature_set, None)
+
+        assert list(empty.columns) == list(before.columns)
+        pd.testing.assert_frame_equal(empty, before)
 
     def test_get_reference_time_column_default(self) -> None:
         """Test get_reference_time_column method returns default column name when no options provided."""

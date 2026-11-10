@@ -181,6 +181,11 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Opera
         DefaultOptionKeys.reference_time: TimeReferenceMixin.REFERENCE_TIME_SPEC,
     }
 
+    @classmethod
+    def replaces_rows(cls) -> bool:
+        """The result has history plus horizon rows on its own frame."""
+        return True
+
     @staticmethod
     def artifact() -> type[BaseArtifact] | None:
         """

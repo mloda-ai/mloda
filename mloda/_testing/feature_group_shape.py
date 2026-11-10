@@ -515,7 +515,7 @@ def _check_zero_rows(
     elif adapter.capabilities.typed_columns:
         for column in (c for c in columns if c in out_columns):
             mapped = _compared([column], names)
-            # input columns compare by their declared type
+            # an adapter may build an input column with another dtype on zero rows, so compare by declared type
             data_type = expected.get(mapped[0][1]) if mapped else data.types.get(column)
             exact = None if data_type is None else adapter.has_type(result, column, data_type)
             if exact is False:

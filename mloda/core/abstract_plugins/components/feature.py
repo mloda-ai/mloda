@@ -753,7 +753,7 @@ class Feature:
         return _deep_hashable(relevant)
 
     def _grouping_hash(self, split_keys: frozenset[str] | None, include_data_type: bool) -> int:
-        keys = self.options.inherited_context_keys if split_keys is None else split_keys
+        keys = self.options.split_context_keys if split_keys is None else split_keys
         compute_frameworks_hashable = (
             frozenset(self.compute_frameworks) if self.compute_frameworks is not None else None
         )
@@ -770,10 +770,10 @@ class Feature:
         (ExecutionPlan._merge_same_framework_groups), except artifact groups, overlapping names,
         differing filters or a variant conflict.
 
-        When split_keys is None it falls back to THIS feature's own inherited_context_keys, a
+        When split_keys is None it falls back to THIS feature's own split_context_keys, a
         per-feature convenience. Production grouping in
         ExecutionPlan.group_features_by_compute_framework_and_options passes the resolution-wide
-        union of every in-scope feature's inherited_context_keys; any caller performing grouping
+        union of every in-scope feature's split_context_keys; any caller performing grouping
         must pass that resolution-wide split_keys rather than relying on the per-feature default.
         data_type is excluded when None so None-typed features can join typed groups.
         """
@@ -783,9 +783,9 @@ class Feature:
         """similarity_hash without data_type, for lenient grouping of None-typed features.
 
         split_keys follows the same rule as similarity_hash: None falls back to THIS feature's own
-        inherited_context_keys (a per-feature convenience), whereas production grouping in
+        split_context_keys (a per-feature convenience), whereas production grouping in
         ExecutionPlan.group_features_by_compute_framework_and_options passes the resolution-wide
-        union of every in-scope feature's inherited_context_keys. Any caller performing grouping
+        union of every in-scope feature's split_context_keys. Any caller performing grouping
         must pass that resolution-wide split_keys rather than relying on the per-feature default.
         """
         return self._grouping_hash(split_keys, include_data_type=False)

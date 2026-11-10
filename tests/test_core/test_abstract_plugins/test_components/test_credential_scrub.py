@@ -73,6 +73,24 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
         ["jdbc:sqlserver://h"],
     ),
     (
+        "jdbc_password_param_spaced_around_equals",
+        "jdbc:sqlserver://h;password = SECRET",
+        ["SECRET"],
+        ["jdbc:sqlserver://h", "password = ***"],
+    ),
+    (
+        "jdbc_password_param_space_before_equals",
+        "jdbc:sqlserver://h;password =SECRET",
+        ["SECRET"],
+        ["jdbc:sqlserver://h", "password =***"],
+    ),
+    (
+        "jdbc_password_param_space_after_equals",
+        "jdbc:sqlserver://h;password= SECRET",
+        ["SECRET"],
+        ["jdbc:sqlserver://h", "password= ***"],
+    ),
+    (
         "libpq_dsn",
         "host=h password=SECRET dbname=d",
         ["SECRET"],
@@ -2214,6 +2232,26 @@ class TestScrubUriProjection:
                 "jdbc:sqlserver://h://S",
                 id="jdbc-double-colon-chain-cut-to-scheme",
             ),
+            pytest.param(
+                "jdbc:sqlserver://h;password = hunter2",
+                "jdbc:sqlserver://h;password = ***",
+                id="jdbc-space-split-param-keeps-key-for-keyword-pass",
+            ),
+            pytest.param(
+                "jdbc:sqlserver://h;password= hunter2",
+                "jdbc:sqlserver://h;password= ***",
+                id="jdbc-space-after-equals-keeps-key-for-keyword-pass",
+            ),
+            pytest.param(
+                "jdbc:sqlserver://h;user=u;password =hunter2",
+                "jdbc:sqlserver://h;user=u;password =***",
+                id="jdbc-space-split-param-after-complete-param",
+            ),
+            pytest.param(
+                "jdbc:sqlserver://h;encrypt=true was slow",
+                "jdbc:sqlserver://h was slow",
+                id="jdbc-complete-param-still-cut-at-whitespace",
+            ),
         ],
     )
     def test_scrub_keeps_host_and_path_only(self, uri: str, expected: str) -> None:
@@ -2243,6 +2281,12 @@ class TestScrubUriFailClosed:
                 "jdbc:sqlserver://host:1433;databaseName=db;user=a;password=hunter2",
                 "hunter2",
                 id="jdbc-sqlserver-semicolons",
+            ),
+            pytest.param("jdbc:sqlserver://host;password = hunter2", "hunter2", id="jdbc-param-space-before-equals"),
+            pytest.param("jdbc:sqlserver://host;password =hunter2", "hunter2", id="jdbc-param-space-around-equals"),
+            pytest.param("jdbc:sqlserver://host;password= hunter2", "hunter2", id="jdbc-param-space-after-equals"),
+            pytest.param(
+                "jdbc:sqlserver://host;user=u;password =hunter2", "hunter2", id="jdbc-param-split-after-prior-param"
             ),
             pytest.param("jdbc:db2://host:50000/DB:user=u;password=hunter2;", "hunter2", id="jdbc-db2-semicolon"),
             pytest.param("mongodb://host/db:password=hunter2", "hunter2", id="colon-then-equals-in-path-segment"),

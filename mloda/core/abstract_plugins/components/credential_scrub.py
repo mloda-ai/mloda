@@ -347,6 +347,19 @@ def _cut_key_value_path(path: str) -> str:
     return path
 
 
+def _jdbc_param_split(match: re.Match[str], path: str) -> bool:
+    """A space split a `;key=value` parameter: cutting the matched piece would orphan its `= value` half."""
+    text, end = match.string, match.end()
+    if end >= len(text) or text[end] not in " \t":
+        return False
+    if path.endswith("="):
+        return True
+    position = end
+    while position < len(text) and text[position] in " \t":
+        position += 1
+    return position < len(text) and text[position] == "="
+
+
 def _uri_projection(match: re.Match[str]) -> str | None:
     scheme, userinfo, host = match["scheme"], match["userinfo"], match["host"]
     # Host parameters ride along with the path: the same key=value and hidden-percent checks apply.
@@ -357,6 +370,10 @@ def _uri_projection(match: re.Match[str]) -> str | None:
     if scheme.startswith("jdbc:"):
         tail = _JDBC_TAIL_PATTERN.search(match.string, match.end())
         if any(mark in path + (tail[0] if tail else "") for mark in "=;@"):
+            if _jdbc_param_split(match, path):
+                # Keep the matched piece: the keyword pass masks the space-separated value (`pwd = SECRET` form),
+                # while a cut would stop at the space and leave the value behind without its key.
+                return f"{scheme}://{container}{host}{path}"
             return f"{scheme}://{container}{host}{_JDBC_PATH_CUT}"
     if any("=" in segment.partition(":")[2] for segment in path.split("/")):
         return None

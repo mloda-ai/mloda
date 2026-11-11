@@ -151,7 +151,6 @@ _ATOM = rf"(?:{_STRING_LITERAL}|[-+]?\.?\d[\w.+-]*|(?:true|false|null|True|False
 _PAIR_OR_ATOM = rf"(?:{_STRING_LITERAL}[ \t]*:[ \t]*{_ATOM}|{_ATOM})"
 _INLINE_CONTAINER = rf"[\[{{(][ \t]*(?:{_PAIR_OR_ATOM}(?:[ \t]*,[ \t]*{_PAIR_OR_ATOM})*[ \t,]*)?[\]}})]"
 _MEMBER = rf"(?:{_PAIR_OR_ATOM}|{_INLINE_CONTAINER})"
-# Inline container whose members may themselves be one-level inline containers.
 _INLINE_CONTAINER2 = rf"[\[{{(][ \t]*(?:{_MEMBER}(?:[ \t]*,[ \t]*{_MEMBER})*[ \t,]*)?[\]}})]"
 _ITEM = rf"(?:{_ATOM}|{_INLINE_CONTAINER2})"
 # A whole bare-item line of a list body; text may follow once a closer was seen.
@@ -179,7 +178,7 @@ def _indent_end(text: str, start: int) -> int:
 
 
 def _consistent_close(text: str, position: int) -> bool:
-    """A close is consistent when a delimiter, quote, backslash, line end or text end follows it."""
+    """Whether a delimiter, quote, backslash or line/text end follows the close."""
     after = _indent_end(text, position)
     return after >= len(text) or text[after] in ",:;]})\\'\"\r\n"
 

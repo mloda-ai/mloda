@@ -327,6 +327,14 @@ class SourceFeatureGroup(FeatureGroup):
         return False
 
     @classmethod
+    def _pointed_by_family_scope_only(cls, options: Options) -> bool:
+        """True when the scope names a concrete ancestor and no pointer key is in options."""
+        scope = current_feature_group_scope()
+        if scope is None or scope is cls or scope == cls.__name__:
+            return False
+        return not any(key in options for key in cls.pointer_keys())
+
+    @classmethod
     def select_implementation(
         cls,
         compute_framework: type[ComputeFramework],
@@ -559,6 +567,7 @@ class SourceFeatureGroup(FeatureGroup):
             return False
         base_name = cls.get_column_base_feature(name)
         pointed = cls.is_pointed(name, options, data_access_collection)
+        named = pointed and not cls._pointed_by_family_scope_only(options)
         foreign = None if pointed else cls.foreign_pointer(options)
         query_declined = foreign is None and QUERY_OPTION in options and not cls.serves_query_text()
         query_reason = (
@@ -578,7 +587,7 @@ class SourceFeatureGroup(FeatureGroup):
                 if declared is None:
                     declared = cls._declared_name(base_name)
                 if not declared:
-                    undeclared = pointed
+                    undeclared = named
                     continue
             if not all(key in options for key in route.required_options):
                 if foreign is None:
@@ -742,7 +751,7 @@ class SourceFeatureGroup(FeatureGroup):
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.NAME_NOT_DECLARED
             )
-        elif pointed:
+        elif named:
             reason = f"{cls.get_class_name()} was pointed at but found no source for '{name}'"
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND

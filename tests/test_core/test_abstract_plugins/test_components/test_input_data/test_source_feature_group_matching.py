@@ -873,6 +873,20 @@ class TestScopePointingRefinement:
             f"\nFor troubleshooting guide, see: {TROUBLESHOOTING_URL}"
         )
 
+    @pytest.mark.parametrize(
+        ("scope", "accessible"),
+        [(_AbstractToyMid, ToySourceFG), (_MidLacksColumn, _MidLacksColumn)],
+        ids=["abstract", "accessible"],
+    )
+    def test_an_abstract_or_accessible_scope_group_captures_no_exclusion(self, scope: type, accessible: type) -> None:
+        feature = Feature(COL, feature_group=scope)
+        excluded = {scope: "disabled by the PluginCollector"}
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, _plugins(accessible), None, None, excluded=excluded)
+
+        assert result.failure_kind == "none"
+        assert result.facts.scope_exclusions == ()
+
     def test_concrete_ancestor_scope_still_points_and_aborts_on_missing_column(self) -> None:
         feature = Feature(COL, feature_group=ToySourceFG)
         with pytest.raises(FeatureResolutionError, match="h1:toy"):
@@ -1535,10 +1549,17 @@ class TestForeignPointerMakesSearchedRoutesDecline:
 
 
 class TestUnreachablePointerRaises:
-    def _run(self, options: Options | None, feature_group: Any, collector: PluginCollector, folder: Path) -> None:
+    def _run(
+        self,
+        options: Options | None,
+        feature_group: Any,
+        collector: PluginCollector,
+        folder: Path,
+        name: str = "fpg_x",
+    ) -> None:
         write_csv(folder / "fpg_a.csv", {"fpg_x": [1]})
         mloda.run_all(
-            [Feature("fpg_x", options if options is not None else Options(), feature_group=feature_group)],
+            [Feature(name, options if options is not None else Options(), feature_group=feature_group)],
             compute_frameworks=[PyArrowTable],
             plugin_collector=collector,
             data_access_collection=DataAccessCollection(folders={"fpg_dir": str(folder)}),
@@ -1563,6 +1584,16 @@ class TestUnreachablePointerRaises:
         message = str(exc_info.value)
         assert expected in message
         assert "disabled by the PluginCollector" in message
+
+    @pytest.mark.parametrize("feature_group", [_DoubledFpgXFG, "_DoubledFpgXFG"], ids=["class", "name"])
+    def test_a_disabled_derived_group_scope_names_the_group_and_the_collector(
+        self, feature_group: type[FeatureGroup] | str, tmp_path: Path
+    ) -> None:
+        collector = PluginCollector.disabled_feature_groups({_DoubledFpgXFG})
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            self._run(None, feature_group, collector, tmp_path, DERIVED_DOUBLED)
+
+        assert "_DoubledFpgXFG is not accessible in this run: disabled by the PluginCollector." in str(exc_info.value)
 
     def test_a_pointer_at_a_strict_dropped_group_raises_naming_strict_mode(self, tmp_path: Path) -> None:
         from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry, register_plugin

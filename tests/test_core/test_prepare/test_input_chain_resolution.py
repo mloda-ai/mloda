@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 import traceback
 from collections import Counter
 from collections.abc import Callable, Iterator
@@ -16,6 +15,7 @@ from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
+from mloda.core.prepare import input_chain
 from mloda.core.prepare.input_chain import normalize_input_name, resolution_environment, resolution_key
 from mloda.provider import DefaultOptionKeys, FeatureGroup, escalate_match_abort
 from mloda.user import (
@@ -565,37 +565,33 @@ def test_plugin_universe_is_walked_on_every_call_outside_a_scope() -> None:
     assert plugins.walks == 3
 
 
-_BIG = 100_000
-
-
 @pytest.mark.parametrize("wrap", [lambda v: v, lambda v: Options({"big": v})], ids=["bare", "options"])
 @pytest.mark.parametrize(
     "make",
     [
-        pytest.param(lambda: list(range(_BIG)), id="list-int"),
-        pytest.param(lambda: [f"s{i}" for i in range(_BIG)], id="list-str"),
-        pytest.param(lambda: tuple(range(_BIG)), id="tuple-int"),
-        pytest.param(lambda: set(range(_BIG)), id="set-int"),
-        pytest.param(lambda: [i if i % 2 == 0 else i + 0.5 for i in range(_BIG)], id="list-int-float"),
-        pytest.param(lambda: [i if i % 2 == 0 else None for i in range(_BIG)], id="list-int-none"),
+        pytest.param(lambda n: list(range(n)), id="list-int"),
+        pytest.param(lambda n: [f"s{i}" for i in range(n)], id="list-str"),
+        pytest.param(lambda n: tuple(range(n)), id="tuple-int"),
+        pytest.param(lambda n: set(range(n)), id="set-int"),
+        pytest.param(lambda n: [i if i % 2 == 0 else i + 0.5 for i in range(n)], id="list-int-float"),
+        pytest.param(lambda n: [i if i % 2 == 0 else None for i in range(n)], id="list-int-none"),
     ],
 )
 def test_flat_scalar_value_is_snapshotted_cheaper_than_one_call_per_element(
-    make: Callable[[], Any], wrap: Callable[[Any], Any]
+    make: Callable[[int], Any], wrap: Callable[[Any], Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    value = make()
-    wrapped = wrap(value)
-    ref_cpu = key_cpu = float("inf")
-    for _ in range(3):
-        start = time.process_time()
-        [resolution_key(v) for v in value]
-        ref_cpu = min(ref_cpu, time.process_time() - start)
-        start = time.process_time()
-        resolution_key(wrapped)
-        key_cpu = min(key_cpu, time.process_time() - start)
-        if key_cpu * 3 < ref_cpu:
-            break
-    assert key_cpu * 3 < ref_cpu, f"snapshot cpu {key_cpu:.4f}s not 3x below per-element {ref_cpu:.4f}s"
+    n = 1_000
+    calls = 0
+    original = input_chain.resolution_key
+
+    def counting(*args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(input_chain, "resolution_key", counting)
+    input_chain.resolution_key(wrap(make(n)))
+    assert 0 < calls < n, f"resolution_key called {calls} times for {n} elements"
 
 
 @pytest.mark.parametrize(

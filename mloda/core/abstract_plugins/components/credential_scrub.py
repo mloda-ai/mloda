@@ -123,11 +123,22 @@ _NEST_DEPTH = 3
 
 # The lead may carry a repr-escaped newline (`\n`, `\\n`).
 # Anchored on a `{`/`,` lead so prose like `invalid password: too short` or unquoted `password: X` is left alone.
+# A key quote may carry a backslash run (repr or JSON dump).
+# A bare closing quote must follow a delimiter-free run; a quote after any backslash run is content.
+# `:` is not a delimiter, or a value could close at the next key's quote and leave that key's secret unmatched.
+_BARE_DELIMITER = r"""[\s,;}\])\\'"]|\Z"""
+_BARE_STRING = (
+    rf"b?'(?:[^'\\\n]|\\+['\"]|\\.|'(?!{_BARE_DELIMITER}))*+(?:'(?={_BARE_DELIMITER})|(?=\r?\n|\Z))"
+    rf"|b?\"(?:[^\"\\\n]|\\+['\"]|\\.|\"(?!{_BARE_DELIMITER}))*+(?:\"(?={_BARE_DELIMITER})|(?=\r?\n|\Z))"
+)
 _QUOTED_KEY_PATTERN = re.compile(
-    r"(?P<lead>[{,](?:\s|\\+[nrt])*)(?P<quote>['\"])(?P<keyword>[\w.-]*" + _SECRET_NAME + r")(?P=quote)[ \t]*:[ \t]*"
-    r"(?P<value>b?'(?:[^'\\\n]|\\.)*'|b?\"(?:[^\"\\\n]|\\.)*\""
-    rf"|\[{_container_body(']', _NEST_DEPTH)}\]?|\{{{_container_body('}', _NEST_DEPTH)}\}}?"
-    rf"|(?:[A-Za-z_][\w.]*)?\({_container_body(')', _NEST_DEPTH)}\)?|[^,}}\s]*)",
+    r"(?P<lead>[{,](?:\s|\\+[nrt])*)(?P<quote>(?P<esc>\\+)?['\"])(?P<keyword>[\w.-]*"
+    + _SECRET_NAME
+    + r")(?P=quote)[ \t]*:[ \t]*"
+    rf"(?P<value>{_BARE_STRING}|(?P<vq>b?\\+['\"])"
+    r"|(?(esc)(?:[A-Za-z_][\w.]*)?[\[{(]|(?:"
+    rf"\[{_container_body(']', _NEST_DEPTH)}\]?|\{{{_container_body('}', _NEST_DEPTH)}\}}?"
+    rf"|(?:[A-Za-z_][\w.]*)?\({_container_body(')', _NEST_DEPTH)}\)?))|[^,}}\s]*)",
     re.IGNORECASE,
 )
 _STRING_LITERAL = r"b?(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\")"
@@ -150,10 +161,8 @@ _OPEN_HEAD_LINE = re.compile(
 )
 _COMMA_AHEAD = re.compile(r"[ \t\r\n]*,")
 _ESCAPED_NEWLINE = r"(?:\\+r)?\\+n"
-_ESCAPED_CONTINUATION = re.compile(
-    rf"{_ESCAPED_NEWLINE}(?:[ \t]|\\+t)+(?P<literal>{_STRING_LITERAL})"
-    rf"[ \t,]*(?:(?P<closer>[\])}}])[\])}}, \t]*|(?={_ESCAPED_NEWLINE}|['\"]|\Z))"
-)
+_ESCAPED_CHUNK_HEAD = re.compile(rf"{_ESCAPED_NEWLINE}(?:[ \t]|\\+t)+(?=b?['\"]|b?\\+['\"])")
+_ESCAPED_CHUNK_TAIL = re.compile(rf"[ \t,]*(?:(?P<closer>[\])}}])[\])}}, \t]*|(?={_ESCAPED_NEWLINE}|['\"]|\Z))")
 _FLAT_BODY_LINE = re.compile(
     r"""b?['"]|[-+.]?\d|[\])},]|(?:true|false|null|True|False|None|NaN|-?Infinity)\b|[\[{(][ \t]*(?:[\]})][ \t,]*)?(?=\r?\n|\Z)"""
 )
@@ -164,6 +173,31 @@ def _indent_end(text: str, start: int) -> int:
     while start < len(text) and text[start] in " \t":
         start += 1
     return start
+
+
+def _string_end(text: str, start: int) -> tuple[int, bool]:
+    """End of the string opened at start, and whether it closed (else line end).
+    Opened by backslash run r0, it closes at the next same quote whose run r has r % (2 * (r0 + 1)) == r0."""
+    size = len(text)
+    body = start
+    while body < size and text[body] == "\\":
+        body += 1
+    if body >= size:
+        return size, False
+    quote, opening = text[body], body - start
+    period = 2 * (opening + 1)
+    run = 0
+    for i in range(body + 1, size):
+        char = text[i]
+        if char == "\\":
+            run += 1
+        elif char == "\n":
+            return i, False
+        else:
+            if char == quote and run % period == opening:
+                return i + 1, True
+            run = 0
+    return size, False
 
 
 def _container_end(text: str, opener: int, key_indent: int) -> int:
@@ -178,11 +212,14 @@ def _container_end(text: str, opener: int, key_indent: int) -> int:
     i = opener
     while i < size:
         char = text[i]
+        if char == "\\":
+            j = i
+            while j < size and text[j] == "\\":
+                j += 1
+            i = _string_end(text, i)[0] if j < size and text[j] in "'\"" else j
+            continue
         if char in "'\"":
-            j = i + 1
-            while j < size and text[j] != "\n" and text[j] != char:
-                j += 2 if text[j] == "\\" and j + 1 < size and text[j + 1] != "\n" else 1
-            i = j + 1 if j < size and text[j] == char else j
+            i = _string_end(text, i)[0]
             continue
         if char in "[{(":
             stack.append(char)
@@ -247,19 +284,37 @@ def _string_continuation_end(text: str, end: int, key_indent: int) -> int:
     return end
 
 
+def _escaped_chunk(text: str, position: int) -> tuple[int, int, bool] | None:
+    """(string end, chunk end, ends the value) of the escaped-newline chunk at position."""
+    head = _ESCAPED_CHUNK_HEAD.match(text, position)
+    if head is None:
+        return None
+    start = head.end()
+    quote = start + 1 if text[start] == "b" and text[start + 1] == "\\" else start
+    if text[quote] == "\\":
+        literal_end, closed = _string_end(text, quote)
+    else:
+        literal = _STRING_ONLY.match(text, start)
+        literal_end, closed = (literal.end(), True) if literal is not None else (start, False)
+    tail = _ESCAPED_CHUNK_TAIL.match(text, literal_end) if closed else None
+    if tail is None:
+        return None
+    return literal_end, tail.end(), bool(tail["closer"])
+
+
 def _escaped_continuation_end(text: str, end: int) -> int:
     """Extend a closed string value over following repr-escaped lines made of one string literal each."""
     position = end
-    while (match := _ESCAPED_CONTINUATION.match(text, position)) is not None:
-        end = match.end("literal")
-        position = match.end()
-        if match["closer"]:
+    while (chunk := _escaped_chunk(text, position)) is not None:
+        end, position = chunk[0], chunk[1]
+        if chunk[2]:
             break
     return end
 
 
 def _quoted_key_spans(text: str) -> Iterator[tuple[int, int, re.Match[str]]]:
-    """Matches of the quoted-key pattern with the span extended over a multi-line value; never shrinks a match."""
+    """Matches of the quoted-key pattern with the span extended over a multi-line value.
+    An escaped key matches only its container opener; the end scan finds the rest."""
     pos = 0
     line = 0
     scanned = 0
@@ -267,8 +322,19 @@ def _quoted_key_spans(text: str) -> Iterator[tuple[int, int, re.Match[str]]]:
         start, end = match.span()
         value = match.span("value")[0]
         container = _CONTAINER_HEAD.match(text, value)
+        if match["vq"]:
+            end, closed = _string_end(text, value + (text[value] == "b"))
+            if closed:
+                end = _escaped_continuation_end(text, end)
+            yield start, end, match
+            pos = end
+            continue
         closed_string = container is None and _STRING_ONLY.fullmatch(text, value, end) is not None
-        if closed_string and _ESCAPED_CONTINUATION.match(text, end) is not None:
+        if container is None and not closed_string:
+            # A value running to the line end must not swallow a trailing comma: the next key needs its lead.
+            while end > value + 1 and text[end - 1] in " \t,":
+                end -= 1
+        if closed_string and _escaped_chunk(text, end) is not None:
             end = _escaped_continuation_end(text, end)
         elif container is not None or (closed_string and text.startswith(("\n", "\r\n"), end)):
             quote = match.span("quote")[0]
@@ -279,7 +345,9 @@ def _quoted_key_spans(text: str) -> Iterator[tuple[int, int, re.Match[str]]]:
             key_indent = _indent_end(text, line) - line
             if container is not None:
                 scan_end = _container_end(text, container.end() - 1, key_indent)
-                if scan_end < end and not text[scan_end:end].strip(" \t,\r"):
+                if len(match["quote"]) > 1:
+                    end = scan_end
+                elif scan_end < end and not text[scan_end:end].strip(" \t,\r"):
                     end = scan_end
                 else:
                     end = max(end, scan_end)

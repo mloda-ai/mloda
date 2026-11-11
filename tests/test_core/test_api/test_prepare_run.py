@@ -426,8 +426,8 @@ class TestConcurrentRunsOnOneSession:
         return session
 
     @staticmethod
-    def _drop_pandas_edges(registry: Any) -> list[tuple[Any, Any]]:
-        """Simulates a gated backend imported after prepare: pandas edges missing, rebuild slowed on this instance."""
+    def _drop_pandas_edges(registry: Any, rebuilds: list[int]) -> list[tuple[Any, Any]]:
+        """Simulates a gated backend imported after prepare: pandas edges missing, rebuilds slowed and counted."""
         prefix = "mloda_plugins.compute_framework.base_implementations.pandas."
         dropped = [pair for pair, t in registry.transformer_map.items() if t.__module__.startswith(prefix)]
         assert dropped
@@ -441,7 +441,13 @@ class TestConcurrentRunsOnOneSession:
             return bool(real_add(transformer, into))
 
         registry.add = slow_add
-        assert not any(pair in registry.transformer_map for pair in dropped)
+        real_register_all = registry._register_all
+
+        def counting_register_all() -> None:
+            rebuilds.append(1)
+            real_register_all()
+
+        registry._register_all = counting_register_all
         return dropped
 
     @staticmethod
@@ -482,10 +488,13 @@ class TestConcurrentRunsOnOneSession:
     ) -> None:
         session = self._prepare(plan, modes)
         column = "PrepareRunApiFeature" if plan == "single_framework" else "PrepareRunJoinedFeature"
-        expected = {i: [f[column].tolist() for f in _rerun(session, path, self._data(i), modes)] for i in range(8)}
-        if plan != "single_framework":
-            assert all(expected[i] == [[f"v{i}_c{i}", f"w{i}_"]] for i in range(8))
-        dropped = self._drop_pandas_edges(session.engine.transformer) if plan.endswith("lazy_refresh") else []
+        if plan == "single_framework":
+            expected = {i: [f[column].tolist() for f in _rerun(session, path, self._data(i), modes)] for i in range(8)}
+        else:
+            expected = {i: [[f"v{i}_c{i}", f"w{i}_"]] for i in range(8)}
+        rebuilds: list[int] = []
+        lazy = plan.endswith("lazy_refresh")
+        dropped = self._drop_pandas_edges(session.engine.transformer, rebuilds) if lazy else []
 
         snapshot = self._snapshot(session)
         barrier = threading.Barrier(8, timeout=5)
@@ -499,6 +508,8 @@ class TestConcurrentRunsOnOneSession:
             got = {i: future.result(timeout=8) for i, future in enumerate(futures)}
 
         assert got == expected
+        if lazy:
+            assert len(rebuilds) == 1
         assert all(pair in session.engine.transformer.transformer_map for pair in dropped)
         self._assert_unchanged(session, snapshot)
 

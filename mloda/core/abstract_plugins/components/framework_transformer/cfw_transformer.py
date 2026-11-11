@@ -185,11 +185,13 @@ class ComputeFrameworkTransformer:
 
     def _refresh(self) -> bool:
         """Pick up transformer files whose backend was imported since the last load; True if any were added."""
-        self._load_available()
-        if frozenset(ComputeFrameworkTransformer._lazy_dirs_loaded) == self._seen_lazy_dirs:
-            return False
-        self._register_all()
-        return True
+        # Check and rebuild under the lock so concurrent misses rebuild once and a stale rebuild cannot win.
+        with ComputeFrameworkTransformer._load_lock:
+            self._load_available()
+            if frozenset(ComputeFrameworkTransformer._lazy_dirs_loaded) == self._seen_lazy_dirs:
+                return False
+            self._register_all()
+            return True
 
     def direct_transformer(self, source: type[Any], target: type[Any]) -> type[BaseTransformer] | None:
         """Direct transformer for a pair, refreshing the registry once on a miss."""

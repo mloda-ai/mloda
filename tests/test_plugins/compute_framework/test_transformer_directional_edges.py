@@ -472,3 +472,22 @@ class TestRegisterAllSwapsTheMap:
         assert dropped not in old_map
         assert registry.transformer_map is not old_map
         assert registry.transformer_map == full_edges
+
+    @pytest.mark.parametrize("lookup", ["direct_transformer", "get_transformation_chain"])
+    def test_lookup_retries_against_a_map_another_thread_swapped_in(self, lookup: str) -> None:
+        """A miss whose refresh reports nothing new still finds an edge a concurrent refresh published."""
+        registry = _empty_registry()
+        fw = type("_FwSwapA", (), {})
+        other_fw = type("_FwSwapB", (), {})
+        transformer_cls = _make_forward_only_transformer("_SwapForward", fw, other_fw)
+        swapped_in: dict[Any, Any] = {(fw, other_fw): transformer_cls}
+
+        def refresh_swapped_by_another_thread() -> bool:
+            registry.transformer_map = swapped_in
+            return False
+
+        registry._refresh = refresh_swapped_by_another_thread  # type: ignore[method-assign]
+
+        found = getattr(registry, lookup)(fw, other_fw)
+
+        assert found == ([transformer_cls] if lookup == "get_transformation_chain" else transformer_cls)

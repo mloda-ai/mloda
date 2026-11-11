@@ -363,14 +363,13 @@ _JDBC_CUT_PATTERN = re.compile(
 _JDBC_PATH_CUT = "\ue002"
 # A quoted value closes only before a delimiter (a dict repr's quote stays a boundary); values stop at a newline or `://`.
 _JDBC_QUOTED = (
-    r"""'(?:(?!://)[^'\n])*+(?:'(?=[;\s,)\]}>]|$)|(?=\n|$|://))"""
-    r"""|"(?:(?!://)[^"\n])*+(?:"(?=[;\s,)\]}>]|$)|(?=\n|$|://))"""
+    r"""'(?:(?!://)[^'\n]|'')*+(?:'(?=[;\s,)\]}>]|$|[.!?:]+(?:\s|$))|(?=\n|$|://))"""
+    r"""|"(?:(?!://)[^"\n]|"")*+(?:"(?=[;\s,)\]}>]|$|[.!?:]+(?:\s|$))|(?=\n|$|://))"""
 )
 _JDBC_BRACED = r"\{(?:(?!://)[^}\n]|\}\})*+\}?"
-_UNCLOSED_BRACE_BODY = re.compile(r"(?:[^}]|\}\})*+")
 _JDBC_PATH_CUT_PATTERN = re.compile(
     _JDBC_PATH_CUT + rf"(?:(?P<v>(?<=[= \t])(?:{_JDBC_QUOTED}|{_JDBC_BRACED})|(?<={_JDBC_PATH_CUT}){_JDBC_BRACED})"
-    r"|[ \t]++(?==)|(?<==)[ \t]++|(?!://)\S)*"  # not `*+`: 3.11 misreports group spans
+    r"|[ \t]++(?==)|(?<==)[ \t]++|(?!://|[,;][\"'(\[{<]*(?:jdbc:)?[A-Za-z][A-Za-z0-9+.-]*://)\S)*"  # not `*+`: 3.11 misreports group spans
 )
 # Closers then sentence punctuation then whitespace or end: the match ended a value, nothing was cut off.
 _CLOSING_END_PATTERN = re.compile(r"[\"'<>)\]}]+[,:;.!?]*(?:\s|$)")
@@ -407,6 +406,33 @@ def _azure_container_prefix(match: re.Match[str]) -> str:
     return ""
 
 
+_SPACED_EQUALS_PATTERN = re.compile(r"[ \t]+=")
+
+
+def _opens_brace_value(text: str) -> bool:
+    """True when the text ends inside a `={...}` value (`}}` escapes a brace)."""
+    inside = False
+    i = 0
+    while i < len(text):
+        if inside:
+            if text.startswith("}}", i):
+                i += 2
+                continue
+            inside = text[i] != "}"
+        elif text.startswith("={", i):
+            inside = True
+            i += 1
+        i += 1
+    return inside
+
+
+def _cut_resume(text: str) -> str:
+    """What stays after the marker so the cut resumes inside an open value."""
+    if _opens_brace_value(text):
+        return "{"
+    return "=" if text.endswith("=") else ""
+
+
 def _uri_projection(match: re.Match[str]) -> str | None:
     scheme, host = match["scheme"], match["host"]
     # Host parameters ride along with the path: the same key=value and hidden-percent checks apply.
@@ -415,17 +441,13 @@ def _uri_projection(match: re.Match[str]) -> str | None:
     if scheme.startswith("jdbc:"):
         tail = _JDBC_TAIL_PATTERN.search(match.string, match.end())
         if any(mark in path + (tail[0] if tail else "") for mark in "=;@"):
-            # A trailing `=` or an unclosed `={` stays after the marker so the cut resumes inside that value.
-            brace = path.rfind("{")
-            if brace > 0 and path[brace - 1] == "=" and _UNCLOSED_BRACE_BODY.fullmatch(path, brace + 1):
-                resume = "{"
-            else:
-                resume = "=" if path.endswith("=") else ""
-            return f"{scheme}://{container}{host}{_JDBC_PATH_CUT}{resume}"
+            return f"{scheme}://{container}{host}{_JDBC_PATH_CUT}{_cut_resume(path)}"
         query = match["query"]
-        if query:
+        if query and (
+            query.endswith("=") or _opens_brace_value(query) or _SPACED_EQUALS_PATTERN.match(match.string, match.end())
+        ):
             kept = _cut_hidden_percent(scheme, host, path)
-            return f"{scheme}://{container}{host}{kept}{_JDBC_PATH_CUT}{'=' if query.endswith('=') else ''}"
+            return f"{scheme}://{container}{host}{kept}{_JDBC_PATH_CUT}{_cut_resume(query)}"
     if any("=" in segment.partition(":")[2] for segment in path.split("/")):
         return None
     return f"{scheme}://{container}{host}{_cut_hidden_percent(scheme, host, path)}"
@@ -489,10 +511,15 @@ def _cut_marker_tail(marker: re.Match[str]) -> str:
     return tail[len(tail.rstrip(_CLOSERS)) :]
 
 
+_PUNCTUATED_CLOSERS = re.compile(r"[\"'<>)\]},]*[,:;.!?]*")
+
+
 def _cut_path_marker_tail(marker: re.Match[str]) -> str:
     """Like _cut_marker_tail, but only the text after the last quoted or braced value can hold closers."""
     start = marker.end("v") if marker["v"] is not None else marker.start() + 1
     tail = marker.string[start : marker.end()]
+    if marker["v"] is not None and _PUNCTUATED_CLOSERS.fullmatch(tail):
+        return tail
     return tail[len(tail.rstrip(_CLOSERS)) :]
 
 

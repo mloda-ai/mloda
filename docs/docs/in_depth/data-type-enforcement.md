@@ -216,7 +216,9 @@ whose data type name sorts first (for example `INT32` before `INT64`), so the ch
 
 The other identity constraints still apply, including options, context, domain, compute frameworks,
 implementation and data source. Two different explicit types remain separate, as does a typed input
-paired with an untyped direct request. Ordinary `Feature` equality and hashing remain type-sensitive.
+paired with an untyped direct request. A typed request pinned to a narrower compute framework set also
+serves an untyped input copy of the same feature on a wider set, and that copy is computed once.
+Ordinary `Feature` equality and hashing remain type-sensitive.
 
 ## Database Type Awareness
 

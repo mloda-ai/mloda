@@ -507,6 +507,7 @@ class TestRuntimeDefaultMaterializationEndToEnd:
             pytest.param("one_framework", None, id="untyped"),
             pytest.param("one_framework", DataType.INT64, id="typed"),
             pytest.param("direct_pinned_of_two", None, id="untyped_direct_pinned_of_two"),
+            pytest.param("direct_pinned_of_two", DataType.INT64, id="typed_direct_pinned_of_two"),
         ],
     )
     def test_direct_and_chained_request_append_style_group_pyarrow(
@@ -533,9 +534,19 @@ class TestRuntimeDefaultMaterializationEndToEnd:
                 assert frame.schema.field(name).type == DataType.to_arrow_type(DataType.INT64)
 
     @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
-    def test_typed_direct_and_untyped_input_keep_runtime_type_enforcement(self, direct_first: bool) -> None:
+    @pytest.mark.parametrize("pinned", ["one_framework", "direct_pinned_of_two"])
+    def test_typed_direct_and_untyped_input_keep_runtime_type_enforcement(
+        self, direct_first: bool, pinned: str
+    ) -> None:
+        two = pinned == "direct_pinned_of_two"
         with pytest.raises(DataTypeMismatchError, match=MDB_DIRECT):
-            _run_direct_and_chained([], direct_first=direct_first, direct_data_type=DataType.STRING)
+            _run_direct_and_chained(
+                [],
+                framework=[PyArrowTable, PythonDictFramework] if two else PythonDictFramework,
+                direct_first=direct_first,
+                direct_data_type=DataType.STRING,
+                direct_compute_framework="PyArrowTable" if two else None,
+            )
 
     @pytest.mark.parametrize(
         ("include_direct", "filter_on", "direct_data_type", "direct_first"),

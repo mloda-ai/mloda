@@ -903,6 +903,71 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
         '{"password": "***",\n2024-01-01 12:00:00 INFO started\n"quoted line"\nnext',
     ),
     (
+        "ml_opener_dict_pair_on_opener_line",
+        '{"password": {"a": "S3CR3T",\n"b": "S3CR3T2"\n}}',
+        '{"password": "***"}',
+    ),
+    (
+        "ml_opener_dict_pair_on_opener_line_single_quotes",
+        "{'password': {'a': 'S3CR3T',\n'b': 'S3CR3T2'\n}}",
+        "{'password': '***'}",
+    ),
+    (
+        "ml_opener_dict_pair_on_opener_line_keeps_user",
+        '{"password": {"a": "S3CR3T",\n"b": "S3CR3T2"\n},\n"user": "bob"\n}',
+        '{"password": "***",\n"user": "bob"\n}',
+    ),
+    (
+        "ml_opener_dict_pair_on_opener_line_indented_keeps_user",
+        'cfg = {\n  "password": {"a": "S3CR3T",\n  "b": "S3CR3T2"\n  },\n  "user": "bob"\n}',
+        'cfg = {\n  "password": "***",\n  "user": "bob"\n}',
+    ),
+    (
+        "ml_opener_two_level_item_line",
+        '{"password": ["S3CR3T",\n[["S3CR3T2"], ["X"]],\n[["TOPSECRET"]]\n]}',
+        '{"password": "***"}',
+    ),
+    (
+        "ml_opener_two_level_item_line_single_quotes",
+        "{'password': ['S3CR3T',\n[['S3CR3T2'], ['X']],\n[['TOPSECRET']]\n]}",
+        "{'password': '***'}",
+    ),
+    (
+        "ml_opener_two_level_item_line_keeps_user",
+        '{"password": ["S3CR3T",\n[["S3CR3T2"], ["X"]],\n[["TOPSECRET"]]\n],\n"user": "bob"\n}',
+        '{"password": "***",\n"user": "bob"\n}',
+    ),
+    (
+        "ml_opener_dict_in_list_item_line_keeps_user",
+        '{"password": ["S3CR3T",\n[{"a": "S3CR3T2"}, ["X"]],\n"z"\n],\n"user": "bob"\n}',
+        '{"password": "***",\n"user": "bob"\n}',
+    ),
+    (
+        "ml_opener_flat_opener_led_item_line",
+        '{"password": [\n[["S3CR3T2"], ["X"]],\n[["TOPSECRET"]]\n],\n"user": "bob"\n}',
+        '{"password": "***",\n"user": "bob"\n}',
+    ),
+    (
+        "ml_opener_flat_opener_led_item_line_no_sibling",
+        '{"password": [\n[["S3CR3T2"], ["X"]],\n[["TOPSECRET"]]\n]}',
+        '{"password": "***"}',
+    ),
+    (
+        "ml_opener_guard_closed_dict_then_sibling",
+        '{"password": {"a": "x"},\n"user": "bob"\n}',
+        '{"password": "***",\n"user": "bob"\n}',
+    ),
+    (
+        "ml_opener_guard_flat_prose_bracket_line",
+        '{\n"password": [\n"S3CR3T",\n[INFO] started\nnext',
+        '{\n"password": "***"\n[INFO] started\nnext',
+    ),
+    (
+        "ml_opener_guard_dict_opener_then_log_line",
+        '{"password": {"a": "S3CR3T",\n2024-01-01 12:00:00 INFO started\nnext',
+        '{"password": "***",\n2024-01-01 12:00:00 INFO started\nnext',
+    ),
+    (
         "ml_cont_text_after_dict",
         "cfg " + pprint.pformat({"password": "word " * 12 + "TAIL"}, width=40) + " rejected",
         "cfg {'password': '***'} rejected",
@@ -1709,6 +1774,22 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
             1000,
             "a repr of json with a quote-holding list value repeated",
         ),
+        (
+            lambda k: '{"password": {"a": "v",\n' + '"b": 1,\n' * k + "}}",
+            5000,
+            "a long dict pair body after an opener line pair",
+        ),
+        (lambda k: '{"password": {"a": "v",\n' * k, 5000, "repeated opener line dict openers"),
+        (
+            lambda k: '{"password": ["v",\n' + '[["v"], ["w"]], ' * k + "x\nnext",
+            5000,
+            "a long failing two level item line",
+        ),
+        (
+            lambda k: '{\n"password": [\n' + '[["v"], [1]],\n' * k,
+            5000,
+            "a long flat body of two level item lines",
+        ),
     ],
     ids=[
         "unterminated_password_brace",
@@ -1748,6 +1829,10 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
         "json_in_json_list_value_many_matches",
         "esclvl_consistent_until_end_deeper_reading_ends_early",
         "esclvl_repeated_repr_json_list_value_with_dquote",
+        "ml_opener_long_dict_pair_body",
+        "ml_opener_repeated_dict_openers",
+        "ml_opener_long_failing_two_level_item_line",
+        "ml_opener_long_flat_two_level_body",
     ],
 )
 def test_repeated_unterminated_password_brace_scrubs_fast(build: Callable[[int], str], n: int, what: str) -> None:

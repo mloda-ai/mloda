@@ -150,7 +150,10 @@ _CONTINUATION_LINE = re.compile(
 _ATOM = rf"(?:{_STRING_LITERAL}|[-+]?\.?\d[\w.+-]*|(?:true|false|null|True|False|None|NaN|-?Infinity)\b)"
 _PAIR_OR_ATOM = rf"(?:{_STRING_LITERAL}[ \t]*:[ \t]*{_ATOM}|{_ATOM})"
 _INLINE_CONTAINER = rf"[\[{{(][ \t]*(?:{_PAIR_OR_ATOM}(?:[ \t]*,[ \t]*{_PAIR_OR_ATOM})*[ \t,]*)?[\]}})]"
-_ITEM = rf"(?:{_ATOM}|{_INLINE_CONTAINER})"
+_MEMBER = rf"(?:{_PAIR_OR_ATOM}|{_INLINE_CONTAINER})"
+# Inline container whose members may themselves be one-level inline containers.
+_INLINE_CONTAINER2 = rf"[\[{{(][ \t]*(?:{_MEMBER}(?:[ \t]*,[ \t]*{_MEMBER})*[ \t,]*)?[\]}})]"
+_ITEM = rf"(?:{_ATOM}|{_INLINE_CONTAINER2})"
 # A whole bare-item line of a list body; text may follow once a closer was seen.
 _ITEM_LINE = re.compile(rf"[ \t]*,?[ \t]*{_ITEM}(?:[ \t]*,[ \t]*{_ITEM})*[ \t,]*(?:[\])}}].*|(?=\r?\n|\Z))")
 _PAIR = rf"{_STRING_LITERAL}[ \t]*:[ \t]*{_ITEM}"
@@ -274,10 +277,10 @@ def _container_end(text: str, opener: int, key_indent: int) -> tuple[int, bool]:
                     i += 1
                     continue
                 if (
-                    (flat and _FLAT_BODY_LINE.match(text, first))
+                    (flat and (_FLAT_BODY_LINE.match(text, first) or _ITEM_LINE.match(text, first)))
                     or (items and _ITEM_LINE.match(text, first))
                     or (items and _OPEN_HEAD_LINE.match(text, first))
-                    or (items and len(stack) > 1 and stack[-1] == "{" and _PAIR_LINE.match(text, first))
+                    or (items and stack[-1] == "{" and _PAIR_LINE.match(text, first))
                 ):
                     i += 1
                     continue

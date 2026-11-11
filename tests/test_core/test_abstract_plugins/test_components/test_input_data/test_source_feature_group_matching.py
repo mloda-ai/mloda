@@ -909,6 +909,20 @@ class _NoSourceSubFG(_NoSourceFG):
     pass
 
 
+class _OverridePointedFG(_NoSourceFG):
+    """Its own is_pointed override points it, independent of scope and keys."""
+
+    @classmethod
+    def is_pointed(
+        cls, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
+    ) -> bool:
+        return True
+
+
+class _RequiredOptionSubFG(ToyRequiredOptionFG):
+    pass
+
+
 class TestScopePointingRefinement:
     SCOPES = [ToySourceFG, "ToySourceFG"]
 
@@ -946,11 +960,28 @@ class TestScopePointingRefinement:
         assert result.eliminations[ToyDeclaredFG].code is CoreDeclineCode.NAME_NOT_DECLARED
         assert _FamilyDeclaredSubFG not in result.eliminations
 
-    def test_a_family_only_sibling_pointed_by_an_ancestor_key_still_records_source_not_found(self) -> None:
+    def test_a_sibling_under_a_family_scope_with_an_ancestor_key_still_records_source_not_found(self) -> None:
         feature = Feature(COL, Options({"ToySourceFG": {COL: [1]}}), feature_group=ToySourceFG)
         result = _identify(feature, None, _NoSourceSubFG)
 
         assert result.eliminations[_NoSourceSubFG].code is CoreDeclineCode.SOURCE_NOT_FOUND
+
+    @pytest.mark.parametrize("scope", SCOPES)
+    def test_an_override_pointed_sibling_under_a_family_scope_still_records_source_not_found(
+        self, scope: object
+    ) -> None:
+        feature = Feature(COL, feature_group=scope)  # type: ignore[arg-type]
+        result = _identify(feature, None, _OverridePointedFG)
+
+        assert "was pointed at but found no source" in result.eliminations[_OverridePointedFG].reason
+        assert result.eliminations[_OverridePointedFG].code is CoreDeclineCode.SOURCE_NOT_FOUND
+
+    @pytest.mark.parametrize("scope", [ToyRequiredOptionFG, "ToyRequiredOptionFG"])
+    def test_a_family_only_sibling_missing_a_required_option_records_nothing(self, scope: object) -> None:
+        feature = Feature(COL, feature_group=scope)  # type: ignore[arg-type]
+        result = _identify(feature, toy_dac(h1={COL: [1]}), _RequiredOptionSubFG)
+
+        assert _RequiredOptionSubFG not in result.eliminations
 
     @pytest.mark.parametrize("scope", [_AbstractToyMid, "_AbstractToyMid"])
     def test_abstract_base_scope_does_not_point_so_the_lacking_sibling_declines(self, scope: object) -> None:

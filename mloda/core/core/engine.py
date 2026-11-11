@@ -930,7 +930,8 @@ class Engine:
             buckets: dict[int, list[tuple[Feature, frozenset[type[ComputeFramework]]]]] = defaultdict(list)
             for member in collection:
                 if member.compute_frameworks is not None:
-                    buckets[member._hash(False, include_child_options=False)].append(
+                    # Buckets only widen; the exact and child-options tiers still compare data_type via _equals.
+                    buckets[member._hash(False, include_child_options=False, include_data_type=False)].append(
                         (member, frozenset(member.compute_frameworks))
                     )
             for bucket in buckets.values():
@@ -948,6 +949,19 @@ class Engine:
                         and t_cf < host_cf
                         and t.child_options_differ(host)
                         and t._equals(host, False, include_child_options=False)
+                        and self._same_merge_scope(t, host)
+                    ]
+                    # Intake's typed reuse; the resolved-input guard it needs always holds after resolution.
+                    narrower = narrower or [
+                        (t, t_cf)
+                        for t, t_cf in bucket
+                        if t is not host
+                        and t_cf < host_cf
+                        and t.initial_requested_data
+                        and t.data_type is not None
+                        and not host.initial_requested_data
+                        and host.data_type is None
+                        and t._equals(host, False, include_child_options=False, include_data_type=False)
                         and self._same_merge_scope(t, host)
                     ]
                     minimal = [t for t, t_cf in narrower if not any(o_cf < t_cf for _, o_cf in narrower)]

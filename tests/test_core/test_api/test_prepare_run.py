@@ -948,6 +948,7 @@ class TestOptionWriteInCalculateFeatureIsRefused:
     def _data(trigger: str) -> dict[str, Any]:
         return {"PrepareExample": {"api_id": [1, 2], "api_value": [trigger, trigger]}}
 
+    @pytest.mark.timeout(30)
     @pytest.mark.parametrize(
         "modes",
         [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}, {ParallelizationMode.MULTIPROCESSING}],
@@ -955,7 +956,7 @@ class TestOptionWriteInCalculateFeatureIsRefused:
     )
     @pytest.mark.parametrize("trigger,key", [("set", "late_ctx_key"), ("group", "late_group_key")])
     def test_write_raises_then_session_runs_cleanly(
-        self, modes: set[ParallelizationMode], trigger: str, key: str
+        self, modes: set[ParallelizationMode], trigger: str, key: str, flight_server: Any
     ) -> None:
         from mloda.provider import FrozenPlanError
 
@@ -968,8 +969,12 @@ class TestOptionWriteInCalculateFeatureIsRefused:
             parallelization_modes=modes,
         )
 
+        run_kwargs: dict[str, Any] = {"parallelization_modes": modes}
+        if ParallelizationMode.MULTIPROCESSING in modes:
+            run_kwargs["flight_server"] = flight_server
+
         with pytest.raises(Exception) as raised:
-            session.run(api_data=self._data(trigger))
+            session.run(api_data=self._data(trigger), **run_kwargs)
 
         message = str(raised.value)
         chain: list[BaseException] = []
@@ -984,7 +989,7 @@ class TestOptionWriteInCalculateFeatureIsRefused:
         for fragment in (key, "before prepare", "run(api_data=", "run(artifacts="):
             assert fragment in message
 
-        result = session.run(api_data=self._data("ok"))
+        result = session.run(api_data=self._data("ok"), **run_kwargs)
         assert result[0]["PrepareRunMutatingOptionsFG"].tolist() == [1, 2]
 
 

@@ -302,6 +302,8 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
         with pytest.raises(ValueError) as exc_info:
             self._resolve(self._feature(self._group_name()), dac)
         assert os.path.abspath(other) in str(exc_info.value)
+        assert "data_access_handle" in str(exc_info.value)
+        assert "column_to_file" in str(exc_info.value)
         feature = Feature(self._group_name(), Options(context={**self.context_options, HANDLE_OPTION: "hand_b"}))
         assert self._claims(feature, dac)
         assert cast(SourceMatch, feature.input_data_match[1]).source == os.path.abspath(other)  # type: ignore[index]

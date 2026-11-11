@@ -227,6 +227,22 @@ class TestDuckdbFGInPlace:
         assert result[0].to_pydict() == {"hop_amount__sum_aggr": [6, 6, 6]}
 
 
+class TestDuckdbFGAmbiguity:
+    def test_two_tables_sharing_a_column_abort_without_pointer_advice(self, opened: list[Any]) -> None:
+        connection = _database(opened, {"shared_col": [1, 2]}, table="table_one")
+        connection.execute("CREATE TABLE table_two (shared_col INTEGER)")
+        dac = DataAccessCollection(connections={HANDLE: connection})
+
+        with pytest.raises(ValueError) as exc_info:
+            _evaluate(_handle_feature("shared_col"), dac)
+
+        message = str(exc_info.value)
+        assert "keep the column in one table or view" in message
+        assert "data_access_handle" not in message
+        assert "column_to_file" not in message
+        assert "point DuckdbFG" not in message
+
+
 class TestDuckdbTablePickling:
     def test_pickling_a_match_names_the_live_connection(self, opened: list[Any]) -> None:
         table = DuckdbTable(_database(opened, {"pickle_col": [1]}), TABLE)

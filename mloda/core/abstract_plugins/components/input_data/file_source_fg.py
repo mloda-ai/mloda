@@ -209,6 +209,10 @@ class _FileSourceFG(SourceFeatureGroup):
         value = None if key is None else options.get(key)
         return str(value) if isinstance(value, (str, os.PathLike)) else None
 
+    @classmethod
+    def _narrowing_hints(cls) -> tuple[str, ...]:
+        return (*super()._narrowing_hints(), "column_to_file")
+
     @staticmethod
     def _pinned_path(feature_name: str, data_access_collection: DataAccessCollection | None) -> str | None:
         if data_access_collection is None or data_access_collection.column_to_file is None:

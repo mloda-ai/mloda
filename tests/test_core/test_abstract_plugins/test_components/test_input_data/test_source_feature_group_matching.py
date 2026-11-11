@@ -673,7 +673,7 @@ class TestAmbiguousSources:
         assert "h2:toy" in message
         assert "feature_group=" not in message
         assert "data_access_handle" in message
-        assert "column_to_file" in message
+        assert "column_to_file" not in message
 
     def test_a_contained_ambiguity_records_its_candidates_and_code(
         self, rejection_window: dict[str, MatchRejection]
@@ -1252,11 +1252,19 @@ class _FixTextFG(ToySourceFG):
 
 
 class TestAmbiguityFixHook:
-    def test_default_keeps_todays_text(self) -> None:
-        text = ToySourceFG.ambiguity_fix(COL, [], None)
+    @pytest.mark.parametrize(
+        ("group", "handle", "expected"),
+        [(ToySourceFG, True, None), (ApiDataFG, False, "point ApiDataFG at one source.")],
+    )
+    def test_default_names_only_the_options_the_group_declares(
+        self, group: type[SourceFeatureGroup], handle: bool, expected: str | None
+    ) -> None:
+        text = group.ambiguity_fix(COL, [], None)
 
-        assert "data_access_handle" in text
-        assert "column_to_file" in text
+        assert ("data_access_handle" in text) is handle
+        assert "column_to_file" not in text
+        if expected is not None:
+            assert text == expected
 
     def test_override_text_ends_the_abort(self) -> None:
         dac = toy_dac(h1={COL: [1]}, h2={COL: [2]})

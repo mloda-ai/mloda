@@ -1534,6 +1534,7 @@ def _fold_copy(frameworks: set[type[ComputeFramework]], data_type: DataType | No
     [
         "nested_chain",
         "conflicting_types",
+        "conflicting_types_swapped",
         "untyped_request_and_typed_request",
         "typed_request_vs_untyped_request_pinned",
     ],
@@ -1554,6 +1555,13 @@ def test_narrower_fold_keeps_every_parent_alive_and_types_consistent(shape: str)
             _fold_copy({pd_, pa_, pdict}, DataType.INT32, True),
         ]
         tied_owner = 1
+    elif shape == "conflicting_types_swapped":
+        copies = [
+            _fold_copy({pa_}, None, False),
+            _fold_copy({pa_, pdict}, DataType.INT32, True),
+            _fold_copy({pd_, pa_, pdict}, DataType.INT64, True),
+        ]
+        tied_owner = 2
     elif shape == "untyped_request_and_typed_request":
         copies = [
             _fold_copy({pa_, pdict}, None, True),
@@ -1593,8 +1601,16 @@ def test_narrower_fold_keeps_every_parent_alive_and_types_consistent(shape: str)
         }
         assert engine.filter_ties == [(copies[1].uuid, other)]
     elif shape == "untyped_request_and_typed_request":
+        assert set(alive) == {copies[0].uuid, copies[2].uuid}
         assert alive[copies[0].uuid].data_type is None
-        assert DataType.INT64 in {f.data_type for f in alive.values()}
+        assert alive[copies[2].uuid].data_type == DataType.INT64
+        assert alive[copies[2].uuid].initial_requested_data is True
+    elif shape == "conflicting_types_swapped":
+        assert {u: f.data_type for u, f in alive.items()} == {
+            copies[0].uuid: DataType.INT32,
+            copies[2].uuid: DataType.INT64,
+        }
+        assert engine.filter_ties == [(copies[2].uuid, other)]
     else:
         assert set(alive) == {copies[0].uuid, copies[1].uuid}
 

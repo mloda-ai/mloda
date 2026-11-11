@@ -924,7 +924,7 @@ class Engine:
         return bound | {DefaultOptionKeys.in_features.value}
 
     def _fold_into_narrower_twins(self) -> None:
-        """Folds each feature into its unique minimal narrower-framework twin; decided from a snapshot, order-free."""
+        """Folds each feature into its unique minimal narrower-framework twin, following fold chains."""
         folds: list[tuple[type[FeatureGroup], Feature, Feature]] = []
         for group_class, collection in self.feature_group_collection.items():
             buckets: dict[int, list[tuple[Feature, frozenset[type[ComputeFramework]]]]] = defaultdict(list)
@@ -984,8 +984,8 @@ class Engine:
                 fold[0].__module__,
                 fold[0].__qualname__,
                 str(fold[1].name),
-                sorted(cf.__qualname__ for cf in fold[1].compute_frameworks or ()),
                 str(fold[1].data_type),
+                sorted(cf.__qualname__ for cf in fold[1].compute_frameworks or ()),
             )
         )
         live = {f.uuid: f for collection in self.feature_group_collection.values() for f in collection}
@@ -996,13 +996,13 @@ class Engine:
                 uid = applied[uid]
             return uid
 
-        # With conflicting typed requests the first fold in sort order wins; the rest stay alive.
+        # With conflicting typed requests the type whose name sorts first wins; the rest stay alive.
         for group_class, planned_host, planned_survivor in folds:
             host = live[planned_host.uuid]
             survivor = live[final(planned_survivor.uuid)]
-            untyped_free = (survivor.data_type is None and not survivor.initial_requested_data) or (
-                host.data_type is None and not host.initial_requested_data
-            )
+            untyped_free = (
+                survivor.data_type is None and not survivor.initial_requested_data and host.initial_requested_data
+            ) or (host.data_type is None and not host.initial_requested_data)
             if host.data_type != survivor.data_type and not untyped_free:
                 continue
             collection = self.feature_group_collection[group_class]

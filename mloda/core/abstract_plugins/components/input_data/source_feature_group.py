@@ -267,7 +267,13 @@ class SourceFeatureGroup(FeatureGroup):
         cls, feature_name: str, matches: list[SourceMatch], data_access_collection: DataAccessCollection | None
     ) -> str:
         """Advice appended to the several-sources abort."""
-        return "narrow with a data_access_handle or column_to_file."
+        hints = cls._narrowing_hints()
+        return f"narrow with a {' or '.join(hints)}." if hints else f"point {cls.get_class_name()} at one source."
+
+    @classmethod
+    def _narrowing_hints(cls) -> tuple[str, ...]:
+        """Options or collection fields this group honors to narrow to one source."""
+        return (HANDLE_OPTION,) if HANDLE_OPTION in cls.declared_option_keys() else ()
 
     @classmethod
     def declared_names(cls) -> frozenset[str]:

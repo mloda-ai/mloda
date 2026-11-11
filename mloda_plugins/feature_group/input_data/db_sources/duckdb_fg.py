@@ -105,6 +105,13 @@ class DuckdbFG(SourceFeatureGroup):
         return [SourceMatch(f"{identity}::{table}", DuckdbTable(connection, table)) for table in tables]
 
     @classmethod
+    def ambiguity_fix(
+        cls, feature_name: str, matches: list[SourceMatch], data_access_collection: DataAccessCollection | None
+    ) -> str:
+        """Advice for a column found in several tables of the connection."""
+        return f"{cls.get_class_name()} reads every table of the connection; keep the column in one table or view."
+
+    @classmethod
     def columns(cls, match: SourceMatch) -> Collection[str] | None:
         access = cast(DuckdbTable, match.access)
         return _catalog(access.connection)[1].get(access.table)

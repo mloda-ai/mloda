@@ -122,6 +122,15 @@ class TestApiDataFGContract(SourceFeatureGroupTestMixin):
         assert self._claims(feature, dac)
         assert self._claimed_match(feature).source == "api_data:k2"
 
+    def test_two_sets_sharing_a_column_abort_pointing_at_the_group_without_undeclared_options(self) -> None:
+        dac = DataAccessCollection().with_api_data_columns({"k": ("api_col",), "k2": ("api_col",)})
+        with pytest.raises(ValueError) as exc_info:
+            self._resolve(Feature(self.present_column), dac)
+        message = str(exc_info.value)
+        assert "point ApiDataFG at one source" in message
+        assert "data_access_handle" not in message
+        assert "column_to_file" not in message
+
     def test_an_unknown_pointer_key_aborts_naming_the_known_keys(self) -> None:
         dac = DataAccessCollection().with_api_data_columns(_TWO_SETS)
         with pytest.raises(FeatureResolutionError) as exc_info:

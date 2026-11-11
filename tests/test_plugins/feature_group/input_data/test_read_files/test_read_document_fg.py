@@ -300,3 +300,4 @@ class TestSiblingsUnderASharedFileSourceBase:
     def test_a_document_group_does_not_inherit_the_file_format_ambiguity_fix(self) -> None:
         definer = next(base for base in ReadDocumentFG.__mro__ if "ambiguity_fix" in vars(base))
         assert definer is not ReadFileFG
+        assert ReadDocumentFG.ambiguity_fix("f", [], None) == "narrow with a data_access_handle or column_to_file."

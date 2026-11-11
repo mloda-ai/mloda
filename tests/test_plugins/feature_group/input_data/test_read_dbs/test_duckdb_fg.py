@@ -289,6 +289,20 @@ class TestDuckdbFGOptIn:
         assert "have_col" not in reason
         assert result.eliminations[DuckdbFG].code is CoreDeclineCode.COLUMN_NOT_FOUND
 
+    def test_two_tables_sharing_a_column_abort_without_pointer_advice(self, opened: list[Any]) -> None:
+        connection = _database(opened, {"shared_col": [1, 2]}, table="table_one")
+        connection.execute("CREATE TABLE table_two (shared_col INTEGER)")
+        dac = DataAccessCollection(connections={HANDLE: connection})
+
+        with pytest.raises(ValueError) as exc_info:
+            _evaluate(_handle_feature("shared_col"), dac)
+
+        message = str(exc_info.value)
+        assert "keep the column in one table or view" in message
+        assert "data_access_handle" not in message
+        assert "column_to_file" not in message
+        assert "point DuckdbFG" not in message
+
     def test_a_non_duckdb_handle_declines_with_a_rejection(self, opened: list[Any]) -> None:
         foreign = sqlite3.connect(":memory:")
         opened.append(foreign)

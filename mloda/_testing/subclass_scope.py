@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from typing import Any
 
 from mloda._testing.feature_group_shape import (
@@ -303,15 +303,19 @@ def check_subclass_scope(
     input_data: TypedTestData | None = None,
     adapter: FrameworkAdapter | None = None,
     require_run: bool = False,
+    free: Collection[str] = (),
 ) -> CheckResult:
     """Check subclass replaces parent only with the selecting options (and values); only these two classes count.
 
+    Keys in free are selecting keys that configure the subclass but get no other-value probe.
     With input_data it also compares the requested output columns with the parent's, in both directions,
     assuming identical row order.
     With require_run, a rule exclusion, a missing serving Implementation, a route block or no rows is a failure.
     """
-    failures = _run(subclass, parent, selecting, requests)
+    failures = _run(subclass, parent, selecting, requests, free)
     notes: list[str] = []
+    if free:
+        notes.append(f"scope: {sorted(free)} set but not probed with other values")
     if input_data is None:
         notes.append("values: not compared (no input_data)")
     elif any(f.startswith(("setup:", "names:", "misses:")) for f in failures):
@@ -334,7 +338,11 @@ def _bound_keys(parent: type[FeatureGroup], names: list[str]) -> dict[str, froze
 
 
 def _run(
-    subclass: type[FeatureGroup], parent: type[FeatureGroup], selecting: Options, requests: Sequence[str] | None
+    subclass: type[FeatureGroup],
+    parent: type[FeatureGroup],
+    selecting: Options,
+    requests: Sequence[str] | None,
+    free: Collection[str] = (),
 ) -> list[str]:
     if not is_nominal_subclass(subclass, parent) or subclass is parent:
         return [f"setup: {subclass.__name__} is not a proper subclass of {parent.__name__}"]
@@ -353,7 +361,14 @@ def _run(
     present = sorted({*selecting.group, *selecting.context} & {*base.group, *base.context})
     if present:
         return [f"setup: selecting keys {present} are already in the base options and would mask a steal"]
-    return _scope_failures(subclass, parent, names, base, selecting, frozenset().union(*bound.values()))
+    name_bound = frozenset().union(*bound.values())
+    selecting_keys = {*selecting.group, *selecting.context}
+    if not set(free) <= selecting_keys:
+        return [f"setup: free keys {sorted(set(free) - selecting_keys)} are not selecting keys"]
+    reserved = {k.value for k in DefaultOptionKeys}
+    if free and not selecting_keys - set(free) - reserved - name_bound:
+        return ["setup: free leaves no selecting key to probe"]
+    return _scope_failures(subclass, parent, names, base, selecting, name_bound | frozenset(free))
 
 
 def assert_subclass_scope(
@@ -365,9 +380,17 @@ def assert_subclass_scope(
     input_data: TypedTestData | None = None,
     adapter: FrameworkAdapter | None = None,
     require_run: bool = True,
+    free: Collection[str] = (),
 ) -> None:
     """Fail the running pytest test if the subclass scope check reports failures; require_run defaults to True."""
     result = check_subclass_scope(
-        subclass, parent, selecting, requests, input_data=input_data, adapter=adapter, require_run=require_run
+        subclass,
+        parent,
+        selecting,
+        requests,
+        input_data=input_data,
+        adapter=adapter,
+        require_run=require_run,
+        free=free,
     )
     assert_passed(result)

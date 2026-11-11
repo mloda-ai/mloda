@@ -409,7 +409,7 @@ def resolve_feature(
 
     Never raises for matching errors: those are reported in the returned ResolvedFeature.error.
     Signature misuse (options/feature_group alongside a Feature) is a programmer error and raises TypeError.
-    The error text is credential-scrubbed, with the collection's registered values masked.
+    The error text is credential-scrubbed.
 
     Design note: resolve_feature is a thin adapter. It only normalizes the standalone request, builds the
     canonical accessible-plugins environment once, delegates one evaluation to evaluate_and_render, and

@@ -549,29 +549,41 @@ class TestRuntimeDefaultMaterializationEndToEnd:
             )
 
     @pytest.mark.parametrize(
-        ("include_direct", "filter_on", "direct_data_type", "direct_first"),
+        ("include_direct", "filter_on", "direct_data_type", "direct_first", "pinned"),
         [
-            (False, "mdb_src", None, True),
-            (False, MDB_DIRECT, None, True),
-            (True, MDB_DIRECT, None, True),
-            (True, MDB_DIRECT, DataType.INT64, True),
-            (True, MDB_DIRECT, DataType.INT64, False),
+            (False, "mdb_src", None, True, "one_framework"),
+            (False, MDB_DIRECT, None, True, "one_framework"),
+            (True, MDB_DIRECT, None, True, "one_framework"),
+            (True, MDB_DIRECT, DataType.INT64, True, "one_framework"),
+            (True, MDB_DIRECT, DataType.INT64, False, "one_framework"),
+            (True, MDB_DIRECT, DataType.INT64, True, "direct_pinned_of_two"),
+            (True, MDB_DIRECT, DataType.INT64, False, "direct_pinned_of_two"),
         ],
-        ids=["chained_only_src", "chained_only_direct", "direct_and_chained_direct", "typed_first", "typed_last"],
+        ids=[
+            "chained_only_src",
+            "chained_only_direct",
+            "direct_and_chained_direct",
+            "typed_first",
+            "typed_last",
+            "typed_pinned_of_two_first",
+            "typed_pinned_of_two_last",
+        ],
     )
     def test_global_filter_on_column_reaching_group_as_input_copy(
-        self, include_direct: bool, filter_on: str, direct_data_type: DataType | None, direct_first: bool
+        self, include_direct: bool, filter_on: str, direct_data_type: DataType | None, direct_first: bool, pinned: str
     ) -> None:
+        two = pinned == "direct_pinned_of_two"
         results = _run_direct_and_chained(
             [],
             include_direct=include_direct,
             filter_on=filter_on,
             direct_data_type=direct_data_type,
             direct_first=direct_first,
+            framework=[PyArrowTable, PythonDictFramework] if two else PythonDictFramework,
+            direct_compute_framework="PyArrowTable" if two else None,
         )
-        (frame,) = [r for r in results if MDB_CHAINED in (r if isinstance(r, dict) else r[0])]
-        values = list(frame[MDB_CHAINED]) if isinstance(frame, dict) else [row[MDB_CHAINED] for row in frame]
-        assert values == [2]
+        (frame,) = [r for r in results if MDB_CHAINED in _frame_columns(r)]
+        assert _column_values(frame, MDB_CHAINED) == [2]
 
     @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
     @pytest.mark.parametrize(

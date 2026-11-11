@@ -2,7 +2,7 @@
 
 import logging
 from abc import abstractmethod
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, ClassVar
@@ -862,7 +862,25 @@ class _FamilyRecordingFG(ToySourceFG):
 
 
 class _FamilyDeclaredSubFG(ToyDeclaredFG):
-    """Declared-route sibling under a concrete base."""
+    pass
+
+
+class _NoSourceFG(ToySourceFG):
+    """Finds no source and records nothing, however it is pointed at."""
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        return []
+
+
+class _NoSourceSubFG(_NoSourceFG):
+    pass
 
 
 class TestScopePointingRefinement:
@@ -902,7 +920,7 @@ class TestScopePointingRefinement:
         assert result.eliminations[ToyDeclaredFG].code is CoreDeclineCode.NAME_NOT_DECLARED
         assert _FamilyDeclaredSubFG not in result.eliminations
 
-    def test_a_family_only_sibling_pointed_by_an_ancestor_key_still_records_both_reasons(self) -> None:
+    def test_a_family_only_sibling_pointed_by_an_ancestor_key_still_records_source_not_found(self) -> None:
         feature = Feature(COL, Options({"ToySourceFG": {COL: [1]}}), feature_group=ToySourceFG)
         result = _identify(feature, None, _NoSourceSubFG)
 
@@ -1180,41 +1198,21 @@ class _DeclaredAndCheckedRouteFG(ToyDeclaredFG):
     )
 
 
-class _NoSourceFG(ToySourceFG):
-    """Finds no source and records nothing, however it is pointed at."""
-
-    @classmethod
-    def find_sources(
-        cls,
-        route: ClaimRoute,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None,
-    ) -> list[SourceMatch]:
-        return []
-
-
-class _NoSourceSubFG(_NoSourceFG):
-    """Subclass of a concrete source group; pointed at by the ancestor key."""
-
-
 class TestPointedRoutesDeclineWithReason:
     @pytest.mark.parametrize(
-        ("group", "pointing"),
+        ("group", "make_feature"),
         [
-            (ToySourceFG, "scope"),
-            (_TableAndOptionRouteFG, "scope"),
-            (_NoSourceFG, "own_key"),
-            (_NoSourceSubFG, "ancestor_key"),
+            (ToySourceFG, lambda group: Feature(COL, feature_group=group)),
+            (_TableAndOptionRouteFG, lambda group: Feature(COL, feature_group=group)),
+            (_NoSourceFG, lambda group: Feature(COL, Options({group.__name__: {COL: [1]}}))),
+            (_NoSourceSubFG, lambda group: Feature(COL, Options({"_NoSourceFG": {COL: [1]}}))),
         ],
         ids=["scope", "scope_two_routes", "own_key", "ancestor_key"],
     )
-    def test_pointed_route_without_a_source_records_an_input_data_rejection(self, group: type, pointing: str) -> None:
-        if pointing == "scope":
-            feature = Feature(COL, feature_group=group)
-        else:
-            key = group.__name__ if pointing == "own_key" else "_NoSourceFG"
-            feature = Feature(COL, Options({key: {COL: [1]}}))
+    def test_pointed_route_without_a_source_records_an_input_data_rejection(
+        self, group: type, make_feature: Callable[[type], Feature]
+    ) -> None:
+        feature = make_feature(group)
         result = _identify(feature, None, group)
 
         assert result.identified == {}

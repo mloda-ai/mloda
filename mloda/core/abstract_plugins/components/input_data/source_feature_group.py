@@ -775,7 +775,7 @@ class SourceFeatureGroup(FeatureGroup):
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND
             )
-        elif not stepped_aside and any(route.names is NamePolicy.DECLARED for route in selected):
+        elif not pointed and not stepped_aside and any(route.names is NamePolicy.DECLARED for route in selected):
             reason = scrub_credentials(f"{cls.get_class_name()} found no source serving '{name}'")
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND

@@ -989,6 +989,16 @@ class TestScopePointingRefinement:
         assert result.eliminations[ToyDeclaredFG].code is CoreDeclineCode.NAME_NOT_DECLARED
         assert _FamilyDeclaredSubFG not in result.eliminations
 
+    @pytest.mark.parametrize("scope", [ToyDeclaredFG, "ToyDeclaredFG"])
+    def test_a_family_only_declared_sibling_with_a_declared_name_and_no_source_records_nothing(
+        self, scope: object
+    ) -> None:
+        feature = Feature("toyfmt_declared_col", feature_group=scope)  # type: ignore[arg-type]
+        result = _identify(feature, None, ToyDeclaredFG, _FamilyDeclaredSubFG)
+
+        assert result.eliminations[ToyDeclaredFG].code is CoreDeclineCode.SOURCE_NOT_FOUND
+        assert _FamilyDeclaredSubFG not in result.eliminations
+
     def test_a_sibling_under_a_family_scope_with_an_ancestor_key_still_records_source_not_found(self) -> None:
         feature = Feature(COL, Options({"ToySourceFG": {COL: [1]}}), feature_group=ToySourceFG)
         result = _identify(feature, None, _NoSourceSubFG)

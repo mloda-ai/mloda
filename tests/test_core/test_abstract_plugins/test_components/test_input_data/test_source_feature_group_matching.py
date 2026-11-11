@@ -929,6 +929,12 @@ class _FamilyNoColumnFG(ToySourceFG):
         return ["toyfmt_other"]
 
 
+class _FamilyColumnsUnknownFG(ToySourceFG):
+    @classmethod
+    def columns(cls, match: SourceMatch) -> list[str] | None:
+        return None
+
+
 class _FamilyCountingFG(ToySourceFG):
     finds: ClassVar[int] = 0
 
@@ -1038,12 +1044,21 @@ class TestScopePointingRefinement:
         assert result.facts.scope_exclusions == ()
 
     @pytest.mark.parametrize("scope", SCOPES)
-    def test_a_family_only_sibling_lacking_the_column_declines_beside_a_serving_sibling(self, scope: object) -> None:
+    @pytest.mark.parametrize(
+        ("lacking", "code"),
+        [
+            (_FamilyNoColumnFG, CoreDeclineCode.COLUMN_NOT_FOUND),
+            (_FamilyColumnsUnknownFG, CoreDeclineCode.COLUMNS_UNKNOWN),
+        ],
+    )
+    def test_a_family_only_sibling_lacking_the_column_declines_beside_a_serving_sibling(
+        self, scope: object, lacking: type[ToySourceFG], code: CoreDeclineCode
+    ) -> None:
         feature = Feature(COL, feature_group=scope)  # type: ignore[arg-type]
-        result = _identify(feature, toy_dac(h1={COL: [1]}), ToySourceSubFG, _FamilyNoColumnFG)
+        result = _identify(feature, toy_dac(h1={COL: [1]}), ToySourceSubFG, lacking)
 
         assert set(result.identified) == {ToySourceSubFG}
-        assert result.eliminations[_FamilyNoColumnFG].code is CoreDeclineCode.COLUMN_NOT_FOUND
+        assert result.eliminations[lacking].code is code
 
     def test_concrete_ancestor_scope_sole_candidate_reports_the_missing_column(self) -> None:
         feature = Feature(COL, feature_group=ToySourceFG)

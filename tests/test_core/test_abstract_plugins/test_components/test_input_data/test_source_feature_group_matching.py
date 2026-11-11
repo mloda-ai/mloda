@@ -924,16 +924,12 @@ class _RequiredOptionSubFG(ToyRequiredOptionFG):
 
 
 class _FamilyNoColumnFG(ToySourceFG):
-    """Sibling under a concrete base whose sources lack the requested column."""
-
     @classmethod
     def columns(cls, match: SourceMatch) -> list[str]:
         return ["toyfmt_other"]
 
 
 class _FamilyCountingFG(ToySourceFG):
-    """Sibling under a concrete base that counts its source probes."""
-
     finds: ClassVar[int] = 0
 
     @classmethod

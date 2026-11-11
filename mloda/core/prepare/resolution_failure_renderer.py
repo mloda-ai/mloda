@@ -198,6 +198,11 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
         if note:
             msg += f" {note}"
 
+    if result.facts.scope_exclusions:
+        scope = feature.feature_group_scope
+        scope_name = scope.__name__ if isinstance(scope, type) else scope
+        msg += f"\n{scope_name} is not accessible in this run: {'; '.join(result.facts.scope_exclusions)}."
+
     near_miss = _render_near_miss_block(result, feature)
     if near_miss is not None:
         msg += f"\n{near_miss}"

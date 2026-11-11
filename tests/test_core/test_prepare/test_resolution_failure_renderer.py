@@ -3653,6 +3653,17 @@ class TestSkippedPluginsRenderBlock:
         assert "  ... and 2 more, see PluginLoader.skipped_plugins()." in message
 
 
+class TestScopeExclusionsRenderLine:
+    def test_a_class_scope_renders_the_reasons_right_after_the_headline(self) -> None:
+        feature = Feature("scopeexcl_feature_791", feature_group=RendererSuccessFG791)
+        result = EvaluationResult(identified={}, facts=RenderFacts(scope_exclusions=("a", "b")))
+
+        message = render_resolution_failure(result, feature)
+
+        assert message is not None
+        assert message.split("\n")[1] == f"{RendererSuccessFG791.__name__} is not accessible in this run: a; b."
+
+
 class TestMultipleSourceFixLine:
     def _result(self, sources: dict[type[FeatureGroup], str]) -> EvaluationResult:
         identified: dict[type[FeatureGroup], set[type[ComputeFramework]]] = {

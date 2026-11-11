@@ -565,7 +565,24 @@ class IdentifyFeatureGroupClass:
             skipped_plugins=tuple(sorted(PluginLoader.skipped_plugins().items())),
             sources=self._capture_sources(result),
             scope_suggestions=self._capture_scope_suggestions(result, accessible_plugins, feature),
+            scope_exclusions=self._capture_scope_exclusions(result, accessible_plugins, feature),
         )
+
+    def _capture_scope_exclusions(
+        self, result: EvaluationResult, accessible_plugins: FeatureGroupEnvironmentMapping, feature: Feature
+    ) -> tuple[str, ...]:
+        """Exclusion reasons of the non-abstract excluded group the scope names exactly; probes no candidate."""
+        scope = feature.feature_group_scope
+        if result.failure_kind != "none" or scope is None:
+            return ()
+        if any(matches_feature_group_scope(fg, scope) for fg in accessible_plugins):
+            return ()
+        reasons = {
+            reason
+            for fg, reason in self._excluded.items()
+            if not inspect.isabstract(fg) and (fg is scope if isinstance(scope, type) else fg.__name__ == scope)
+        }
+        return tuple(sorted(reasons))
 
     @staticmethod
     def _capture_scope_suggestions(

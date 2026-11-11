@@ -88,6 +88,8 @@ class RenderFacts:
     sources: dict[type[FeatureGroup], str] = field(default_factory=dict)
     # Close class names for a string scope no accessible candidate has in its MRO.
     scope_suggestions: tuple[str, ...] = ()
+    # Why the group a scope names was excluded, when no accessible candidate matches.
+    scope_exclusions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

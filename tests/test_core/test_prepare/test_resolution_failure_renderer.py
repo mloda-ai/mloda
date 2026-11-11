@@ -3654,15 +3654,26 @@ class TestSkippedPluginsRenderBlock:
 
 
 class TestMultipleSourceFixLine:
-    def _result(self, sources: dict[type[FeatureGroup], str]) -> EvaluationResult:
+    def _result(
+        self,
+        sources: dict[type[FeatureGroup], str],
+        narrowing_hints: dict[type[FeatureGroup], tuple[str, ...]] | None = None,
+    ) -> EvaluationResult:
         identified: dict[type[FeatureGroup], set[type[ComputeFramework]]] = {
             RendererSuccessFG791: set(),
             RendererBareOnlyFG791: set(),
         }
-        return EvaluationResult(identified=identified, facts=RenderFacts(sources=sources))
+        return EvaluationResult(
+            identified=identified,
+            facts=RenderFacts(sources=sources, narrowing_hints=narrowing_hints or {}),
+        )
 
     def test_captured_sources_append_one_fix_line_before_the_url(self) -> None:
-        result = self._result({RendererSuccessFG791: "A: one", RendererBareOnlyFG791: "B: two"})
+        both = ("data_access_handle", "column_to_file")
+        result = self._result(
+            {RendererSuccessFG791: "A: one", RendererBareOnlyFG791: "B: two"},
+            {RendererSuccessFG791: both, RendererBareOnlyFG791: both},
+        )
 
         message = render_resolution_failure(result, Feature(MULTIPLE_FEATURE_791))
 
@@ -3679,10 +3690,41 @@ class TestMultipleSourceFixLine:
         )
 
         assert message is not None
-        assert "column_to_file" not in message
+        assert "To pick one source" not in message
 
     def test_no_captured_source_appends_no_fix_line(self) -> None:
         message = render_resolution_failure(self._result({}), Feature(MULTIPLE_FEATURE_791))
 
         assert message is not None
-        assert "column_to_file" not in message
+        assert "To pick one source" not in message
+
+    @pytest.mark.parametrize(
+        "first,second,expected",
+        [
+            ((), ("data_access_handle", "column_to_file"), "To pick one source, use feature_group=."),
+            (
+                ("data_access_handle",),
+                ("data_access_handle",),
+                "To pick one source, use feature_group= or a data_access_handle.",
+            ),
+            (("column_to_file",), ("column_to_file",), "To pick one source, use feature_group= or column_to_file."),
+            (
+                ("data_access_handle",),
+                ("data_access_handle", "column_to_file"),
+                "To pick one source, use feature_group= or a data_access_handle.",
+            ),
+        ],
+    )
+    def test_fix_line_names_only_options_every_group_honors(
+        self, first: tuple[str, ...], second: tuple[str, ...], expected: str
+    ) -> None:
+        result = self._result(
+            {RendererSuccessFG791: "A: one", RendererBareOnlyFG791: "B: two"},
+            {RendererSuccessFG791: first, RendererBareOnlyFG791: second},
+        )
+
+        message = render_resolution_failure(result, Feature(MULTIPLE_FEATURE_791))
+
+        assert message is not None
+        fix_lines = [line for line in message.split("\n") if "To pick one source" in line]
+        assert fix_lines == [expected]

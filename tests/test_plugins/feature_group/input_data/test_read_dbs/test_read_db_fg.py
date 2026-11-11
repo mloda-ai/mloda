@@ -785,6 +785,10 @@ class TestMultipleMessageSourceIsScrubbed:
         assert "[source: " in message
         assert "kv://shop" in message
         assert secret not in message
+        fix_lines = [line for line in message.split("\n") if "To pick one source" in line]
+        assert len(fix_lines) == 1
+        assert "data_access_handle" in fix_lines[0]
+        assert "column_to_file" not in fix_lines[0]
 
 
 class TestCatalogFailures:

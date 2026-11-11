@@ -601,6 +601,8 @@ class TestTwoPointedGroups:
             evaluate_or_raise(feature, _plugins(_ValueCheckedFG, ToyOtherSourceFG), None, None)
         assert "_ValueCheckedFG" in str(exc_info.value)
         assert "ToyOtherSourceFG" in str(exc_info.value)
+        fix_lines = [line for line in str(exc_info.value).split("\n") if "To pick one source" in line]
+        assert fix_lines == ["To pick one source, use feature_group= or a data_access_handle."]
 
 
 class TestPointedMissingColumnText:
@@ -1320,6 +1322,38 @@ class TestAmbiguityFixHook:
         text = JsonFG.ambiguity_fix("f", [JsonFG._source("s3://b/x.json")], None)
 
         assert "file handles" not in text
+
+
+class _RaisingHintsFG(ToySourceFG):
+    @classmethod
+    def _narrowing_hints(cls) -> tuple[str, ...]:
+        raise RuntimeError("hints failed")
+
+
+class TestRendererNarrowingHints:
+    def _dac(self) -> DataAccessCollection:
+        return toy_dac(h1={COL: [1]}).with_api_data_columns({"k": (COL,)})
+
+    def test_captured_hints_follow_what_each_group_honors(self) -> None:
+        result = _identify(Feature(COL), self._dac(), ToySourceFG, ApiDataFG)
+
+        assert result.facts.narrowing_hints == {ToySourceFG: ("data_access_handle",), ApiDataFG: ()}
+
+    def test_the_rendered_line_names_neither_handle_nor_column_to_file(self) -> None:
+        with pytest.raises(ValueError, match="Multiple feature groups") as exc_info:
+            evaluate_or_raise(Feature(COL), _plugins(ToySourceFG, ApiDataFG), None, self._dac())
+
+        fix_lines = [line for line in str(exc_info.value).split("\n") if "To pick one source" in line]
+        assert fix_lines == ["To pick one source, use feature_group=."]
+
+    def test_a_raising_hook_degrades_to_no_hints_and_the_message_renders(self) -> None:
+        result = _identify(Feature(COL), self._dac(), _RaisingHintsFG, ApiDataFG)
+        assert result.facts.narrowing_hints[_RaisingHintsFG] == ()
+
+        with pytest.raises(ValueError, match="Multiple feature groups") as exc_info:
+            evaluate_or_raise(Feature(COL), _plugins(_RaisingHintsFG, ApiDataFG), None, self._dac())
+
+        assert "data_access_handle" not in str(exc_info.value)
 
 
 class _PointedParent(ToySourceBase):

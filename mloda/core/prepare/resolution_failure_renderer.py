@@ -8,6 +8,7 @@ from mloda.core.abstract_plugins.components.utils import safe_field, as_str
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
 from mloda.core.prepare.resolution_types import EliminationStage, EvaluationResult
 
 
@@ -104,6 +105,20 @@ def _render_near_miss_block(result: EvaluationResult, feature: Feature) -> str |
     return f"Feature group(s) eliminated while matching '{str(feature.name)}':\n{lines}"
 
 
+def _source_fix_line(result: EvaluationResult, captured: list[type[FeatureGroup]]) -> str:
+    # An option narrows only if every competing group honors it.
+    hints = result.facts.narrowing_hints
+    shared = [h for h in hints.get(captured[0], ()) if all(h in hints.get(fg, ()) for fg in captured[1:])]
+    items = ["feature_group="] + [f"a {h}" if h == HANDLE_OPTION else h for h in shared]
+    if len(items) == 1:
+        text = items[0]
+    elif len(items) == 2:
+        text = " or ".join(items)
+    else:
+        text = ", ".join(items[:-1]) + ", or " + items[-1]
+    return f"To pick one source, use {text}.\n"
+
+
 def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | None) -> str:
     # Every identified candidate gets a line; only a candidate with a captured domain gets the suffix.
     # The resolve_feature pointer is deliberately omitted: the message already names every candidate,
@@ -115,10 +130,8 @@ def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | 
         for fg in sorted(result.identified, key=_candidate_sort_key)
     )
     scope_line = f"{callout}\n" if callout else ""
-    captured = sum(1 for fg in result.identified if fg in result.facts.sources)
-    source_fix = (
-        "To pick one source, use feature_group=, a data_access_handle, or column_to_file.\n" if captured >= 2 else ""
-    )
+    captured = [fg for fg in sorted(result.identified, key=_candidate_sort_key) if fg in result.facts.sources]
+    source_fix = _source_fix_line(result, captured) if len(captured) >= 2 else ""
     return (
         f"Multiple feature groups found for feature '{str(feature.name)}'{_needed_by(feature)}:\n"
         f"{lines}\n"

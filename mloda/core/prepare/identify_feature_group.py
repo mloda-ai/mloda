@@ -552,6 +552,7 @@ class IdentifyFeatureGroupClass:
         message reads. Every provider hook here is best-effort: a raising one degrades its own fact, never this
         call or a sibling's fact.
         """
+        sources = self._capture_sources(result)
         return RenderFacts(
             domains=self._capture_domains(result),
             concrete_frameworks=self._concrete_implementation_frameworks(result, accessible_plugins),
@@ -563,7 +564,8 @@ class IdentifyFeatureGroupClass:
                 else frozenset()
             ),
             skipped_plugins=tuple(sorted(PluginLoader.skipped_plugins().items())),
-            sources=self._capture_sources(result),
+            sources=sources,
+            narrowing_hints=self._capture_narrowing_hints(sources),
             scope_suggestions=self._capture_scope_suggestions(result, accessible_plugins, feature),
         )
 
@@ -599,6 +601,24 @@ class IdentifyFeatureGroupClass:
                 field=f"{getattr(reader, '__name__', 'reader')}.data_access_identity",
             )
         return {fg: text for fg, text in sources.items() if text}
+
+    def _capture_narrowing_hints(
+        self, sources: dict[type[FeatureGroup], str]
+    ) -> dict[type[FeatureGroup], tuple[str, ...]]:
+        """Narrowing options each captured source group honors; () when the hook is absent or fails."""
+        hints: dict[type[FeatureGroup], tuple[str, ...]] = {}
+        for feature_group in sources:
+            reader = self._input_data_matches[feature_group][0]
+            hints[feature_group] = (
+                safe_field(
+                    lambda: tuple(h for h in reader._narrowing_hints() if isinstance(h, str)),
+                    (),
+                    field=f"{getattr(reader, '__name__', 'reader')}._narrowing_hints",
+                )
+                if is_nominal_subclass(reader, SourceFeatureGroup)
+                else ()
+            )
+        return hints
 
     def _capture_eliminated_hints(self, result: EvaluationResult) -> frozenset[str]:
         """Class name and prefix of every eliminated near-miss, so the none message can suppress a

@@ -1396,9 +1396,7 @@ class _ComputesDeclaredColFG(FeatureGroup):
 
 
 class TestUnpointedDeclaredNamesDeclineWithReason:
-    @pytest.mark.parametrize(
-        "name", ["ToyDeclaredFG", "toyfmt_declared_col", "toyfmt_pre_anything", "toyfmt_pre_x~key"]
-    )
+    @pytest.mark.parametrize("name", TestDeclaredNames.CLAIMED)
     @pytest.mark.parametrize("dac", [None, foreign_dac()], ids=["no_collection", "foreign_collection"])
     def test_unpointed_declared_name_without_a_source_records_source_not_found(
         self, name: str, dac: DataAccessCollection | None
@@ -1423,7 +1421,6 @@ class TestUnpointedDeclaredNamesDeclineWithReason:
         del group, result
 
     def test_source_group_stays_silent_when_a_non_source_candidate_computes_the_name(self) -> None:
-        """Regression pin: may already pass before the change."""
         dac = toy_dac(h1={COL: [1]})
         alone = evaluate_or_raise(Feature("toyfmt_declared_col"), _plugins(ToyDeclaredFG), None, dac)
         assert set(alone.identified) == {ToyDeclaredFG}

@@ -1973,6 +1973,21 @@ class TestScrubUriProjection:
                 id="py-dict-compact-url-then-password",
             ),
             pytest.param(
+                "{'url': 'jdbc:postgresql://h/db;a=', 'password': 'sec'}",
+                "{'url': 'jdbc:postgresql://h', 'password': '***'}",
+                id="jdbc-dict-repr-single-quoted-masked",
+            ),
+            pytest.param(
+                '{"url": "jdbc:postgresql://h/db;a=", "password": "sec"}',
+                '{"url": "jdbc:postgresql://h", "password": "***"}',
+                id="jdbc-dict-repr-double-quoted-masked",
+            ),
+            pytest.param(
+                '{"url":"jdbc:postgresql://h/db;a=","password":"sec"}',
+                '{"url":"jdbc:postgresql://h"}',
+                id="jdbc-json-compact-password-dropped",
+            ),
+            pytest.param(
                 '["https://h1/p?a=1","https://h2/p?b=2","https://h3/p?c=3"]',
                 '["https://h1/p","https://h2/p","https://h3/p"]',
                 id="compact-json-url-list",
@@ -2380,21 +2395,6 @@ class TestScrubUriProjection:
                 "jdbc:sqlserver://b;password={X} connected ok",
                 "jdbc:sqlserver://b connected ok",
                 id="jdbc-brace-value-prose-after-kept",
-            ),
-            pytest.param(
-                "{'url': 'jdbc:postgresql://h/db;a=', 'password': 'sec'}",
-                "{'url': 'jdbc:postgresql://h', 'password': '***'}",
-                id="jdbc-dict-repr-single-quoted-masked",
-            ),
-            pytest.param(
-                '{"url": "jdbc:postgresql://h/db;a=", "password": "sec"}',
-                '{"url": "jdbc:postgresql://h", "password": "***"}',
-                id="jdbc-dict-repr-double-quoted-masked",
-            ),
-            pytest.param(
-                '{"url":"jdbc:postgresql://h/db;a=","password":"sec"}',
-                '{"url":"jdbc:postgresql://h"}',
-                id="jdbc-json-compact-password-dropped",
             ),
             pytest.param("s3://b/x]y%20z", "s3://b/x]y%20z", id="mid-path-closer-encoded-space-kept"),
             pytest.param("s3://b/x];", "s3://b/x];", id="mid-path-closer-trailing-semicolon-kept"),

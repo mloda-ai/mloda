@@ -359,10 +359,9 @@ _JDBC_CUT_PATTERN = re.compile(
     r"(?:::(?:[a-z][a-z0-9+.-]{0,31}::)*+|\S))*"
 )
 # Own marker for a dropped jdbc path: its cut runs to the next `://` (jdbc tails are never fsspec chains), then
-# through a spaced `key = value` tail.
+# through spaced `key = value` and quoted or braced values.
 _JDBC_PATH_CUT = "\ue002"
-# A quoted value closes only before a delimiter (so a dict repr's `'` stays a boundary); quoted and braced values
-# stop at a newline or `://`, and an unclosed one runs to that stop.
+# A quoted value closes only before a delimiter (a dict repr's quote stays a boundary); values stop at a newline or `://`.
 _JDBC_QUOTED = (
     r"""'(?:(?!://)[^'\n])*+(?:'(?=[;\s,)\]}>]|$)|(?=\n|$|://))"""
     r"""|"(?:(?!://)[^"\n])*+(?:"(?=[;\s,)\]}>]|$)|(?=\n|$|://))"""
@@ -371,7 +370,7 @@ _JDBC_BRACED = r"\{(?:(?!://)[^}\n]|\}\})*+\}?"
 _UNCLOSED_BRACE_BODY = re.compile(r"(?:[^}]|\}\})*+")
 _JDBC_PATH_CUT_PATTERN = re.compile(
     _JDBC_PATH_CUT + rf"(?:(?P<v>(?<=[= \t])(?:{_JDBC_QUOTED}|{_JDBC_BRACED})|(?<={_JDBC_PATH_CUT}){_JDBC_BRACED})"
-    r"|[ \t]++(?==)|(?<==)[ \t]++|(?!://)\S)*"  # not `*+`: 3.11 mis-reports group spans under a possessive loop
+    r"|[ \t]++(?==)|(?<==)[ \t]++|(?!://)\S)*"  # not `*+`: 3.11 misreports group spans
 )
 # Closers then sentence punctuation then whitespace or end: the match ended a value, nothing was cut off.
 _CLOSING_END_PATTERN = re.compile(r"[\"'<>)\]}]+[,:;.!?]*(?:\s|$)")

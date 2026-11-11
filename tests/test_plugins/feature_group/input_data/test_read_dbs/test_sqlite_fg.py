@@ -800,6 +800,8 @@ class TestSqliteFGMultiprocessing:
             DataAccessCollection(credentials=[HashableDict({KEY: str(tmp_path / "mp_hashable.sqlite")})])
         assert "credential" in str(excinfo.value).lower()
 
+    # Spawned workers re-import mloda and the first Flight user starts the server; a loaded -n 8 gate can pass 10 s.
+    @pytest.mark.timeout(30)
     def test_plain_dict_credentials_under_multiprocessing(self, people_db: str, flight_server: Any) -> None:
         result = mloda.run_all(
             ["name", "id"],
@@ -812,6 +814,7 @@ class TestSqliteFGMultiprocessing:
 
         assert result[0].to_pydict() == {"name": ["Alice", "Bob", "Charlie"], "id": [1, 2, 3]}
 
+    @pytest.mark.timeout(30)
     def test_a_worker_step_registers_only_its_own_credentials_secrets(
         self, people_db: str, tmp_path: Path, flight_server: Any
     ) -> None:

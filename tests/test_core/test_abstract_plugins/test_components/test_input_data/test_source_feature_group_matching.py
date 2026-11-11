@@ -1378,6 +1378,77 @@ class TestPointedRoutesDeclineWithReason:
         assert elimination.code is CoreDeclineCode.SOURCE_NOT_FOUND
 
 
+class _ComputesDeclaredColFG(FeatureGroup):
+    """Non-source group computing a name that ToyDeclaredFG declares."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: FeatureName | str, options: Options, data_access_collection: Any = None
+    ) -> bool:
+        return str(feature_name) == "toyfmt_declared_col"
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(COL)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+
+class TestUnpointedDeclaredNamesDeclineWithReason:
+    @pytest.mark.parametrize(
+        "name", ["ToyDeclaredFG", "toyfmt_declared_col", "toyfmt_pre_anything", "toyfmt_pre_x~key"]
+    )
+    @pytest.mark.parametrize("dac", [None, foreign_dac()], ids=["no_collection", "foreign_collection"])
+    def test_unpointed_declared_name_without_a_source_records_source_not_found(
+        self, name: str, dac: DataAccessCollection | None
+    ) -> None:
+        result = _identify(Feature(name), dac, ToyDeclaredFG)
+
+        assert ToyDeclaredFG not in result.identified
+        elimination = result.eliminations[ToyDeclaredFG]
+        assert elimination.stage == "input_data"
+        assert elimination.code is CoreDeclineCode.SOURCE_NOT_FOUND
+        assert f"ToyDeclaredFG found no source serving '{name}'" in elimination.reason
+
+    @pytest.mark.parametrize("dac", [None, toy_dac()], ids=["no_collection", "empty_toy_collection"])
+    def test_a_reason_recorded_by_find_sources_wins(self, dac: DataAccessCollection | None) -> None:
+        calls: list[str] = []
+        group = _spy_declared_group(calls, record=True)
+        result = _identify(Feature("toyfmt_declared_col"), dac, group)
+
+        assert calls == ["toyfmt_declared_col"]
+        assert group not in result.identified
+        assert result.eliminations[group].reason == "credential check failed"
+        del group, result
+
+    def test_source_group_stays_silent_when_a_non_source_candidate_computes_the_name(self) -> None:
+        """Regression pin: may already pass before the change."""
+        dac = toy_dac(h1={COL: [1]})
+        alone = evaluate_or_raise(Feature("toyfmt_declared_col"), _plugins(ToyDeclaredFG), None, dac)
+        assert set(alone.identified) == {ToyDeclaredFG}
+
+        plugins = _plugins(ToyDeclaredFG, ToySourceFG, _ComputesDeclaredColFG)
+        result = evaluate_or_raise(Feature("toyfmt_declared_col"), plugins, None, dac)
+
+        assert set(result.identified) == {_ComputesDeclaredColFG}
+        assert ToyDeclaredFG not in result.eliminations
+
+    def test_lone_derived_consumer_names_the_unserved_declared_input(self) -> None:
+        feature = Feature("toyfmt_declared_col__sum_aggr")
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            mloda.run_all(
+                [feature],
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups({ToyDeclaredFG, AggregatedFeatureGroup}),
+            )
+
+        assert (
+            "ToyDeclaredFG (input data): ToyDeclaredFG found no source serving 'toyfmt_declared_col'"
+            " [code: source_not_found]"
+        ) in str(exc_info.value)
+
+
 class _AbstractRouted(SourceFeatureGroup):
     """Abstract group that inherits routes but implements no hooks."""
 

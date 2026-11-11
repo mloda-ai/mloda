@@ -773,4 +773,9 @@ class SourceFeatureGroup(FeatureGroup):
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND
             )
+        elif any(route.names is NamePolicy.DECLARED for route in selected):
+            reason = f"{cls.get_class_name()} found no source serving '{name}'"
+            record_match_rejection(
+                cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND
+            )
         return False

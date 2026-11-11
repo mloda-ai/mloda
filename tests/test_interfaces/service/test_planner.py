@@ -57,6 +57,7 @@ from mloda.provider import (
     property_spec,
 )
 from mloda.user import PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
@@ -244,6 +245,33 @@ class PlannerOptionsProbeMcp4(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {OPTS: list(data["income"])}
+
+
+PIN_ROOT = "mcp4_pin_root"
+
+
+class PlannerPinRootMcp4(FeatureGroup):
+    """Root that pins a variant input to Pandas beside a denied column input."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == PIN_ROOT
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("optoyvar_open_consumer", implementation="OpToyVariantPandas"), Feature("mcp4_salary")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
 
 
 BIND_PREFIX = "income__mcp4_bind_"
@@ -1169,6 +1197,54 @@ class TestPolicy:
         assert {k: v for k, v in error.items() if k != "audit_id"} == {
             k: v for k, v in with_column.items() if k != "audit_id"
         }
+        assert denied_calls == []
+
+    def test_variant_pin_beside_a_denied_input_is_policy_denied_either_way(self, tmp_path: Path) -> None:
+        toy = importlib.import_module(
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+        )
+        base = PluginCollector.enabled_feature_groups(
+            {
+                *FILE_SOURCE_GROUPS,
+                PlannerDeniedMcp4,
+                PlannerDoubleMcp4,
+                PlannerPinRootMcp4,
+                toy.OpToyVariantFG,
+                toy.OpToyVariantOpenConsumerFG,
+            }
+        )
+        request = {"features": [{"name": PIN_ROOT, "options": {toy.OPTOY_KEY: "sum"}}]}
+        errors = []
+        for with_denied_column in (True, False):
+            sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=with_denied_column))}
+            settings = _settings(
+                tmp_path,
+                sources=sources,
+                compute_frameworks=("PandasDataFrame", "PyArrowTable"),
+                allow_options=("optoy_kind", "allow_variants"),
+            )
+            result = _planner(settings, base=base).explain(request)
+            error = _error(result, "policy_denied")
+            assert _has_detail(error, path="/features", problem="policy_denied")
+            dumped = json.dumps(result)
+            assert "mcp4_salary" not in dumped
+            assert toy.OPTOY_VARIANT_OPEN_CONSUMER not in dumped
+            errors.append({k: v for k, v in error.items() if k != "audit_id"})
+        assert errors[0] == errors[1]
+
+    @pytest.mark.parametrize("with_denied_column", [True, False])
+    def test_denied_input_beside_a_real_failing_sibling_is_policy_denied(
+        self, tmp_path: Path, with_denied_column: bool
+    ) -> None:
+        sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=with_denied_column))}
+
+        result = _explain(tmp_path, {"features": ["mcp4_salary" + DOUBLE_SUFFIX, "nope_x"]}, sources=sources)
+
+        error = _error(result, "policy_denied")
+        assert _has_detail(error, path="/features", problem="policy_denied")
+        dumped = json.dumps(result).replace("mcp4_salary" + DOUBLE_SUFFIX, "")
+        assert "nope_x" not in dumped
+        assert "mcp4_salary" not in dumped
 
     @pytest.mark.parametrize("with_denied_column", [True, False])
     def test_derived_name_over_denied_column_carries_alternatives(
@@ -1187,12 +1263,15 @@ class TestPolicy:
 
         assert _error(result, "policy_denied")["alternatives"] == ["income"]
 
+    @pytest.mark.parametrize("failing_name", ["sibling_x", None])
     def test_denied_input_resolved_beside_a_failing_sibling_is_policy_denied(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failing_name: str | None
     ) -> None:
         failed = EvaluationResult(identified={}, eliminations={})
         records = [ResolutionRecord("mcp4_salary", False, failed)]
-        diagnosis = ResolutionDiagnosis(records=records, complete=False, feature_name="sibling_x", failed_result=failed)
+        diagnosis = ResolutionDiagnosis(
+            records=records, complete=False, feature_name=failing_name, failed_result=failed
+        )
         monkeypatch.setattr(mloda, "diagnose", lambda *args, **kwargs: diagnosis)
 
         result = _explain(tmp_path, {"features": ["income"]})

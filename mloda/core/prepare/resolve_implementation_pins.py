@@ -189,6 +189,7 @@ class ResolveImplementationPins:
                     variants=tuple(sorted({str(r.variant) for r in found})),
                     allow_variants=variant_fix(group, {fw: found}, feature.options),
                     resolving_path=resolving_path,
+                    planned_names=tuple(dict.fromkeys(str(n.feature.name) for n in self.graph.nodes.values())),
                 )
         if not serves:
             reason = (

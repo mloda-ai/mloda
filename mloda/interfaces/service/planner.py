@@ -67,15 +67,15 @@ _PAYLOAD_KEYS = frozenset({"kid", "req", "digest", "cfg", "sub", "exp"})
 _TOO_LARGE_MESSAGE = "The request is too large for a plan id."
 
 
+_DENIED_MESSAGE = "This feature is not available under the service policy."
+_UNPLANNABLE_MESSAGE = "The request cannot be planned under the service policy and sources."
+_WITHHELD_FILTER_MESSAGE = "Filters on columns the preview withholds are refused; row counts would reveal their values."
+
+
 def _root_pointer(root: str, names: Sequence[str]) -> tuple[str, str]:
     if root in names:
         return f"/features/{names.index(root)}", f"'{sanitize_text(root, MAX_NAME_LENGTH)}'"
     return "/features", "a requested feature"
-
-
-_DENIED_MESSAGE = "This feature is not available under the service policy."
-_UNPLANNABLE_MESSAGE = "The request cannot be planned under the service policy and sources."
-_WITHHELD_FILTER_MESSAGE = "Filters on columns the preview withholds are refused; row counts would reveal their values."
 
 
 def _b64(data: bytes) -> str:
@@ -306,6 +306,9 @@ class Planner:
                     failure = error
         except Exception as error:
             if isinstance(error, VariantBlockedPinError):
+                denied = self._denied([("/features", n) for n in error.planned_names])
+                if denied is not None:
+                    return denied
                 path, owner = _root_pointer(
                     error.resolving_path[0] if error.resolving_path else error.feature, request_names
                 )
@@ -503,6 +506,14 @@ class Planner:
         ]
         return error_result("policy_denied", _DENIED_MESSAGE, details, **extra)
 
+    def _denied_diagnosis(self, diagnosis: ResolutionDiagnosis) -> dict[str, Any] | None:
+        names = [
+            *([diagnosis.feature_name] if diagnosis.feature_name is not None else []),
+            *diagnosis.resolving_path,
+            *(r.feature_name for r in diagnosis.records),
+        ]
+        return self._denied([("/features", n) for n in dict.fromkeys(names)])
+
     def _unresolved(
         self,
         diagnosis: ResolutionDiagnosis,
@@ -510,16 +521,15 @@ class Planner:
         sources: Mapping[str, SourceConfig],
         in_sources: Sequence[tuple[str, str]],
     ) -> dict[str, Any]:
+        # The same answer whether or not a source has the denied column.
+        denied = self._denied_diagnosis(diagnosis)
+        if denied is not None:
+            return denied
         name = diagnosis.feature_name
         if name is None:
             # The core message may name configured paths, so it is never forwarded.
             detail = {"path": "/features", "problem": "unresolved", "message": _UNPLANNABLE_MESSAGE}
             return error_result("validation_failed", _UNPLANNABLE_MESSAGE, [detail])
-        names_seen = dict.fromkeys([name, *diagnosis.resolving_path, *(r.feature_name for r in diagnosis.records)])
-        # The same answer whether or not a source has the denied column.
-        denied = self._denied([("/features", n) for n in names_seen])
-        if denied is not None:
-            return denied
         shown = sanitize_text(name, MAX_NAME_LENGTH)
         typed = {declared: pointer for pointer, declared in reversed(in_sources)}
         requested = name in names or name in typed

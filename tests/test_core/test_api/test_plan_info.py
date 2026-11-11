@@ -1274,6 +1274,10 @@ class TestPlanStepVariantAllowOption:
         assert caught.value.feature_group == "OpToyVariantFG"
         assert caught.value.variants == (toy.OPTOY_VARIANT,)
         assert caught.value.allow_variants == (toy.OPTOY_VARIANT,)
+        requested = toy.OPTOY_VARIANT_PIN_ROOT if input_pin else toy.OPTOY_VARIANT_OPEN_CONSUMER
+        assert {requested, toy.OPTOY_VARIANT_OPEN_CONSUMER, toy.OPTOY_VARIANT_FEATURE} <= set(
+            caught.value.planned_names
+        )
 
     def test_diagnose_on_a_consumer_over_a_blocked_input_reports_the_resolving_path(self) -> None:
         toy = importlib.import_module(self.TOY)

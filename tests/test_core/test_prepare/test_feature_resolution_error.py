@@ -246,6 +246,7 @@ class TestFeatureResolutionErrorTransport:
             variants=("v1", "v2"),
             allow_variants=("v1",),
             resolving_path=("root_809", "f_809"),
+            planned_names=("root_809", "f_809", "g_809"),
         )
 
         restored = round_trip(original)
@@ -257,6 +258,7 @@ class TestFeatureResolutionErrorTransport:
         assert restored.variants == ("v1", "v2")
         assert restored.allow_variants == ("v1",)
         assert restored.resolving_path == ("root_809", "f_809")
+        assert restored.planned_names == ("root_809", "f_809", "g_809")
 
 
 class TestFeatureResolutionErrorImportSurfaces:

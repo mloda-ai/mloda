@@ -272,7 +272,7 @@ class SourceFeatureGroup(FeatureGroup):
 
     @classmethod
     def _narrowing_hints(cls) -> tuple[str, ...]:
-        """Option names this group honors for narrowing to one source."""
+        """Options or collection fields this group honors to narrow to one source."""
         return (HANDLE_OPTION,) if HANDLE_OPTION in cls.declared_option_keys() else ()
 
     @classmethod

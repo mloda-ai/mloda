@@ -93,7 +93,7 @@ def _keyword_pattern(plain: str) -> re.Pattern[str]:
     )
 
 
-# A quote run continues the value unless a delimiter or end follows it, so `hun'!ter2` and `hun''ter2` leave no fragment.
+# A quote run continues the value unless a delimiter or the end follows it, so no fragment of the value is left.
 _KEYWORD_PATTERN = _keyword_pattern(r"[^;&\s'\"]*(?:['\"]++(?![\s,;&:)\]}>]|$)[^;&\s'\"]+)*")
 # The identity form: a segment value ends at `/` or at a `::` that continues a chain; an inner quote run continues it.
 _KEYWORD_SEGMENT_PATTERN = _keyword_pattern(

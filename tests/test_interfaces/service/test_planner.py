@@ -31,7 +31,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plan_info import PlanStep
-from mloda.core.prepare.resolution_types import Elimination, EvaluationResult
+from mloda.core.prepare.resolution_types import Elimination, EvaluationResult, ResolutionRecord
 from mloda.interfaces.service.catalog import Catalog
 from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig, load_settings
 from mloda.interfaces.service.errors import ERROR_CODES, is_error
@@ -933,22 +933,34 @@ class TestVariantNotAllowed:
         assert [d["path"] for d in details] == ["/features/0"]
         assert "One of the inputs of" in details[0]["message"]
 
-    def test_chained_implementation_pin_is_validation_failed_not_internal(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize(
+        ("feature_const", "config", "extra_groups"),
+        [
+            ("OPTOY_VARIANT_OPEN_CONSUMER", {"implementation": "OpToyVariantPandas"}, ("OpToyVariantOpenConsumerFG",)),
+            ("OPTOY_VARIANT_PIN_ROOT", None, ("OpToyVariantOpenConsumerFG", "OpToyVariantPinRootFG")),
+        ],
+        ids=["root_pin", "input_pin"],
+    )
+    def test_chained_implementation_pin_is_validation_failed_not_internal(
+        self, tmp_path: Path, feature_const: str, config: dict[str, Any] | None, extra_groups: tuple[str, ...]
+    ) -> None:
         result, detail, toy = self._blocked(
             tmp_path,
             "OpToyVariantFG",
-            feature_const="OPTOY_VARIANT_OPEN_CONSUMER",
-            config={"implementation": "OpToyVariantPandas"},
-            extra_groups=("OpToyVariantOpenConsumerFG",),
+            feature_const=feature_const,
+            config=config,
+            extra_groups=extra_groups,
             compute_frameworks=("PandasDataFrame", "PyArrowTable"),
             allow_options=("optoy_kind", "allow_variants"),
         )
 
         assert detail["path"] == "/features/0"
-        assert toy.OPTOY_VARIANT_OPEN_CONSUMER in detail["message"]
+        assert getattr(toy, feature_const) in detail["message"]
         assert detail["fix"] == {"allow_variants": [toy.OPTOY_VARIANT]}
         assert detail["feature_group"] == "OpToyVariantFG"
         assert detail["variants"] == [toy.OPTOY_VARIANT]
+        if config is None:
+            assert toy.OPTOY_VARIANT_OPEN_CONSUMER not in json.dumps(result)
         _assert_no_paths(result, tmp_path, "sales.csv")
 
     def test_competing_consumers_give_one_variant_detail_each(self, tmp_path: Path) -> None:
@@ -1145,15 +1157,26 @@ class TestPolicy:
     ) -> None:
         result = _explain(tmp_path, {"features": ["mcp4_salary" + DOUBLE_SUFFIX]})
 
-        error = _error(result, "validation_failed")
-        assert _has_detail(error, path="/features/0", problem="unresolved")
+        error = _error(result, "policy_denied")
+        assert _has_detail(error, path="/features", problem="policy_denied")
         assert all("suggestion" not in detail for detail in error["details"])
-        assert "'mcp4_salary'" not in json.dumps(result)
         assert "mcp4_salary" not in json.dumps(result).replace("mcp4_salary" + DOUBLE_SUFFIX, "")
         assert denied_calls == []
-
-    def test_derived_name_over_denied_column_carries_alternatives(self, tmp_path: Path) -> None:
         sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=True))}
+        with_column = _error(
+            _explain(tmp_path, {"features": ["mcp4_salary" + DOUBLE_SUFFIX]}, sources=sources), "policy_denied"
+        )
+        assert {k: v for k, v in error.items() if k != "audit_id"} == {
+            k: v for k, v in with_column.items() if k != "audit_id"
+        }
+
+    @pytest.mark.parametrize("with_denied_column", [True, False])
+    def test_derived_name_over_denied_column_carries_alternatives(
+        self, tmp_path: Path, with_denied_column: bool
+    ) -> None:
+        sources = (
+            {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=True))} if with_denied_column else None
+        )
 
         result = _explain(
             tmp_path,
@@ -1163,6 +1186,20 @@ class TestPolicy:
         )
 
         assert _error(result, "policy_denied")["alternatives"] == ["income"]
+
+    def test_denied_input_resolved_beside_a_failing_sibling_is_policy_denied(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        failed = EvaluationResult(identified={}, eliminations={})
+        records = [ResolutionRecord("mcp4_salary", False, failed)]
+        diagnosis = ResolutionDiagnosis(records=records, complete=False, feature_name="sibling_x", failed_result=failed)
+        monkeypatch.setattr(mloda, "diagnose", lambda *args, **kwargs: diagnosis)
+
+        result = _explain(tmp_path, {"features": ["income"]})
+
+        error = _error(result, "policy_denied")
+        assert _has_detail(error, path="/features", problem="policy_denied")
+        assert "sibling_x" not in json.dumps(result)
 
     def test_allowed_request_never_calls_into_denied(self, tmp_path: Path, denied_calls: list[str]) -> None:
         _success(_explain(tmp_path, {"features": ["customer_id", DERIVED]}))

@@ -16,9 +16,11 @@ class VariantBlockedPinError(ImplementationPinError):
         feature_group: str = "",
         variants: tuple[str, ...] = (),
         allow_variants: tuple[str, ...] = (),
+        resolving_path: tuple[str, ...] = (),
     ) -> None:
         super().__init__(message)
         self.feature = feature
         self.feature_group = feature_group
         self.variants = variants
         self.allow_variants = allow_variants
+        self.resolving_path = resolving_path

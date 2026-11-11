@@ -159,7 +159,8 @@ Credentials a group reads at run time with `read_credential` stay here too (see 
 - Denied FeatureGroups are disabled before matching, so their code does not run; the agent sees `policy_denied` and
   the alternatives you configured. Requested names, `index` columns, `in_features` source names and filter columns are
   checked before planning. Any planned feature name the deny list matches, such as a chained name over a denied
-  column, is refused after planning.
+  column, is refused after planning, and refused the same way when the denied name cannot be resolved or fails beside
+  another input.
 - `run` re-plans the request: validation, policy, filters and row limits are checked again, and a plan that resolves
   differently is refused as `plan_stale`.
 - With `max_rows` set, a request is refused as `limit_exceeded` when a configured source has more rows or cannot be

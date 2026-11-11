@@ -259,6 +259,18 @@ class OpToyVariantEmptyConsumerFG(OpToyVariantOpenConsumerFG):
     INPUT = "optoyvar_empty"
 
 
+OPTOY_VARIANT_PIN_ROOT = "optoyvar_pin_root"
+
+
+class OpToyVariantPinRootFG(OpToyVariantOpenConsumerFG):
+    """Consumer that pins its variant input to the Pandas implementation."""
+
+    NAME = OPTOY_VARIANT_PIN_ROOT
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(OPTOY_VARIANT_OPEN_CONSUMER, implementation="OpToyVariantPandas")}
+
+
 OPTOY_VARIANT_RIVAL_CONSUMER = "optoyvar_rival_consumer"
 
 

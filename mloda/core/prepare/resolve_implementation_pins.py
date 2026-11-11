@@ -68,7 +68,7 @@ class ResolveImplementationPins:
                 continue
             for step, impl in self._assign(uuid, pin):
                 feature = self.graph.nodes[step].feature
-                served = self._allowed(step, impl, str(node.feature.name))
+                served = self._allowed(step, impl, str(node.feature.name), node.feature.resolving_path)
                 for other, other_impl, other_request in seen:
                     twin = self.graph.nodes[other].feature
                     if (
@@ -154,7 +154,13 @@ class ResolveImplementationPins:
         stop_after = "load_neutral" if is_nominal_subclass(group, SourceFeatureGroup) else None
         return serving_implementation(group, framework, self.accessible, stop_after=stop_after)
 
-    def _allowed(self, uuid: UUID, impl: type[Implementation[Any]], request: str | None = None) -> frozenset[Framework]:
+    def _allowed(
+        self,
+        uuid: UUID,
+        impl: type[Implementation[Any]],
+        request: str | None = None,
+        resolving_path: tuple[str, ...] = (),
+    ) -> frozenset[Framework]:
         node = self.graph.nodes[uuid]
         feature = node.feature
         group = node.feature_group_class
@@ -182,6 +188,7 @@ class ResolveImplementationPins:
                     feature_group=group.__name__,
                     variants=tuple(sorted({str(r.variant) for r in found})),
                     allow_variants=variant_fix(group, {fw: found}, feature.options),
+                    resolving_path=resolving_path,
                 )
         if not serves:
             reason = (

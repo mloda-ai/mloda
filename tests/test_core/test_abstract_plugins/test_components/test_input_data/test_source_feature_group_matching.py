@@ -1253,18 +1253,18 @@ class _FixTextFG(ToySourceFG):
 
 class TestAmbiguityFixHook:
     @pytest.mark.parametrize(
-        ("group", "handle", "expected"),
-        [(ToySourceFG, True, None), (ApiDataFG, False, "point ApiDataFG at one source.")],
+        ("group", "expected"),
+        [
+            pytest.param(ToySourceFG, "narrow with a data_access_handle.", id="toy"),
+            pytest.param(ApiDataFG, "point ApiDataFG at one source.", id="api"),
+        ],
     )
     def test_default_names_only_the_options_the_group_declares(
-        self, group: type[SourceFeatureGroup], handle: bool, expected: str | None
+        self, group: type[SourceFeatureGroup], expected: str
     ) -> None:
         text = group.ambiguity_fix(COL, [], None)
 
-        assert ("data_access_handle" in text) is handle
-        assert "column_to_file" not in text
-        if expected is not None:
-            assert text == expected
+        assert text == expected
 
     def test_override_text_ends_the_abort(self) -> None:
         dac = toy_dac(h1={COL: [1]}, h2={COL: [2]})

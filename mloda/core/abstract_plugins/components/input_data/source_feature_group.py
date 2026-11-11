@@ -268,7 +268,7 @@ class SourceFeatureGroup(FeatureGroup):
     ) -> str:
         """Advice appended to the several-sources abort."""
         hints = cls._narrowing_hints()
-        return "narrow with a " + " or ".join(hints) + "." if hints else f"point {cls.get_class_name()} at one source."
+        return f"narrow with a {' or '.join(hints)}." if hints else f"point {cls.get_class_name()} at one source."
 
     @classmethod
     def _narrowing_hints(cls) -> tuple[str, ...]:

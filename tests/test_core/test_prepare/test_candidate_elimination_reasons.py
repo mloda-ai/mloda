@@ -45,8 +45,9 @@ from mloda.core.prepare.identify_feature_group import (
     FeatureResolutionError,
     IdentifyFeatureGroupClass,
 )
+from mloda.core.prepare.input_chain import input_variant_block
 from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
-from mloda.core.prepare.resolution_types import Elimination
+from mloda.core.prepare.resolution_types import Elimination, EvaluationResult
 from mloda.provider import NAME_STAGE, FeatureSet, record_match_rejection
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise, identify_winner
 
@@ -920,6 +921,53 @@ class TestEliminationStages:
         }
 
         assert variant_fix(toy.OpToyVariantOtherFG, blocked, Options(group=allow)) == expected
+
+    def test_competing_consumers_carry_the_input_variant_block(self) -> None:
+        toy = _op_toy()
+        fixable, unlisted = toy.OpToyVariantRivalFixableConsumerFG, toy.OpToyVariantRivalUnlistedConsumerFG
+        feature = Feature(toy.OPTOY_VARIANT_RIVAL_CONSUMER, {toy.OPTOY_KEY: "sum"})
+        pandas_only: set[type[ComputeFramework]] = {PandasDataFrame}
+        plugins: FeatureGroupEnvironmentMapping = {
+            fixable: pandas_only,
+            unlisted: pandas_only,
+            toy.OpToyVariantFG: pandas_only,
+            toy.OpToyVariantEmptyFG: pandas_only,
+        }
+
+        with accessible_implementations(
+            {toy.OpToyVariantConsumerPandas, toy.OpToyVariantPandas, toy.OpToyVariantPyArrow}
+        ):
+            err = _fail(feature, plugins)
+
+        eliminations = err.result.eliminations
+        assert eliminations[fixable].stage == "inputs"
+        assert eliminations[fixable].variants == ("skip_nan",)
+        assert eliminations[fixable].allow_variants == ("skip_nan",)
+        assert eliminations[unlisted].stage == "inputs"
+        assert eliminations[unlisted].variants == ("skip_nan",)
+        assert eliminations[unlisted].allow_variants == ()
+
+    def test_input_variant_block_unions_and_withholds_an_unfixable_fix(self) -> None:
+        def variant(name: str, fix: tuple[str, ...]) -> Elimination:
+            return Elimination(stage="variant", reason="r", variants=(name,), allow_variants=fix)
+
+        fixable = EvaluationResult(
+            identified={}, eliminations={ElimSortAFG011: variant("b", ("b",)), ElimSortBFG011: variant("a", ("a",))}
+        )
+        mixed = EvaluationResult(
+            identified={}, eliminations={ElimSortAFG011: variant("b", ("b",)), ElimSortBFG011: variant("a", ())}
+        )
+        multiple = EvaluationResult(
+            identified={ElimSortAFG011: set(), ElimSortBFG011: set()},
+            eliminations={ElimSuccessFG011: variant("a", ("a",))},
+        )
+
+        abstract_only = EvaluationResult(identified={}, abstract_matched={ElimSortAFG011})
+
+        assert input_variant_block(fixable) == (("a", "b"), ("a", "b"))
+        assert input_variant_block(mixed) == (("a", "b"), ())
+        assert input_variant_block(multiple) == ((), ())
+        assert input_variant_block(abstract_only) == ((), ())
 
     def test_links_stage(self) -> None:
         feature = Feature(LINKS_FEATURE)

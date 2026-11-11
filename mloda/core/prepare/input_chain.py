@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.property_spec import unforwarded_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import current_implementations
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
+from mloda.core.prepare.resolution_types import EvaluationResult
 
 
 T = TypeVar("T")
@@ -292,6 +293,19 @@ class InputChainOutcome:
     refusals: tuple[Exception, ...] = ()
     # A back edge is provisionally viable, but cannot seed a completed-success memo.
     pending: frozenset[Hashable] = frozenset()
+    variants: tuple[str, ...] = ()
+    allow_variants: tuple[str, ...] = ()
+
+
+def input_variant_block(result: EvaluationResult) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The union of variants an unresolvable input was blocked by, and the allow list only if it fixes every block."""
+    if result.failure_kind != "none":
+        return (), ()
+    blocked = [elimination for elimination in result.eliminations.values() if elimination.variants]
+    variants = tuple(sorted({name for elimination in blocked for name in elimination.variants}))
+    if not all(elimination.allow_variants for elimination in blocked):
+        return variants, ()
+    return variants, tuple(sorted({name for elimination in blocked for name in elimination.allow_variants}))
 
 
 @dataclass

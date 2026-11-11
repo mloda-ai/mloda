@@ -327,7 +327,7 @@ class Planner:
             refusal.__context__ = failure
             return failure_result("Planning", refusal)
         if diagnosis is not None and not diagnosis.complete:
-            return self._unresolved(diagnosis, request_names, sources)
+            return self._unresolved(diagnosis, request_names, sources, in_feature_sources(request))
         planned = self._denied([("/features", name) for step in steps for name in step.feature_names])
         if planned is not None:
             return planned
@@ -497,13 +497,44 @@ class Planner:
         return error_result("policy_denied", _DENIED_MESSAGE, details, **extra)
 
     def _unresolved(
-        self, diagnosis: ResolutionDiagnosis, names: Sequence[str], sources: Mapping[str, SourceConfig]
+        self,
+        diagnosis: ResolutionDiagnosis,
+        names: Sequence[str],
+        sources: Mapping[str, SourceConfig],
+        in_sources: Sequence[tuple[str, str]],
     ) -> dict[str, Any]:
         name = diagnosis.feature_name
         if name is None:
             # The core message may name configured paths, so it is never forwarded.
             detail = {"path": "/features", "problem": "unresolved", "message": _UNPLANNABLE_MESSAGE}
             return error_result("validation_failed", _UNPLANNABLE_MESSAGE, [detail])
+        shown = sanitize_text(name, MAX_NAME_LENGTH)
+        typed = {declared: pointer for pointer, declared in reversed(in_sources)}
+        requested = name in names or name in typed
+        path = f"/features/{names.index(name)}" if name in names else typed.get(name, "/features")
+        subject = f"'{shown}'"
+        inputs_subject = f"One of the inputs of '{shown}'"
+        root_path, root_subject = path, inputs_subject
+        if diagnosis.resolving_path:
+            root = diagnosis.resolving_path[0]
+            root_path = f"/features/{names.index(root)}" if root in names else "/features"
+            owner = f"'{sanitize_text(root, MAX_NAME_LENGTH)}'" if root in names else "a requested feature"
+            root_subject = f"One of the inputs of {owner}"
+        failed = diagnosis.failed_result
+        if failed is not None and failed.failure_kind == "none":
+            variant_details = (
+                self._variant_details(failed, root_path, root_subject, root_subject)
+                if diagnosis.resolving_path
+                else self._variant_details(failed, path, subject, inputs_subject)
+            )
+            if variant_details:
+                headline = next((d for d in variant_details if "fix" in d), variant_details[0])
+                return error_result("validation_failed", headline["message"], variant_details)
+        if diagnosis.resolving_path and not requested:
+            message = f"{root_subject} cannot be resolved under the service policy and sources."
+            return error_result(
+                "validation_failed", message, [{"path": root_path, "problem": "unresolved", "message": message}]
+            )
         known = diagnosis.failed_result.facts.known_names if diagnosis.failed_result is not None else ()
         candidates = [
             candidate
@@ -511,20 +542,6 @@ class Planner:
             if candidate != name and not self._catalog.is_denied(candidate)
         ]
         close = difflib.get_close_matches(name, candidates, n=1)
-        shown = sanitize_text(name, MAX_NAME_LENGTH)
-        path = f"/features/{names.index(name)}" if name in names else "/features"
-        failed = diagnosis.failed_result
-        if failed is not None and failed.failure_kind == "none":
-            variant_path = path
-            subject = f"'{shown}'"
-            if diagnosis.resolving_path:
-                root = diagnosis.resolving_path[0]
-                variant_path = f"/features/{names.index(root)}" if root in names else "/features"
-                subject = f"One of the inputs of '{sanitize_text(root, MAX_NAME_LENGTH)}'"
-            variant_details = self._variant_details(failed, variant_path, subject)
-            if variant_details:
-                headline = next((d for d in variant_details if "fix" in d), variant_details[0])
-                return error_result("validation_failed", headline["message"], variant_details)
         detail = {
             "path": path,
             "problem": "unresolved",
@@ -534,12 +551,20 @@ class Planner:
             detail["suggestion"] = close[0]
         return error_result("validation_failed", detail["message"], [detail])
 
-    def _variant_details(self, failed: EvaluationResult, path: str, subject: str) -> list[dict[str, Any]]:
-        """One variant_not_allowed detail per group whose only fitting frameworks follow an unallowed variant."""
+    def _variant_details(
+        self, failed: EvaluationResult, path: str, subject: str, inputs_subject: str
+    ) -> list[dict[str, Any]]:
+        """One variant_not_allowed detail per group whose fitting frameworks, or inputs, follow an unallowed variant."""
         return [
-            self._variant_detail(path, subject, group.__name__, elimination.variants, elimination.allow_variants)
+            self._variant_detail(
+                path,
+                inputs_subject if elimination.stage == "inputs" else subject,
+                group.__name__,
+                elimination.variants,
+                elimination.allow_variants,
+            )
             for group, elimination in sorted(failed.eliminations.items(), key=lambda item: item[0].__name__)
-            if elimination.stage == "variant"
+            if elimination.variants
         ]
 
     def _variant_detail(

@@ -76,6 +76,7 @@ from mloda.core.prepare.input_chain import (
     declared_inputs,
     input_chain_state,
     input_features_collection,
+    input_variant_block,
     normalize_input_name,
     resolution_environment,
     resolution_key,
@@ -1246,7 +1247,13 @@ class IdentifyFeatureGroupClass:
             outcome = self._input_chain(feature_group, feature)
             if not outcome.viable:
                 del identified[feature_group]
-                self._record_elimination(feature_group, "inputs", outcome.reason)
+                self._record_elimination(
+                    feature_group,
+                    "inputs",
+                    outcome.reason,
+                    variants=outcome.variants,
+                    allow_variants=outcome.allow_variants,
+                )
                 self._input_refusals[feature_group] = outcome.refusals
 
     @staticmethod
@@ -1325,7 +1332,12 @@ class IdentifyFeatureGroupClass:
                     child = self._probe_input(input_feature, links)
                     if not child.viable:
                         outcome = InputChainOutcome(
-                            False, True, f"input '{input_feature.name}': {child.reason}", child.refusals
+                            False,
+                            True,
+                            f"input '{input_feature.name}': {child.reason}",
+                            child.refusals,
+                            variants=child.variants,
+                            allow_variants=child.allow_variants,
                         )
                         break
                     pending.update(child.pending)
@@ -1361,7 +1373,15 @@ class IdentifyFeatureGroupClass:
                 )
                 message = render_resolution_failure(result, feature)
                 if message is not None:
-                    return InputChainOutcome(False, True, _first_line(message), refusals)
+                    variants, allow_variants = ((), ()) if refusals else input_variant_block(result)
+                    return InputChainOutcome(
+                        False,
+                        True,
+                        _first_line(message),
+                        refusals,
+                        variants=variants,
+                        allow_variants=allow_variants,
+                    )
             else:
                 result = self._input_resolver(feature, links, self._input_depth + 1)
             winner = next(iter(result.identified))
@@ -1376,7 +1396,8 @@ class IdentifyFeatureGroupClass:
             child._output_parts = result.output_parts
             return child._input_chain(winner, feature)
         except FeatureResolutionError as exc:
-            return self._input_failure(exc)
+            variants, allow_variants = ((), ()) if exc.refusals else input_variant_block(exc.result)
+            return replace(self._input_failure(exc), variants=variants, allow_variants=allow_variants)
 
     def _declaration_requirement(
         self, feature_group: type[FeatureGroup], feature: Feature

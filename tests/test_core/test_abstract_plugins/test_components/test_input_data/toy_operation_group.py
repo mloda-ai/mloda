@@ -259,6 +259,23 @@ class OpToyVariantEmptyConsumerFG(OpToyVariantOpenConsumerFG):
     INPUT = "optoyvar_empty"
 
 
+OPTOY_VARIANT_RIVAL_CONSUMER = "optoyvar_rival_consumer"
+
+
+class OpToyVariantRivalFixableConsumerFG(OpToyVariantOpenConsumerFG):
+    """Rival consumer whose variant input the caller can fix by allowing the variant."""
+
+    NAME = OPTOY_VARIANT_RIVAL_CONSUMER
+    INPUT = OPTOY_VARIANT_FEATURE
+
+
+class OpToyVariantRivalUnlistedConsumerFG(OpToyVariantOpenConsumerFG):
+    """Rival consumer over the group whose variant is unlisted, so no allow fixes it."""
+
+    NAME = OPTOY_VARIANT_RIVAL_CONSUMER
+    INPUT = "optoyvar_empty"
+
+
 OPTOY_VARIANT_NARROW_CONSUMER = "optoyvar_narrow_consumer"
 
 

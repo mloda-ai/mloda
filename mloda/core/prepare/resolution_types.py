@@ -153,3 +153,4 @@ class ResolutionDiagnosis:
     feature_name: str | None = None
     failed_result: EvaluationResult | None = None
     message: str | None = None
+    resolving_path: tuple[str, ...] = ()

@@ -216,6 +216,42 @@ class TestFeatureResolutionErrorTransport:
         assert str(restored) == str(original)
         assert restored.refusals == ()
 
+    @pytest.mark.parametrize(
+        "round_trip",
+        [lambda e: pickle.loads(pickle.dumps(e)), copy.deepcopy],  # nosec B301
+        ids=["pickle", "deepcopy"],
+    )
+    @pytest.mark.parametrize("path", [("outer_809", "inner_809"), ()])
+    def test_round_trip_preserves_the_resolving_path(self, round_trip: Any, path: tuple[str, ...]) -> None:
+        original = _raised_resolution_error_809()
+        kwargs: dict[str, Any] = {"resolving_path": path} if path else {}
+        with_path = FeatureResolutionError(str(original), original.feature_name, original.result, **kwargs)
+
+        restored = round_trip(with_path)
+
+        assert restored.resolving_path == path
+
+    @pytest.mark.parametrize(
+        "round_trip",
+        [lambda e: pickle.loads(pickle.dumps(e)), copy.deepcopy],  # nosec B301
+        ids=["pickle", "deepcopy"],
+    )
+    def test_variant_blocked_pin_error_round_trips_with_its_attributes(self, round_trip: Any) -> None:
+        from mloda.core.abstract_plugins.implementation_pin_error import VariantBlockedPinError
+
+        original = VariantBlockedPinError(
+            "pin blocked", feature="f_809", feature_group="G_809", variants=("v1", "v2"), allow_variants=("v1",)
+        )
+
+        restored = round_trip(original)
+
+        assert isinstance(restored, VariantBlockedPinError)
+        assert str(restored) == "pin blocked"
+        assert restored.feature == "f_809"
+        assert restored.feature_group == "G_809"
+        assert restored.variants == ("v1", "v2")
+        assert restored.allow_variants == ("v1",)
+
 
 class TestFeatureResolutionErrorImportSurfaces:
     """The typed error is re-exported from the user and steward surfaces."""

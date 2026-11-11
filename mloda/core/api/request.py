@@ -825,6 +825,7 @@ class mlodaAPI:
                 feature_name=error.feature_name,
                 failed_result=deepcopy(error.result),
                 message=str(error),
+                resolving_path=error.resolving_path,
             )
         except (
             ComputeFrameworkPinError,

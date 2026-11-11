@@ -406,7 +406,10 @@ LOOP_INPUT_CASES: dict[str, tuple[Callable[[], TypedTestData], list[Options]]] =
     "missing_value": (_missing_value_table, [Options(), Options({"group_by_features": ["region"]})]),
     "text_cleaning": (
         lambda: TypedTestData({"text": (DataType.STRING, ["Hello, The World!"] * _ROWS)}),
-        [Options({"cleaning_operations": ("normalize", "remove_punctuation")})],
+        [
+            Options({"cleaning_operations": ("normalize",)}),
+            Options({"cleaning_operations": ("normalize", "remove_punctuation")}),
+        ],
     ),
     "geo_distance": (
         lambda: TypedTestData({"a": (DataType.LIST, _GEO_POINTS), "b": (DataType.LIST, list(reversed(_GEO_POINTS)))}),
@@ -428,8 +431,19 @@ ADAPTERS: dict[type[ComputeFramework], FrameworkAdapter] = {
 }
 
 
+def _label_value(value: Any) -> str:
+    if isinstance(value, (set, frozenset)):
+        value = sorted(str(item) for item in value)
+    if isinstance(value, (list, tuple)):
+        return ",".join(str(item) for item in value)
+    return str(value)
+
+
 def _variant_label(options: Options) -> str:
-    return "+".join(sorted(str(key) for key in options.keys())) or "default"
+    return (
+        "+".join(f"{key}={_label_value(options.get(key))}" for key in sorted(str(k) for k in options.keys()))
+        or "default"
+    )
 
 
 LOOP_INPUT_PARAMS = [

@@ -734,14 +734,25 @@ class TestUnresolved:
 
 class TestVariantNotAllowed:
     @staticmethod
-    def _blocked(tmp_path: Path, group_name: str, **kwargs: Any) -> tuple[dict[str, Any], dict[str, Any], Any]:
+    def _blocked(
+        tmp_path: Path,
+        group_name: str,
+        *,
+        feature_const: str | None = None,
+        config: dict[str, Any] | None = None,
+        extra_groups: tuple[str, ...] = (),
+        compute_frameworks: tuple[str, ...] = ("PandasDataFrame",),
+        **kwargs: Any,
+    ) -> tuple[dict[str, Any], dict[str, Any], Any]:
         toy = importlib.import_module(
             "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
         )
         group = getattr(toy, group_name)
-        request = {"features": [{"name": group.FEATURE, "options": {toy.OPTOY_KEY: "sum"}}]}
-        settings = _settings(tmp_path, compute_frameworks=("PandasDataFrame",), **kwargs)
-        base = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, group})
+        name = getattr(toy, feature_const) if feature_const else group.FEATURE
+        request = {"features": [{"name": name, "options": {toy.OPTOY_KEY: "sum"}, **(config or {})}]}
+        settings = _settings(tmp_path, compute_frameworks=compute_frameworks, **kwargs)
+        groups = {group, *(getattr(toy, extra) for extra in extra_groups)}
+        base = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, *groups})
         result = _planner(settings, base=base).explain(request)
         details = [
             d for d in _error(result, "validation_failed")["details"] if d.get("problem") == "variant_not_allowed"
@@ -756,6 +767,12 @@ class TestVariantNotAllowed:
             ("OpToyVariantFG", {"allow_options": ("optoy_kind",)}, False, "service policy"),
             ("OpToyVariantFG", {"trusted_caller": True}, True, "add the fix"),
             ("OpToyVariantEmptyFG", {"allow_options": ("optoy_kind", "allow_variants")}, False, "cannot be allowed"),
+            (
+                "OpToyVariantFG",
+                {"allow_options": ("optoy_kind", "allow_variants"), "config": {"implementation": "OpToyVariantPandas"}},
+                True,
+                "add the fix",
+            ),
         ],
     )
     def test_blocked_variant_is_named(
@@ -776,6 +793,87 @@ class TestVariantNotAllowed:
         assert "does not allow" not in dumped
         assert "OpToyVariantPandas" not in dumped
         _assert_no_paths(result, tmp_path, "sales.csv")
+
+    @pytest.mark.parametrize(
+        "blocked, const, input_name, extra, fix, message_part",
+        [
+            (
+                "OpToyVariantFG",
+                "OPTOY_VARIANT_CONSUMER",
+                "optoyvar_value",
+                ("OpToyVariantConsumerFG",),
+                True,
+                "add the fix",
+            ),
+            (
+                "OpToyVariantEmptyFG",
+                "OPTOY_VARIANT_EMPTY_CONSUMER",
+                "optoyvar_empty",
+                ("OpToyVariantEmptyConsumerFG",),
+                False,
+                "cannot be allowed",
+            ),
+        ],
+    )
+    def test_blocked_input_is_reported_at_the_requested_feature(
+        self,
+        tmp_path: Path,
+        blocked: str,
+        const: str,
+        input_name: str,
+        extra: tuple[str, ...],
+        fix: bool,
+        message_part: str,
+    ) -> None:
+        result, detail, toy = self._blocked(
+            tmp_path,
+            blocked,
+            feature_const=const,
+            extra_groups=extra,
+            allow_options=("optoy_kind", "allow_variants"),
+        )
+
+        assert detail["path"] == "/features/0"
+        assert getattr(toy, const) in detail["message"]
+        assert input_name not in detail["message"].replace(getattr(toy, const), "")
+        assert message_part in detail["message"]
+        if fix:
+            assert detail["fix"] == {"allow_variants": [toy.OPTOY_VARIANT]}
+        else:
+            assert "fix" not in detail
+        assert input_name not in json.dumps(result).replace(getattr(toy, const), "")
+
+    def test_chained_implementation_pin_is_validation_failed_not_internal(self, tmp_path: Path) -> None:
+        result, detail, toy = self._blocked(
+            tmp_path,
+            "OpToyVariantFG",
+            feature_const="OPTOY_VARIANT_OPEN_CONSUMER",
+            config={"implementation": "OpToyVariantPandas"},
+            extra_groups=("OpToyVariantOpenConsumerFG",),
+            compute_frameworks=("PandasDataFrame", "PyArrowTable"),
+            allow_options=("optoy_kind", "allow_variants"),
+        )
+
+        assert detail["path"] == "/features/0"
+        assert toy.OPTOY_VARIANT_OPEN_CONSUMER in detail["message"]
+        assert detail["fix"] == {"allow_variants": [toy.OPTOY_VARIANT]}
+        assert detail["feature_group"] == "OpToyVariantFG"
+        assert detail["variants"] == [toy.OPTOY_VARIANT]
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+    def test_unresolvable_input_keeps_the_generic_unresolved_detail(self, tmp_path: Path) -> None:
+        toy = importlib.import_module(
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+        )
+        request = {"features": [{"name": toy.OPTOY_VARIANT_CONSUMER, "options": {toy.OPTOY_KEY: "sum"}}]}
+        settings = _settings(tmp_path, compute_frameworks=("PandasDataFrame",), allow_options=("optoy_kind",))
+        base = PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, toy.OpToyVariantConsumerFG})
+
+        result = _planner(settings, base=base).explain(request)
+
+        error = _error(result, "validation_failed")
+        assert _has_detail(error, path="/features", problem="unresolved")
+        assert not _has_detail(error, problem="variant_not_allowed")
 
     def test_refused_allow_variants_key_gets_no_fix(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(

@@ -196,8 +196,11 @@ class FeatureResolutionError(ValueError):
         result: EvaluationResult,
         partial_records: Sequence[ResolutionRecord] = (),
         refusals: Sequence[Exception] = (),
+        *,
+        resolving_path: tuple[str, ...] = (),
     ) -> None:
         super().__init__(message)
+        self.resolving_path = tuple(resolving_path)
         self.refusals: tuple[Exception, ...] = tuple(refusals)
         if self.refusals:
             self.__cause__ = self.refusals[0]
@@ -210,9 +213,32 @@ class FeatureResolutionError(ValueError):
 
     def __reduce__(
         self,
-    ) -> tuple[type["FeatureResolutionError"], tuple[str, str, EvaluationResult, tuple[ResolutionRecord, ...]]]:
+    ) -> tuple[
+        Callable[..., "FeatureResolutionError"],
+        tuple[
+            type["FeatureResolutionError"], str, str, EvaluationResult, tuple[ResolutionRecord, ...], tuple[str, ...]
+        ],
+    ]:
         # The default reduction reconstructs from args=(message,) and drops the extra constructor arguments.
-        return type(self), (str(self), self.feature_name, self.result, self.partial_records)
+        return _rebuild_resolution_error, (
+            type(self),
+            str(self),
+            self.feature_name,
+            self.result,
+            self.partial_records,
+            self.resolving_path,
+        )
+
+
+def _rebuild_resolution_error(
+    cls: type[FeatureResolutionError],
+    message: str,
+    feature_name: str,
+    result: EvaluationResult,
+    partial_records: tuple[ResolutionRecord, ...],
+    resolving_path: tuple[str, ...],
+) -> FeatureResolutionError:
+    return cls(message, feature_name, result, partial_records, resolving_path=resolving_path)
 
 
 class ComputeFrameworkPinError(ValueError):
@@ -1154,6 +1180,7 @@ class IdentifyFeatureGroupClass:
                         ),
                         partial_records=self._partial_records,
                         refusals=(refusal,) if isinstance(refusal, Exception) else (),
+                        resolving_path=tuple(feature.resolving_path or ()),
                     )
                 )
 
@@ -1611,6 +1638,11 @@ def resolve_or_raise(
     if message is not None:
         # The constructor does the cap-then-deepcopy snapshot, so the records are forwarded as they are.
         raise FeatureResolutionError(
-            message, str(feature.name), result, partial_records=partial_records, refusals=refusals
+            message,
+            str(feature.name),
+            result,
+            partial_records=partial_records,
+            refusals=refusals,
+            resolving_path=tuple(feature.resolving_path or ()),
         )
     return result

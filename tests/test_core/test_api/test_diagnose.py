@@ -30,6 +30,7 @@ import mloda.steward as mloda_steward
 import mloda.user as mloda_user
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourcePointerError
+from mloda.core.api.request import SetupConfigurationError
 from mloda.core.prepare.accessible_plugins import (
     EnvironmentPreconditionError,
     FrameworkDeclarationError,
@@ -426,6 +427,8 @@ class TestDiagnoseEmptyRequest:
 # diagnose() scrubs its published message at one exit
 # ---------------------------------------------------------------------------
 
+# The five monkeypatched cases test the exit directly (their real raise sites already run inside the
+# session's redaction); only `setup` is a real pre-fix leak.
 DIAGNOSE_SECRET_812 = "diagnose_secret_812_value"  # nosec B105
 
 
@@ -487,4 +490,21 @@ class TestDiagnoseScrubsMessage:
         diagnosis = _diagnose_branch_812(branch, monkeypatch, None)
 
         assert diagnosis.message is not None
-        assert DIAGNOSE_SECRET_812 in diagnosis.message
+        if branch in _PLAN_ERRORS_812:
+            assert diagnosis.message == str(_PLAN_ERRORS_812[branch]())
+        else:
+            assert DIAGNOSE_SECRET_812 in diagnosis.message
+
+    def test_credential_shaped_text_is_masked_without_collection(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        exc = SetupConfigurationError("bad url postgres://alice:hunter2pass@db.example/x")
+        monkeypatch.setattr(mlodaAPI, "_plan", _raising_plan(exc))
+
+        diagnosis = mloda.diagnose(
+            _success_features(),
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_DIAGNOSE_PLUGINS,
+            data_access_collection=None,
+        )
+
+        assert diagnosis.message is not None
+        assert "hunter2pass" not in diagnosis.message

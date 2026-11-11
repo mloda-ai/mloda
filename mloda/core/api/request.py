@@ -803,6 +803,7 @@ class mlodaAPI:
         The message is credential-scrubbed.
         """
         literals = frozenset() if data_access_collection is None else data_access_collection.secret_literals()
+        # identity stays empty so plan identities and hashes match prepare() (session redaction registers identity)
         with registered_secrets_scope(literals, frozenset()):
             diagnosis = cls._diagnose(
                 features,
@@ -828,18 +829,18 @@ class mlodaAPI:
         cls,
         features: Features | Sequence[Feature | str],
         *,
-        compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
-        links: set[Link] | None = None,
-        data_access_collection: DataAccessCollection | None = None,
-        global_filter: GlobalFilter | None = None,
-        api_data: dict[str, dict[str, Any]] | None = None,
-        plugin_collector: PluginCollector | None = None,
-        copy_features: bool = True,
-        strict_type_enforcement: bool = False,
-        column_ordering: str | None = None,
-        parallelization_modes: set[ParallelizationMode] | None = None,
-        function_extender: set[Extender] | None = None,
-        output_framework: str | type[ComputeFramework] | None = None,
+        compute_frameworks: Sequence[str | type[ComputeFramework]] | None,
+        links: set[Link] | None,
+        data_access_collection: DataAccessCollection | None,
+        global_filter: GlobalFilter | None,
+        api_data: dict[str, dict[str, Any]] | None,
+        plugin_collector: PluginCollector | None,
+        copy_features: bool,
+        strict_type_enforcement: bool,
+        column_ordering: str | None,
+        parallelization_modes: set[ParallelizationMode] | None,
+        function_extender: set[Extender] | None,
+        output_framework: str | type[ComputeFramework] | None,
     ) -> ResolutionDiagnosis:
         try:
             with _plan_origin("diagnose"):

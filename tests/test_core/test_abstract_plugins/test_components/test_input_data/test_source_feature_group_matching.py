@@ -827,6 +827,27 @@ class _MidLacksColumn(_AbstractToyMid):
         return "b"
 
 
+class _EmptyFamilySource(ToySourceBase):
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.CHECKED, True),)
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        if options.get("toyfmt_sibling_decline"):
+            record_match_rejection(
+                cls.get_class_name(),
+                "the sibling source is unavailable",
+                INPUT_DATA_STAGE,
+                code=CoreDeclineCode.SOURCE_UNREADABLE,
+            )
+        return []
+
+
 class TestScopePointingRefinement:
     @pytest.mark.parametrize("scope", [_AbstractToyMid, "_AbstractToyMid"])
     def test_abstract_base_scope_does_not_point_so_the_lacking_sibling_declines(self, scope: object) -> None:
@@ -856,6 +877,29 @@ class TestScopePointingRefinement:
         feature = Feature(COL, feature_group=_MidLacksColumn)
         with pytest.raises(FeatureResolutionError, match="h1:toy"):
             evaluate_or_raise(feature, _plugins(_MidLacksColumn), None, toy_dac(h1={COL: [1]}))
+
+    @pytest.mark.parametrize("scope", [ToySourceBase, "ToySourceBase"], ids=["class", "name"])
+    @pytest.mark.parametrize("sibling_decline", [False, True], ids=["empty", "explicit-decline"])
+    def test_concrete_family_scope_reports_only_specific_rejections(
+        self, scope: str | type[FeatureGroup], sibling_decline: bool
+    ) -> None:
+        feature = Feature(COL, Options({"toyfmt_sibling_decline": sibling_decline}), feature_group=scope)
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            evaluate_or_raise(feature, _plugins(ToySourceFG, _EmptyFamilySource), None, toy_dac(h1={"other": [1]}))
+
+        eliminations = exc_info.value.result.eliminations
+        assert eliminations[ToySourceFG].code is CoreDeclineCode.COLUMN_NOT_FOUND
+        if sibling_decline:
+            assert eliminations[_EmptyFamilySource].code is CoreDeclineCode.SOURCE_UNREADABLE
+        else:
+            assert _EmptyFamilySource not in eliminations
+
+    def test_concrete_family_scope_with_a_direct_pointer_still_reports_no_source(self) -> None:
+        feature = Feature(COL, Options({_EmptyFamilySource.__name__: "empty"}), feature_group=ToySourceBase)
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            evaluate_or_raise(feature, _plugins(_EmptyFamilySource))
+
+        assert exc_info.value.result.eliminations[_EmptyFamilySource].code is CoreDeclineCode.SOURCE_NOT_FOUND
 
 
 class TestPointingIsExplicitOnly:

@@ -741,6 +741,15 @@ class SourceFeatureGroup(FeatureGroup):
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.NAME_NOT_DECLARED
             )
         elif pointed:
+            scope = current_feature_group_scope()
+            # A family scope makes the group eligible, but doesn't name this source.
+            if (
+                scope is not cls
+                and scope != cls.__name__
+                and cls._scope_points_here(scope)
+                and not any(key in options for key in cls.pointer_keys())
+            ):
+                return False
             reason = f"{cls.get_class_name()} was pointed at but found no source for '{name}'"
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND

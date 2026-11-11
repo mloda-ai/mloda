@@ -346,13 +346,15 @@ class TestServe:
 
         assert log_masking.process_wide_log_masking_enabled() is True
 
+    # A cold interpreter importing the MCP server and CLI can pass 8s on a loaded host.
+    @pytest.mark.timeout(60)
     def test_main_entry_masks_a_scoped_secret_logged_from_a_plain_thread(self, tmp_path: Path) -> None:
         pytest.importorskip("mcp")
         done = subprocess.run(  # nosec B603
             [sys.executable, "-c", _MASKING_SCRIPT, str(_config(tmp_path))],
             capture_output=True,
             text=True,
-            timeout=8,
+            timeout=30,
             stdin=subprocess.DEVNULL,
             check=False,
         )

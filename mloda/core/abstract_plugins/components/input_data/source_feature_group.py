@@ -592,6 +592,7 @@ class SourceFeatureGroup(FeatureGroup):
             )
             return False
         skipped = False
+        stepped_aside = False
         missing: set[str] = set()
         selected: list[ClaimRoute] = []
         searched_only: set[ClaimRoute] = set()
@@ -642,6 +643,7 @@ class SourceFeatureGroup(FeatureGroup):
                 claims.fitting.keys() != unlocked.fitting.keys() or claims.open_only != unlocked.open_only
             ) and computed_elsewhere(name):
                 claims = unlocked
+                stepped_aside = True
                 selected = [route for route in selected if route not in searched_only]
             fitting, seen, open_only = claims.fitting, claims.seen, claims.open_only
         if query_declined:
@@ -773,8 +775,8 @@ class SourceFeatureGroup(FeatureGroup):
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND
             )
-        elif any(route.names is NamePolicy.DECLARED for route in selected):
-            reason = f"{cls.get_class_name()} found no source serving '{name}'"
+        elif not stepped_aside and any(route.names is NamePolicy.DECLARED for route in selected):
+            reason = scrub_credentials(f"{cls.get_class_name()} found no source serving '{name}'")
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND
             )

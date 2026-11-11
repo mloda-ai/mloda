@@ -1395,6 +1395,28 @@ class _ComputesDeclaredColFG(FeatureGroup):
         return data
 
 
+class _SearchedAndEmptyOptionRouteFG(ToyDeclaredFG):
+    """Searched declared route plus an option-gated declared route that finds nothing."""
+
+    PROPERTY_MAPPING: ClassVar[dict[str, Any]] = {"toyfmt_required": PropertySpec(explanation="gate")}
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
+        ClaimRoute("toy", NamePolicy.DECLARED, True),
+        ClaimRoute("toy_opt", NamePolicy.DECLARED, False, required_options=("toyfmt_required",)),
+    )
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        if route.source_kind == "toy_opt":
+            return []
+        return super().find_sources(route, feature_name, options, data_access_collection)
+
+
 class TestUnpointedDeclaredNamesDeclineWithReason:
     @pytest.mark.parametrize("name", TestDeclaredNames.CLAIMED)
     @pytest.mark.parametrize("dac", [None, foreign_dac()], ids=["no_collection", "foreign_collection"])
@@ -1430,6 +1452,18 @@ class TestUnpointedDeclaredNamesDeclineWithReason:
 
         assert set(result.identified) == {_ComputesDeclaredColFG}
         assert ToyDeclaredFG not in result.eliminations
+
+    def test_steps_aside_silently_when_only_an_option_gated_route_found_nothing(self) -> None:
+        dac = toy_dac(h1={COL: [1]})
+        feature = Feature("toyfmt_declared_col", Options({"toyfmt_required": True}))
+        alone = evaluate_or_raise(feature, _plugins(_SearchedAndEmptyOptionRouteFG), None, dac)
+        assert set(alone.identified) == {_SearchedAndEmptyOptionRouteFG}
+
+        plugins = _plugins(_SearchedAndEmptyOptionRouteFG, ToySourceFG, _ComputesDeclaredColFG)
+        result = evaluate_or_raise(feature, plugins, None, dac)
+
+        assert set(result.identified) == {_ComputesDeclaredColFG}
+        assert _SearchedAndEmptyOptionRouteFG not in result.eliminations
 
     def test_lone_derived_consumer_names_the_unserved_declared_input(self) -> None:
         feature = Feature("toyfmt_declared_col__sum_aggr")

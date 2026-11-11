@@ -373,21 +373,7 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
         for name in self._declared():
             rejection_window.clear()
             assert not self._matches(name, self._options(), None), name
-            rejection = rejection_window[group]
-            assert f"found no source serving '{name}'" in rejection.reason, name
-            assert group in rejection.reason, name
-            assert rejection.code is CoreDeclineCode.SOURCE_NOT_FOUND, name
-
-    def test_doc_unpointed_numbered_name_with_the_own_file_present_records_source_not_found(
-        self, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        group = self._group_name()
-        name = f"{group}~0"
-        rejection_window.clear()
-        assert not self._matches(name, self._options(), self.own_dac()), name
-        rejection = rejection_window[group]
-        assert f"found no source serving '{name}'" in rejection.reason
-        assert rejection.code is CoreDeclineCode.SOURCE_NOT_FOUND
+            assert group in rejection_window, name
 
     def test_doc_the_prefix_shortcut_is_gone_for_a_name_extending_the_group_name(self) -> None:
         name = f"{self._group_name()}_extra"

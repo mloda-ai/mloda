@@ -138,7 +138,7 @@ The recorded decline renders as a near-miss line of the resolution failure:
 Rules for source group authors:
 
 - Record only when ownership is established but the content fails: right suffix but a missing column, valid credentials but a declined feature. Plain non-matches (wrong suffix, invalid credentials, a name the group does not declare) stay silent.
-- An unpointed request for a name a `NamePolicy.DECLARED` route declares records `<Group> found no source serving '<name>'` (`source_not_found`) when no source is found, unless the group recorded a reason first; record in `find_sources` only for a more specific reason.
+- A request that points at no source group, for a name a `NamePolicy.DECLARED` route declares, records `<Group> found no source serving '<name>'` (`source_not_found`) when no source is found, unless the group recorded a reason first; record in `find_sources` only for a more specific reason.
 - Never raise to decline: a hook that raises anything but `OSError`, `ValueError` or `ImportError` from `column_names` (or an unmarked `NotImplementedError` where a base documents it) ends matching for that candidate. A raise marked with `escalate_match_abort` propagates. Record, then return a falsy value.
 - Recording outside an engine-opened window is a no-op, so groups stay usable standalone. In tests, use `collect_match_rejections` (see [Feature Group Matching](feature-group-matching.md)).
 - Recorded reasons are discarded at the enclosing candidate level: when the group ultimately matches, or when the feature group matches by another rule. Only a decline surfaces them.

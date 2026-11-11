@@ -504,6 +504,26 @@ class Planner:
             # The core message may name configured paths, so it is never forwarded.
             detail = {"path": "/features", "problem": "unresolved", "message": _UNPLANNABLE_MESSAGE}
             return error_result("validation_failed", _UNPLANNABLE_MESSAGE, [detail])
+        shown = sanitize_text(name, MAX_NAME_LENGTH)
+        path = f"/features/{names.index(name)}" if name in names else "/features"
+        subject = f"'{shown}'"
+        inputs_subject = f"One of the inputs of '{shown}'"
+        unrequested_input = bool(diagnosis.resolving_path) and name not in names
+        if unrequested_input:
+            root = diagnosis.resolving_path[0]
+            path = f"/features/{names.index(root)}" if root in names else "/features"
+            inputs_subject = subject = f"One of the inputs of '{sanitize_text(root, MAX_NAME_LENGTH)}'"
+        failed = diagnosis.failed_result
+        if failed is not None and failed.failure_kind == "none":
+            variant_details = self._variant_details(failed, path, subject, inputs_subject)
+            if variant_details:
+                headline = next((d for d in variant_details if "fix" in d), variant_details[0])
+                return error_result("validation_failed", headline["message"], variant_details)
+        if unrequested_input:
+            message = f"{subject} cannot be resolved under the service policy and sources."
+            return error_result(
+                "validation_failed", message, [{"path": path, "problem": "unresolved", "message": message}]
+            )
         known = diagnosis.failed_result.facts.known_names if diagnosis.failed_result is not None else ()
         candidates = [
             candidate
@@ -511,20 +531,6 @@ class Planner:
             if candidate != name and not self._catalog.is_denied(candidate)
         ]
         close = difflib.get_close_matches(name, candidates, n=1)
-        shown = sanitize_text(name, MAX_NAME_LENGTH)
-        path = f"/features/{names.index(name)}" if name in names else "/features"
-        failed = diagnosis.failed_result
-        if failed is not None and failed.failure_kind == "none":
-            variant_path = path
-            subject = f"'{shown}'"
-            if diagnosis.resolving_path:
-                root = diagnosis.resolving_path[0]
-                variant_path = f"/features/{names.index(root)}" if root in names else "/features"
-                subject = f"One of the inputs of '{sanitize_text(root, MAX_NAME_LENGTH)}'"
-            variant_details = self._variant_details(failed, variant_path, subject)
-            if variant_details:
-                headline = next((d for d in variant_details if "fix" in d), variant_details[0])
-                return error_result("validation_failed", headline["message"], variant_details)
         detail = {
             "path": path,
             "problem": "unresolved",
@@ -534,12 +540,20 @@ class Planner:
             detail["suggestion"] = close[0]
         return error_result("validation_failed", detail["message"], [detail])
 
-    def _variant_details(self, failed: EvaluationResult, path: str, subject: str) -> list[dict[str, Any]]:
-        """One variant_not_allowed detail per group whose only fitting frameworks follow an unallowed variant."""
+    def _variant_details(
+        self, failed: EvaluationResult, path: str, subject: str, inputs_subject: str
+    ) -> list[dict[str, Any]]:
+        """One variant_not_allowed detail per group whose fitting frameworks, or inputs, follow an unallowed variant."""
         return [
-            self._variant_detail(path, subject, group.__name__, elimination.variants, elimination.allow_variants)
+            self._variant_detail(
+                path,
+                inputs_subject if elimination.stage == "inputs" else subject,
+                group.__name__,
+                elimination.variants,
+                elimination.allow_variants,
+            )
             for group, elimination in sorted(failed.eliminations.items(), key=lambda item: item[0].__name__)
-            if elimination.stage == "variant"
+            if elimination.variants
         ]
 
     def _variant_detail(

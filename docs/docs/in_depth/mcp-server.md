@@ -134,7 +134,7 @@ Every result is a one-line summary followed by the result as JSON, which is also
 call has `isError` set and one error shape: `{"error": {"code", "message", "details", "audit_id"}}` with the codes
 `validation_failed`, `policy_denied`, `limit_exceeded`, `plan_invalid`, `plan_stale`, `missing_input_feature` and
 `internal`. Details point at the request by JSON pointer, with a suggestion when a close name exists. A
-`missing_input_feature` detail holds `feature_group`, `feature` and `missing_inputs` (never the available columns). A `variant_not_allowed` detail holds `feature_group` and `variants`, plus a `fix` of `{"allow_variants": [...]}` only when the group lists every variant blocking some framework and the caller may set `allow_variants`. It is reported at the requested feature when an input is variant-blocked or a chained implementation pin hits a blocked implementation.
+`missing_input_feature` detail holds `feature_group`, `feature` and `missing_inputs` (never the available columns). A `variant_not_allowed` detail holds `feature_group` and `variants`, plus a `fix` of `{"allow_variants": [...]}` only when the group lists every variant blocking some framework and the caller may set `allow_variants`. It is reported at the requested feature when an input is variant-blocked or a chained implementation pin hits a blocked implementation. Competing consumers over a variant-blocked input give one `variant_not_allowed` detail per competing consumer, whose `feature_group` names the consumer. An unrequested input that cannot be resolved is reported as `unresolved` at the requested feature, without the input's name or a suggestion.
 
 ## What stays on the server
 

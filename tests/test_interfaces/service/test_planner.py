@@ -731,10 +731,32 @@ class TestUnresolved:
         assert "suggestion" not in details[0]
         _assert_no_paths(result, tmp_path, "sales.csv")
 
+    def test_unrequested_input_gets_no_suggestion_and_is_not_named(self, tmp_path: Path) -> None:
+        result = _explain(tmp_path, {"features": ["incme" + DOUBLE_SUFFIX]})
+
+        error = _error(result, "validation_failed")
+        assert _has_detail(error, path="/features/0", problem="unresolved")
+        assert all("suggestion" not in detail for detail in error["details"])
+        assert "'incme'" not in json.dumps(result)
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+    def test_requested_input_keeps_its_own_pointer_and_suggestion(self, tmp_path: Path) -> None:
+        result = _explain(tmp_path, {"features": ["incme" + DOUBLE_SUFFIX, "incme"]})
+
+        error = _error(result, "validation_failed")
+        assert _has_detail(error, path="/features/1", problem="unresolved", suggestion="income")
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
 
 class TestVariantNotAllowed:
     @staticmethod
-    def _blocked(
+    def _blocked(tmp_path: Path, group_name: str, **kwargs: Any) -> tuple[dict[str, Any], dict[str, Any], Any]:
+        result, details, toy = TestVariantNotAllowed._blocked_details(tmp_path, group_name, **kwargs)
+        assert len(details) == 1
+        return result, details[0], toy
+
+    @staticmethod
+    def _blocked_details(
         tmp_path: Path,
         group_name: str,
         *,
@@ -743,7 +765,7 @@ class TestVariantNotAllowed:
         extra_groups: tuple[str, ...] = (),
         compute_frameworks: tuple[str, ...] = ("PandasDataFrame",),
         **kwargs: Any,
-    ) -> tuple[dict[str, Any], dict[str, Any], Any]:
+    ) -> tuple[dict[str, Any], list[dict[str, Any]], Any]:
         toy = importlib.import_module(
             "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
         )
@@ -757,8 +779,7 @@ class TestVariantNotAllowed:
         details = [
             d for d in _error(result, "validation_failed")["details"] if d.get("problem") == "variant_not_allowed"
         ]
-        assert len(details) == 1
-        return result, details[0], toy
+        return result, details, toy
 
     @pytest.mark.parametrize(
         "group_name, kwargs, fix, message_part",
@@ -861,7 +882,35 @@ class TestVariantNotAllowed:
         assert detail["variants"] == [toy.OPTOY_VARIANT]
         _assert_no_paths(result, tmp_path, "sales.csv")
 
-    def test_unresolvable_input_keeps_the_generic_unresolved_detail(self, tmp_path: Path) -> None:
+    def test_competing_consumers_give_one_variant_detail_each(self, tmp_path: Path) -> None:
+        result, details, toy = self._blocked_details(
+            tmp_path,
+            "OpToyVariantFG",
+            feature_const="OPTOY_VARIANT_RIVAL_CONSUMER",
+            extra_groups=(
+                "OpToyVariantRivalFixableConsumerFG",
+                "OpToyVariantRivalUnlistedConsumerFG",
+                "OpToyVariantEmptyFG",
+            ),
+            allow_options=("optoy_kind", "allow_variants"),
+        )
+
+        assert [d["path"] for d in details] == ["/features/0", "/features/0"]
+        by_group = {d["feature_group"]: d for d in details}
+        assert set(by_group) == {"OpToyVariantRivalFixableConsumerFG", "OpToyVariantRivalUnlistedConsumerFG"}
+        fixable = by_group["OpToyVariantRivalFixableConsumerFG"]
+        unlisted = by_group["OpToyVariantRivalUnlistedConsumerFG"]
+        assert fixable["fix"] == {"allow_variants": [toy.OPTOY_VARIANT]}
+        assert "fix" not in unlisted
+        assert "cannot be allowed" in unlisted["message"]
+        assert "add the fix" in fixable["message"]
+        error = _error(result, "validation_failed")
+        assert error["message"] == fixable["message"]
+        dumped = json.dumps(result)
+        assert "optoyvar_value" not in dumped
+        assert "optoyvar_empty" not in dumped
+
+    def test_unresolvable_input_is_reported_at_the_requested_feature_without_its_name(self, tmp_path: Path) -> None:
         toy = importlib.import_module(
             "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
         )
@@ -872,8 +921,12 @@ class TestVariantNotAllowed:
         result = _planner(settings, base=base).explain(request)
 
         error = _error(result, "validation_failed")
-        assert _has_detail(error, path="/features", problem="unresolved")
+        assert _has_detail(error, path="/features/0", problem="unresolved")
         assert not _has_detail(error, problem="variant_not_allowed")
+        detail = next(d for d in error["details"] if d.get("problem") == "unresolved")
+        assert toy.OPTOY_VARIANT_CONSUMER in detail["message"]
+        assert "suggestion" not in detail
+        assert toy.OPTOY_VARIANT_FEATURE not in json.dumps(result)
 
     def test_refused_allow_variants_key_gets_no_fix(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
@@ -1017,6 +1070,17 @@ class TestPolicy:
         assert _has_detail(error, path="/features", problem="policy_denied")
         assert denied_calls == []
         _assert_no_paths(result, tmp_path, "sales.csv")
+
+    def test_derived_name_over_unknown_column_does_not_name_the_column(
+        self, tmp_path: Path, denied_calls: list[str]
+    ) -> None:
+        result = _explain(tmp_path, {"features": ["mcp4_salary" + DOUBLE_SUFFIX]})
+
+        error = _error(result, "validation_failed")
+        assert _has_detail(error, path="/features/0")
+        assert all("suggestion" not in detail for detail in error["details"])
+        assert "'mcp4_salary'" not in json.dumps(result)
+        assert denied_calls == []
 
     def test_derived_name_over_denied_column_carries_alternatives(self, tmp_path: Path) -> None:
         sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=True))}

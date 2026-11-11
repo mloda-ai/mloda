@@ -61,7 +61,7 @@ class Elimination:
     stage: EliminationStage
     reason: str
     code: DeclineCode | None = None
-    # Filled only by the "variant" stage.
+    # Filled by the "variant" stage, and by an "inputs" stage whose input is blocked by an unallowed variant.
     variants: tuple[str, ...] = ()
     allow_variants: tuple[str, ...] = ()
 

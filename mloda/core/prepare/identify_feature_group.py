@@ -91,6 +91,7 @@ from mloda.core.abstract_plugins.components.utils import (
     is_match_abort,
     contained_raise_reason,
     safe_exc_str,
+    require_value_collection,
     safe_field,
 )
 from mloda.core.abstract_plugins.components.divergence import Divergence
@@ -552,6 +553,7 @@ class IdentifyFeatureGroupClass:
         message reads. Every provider hook here is best-effort: a raising one degrades its own fact, never this
         call or a sibling's fact.
         """
+        sources = self._capture_sources(result)
         return RenderFacts(
             domains=self._capture_domains(result),
             concrete_frameworks=self._concrete_implementation_frameworks(result, accessible_plugins),
@@ -563,7 +565,8 @@ class IdentifyFeatureGroupClass:
                 else frozenset()
             ),
             skipped_plugins=tuple(sorted(PluginLoader.skipped_plugins().items())),
-            sources=self._capture_sources(result),
+            sources=sources,
+            narrowing_hints=self._capture_narrowing_hints(result),
             scope_suggestions=self._capture_scope_suggestions(result, accessible_plugins, feature),
             scope_exclusions=self._capture_scope_exclusions(result, accessible_plugins, feature),
         )
@@ -616,6 +619,27 @@ class IdentifyFeatureGroupClass:
                 field=f"{getattr(reader, '__name__', 'reader')}.data_access_identity",
             )
         return {fg: text for fg, text in sources.items() if text}
+
+    def _capture_narrowing_hints(self, result: EvaluationResult) -> dict[type[FeatureGroup], tuple[str, ...]]:
+        """Narrowing options each identified source group honors; () when the hook is absent or fails."""
+        hints: dict[type[FeatureGroup], tuple[str, ...]] = {}
+        for feature_group in result.identified:
+            pair = self._input_data_matches.get(feature_group)
+            if pair is None:
+                continue
+            reader = pair[0]
+
+            def read_hints() -> tuple[str, ...]:
+                values = reader._narrowing_hints()
+                require_value_collection(values, "_narrowing_hints()")
+                return tuple(dict.fromkeys(h for h in values if isinstance(h, str)))
+
+            hints[feature_group] = (
+                safe_field(read_hints, (), field=f"{getattr(reader, '__name__', 'reader')}._narrowing_hints")
+                if is_nominal_subclass(reader, SourceFeatureGroup)
+                else ()
+            )
+        return hints
 
     def _capture_eliminated_hints(self, result: EvaluationResult) -> frozenset[str]:
         """Class name and prefix of every eliminated near-miss, so the none message can suppress a

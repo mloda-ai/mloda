@@ -899,7 +899,9 @@ class TestResolveFeatureIsNonThrowing:
         assert self._resolve_abort("bad", secret_dac=False).raised == "ValueError"
 
     @staticmethod
-    def _resolve_echo_branch(branch: str, monkeypatch: pytest.MonkeyPatch, dac: DataAccessCollection | None) -> Any:
+    def _resolve_echo_branch(
+        branch: str, monkeypatch: pytest.MonkeyPatch, dac: DataAccessCollection | None
+    ) -> ResolvedFeature:
         secret = ABORT_ECHO_SECRET
         echoing_obj: Any = type(secret, (), {})()
         if branch in ("mloda_env", "plugin_env"):

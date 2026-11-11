@@ -632,7 +632,9 @@ class SourceFeatureGroup(FeatureGroup):
             return False
         if (len(fitting) > 1 or (not fitting and seen and pointed)) and not cls.passes_option_declarations(options):
             return False
-        show_columns = pointed or isinstance(options.get(HANDLE_OPTION), str)
+        show_columns = pointed or (
+            isinstance(options.get(HANDLE_OPTION), str) and HANDLE_OPTION in cls.declared_option_keys()
+        )
         if len(fitting) > 1:
             if show_columns:
                 listed = sorted(fitting)

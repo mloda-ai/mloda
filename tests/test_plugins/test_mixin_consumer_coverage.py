@@ -429,6 +429,36 @@ CONTRACTS: tuple[MixinContract, ...] = (
             f"{_INPUT_DATA}.test_read_files.test_yaml_document_reader",
         ),
     ),
+    MixinContract(
+        ComputeFramework,
+        FileLoadsIntoFrameworkTestMixin,
+        "adapter_class",
+        (
+            f"{_INPUT_DATA}.test_read_files.test_csv_backend_neutral_regression",
+            f"{_FRAMEWORKS}.spark.test_spark_loads_into_framework",
+        ),
+        resolver=_framework_of_adapter,
+    ),
+    MixinContract(
+        ComputeFramework,
+        DatabaseLoadsIntoFrameworkTestMixin,
+        "adapter_class",
+        (
+            f"{_INPUT_DATA}.test_read_dbs.test_sqlite_fg",
+            f"{_FRAMEWORKS}.spark.test_spark_loads_into_framework",
+        ),
+        resolver=_framework_of_adapter,
+    ),
+    MixinContract(
+        ComputeFramework,
+        DocumentLoadsIntoFrameworkTestMixin,
+        "adapter_class",
+        (
+            f"{_INPUT_DATA}.test_read_files.test_text_document_reader",
+            f"{_FRAMEWORKS}.spark.test_spark_loads_into_framework",
+        ),
+        resolver=_framework_of_adapter,
+    ),
 )
 
 
@@ -483,7 +513,9 @@ def covered_classes(contract: MixinContract) -> set[str]:
     }
 
 
-@pytest.mark.parametrize("contract", CONTRACTS, ids=[contract.mixin.__name__ for contract in CONTRACTS])
+@pytest.mark.parametrize(
+    "contract", CONTRACTS, ids=[f"{contract.base.__name__}-{contract.mixin.__name__}" for contract in CONTRACTS]
+)
 def test_every_concrete_implementation_has_a_mixin_consumer(contract: MixinContract) -> None:
     implementations = concrete_plugin_classes(contract.base, contract.aspect, contract.applies)
     assert implementations, (

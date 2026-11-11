@@ -19,7 +19,16 @@ import pytest
 
 from mloda.provider import ReadFileFG
 from mloda.user import DataAccessCollection, mloda
-from mloda._testing.framework_adapter import PandasAdapter, PolarsAdapter, PyArrowAdapter, PythonDictAdapter
+from mloda._testing.framework_adapter import (
+    DuckDBAdapter,
+    IcebergAdapter,
+    PandasAdapter,
+    PolarsAdapter,
+    PolarsLazyAdapter,
+    PyArrowAdapter,
+    PythonDictAdapter,
+    SqliteAdapter,
+)
 from mloda._testing.source.loads_into_framework_suite import FileLoaderNameTestMixin, FileLoadsIntoFrameworkTestMixin
 from tests.mixins.reader_feature_groups.format_file_writers import (
     write_csv,
@@ -192,6 +201,22 @@ class TestCsvIntoPolarsDataFrame(_CsvFiles, FileLoadsIntoFrameworkTestMixin):
 
 class TestCsvIntoPythonDict(_CsvFiles, FileLoadsIntoFrameworkTestMixin):
     adapter_class = PythonDictAdapter
+
+
+class TestCsvIntoDuckDB(_CsvFiles, FileLoadsIntoFrameworkTestMixin):
+    adapter_class = DuckDBAdapter
+
+
+class TestCsvIntoSqlite(_CsvFiles, FileLoadsIntoFrameworkTestMixin):
+    adapter_class = SqliteAdapter
+
+
+class TestCsvIntoIceberg(_CsvFiles, FileLoadsIntoFrameworkTestMixin):
+    adapter_class = IcebergAdapter
+
+
+class TestCsvIntoPolarsLazy(_CsvFiles, FileLoadsIntoFrameworkTestMixin):
+    adapter_class = PolarsLazyAdapter
 
 
 class TestParquetIntoPyArrowTable(_ParquetFiles, FileLoaderNameTestMixin):

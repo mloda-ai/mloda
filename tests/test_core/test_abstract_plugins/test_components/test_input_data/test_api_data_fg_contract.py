@@ -84,9 +84,15 @@ class TestApiDataFGContract(SourceFeatureGroupTestMixin):
         assert self.present_column in message
         assert exc_info.value.result.eliminations[ApiDataFG].code is CoreDeclineCode.COLUMN_NOT_FOUND
 
-    # An unpointed missing column names the source but does not show the columns.
-    def test_an_unpointed_missing_column_names_the_source_and_hides_the_columns(self) -> None:
-        unpointed = self._evaluate(Feature(self.missing_column), self.own_dac())
+    # An unpointed missing column names the source but does not show the columns, even with an undeclared str handle.
+    @pytest.mark.parametrize("handle", [None, "k"])
+    def test_an_unpointed_missing_column_names_the_source_and_hides_the_columns(self, handle: str | None) -> None:
+        feature = (
+            Feature(self.missing_column)
+            if handle is None
+            else Feature(self.missing_column, self._options(context={HANDLE_OPTION: handle}))
+        )
+        unpointed = self._evaluate(feature, self.own_dac())
         reason = unpointed.eliminations[ApiDataFG].reason
         assert self.expected_source in reason
         assert self.present_column not in reason

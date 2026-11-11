@@ -33,7 +33,7 @@ _AZURE_CONTAINER_PATTERN = re.compile(r"[a-z0-9-]{3,63}|\$(?:root|web|logs)")
 
 # The lookbehind (not a bare \b) avoids quadratic backtracking on long alphanumeric runs; the jdbc
 # subprotocol group is bounded (up to four words after `jdbc:`, e.g. `jdbc:h2:tcp`) for the same reason.
-_SCHEME = r"(?<![A-Za-z0-9+.-])(?P<scheme>(?:jdbc:(?:[A-Za-z][A-Za-z0-9+.-]*:){0,3})?[A-Za-z][A-Za-z0-9+.-]*)"
+_SCHEME = r"(?<![A-Za-z0-9+.-])(?P<scheme>(?:(?i:jdbc):(?:[A-Za-z][A-Za-z0-9+.-]*:){0,3})?[A-Za-z][A-Za-z0-9+.-]*)"
 # A `::` that continues an fsspec chain: before a `<scheme>://` or a lowercase `<protocol>::` element.
 _CHAIN_COLONS = r"::(?=[A-Za-z][A-Za-z0-9+.-]*://|[a-z][a-z0-9+.-]*::)"
 # A `::` after a value continues a chain only when its protocol run reaches a `scheme://`; the run is bounded so the
@@ -45,7 +45,7 @@ _FREE_TEXT_URI_PATTERN = re.compile(
     r"(?P<host>(?:\[[0-9A-Fa-f:.]+\]|[\w.~=-]*)(?::\d+)?)"
     # `;` or percent-escape parameters directly after a pathless host (stops at `/`, so the path group still owns
     # later segments, at a chain `::`, so a chained URI keeps its match; a `;` before another URI is no parameter).
-    rf"(?P<params>(?:(?:;(?!(?:jdbc:(?:[A-Za-z][A-Za-z0-9+.-]*:){{0,3}})?[A-Za-z][A-Za-z0-9+.-]*://)|(?=%))(?:(?!{_CHAIN_COLONS})[^\s?#\"'<>\];/])*)+)?"
+    rf"(?P<params>(?:(?:;(?!(?:(?i:jdbc):(?:[A-Za-z][A-Za-z0-9+.-]*:){{0,3}})?[A-Za-z][A-Za-z0-9+.-]*://)|(?=%))(?:(?!{_CHAIN_COLONS})[^\s?#\"'<>\];/])*)+)?"
     # Stop at `;scheme://` so `a.csv;s3://b/b.csv` is two URIs.
     r"(?P<path>/(?:[^\s?#\"'<>\];]|;(?![A-Za-z][A-Za-z0-9+.-]*://))*)?"
     r"(?P<query>[?#][^\s\"'<>)\]]*)?"
@@ -79,15 +79,22 @@ _SECRET_NAME = (  # nosec B105
 _KNOWN_SCHEMES = r"(?i:bearer|basic|token|digest|apikey|negotiate)"
 
 
+def _quoted_value(quote: str, extra: str) -> str:
+    """A quoted value (doubled quotes allowed inside) that closes only before a delimiter, so a quote run stays whole."""
+    end = rf"[\s;&,:)\]}}>\\{extra}]|$|[.!?]+(?:\s|$|['\"])"
+    return rf"{quote}(?:[^{quote}\\\n]|\\.|{quote}{quote})*+{quote}(?={end}|['\"](?:{end}))"
+
+
 # (?<![\w.-]), not (?<![A-Za-z]): a name-start anchor so a prefixed or dotted identifier (sslpassword,
 # PGPASSWORD, X-Api-Key, fs.s3a.secret.key) still matches, captured whole so the prefix survives the replacement.
 # Optional scheme prefix so `access_token=Bearer abc` masks the token, not just the word `Bearer`.
 # Trailing `}` optional: an unterminated `{` masks to end of line instead of rescanning.
-def _keyword_pattern(plain: str) -> re.Pattern[str]:
+def _keyword_pattern(plain: str, extra: str = "") -> re.Pattern[str]:
+    single, double = _quoted_value("'", extra), _quoted_value('"', extra)
     return re.compile(
         rf"(?<![\w.-])(?P<keyword>[\w.-]*{_SECRET_NAME})(?P<sep>[ \t]*=[ \t]*)"
         rf"(?P<known>{_KNOWN_SCHEMES}[ \t]+)?"
-        r"(?P<value>(?P<quoted>'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\")"
+        rf"(?P<value>(?P<quoted>{single}|{double})"
         r"|(?P<braced>\{(?:[^}\n]|\}\})*\}?)|" + plain + ")",
         re.IGNORECASE,
     )
@@ -98,7 +105,8 @@ _KEYWORD_PATTERN = _keyword_pattern(r"[^;&\s'\"]*(?:['\"]++(?![\s,;&:)\]}>]|$)[^
 # The identity form: a segment value ends at `/` or at a `::` that continues a chain; an inner quote run continues it.
 _KEYWORD_SEGMENT_PATTERN = _keyword_pattern(
     rf"(?:(?!{_CHAIN_AFTER_VALUE})(?:::(?:[a-z][a-z0-9+.-]{{0,31}}::)*+|[^;&/\s'\"]))*"
-    rf"(?:['\"]++(?=[^;&/\s'\"])(?:(?!{_CHAIN_AFTER_VALUE})(?:::(?:[a-z][a-z0-9+.-]{{0,31}}::)*+|[^;&/\s'\"]))+)*"
+    rf"(?:['\"]++(?=[^;&/\s'\"])(?:(?!{_CHAIN_AFTER_VALUE})(?:::(?:[a-z][a-z0-9+.-]{{0,31}}::)*+|[^;&/\s'\"]))+)*",
+    "/",
 )
 _PATH_VALUE = re.compile(r"/[\w.-]+(?:/[\w.-]+)+/?")
 _COUNT_NAME = re.compile(r"(?:max|min|num|total)[_-]?token", re.IGNORECASE)
@@ -430,20 +438,23 @@ _JDBC_CUT_PATTERN = re.compile(
 # through spaced `key = value` and quoted or braced values.
 _JDBC_PATH_CUT = "\ue002"
 # A quoted value closes only before a delimiter (a dict repr's quote stays a boundary); values stop at a newline or `://`.
+_JDBC_VALUE_END = r"""[;\s,)\]}>\\]|$|[.!?:]+(?:\s|$|["'])"""
 _JDBC_QUOTED = (
-    r"""'(?:(?!://)[^'\n]|'')*+(?:'(?=[;\s,)\]}>]|$|[.!?:]+(?:\s|$))|(?=\n|$|://))"""
-    r"""|"(?:(?!://)[^"\n]|"")*+(?:"(?=[;\s,)\]}>]|$|[.!?:]+(?:\s|$))|(?=\n|$|://))"""
+    rf"""'(?:(?!://)[^'\n]|'')*+(?:'(?={_JDBC_VALUE_END}|["'](?:{_JDBC_VALUE_END}))|(?=\n|$|://))"""
+    rf"""|"(?:(?!://)[^"\n]|"")*+(?:"(?={_JDBC_VALUE_END}|["'](?:{_JDBC_VALUE_END}))|(?=\n|$|://))"""
 )
 _JDBC_BRACED = r"\{(?:(?!://)[^}\n]|\}\})*+\}?"
 _JDBC_PATH_CUT_PATTERN = re.compile(
     _JDBC_PATH_CUT + rf"(?:(?P<v>(?<=[= \t])(?:{_JDBC_QUOTED}|{_JDBC_BRACED})|(?<={_JDBC_PATH_CUT}){_JDBC_BRACED})"
-    r"|[ \t]++(?==)|(?<==)[ \t]++|(?!://|[,;][\"'(\[{<]*(?:jdbc:)?[A-Za-z][A-Za-z0-9+.-]*://)\S)*"  # not `*+`: 3.11 misreports group spans
+    rf"|[ \t]++(?==)|(?<==)[ \t]++|(?<=[= \t]){_KNOWN_SCHEMES}[ \t]++"
+    r"|(?!://|[,;][\"'(\[{<]*(?:(?i:jdbc):)?[A-Za-z][A-Za-z0-9+.-]*://)\S)*"  # not `*+`: 3.11 misreports group spans
 )
 # Closers then sentence punctuation then whitespace or end: the match ended a value, nothing was cut off.
 _CLOSING_END_PATTERN = re.compile(r"[\"'<>)\]}]+[,:;.!?]*(?:\s|$)")
 # Closers then a separator and an opener: a following list or dict item, if the URL itself was opened.
 _CLOSING_NEXT_PATTERN = re.compile(r"[\"'<>)\]}]+[,:][\"'\[{(<]")
 _OPENERS = "\"'([{<"
+_URI_LIST_ITEM_PATTERN = re.compile(r"[,;][\"'(\[{<]*(?:(?i:jdbc):)?[A-Za-z][A-Za-z0-9+.-]*://")
 # Closers kept after a cut so a later `, 'password': ...` still has its `,` lead.
 _CLOSERS = "\"'<>)]},"
 # Characters the free-text URI pattern refuses inside a query or fragment (a path refuses all but `)` too):
@@ -501,22 +512,33 @@ def _cut_resume(text: str) -> str:
     return "=" if text.endswith("=") else ""
 
 
+def _dropped_continues(match: re.Match[str], dropped: str) -> bool:
+    """True when dropped URI text hands its value on past the match (`=` end, open brace, spaced `=`)."""
+    return bool(dropped) and (
+        dropped.endswith("=")
+        or _opens_brace_value(dropped)
+        or _SPACED_EQUALS_PATTERN.match(match.string, match.end()) is not None
+    )
+
+
 def _uri_projection(match: re.Match[str]) -> str | None:
     scheme, host = match["scheme"], match["host"]
     # Host parameters ride along with the path: the same key=value and hidden-percent checks apply.
     path = (match["params"] or "") + (match["path"] or "")
     container = _azure_container_prefix(match)
-    if scheme.startswith("jdbc:"):
+    is_jdbc = scheme.lower().startswith("jdbc:")
+    if is_jdbc:
         tail = _JDBC_TAIL_PATTERN.search(match.string, match.end())
         if any(mark in path + (tail[0] if tail else "") for mark in "=;@"):
             return f"{scheme}://{container}{host}{_JDBC_PATH_CUT}{_cut_resume(path)}"
-        query = match["query"]
-        if query and (
-            query.endswith("=") or _opens_brace_value(query) or _SPACED_EQUALS_PATTERN.match(match.string, match.end())
-        ):
-            kept = _cut_hidden_percent(scheme, host, path)
-            return f"{scheme}://{container}{host}{kept}{_JDBC_PATH_CUT}{_cut_resume(query)}"
-    if any("=" in segment.partition(":")[2] for segment in path.split("/")):
+    key_value_path = any("=" in segment.partition(":")[2] for segment in path.split("/"))
+    if key_value_path and not is_jdbc:
+        return None
+    query = match["query"] or ""
+    if _dropped_continues(match, query):
+        kept = _cut_hidden_percent(scheme, host, path)
+        return f"{scheme}://{container}{host}{kept}{_JDBC_PATH_CUT}{_cut_resume(query)}"
+    if key_value_path:
         return None
     return f"{scheme}://{container}{host}{_cut_hidden_percent(scheme, host, path)}"
 
@@ -534,25 +556,43 @@ def _cut_hidden_percent(scheme: str, host: str, path: str) -> str:
     return head[: head.rfind("/") + 1]
 
 
-def _hides_parameter_region(match: re.Match[str]) -> bool:
-    """A mid-path closer the URL was not opened with, followed by a hidden parameter region in the same token."""
+def _part_clean_head(part: str) -> str:
+    """The part up to its first raw `?`/`#`, else its clean head before a `;` or percent-escape."""
+    raw = min((i for i in (part.find("?"), part.find("#")) if i >= 0), default=len(part))
+    decoded = _decode_to_fixpoint(part[:raw])
+    if decoded is not None and not any(mark in decoded for mark in ";?#"):
+        return part[:raw]
+    return _clean_head(part)
+
+
+def _hidden_region_head(match: re.Match[str]) -> str | None:
+    """The kept head of a token tail that hides a parameter region after a mid-token stop char; None if it hides none.
+    A closer the URL was opened with ends the value; a `[,;]` starting another `scheme://` item is a list."""
     text, end, start = match.string, match.end(), match.start()
-    if end >= len(text) or text[end] not in _MATCH_END_TERMINATORS:
-        return False
-    if start > 0 and text[start - 1] == _OPENER_OF.get(text[end]):
-        # A closer glued to a token character is mid-path, not the end of the opened value.
-        following = text[end + 1 : end + 2]
-        if not (following.isalnum() or following == "_"):
-            return False
+    if end >= len(text) or text[end].isspace():
+        return None
+    if text[end] in _MATCH_END_TERMINATORS:
+        if start > 0 and text[start - 1] == _OPENER_OF.get(text[end]):
+            # A closer glued to a token character is mid-path, not the end of the opened value.
+            following = text[end + 1 : end + 2]
+            if not (following.isalnum() or following == "_"):
+                return None
+    # A `}` stop ends a braced value the jdbc cut already owns.
+    elif text[end] == "}" or _URI_LIST_ITEM_PATTERN.match(text, end):
+        return None
     tail = _JDBC_TAIL_PATTERN.match(text, end)
     if tail is None:
-        return False
+        return None
     decoded = _decode_to_fixpoint(tail[0])
-    return (
-        decoded is None
-        or _KEY_VALUE_REGION_PATTERN.search(decoded) is not None
-        or _PARAMETER_REGION.search(decoded) is not None
-    )
+    if decoded is not None and not (_KEY_VALUE_REGION_PATTERN.search(decoded) or _PARAMETER_REGION.search(decoded)):
+        return None
+    if text[end] in _MATCH_END_TERMINATORS:
+        return ""
+    regions = _parameter_regions(tail[0])
+    if not regions:
+        return ""
+    start, _, end = regions[0]
+    return tail[0][:start] + _part_clean_head(tail[0][start:end])
 
 
 def _cut_dropped_tail(match: re.Match[str], scrubbed: str, dropped: bool) -> str:
@@ -560,7 +600,8 @@ def _cut_dropped_tail(match: re.Match[str], scrubbed: str, dropped: bool) -> str
     if scrubbed.rstrip("={").endswith((_JDBC_CUT, _JDBC_PATH_CUT)):
         return scrubbed
     if not dropped:
-        return scrubbed + _JDBC_CUT if _hides_parameter_region(match) else scrubbed
+        head = _hidden_region_head(match)
+        return scrubbed if head is None else scrubbed + head + _JDBC_CUT
     text, end, start = match.string, match.end(), match.start()
     if text.startswith("::", end) and _CHAIN_AFTER_VALUE_PATTERN.match(text, end) is None:
         return scrubbed + _JDBC_CUT
@@ -648,15 +689,21 @@ def _cut_at_parameter_region(match: re.Match[str], path: str) -> str | None:
 def _scrub_uri_match(match: re.Match[str]) -> str:
     scheme, host = match["scheme"], match["host"]
     path = (match["params"] or "") + (match["path"] or "")
-    if path and not scheme.startswith("jdbc:"):
+    if path and not scheme.lower().startswith("jdbc:"):
         cut_uri = _cut_at_parameter_region(match, path)
         if cut_uri is not None:
+            dropped = path + (match["query"] or "")
+            if _dropped_continues(match, dropped):
+                cut_uri += _JDBC_PATH_CUT + _cut_resume(dropped)
             return _cut_dropped_tail(match, cut_uri, True)
     projection = _uri_projection(match)
     if projection is not None:
         dropped = bool(match["query"]) or not projection.endswith(path)
         return _cut_dropped_tail(match, projection, dropped)
     scrubbed = f"{scheme}://{host}{_cut_hidden_percent(scheme, host, _cut_key_value_path(path))}"
+    query = match["query"] or ""
+    if _dropped_continues(match, query):
+        scrubbed += _JDBC_PATH_CUT + _cut_resume(query)
     return _cut_dropped_tail(match, scrubbed, True)
 
 

@@ -1373,9 +1373,14 @@ class IdentifyFeatureGroupClass:
                 )
                 message = render_resolution_failure(result, feature)
                 if message is not None:
-                    variants, allow_variants = input_variant_block(result)
+                    variants, allow_variants = ((), ()) if refusals else input_variant_block(result)
                     return InputChainOutcome(
-                        False, True, _first_line(message), refusals, frozenset(), variants, allow_variants
+                        False,
+                        True,
+                        _first_line(message),
+                        refusals,
+                        variants=variants,
+                        allow_variants=allow_variants,
                     )
             else:
                 result = self._input_resolver(feature, links, self._input_depth + 1)
@@ -1391,7 +1396,7 @@ class IdentifyFeatureGroupClass:
             child._output_parts = result.output_parts
             return child._input_chain(winner, feature)
         except FeatureResolutionError as exc:
-            variants, allow_variants = input_variant_block(exc.result)
+            variants, allow_variants = ((), ()) if exc.refusals else input_variant_block(exc.result)
             return replace(self._input_failure(exc), variants=variants, allow_variants=allow_variants)
 
     def _declaration_requirement(

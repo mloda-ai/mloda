@@ -45,6 +45,7 @@ from mloda.core.prepare.identify_feature_group import (
     FeatureResolutionError,
     IdentifyFeatureGroupClass,
 )
+from mloda.core.prepare.input_chain import input_variant_block
 from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
 from mloda.core.prepare.resolution_types import Elimination, EvaluationResult
 from mloda.provider import NAME_STAGE, FeatureSet, record_match_rejection
@@ -947,8 +948,6 @@ class TestEliminationStages:
         assert eliminations[unlisted].allow_variants == ()
 
     def test_input_variant_block_unions_and_withholds_an_unfixable_fix(self) -> None:
-        from mloda.core.prepare.input_chain import input_variant_block
-
         def variant(name: str, fix: tuple[str, ...]) -> Elimination:
             return Elimination(stage="variant", reason="r", variants=(name,), allow_variants=fix)
 
@@ -963,9 +962,12 @@ class TestEliminationStages:
             eliminations={ElimSuccessFG011: variant("a", ("a",))},
         )
 
+        abstract_only = EvaluationResult(identified={}, abstract_matched={ElimSortAFG011})
+
         assert input_variant_block(fixable) == (("a", "b"), ("a", "b"))
         assert input_variant_block(mixed) == (("a", "b"), ())
         assert input_variant_block(multiple) == ((), ())
+        assert input_variant_block(abstract_only) == ((), ())
 
     def test_links_stage(self) -> None:
         feature = Feature(LINKS_FEATURE)

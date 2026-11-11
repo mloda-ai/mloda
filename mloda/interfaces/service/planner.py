@@ -327,7 +327,7 @@ class Planner:
             refusal.__context__ = failure
             return failure_result("Planning", refusal)
         if diagnosis is not None and not diagnosis.complete:
-            return self._unresolved(diagnosis, request_names, sources)
+            return self._unresolved(diagnosis, request_names, sources, in_feature_sources(request))
         planned = self._denied([("/features", name) for step in steps for name in step.feature_names])
         if planned is not None:
             return planned
@@ -497,7 +497,11 @@ class Planner:
         return error_result("policy_denied", _DENIED_MESSAGE, details, **extra)
 
     def _unresolved(
-        self, diagnosis: ResolutionDiagnosis, names: Sequence[str], sources: Mapping[str, SourceConfig]
+        self,
+        diagnosis: ResolutionDiagnosis,
+        names: Sequence[str],
+        sources: Mapping[str, SourceConfig],
+        in_sources: Sequence[tuple[str, str]],
     ) -> dict[str, Any]:
         name = diagnosis.feature_name
         if name is None:
@@ -505,24 +509,31 @@ class Planner:
             detail = {"path": "/features", "problem": "unresolved", "message": _UNPLANNABLE_MESSAGE}
             return error_result("validation_failed", _UNPLANNABLE_MESSAGE, [detail])
         shown = sanitize_text(name, MAX_NAME_LENGTH)
-        path = f"/features/{names.index(name)}" if name in names else "/features"
+        typed = {declared: pointer for pointer, declared in reversed(in_sources)}
+        requested = name in names or name in typed
+        path = f"/features/{names.index(name)}" if name in names else typed.get(name, "/features")
         subject = f"'{shown}'"
         inputs_subject = f"One of the inputs of '{shown}'"
-        unrequested_input = bool(diagnosis.resolving_path) and name not in names
-        if unrequested_input:
+        root_path, root_subject = path, inputs_subject
+        if diagnosis.resolving_path:
             root = diagnosis.resolving_path[0]
-            path = f"/features/{names.index(root)}" if root in names else "/features"
-            inputs_subject = subject = f"One of the inputs of '{sanitize_text(root, MAX_NAME_LENGTH)}'"
+            root_path = f"/features/{names.index(root)}" if root in names else "/features"
+            owner = f"'{sanitize_text(root, MAX_NAME_LENGTH)}'" if root in names else "a requested feature"
+            root_subject = f"One of the inputs of {owner}"
         failed = diagnosis.failed_result
         if failed is not None and failed.failure_kind == "none":
-            variant_details = self._variant_details(failed, path, subject, inputs_subject)
+            variant_details = (
+                self._variant_details(failed, root_path, root_subject, root_subject)
+                if diagnosis.resolving_path
+                else self._variant_details(failed, path, subject, inputs_subject)
+            )
             if variant_details:
                 headline = next((d for d in variant_details if "fix" in d), variant_details[0])
                 return error_result("validation_failed", headline["message"], variant_details)
-        if unrequested_input:
-            message = f"{subject} cannot be resolved under the service policy and sources."
+        if diagnosis.resolving_path and not requested:
+            message = f"{root_subject} cannot be resolved under the service policy and sources."
             return error_result(
-                "validation_failed", message, [{"path": path, "problem": "unresolved", "message": message}]
+                "validation_failed", message, [{"path": root_path, "problem": "unresolved", "message": message}]
             )
         known = diagnosis.failed_result.facts.known_names if diagnosis.failed_result is not None else ()
         candidates = [

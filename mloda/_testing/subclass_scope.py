@@ -138,14 +138,12 @@ def _plain_failure(
 
 def _value_failure(
     name: str,
-    key: str,
-    value: Any,
+    label: str,
     make: Callable[[], Options],
     mapping: FeatureGroupEnvironmentMapping,
     parent: type[FeatureGroup],
     subclass: type[FeatureGroup],
 ) -> list[str]:
-    label = f"with '{key}'={value!r}"
     result, _, aborted = _evaluate(Feature(name, make()), mapping)
     if aborted is not None:
         return [f"setup: matching '{name}' {label} aborted: {aborted}"]
@@ -160,6 +158,13 @@ def _value_failure(
     return []
 
 
+def _free_only(base: Options, selecting: Options, free: frozenset[str]) -> Options:
+    return Options(
+        group={**base.group, **{k: v for k, v in selecting.group.items() if k in free}},
+        context={**base.context, **{k: v for k, v in selecting.context.items() if k in free}},
+    )
+
+
 def _scope_failures(
     subclass: type[FeatureGroup],
     parent: type[FeatureGroup],
@@ -167,6 +172,7 @@ def _scope_failures(
     base: Options,
     selecting: Options,
     bound: frozenset[str] = frozenset(),
+    free: frozenset[str] = frozenset(),
 ) -> list[str]:
     keys = {*selecting.group, *selecting.context}
     mapping, failures = _mapping(parent, subclass)
@@ -181,7 +187,11 @@ def _scope_failures(
             if failure is not None:
                 failures.append(failure)
         for key, value, make in value_probes:
-            failures += _value_failure(name, key, value, make, mapping, parent, subclass)
+            failures += _value_failure(name, f"with '{key}'={value!r}", make, mapping, parent, subclass)
+        if free:
+            make_free = functools.partial(_free_only, base, selecting, free)
+            label = f"with free keys only {sorted(free)}"
+            failures += _value_failure(name, label, make_free, mapping, parent, subclass)
         selected, selected_message, aborted = _evaluate(Feature(name, _combined(base, selecting)), mapping)
         if aborted is not None:
             failures.append(f"misses: matching '{name}' with {sorted(keys)} aborted: {aborted}")
@@ -312,10 +322,11 @@ def check_subclass_scope(
     assuming identical row order.
     With require_run, a rule exclusion, a missing serving Implementation, a route block or no rows is a failure.
     """
-    failures = _run(subclass, parent, selecting, requests, free)
+    free_keys = frozenset((free,) if isinstance(free, str) else free)
+    failures = _run(subclass, parent, selecting, requests, free_keys)
     notes: list[str] = []
-    if free:
-        notes.append(f"scope: {sorted(free)} set but not probed with other values")
+    if free_keys and not any(f.startswith(("setup:", "names:")) for f in failures):
+        notes.append(f"scope: {sorted(free_keys)} set but not probed with other values")
     if input_data is None:
         notes.append("values: not compared (no input_data)")
     elif any(f.startswith(("setup:", "names:", "misses:")) for f in failures):
@@ -342,7 +353,7 @@ def _run(
     parent: type[FeatureGroup],
     selecting: Options,
     requests: Sequence[str] | None,
-    free: Collection[str] = (),
+    free: frozenset[str] = frozenset(),
 ) -> list[str]:
     if not is_nominal_subclass(subclass, parent) or subclass is parent:
         return [f"setup: {subclass.__name__} is not a proper subclass of {parent.__name__}"]
@@ -363,12 +374,12 @@ def _run(
         return [f"setup: selecting keys {present} are already in the base options and would mask a steal"]
     name_bound = frozenset().union(*bound.values())
     selecting_keys = {*selecting.group, *selecting.context}
-    if not set(free) <= selecting_keys:
-        return [f"setup: free keys {sorted(set(free) - selecting_keys)} are not selecting keys"]
+    if not free <= selecting_keys:
+        return [f"setup: free keys {sorted(free - selecting_keys)} are not selecting keys"]
     reserved = {k.value for k in DefaultOptionKeys}
-    if free and not selecting_keys - set(free) - reserved - name_bound:
+    if free and not selecting_keys - free - reserved - name_bound:
         return ["setup: free leaves no selecting key to probe"]
-    return _scope_failures(subclass, parent, names, base, selecting, name_bound | frozenset(free))
+    return _scope_failures(subclass, parent, names, base, selecting, name_bound | free, free)
 
 
 def assert_subclass_scope(

@@ -1053,21 +1053,14 @@ class TestScopePointingRefinement:
         assert exc_info.value.result.eliminations[ToySourceSubFG].code is CoreDeclineCode.COLUMN_NOT_FOUND
 
     @pytest.mark.parametrize("scope", SCOPES)
-    def test_a_family_only_group_with_query_text_declines_without_data_access(self, scope: object) -> None:
-        feature = Feature(COL, Options({"query_text": "select 1"}), feature_group=scope)  # type: ignore[arg-type]
-        with pytest.raises(FeatureResolutionError) as exc_info:
-            evaluate_or_raise(feature, _plugins(ToySourceSubFG), None, None)
-
-        elimination = exc_info.value.result.eliminations[ToySourceSubFG]
-        assert elimination.code is CoreDeclineCode.NO_QUERY_ROUTE
-        assert "query_text is set, but ToySourceSubFG lists no query route" in elimination.reason
-
-    def test_a_family_only_sibling_with_query_text_declines_without_probing_sources(self) -> None:
+    def test_a_family_only_group_with_query_text_declines_without_probing(self, scope: object) -> None:
         _FamilyCountingFG.finds = 0
-        feature = Feature(COL, Options({"query_text": "select 1"}), feature_group=ToySourceFG)
-        result = _identify(feature, toy_dac(h1={COL: [1]}), _FamilyCountingFG)
+        feature = Feature(COL, Options({"query_text": "select 1"}), feature_group=scope)  # type: ignore[arg-type]
+        result = _identify(feature, None, _FamilyCountingFG)
 
-        assert result.eliminations[_FamilyCountingFG].code is CoreDeclineCode.NO_QUERY_ROUTE
+        elimination = result.eliminations[_FamilyCountingFG]
+        assert elimination.code is CoreDeclineCode.NO_QUERY_ROUTE
+        assert "query_text is set, but _FamilyCountingFG lists no query route" in elimination.reason
         assert _FamilyCountingFG.finds == 0
 
     def test_a_group_scoped_by_its_own_name_with_query_text_still_aborts(self) -> None:

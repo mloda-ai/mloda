@@ -30,7 +30,11 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 from mloda.core.api.plugin_info import ResolvedFeature
 from mloda.core.api import plugin_docs
 from mloda.core.api.plugin_docs import resolve_feature
-from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, RedefinitionConflictError
+from mloda.core.prepare.accessible_plugins import (
+    EnvironmentPreconditionError,
+    FeatureGroupEnvironmentMapping,
+    RedefinitionConflictError,
+)
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsVaultFG
 from mloda.user import PluginLoader
@@ -893,6 +897,57 @@ class TestResolveFeatureIsNonThrowing:
 
     def test_a_marked_match_abort_records_the_raised_class_name(self) -> None:
         assert self._resolve_abort("bad", secret_dac=False).raised == "ValueError"
+
+    @staticmethod
+    def _resolve_echo_branch(
+        branch: str, monkeypatch: pytest.MonkeyPatch, dac: DataAccessCollection | None
+    ) -> ResolvedFeature:
+        secret = ABORT_ECHO_SECRET
+        echoing_obj: Any = type(secret, (), {})()
+        if branch in ("mloda_env", "plugin_env"):
+            exc: Exception = (
+                EnvironmentPreconditionError(f"precondition {secret}")
+                if branch == "mloda_env"
+                else RuntimeError(secret)
+            )
+
+            def _raise(*args: Any, **kwargs: Any) -> Any:
+                raise exc
+
+            monkeypatch.setattr(plugin_docs, "PreFilterPlugins", _raise)
+            return resolve_feature(SPLIT_CAP_FEATURE, data_access_collection=dac)
+        if branch == "scope_type":
+            return resolve_feature(SPLIT_CAP_FEATURE, feature_group=echoing_obj, data_access_collection=dac)
+        if branch == "feature_build":
+            return resolve_feature(
+                SPLIT_CAP_FEATURE, options=Options(group={"domain": echoing_obj}), data_access_collection=dac
+            )
+        return resolve_feature(
+            secret,
+            plugin_collector=PluginCollector.enabled_feature_groups({AbortEchoResolveFeatureGroup}),
+            data_access_collection=dac,
+        )
+
+    ECHO_BRANCHES = ["scope_type", "mloda_env", "plugin_env", "feature_build", "no_match"]
+
+    @pytest.mark.parametrize("branch", ECHO_BRANCHES)
+    def test_every_error_branch_masks_a_registered_secret(self, branch: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        dac = DataAccessCollection(credentials={"vault": {"token": ABORT_ECHO_SECRET}})
+
+        result = self._resolve_echo_branch(branch, monkeypatch, dac)
+
+        assert result.error is not None
+        assert ABORT_ECHO_SECRET not in result.error
+        assert "***" in result.error
+
+    @pytest.mark.parametrize("branch", ECHO_BRANCHES)
+    def test_every_error_branch_keeps_text_without_a_credential_collection(
+        self, branch: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        result = self._resolve_echo_branch(branch, monkeypatch, None)
+
+        assert result.error is not None
+        assert ABORT_ECHO_SECRET in result.error
 
     def test_success_with_a_credential_collection_has_no_error(self) -> None:
         dac = DataAccessCollection(credentials={"vault": {"token": ABORT_ECHO_SECRET}})

@@ -409,6 +409,7 @@ def resolve_feature(
 
     Never raises for matching errors: those are reported in the returned ResolvedFeature.error.
     Signature misuse (options/feature_group alongside a Feature) is a programmer error and raises TypeError.
+    The error text is credential-scrubbed.
 
     Design note: resolve_feature is a thin adapter. It only normalizes the standalone request, builds the
     canonical accessible-plugins environment once, delegates one evaluation to evaluate_and_render, and
@@ -439,15 +440,20 @@ def resolve_feature(
         all matching candidates, and any error message.
     """
     with run_boundary():
-        return _resolve_feature(
-            feature,
-            options=options,
-            plugin_collector=plugin_collector,
-            feature_group=feature_group,
-            links=links,
-            data_access_collection=data_access_collection,
-            compute_frameworks=compute_frameworks,
-        )
+        literals = frozenset() if data_access_collection is None else data_access_collection.secret_literals()
+        with registered_secrets_scope(literals):
+            resolved = _resolve_feature(
+                feature,
+                options=options,
+                plugin_collector=plugin_collector,
+                feature_group=feature_group,
+                links=links,
+                data_access_collection=data_access_collection,
+                compute_frameworks=compute_frameworks,
+            )
+            if resolved.error is not None:
+                resolved.error = scrub_credentials(resolved.error)
+            return resolved
 
 
 def _resolve_feature(
@@ -526,19 +532,16 @@ def _resolve_feature(
                 excluded=pre_filter.excluded_feature_groups,
             )
 
-    literals = frozenset() if data_access_collection is None else data_access_collection.secret_literals()
-    with registered_secrets_scope(literals):
-        evaluation, eval_error, raised, refused = safe_field_with_abort(_evaluate, None)
-        if evaluation is None:
-            scrubbed_error = "" if eval_error is None else scrub_credentials(eval_error)
-            return ResolvedFeature(
-                feature_name,
-                None,
-                [],
-                error=f"{scrubbed_error}{scope_suffix}",
-                credential_refusal=refused,
-                raised=raised,
-            )
+    evaluation, eval_error, raised, refused = safe_field_with_abort(_evaluate, None)
+    if evaluation is None:
+        return ResolvedFeature(
+            feature_name,
+            None,
+            [],
+            error=f"{'' if eval_error is None else eval_error}{scope_suffix}",
+            credential_refusal=refused,
+            raised=raised,
+        )
     result, message = evaluation
 
     candidates = sorted(result.criteria_matched, key=lambda c: c.get_class_name())

@@ -114,7 +114,7 @@ When exactly one FeatureGroup resolves, `ResolvedFeature` also reports
 `subtype` (resolved from the name, the passed options, or the key's declared
 default, e.g. `"sum"` for `sales__sum_aggr`) and `subtype_family` (the
 parametric family name, `"ntile"` for `ntile_2`); both are `None` when
-nothing resolves. `credential_refusal` is `True` when resolution ended on a credential handle refusal; `error` then holds its text, naming handles and keys only. `raised` is the class name of an exception that escaped the evaluation (an escalated match abort, or a crash in a capability hook or the renderer), else `None`.
+nothing resolves. `credential_refusal` is `True` when resolution ended on a credential handle refusal; `error` then holds its text, naming handles and keys only. `error` is always credential-scrubbed (collection secrets show as `***`, and credential-shaped text such as key=value secrets, URI user info and bearer tokens is masked even without a collection). `raised` is the class name of an exception that escaped the evaluation (an escalated match abort, or a crash in a capability hook or the renderer), else `None`.
 
 ### Inspecting Candidates
 

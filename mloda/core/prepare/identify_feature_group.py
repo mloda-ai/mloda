@@ -91,6 +91,7 @@ from mloda.core.abstract_plugins.components.utils import (
     is_match_abort,
     contained_raise_reason,
     safe_exc_str,
+    require_value_collection,
     safe_field,
 )
 from mloda.core.abstract_plugins.components.divergence import Divergence
@@ -565,7 +566,7 @@ class IdentifyFeatureGroupClass:
             ),
             skipped_plugins=tuple(sorted(PluginLoader.skipped_plugins().items())),
             sources=sources,
-            narrowing_hints=self._capture_narrowing_hints(sources),
+            narrowing_hints=self._capture_narrowing_hints(result),
             scope_suggestions=self._capture_scope_suggestions(result, accessible_plugins, feature),
         )
 
@@ -602,19 +603,22 @@ class IdentifyFeatureGroupClass:
             )
         return {fg: text for fg, text in sources.items() if text}
 
-    def _capture_narrowing_hints(
-        self, sources: dict[type[FeatureGroup], str]
-    ) -> dict[type[FeatureGroup], tuple[str, ...]]:
-        """Narrowing options each captured source group honors; () when the hook is absent or fails."""
+    def _capture_narrowing_hints(self, result: EvaluationResult) -> dict[type[FeatureGroup], tuple[str, ...]]:
+        """Narrowing options each identified source group honors; () when the hook is absent or fails."""
         hints: dict[type[FeatureGroup], tuple[str, ...]] = {}
-        for feature_group in sources:
-            reader = self._input_data_matches[feature_group][0]
+        for feature_group in result.identified:
+            pair = self._input_data_matches.get(feature_group)
+            if pair is None:
+                continue
+            reader = pair[0]
+
+            def read_hints() -> tuple[str, ...]:
+                values = reader._narrowing_hints()
+                require_value_collection(values, "_narrowing_hints()")
+                return tuple(dict.fromkeys(h for h in values if isinstance(h, str)))
+
             hints[feature_group] = (
-                safe_field(
-                    lambda: tuple(h for h in reader._narrowing_hints() if isinstance(h, str)),
-                    (),
-                    field=f"{getattr(reader, '__name__', 'reader')}._narrowing_hints",
-                )
+                safe_field(read_hints, (), field=f"{getattr(reader, '__name__', 'reader')}._narrowing_hints")
                 if is_nominal_subclass(reader, SourceFeatureGroup)
                 else ()
             )

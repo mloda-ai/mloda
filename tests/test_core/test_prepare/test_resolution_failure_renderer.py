@@ -3658,11 +3658,14 @@ class TestMultipleSourceFixLine:
         self,
         sources: dict[type[FeatureGroup], str],
         narrowing_hints: dict[type[FeatureGroup], tuple[str, ...]] | None = None,
+        extra_identified: tuple[type[FeatureGroup], ...] = (),
     ) -> EvaluationResult:
         identified: dict[type[FeatureGroup], set[type[ComputeFramework]]] = {
             RendererSuccessFG791: set(),
             RendererBareOnlyFG791: set(),
         }
+        for extra in extra_identified:
+            identified[extra] = set()
         return EvaluationResult(
             identified=identified,
             facts=RenderFacts(sources=sources, narrowing_hints=narrowing_hints or {}),
@@ -3713,6 +3716,11 @@ class TestMultipleSourceFixLine:
                 ("data_access_handle", "column_to_file"),
                 "To pick one source, use feature_group= or a data_access_handle.",
             ),
+            (
+                ("data_access_handle", "column_to_file"),
+                ("data_access_handle", "column_to_file"),
+                "To pick one source, use feature_group=, a data_access_handle, or column_to_file.",
+            ),
         ],
     )
     def test_fix_line_names_only_options_every_group_honors(
@@ -3728,3 +3736,17 @@ class TestMultipleSourceFixLine:
         assert message is not None
         fix_lines = [line for line in message.split("\n") if "To pick one source" in line]
         assert fix_lines == [expected]
+
+    def test_an_identified_group_without_a_captured_source_leaves_only_feature_group(self) -> None:
+        both = ("data_access_handle", "column_to_file")
+        result = self._result(
+            {RendererSuccessFG791: "A: one", RendererBareOnlyFG791: "B: two"},
+            {RendererSuccessFG791: both, RendererBareOnlyFG791: both},
+            extra_identified=(RendererStrictFG791,),
+        )
+
+        message = render_resolution_failure(result, Feature(MULTIPLE_FEATURE_791))
+
+        assert message is not None
+        fix_lines = [line for line in message.split("\n") if "To pick one source" in line]
+        assert fix_lines == ["To pick one source, use feature_group=."]

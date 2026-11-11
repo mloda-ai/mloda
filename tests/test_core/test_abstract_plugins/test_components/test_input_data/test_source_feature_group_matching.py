@@ -1330,6 +1330,18 @@ class _RaisingHintsFG(ToySourceFG):
         raise RuntimeError("hints failed")
 
 
+class _BareStrHintsFG(ToySourceFG):
+    @classmethod
+    def _narrowing_hints(cls) -> Any:
+        return "data_access_handle"
+
+
+class _DuplicateHintsFG(ToySourceFG):
+    @classmethod
+    def _narrowing_hints(cls) -> tuple[str, ...]:
+        return ("data_access_handle", "data_access_handle")
+
+
 class TestRendererNarrowingHints:
     def _dac(self) -> DataAccessCollection:
         return toy_dac(h1={COL: [1]}).with_api_data_columns({"k": (COL,)})
@@ -1354,6 +1366,16 @@ class TestRendererNarrowingHints:
             evaluate_or_raise(Feature(COL), _plugins(_RaisingHintsFG, ApiDataFG), None, self._dac())
 
         assert "data_access_handle" not in str(exc_info.value)
+
+    def test_a_bare_str_hook_degrades_to_no_hints(self) -> None:
+        result = _identify(Feature(COL), self._dac(), _BareStrHintsFG, ApiDataFG)
+
+        assert result.facts.narrowing_hints[_BareStrHintsFG] == ()
+
+    def test_duplicate_hints_are_captured_once(self) -> None:
+        result = _identify(Feature(COL), self._dac(), _DuplicateHintsFG, ApiDataFG)
+
+        assert result.facts.narrowing_hints[_DuplicateHintsFG] == ("data_access_handle",)
 
 
 class _PointedParent(ToySourceBase):

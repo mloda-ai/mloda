@@ -105,10 +105,10 @@ def _render_near_miss_block(result: EvaluationResult, feature: Feature) -> str |
     return f"Feature group(s) eliminated while matching '{str(feature.name)}':\n{lines}"
 
 
-def _source_fix_line(result: EvaluationResult, captured: list[type[FeatureGroup]]) -> str:
-    # An option narrows only if every competing group honors it.
+def _source_fix_line(result: EvaluationResult, candidates: list[type[FeatureGroup]]) -> str:
+    # An option narrows only if every identified candidate honors it; one without hints leaves feature_group=.
     hints = result.facts.narrowing_hints
-    shared = [h for h in hints.get(captured[0], ()) if all(h in hints.get(fg, ()) for fg in captured[1:])]
+    shared = [h for h in hints.get(candidates[0], ()) if all(h in hints.get(fg, ()) for fg in candidates[1:])]
     items = ["feature_group="] + [f"a {h}" if h == HANDLE_OPTION else h for h in shared]
     if len(items) == 1:
         text = items[0]
@@ -130,8 +130,9 @@ def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | 
         for fg in sorted(result.identified, key=_candidate_sort_key)
     )
     scope_line = f"{callout}\n" if callout else ""
-    captured = [fg for fg in sorted(result.identified, key=_candidate_sort_key) if fg in result.facts.sources]
-    source_fix = _source_fix_line(result, captured) if len(captured) >= 2 else ""
+    ordered = sorted(result.identified, key=_candidate_sort_key)
+    captured = [fg for fg in ordered if fg in result.facts.sources]
+    source_fix = _source_fix_line(result, ordered) if len(captured) >= 2 else ""
     return (
         f"Multiple feature groups found for feature '{str(feature.name)}'{_needed_by(feature)}:\n"
         f"{lines}\n"

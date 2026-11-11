@@ -591,7 +591,10 @@ def test_flat_scalar_value_is_snapshotted_cheaper_than_one_call_per_element(
 
     monkeypatch.setattr(input_chain, "resolution_key", counting)
     input_chain.resolution_key(wrap(make(n)))
-    assert 0 < calls < n, f"resolution_key called {calls} times for {n} elements"
+    assert calls < n // 10, f"resolution_key called {calls} times for {n} elements"
+    calls = 0
+    input_chain.resolution_key([(i,) for i in range(n)])
+    assert calls > n
 
 
 @pytest.mark.parametrize(

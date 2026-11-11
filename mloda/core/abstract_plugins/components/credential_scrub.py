@@ -347,7 +347,7 @@ _PASSWORD_AS_SCHEME_PATTERN = re.compile(
 # The jdbc tail (used by _uri_projection and the jdbc marker cut): non-whitespace text after a jdbc match, cut at the
 # next `://` so repeated URIs scan linearly.
 _JDBC_TAIL_PATTERN = re.compile(r"(?:(?!://)\S)*")
-_PARAMETER_REGION_PATTERN = re.compile(r"[;:][^=;:]*=|[?#]\S")
+_KEY_VALUE_REGION_PATTERN = re.compile(r":[^=;:]*=")
 # Private-use marker appended by _scrub_uri_match after a dropped query, key=value path or hidden percent path;
 # _cut_marker_tail cuts the token tail that follows it.
 _JDBC_CUT = "\ue001"
@@ -359,11 +359,17 @@ _JDBC_CUT_PATTERN = re.compile(
     r"(?:::(?:[a-z][a-z0-9+.-]{0,31}::)*+|\S))*"
 )
 # Own marker for a dropped jdbc path: its cut runs to the next `://` (jdbc tails are never fsspec chains), then
-# through a spaced `key = value` tail.
+# through spaced `key = value` and quoted or braced values.
 _JDBC_PATH_CUT = "\ue002"
-_JDBC_PATH_TAIL = r"(?:(?!://)\S)*+"
+# A quoted value closes only before a delimiter (a dict repr's quote stays a boundary); values stop at a newline or `://`.
+_JDBC_QUOTED = (
+    r"""'(?:(?!://)[^'\n]|'')*+(?:'(?=[;\s,)\]}>]|$|[.!?:]+(?:\s|$))|(?=\n|$|://))"""
+    r"""|"(?:(?!://)[^"\n]|"")*+(?:"(?=[;\s,)\]}>]|$|[.!?:]+(?:\s|$))|(?=\n|$|://))"""
+)
+_JDBC_BRACED = r"\{(?:(?!://)[^}\n]|\}\})*+\}?"
 _JDBC_PATH_CUT_PATTERN = re.compile(
-    _JDBC_PATH_CUT + _JDBC_PATH_TAIL + r"(?:(?:(?<==)[ \t]+|[ \t]*=[ \t]*)" + _JDBC_PATH_TAIL + ")*+"
+    _JDBC_PATH_CUT + rf"(?:(?P<v>(?<=[= \t])(?:{_JDBC_QUOTED}|{_JDBC_BRACED})|(?<={_JDBC_PATH_CUT}){_JDBC_BRACED})"
+    r"|[ \t]++(?==)|(?<==)[ \t]++|(?!://|[,;][\"'(\[{<]*(?:jdbc:)?[A-Za-z][A-Za-z0-9+.-]*://)\S)*"  # not `*+`: 3.11 misreports group spans
 )
 # Closers then sentence punctuation then whitespace or end: the match ended a value, nothing was cut off.
 _CLOSING_END_PATTERN = re.compile(r"[\"'<>)\]}]+[,:;.!?]*(?:\s|$)")
@@ -400,6 +406,33 @@ def _azure_container_prefix(match: re.Match[str]) -> str:
     return ""
 
 
+_SPACED_EQUALS_PATTERN = re.compile(r"[ \t]+=")
+
+
+def _opens_brace_value(text: str) -> bool:
+    """True when the text ends inside a `={...}` value (`}}` escapes a brace)."""
+    inside = False
+    i = 0
+    while i < len(text):
+        if inside:
+            if text.startswith("}}", i):
+                i += 2
+                continue
+            inside = text[i] != "}"
+        elif text.startswith("={", i):
+            inside = True
+            i += 1
+        i += 1
+    return inside
+
+
+def _cut_resume(text: str) -> str:
+    """What stays after the marker so the cut resumes inside an open value."""
+    if _opens_brace_value(text):
+        return "{"
+    return "=" if text.endswith("=") else ""
+
+
 def _uri_projection(match: re.Match[str]) -> str | None:
     scheme, host = match["scheme"], match["host"]
     # Host parameters ride along with the path: the same key=value and hidden-percent checks apply.
@@ -408,8 +441,13 @@ def _uri_projection(match: re.Match[str]) -> str | None:
     if scheme.startswith("jdbc:"):
         tail = _JDBC_TAIL_PATTERN.search(match.string, match.end())
         if any(mark in path + (tail[0] if tail else "") for mark in "=;@"):
-            # A trailing `=` stays after the marker so the cut sees a `key= value` continuation.
-            return f"{scheme}://{container}{host}{_JDBC_PATH_CUT}{'=' if path.endswith('=') else ''}"
+            return f"{scheme}://{container}{host}{_JDBC_PATH_CUT}{_cut_resume(path)}"
+        query = match["query"]
+        if query and (
+            query.endswith("=") or _opens_brace_value(query) or _SPACED_EQUALS_PATTERN.match(match.string, match.end())
+        ):
+            kept = _cut_hidden_percent(scheme, host, path)
+            return f"{scheme}://{container}{host}{kept}{_JDBC_PATH_CUT}{_cut_resume(query)}"
     if any("=" in segment.partition(":")[2] for segment in path.split("/")):
         return None
     return f"{scheme}://{container}{host}{_cut_hidden_percent(scheme, host, path)}"
@@ -439,12 +477,19 @@ def _hides_parameter_region(match: re.Match[str]) -> bool:
         if not (following.isalnum() or following == "_"):
             return False
     tail = _JDBC_TAIL_PATTERN.match(text, end)
-    return tail is not None and _PARAMETER_REGION_PATTERN.search(tail[0]) is not None
+    if tail is None:
+        return False
+    decoded = _decode_to_fixpoint(tail[0])
+    return (
+        decoded is None
+        or _KEY_VALUE_REGION_PATTERN.search(decoded) is not None
+        or _PARAMETER_REGION.search(decoded) is not None
+    )
 
 
 def _cut_dropped_tail(match: re.Match[str], scrubbed: str, dropped: bool) -> str:
     """Append the cut marker when a dropped value may continue past the match (it stops at a quote or bracket)."""
-    if scrubbed.rstrip("=").endswith((_JDBC_CUT, _JDBC_PATH_CUT)):
+    if scrubbed.rstrip("={").endswith((_JDBC_CUT, _JDBC_PATH_CUT)):
         return scrubbed
     if not dropped:
         return scrubbed + _JDBC_CUT if _hides_parameter_region(match) else scrubbed
@@ -463,6 +508,18 @@ def _cut_dropped_tail(match: re.Match[str], scrubbed: str, dropped: bool) -> str
 def _cut_marker_tail(marker: re.Match[str]) -> str:
     """Drop the token tail after the marker, keeping only its trailing run of closers."""
     tail = marker[0][1:]
+    return tail[len(tail.rstrip(_CLOSERS)) :]
+
+
+_PUNCTUATED_CLOSERS = re.compile(r"[\"'<>)\]},]*[,:;.!?]*")
+
+
+def _cut_path_marker_tail(marker: re.Match[str]) -> str:
+    """Like _cut_marker_tail, but only the text after the last quoted or braced value can hold closers."""
+    start = marker.end("v") if marker["v"] is not None else marker.start() + 1
+    tail = marker.string[start : marker.end()]
+    if marker["v"] is not None and _PUNCTUATED_CLOSERS.fullmatch(tail):
+        return tail
     return tail[len(tail.rstrip(_CLOSERS)) :]
 
 
@@ -894,7 +951,7 @@ _PASSES: list[tuple[re.Pattern[str], Any]] = [
     (_FREE_TEXT_USERINFO_PATTERN, r"\g<scheme>://"),
     (_FREE_TEXT_URI_PATTERN, _scrub_uri_match),
     (_JDBC_CUT_PATTERN, _cut_marker_tail),
-    (_JDBC_PATH_CUT_PATTERN, _cut_marker_tail),
+    (_JDBC_PATH_CUT_PATTERN, _cut_path_marker_tail),
     (_PASSWORD_AS_SCHEME_PATTERN, _password_scheme_repl),
     (_AUTHORIZATION_PATTERN, _authorization_repl),
     (_BEARER_PATTERN, r"\g<scheme> ***"),

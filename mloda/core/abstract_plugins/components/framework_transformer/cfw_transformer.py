@@ -173,13 +173,15 @@ class ComputeFrameworkTransformer:
         return (_rebuild_transformer, (type(self), carried))
 
     def _register_all(self) -> None:
-        self._seen_lazy_dirs = frozenset(ComputeFrameworkTransformer._lazy_dirs_loaded)
+        seen = frozenset(ComputeFrameworkTransformer._lazy_dirs_loaded)
         # Built aside and swapped once, so a reader iterating the old map never sees it resize.
         fresh: dict[tuple[type[Any], type[Any]], type[BaseTransformer]] = {}
         # Sorted so map insertion order (the BFS tie-break) is the same in every process.
         for transformer in sorted(get_all_subclasses(BaseTransformer), key=lambda c: (c.__module__, c.__qualname__)):
             self.add(transformer, fresh)
         self.transformer_map = fresh
+        # Published after the swap so a concurrent refresher never sees "up to date" with the old map.
+        self._seen_lazy_dirs = seen
 
     def _refresh(self) -> bool:
         """Pick up transformer files whose backend was imported since the last load; True if any were added."""
@@ -191,8 +193,9 @@ class ComputeFrameworkTransformer:
 
     def direct_transformer(self, source: type[Any], target: type[Any]) -> type[BaseTransformer] | None:
         """Direct transformer for a pair, refreshing the registry once on a miss."""
-        found = self.transformer_map.get((source, target))
-        if found is None and self._refresh():
+        edges = self.transformer_map
+        found = edges.get((source, target))
+        if found is None and (self._refresh() or self.transformer_map is not edges):
             found = self.transformer_map.get((source, target))
         return found
 
@@ -244,7 +247,7 @@ class ComputeFrameworkTransformer:
                     return chain
                 queue.append(dst)
 
-        if self._refresh():
+        if self._refresh() or self.transformer_map is not edges:
             return self.get_transformation_chain(from_framework, to_framework)
         return None
 

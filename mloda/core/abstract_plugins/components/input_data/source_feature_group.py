@@ -327,12 +327,15 @@ class SourceFeatureGroup(FeatureGroup):
         return False
 
     @classmethod
-    def _pointed_by_family_scope_only(cls, options: Options) -> bool:
-        """True when the scope names a concrete ancestor and no pointer key is in options."""
+    def _pointed_by_family_scope_only(
+        cls, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
+    ) -> bool:
+        """True when the only pointer is a feature_group= scope naming a concrete ancestor."""
         scope = current_feature_group_scope()
-        if scope is None or scope is cls or scope == cls.__name__:
+        if scope is cls or scope == cls.__name__ or not cls._scope_points_here(scope):
             return False
-        return not any(key in options for key in cls.pointer_keys())
+        with feature_group_scope(None):
+            return not cls.is_pointed(feature_name, options, data_access_collection)
 
     @classmethod
     def select_implementation(
@@ -567,7 +570,7 @@ class SourceFeatureGroup(FeatureGroup):
             return False
         base_name = cls.get_column_base_feature(name)
         pointed = cls.is_pointed(name, options, data_access_collection)
-        named = pointed and not cls._pointed_by_family_scope_only(options)
+        explicitly_pointed = pointed and not cls._pointed_by_family_scope_only(name, options, data_access_collection)
         foreign = None if pointed else cls.foreign_pointer(options)
         query_declined = foreign is None and QUERY_OPTION in options and not cls.serves_query_text()
         query_reason = (
@@ -587,7 +590,7 @@ class SourceFeatureGroup(FeatureGroup):
                 if declared is None:
                     declared = cls._declared_name(base_name)
                 if not declared:
-                    undeclared = named
+                    undeclared = explicitly_pointed
                     continue
             if not all(key in options for key in route.required_options):
                 if foreign is None:
@@ -733,7 +736,9 @@ class SourceFeatureGroup(FeatureGroup):
                 )
             replace_probe_match_rejection(cls.get_class_name(), reason, known_owners, stage=INPUT_DATA_STAGE, code=code)
         elif (
-            missing and not selected and (pointed or (cls._declared_name(base_name) if declared is None else declared))
+            missing
+            and not selected
+            and (explicitly_pointed or (cls._declared_name(base_name) if declared is None else declared))
         ):
             plural = "s" if len(missing) > 1 else ""
             keys = ", ".join(repr(key) for key in sorted(missing))
@@ -751,7 +756,7 @@ class SourceFeatureGroup(FeatureGroup):
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.NAME_NOT_DECLARED
             )
-        elif named:
+        elif explicitly_pointed:
             reason = f"{cls.get_class_name()} was pointed at but found no source for '{name}'"
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND

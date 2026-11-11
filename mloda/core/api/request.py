@@ -800,7 +800,47 @@ class mlodaAPI:
         the diagnosis instead of raising (an environment failure found after planning, a missing connection, also
         carries the resolved records); any other error propagates, including an exception a breaking extender
         raises unless it is one of the types above. Every parameter after features is keyword-only.
+        The message is credential-scrubbed.
         """
+        literals = frozenset() if data_access_collection is None else data_access_collection.secret_literals()
+        with registered_secrets_scope(literals, frozenset()):
+            diagnosis = cls._diagnose(
+                features,
+                compute_frameworks=compute_frameworks,
+                links=links,
+                data_access_collection=data_access_collection,
+                global_filter=global_filter,
+                api_data=api_data,
+                plugin_collector=plugin_collector,
+                copy_features=copy_features,
+                strict_type_enforcement=strict_type_enforcement,
+                column_ordering=column_ordering,
+                parallelization_modes=parallelization_modes,
+                function_extender=function_extender,
+                output_framework=output_framework,
+            )
+            if diagnosis.message is None:
+                return diagnosis
+            return replace(diagnosis, message=scrub_credentials(diagnosis.message))
+
+    @classmethod
+    def _diagnose(
+        cls,
+        features: Features | Sequence[Feature | str],
+        *,
+        compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
+        links: set[Link] | None = None,
+        data_access_collection: DataAccessCollection | None = None,
+        global_filter: GlobalFilter | None = None,
+        api_data: dict[str, dict[str, Any]] | None = None,
+        plugin_collector: PluginCollector | None = None,
+        copy_features: bool = True,
+        strict_type_enforcement: bool = False,
+        column_ordering: str | None = None,
+        parallelization_modes: set[ParallelizationMode] | None = None,
+        function_extender: set[Extender] | None = None,
+        output_framework: str | type[ComputeFramework] | None = None,
+    ) -> ResolutionDiagnosis:
         try:
             with _plan_origin("diagnose"):
                 session = cls(

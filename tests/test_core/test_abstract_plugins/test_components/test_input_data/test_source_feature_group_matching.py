@@ -923,6 +923,31 @@ class _RequiredOptionSubFG(ToyRequiredOptionFG):
     pass
 
 
+class _FamilyNoColumnFG(ToySourceFG):
+    """Sibling under a concrete base whose sources lack the requested column."""
+
+    @classmethod
+    def columns(cls, match: SourceMatch) -> list[str]:
+        return ["toyfmt_other"]
+
+
+class _FamilyCountingFG(ToySourceFG):
+    """Sibling under a concrete base that counts its source probes."""
+
+    finds: ClassVar[int] = 0
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        cls.finds += 1
+        return super().find_sources(route, feature_name, options, data_access_collection)
+
+
 class TestScopePointingRefinement:
     SCOPES = [ToySourceFG, "ToySourceFG"]
 
@@ -1016,10 +1041,43 @@ class TestScopePointingRefinement:
         assert result.failure_kind == "none"
         assert result.facts.scope_exclusions == ()
 
-    def test_concrete_ancestor_scope_still_points_and_aborts_on_missing_column(self) -> None:
+    @pytest.mark.parametrize("scope", SCOPES)
+    def test_a_family_only_sibling_lacking_the_column_declines_beside_a_serving_sibling(self, scope: object) -> None:
+        feature = Feature(COL, feature_group=scope)  # type: ignore[arg-type]
+        result = _identify(feature, toy_dac(h1={COL: [1]}), ToySourceSubFG, _FamilyNoColumnFG)
+
+        assert set(result.identified) == {ToySourceSubFG}
+        assert result.eliminations[_FamilyNoColumnFG].code is CoreDeclineCode.COLUMN_NOT_FOUND
+
+    def test_concrete_ancestor_scope_sole_candidate_reports_the_missing_column(self) -> None:
         feature = Feature(COL, feature_group=ToySourceFG)
-        with pytest.raises(FeatureResolutionError, match="h1:toy"):
+        with pytest.raises(FeatureResolutionError, match="h1:toy") as exc_info:
             evaluate_or_raise(feature, _plugins(ToySourceSubFG), None, toy_dac(h1={"other": [1]}))
+
+        assert exc_info.value.result.eliminations[ToySourceSubFG].code is CoreDeclineCode.COLUMN_NOT_FOUND
+
+    @pytest.mark.parametrize("scope", SCOPES)
+    def test_a_family_only_group_with_query_text_declines_without_data_access(self, scope: object) -> None:
+        feature = Feature(COL, Options({"query_text": "select 1"}), feature_group=scope)  # type: ignore[arg-type]
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            evaluate_or_raise(feature, _plugins(ToySourceSubFG), None, None)
+
+        elimination = exc_info.value.result.eliminations[ToySourceSubFG]
+        assert elimination.code is CoreDeclineCode.NO_QUERY_ROUTE
+        assert "query_text is set, but ToySourceSubFG lists no query route" in elimination.reason
+
+    def test_a_family_only_sibling_with_query_text_declines_without_probing_sources(self) -> None:
+        _FamilyCountingFG.finds = 0
+        feature = Feature(COL, Options({"query_text": "select 1"}), feature_group=ToySourceFG)
+        result = _identify(feature, toy_dac(h1={COL: [1]}), _FamilyCountingFG)
+
+        assert result.eliminations[_FamilyCountingFG].code is CoreDeclineCode.NO_QUERY_ROUTE
+        assert _FamilyCountingFG.finds == 0
+
+    def test_a_group_scoped_by_its_own_name_with_query_text_still_aborts(self) -> None:
+        feature = Feature(COL, Options({"query_text": "select 1"}), feature_group=ToySourceSubFG)
+        with pytest.raises(FeatureResolutionError, match="query_text is set, but ToySourceSubFG lists no query route"):
+            evaluate_or_raise(feature, _plugins(ToySourceSubFG), None, None)
 
     def test_scope_naming_the_candidate_itself_points(self) -> None:
         feature = Feature(COL, feature_group=_MidLacksColumn)

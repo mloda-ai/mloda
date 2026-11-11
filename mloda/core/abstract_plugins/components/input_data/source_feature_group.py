@@ -472,10 +472,10 @@ class SourceFeatureGroup(FeatureGroup):
         return everything.freeze(), unlocked.freeze()
 
     @classmethod
-    def _decline_refused_probe(cls, outcome: SourceProbeOutcome, pointed: bool, known_owners: frozenset[str]) -> bool:
+    def _decline_refused_probe(cls, outcome: SourceProbeOutcome, explicit: bool, known_owners: frozenset[str]) -> bool:
         drop_match_rejections_since(known_owners)
         message = f"refused at INPUT_DATA_MATCH: {outcome.refused}"
-        if pointed:
+        if explicit:
             return cls._abort(
                 ValueError(f"{cls.get_class_name()} {message}"),
                 code=CoreDeclineCode.EXTENDER_REFUSED,
@@ -517,10 +517,11 @@ class SourceFeatureGroup(FeatureGroup):
         if inspect.isabstract(cls):
             return SourceProbeOutcome(cls._reject_abstract(name, options, data_access_collection), None)
         pointed = cls.is_pointed(name, options, data_access_collection)
+        explicit = pointed and not cls._pointed_by_family_scope_only(name, options, data_access_collection)
         known_owners = match_rejection_owners()
         outcome = probe_source_group(cls, probe, data_access_collection, cls.get_column_base_feature(name), options)
         if outcome.refused is not None:
-            cls._decline_refused_probe(outcome, pointed, known_owners)
+            cls._decline_refused_probe(outcome, explicit, known_owners)
         return outcome
 
     @classmethod
@@ -584,7 +585,12 @@ class SourceFeatureGroup(FeatureGroup):
             "(database groups opt in with ReadDBFG.QUERY_ROUTE)"
         )
         if pointed and query_declined:
-            return cls._abort(ValueError(query_reason), code=CoreDeclineCode.NO_QUERY_ROUTE, deferrable=True)
+            if explicitly_pointed:
+                return cls._abort(ValueError(query_reason), code=CoreDeclineCode.NO_QUERY_ROUTE, deferrable=True)
+            record_match_rejection(
+                cls.get_class_name(), query_reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.NO_QUERY_ROUTE
+            )
+            return False
         skipped = False
         missing: set[str] = set()
         selected: list[ClaimRoute] = []
@@ -630,7 +636,7 @@ class SourceFeatureGroup(FeatureGroup):
                 ),
             )
             if outcome.refused is not None:
-                return cls._decline_refused_probe(outcome, pointed, known_owners)
+                return cls._decline_refused_probe(outcome, explicitly_pointed, known_owners)
             claims, unlocked = outcome.result
             if (
                 claims.fitting.keys() != unlocked.fitting.keys() or claims.open_only != unlocked.open_only
@@ -734,7 +740,7 @@ class SourceFeatureGroup(FeatureGroup):
                 and cls.get_class_name() not in known_owners
             ):
                 reason += "; skipped folder entries that link outside their folder"
-            if pointed:
+            if explicitly_pointed:
                 return cls._abort(
                     ValueError(f"{reason}; request a column a source has or point at another source."),
                     code=code,

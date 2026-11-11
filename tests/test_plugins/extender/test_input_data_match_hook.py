@@ -126,6 +126,18 @@ class ImdMatchGateSubSource(ImdMatchGateSource):
     pass
 
 
+class ImdFamilyBaseSource(_ImdSourceBase):
+    served = frozenset({_COL_A})
+
+
+class ImdFamilyRefusedSource(ImdFamilyBaseSource):
+    pass
+
+
+class ImdFamilyServingSource(ImdFamilyBaseSource):
+    pass
+
+
 class _ImdKeyFmt(_ImdSourceBase):
     served = frozenset({_COL_A, _COL_B, _COL_G})
 
@@ -932,6 +944,22 @@ class TestSourceGroupHook:
 
         assert session is not None
         assert ImdMatchGateSource.probes == 0
+
+    def test_a_family_scoped_refused_group_is_served_by_its_sibling(self) -> None:
+        enabled = PluginCollector.enabled_feature_groups({ImdFamilyRefusedSource, ImdFamilyServingSource})
+        feature = Feature(_COL_A, feature_group=ImdFamilyBaseSource)
+
+        session = _prepare(feature, enabled, _global_access(), _gate(ImdFamilyRefusedSource))
+
+        assert session is not None
+
+    @pytest.mark.parametrize("scope", [ImdFamilyRefusedSource, "ImdFamilyRefusedSource"])
+    def test_a_refused_group_scoped_by_its_own_name_still_fails_planning(self, scope: object) -> None:
+        enabled = PluginCollector.enabled_feature_groups({ImdFamilyRefusedSource, ImdFamilyServingSource})
+        feature = Feature(_COL_A, feature_group=scope)  # type: ignore[arg-type]
+
+        with pytest.raises(FeatureResolutionError, match="no clearance"):
+            _prepare(feature, enabled, _global_access(), _gate(ImdFamilyRefusedSource))
 
     def test_a_post_probe_refusal_replaces_the_probes_own_rejection_for_an_unpointed_group(self) -> None:
         enabled = PluginCollector.enabled_feature_groups({ImdMatchRejectingSource})

@@ -2,7 +2,7 @@
 
 import logging
 from abc import abstractmethod
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, ClassVar
@@ -855,7 +855,163 @@ class _MidLacksColumn(_AbstractToyMid):
         return "b"
 
 
+_FAMILY_OWN_REASON = "toyfmt sibling credential check failed"
+
+
+class _FamilyLacksSourceFG(ToySourceFG):
+    """Sibling under a concrete base: finds a source only when its own key is in the options."""
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        if cls.get_class_name() in options:
+            return super().find_sources(route, feature_name, options, data_access_collection)
+        return []
+
+
+class _FamilyRecordingFG(ToySourceFG):
+    """Sibling under a concrete base that records its own reason before finding nothing."""
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        record_match_rejection(cls.get_class_name(), _FAMILY_OWN_REASON, INPUT_DATA_STAGE)
+        return []
+
+
+class _FamilyDeclaredSubFG(ToyDeclaredFG):
+    pass
+
+
+class _NoSourceFG(ToySourceFG):
+    """Finds no source and records nothing, however it is pointed at."""
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        return []
+
+
+class _NoSourceSubFG(_NoSourceFG):
+    pass
+
+
+class _OverridePointedFG(_NoSourceFG):
+    """Its own is_pointed override points it, independent of scope and keys."""
+
+    @classmethod
+    def is_pointed(
+        cls, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
+    ) -> bool:
+        return True
+
+
+class _RequiredOptionSubFG(ToyRequiredOptionFG):
+    pass
+
+
+class _FamilyNoColumnFG(ToySourceFG):
+    @classmethod
+    def columns(cls, match: SourceMatch) -> list[str]:
+        return ["toyfmt_other"]
+
+
+class _FamilyColumnsUnknownFG(ToySourceFG):
+    @classmethod
+    def columns(cls, match: SourceMatch) -> list[str] | None:
+        return None
+
+
+class _FamilyCountingFG(ToySourceFG):
+    finds: ClassVar[int] = 0
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        cls.finds += 1
+        return super().find_sources(route, feature_name, options, data_access_collection)
+
+
 class TestScopePointingRefinement:
+    SCOPES = [ToySourceFG, "ToySourceFG"]
+
+    @pytest.mark.parametrize("scope", SCOPES)
+    def test_a_family_only_sibling_that_finds_no_source_records_nothing(self, scope: object) -> None:
+        feature = Feature(COL, feature_group=scope)  # type: ignore[arg-type]
+        result = _identify(feature, toy_dac(h1={COL: [1]}), ToySourceSubFG, _FamilyLacksSourceFG)
+
+        assert set(result.identified) == {ToySourceSubFG}
+        assert _FamilyLacksSourceFG not in result.eliminations
+
+    @pytest.mark.parametrize("scope", SCOPES)
+    def test_the_scoped_base_keeps_its_own_reason_and_the_sibling_records_none(self, scope: object) -> None:
+        feature = Feature(COL, feature_group=scope)  # type: ignore[arg-type]
+        result = _identify(feature, None, ToySourceFG, _FamilyLacksSourceFG)
+
+        assert result.identified == {}
+        assert "ToySourceFG was pointed at but found no source" in result.eliminations[ToySourceFG].reason
+        assert result.eliminations[ToySourceFG].code is CoreDeclineCode.SOURCE_NOT_FOUND
+        assert _FamilyLacksSourceFG not in result.eliminations
+
+    @pytest.mark.parametrize("scope", SCOPES)
+    def test_a_family_only_sibling_keeps_a_reason_it_records_itself(self, scope: object) -> None:
+        feature = Feature(COL, feature_group=scope)  # type: ignore[arg-type]
+        result = _identify(feature, None, _FamilyRecordingFG)
+
+        assert result.eliminations[_FamilyRecordingFG].reason == _FAMILY_OWN_REASON
+
+    @pytest.mark.parametrize("scope", [ToyDeclaredFG, "ToyDeclaredFG"])
+    def test_a_family_only_declared_sibling_with_an_undeclared_name_records_nothing(self, scope: object) -> None:
+        feature = Feature("toyfmt_undeclared", feature_group=scope)  # type: ignore[arg-type]
+        dac = toy_dac(h1={"toyfmt_undeclared": [1]})
+        result = _identify(feature, dac, ToyDeclaredFG, _FamilyDeclaredSubFG)
+
+        assert result.eliminations[ToyDeclaredFG].code is CoreDeclineCode.NAME_NOT_DECLARED
+        assert _FamilyDeclaredSubFG not in result.eliminations
+
+    def test_a_sibling_under_a_family_scope_with_an_ancestor_key_still_records_source_not_found(self) -> None:
+        feature = Feature(COL, Options({"ToySourceFG": {COL: [1]}}), feature_group=ToySourceFG)
+        result = _identify(feature, None, _NoSourceSubFG)
+
+        assert result.eliminations[_NoSourceSubFG].code is CoreDeclineCode.SOURCE_NOT_FOUND
+
+    @pytest.mark.parametrize("scope", SCOPES)
+    def test_an_override_pointed_sibling_under_a_family_scope_still_records_source_not_found(
+        self, scope: object
+    ) -> None:
+        feature = Feature(COL, feature_group=scope)  # type: ignore[arg-type]
+        result = _identify(feature, None, _OverridePointedFG)
+
+        assert "was pointed at but found no source" in result.eliminations[_OverridePointedFG].reason
+        assert result.eliminations[_OverridePointedFG].code is CoreDeclineCode.SOURCE_NOT_FOUND
+
+    @pytest.mark.parametrize("scope", [ToyRequiredOptionFG, "ToyRequiredOptionFG"])
+    def test_a_family_only_sibling_missing_a_required_option_records_nothing(self, scope: object) -> None:
+        feature = Feature(COL, feature_group=scope)  # type: ignore[arg-type]
+        result = _identify(feature, toy_dac(h1={COL: [1]}), _RequiredOptionSubFG)
+
+        assert _RequiredOptionSubFG not in result.eliminations
+
     @pytest.mark.parametrize("scope", [_AbstractToyMid, "_AbstractToyMid"])
     def test_abstract_base_scope_does_not_point_so_the_lacking_sibling_declines(self, scope: object) -> None:
         feature = Feature(COL, feature_group=scope)  # type: ignore[arg-type]
@@ -889,10 +1045,45 @@ class TestScopePointingRefinement:
         assert result.failure_kind == "none"
         assert result.facts.scope_exclusions == ()
 
-    def test_concrete_ancestor_scope_still_points_and_aborts_on_missing_column(self) -> None:
+    @pytest.mark.parametrize("scope", SCOPES)
+    @pytest.mark.parametrize(
+        ("lacking", "code"),
+        [
+            (_FamilyNoColumnFG, CoreDeclineCode.COLUMN_NOT_FOUND),
+            (_FamilyColumnsUnknownFG, CoreDeclineCode.COLUMNS_UNKNOWN),
+        ],
+    )
+    def test_a_family_only_sibling_lacking_the_column_declines_beside_a_serving_sibling(
+        self, scope: object, lacking: type[ToySourceFG], code: CoreDeclineCode
+    ) -> None:
+        feature = Feature(COL, feature_group=scope)  # type: ignore[arg-type]
+        result = _identify(feature, toy_dac(h1={COL: [1]}), ToySourceSubFG, lacking)
+
+        assert set(result.identified) == {ToySourceSubFG}
+        assert result.eliminations[lacking].code is code
+
+    def test_concrete_ancestor_scope_sole_candidate_reports_the_missing_column(self) -> None:
         feature = Feature(COL, feature_group=ToySourceFG)
-        with pytest.raises(FeatureResolutionError, match="h1:toy"):
+        with pytest.raises(FeatureResolutionError, match="h1:toy") as exc_info:
             evaluate_or_raise(feature, _plugins(ToySourceSubFG), None, toy_dac(h1={"other": [1]}))
+
+        assert exc_info.value.result.eliminations[ToySourceSubFG].code is CoreDeclineCode.COLUMN_NOT_FOUND
+
+    @pytest.mark.parametrize("scope", SCOPES)
+    def test_a_family_only_group_with_query_text_declines_without_probing(self, scope: object) -> None:
+        _FamilyCountingFG.finds = 0
+        feature = Feature(COL, Options({"query_text": "select 1"}), feature_group=scope)  # type: ignore[arg-type]
+        result = _identify(feature, None, _FamilyCountingFG)
+
+        elimination = result.eliminations[_FamilyCountingFG]
+        assert elimination.code is CoreDeclineCode.NO_QUERY_ROUTE
+        assert "query_text is set, but _FamilyCountingFG lists no query route" in elimination.reason
+        assert _FamilyCountingFG.finds == 0
+
+    def test_a_group_scoped_by_its_own_name_with_query_text_still_aborts(self) -> None:
+        feature = Feature(COL, Options({"query_text": "select 1"}), feature_group=ToySourceSubFG)
+        with pytest.raises(FeatureResolutionError, match="query_text is set, but ToySourceSubFG lists no query route"):
+            evaluate_or_raise(feature, _plugins(ToySourceSubFG), None, None)
 
     def test_scope_naming_the_candidate_itself_points(self) -> None:
         feature = Feature(COL, feature_group=_MidLacksColumn)
@@ -1143,9 +1334,21 @@ class _DeclaredAndCheckedRouteFG(ToyDeclaredFG):
 
 
 class TestPointedRoutesDeclineWithReason:
-    @pytest.mark.parametrize("group", [ToySourceFG, _TableAndOptionRouteFG])
-    def test_pointed_route_without_a_source_records_an_input_data_rejection(self, group: type) -> None:
-        result = _identify(Feature(COL, feature_group=group), None, group)
+    @pytest.mark.parametrize(
+        ("group", "make_feature"),
+        [
+            (ToySourceFG, lambda group: Feature(COL, feature_group=group)),
+            (_TableAndOptionRouteFG, lambda group: Feature(COL, feature_group=group)),
+            (_NoSourceFG, lambda group: Feature(COL, Options({group.__name__: {COL: [1]}}))),
+            (_NoSourceSubFG, lambda group: Feature(COL, Options({"_NoSourceFG": {COL: [1]}}))),
+        ],
+        ids=["scope", "scope_two_routes", "own_key", "ancestor_key"],
+    )
+    def test_pointed_route_without_a_source_records_an_input_data_rejection(
+        self, group: type, make_feature: Callable[[type], Feature]
+    ) -> None:
+        feature = make_feature(group)
+        result = _identify(feature, None, group)
 
         assert result.identified == {}
         elimination = result.eliminations[group]

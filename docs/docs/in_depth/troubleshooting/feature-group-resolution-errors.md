@@ -272,7 +272,7 @@ Fix it with one of:
 
 ### Column missing from every source
 
-The group owns sources but none has the column. Unpointed, this is a decline recorded in the near-miss block; once the feature is pointed at the group (by a pointer or `feature_group=`), it aborts. Every pointed decline (a missing column, a source refused at `INPUT_DATA_MATCH`, a pointed `query_text` without a query route) raises `FeatureResolutionError` with the group's reason, its `result.eliminations` holding the group under stage `input_data`:
+The group owns sources but none has the column. Unpointed, this is a decline recorded in the near-miss block; once the feature is pointed at the group (by a pointer or `feature_group=`), it aborts (a `feature_group=` scope naming only a concrete ancestor of the group does not make it abort; it declines). Every pointed decline (a missing column, a source refused at `INPUT_DATA_MATCH`, a pointed `query_text` without a query route) raises `FeatureResolutionError` with the group's reason, its `result.eliminations` holding the group under stage `input_data`:
 
 ```text
 FeatureResolutionError: column 'idd' is in none of the sources of CsvFG: /data/application_train.csv has columns [id, name]; /data/bureau.csv has columns [bureau_id, id]; did you mean 'id'?; request a column a source has or point at another source.
@@ -282,7 +282,7 @@ Check the spelling, request a column a source has, or point at the source that h
 
 ### query_text on a group without a query route
 
-`query_text is set, but <Group> lists no query route`: `query_text` is reserved for groups that list `ReadDBFG.QUERY_ROUTE`; any other source group declines when unpointed and aborts when pointed. Point the feature at a group that lists the route, or keep `query_text` off the feature with `forward_group_exclude`.
+`query_text is set, but <Group> lists no query route`: `query_text` is reserved for groups that list `ReadDBFG.QUERY_ROUTE`; any other source group declines when unpointed and aborts when pointed (a `feature_group=` scope naming only a concrete ancestor of the group does not make it abort; it declines). Point the feature at a group that lists the route, or keep `query_text` off the feature with `forward_group_exclude`.
 
 ### Pointers on derived features
 

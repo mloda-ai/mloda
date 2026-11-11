@@ -126,6 +126,18 @@ class ImdMatchGateSubSource(ImdMatchGateSource):
     pass
 
 
+class ImdFamilyBaseSource(_ImdSourceBase):
+    served = frozenset({_COL_A})
+
+
+class ImdFamilyRefusedSource(ImdFamilyBaseSource):
+    pass
+
+
+class ImdFamilyServingSource(ImdFamilyBaseSource):
+    pass
+
+
 class _ImdKeyFmt(_ImdSourceBase):
     served = frozenset({_COL_A, _COL_B, _COL_G})
 
@@ -213,6 +225,18 @@ class ImdMatchOverrideSource(_ImdSourceBase):
         return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 
 
+class ImdOverrideFamilyBase(ImdMatchOverrideSource):
+    pass
+
+
+class ImdOverrideFamilyRefused(ImdOverrideFamilyBase):
+    pass
+
+
+class ImdOverrideFamilyServing(ImdOverrideFamilyBase):
+    pass
+
+
 class _ImdAbstractFmt(_ImdSourceBase):
     """Abstract through one extra abstract hook."""
 
@@ -279,6 +303,10 @@ _ALL_FORMATS = (
     ImdMatchZzTwinSource,
     ImdMatchRefusedThenRaisingSource,
     ImdMatchOverrideSource,
+    ImdFamilyRefusedSource,
+    ImdFamilyServingSource,
+    ImdOverrideFamilyRefused,
+    ImdOverrideFamilyServing,
     _ImdKeyFmt,
     _ImdAbstractFmt,
 )
@@ -382,6 +410,8 @@ def _reset_probe_counters() -> None:
         fmt.probes = 0
         fmt.column_reads = 0
     ImdMatchOverrideSource.catalog_reads = 0
+    ImdOverrideFamilyRefused.catalog_reads = 0
+    ImdOverrideFamilyServing.catalog_reads = 0
 
 
 def _global_access() -> DataAccessCollection:
@@ -932,6 +962,49 @@ class TestSourceGroupHook:
 
         assert session is not None
         assert ImdMatchGateSource.probes == 0
+
+    @pytest.mark.parametrize(
+        ("base", "refused", "serving"),
+        [
+            (ImdFamilyBaseSource, ImdFamilyRefusedSource, ImdFamilyServingSource),
+            (ImdOverrideFamilyBase, ImdOverrideFamilyRefused, ImdOverrideFamilyServing),
+        ],
+        ids=["matcher", "gated_probe"],
+    )
+    def test_a_family_scoped_refused_group_is_served_by_its_sibling(
+        self, base: type[_ImdSourceBase], refused: type[_ImdSourceBase], serving: type[_ImdSourceBase]
+    ) -> None:
+        enabled = PluginCollector.enabled_feature_groups({refused, serving})
+        feature = Feature(_COL_A, feature_group=base)
+
+        session = _prepare(feature, enabled, _global_access(), _gate(refused))
+
+        assert session is not None
+        assert refused.probes == 0
+        assert refused.column_reads == 0
+
+    def test_a_sole_family_scoped_refused_group_fails_planning_with_its_refusal(self) -> None:
+        enabled = PluginCollector.enabled_feature_groups({ImdFamilyRefusedSource})
+        feature = Feature(_COL_A, feature_group=ImdFamilyBaseSource)
+        extender = _gate(ImdFamilyRefusedSource)
+
+        with pytest.raises(FeatureResolutionError) as excinfo:
+            _prepare(feature, enabled, _global_access(), extender)
+
+        refusals = excinfo.value.refusals
+        assert len(refusals) == 1
+        assert any(refusals[0] is raised for raised in extender.raised)
+        assert excinfo.value.__cause__ is refusals[0]
+        assert ImdFamilyRefusedSource.probes == 0
+        assert ImdFamilyRefusedSource.column_reads == 0
+
+    @pytest.mark.parametrize("scope", [ImdFamilyRefusedSource, "ImdFamilyRefusedSource"])
+    def test_a_refused_group_scoped_by_its_own_name_still_fails_planning(self, scope: object) -> None:
+        enabled = PluginCollector.enabled_feature_groups({ImdFamilyRefusedSource, ImdFamilyServingSource})
+        feature = Feature(_COL_A, feature_group=scope)  # type: ignore[arg-type]
+
+        with pytest.raises(FeatureResolutionError, match="no clearance"):
+            _prepare(feature, enabled, _global_access(), _gate(ImdFamilyRefusedSource))
 
     def test_a_post_probe_refusal_replaces_the_probes_own_rejection_for_an_unpointed_group(self) -> None:
         enabled = PluginCollector.enabled_feature_groups({ImdMatchRejectingSource})

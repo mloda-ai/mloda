@@ -1062,6 +1062,71 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
         ),
         repr(ValueError("{'password': '***',\n 'user': 'bo\"b'}")),
     ),
+    (
+        "esclvl_repr_json_list_value_with_dquote",
+        repr(json.dumps({"api_key": ['x"y] S3CR3T', "TOPSECRET"]})),
+        repr(json.dumps({"api_key": "***"})),
+    ),
+    (
+        "esclvl_repr_json_list_value_keeps_sibling_and_masks_second_secret",
+        repr(json.dumps({"api_key": ['x"y] S3CR3T', "TOPSECRET"], "user": "bob", "token": "TOPSECRET"})),
+        repr(json.dumps({"api_key": "***", "user": "bob", "token": "***"})),
+    ),
+    (
+        "esclvl_json_repr_json_str_value_with_dquote",
+        json.dumps(repr(json.dumps({"password": 'a"b S3CR3T'}))),
+        json.dumps(repr(json.dumps({"password": "***"}))),
+    ),
+    (
+        "esclvl_json_repr_json_str_value_keeps_sibling",
+        json.dumps(repr(json.dumps({"password": 'a"b S3CR3T', "user": "bob"}))),
+        json.dumps(repr(json.dumps({"password": "***", "user": "bob"}))),
+    ),
+    (
+        "esclvl_json_repr_json_inches_value_keeps_sibling",
+        json.dumps(repr(json.dumps({"password": '6" S3CR3T', "user": "bob"}))),
+        json.dumps(repr(json.dumps({"password": "***", "user": "bob"}))),
+    ),
+    (
+        "esclvl_json_repr_json_inches_value_masks_second_secret",
+        json.dumps(repr(json.dumps({"password": '6" S3CR3T', "user": "bob", "token": "TOPSECRET"}))),
+        json.dumps(repr(json.dumps({"password": "***", "user": "bob", "token": "***"}))),
+    ),
+    (
+        "esclvl_repr_json_dict_value_with_dquote_keeps_sibling",
+        repr(json.dumps({"api_key": {"k": 'x"y] S3CR3T'}, "user": "bob"})),
+        repr(json.dumps({"api_key": "***", "user": "bob"})),
+    ),
+    (
+        "esclvl_json_repr_json_dict_value_with_dquote_keeps_sibling",
+        json.dumps(repr(json.dumps({"password": {"k": 'a"b S3CR3T'}, "user": "bob"}))),
+        json.dumps(repr(json.dumps({"password": "***", "user": "bob"}))),
+    ),
+    (
+        "esclvl_repr_repr_json_list_value_with_dquote_keeps_sibling",
+        repr(repr(json.dumps({"password": ['a"b', "S3CR3T"], "user": "bob"}))),
+        repr(repr(json.dumps({"password": "***", "user": "bob"}))),
+    ),
+    (
+        "esclvl_json_repr_json_list_value_with_dquote_keeps_sibling",
+        json.dumps(repr(json.dumps({"password": ['a"b', "S3CR3T"], "user": "bob"}))),
+        json.dumps(repr(json.dumps({"password": "***", "user": "bob"}))),
+    ),
+    (
+        "esclvl_guard_json_string_holding_unescaped_quote_list",
+        json.dumps('{"password": ["x"y, "S3CR3T"], "user": "bob"}'),
+        json.dumps('{"password": "***", "user": "bob"}'),
+    ),
+    (
+        "esclvl_guard_backslash_ending_value_in_repr_keeps_sibling",
+        repr(json.dumps({"password": ["C:\\", "S3CR3T"], "user": "bob"})),
+        repr(json.dumps({"password": "***", "user": "bob"})),
+    ),
+    (
+        "esclvl_guard_plain_repr_json_list_keeps_sibling",
+        repr(json.dumps({"api_key": ["a", "S3CR3T"], "user": "bob"})),
+        repr(json.dumps({"api_key": "***", "user": "bob"})),
+    ),
 ]
 
 
@@ -1634,6 +1699,16 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
             1000,
             "a json-in-json list value repeated",
         ),
+        (
+            lambda k: ' \\" '.join([json.dumps(repr(json.dumps({"api_key": ['x" z', " a"]})))[2:-2]] * k) + '\\"x\\"y',
+            600,
+            "a record consistent at one doubling depth until the very end",
+        ),
+        (
+            lambda k: repr(json.dumps([{"api_key": ['x"y] S3', "T"]}] * k)),
+            1000,
+            "a repr of json with a quote-holding list value repeated",
+        ),
     ],
     ids=[
         "unterminated_password_brace",
@@ -1671,6 +1746,8 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
         "esc_key_dict_value_many_matches",
         "esc_key_tuple_value_many_matches",
         "json_in_json_list_value_many_matches",
+        "esclvl_consistent_until_end_deeper_reading_ends_early",
+        "esclvl_repeated_repr_json_list_value_with_dquote",
     ],
 )
 def test_repeated_unterminated_password_brace_scrubs_fast(build: Callable[[int], str], n: int, what: str) -> None:

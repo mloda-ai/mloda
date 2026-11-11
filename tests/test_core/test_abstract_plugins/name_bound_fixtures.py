@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 import pyarrow as pa
 
+from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import FeatureChainParserMixin, DataCreatorFeatureGroup, PropertySpec
@@ -30,6 +31,8 @@ def make_name_bound_fg(
     calls: list[list[str]] | None = None,
     append_columns: bool = False,
     replaces_rows: bool = False,
+    *,
+    input_compute_framework: str | None = None,
 ) -> type[FeatureGroup]:
     """Pattern group binding ``bound_keys`` from ``<name>__<tag>_<x>_<y>``; records option tuples in ``seen``.
 
@@ -38,7 +41,8 @@ def make_name_bound_fg(
     key to its ``name_converter``; ``capture`` is the regex class of each captured segment. ``calls``
     gets one list of feature names (repeats kept) appended per calculate_feature call; ``append_columns``
     makes the group append one pyarrow column per feature instead of returning a dict; ``replaces_rows``
-    makes the group declare ``replaces_rows()`` True.
+    makes the group declare ``replaces_rows()`` True; ``input_compute_framework`` pins each input feature
+    to that framework.
     """
     pattern = rf".*__{tag}_" + "_".join(rf"(?P<{key}>{capture})" for key in bound_keys) + "$"
     keys = (*bound_keys, *unbound_keys)
@@ -77,6 +81,15 @@ def make_name_bound_fg(
     }
     if replaces_rows:
         namespace["replaces_rows"] = classmethod(lambda cls: True)
+    if input_compute_framework is not None:
+
+        def input_features(self: Any, options: Any, feature_name: Any) -> Any:
+            inputs = FeatureChainParserMixin.input_features(self, options, feature_name)
+            if inputs is None:
+                return None
+            return {Feature(f.name, f.options, compute_framework=input_compute_framework) for f in inputs}
+
+        namespace["input_features"] = input_features
     return type(f"{prefix}NameBoundFeatureGroup", (FeatureChainParserMixin, FeatureGroup), namespace)
 
 

@@ -7,8 +7,10 @@ import copy
 import importlib
 import inspect
 import sqlite3
+from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from pathlib import Path
+from uuid import uuid4
 from typing import Any, ClassVar
 from unittest.mock import MagicMock, create_autospec
 
@@ -17,7 +19,7 @@ import pyarrow as pa
 import pytest
 
 from mloda.provider import FeatureSet, DataCreatorFeatureGroup
-from mloda.user import DataAccessCollection, GlobalFilter, Index, Options, PluginCollector, mloda
+from mloda.user import DataAccessCollection, DataType, GlobalFilter, Index, Options, PluginCollector, mloda
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -1519,6 +1521,82 @@ def test_unpinned_request_folds_into_exact_pinned_twin_despite_pinned_input_copy
     _, steps = _shared_root_steps([by_slot[slot] for slot in order], plugins=_PINNED_COPY_PLUGINS)
 
     assert sorted(step.compute_framework.__name__ for step in steps) == ["PandasDataFrame", "PyArrowTable"]
+
+
+def _fold_copy(frameworks: set[type[ComputeFramework]], data_type: DataType | None, requested: bool) -> Feature:
+    copy_ = Feature(PinnedUnpinnedSharedRootFG.NAME, data_type=data_type, initial_requested_data=requested)
+    copy_.compute_frameworks = frameworks
+    return copy_
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        "nested_chain",
+        "conflicting_types",
+        "untyped_request_and_typed_request",
+        "typed_request_vs_untyped_request_pinned",
+    ],
+)
+def test_narrower_fold_keeps_every_parent_alive_and_types_consistent(shape: str) -> None:
+    pa_, pd_, pdict = PyArrowTable, PandasDataFrame, PythonDictFramework
+    tied_owner = 0
+    if shape == "nested_chain":
+        copies = [
+            _fold_copy({pa_, pd_, pdict}, None, False),
+            _fold_copy({pa_, pd_}, None, False),
+            _fold_copy({pa_}, DataType.INT64, True),
+        ]
+    elif shape == "conflicting_types":
+        copies = [
+            _fold_copy({pa_}, None, False),
+            _fold_copy({pa_, pdict}, DataType.INT64, True),
+            _fold_copy({pd_, pa_, pdict}, DataType.INT32, True),
+        ]
+        tied_owner = 1
+    elif shape == "untyped_request_and_typed_request":
+        copies = [
+            _fold_copy({pa_, pdict}, None, True),
+            _fold_copy({pa_, pdict}, DataType.INT64, True),
+            _fold_copy({pa_}, None, False),
+        ]
+    else:
+        copies = [_fold_copy({pa_, pdict}, DataType.INT64, True), _fold_copy({pa_}, None, True)]
+    consumers = {copy_.uuid: uuid4() for copy_ in copies}
+    other = uuid4()
+    engine = Engine.__new__(Engine)
+    engine.feature_group_collection = {PinnedUnpinnedSharedRootFG: set(copies)}
+    engine.global_filter = None
+    engine.filter_ties = [(copies[tied_owner].uuid, other)]
+    engine.feature_link_parents = defaultdict(set)
+    for copy_ in copies:
+        engine.feature_link_parents[copy_.uuid] = set()
+        engine.feature_link_parents[consumers[copy_.uuid]] = {copy_.uuid}
+    engine.specialized_from = {}
+    engine.resolved_input_feature_names = {}
+    engine.input_feature_columns = {}
+    engine._declared_options_by_uuid = {}
+    engine._cascade_keys_at_resolution = {}
+
+    engine._fold_into_narrower_twins()
+
+    alive = {f.uuid: f for f in engine.feature_group_collection[PinnedUnpinnedSharedRootFG]}
+    for consumer in consumers.values():
+        assert engine.feature_link_parents[consumer] <= alive.keys()
+    if shape == "nested_chain":
+        assert list(alive) == [copies[2].uuid]
+        assert engine.filter_ties == [(copies[2].uuid, other)]
+    elif shape == "conflicting_types":
+        assert {u: f.data_type for u, f in alive.items()} == {
+            copies[0].uuid: DataType.INT32,
+            copies[1].uuid: DataType.INT64,
+        }
+        assert engine.filter_ties == [(copies[1].uuid, other)]
+    elif shape == "untyped_request_and_typed_request":
+        assert alive[copies[0].uuid].data_type is None
+        assert DataType.INT64 in {f.data_type for f in alive.values()}
+    else:
+        assert set(alive) == {copies[0].uuid, copies[1].uuid}
 
 
 def test_pinned_and_unpinned_request_with_differing_options_stay_two_steps() -> None:

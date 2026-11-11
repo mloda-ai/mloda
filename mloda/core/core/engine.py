@@ -957,10 +957,20 @@ class Engine:
                         for t, t_cf in bucket
                         if t is not host
                         and t_cf < host_cf
-                        and t.initial_requested_data
-                        and t.data_type is not None
-                        and not host.initial_requested_data
-                        and host.data_type is None
+                        and (
+                            (
+                                t.initial_requested_data
+                                and t.data_type is not None
+                                and not host.initial_requested_data
+                                and host.data_type is None
+                            )
+                            or (
+                                host.initial_requested_data
+                                and host.data_type is not None
+                                and not t.initial_requested_data
+                                and t.data_type is None
+                            )
+                        )
                         and t._equals(host, False, include_child_options=False, include_data_type=False)
                         and self._same_merge_scope(t, host)
                     ]
@@ -975,17 +985,40 @@ class Engine:
                 fold[0].__qualname__,
                 str(fold[1].name),
                 sorted(cf.__qualname__ for cf in fold[1].compute_frameworks or ()),
+                str(fold[1].data_type),
             )
         )
-        fold_map = {host.uuid: survivor.uuid for _, host, survivor in folds}
-        for group_class, host, survivor in folds:
+        live = {f.uuid: f for collection in self.feature_group_collection.values() for f in collection}
+        applied: dict[UUID, UUID] = {}
+
+        def final(uid: UUID) -> UUID:
+            while uid in applied:
+                uid = applied[uid]
+            return uid
+
+        # With conflicting typed requests the first fold in sort order wins; the rest stay alive.
+        for group_class, planned_host, planned_survivor in folds:
+            host = live[planned_host.uuid]
+            survivor = live[final(planned_survivor.uuid)]
+            untyped_free = (survivor.data_type is None and not survivor.initial_requested_data) or (
+                host.data_type is None and not host.initial_requested_data
+            )
+            if host.data_type != survivor.data_type and not untyped_free:
+                continue
             collection = self.feature_group_collection[group_class]
-            self.feature_group_collection[group_class] = {f for f in collection if f is not host}
+            if survivor.data_type is None and host.data_type is not None:
+                promoted = copy(survivor)
+                promoted.data_type = host.data_type
+                collection = {promoted if f is survivor else f for f in collection}
+                live[promoted.uuid] = survivor = promoted
+            self.feature_group_collection[group_class] = {f for f in collection if f.uuid != host.uuid}
             self._merge_host_into(survivor, host)
             survivor.framework_pinned = survivor.framework_pinned or host.framework_pinned
             if self.global_filter is not None:
                 self.global_filter.probes.pop((group_class, host.name, host.uuid), None)
-        ties = [(fold_map.get(a, a), fold_map.get(b, b)) for a, b in self.filter_ties]
+            del live[host.uuid]
+            applied[host.uuid] = survivor.uuid
+        ties = [(final(a), final(b)) for a, b in self.filter_ties]
         self.filter_ties = list(dict.fromkeys(ties))
 
     def _same_merge_scope(self, a: Feature, b: Feature) -> bool:

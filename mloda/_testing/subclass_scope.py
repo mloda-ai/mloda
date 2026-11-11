@@ -307,7 +307,7 @@ def check_subclass_scope(
 ) -> CheckResult:
     """Check subclass replaces parent only with the selecting options (and values); only these two classes count.
 
-    Keys in free are selecting keys that configure the subclass but get no other-value probe.
+    Keys in free configure the subclass but get no other-value probe.
     With input_data it also compares the requested output columns with the parent's, in both directions,
     assuming identical row order.
     With require_run, a rule exclusion, a missing serving Implementation, a route block or no rows is a failure.

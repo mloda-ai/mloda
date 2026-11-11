@@ -7,6 +7,8 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, ClassVar
 
+import pyarrow as pa
+import pyarrow.compute as pc
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -799,6 +801,30 @@ class _ComputingColFG(FeatureGroup):
         return data
 
 
+DERIVED_DOUBLED = "fpg_x_doubled"
+
+
+class _DoubledFpgXFG(FeatureGroup):
+    """Derived group doubling fpg_x, matching only its own name."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: FeatureName | str, options: Options, data_access_collection: Any = None
+    ) -> bool:
+        return str(feature_name) == DERIVED_DOUBLED
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PyArrowTable}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("fpg_x")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({DERIVED_DOUBLED: pc.multiply(data["fpg_x"], 2)})
+
+
 class _AbstractToyMid(ToySourceBase):
     """Abstract shared base: naming it as a scope must not point at its subclasses."""
 
@@ -1449,20 +1475,29 @@ class TestForeignPointerMakesSearchedRoutesDecline:
         result = IdentifyFeatureGroupClass.evaluate(feature, _plugins(_stock("csv_fg", "CsvFG")), None, None)
         assert not result.identified
 
+    @pytest.mark.parametrize(
+        ("name", "feature_group", "expected"),
+        [
+            ("fpg_x", None, [1, 2]),
+            (DERIVED_DOUBLED, _DoubledFpgXFG, [2, 4]),
+            (DERIVED_DOUBLED, "_DoubledFpgXFG", [2, 4]),
+        ],
+        ids=["source", "derived_scope_class", "derived_scope_name"],
+    )
     def test_a_csv_pointer_returns_the_pointed_value_though_the_collection_holds_the_column_elsewhere(
-        self, tmp_path: Path
+        self, tmp_path: Path, name: str, feature_group: type[FeatureGroup] | str | None, expected: list[int]
     ) -> None:
         csv_path, _ = _write_csv_and_parquet(tmp_path)
         result = mloda.run_all(
-            [Feature("fpg_x", Options({"CsvFG": csv_path}))],
+            [Feature(name, Options({"CsvFG": csv_path}), feature_group=feature_group)],
             compute_frameworks=[PyArrowTable],
             plugin_collector=PluginCollector.enabled_feature_groups(
-                {_stock("csv_fg", "CsvFG"), _stock("parquet_fg", "ParquetFG")}
+                {_stock("csv_fg", "CsvFG"), _stock("parquet_fg", "ParquetFG"), _DoubledFpgXFG}
             ),
             data_access_collection=DataAccessCollection(folders={"fpg_dir": str(tmp_path)}),
         )
 
-        assert column_values(result, "fpg_x") == [1, 2]
+        assert column_values(result, name) == expected
 
     def test_a_foreign_pointer_also_declines_a_required_option_route(self) -> None:
         from mloda.provider import ReadDBFG

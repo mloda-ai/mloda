@@ -344,14 +344,14 @@ def validate_source_pointers(
             raise SourcePointerError(
                 f"feature_group={scope_name}, but {scope_name} is not accessible in this run: {reason}."
             )
-        for key in keys:
-            if key in loaded and not any(
-                matches_feature_group_scope(fg, scope) and key in fg.pointer_keys() for fg in accessible_sources
-            ):
-                raise SourcePointerError(
-                    f"feature_group={scope_name} and an options pointer at {key} name different groups; "
-                    "drop one of them."
-                )
+        scoped_sources = [fg for fg in accessible_sources if matches_feature_group_scope(fg, scope)]
+        if scoped_sources:
+            for key in keys:
+                if key in loaded and not any(key in fg.pointer_keys() for fg in scoped_sources):
+                    raise SourcePointerError(
+                        f"feature_group={scope_name} and an options pointer at {key} name different groups; "
+                        "drop one of them."
+                    )
     conflict = _pin_conflict(feature, data_access_collection, loaded)
     if conflict is not None:
         raise SourcePointerError(conflict)

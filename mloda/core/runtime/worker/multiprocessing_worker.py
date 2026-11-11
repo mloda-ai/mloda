@@ -144,8 +144,8 @@ def _handle_command_result(
     result_queue: multiprocessing.Queue[Any],
 ) -> None:
     """Handles the result of a command execution, including uploading data if necessary."""
-    if not isinstance(data, str) and isinstance(command, FeatureGroupStep):
-        # uploaded if requested
+    if not isinstance(data, str) and isinstance(command, FeatureGroupStep) and not command.need_to_upload:
+        # the step already uploads when need_to_upload is set
         if command.features.get_initial_requested_features():
             if location is None:
                 raise ValueError(

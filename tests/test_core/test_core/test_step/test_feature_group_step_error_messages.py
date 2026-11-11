@@ -11,6 +11,7 @@ from mloda.core.abstract_plugins.components.plan_freeze import FrozenPlanError
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.runtime.worker.multiprocessing_worker import _handle_command_result
 from mloda.user import Feature, Options
 
 
@@ -21,13 +22,16 @@ class MockFeatureGroup(FeatureGroup):
         return None
 
 
-def test_execute_does_not_upload_finished_data_twice() -> None:
+@pytest.mark.parametrize("need_to_upload", [True, False], ids=["upload", "no-upload"])
+@pytest.mark.parametrize("shape", ["finished", "native"])
+def test_step_and_worker_upload_a_requested_result_once(need_to_upload: bool, shape: str) -> None:
     features = MagicMock(spec=FeatureSet)
     features.features = set()
     features.artifact_to_save = None
     features.runtime_parameters = ()
+    features.get_initial_requested_features.return_value = {"requested"}
     step = FeatureGroupStep(MockFeatureGroup, features, set(), ComputeFramework)
-    step.need_to_upload = True
+    step.need_to_upload = need_to_upload
 
     cfw_register = MagicMock()
     cfw_register.get_location.return_value = "flight-location"
@@ -36,14 +40,20 @@ def test_execute_does_not_upload_finished_data_twice() -> None:
     cfw = MagicMock(spec=ComputeFramework)
     cfw.uuid = "framework-id"
 
-    def run_calculation(*_: object) -> str:
-        cfw.data = "object-id"
-        cfw.upload_finished_data("flight-location")
-        return "object-id"
+    native = {"col": [1, 2]}
+
+    def run_calculation(*_: object) -> object:
+        if shape == "finished":
+            cfw.data = "object-id"
+            cfw.upload_finished_data("flight-location")
+            return "object-id"
+        cfw.data = native
+        return native
 
     cfw.run_calculation.side_effect = run_calculation
 
-    step.execute(cfw_register, cfw)
+    data = step.execute(cfw_register, cfw)
+    _handle_command_result(step, cfw, "flight-location", data, MagicMock())
 
     cfw.upload_finished_data.assert_called_once_with("flight-location")
 

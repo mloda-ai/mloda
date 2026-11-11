@@ -545,7 +545,9 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
     ("quote_doubled_inside_quoted_value", "password='a''b'", ["''b", "'b"], ["password=***"]),
     ("quote_triple_opening_run", "password='''abc", ["abc"], ["password=***"]),
     ("quote_closed_then_literal_newline_kept", "password='abc'\\nhost=db", ["abc"], ["\\nhost=db"]),
+    ("quote_single_quoted_value", "password='abc'", ["abc"], ["password=***"]),
     ("quote_closing_kept", "'password=abc'", ["abc"], ["'password=***'"]),
+    ("spaced_equals_after_path_param_kept", "s3://b/x;v=1 = foo bar", [], [" = foo bar"]),
     ("quote_closing_kept_in_list", "['password=abc']", ["abc"], ["['password=***']"]),
     ("quote_then_space_kept", "password=abc' x", ["abc"], ["password=***' x"]),
     (
@@ -870,6 +872,7 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
     ("closer_single_quote_dropped_before_space", "password='x' ", "password=*** "),
     ("closer_double_quote_dropped_at_end", 'password="x"', "password=***"),
     ("closer_brace_dropped_at_end", "password={x}", "password=***"),
+    ("quoted_value_glued_letter_masked", "password='SECRET VALUE'x", "password=***"),
     ("ml_items_basic", '{"password": ["S3CR3T",\n"S3CR3T2"\n]}', '{"password": "***"}'),
     ("ml_items_single_quotes", "{'password': ['S3CR3T',\n'S3CR3T2'\n]}", "{'password': '***'}"),
     (
@@ -1323,6 +1326,7 @@ def test_text_without_url_is_unchanged() -> None:
         'pwd=""pwd={,',
         ";pwd={:}:",
         "pwd={pwd}x@",
+        "s3://b!y/a:k=SECRETVALUE/z?q=1",
         "fs.s3a.secret.key=X1234567",
         repr(ValueError('{\n"password": {\n"a": "S3CR3T"\n}\n}')),
         '{\n  "user": "u",\n  "password": "hunter2z9"\n}',
@@ -2685,7 +2689,12 @@ class TestScrubUriProjection:
             pytest.param(
                 "https://user:pwd=x@host/path/data.csv", "https://host/path/data.csv", id="userinfo-pwd-equals-dropped"
             ),
-            pytest.param("password='abc'", "password=***", id="keyword-quoted-value-masked"),
+            pytest.param(
+                "https://h/x?id=5 == expected", "https://h/x == expected", id="query-double-equals-prose-kept"
+            ),
+            pytest.param(
+                "url = https://h/x?a=1 = b", "url = https://h/x = b", id="query-with-equals-then-spaced-equals-kept"
+            ),
             pytest.param("s3://b/x?q=1 done", "s3://b/x done", id="clean-query-then-prose-dropped"),
         ],
     )
@@ -2975,9 +2984,44 @@ class TestScrubUriFailClosed:
             pytest.param("s3://b$y;v=SECRETVALUE", "SECRETVALUE", id="host-stop-dollar-param-region"),
             pytest.param("s3://b^y;v=SECRETVALUE", "SECRETVALUE", id="host-stop-caret-param-region"),
             pytest.param("s3://b(y;v=SECRETVALUE", "SECRETVALUE", id="host-stop-paren-param-region"),
-            pytest.param("pwd=''SECRETVALUE", "SECRETVALUE", id="keyword-opening-quote-run"),
-            pytest.param("password='''SECRETVALUE", "SECRETVALUE", id="keyword-triple-opening-quote-run"),
-            pytest.param("password='SECR''ETVALUE'", "ETVALUE", id="keyword-doubled-quote-inside-quoted"),
+            pytest.param("s3://b!y;password='A SECRETX' tail", "SECRETX", id="host-stop-region-single-quoted-spaced"),
+            pytest.param('s3://b!y;password="A SECRETX" tail', "SECRETX", id="host-stop-region-double-quoted-spaced"),
+            pytest.param("s3://b!y;password={A SECRETX} tail", "SECRETX", id="host-stop-region-braced-spaced"),
+            pytest.param("s3://b!y;password = SECRETVALUE", "SECRETVALUE", id="host-stop-region-spaced-password"),
+            pytest.param("s3://b!y;v = SECRETVALUE", "SECRETVALUE", id="host-stop-region-spaced-plain-key"),
+            pytest.param(
+                "mongodb://h1:1,h2:2/db?password = SECRETVALUE", "SECRETVALUE", id="multi-host-path-spaced-password"
+            ),
+            pytest.param("mongodb://h1:1,h2:2?password = SECRETVALUE", "SECRETVALUE", id="multi-host-spaced-password"),
+            pytest.param("s3://b!y/a:k=SECRETVALUE/z?q=1", "SECRETVALUE", id="host-stop-key-value-path-in-kept-head"),
+            pytest.param("s3://b}y;v=SECRETVALUE", "SECRETVALUE", id="host-stop-close-brace-param-region"),
+            pytest.param(
+                "{'url': 's3://b}y;v=SECRETVALUE'}", "SECRETVALUE", id="host-stop-close-brace-param-region-in-dict"
+            ),
+            pytest.param("password='SECRET VALUE'x", "VALUE", id="keyword-quoted-value-glued-letter"),
+            pytest.param("password='SECRET VALUE'/tmp", "VALUE", id="keyword-quoted-value-glued-path"),
+            pytest.param("password='SECRET VALUE'(retry)", "VALUE", id="keyword-quoted-value-glued-paren"),
+            pytest.param("password='SECRET VALUE'@host", "VALUE", id="keyword-quoted-value-glued-at"),
+            pytest.param("password='SECRET VALUE'.csv", "VALUE", id="keyword-quoted-value-glued-extension"),
+            pytest.param("password='SECRET VALUE'-x", "VALUE", id="keyword-quoted-value-glued-dash"),
+            pytest.param("password='SECRET VALUE'|x", "VALUE", id="keyword-quoted-value-glued-pipe"),
+            pytest.param("password='SECRET VALUE'=", "VALUE", id="keyword-quoted-value-glued-equals"),
+            pytest.param("token='A SECRET'@host", "SECRET", id="keyword-token-quoted-value-glued-at"),
+            pytest.param("password = 'A SECRET'x", "SECRET", id="keyword-spaced-quoted-value-glued"),
+            pytest.param("password='a SECRET''", "SECRET", id="keyword-quoted-value-trailing-quote-run"),
+            pytest.param("password='a\\'b SECRET'x", "SECRET", id="keyword-escaped-quote-value-glued"),
+            pytest.param(
+                "jdbc:sqlserver://h;password='A SECRETX'x", "SECRETX", id="jdbc-quoted-spaced-value-glued-letter"
+            ),
+            pytest.param(
+                "https://h/x?password=Bearer SECRETVALUE", "SECRETVALUE", id="https-query-unspaced-bearer-value"
+            ),
+            pytest.param(
+                "jdbc:mysql://h/db;password=Bearer SECRETVALUE", "SECRETVALUE", id="jdbc-param-unspaced-bearer-value"
+            ),
+            pytest.param(
+                "https://h/x?password=Basic SECRETVALUE", "SECRETVALUE", id="https-query-unspaced-basic-value"
+            ),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:
@@ -3186,6 +3230,8 @@ class TestRegisteredSecretsScope:
             ),
             pytest.param("x'y", "'https://h/x?a=1x'y'", "x'y", id="quote-literal-after-query"),
             pytest.param("SE::cretval", "zip://d;%74oken=SE::cretval::x", "cretval", id="literal-with-value-colon-cut"),
+            pytest.param("abc;def", "s3://b!yabc;def", "abc", id="literal-in-host-stop-kept-head"),
+            pytest.param("h2/dbSEC?", "mongodb://h1,h2/dbSEC?ret=1", "dbSEC", id="literal-in-multi-host-kept-head"),
         ],
     )
     def test_secret_is_masked_when_the_literal_overlaps_a_pattern(self, literal: str, text: str, secret: str) -> None:

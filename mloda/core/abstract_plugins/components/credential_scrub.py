@@ -80,9 +80,10 @@ _KNOWN_SCHEMES = r"(?i:bearer|basic|token|digest|apikey|negotiate)"
 
 
 def _quoted_value(quote: str, extra: str) -> str:
-    """A quoted value (doubled quotes allowed inside) that closes only before a delimiter, so a quote run stays whole."""
+    """A quoted value (doubled quotes allowed inside); the glued non-delimiter run after its close stays part of it."""
     end = rf"[\s;&,:)\]}}>\\{extra}]|$|[.!?]+(?:\s|$|['\"])"
-    return rf"{quote}(?:[^{quote}\\\n]|\\.|{quote}{quote})*+{quote}(?={end}|['\"](?:{end}))"
+    glued = rf"[^;&\s'\"{extra}]++(?!{quote})"
+    return rf"{quote}(?:[^{quote}\\\n]|\\.|{quote}{quote}(?!\s|$))*+{quote}(?:(?={end}|['\"](?:{end}))|{glued})"
 
 
 # (?<![\w.-]), not (?<![A-Za-z]): a name-start anchor so a prefixed or dotted identifier (sslpassword,
@@ -439,16 +440,27 @@ _JDBC_CUT_PATTERN = re.compile(
 _JDBC_PATH_CUT = "\ue002"
 # A quoted value closes only before a delimiter (a dict repr's quote stays a boundary); values stop at a newline or `://`.
 _JDBC_VALUE_END = r"""[;\s,)\]}>\\]|$|[.!?:]+(?:\s|$|["'])"""
+_JDBC_GLUED = r"""(?:(?!://)[^;\s'"])++"""
 _JDBC_QUOTED = (
-    rf"""'(?:(?!://)[^'\n]|'')*+(?:'(?={_JDBC_VALUE_END}|["'](?:{_JDBC_VALUE_END}))|(?=\n|$|://))"""
-    rf"""|"(?:(?!://)[^"\n]|"")*+(?:"(?={_JDBC_VALUE_END}|["'](?:{_JDBC_VALUE_END}))|(?=\n|$|://))"""
+    rf"""'(?:(?!://)[^'\n]|'')*+(?:'(?={_JDBC_VALUE_END}|["'](?:{_JDBC_VALUE_END}))|'{_JDBC_GLUED}(?!')|(?=\n|$|://))"""
+    rf"""|"(?:(?!://)[^"\n]|"")*+(?:"(?={_JDBC_VALUE_END}|["'](?:{_JDBC_VALUE_END}))|"{_JDBC_GLUED}(?!")|(?=\n|$|://))"""
 )
 _JDBC_BRACED = r"\{(?:(?!://)[^}\n]|\}\})*+\}?"
-_JDBC_PATH_CUT_PATTERN = re.compile(
-    _JDBC_PATH_CUT + rf"(?:(?P<v>(?<=[= \t])(?:{_JDBC_QUOTED}|{_JDBC_BRACED})|(?<={_JDBC_PATH_CUT}){_JDBC_BRACED})"
-    rf"|[ \t]++(?==)|(?<==)[ \t]++|(?<=[= \t]){_KNOWN_SCHEMES}[ \t]++"
-    r"|(?!://|[,;][\"'(\[{<]*(?:(?i:jdbc):)?[A-Za-z][A-Za-z0-9+.-]*://)\S)*"  # not `*+`: 3.11 misreports group spans
-)
+# Own marker for a hidden parameter region after a mid-token stop: the cut keeps the tail's clean head.
+_HIDDEN_CUT = "\ue003"
+_MARKER_PATTERN = re.compile(f"[{_JDBC_CUT}{_JDBC_PATH_CUT}{_HIDDEN_CUT}]")
+
+
+def _value_cut_pattern(marker: str) -> re.Pattern[str]:
+    return re.compile(
+        marker + rf"(?:(?P<v>(?<=[= \t])(?:{_JDBC_QUOTED}|{_JDBC_BRACED})|(?<={marker}){_JDBC_BRACED})"
+        rf"|[ \t]++(?==)|(?<==)[ \t]++|(?<=[= \t]){_KNOWN_SCHEMES}[ \t]++"
+        r"|(?!://|[,;][\"'(\[{<]*(?:(?i:jdbc):)?[A-Za-z][A-Za-z0-9+.-]*://)\S)*"  # not `*+`: 3.11 misreports group spans
+    )
+
+
+_JDBC_PATH_CUT_PATTERN = _value_cut_pattern(_JDBC_PATH_CUT)
+_HIDDEN_CUT_PATTERN = _value_cut_pattern(_HIDDEN_CUT)
 # Closers then sentence punctuation then whitespace or end: the match ended a value, nothing was cut off.
 _CLOSING_END_PATTERN = re.compile(r"[\"'<>)\]}]+[,:;.!?]*(?:\s|$)")
 # Closers then a separator and an opener: a following list or dict item, if the URL itself was opened.
@@ -485,7 +497,8 @@ def _azure_container_prefix(match: re.Match[str]) -> str:
     return ""
 
 
-_SPACED_EQUALS_PATTERN = re.compile(r"[ \t]+=")
+_SPACED_EQUALS_PATTERN = re.compile(r"[ \t]+=(?!=)")
+_KNOWN_SCHEME_END_PATTERN = re.compile(rf"={_KNOWN_SCHEMES}\Z")
 
 
 def _opens_brace_value(text: str) -> bool:
@@ -505,20 +518,32 @@ def _opens_brace_value(text: str) -> bool:
     return inside
 
 
+def _in_open_brace_value(text: str, start: int) -> bool:
+    """True when the nearby text before start sits inside an open `={...}` value."""
+    opener = text.rfind("={", max(0, start - 256), start)
+    return opener >= 0 and _opens_brace_value(text[opener:start])
+
+
 def _cut_resume(text: str) -> str:
     """What stays after the marker so the cut resumes inside an open value."""
     if _opens_brace_value(text):
         return "{"
-    return "=" if text.endswith("=") else ""
+    return "=" if text.endswith("=") or _KNOWN_SCHEME_END_PATTERN.search(text) else ""
 
 
 def _dropped_continues(match: re.Match[str], dropped: str) -> bool:
-    """True when dropped URI text hands its value on past the match (`=` end, open brace, spaced `=`)."""
-    return bool(dropped) and (
-        dropped.endswith("=")
-        or _opens_brace_value(dropped)
-        or _SPACED_EQUALS_PATTERN.match(match.string, match.end()) is not None
-    )
+    """True when dropped URI text hands its value on past the match (`=` end, open brace, spaced `=`, `=Bearer `)."""
+    if not dropped:
+        return False
+    if dropped.endswith("=") or _opens_brace_value(dropped):
+        return True
+    text, end = match.string, match.end()
+    if _KNOWN_SCHEME_END_PATTERN.search(dropped):
+        return text[end : end + 1] in (" ", "\t")
+    last_parameter = dropped[max(dropped.rfind(mark) for mark in "?&;#") + 1 :]
+    if "=" in last_parameter and not match["scheme"].lower().startswith("jdbc:"):
+        return False
+    return _SPACED_EQUALS_PATTERN.match(text, end) is not None
 
 
 def _uri_projection(match: re.Match[str]) -> str | None:
@@ -565,34 +590,44 @@ def _part_clean_head(part: str) -> str:
     return _clean_head(part)
 
 
-def _hidden_region_head(match: re.Match[str]) -> str | None:
-    """The kept head of a token tail that hides a parameter region after a mid-token stop char; None if it hides none.
+def _token_tail(text: str, start: int) -> str:
+    found = _JDBC_TAIL_PATTERN.match(text, start)
+    return found[0] if found else ""
+
+
+def _hides_parameter_region(match: re.Match[str]) -> bool:
+    """True when the token tail after a mid-token stop char hides a parameter region.
     A closer the URL was opened with ends the value; a `[,;]` starting another `scheme://` item is a list."""
     text, end, start = match.string, match.end(), match.start()
     if end >= len(text) or text[end].isspace():
-        return None
+        return False
     if text[end] in _MATCH_END_TERMINATORS:
         if start > 0 and text[start - 1] == _OPENER_OF.get(text[end]):
             # A closer glued to a token character is mid-path, not the end of the opened value.
             following = text[end + 1 : end + 2]
             if not (following.isalnum() or following == "_"):
-                return None
-    # A `}` stop ends a braced value the jdbc cut already owns.
-    elif text[end] == "}" or _URI_LIST_ITEM_PATTERN.match(text, end):
-        return None
-    tail = _JDBC_TAIL_PATTERN.match(text, end)
-    if tail is None:
-        return None
-    decoded = _decode_to_fixpoint(tail[0])
-    if decoded is not None and not (_KEY_VALUE_REGION_PATTERN.search(decoded) or _PARAMETER_REGION.search(decoded)):
-        return None
-    if text[end] in _MATCH_END_TERMINATORS:
+                return False
+    # A `}` stop inside an open braced value ends it; the jdbc cut owns that value.
+    elif (text[end] == "}" and _in_open_brace_value(text, start)) or _URI_LIST_ITEM_PATTERN.match(text, end):
+        return False
+    decoded = _decode_to_fixpoint(_token_tail(text, end))
+    return decoded is None or bool(_KEY_VALUE_REGION_PATTERN.search(decoded) or _PARAMETER_REGION.search(decoded))
+
+
+def _hidden_head(text: str, start: int) -> str:
+    """The clean head of the token tail at start, up to its first parameter region."""
+    if text[start] in _MATCH_END_TERMINATORS:
         return ""
-    regions = _parameter_regions(tail[0])
+    tail = _token_tail(text, start)
+    regions = _parameter_regions(tail)
     if not regions:
         return ""
-    start, _, end = regions[0]
-    return tail[0][:start] + _part_clean_head(tail[0][start:end])
+    first, _, end = regions[0]
+    return _cut_key_value_path(tail[:first] + _part_clean_head(tail[first:end]))
+
+
+def _cut_hidden_tail(marker: re.Match[str]) -> str:
+    return _hidden_head(marker.string, marker.start() + 1) + _cut_path_marker_tail(marker)
 
 
 def _cut_dropped_tail(match: re.Match[str], scrubbed: str, dropped: bool) -> str:
@@ -600,8 +635,7 @@ def _cut_dropped_tail(match: re.Match[str], scrubbed: str, dropped: bool) -> str
     if scrubbed.rstrip("={").endswith((_JDBC_CUT, _JDBC_PATH_CUT)):
         return scrubbed
     if not dropped:
-        head = _hidden_region_head(match)
-        return scrubbed if head is None else scrubbed + head + _JDBC_CUT
+        return scrubbed + _HIDDEN_CUT if _hides_parameter_region(match) else scrubbed
     text, end, start = match.string, match.end(), match.start()
     if text.startswith("::", end) and _CHAIN_AFTER_VALUE_PATTERN.match(text, end) is None:
         return scrubbed + _JDBC_CUT
@@ -1036,7 +1070,8 @@ def _keyword_repl(m: re.Match[str]) -> str:
         return m[0]
     if _COUNT_NAME.fullmatch(keyword.rpartition(".")[2]) and value.isascii() and value.isdigit() and len(value) <= 7:
         return m[0]
-    if (m["quoted"] or m["braced"]) and end < len(text) and text[end] not in ";&'\"" and not text[end].isspace():
+    closed = m["braced"] or (m["quoted"] and value[-1] == value[0])
+    if closed and end < len(text) and text[end] not in ";&'\"" and not text[end].isspace():
         closer = "}" if m["braced"] else value[0]
         opener = "{" if m["braced"] else value[0]
         return f"{keyword}{sep}{opener}***{closer}"
@@ -1067,6 +1102,7 @@ _PASSES: list[tuple[re.Pattern[str], Any]] = [
     (_FREE_TEXT_URI_PATTERN, _scrub_uri_match),
     (_JDBC_CUT_PATTERN, _cut_marker_tail),
     (_JDBC_PATH_CUT_PATTERN, _cut_path_marker_tail),
+    (_HIDDEN_CUT_PATTERN, _cut_hidden_tail),
     (_PASSWORD_AS_SCHEME_PATTERN, _password_scheme_repl),
     (_AUTHORIZATION_PATTERN, _authorization_repl),
     (_BEARER_PATTERN, r"\g<scheme> ***"),
@@ -1078,14 +1114,14 @@ _PASSES: list[tuple[re.Pattern[str], Any]] = [
 
 
 def _scrub_passes(text: str) -> str:
-    text = text.replace(_JDBC_CUT, "\ufffd").replace(_JDBC_PATH_CUT, "\ufffd")
+    text = _MARKER_PATTERN.sub("\ufffd", text)
     for pattern, repl in _PASSES:
         text = _sub_quoted_keys(text) if pattern is _QUOTED_KEY_PATTERN else pattern.sub(repl, text)
     return text
 
 
 def _scrub_tracked(text: str) -> tuple[str, list[int]]:
-    text = text.replace(_JDBC_CUT, "\ufffd").replace(_JDBC_PATH_CUT, "\ufffd")
+    text = _MARKER_PATTERN.sub("\ufffd", text)
     origin = list(range(len(text)))
     for pattern, repl in _PASSES:
         text, origin = _sub_tracked(

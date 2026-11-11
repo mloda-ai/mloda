@@ -12,7 +12,13 @@ PREFIXES = [
     "jdbc:sqlserver://h",
     "s3://b/x",
     "https://h/x",
+    "s3://b!y",
+    "s3://b}y",
+    "mongodb://h1:1,h2:2/db",
+    "mongodb://h1:1,h2:2",
 ]
+# Prefixes crossed with the `;` and `?` parameters only, to keep the product small.
+SHORT_PARAMETER_PREFIXES = {"s3://b!y", "s3://b}y", "mongodb://h1:1,h2:2/db", "mongodb://h1:1,h2:2"}
 PARAMETERS = [";", "?", "?a=1&", "#"]
 KEYS = ["password", "pass%77ord", "auth"]
 SPACINGS = ["=", " = ", " =", "= "]
@@ -33,30 +39,30 @@ TRAILINGS = {
     "json-list-item": ('["', '", "next"]'),
     "dict-repr": ("{'url': '", "'}"),
     "literal-newline": ("", "\\nhost=x"),
+    "glued": ("", "x/tmp"),
 }
-HOST_STOPS = ["!", "{", ",", "|", "*", "+", "$", "^", "("]
+HOST_STOPS = ["!", "{", "}", ",", "|", "*", "+", "$", "^", "("]
 
 # Combinations left out of the product, each with the reason.
 EXCLUSIONS = {
     "unquoted multi-word values": "indistinguishable from prose after the secret",
-    "bearer value without a space after the separator": "the token then reads as a plain word, covered by plain",
     "quote-wrapped value in a dict repr or json item with a matching quote": "the wrapper quote ends the value early",
+    "quoted-free-text wrapper around a case containing a quote": "the wrapper quote ends the value early",
 }
 
 
-def _excluded(trailing: str, value: str, spacing: str) -> bool:
+def _excluded(trailing: str, value: str) -> bool:
     quoted = value[0] in "'\""
     wrapper_quote = TRAILINGS[trailing][0][-1:]
-    if quoted and wrapper_quote == value[0] and trailing in ("json-list-item", "dict-repr"):
-        return True
-    return value.startswith("Bearer") and spacing.endswith("=")
+    return quoted and wrapper_quote == value[0] and trailing in ("json-list-item", "dict-repr")
 
 
 def connection_string_matrix() -> Iterator[tuple[str, str, str, str]]:
     """Yield (label, text, expected_unused, secret)."""
     for prefix, key, value_name, trailing in itertools.product(PREFIXES, KEYS, VALUES, TRAILINGS):
-        for parameter, spacing in itertools.product(PARAMETERS, SPACINGS):
-            if _excluded(trailing, VALUES[value_name], spacing):
+        parameters = [";", "?"] if prefix in SHORT_PARAMETER_PREFIXES else PARAMETERS
+        for parameter, spacing in itertools.product(parameters, SPACINGS):
+            if _excluded(trailing, VALUES[value_name]):
                 continue
             lead, tail = TRAILINGS[trailing]
             text = f"{lead}{prefix}{parameter}{key}{spacing}{VALUES[value_name]}{tail}"

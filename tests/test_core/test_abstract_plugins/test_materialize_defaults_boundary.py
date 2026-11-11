@@ -232,6 +232,7 @@ def _run_direct_and_chained(
     include_name_bound: bool = True,
     root_calls: list[list[str]] | None = None,
     root_append_columns: bool = False,
+    chained_input_compute_framework: str | None = None,
 ) -> list[Any]:
     fg = make_name_bound_fg(
         "Mdb",
@@ -244,6 +245,7 @@ def _run_direct_and_chained(
         calls=calls,
         append_columns=append_columns,
         replaces_rows=replaces_rows,
+        input_compute_framework=chained_input_compute_framework,
     )
     source = make_root_fg(
         "MdbTwoKeys", __name__, "mdb_src", [1, 2], append_columns=root_append_columns, calls=root_calls
@@ -508,6 +510,8 @@ class TestRuntimeDefaultMaterializationEndToEnd:
             pytest.param("one_framework", DataType.INT64, id="typed"),
             pytest.param("direct_pinned_of_two", None, id="untyped_direct_pinned_of_two"),
             pytest.param("direct_pinned_of_two", DataType.INT64, id="typed_direct_pinned_of_two"),
+            pytest.param("chained_input_pinned_of_two", DataType.INT64, id="typed_chained_input_pinned_of_two"),
+            pytest.param("chained_input_pinned_of_two", None, id="untyped_chained_input_pinned_of_two"),
         ],
     )
     def test_direct_and_chained_request_append_style_group_pyarrow(
@@ -515,13 +519,15 @@ class TestRuntimeDefaultMaterializationEndToEnd:
     ) -> None:
         calls: list[list[str]] = []
         two = pinned == "direct_pinned_of_two"
+        chained_two = pinned == "chained_input_pinned_of_two"
         results = _run_direct_and_chained(
             calls,
-            framework=[PyArrowTable, PythonDictFramework] if two else PyArrowTable,
+            framework=[PyArrowTable, PythonDictFramework] if two or chained_two else PyArrowTable,
             append_columns=True,
             direct_first=direct_first,
             direct_data_type=direct_data_type,
             direct_compute_framework="PyArrowTable" if two else None,
+            chained_input_compute_framework="PyArrowTable" if chained_two else None,
         )
         names = [name for frame in results for name in _frame_columns(frame)]
         assert names.count(MDB_DIRECT) == 1
@@ -534,18 +540,20 @@ class TestRuntimeDefaultMaterializationEndToEnd:
                 assert frame.schema.field(name).type == DataType.to_arrow_type(DataType.INT64)
 
     @pytest.mark.parametrize("direct_first", [True, False], ids=["direct_first", "chained_first"])
-    @pytest.mark.parametrize("pinned", ["one_framework", "direct_pinned_of_two"])
+    @pytest.mark.parametrize("pinned", ["one_framework", "direct_pinned_of_two", "chained_input_pinned_of_two"])
     def test_typed_direct_and_untyped_input_keep_runtime_type_enforcement(
         self, direct_first: bool, pinned: str
     ) -> None:
         two = pinned == "direct_pinned_of_two"
+        chained_two = pinned == "chained_input_pinned_of_two"
         with pytest.raises(DataTypeMismatchError, match=MDB_DIRECT):
             _run_direct_and_chained(
                 [],
-                framework=[PyArrowTable, PythonDictFramework] if two else PythonDictFramework,
+                framework=[PyArrowTable, PythonDictFramework] if two or chained_two else PythonDictFramework,
                 direct_first=direct_first,
                 direct_data_type=DataType.STRING,
                 direct_compute_framework="PyArrowTable" if two else None,
+                chained_input_compute_framework="PyArrowTable" if chained_two else None,
             )
 
     @pytest.mark.parametrize(

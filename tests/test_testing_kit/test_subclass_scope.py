@@ -71,9 +71,12 @@ def make_parent(
     writes_on_match: bool = False,
     rule: set[type[ComputeFramework]] | None = None,
     run_time_parts: bool = False,
+    property_mapping: dict[str, PropertySpec] | None = None,
 ) -> type[FeatureGroup]:
     class ScopeParent(base):  # type: ignore[valid-type, misc]
         DIVERGENCES = divergences
+        if property_mapping is not None:
+            PROPERTY_MAPPING = property_mapping
         if rule is not None:
 
             @classmethod
@@ -115,6 +118,8 @@ def _gated_subclass(
     required_key: str,
     calc: Calc | None = None,
     divergences: tuple[Divergence, ...] = (),
+    presence_only: bool = False,
+    value: str = "x",
 ) -> type[FeatureGroup]:
     class GatedChild(parent):  # type: ignore[valid-type, misc]
         if divergences:
@@ -126,7 +131,10 @@ def _gated_subclass(
         def match_feature_group_criteria(
             cls, feature_name: Any, options: Options, data_access_collection: Any = None
         ) -> bool:
-            if required_key not in options.group and required_key not in options.context:
+            if presence_only:
+                if required_key not in options.group and required_key not in options.context:
+                    return False
+            elif value not in (options.group.get(required_key), options.context.get(required_key)):
                 return False
             return super().match_feature_group_criteria(feature_name, options, data_access_collection)  # type: ignore[no-any-return]
 
@@ -180,6 +188,22 @@ def make_gate_rejects_own_option() -> Pair:
     return parent, _gated_subclass(parent, "other")
 
 
+def make_presence_gated_pair(
+    spec: PropertySpec | None = None, two_keys: bool = False, sub_spec: PropertySpec | None = None
+) -> Pair:
+    parent = make_parent(property_mapping=None if spec is None else {"variant": spec})
+    if two_keys:
+        return parent, _gated_subclass(_gated_subclass(parent, "variant"), "mode", presence_only=True)
+    sub = _gated_subclass(parent, "variant", presence_only=True)
+    if sub_spec is not None:
+
+        class Redeclared(sub):  # type: ignore[valid-type, misc]
+            PROPERTY_MAPPING = {"variant": sub_spec}
+
+        return parent, Redeclared
+    return parent, sub
+
+
 def make_unrelated() -> Pair:
     return make_parent(), make_well_scoped()[1]
 
@@ -229,7 +253,7 @@ def make_request_pair() -> Pair:
         def match_feature_group_criteria(
             cls, feature_name: Any, options: Options, data_access_collection: Any = None
         ) -> bool:
-            return str(feature_name) == "rq_a" and "variant" in options.group
+            return str(feature_name) == "rq_a" and options.group.get("variant") == "x"
 
     return RequestParent, RequestChild
 
@@ -293,6 +317,47 @@ def test_well_scoped_subclass_passes(data: TypedTestData | None) -> None:
     assert result.check == "subclass_scope"
     assert result.subject == sub.__name__
     assert result.failures == ()
+
+
+STRICT_SPEC = PropertySpec("Variant.", allowed_values=("x", "y"), strict_validation=True, default=None)
+
+
+@pytest.mark.parametrize(
+    ("make", "selecting", "phrase", "absent"),
+    [
+        pytest.param(make_presence_gated_pair, SELECTING, "'variant'", "", id="free_form_group"),
+        pytest.param(
+            make_presence_gated_pair, Options(context={"variant": "x"}), "'variant'", "", id="free_form_context"
+        ),
+        pytest.param(
+            functools.partial(make_presence_gated_pair, STRICT_SPEC), SELECTING, "'y'", "", id="strict_allowed_values"
+        ),
+        pytest.param(
+            functools.partial(make_presence_gated_pair, STRICT_SPEC, sub_spec=PropertySpec("Variant.", default=None)),
+            SELECTING,
+            "'y'",
+            "",
+            id="allowed_values_from_parent_spec",
+        ),
+        pytest.param(
+            functools.partial(make_presence_gated_pair, two_keys=True),
+            Options(group={"variant": "x", "mode": "m"}),
+            "'mode'",
+            "'variant'",
+            id="two_keys_only_mode_gated",
+        ),
+    ],
+)
+def test_presence_gated_subclass_steals(
+    make: Callable[[], Pair], selecting: Options, phrase: str, absent: str | None
+) -> None:
+    parent, sub = make()
+    result = check_subclass_scope(sub, parent, selecting)
+    assert not result.passed
+    assert all(f.startswith("steals:") for f in result.failures), result.failures
+    assert phrase in " ".join(result.failures), result.failures
+    if absent:
+        assert absent not in " ".join(result.failures), result.failures
 
 
 @pytest.mark.parametrize(
@@ -777,15 +842,24 @@ def test_allowed_variant_still_compares_through_the_implementation(
     assert not any(n.startswith("values:") for n in result.notes), result.notes
 
 
-def _name_path_pair(default: str | None = None) -> Pair:
+def _name_path_pair(default: str | None = None, key: str = "variant", value: str = "x") -> Pair:
     parent = make_name_path_group(default=default)
-    return parent, _gated_subclass(parent, "variant")
+    return parent, _gated_subclass(parent, key, value=value)
 
 
-@pytest.mark.parametrize("default", [None, "fast"])
-def test_name_path_parent_is_probed_with_the_requested_names_bound(default: str | None) -> None:
-    parent, sub = _name_path_pair(default)
-    result = check_subclass_scope(sub, parent, SELECTING, requests=["x__tt_slow"])
+@pytest.mark.parametrize(
+    ("default", "key", "value", "selecting"),
+    [
+        pytest.param(None, "variant", "x", SELECTING, id="no_default"),
+        pytest.param("fast", "variant", "x", SELECTING, id="default"),
+        pytest.param(None, "mode", "slow", Options(context={"mode": "slow"}), id="selecting_key_is_name_bound"),
+    ],
+)
+def test_name_path_parent_is_probed_with_the_requested_names_bound(
+    default: str | None, key: str, value: str, selecting: Options
+) -> None:
+    parent, sub = _name_path_pair(default, key, value)
+    result = check_subclass_scope(sub, parent, selecting, requests=["x__tt_slow"])
     assert result.passed, result.failures
 
 

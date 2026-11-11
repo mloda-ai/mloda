@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import functools
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from mloda._testing.feature_group_shape import (
+    _UNKNOWN_VALUE,
+    _probe,
     _base_options,
+    _cell_same,
     _first_value,
     _name_bound_keys,
     _availability_reason,
@@ -27,6 +31,7 @@ from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.divergence import Divergence, DivergenceKind, allowed_variants
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field_with_error
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -74,6 +79,42 @@ def _optional_probes(
     return probes
 
 
+def _value_probes(
+    subclass: type[FeatureGroup],
+    parent: type[FeatureGroup],
+    base: Options,
+    selecting: Options,
+    bound: frozenset[str] = frozenset(),
+) -> list[tuple[str, Any, Callable[[], Options]]]:
+    """(key, value, options factory) per selecting key and other value; a fresh Options per call."""
+    reserved = {k.value for k in DefaultOptionKeys}
+    probes: list[tuple[str, Any, Callable[[], Options]]] = []
+    for section in ("group", "context"):
+        for key, chosen in getattr(selecting, section).items():
+            if key in reserved or key in bound:
+                continue
+            found = [(c.PROPERTY_MAPPING or {}).get(key) for c in (subclass, parent)]
+            specs = [f for f in found if isinstance(f, PropertySpec)]
+            allowed = [v for s in specs for v in (s.allowed_values or ())]
+            others = [v for v in allowed if not _cell_same(v, chosen)]
+            values = sorted(
+                {repr(v): v for v in others}.values(),
+                key=repr,
+            )
+            if not specs or not all(s.allowed_values and s.strict_validation for s in specs):
+                values.append(_UNKNOWN_VALUE)
+            for value in values:
+                probes.append((key, value, functools.partial(_replaced, base, selecting, section, key, value)))
+    return probes
+
+
+def _replaced(base: Options, selecting: Options, section: str, key: str, value: Any) -> Options:
+    combined = _combined(base, selecting)
+    sections = {"group": dict(combined.group), "context": dict(combined.context)}
+    sections[section][key] = value
+    return Options(group=sections["group"], context=sections["context"])
+
+
 def _plain_failure(
     name: str,
     options: Options,
@@ -95,6 +136,30 @@ def _plain_failure(
     return f"setup: {parent.__name__} itself does not resolve '{name}' {label}: {message}"
 
 
+def _value_failure(
+    name: str,
+    key: str,
+    value: Any,
+    make: Callable[[], Options],
+    mapping: FeatureGroupEnvironmentMapping,
+    parent: type[FeatureGroup],
+    subclass: type[FeatureGroup],
+) -> list[str]:
+    label = f"with '{key}'={value!r}"
+    result, _, aborted = _evaluate(Feature(name, make()), mapping)
+    if aborted is not None:
+        return [f"setup: matching '{name}' {label} aborted: {aborted}"]
+    found = set(result.identified)
+    if found == {subclass}:
+        alone = _probe(parent, name, make())
+        if alone.aborted is not None:
+            return [f"setup: matching '{name}' on {parent.__name__} {label} aborted: {alone.aborted}"]
+        return [f"steals: '{name}' {label} resolves to {subclass.__name__}"] if alone.matched else []
+    if len(found) > 1:
+        return [f"setup: '{name}' {label} is ambiguous between {', '.join(sorted(c.__name__ for c in found))}"]
+    return []
+
+
 def _scope_failures(
     subclass: type[FeatureGroup],
     parent: type[FeatureGroup],
@@ -109,11 +174,14 @@ def _scope_failures(
         return failures
     label = f"without {sorted(keys)}"
     probes = [("", base), *_optional_probes(parent, base, keys, bound)]
+    value_probes = _value_probes(subclass, parent, base, selecting, bound)
     for name in names:
         for key, options in probes:
             failure = _plain_failure(name, options, f"with option '{key}'" if key else label, mapping, parent, subclass)
             if failure is not None:
                 failures.append(failure)
+        for key, value, make in value_probes:
+            failures += _value_failure(name, key, value, make, mapping, parent, subclass)
         selected, selected_message, aborted = _evaluate(Feature(name, _combined(base, selecting)), mapping)
         if aborted is not None:
             failures.append(f"misses: matching '{name}' with {sorted(keys)} aborted: {aborted}")
@@ -236,7 +304,7 @@ def check_subclass_scope(
     adapter: FrameworkAdapter | None = None,
     require_run: bool = False,
 ) -> CheckResult:
-    """Check subclass replaces parent only with the selecting options; only these two classes are considered.
+    """Check subclass replaces parent only with the selecting options (and values); only these two classes count.
 
     With input_data it also compares the requested output columns with the parent's, in both directions,
     assuming identical row order.

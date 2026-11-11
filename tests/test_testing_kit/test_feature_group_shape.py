@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import pytest
 
@@ -518,6 +518,34 @@ def make_bytes_password_default() -> type[FeatureGroup]:
     return make_secret_group({"conn": PropertySpec("Connection.", default={"password": b"x"})})
 
 
+def _raise_boom(cls: Any) -> Any:
+    raise RuntimeError("boom")
+
+
+_BROKEN_DECLARATIONS: dict[str, tuple[str, Callable[[Any], Any]]] = {
+    "version_empty": ("version", lambda cls: ""),
+    "version_empty_inherited": ("inherited:version", lambda cls: ""),
+    "version_non_str": ("version", lambda cls: 5),
+    "version_raises": ("version", _raise_boom),
+    "rule_set_of_int": ("compute_framework_rule", lambda cls: {int}),
+    "rule_list": ("compute_framework_rule", lambda cls: [PandasDataFrame]),
+    "rule_frozenset": ("compute_framework_rule", lambda cls: frozenset({PandasDataFrame})),
+    "rule_raises": ("compute_framework_rule", _raise_boom),
+}
+
+
+def make_broken_declaration(broken: str) -> type[FeatureGroup]:
+    """A toy group whose version() or compute_framework_rule() is broken; "not_a_group" is no FeatureGroup at all."""
+    if broken == "not_a_group":
+        return cast("type[FeatureGroup]", type("NotAGroup", (), {}))
+    attr, body = _BROKEN_DECLARATIONS[broken]
+    if attr.startswith("inherited:"):
+        middle = type("BrokenMiddle", (make_toy_group(),), {"__module__": __name__, attr[10:]: classmethod(body)})
+        return cast("type[FeatureGroup]", type("BrokenDeclaration", (middle,), {"__module__": __name__}))
+    namespace = {"__module__": __name__, attr: classmethod(body)}
+    return cast("type[FeatureGroup]", type("BrokenDeclaration", (make_toy_group(),), namespace))
+
+
 def make_plural_env_named_key() -> type[FeatureGroup]:
     explanation = "Names the environment variables holding the key."
     return make_secret_group({"pii_key_env": PropertySpec(explanation, default="PII_KEY")})
@@ -578,6 +606,10 @@ def test_undeclared_option_failure_is_named() -> None:
         (make_masked_then_real_secret, "secrets:"),
         (make_bytes_password_default, "secrets:"),
         (make_plural_env_named_key, "secrets:"),
+        *[
+            pytest.param(functools.partial(make_broken_declaration, broken), "declaration:", id=broken)
+            for broken in ("not_a_group", *_BROKEN_DECLARATIONS)
+        ],
     ],
 )
 def test_broken_group_fails_only_its_sub_check(make: Callable[[], type[FeatureGroup]], prefix: str) -> None:
@@ -769,10 +801,14 @@ def test_generator_requests_behave_like_a_list() -> None:
     assert any(f.startswith("names:") and "nonsense" in f for f in result.failures), result.failures
 
 
-def test_string_requests_fail_as_not_a_sequence() -> None:
+@pytest.mark.parametrize("broken", [None, "version_empty"])
+def test_string_requests_fail_as_not_a_sequence(broken: str | None) -> None:
     requests: Any = "x__tt_fast"
-    result = check_feature_group_shape(make_name_path_group(), requests=requests)
+    group = make_name_path_group() if broken is None else make_broken_declaration(broken)
+    result = check_feature_group_shape(group, requests=requests)
     assert any(f.startswith("names:") and "sequence" in f and "string" in f for f in result.failures), result.failures
+    if broken is not None:
+        assert any(f.startswith("declaration:") for f in result.failures), result.failures
 
 
 def test_requests_binding_different_key_sets_fail_with_one_clear_message() -> None:
@@ -792,6 +828,8 @@ def test_requests_binding_different_key_sets_fail_with_one_clear_message() -> No
     assert len(names) == 1, result.failures
     assert "separate" in names[0], names
     assert "is declared but" not in names[0]
+    assert any(n.startswith("declaration: inherited version() raised") for n in result.notes), result.notes
+    assert not any(f.startswith("declaration:") for f in result.failures), result.failures
 
 
 def test_no_requests_keeps_required_option_check_for_declared_name_bound_key() -> None:
@@ -1233,6 +1271,16 @@ def test_framework_excluded_by_rule_notes_run_skipped() -> None:
     result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
     assert result.failures == (), result.failures
     assert "run: PythonDictFramework excluded by compute_framework_rule" in result.notes, result.notes
+
+
+@pytest.mark.parametrize("broken", ["rule_set_of_int", "rule_list", "rule_frozenset", "rule_raises"])
+def test_malformed_rule_skips_run_with_declaration_failure(broken: str) -> None:
+    group = make_broken_declaration(broken)
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PythonDictAdapter())
+    assert any(f.startswith("declaration:") and "compute_framework_rule" in f for f in result.failures), result.failures
+    assert "run: not run (compute_framework_rule is malformed)" in result.notes, result.notes
+    if broken == "rule_list":
+        assert any("got list" in f for f in result.failures), result.failures
 
 
 def test_unavailable_adapter_notes_run_skipped() -> None:

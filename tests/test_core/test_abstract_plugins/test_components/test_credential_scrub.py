@@ -1347,6 +1347,14 @@ def test_slash_password_host_repeat_scrubs_fast() -> None:
         (lambda k: "s3://b/x]" + ";" * k, 40_000, "a semicolon run after a mid-path closer"),
         (lambda k: "s3://b/x]" + ":" * k, 40_000, "a colon run after a mid-path closer"),
         (lambda k: "jdbc:sqlserver://b;x" + " = a" * k, 40_000, "repeated spaced jdbc pairs"),
+        (lambda k: "jdbc:sqlserver://b;x" + " = 'a" * k, 20_000, "repeated spaced open quotes"),
+        (lambda k: "jdbc:sqlserver://b;x" + " = {a" * k, 20_000, "repeated spaced open braces"),
+        (lambda k: "jdbc:sqlserver://b;x" + " = 'a" * k + "://", 20_000, "repeated spaced open quotes then scheme"),
+        (lambda k: "jdbc:sqlserver://b;x" + " = {a" * k + "://", 20_000, "repeated spaced open braces then scheme"),
+        (lambda k: "jdbc:sqlserver://b;x" + "='a" * k, 20_000, "repeated unspaced open quotes"),
+        (lambda k: "s3://b/x]" + "%3B" * k, 20_000, "an encoded semicolon run after a mid-path closer"),
+        (lambda k: "s3://b/x]" + "%25" * k, 20_000, "an encoded percent run after a mid-path closer"),
+        (lambda k: "s3://b/x]" + "%3B%0A" * k, 20_000, "an encoded semicolon newline run after a mid-path closer"),
     ],
     ids=[
         "dotted_prefix",
@@ -1360,6 +1368,14 @@ def test_slash_password_host_repeat_scrubs_fast() -> None:
         "mid_path_closer_semicolon_run",
         "mid_path_closer_colon_run",
         "spaced_jdbc_pairs_run",
+        "spaced_jdbc_open_quote_run",
+        "spaced_jdbc_open_brace_run",
+        "spaced_jdbc_open_quote_run_scheme",
+        "spaced_jdbc_open_brace_run_scheme",
+        "unspaced_jdbc_open_quote_run",
+        "mid_path_closer_encoded_semicolon_run",
+        "mid_path_closer_encoded_percent_run",
+        "mid_path_closer_encoded_semicolon_newline_run",
     ],
 )
 def test_dotted_and_multiline_inputs_scrub_fast(build: Callable[[int], str], n: int, what: str) -> None:
@@ -2317,6 +2333,75 @@ class TestScrubUriProjection:
             pytest.param("see 's3://b/x.csv'? yes", "see 's3://b/x.csv'? yes", id="closing-quote-question-prose-kept"),
             pytest.param("[s3://b/x.csv]: note", "[s3://b/x.csv]: note", id="closing-bracket-colon-prose-kept"),
             pytest.param('"s3://b/x.csv"#1', '"s3://b/x.csv"#1', id="closing-quote-hash-prose-kept"),
+            pytest.param(
+                "jdbc:mysql://h/db?password = SECRETVALUE", "jdbc:mysql://h/db", id="spaced-query-password-cut"
+            ),
+            pytest.param(
+                "jdbc:sqlserver://b;password={ZQXA ZQXB}",
+                "jdbc:sqlserver://b",
+                id="spaced-brace-value-cut-no-trailing-brace",
+            ),
+            pytest.param(
+                "jdbc:sqlserver://b;password = 'ZQXA ZQXB'",
+                "jdbc:sqlserver://b",
+                id="spaced-quoted-value-cut-no-trailing-quote",
+            ),
+            pytest.param(
+                "jdbc:sqlserver://b;password={ZQXA ZQXB};encrypt=true next",
+                "jdbc:sqlserver://b next",
+                id="spaced-brace-value-then-param-cut",
+            ),
+            pytest.param(
+                "jdbc:mysql://h/db?password = 'ZQXA ZQXB' next",
+                "jdbc:mysql://h/db next",
+                id="spaced-query-quoted-value-cut",
+            ),
+            pytest.param(
+                "jdbc:sqlserver://b;password={A}}B C} next",
+                "jdbc:sqlserver://b next",
+                id="jdbc-brace-escape-with-space-cut",
+            ),
+            pytest.param(
+                "jdbc:sqlserver://b;password={A B", "jdbc:sqlserver://b", id="jdbc-unclosed-brace-with-space-cut"
+            ),
+            pytest.param(
+                "jdbc:sqlserver://b;password = 'A B", "jdbc:sqlserver://b", id="jdbc-unclosed-quote-with-space-cut"
+            ),
+            pytest.param("jdbc:mysql://h/db?x=1 = 2", "jdbc:mysql://h/db", id="jdbc-spaced-equals-over-cut"),
+            pytest.param("s3://b/x]y;SECRETVALUE", "s3://b/x", id="mid-path-closer-bare-semicolon-region-cut"),
+            pytest.param("s3://b/x]y%3Bv=SECRETVALUE", "s3://b/x", id="mid-path-closer-encoded-semicolon-region-cut"),
+            pytest.param(
+                "jdbc:mysql://h/db?ssl=true is down", "jdbc:mysql://h/db is down", id="jdbc-query-prose-after-kept"
+            ),
+            pytest.param(
+                "jdbc:postgresql://h/db = x", "jdbc:postgresql://h/db = x", id="jdbc-no-param-spaced-equals-kept"
+            ),
+            pytest.param(
+                "jdbc:sqlserver://b;password={X} connected ok",
+                "jdbc:sqlserver://b connected ok",
+                id="jdbc-brace-value-prose-after-kept",
+            ),
+            pytest.param(
+                "{'url': 'jdbc:postgresql://h/db;a=', 'password': 'sec'}",
+                "{'url': 'jdbc:postgresql://h', 'password': '***'}",
+                id="jdbc-dict-repr-single-quoted-masked",
+            ),
+            pytest.param(
+                '{"url": "jdbc:postgresql://h/db;a=", "password": "sec"}',
+                '{"url": "jdbc:postgresql://h", "password": "***"}',
+                id="jdbc-dict-repr-double-quoted-masked",
+            ),
+            pytest.param(
+                '{"url":"jdbc:postgresql://h/db;a=","password":"sec"}',
+                '{"url":"jdbc:postgresql://h"}',
+                id="jdbc-json-compact-password-dropped",
+            ),
+            pytest.param("s3://b/x]y%20z", "s3://b/x]y%20z", id="mid-path-closer-encoded-space-kept"),
+            pytest.param("s3://b/x];", "s3://b/x];", id="mid-path-closer-trailing-semicolon-kept"),
+            pytest.param("s3://b/x]; ok", "s3://b/x]; ok", id="mid-path-closer-semicolon-prose-kept"),
+            pytest.param(
+                "path s3://b/x] ; ok", "path s3://b/x] ; ok", id="mid-path-closer-spaced-semicolon-prose-kept"
+            ),
         ],
     )
     def test_scrub_keeps_host_and_path_only(self, uri: str, expected: str) -> None:
@@ -2518,6 +2603,45 @@ class TestScrubUriFailClosed:
             pytest.param('s3://b/x"y#SECRETVALUE', "SECRETVALUE", id="mid-path-double-quote-fragment-region"),
             pytest.param("s3://b/x]y:k=SECRETVALUE", "SECRETVALUE", id="mid-path-close-bracket-colon-region"),
             pytest.param("s3://b/x]y/a:k=SECRETVALUE", "SECRETVALUE", id="mid-path-close-bracket-colon-region-segment"),
+            pytest.param("jdbc:mysql://h/db?password = SECRETVALUE", "SECRETVALUE", id="jdbc-spaced-query-password"),
+            pytest.param(
+                "jdbc:mysql://h/db?password= SECRETVALUE", "SECRETVALUE", id="jdbc-query-password-space-after-equals"
+            ),
+            pytest.param("jdbc:sqlserver://b;password={ZQXA ZQXB}", "ZQXB", id="jdbc-brace-value-with-space"),
+            pytest.param("jdbc:sqlserver://b;password = 'ZQXA ZQXB'", "ZQXB", id="jdbc-spaced-quoted-value-with-space"),
+            pytest.param("jdbc:sqlserver://b;password='ZQXA ZQXB'", "ZQXB", id="jdbc-quoted-value-with-space"),
+            pytest.param(
+                'jdbc:sqlserver://b;password="ZQXA ZQXB";encrypt=true', "ZQXB", id="jdbc-double-quoted-value-with-space"
+            ),
+            pytest.param("jdbc:sqlserver://b;password = {ZQXA ZQXB}", "ZQXB", id="jdbc-spaced-brace-value-with-space"),
+            pytest.param("jdbc:mysql://h/db#password = SECRETVALUE", "SECRETVALUE", id="jdbc-spaced-fragment-password"),
+            pytest.param(
+                "jdbc:mysql://h?password = SECRETVALUE", "SECRETVALUE", id="jdbc-bare-host-spaced-query-password"
+            ),
+            pytest.param("jdbc:mysql://h/db?password='ZQXA ZQXB'", "ZQXB", id="jdbc-query-quoted-value-with-space"),
+            pytest.param(
+                "jdbc:mysql://h/db?user=u&password= 'ZQXA ZQXB'", "ZQXB", id="jdbc-ampersand-spaced-quoted-value"
+            ),
+            pytest.param("s3://b/x]y;SECRETVALUE", "SECRETVALUE", id="mid-path-close-bracket-bare-semicolon-region"),
+            pytest.param(
+                "s3://b/x]y%3Bv=SECRETVALUE", "SECRETVALUE", id="mid-path-close-bracket-encoded-semicolon-region"
+            ),
+            pytest.param(
+                "s3://b/x]y%253Bv=SECRETVALUE",
+                "SECRETVALUE",
+                id="mid-path-close-bracket-double-encoded-semicolon-region",
+            ),
+            pytest.param("s3://b/x]y%3Fv=SECRETVALUE", "SECRETVALUE", id="mid-path-close-bracket-encoded-query-region"),
+            pytest.param(
+                "s3://b/x]y%23SECRETVALUE", "SECRETVALUE", id="mid-path-close-bracket-encoded-fragment-region"
+            ),
+            pytest.param(
+                "s3://b/x]y%3B%0ASECRETVALUE",
+                "SECRETVALUE",
+                id="mid-path-close-bracket-encoded-semicolon-newline-region",
+            ),
+            pytest.param("s3://b/x'y%3Bv=SECRETVALUE", "SECRETVALUE", id="mid-path-quote-encoded-semicolon-region"),
+            pytest.param("s3://b/x<y;SECRETVALUE", "SECRETVALUE", id="mid-path-lt-bare-semicolon-region"),
         ],
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:

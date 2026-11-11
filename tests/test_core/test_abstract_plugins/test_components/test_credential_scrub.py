@@ -1192,6 +1192,21 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
         repr(json.dumps({"api_key": ["a", "S3CR3T"], "user": "bob"})),
         repr(json.dumps({"api_key": "***", "user": "bob"})),
     ),
+    (
+        "esclvl_carried_later_item_dquote_then_brace",
+        repr(json.dumps({"password": ['x"y', '"} S3CR3Tq9'], "user": "bob", "token": "Z7xW4kq2"})),
+        repr(json.dumps({"password": "***", "user": "bob", "token": "***"})),
+    ),
+    (
+        "esclvl_carried_later_item_dquote_then_bracket",
+        repr(json.dumps({"password": ['x"y', '"] S3CR3Tq9'], "user": "bob", "token": "Z7xW4kq2"})),
+        repr(json.dumps({"password": "***", "user": "bob", "token": "***"})),
+    ),
+    (
+        "esclvl_carried_both_quote_kinds_first_item",
+        repr(json.dumps({"api_key": ["a'b\"c", '"} S3CR3Tq9'], "user": "bob"})),
+        repr(json.dumps({"api_key": "***", "user": "bob"})),
+    ),
 ]
 
 

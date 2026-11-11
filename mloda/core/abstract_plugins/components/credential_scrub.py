@@ -210,10 +210,10 @@ def _string_end(text: str, start: int, extra: int = 0, strict: bool = False) -> 
     return size, False, True
 
 
-def _chosen_end(text: str, start: int) -> tuple[int, bool, int]:
+def _chosen_end(text: str, start: int, floor: int = 0) -> tuple[int, bool, int]:
     """(end, closed, extra): the first escape-level reading with a consistent close, never ending short of any scan."""
     reached = start
-    for extra in (0, 1, 2):
+    for extra in (floor,) + tuple(e for e in (0, 1, 2) if e != floor):
         end, closed, consistent = _string_end(text, start, extra, True)
         reached = max(reached, end)
         if consistent:
@@ -233,6 +233,7 @@ def _container_end(text: str, opener: int, key_indent: int) -> tuple[int, bool]:
     items = False
     seen_newline = False
     deeper = False
+    level = 0
     i = opener
     while i < size:
         char = text[i]
@@ -241,14 +242,16 @@ def _container_end(text: str, opener: int, key_indent: int) -> tuple[int, bool]:
             while j < size and text[j] == "\\":
                 j += 1
             if j < size and text[j] in "'\"":
-                i, _, extra = _chosen_end(text, i)
+                i, _, extra = _chosen_end(text, i, level)
                 deeper = deeper or extra > 0
+                level = max(level, extra)
             else:
                 i = j
             continue
         if char in "'\"":
-            i, _, extra = _chosen_end(text, i)
+            i, _, extra = _chosen_end(text, i, level)
             deeper = deeper or extra > 0
+            level = max(level, extra)
             continue
         if char in "[{(":
             stack.append(char)

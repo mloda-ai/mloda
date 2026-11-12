@@ -25,6 +25,7 @@ from mloda.core.abstract_plugins.components.divergence import MAX_DOCS_LENGTH, d
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation_pin_error import VariantBlockedPinError
+from mloda.core.prepare.input_chain import eliminated_input_names
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.interfaces.service.catalog import MAX_DESCRIPTION_LENGTH, Catalog, plugin_collector_for, sanitize_text
 from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig
@@ -511,6 +512,7 @@ class Planner:
             *([diagnosis.feature_name] if diagnosis.feature_name is not None else []),
             *diagnosis.resolving_path,
             *(r.feature_name for r in diagnosis.records),
+            *(eliminated_input_names(diagnosis.failed_result) if diagnosis.failed_result is not None else ()),
         ]
         return self._denied([("/features", n) for n in dict.fromkeys(names)])
 

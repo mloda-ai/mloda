@@ -295,6 +295,15 @@ class InputChainOutcome:
     pending: frozenset[Hashable] = frozenset()
     variants: tuple[str, ...] = ()
     allow_variants: tuple[str, ...] = ()
+    # Siblings before a failure are kept so the names do not depend on whether an earlier input resolved.
+    inputs: tuple[str, ...] = ()
+
+
+def eliminated_input_names(result: EvaluationResult) -> tuple[str, ...]:
+    """The input names every eliminated candidate visited, only when no candidate survived."""
+    if result.failure_kind != "none":
+        return ()
+    return tuple(dict.fromkeys(name for elimination in result.eliminations.values() for name in elimination.inputs))
 
 
 def input_variant_block(result: EvaluationResult) -> tuple[tuple[str, ...], tuple[str, ...]]:

@@ -79,6 +79,18 @@ def test_two_hop_failure_selects_the_candidate_whose_whole_chain_resolves() -> N
     assert result.eliminations[ChainA2320].stage == "inputs"
     assert MIDDLE in result.eliminations[ChainA2320].reason
     assert MISSING in result.eliminations[ChainA2320].reason
+    assert result.eliminations[ChainA2320].inputs == (MIDDLE, MISSING)
+
+
+def test_a_resolved_sibling_before_the_failing_input_stays_in_the_visited_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ChainA2320, "INPUTS", (LEAF, MISSING))
+
+    result = result_for(prepare_chain(GROUPS).resolution_report())
+
+    assert set(result.identified) == {ChainB2320}
+    assert result.eliminations[ChainA2320].inputs == (LEAF, MISSING)
 
 
 def test_a_sole_candidate_still_fails_at_the_missing_dependency() -> None:
@@ -94,9 +106,12 @@ def test_all_failed_chains_report_each_candidate_and_failing_input() -> None:
 
     error = caught.value
     assert error.result.failure_kind == "none"
+    assert error.result.eliminations[ChainA2320].inputs == (MIDDLE, MISSING)
+    assert error.result.eliminations[ChainC2320].inputs == (OTHER_MISSING,)
     for candidate, missing in ((ChainA2320, MISSING), (ChainC2320, OTHER_MISSING)):
         assert error.result.eliminations[candidate].stage == "inputs"
         assert missing in error.result.eliminations[candidate].reason
+        assert missing in error.result.eliminations[candidate].inputs
         assert candidate.__name__ in str(error)
 
 

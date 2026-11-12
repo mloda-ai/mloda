@@ -180,7 +180,8 @@ class ResolveImplementationPins:
                 else ()
             )
             if found:
-                target = f"the options of {request}" if request else "the feature's options"
+                advised = resolving_path[0] if resolving_path else request
+                target = f"the options of {advised}" if advised else "the feature's options"
                 reason = variant_block_reason(group, {fw: found}, {fw: served}, feature.options, target)
                 raise VariantBlockedPinError(
                     f"Step {feature.name} pins implementation {impl.__name__}: {reason}",

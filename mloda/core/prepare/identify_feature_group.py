@@ -1294,6 +1294,7 @@ class IdentifyFeatureGroupClass:
                     outcome.reason,
                     variants=outcome.variants,
                     allow_variants=outcome.allow_variants,
+                    inputs=outcome.inputs,
                 )
                 self._input_refusals[feature_group] = outcome.refusals
 
@@ -1365,12 +1366,14 @@ class IdentifyFeatureGroupClass:
                     LinkValidator.validate_links(links)
                 pending: set[Any] = set()
                 outcome = InputChainOutcome(True, True)
+                visited: list[str] = []
                 for input_feature in inputs:
                     input_feature.options.lock_own_keys()
                     input_feature.resolving_consumer = feature_group.get_class_name()
                     # Relative paths belong to the candidate, not the outer request that first filled the memo.
                     input_feature.resolving_path = (str(attempted.name),)
                     child = self._probe_input(input_feature, links)
+                    visited.extend((str(input_feature.name), *child.inputs))
                     if not child.viable:
                         outcome = InputChainOutcome(
                             False,
@@ -1379,11 +1382,12 @@ class IdentifyFeatureGroupClass:
                             child.refusals,
                             variants=child.variants,
                             allow_variants=child.allow_variants,
+                            inputs=tuple(dict.fromkeys(visited)),
                         )
                         break
                     pending.update(child.pending)
                 if outcome.viable:
-                    outcome = replace(outcome, pending=frozenset(pending))
+                    outcome = replace(outcome, pending=frozenset(pending), inputs=tuple(dict.fromkeys(visited)))
         finally:
             state.active.remove(key)
             state.active_features[feature_key].remove(key)
@@ -1464,11 +1468,14 @@ class IdentifyFeatureGroupClass:
         *,
         variants: tuple[str, ...] = (),
         allow_variants: tuple[str, ...] = (),
+        inputs: tuple[str, ...] = (),
     ) -> None:
         """Record the first gate a non-winning name-matching candidate failed; one entry per candidate."""
         self._eliminations.setdefault(
             feature_group,
-            Elimination(stage=stage, reason=reason, code=code, variants=variants, allow_variants=allow_variants),
+            Elimination(
+                stage=stage, reason=reason, code=code, variants=variants, allow_variants=allow_variants, inputs=inputs
+            ),
         )
 
     def _value_rejection(self, feature_group: type[FeatureGroup]) -> MatchRejection | None:

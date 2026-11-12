@@ -969,6 +969,25 @@ class TestEliminationStages:
         assert input_variant_block(multiple) == ((), ())
         assert input_variant_block(abstract_only) == ((), ())
 
+    def test_eliminated_input_names_are_reported_only_when_every_candidate_failed(self) -> None:
+        from mloda.core.prepare.input_chain import eliminated_input_names
+
+        def failed(*names: str) -> Elimination:
+            return Elimination(stage="inputs", reason="r", inputs=names)
+
+        none = EvaluationResult(
+            identified={}, eliminations={ElimSortAFG011: failed("x", "y"), ElimSortBFG011: failed("y", "z")}
+        )
+        multiple = EvaluationResult(
+            identified={ElimSortAFG011: set(), ElimSortBFG011: set()},
+            eliminations={ElimSuccessFG011: failed("x")},
+        )
+        abstract_only = EvaluationResult(identified={}, abstract_matched={ElimSortAFG011})
+
+        assert eliminated_input_names(none) == ("x", "y", "z")
+        assert eliminated_input_names(multiple) == ()
+        assert eliminated_input_names(abstract_only) == ()
+
     def test_links_stage(self) -> None:
         feature = Feature(LINKS_FEATURE)
         plugins: FeatureGroupEnvironmentMapping = {ElimLinksFG011: {ElimFwOne011}}

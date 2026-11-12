@@ -64,6 +64,8 @@ class Elimination:
     # Filled by the "variant" stage, and by an "inputs" stage whose input is blocked by an unallowed variant.
     variants: tuple[str, ...] = ()
     allow_variants: tuple[str, ...] = ()
+    # Filled by the "inputs" stage: the input names its probe visited.
+    inputs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -595,6 +595,8 @@ class TestFileSourceUriProjection:
             ("s3://b/token=SE::c1::c2::c3::c4::s3://c/x{s}", "s3://b/token=***//c/x{s}"),  # nosec B105
             ("s3://b/x]y;v=SECRET/z{s}", "s3://b/x]y;***/z{s}"),  # nosec B105
             ("s3://b/x'y;v=SECRET/z{s}", "s3://b/x'y;***/z{s}"),  # nosec B105
+            ("s3://b/pwd=''x/y{s}", "s3://b/pwd=***/y{s}"),  # nosec B105
+            ("s3://b/password='a b'x/y{s}", "s3://b/password=***/y{s}"),  # nosec B105
         ],
         ids=[
             "slash-in-password",
@@ -685,6 +687,8 @@ class TestFileSourceUriProjection:
             "key-value-long-protocol-run-fails-closed",
             "mid-path-close-bracket-param-region",
             "mid-path-quote-param-region",
+            "key-value-opening-quote-run",
+            "key-value-quoted-value-glued",
         ],
     )
     def test_uri_projection(self, template: str, expected: str) -> None:

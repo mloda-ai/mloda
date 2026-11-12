@@ -18,6 +18,7 @@ leak into another module's candidate universe in the parallel suite.
 
 import dataclasses
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 import pandas as pd
@@ -27,7 +28,15 @@ import pytest
 # ``mloda`` mlodaAPI alias imported below.
 import mloda.steward as mloda_steward
 import mloda.user as mloda_user
-from mloda.core.prepare.identify_feature_group import FeatureResolutionError
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourcePointerError
+from mloda.core.api.request import SetupConfigurationError
+from mloda.core.prepare.accessible_plugins import (
+    EnvironmentPreconditionError,
+    FrameworkDeclarationError,
+    RedefinitionConflictError,
+)
+from mloda.core.prepare.identify_feature_group import ComputeFrameworkPinError, FeatureResolutionError
 from mloda.core.prepare.resolution_types import (
     EvaluationResult,
     ResolutionDiagnosis,
@@ -412,3 +421,90 @@ class TestDiagnoseEmptyRequest:
         assert diagnosis.feature_name is None
         assert diagnosis.failed_result is None
         assert diagnosis.message is None
+
+
+# ---------------------------------------------------------------------------
+# diagnose() scrubs its published message at one exit
+# ---------------------------------------------------------------------------
+
+# The five monkeypatched cases test the exit directly (their real raise sites already run inside the
+# session's redaction); only `setup` is a real pre-fix leak.
+DIAGNOSE_SECRET_812 = "diagnose_secret_812_value"  # nosec B105
+
+
+def _secret_collection() -> DataAccessCollection:
+    return DataAccessCollection(credentials={"vault": {"token": DIAGNOSE_SECRET_812}})
+
+
+def _raising_plan(exc: Exception) -> Any:
+    def _raise(self: Any, *args: Any, **kwargs: Any) -> Any:
+        raise exc
+
+    return _raise
+
+
+_PLAN_ERRORS_812: dict[str, Callable[[], Exception]] = {
+    "pin": lambda: ComputeFrameworkPinError(f"pin {DIAGNOSE_SECRET_812}"),
+    "source_pointer": lambda: SourcePointerError(f"pointer {DIAGNOSE_SECRET_812}"),
+    "redefinition": lambda: RedefinitionConflictError(f"redefined {DIAGNOSE_SECRET_812}"),
+    "framework_declaration": lambda: FrameworkDeclarationError("m:C", ValueError(f"boom {DIAGNOSE_SECRET_812}")),
+    "environment_precondition": lambda: EnvironmentPreconditionError(f"env {DIAGNOSE_SECRET_812}"),
+}
+
+
+def _diagnose_branch_812(branch: str, monkeypatch: pytest.MonkeyPatch, dac: DataAccessCollection | None) -> Any:
+    features: list[Feature | str] = _success_features()
+    extra: dict[str, Any] = {}
+    if branch == "setup":
+        extra["column_ordering"] = DIAGNOSE_SECRET_812
+    elif branch == "resolution":
+        features = [DIAGNOSE_SECRET_812]
+    else:
+        monkeypatch.setattr(mlodaAPI, "_plan", _raising_plan(_PLAN_ERRORS_812[branch]()))
+    return mloda.diagnose(
+        features,
+        compute_frameworks=[PandasDataFrame],
+        plugin_collector=_DIAGNOSE_PLUGINS,
+        data_access_collection=dac,
+        **extra,
+    )
+
+
+_BRANCHES_812 = ["setup", "resolution", *_PLAN_ERRORS_812]
+
+
+class TestDiagnoseScrubsMessage:
+    """Every diagnose branch masks registered secrets in the message; without registration it stays verbatim."""
+
+    @pytest.mark.parametrize("branch", _BRANCHES_812)
+    def test_registered_secret_is_masked(self, branch: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        diagnosis = _diagnose_branch_812(branch, monkeypatch, _secret_collection())
+
+        assert diagnosis.complete is False
+        assert diagnosis.message is not None
+        assert DIAGNOSE_SECRET_812 not in diagnosis.message
+        assert "***" in diagnosis.message
+
+    @pytest.mark.parametrize("branch", _BRANCHES_812)
+    def test_unregistered_secret_is_kept(self, branch: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        diagnosis = _diagnose_branch_812(branch, monkeypatch, None)
+
+        assert diagnosis.message is not None
+        if branch in _PLAN_ERRORS_812:
+            assert diagnosis.message == str(_PLAN_ERRORS_812[branch]())
+        else:
+            assert DIAGNOSE_SECRET_812 in diagnosis.message
+
+    def test_credential_shaped_text_is_masked_without_collection(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        exc = SetupConfigurationError("bad url postgres://alice:hunter2pass@db.example/x")
+        monkeypatch.setattr(mlodaAPI, "_plan", _raising_plan(exc))
+
+        diagnosis = mloda.diagnose(
+            _success_features(),
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_DIAGNOSE_PLUGINS,
+            data_access_collection=None,
+        )
+
+        assert diagnosis.message is not None
+        assert "hunter2pass" not in diagnosis.message

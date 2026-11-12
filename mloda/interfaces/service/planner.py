@@ -65,9 +65,17 @@ ROWS_RETURNED_NOTE = "Rows returned depend on filters and joins; they are known 
 _SEGMENT = re.compile(r"[A-Za-z0-9_-]+")
 _PAYLOAD_KEYS = frozenset({"kid", "req", "digest", "cfg", "sub", "exp"})
 _TOO_LARGE_MESSAGE = "The request is too large for a plan id."
+
+
 _DENIED_MESSAGE = "This feature is not available under the service policy."
 _UNPLANNABLE_MESSAGE = "The request cannot be planned under the service policy and sources."
 _WITHHELD_FILTER_MESSAGE = "Filters on columns the preview withholds are refused; row counts would reveal their values."
+
+
+def _root_pointer(root: str, names: Sequence[str]) -> tuple[str, str]:
+    if root in names:
+        return f"/features/{names.index(root)}", f"'{sanitize_text(root, MAX_NAME_LENGTH)}'"
+    return "/features", "a requested feature"
 
 
 def _b64(data: bytes) -> str:
@@ -298,11 +306,13 @@ class Planner:
                     failure = error
         except Exception as error:
             if isinstance(error, VariantBlockedPinError):
-                shown = sanitize_text(error.feature, MAX_NAME_LENGTH)
-                path = (
-                    f"/features/{request_names.index(error.feature)}" if error.feature in request_names else "/features"
+                denied = self._denied([("/features", n) for n in error.planned_names])
+                if denied is not None:
+                    return denied
+                path, owner = _root_pointer(
+                    error.resolving_path[0] if error.resolving_path else error.feature, request_names
                 )
-                subject = f"One of the inputs of '{shown}' (pinned to an implementation that follows a rule variant)"
+                subject = f"One of the inputs of {owner} (pinned to an implementation that follows a rule variant)"
                 detail = self._variant_detail(
                     path,
                     subject,
@@ -496,6 +506,14 @@ class Planner:
         ]
         return error_result("policy_denied", _DENIED_MESSAGE, details, **extra)
 
+    def _denied_diagnosis(self, diagnosis: ResolutionDiagnosis) -> dict[str, Any] | None:
+        names = [
+            *([diagnosis.feature_name] if diagnosis.feature_name is not None else []),
+            *diagnosis.resolving_path,
+            *(r.feature_name for r in diagnosis.records),
+        ]
+        return self._denied([("/features", n) for n in dict.fromkeys(names)])
+
     def _unresolved(
         self,
         diagnosis: ResolutionDiagnosis,
@@ -503,6 +521,10 @@ class Planner:
         sources: Mapping[str, SourceConfig],
         in_sources: Sequence[tuple[str, str]],
     ) -> dict[str, Any]:
+        # The same answer whether or not a source has the denied column.
+        denied = self._denied_diagnosis(diagnosis)
+        if denied is not None:
+            return denied
         name = diagnosis.feature_name
         if name is None:
             # The core message may name configured paths, so it is never forwarded.
@@ -516,9 +538,7 @@ class Planner:
         inputs_subject = f"One of the inputs of '{shown}'"
         root_path, root_subject = path, inputs_subject
         if diagnosis.resolving_path:
-            root = diagnosis.resolving_path[0]
-            root_path = f"/features/{names.index(root)}" if root in names else "/features"
-            owner = f"'{sanitize_text(root, MAX_NAME_LENGTH)}'" if root in names else "a requested feature"
+            root_path, owner = _root_pointer(diagnosis.resolving_path[0], names)
             root_subject = f"One of the inputs of {owner}"
         failed = diagnosis.failed_result
         if failed is not None and failed.failure_kind == "none":

@@ -1255,18 +1255,29 @@ class TestPlanStepVariantAllowOption:
         )
         assert advice in str(caught.value)
 
-    def test_a_chained_pin_error_carries_the_variant_block_attributes(self) -> None:
+    @pytest.mark.parametrize("input_pin", [False, True], ids=["root_pin", "input_pin"])
+    def test_a_chained_pin_error_carries_the_variant_block_attributes(self, input_pin: bool) -> None:
         from mloda.core.abstract_plugins.implementation_pin_error import VariantBlockedPinError
 
         toy = importlib.import_module(self.TOY)
         with pytest.raises(VariantBlockedPinError) as caught:
-            self._chained_pin("OpToyVariantOpenConsumerFG", toy.OPTOY_VARIANT_OPEN_CONSUMER)
+            if input_pin:
+                self._explain_group(
+                    "OpToyVariantFG,OpToyVariantOpenConsumerFG,OpToyVariantPinRootFG", toy.OPTOY_VARIANT_PIN_ROOT
+                )
+            else:
+                self._chained_pin("OpToyVariantOpenConsumerFG", toy.OPTOY_VARIANT_OPEN_CONSUMER)
 
         assert isinstance(caught.value, ImplementationPinError)
         assert caught.value.feature == toy.OPTOY_VARIANT_OPEN_CONSUMER
+        assert caught.value.resolving_path == ((toy.OPTOY_VARIANT_PIN_ROOT,) if input_pin else ())
         assert caught.value.feature_group == "OpToyVariantFG"
         assert caught.value.variants == (toy.OPTOY_VARIANT,)
         assert caught.value.allow_variants == (toy.OPTOY_VARIANT,)
+        requested = toy.OPTOY_VARIANT_PIN_ROOT if input_pin else toy.OPTOY_VARIANT_OPEN_CONSUMER
+        assert {requested, toy.OPTOY_VARIANT_OPEN_CONSUMER, toy.OPTOY_VARIANT_FEATURE} <= set(
+            caught.value.planned_names
+        )
 
     def test_diagnose_on_a_consumer_over_a_blocked_input_reports_the_resolving_path(self) -> None:
         toy = importlib.import_module(self.TOY)

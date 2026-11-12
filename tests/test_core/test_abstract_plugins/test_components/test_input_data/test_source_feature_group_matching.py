@@ -1434,6 +1434,19 @@ class _SearchedAndEmptyOptionRouteFG(ToyDeclaredFG):
         return super().find_sources(route, feature_name, options, data_access_collection)
 
 
+class _PluralRequiredOptionFG(ToyDeclaredFG):
+    """Two option-gated routes used to pin plural missing-option diagnostics."""
+
+    PROPERTY_MAPPING: ClassVar[dict[str, Any]] = {
+        "toyfmt_first": PropertySpec(explanation="first gate"),
+        "toyfmt_second": PropertySpec(explanation="second gate"),
+    }
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
+        ClaimRoute("toy", NamePolicy.DECLARED, False, required_options=("toyfmt_first",)),
+        ClaimRoute("toy", NamePolicy.DECLARED, False, required_options=("toyfmt_second",)),
+    )
+
+
 class TestUnpointedDeclaredNamesDeclineWithReason:
     @pytest.mark.parametrize("name", TestDeclaredNames.CLAIMED)
     @pytest.mark.parametrize("dac", [None, foreign_dac()], ids=["no_collection", "foreign_collection"])
@@ -1508,6 +1521,15 @@ class TestUnpointedDeclaredNamesDeclineWithReason:
             "ToyDeclaredFG (input data): ToyDeclaredFG found no source serving 'toyfmt_declared_col'"
             " [code: source_not_found]"
         ) in str(exc_info.value)
+
+    def test_missing_multiple_route_options_are_sorted_and_pluralized(self) -> None:
+        result = _identify(Feature("toyfmt_declared_col"), None, _PluralRequiredOptionFG)
+
+        assert result.identified == {}
+        elimination = result.eliminations[_PluralRequiredOptionFG]
+        assert elimination.reason == (
+            "_PluralRequiredOptionFG needs the options 'toyfmt_first', 'toyfmt_second' for 'toyfmt_declared_col'"
+        )
 
 
 class _AbstractRouted(SourceFeatureGroup):

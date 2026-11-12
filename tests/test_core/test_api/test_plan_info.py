@@ -1245,15 +1245,22 @@ class TestPlanStepVariantAllowOption:
     def _chained_pin(self, group: str, name: str, **kwargs: Any) -> list[PlanStep]:
         return self._explain_group(f"OpToyVariantFG,{group}", name, **kwargs, implementation="OpToyVariantPandas")
 
-    def test_a_chained_pin_on_the_variant_implementation_fails_with_the_copyable_line(self) -> None:
+    _PIN_ROOT_GROUPS = "OpToyVariantFG,OpToyVariantOpenConsumerFG,OpToyVariantPinRootFG"
+
+    @pytest.mark.parametrize("input_pin", [False, True], ids=["root_pin", "input_pin"])
+    def test_a_chained_pin_on_the_variant_implementation_fails_with_the_copyable_line(self, input_pin: bool) -> None:
         toy = importlib.import_module(self.TOY)
         with pytest.raises(ImplementationPinError) as caught:
-            self._chained_pin("OpToyVariantOpenConsumerFG", toy.OPTOY_VARIANT_OPEN_CONSUMER)
+            if input_pin:
+                self._explain_group(self._PIN_ROOT_GROUPS, toy.OPTOY_VARIANT_PIN_ROOT)
+            else:
+                self._chained_pin("OpToyVariantOpenConsumerFG", toy.OPTOY_VARIANT_OPEN_CONSUMER)
 
-        advice = self._copyable_line().replace(
-            "the feature's options", f"the options of {toy.OPTOY_VARIANT_OPEN_CONSUMER}"
-        )
+        requested = toy.OPTOY_VARIANT_PIN_ROOT if input_pin else toy.OPTOY_VARIANT_OPEN_CONSUMER
+        advice = self._copyable_line().replace("the feature's options", f"the options of {requested}")
         assert advice in str(caught.value)
+        if input_pin:
+            assert f"the options of {toy.OPTOY_VARIANT_OPEN_CONSUMER}" not in str(caught.value)
 
     @pytest.mark.parametrize("input_pin", [False, True], ids=["root_pin", "input_pin"])
     def test_a_chained_pin_error_carries_the_variant_block_attributes(self, input_pin: bool) -> None:
@@ -1289,9 +1296,13 @@ class TestPlanStepVariantAllowOption:
 
         assert diagnosis.resolving_path == (toy.OPTOY_VARIANT_CONSUMER,)
 
-    def test_the_chained_pin_advice_works_when_followed(self) -> None:
+    @pytest.mark.parametrize("input_pin", [False, True], ids=["root_pin", "input_pin"])
+    def test_the_chained_pin_advice_works_when_followed(self, input_pin: bool) -> None:
         toy = importlib.import_module(self.TOY)
-        steps = self._chained_pin("OpToyVariantOpenConsumerFG", toy.OPTOY_VARIANT_OPEN_CONSUMER, allow="skip_nan")
+        if input_pin:
+            steps = self._explain_group(self._PIN_ROOT_GROUPS, toy.OPTOY_VARIANT_PIN_ROOT, allow="skip_nan")
+        else:
+            steps = self._chained_pin("OpToyVariantOpenConsumerFG", toy.OPTOY_VARIANT_OPEN_CONSUMER, allow="skip_nan")
 
         assert any(s.implementation is toy.OpToyVariantPandas for s in steps)
 

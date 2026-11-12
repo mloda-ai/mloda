@@ -1351,7 +1351,7 @@ class TestPointedRoutesDeclineWithReason:
             (
                 _TableAndOptionRouteFG,
                 lambda group: Feature(COL, feature_group=group),
-                "; skipped routes that need the option 'toyfmt_required'",
+                "; sources needing the option 'toyfmt_required' were not searched",
             ),
             (_NoSourceFG, lambda group: Feature(COL, Options({group.__name__: {COL: [1]}})), ""),
             (_NoSourceSubFG, lambda group: Feature(COL, Options({"_NoSourceFG": {COL: [1]}})), ""),
@@ -1368,7 +1368,7 @@ class TestPointedRoutesDeclineWithReason:
         elimination = result.eliminations[group]
         assert elimination.stage == "input_data"
         assert f"{group.__name__} was pointed at but found no source for 'toyfmt_col'{suffix}" in elimination.reason
-        assert ("skipped routes" in elimination.reason) is bool(suffix)
+        assert ("were not searched" in elimination.reason) is bool(suffix)
         assert elimination.code is CoreDeclineCode.SOURCE_NOT_FOUND
 
     def test_pointed_declared_route_with_an_undeclared_name_records_a_rejection(self) -> None:
@@ -1445,7 +1445,7 @@ class TestUnpointedDeclaredNamesDeclineWithReason:
         assert elimination.stage == "input_data"
         assert elimination.code is CoreDeclineCode.SOURCE_NOT_FOUND
         assert f"ToyDeclaredFG found no source serving '{name}'" in elimination.reason
-        assert "skipped routes" not in elimination.reason
+        assert "were not searched" not in elimination.reason
 
     @pytest.mark.parametrize("dac", [None, foreign_dac()], ids=["no_collection", "foreign_collection"])
     def test_unpointed_declared_name_names_the_skipped_option_routes(self, dac: DataAccessCollection | None) -> None:
@@ -1457,7 +1457,7 @@ class TestUnpointedDeclaredNamesDeclineWithReason:
         assert elimination.stage == "input_data"
         assert elimination.code is CoreDeclineCode.SOURCE_NOT_FOUND
         expected = "_SearchedAndEmptyOptionRouteFG found no source serving 'toyfmt_declared_col'"
-        assert f"{expected}; skipped routes that need the option 'toyfmt_required'" in elimination.reason
+        assert f"{expected}; sources needing the option 'toyfmt_required' were not searched" in elimination.reason
 
     @pytest.mark.parametrize("dac", [None, toy_dac()], ids=["no_collection", "empty_toy_collection"])
     def test_a_reason_recorded_by_find_sources_wins(self, dac: DataAccessCollection | None) -> None:

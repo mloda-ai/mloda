@@ -704,7 +704,7 @@ class SourceFeatureGroup(FeatureGroup):
             return True
         plural = "s" if len(missing) > 1 else ""
         keys = ", ".join(repr(key) for key in sorted(missing))
-        skipped_routes = f"; skipped routes that need the option{plural} {keys}" if missing else ""
+        unsearched = f"; sources needing the option{plural} {keys} were not searched" if missing else ""
         if seen:
             items = sorted(seen.items())
             known = {source: cls.columns(match) for source, match in items}
@@ -772,12 +772,12 @@ class SourceFeatureGroup(FeatureGroup):
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.NAME_NOT_DECLARED
             )
         elif explicitly_pointed:
-            reason = f"{cls.get_class_name()} was pointed at but found no source for '{name}'{skipped_routes}"
+            reason = f"{cls.get_class_name()} was pointed at but found no source for '{name}'{unsearched}"
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND
             )
         elif not pointed and not stepped_aside and any(route.names is NamePolicy.DECLARED for route in selected):
-            reason = scrub_credentials(f"{cls.get_class_name()} found no source serving '{name}'{skipped_routes}")
+            reason = scrub_credentials(f"{cls.get_class_name()} found no source serving '{name}'{unsearched}")
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND
             )

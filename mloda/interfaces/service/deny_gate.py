@@ -12,7 +12,7 @@ class DeniedNameGate(Extender):
 
     never_fall_back = True
 
-    def __init__(self, is_denied: Callable[[str], bool]) -> None:
+    def __init__(self, is_denied: Callable[[str], bool] = lambda name: True) -> None:
         self._is_denied = is_denied
 
     def wraps(self) -> set[ExtenderHook]:

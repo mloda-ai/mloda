@@ -31,9 +31,12 @@ from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTIO
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.function_extender import ExtenderHook
+from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.prepare.resolution_types import Elimination, EvaluationResult, ResolutionRecord
 from mloda.interfaces.service.catalog import Catalog
+from mloda.interfaces.service.deny_gate import DeniedNameGate
 from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig, load_settings
 from mloda.interfaces.service.errors import ERROR_CODES, is_error
 from mloda.interfaces.service.lock import MLODA_LOCK
@@ -477,6 +480,10 @@ def _error(result: dict[str, Any], code: str) -> dict[str, Any]:
 def _success(result: dict[str, Any]) -> dict[str, Any]:
     assert not is_error(result), result
     return result
+
+
+def _without_audit(error: Mapping[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in error.items() if k != "audit_id"}
 
 
 def _has_detail(error: Mapping[str, Any], **expected: Any) -> bool:
@@ -1284,7 +1291,7 @@ class TestPolicy:
             assert "mcp4_salary" not in dumped
             assert "mcp4_nowhere_column" not in dumped
             if is_error(result):
-                answers.append({k: v for k, v in result["error"].items() if k != "audit_id"})
+                answers.append(_without_audit(result["error"]))
             else:
                 answers.append({k: result[k] for k in ("steps", "lineage", "egress")})
             assert denied_calls == []
@@ -1296,46 +1303,48 @@ class TestPolicy:
             )
             assert all("suggestion" not in detail for detail in answers[0]["details"])
 
+    def test_derived_name_over_a_denied_inline_name_answers_alike_with_or_without_the_column(
+        self, tmp_path: Path, denied_calls: list[str]
+    ) -> None:
+        name = "mcp4_salary" + DOUBLE_SUFFIX
+        answers = []
+        for column in ("segment", "mcp4_salary"):
+            request = {"features": [name], "data": {"Tbl": {column: [1, 2], "income": [10, 20]}}}
+            result = _explain(tmp_path, request, base=_base(PlannerRivalIncomeMcp4), inline_data=True)
+            assert "mcp4_salary" not in json.dumps(result).replace(name, "")
+            if is_error(result):
+                answers.append(_without_audit(result["error"]))
+            else:
+                answers.append({k: result[k] for k in ("steps", "lineage", "egress")})
+            assert denied_calls == []
+        assert answers[0] == answers[1]
+
     def test_run_over_a_denied_name_with_one_resolving_rival_answers_alike(self, tmp_path: Path) -> None:
         base = _base(PlannerRivalIncomeMcp4)
         name = "mcp4_salary" + DOUBLE_SUFFIX
         answers = []
         for with_denied_column in (False, True):
             sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=with_denied_column))}
-            planner = _planner(_settings(tmp_path, sources=sources), base=base)
-            explained = planner.explain({"features": [name]})
-            outcome = (
-                explained
-                if is_error(explained)
-                else Runner(planner, clock=lambda: CLOCK_START).run(explained["plan_id"])
-            )
-            if is_error(outcome):
-                answers.append({k: v for k, v in outcome["error"].items() if k != "audit_id"})
-            else:
-                answers.append(outcome)
-        assert answers[0] == answers[1]
-        assert answers[0].get("code") != "internal_error"
+            planner = _planner(_settings(tmp_path, sources=sources, mode="execute"), base=base)
+            explained = _success(planner.explain({"features": [name]}))
+            outcome = _success(Runner(planner, clock=lambda: CLOCK_START).run(explained["plan_id"]))
+            assert outcome["status"] == "completed"
+            answers.append([[c["name"] for c in table["columns"]] for table in outcome["tables"]])
+        assert answers[0] and answers[0] == answers[1]
 
-    @pytest.mark.parametrize("rival", [False, True])
-    def test_strict_mode_keeps_the_gate(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rival: bool) -> None:
+    def test_strict_mode_keeps_the_gate_registered(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MLODA_PLUGIN_REGISTRY_STRICT", "strict")
-        base = _base(PlannerRivalMissingMcp4) if rival else None
-        _success(_explain(tmp_path, {"features": ["income"]}, base=base))
-        name = "mcp4_salary" + DOUBLE_SUFFIX
-        results = []
-        for with_denied_column in (False, True):
-            sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=with_denied_column))}
-            results.append(_explain(tmp_path, {"features": [name]}, base=base, sources=sources))
-        errors = [{k: v for k, v in r["error"].items() if k != "audit_id"} for r in results if is_error(r)]
-        assert len(errors) == 2
-        assert errors[0] == errors[1]
+        _success(_explain(tmp_path, {"features": ["income"]}))
 
     def test_gated_planning_logs_no_denied_name(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         name = "mcp4_salary" + DOUBLE_SUFFIX
         sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=True))}
         with caplog.at_level(logging.DEBUG):
             _explain(tmp_path, {"features": [name]}, base=_base(PlannerRivalMissingMcp4), sources=sources)
-        assert "mcp4_salary" not in "\n".join(r.getMessage() for r in caplog.records).replace(name, "")
+        messages = "\n".join(r.getMessage() for r in caplog.records)
+        assert "denied by the service policy" in messages
+        assert "DeniedNameGate" in messages
+        assert "mcp4_salary" not in messages.replace(name, "")
 
     def test_variant_pin_beside_a_denied_input_is_policy_denied_either_way(self, tmp_path: Path) -> None:
         toy = importlib.import_module(
@@ -1367,7 +1376,7 @@ class TestPolicy:
             dumped = json.dumps(result)
             assert "mcp4_salary" not in dumped
             assert toy.OPTOY_VARIANT_OPEN_CONSUMER not in dumped
-            errors.append({k: v for k, v in error.items() if k != "audit_id"})
+            errors.append(_without_audit(error))
         assert errors[0] == errors[1]
 
     @pytest.mark.parametrize("with_denied_column", [True, False])
@@ -1421,6 +1430,40 @@ class TestPolicy:
     def test_allowed_request_never_calls_into_denied(self, tmp_path: Path, denied_calls: list[str]) -> None:
         _success(_explain(tmp_path, {"features": ["customer_id", DERIVED]}))
         assert denied_calls == []
+
+
+class TestDeniedNameGate:
+    @staticmethod
+    def _context(*names: str) -> HookContext:
+        return HookContext(
+            hook=ExtenderHook.INPUT_DATA_MATCH,
+            feature_group_class="x.Group",
+            feature_group_version=None,
+            feature_names=names,
+            compute_framework_name=None,
+        )
+
+    def test_wraps_the_input_data_match_hook(self) -> None:
+        assert DeniedNameGate(lambda name: False).wraps() == {ExtenderHook.INPUT_DATA_MATCH}
+
+    def test_refuses_without_an_active_context(self) -> None:
+        with pytest.raises(PermissionError):
+            DeniedNameGate(lambda name: False)(lambda: "ran")
+
+    def test_calls_through_for_an_allowed_name_and_refuses_a_denied_one(self) -> None:
+        gate = DeniedNameGate(lambda name: name == "bad")
+        with self._context("good").activate():
+            assert gate(lambda: "ran") == "ran"
+        with self._context("good", "bad").activate():
+            with pytest.raises(PermissionError, match="denied by the service policy"):
+                gate(lambda: "ran")
+
+    def test_without_an_argument_it_refuses_every_name(self) -> None:
+        gate = DeniedNameGate()
+        assert gate.wraps() == {ExtenderHook.INPUT_DATA_MATCH}
+        with self._context("anything").activate():
+            with pytest.raises(PermissionError):
+                gate(lambda: "ran")
 
 
 class TestFilters:

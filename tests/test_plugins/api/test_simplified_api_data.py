@@ -784,13 +784,14 @@ class TestApiDataNeutralType:
 
 SETUP_SECRET = "setup_secret_value_q4x9"  # nosec B105
 
-SETUP_CHECK_CASES: dict[str, tuple[Callable[[str], dict[str, Any]], str]] = {
-    "non_mapping_set": (lambda key: {"api_data": {key: 5}}, "must be a mapping"),
+SETUP_CHECK_CASES: dict[str, tuple[Callable[[str], dict[str, Any]], str, bool]] = {
+    "non_mapping_set": (lambda key: {"api_data": {key: 5}}, "must be a mapping", True),
     "duplicate_column": (
         lambda key: {"api_data": {"A": {key: [1]}, "B": {key: [2]}}},
         "appears in api_data sets",
+        True,
     ),
-    "column_ordering": (lambda key: {"column_ordering": key}, "column_ordering must be"),
+    "column_ordering": (lambda key: {"column_ordering": key}, "column_ordering must be", False),
 }
 
 
@@ -858,7 +859,7 @@ class TestApiDataScopeAndShapes:
     @pytest.mark.parametrize("case", list(SETUP_CHECK_CASES))
     @pytest.mark.parametrize("entry", ["prepare", "run_all", "stream_all"])
     def test_setup_argument_checks_mask_registered_values(self, entry: str, case: str, registered: bool) -> None:
-        build, fragment = SETUP_CHECK_CASES[case]
+        build, fragment, has_cause = SETUP_CHECK_CASES[case]
         key = SETUP_SECRET if registered else "setup_plain_unknown_key"
         dac = DataAccessCollection(credentials={"vault": {"token": SETUP_SECRET}})
 
@@ -876,8 +877,11 @@ class TestApiDataScopeAndShapes:
         if registered:
             assert SETUP_SECRET not in text
             assert "***" in text
-            if raised.value.__cause__ is not None:
+            if has_cause:
+                assert raised.value.__cause__ is not None
                 assert SETUP_SECRET not in str(raised.value.__cause__)
+            else:
+                assert raised.value.__cause__ is None
         else:
             assert key in text
 

@@ -300,10 +300,10 @@ class InputChainOutcome:
 
 
 def eliminated_input_names(result: EvaluationResult) -> tuple[str, ...]:
-    """The input names every eliminated candidate visited, only when no candidate survived."""
-    if result.failure_kind != "none":
+    """The sorted input names every eliminated candidate visited, only when no candidate survived."""
+    if result.identified:
         return ()
-    return tuple(dict.fromkeys(name for elimination in result.eliminations.values() for name in elimination.inputs))
+    return tuple(sorted({name for elimination in result.eliminations.values() for name in elimination.inputs}))
 
 
 def input_variant_block(result: EvaluationResult) -> tuple[tuple[str, ...], tuple[str, ...]]:

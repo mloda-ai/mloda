@@ -93,6 +93,19 @@ def test_a_resolved_sibling_before_the_failing_input_stays_in_the_visited_names(
     assert result.eliminations[ChainA2320].inputs == (LEAF, MISSING)
 
 
+class ChainMiddleTwin2320(ChainStub2320):
+    MATCHED_NAMES = frozenset({MIDDLE})
+    INPUTS = (OTHER_MISSING,)
+
+
+def test_an_input_with_two_failing_candidates_passes_their_leaf_names_up() -> None:
+    result = result_for(prepare_chain(GROUPS | {ChainMiddleTwin2320}).resolution_report())
+
+    assert set(result.identified) == {ChainB2320}
+    assert result.eliminations[ChainA2320].stage == "inputs"
+    assert {MIDDLE, MISSING, OTHER_MISSING} <= set(result.eliminations[ChainA2320].inputs)
+
+
 def test_a_sole_candidate_still_fails_at_the_missing_dependency() -> None:
     with pytest.raises(FeatureResolutionError) as caught:
         prepare_chain({ChainA2320, ChainMiddle2320})

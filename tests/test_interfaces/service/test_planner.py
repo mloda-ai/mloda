@@ -7,6 +7,7 @@ import json
 import logging
 import sqlite3
 import threading
+from abc import abstractmethod
 from collections.abc import Iterator, Mapping
 from datetime import datetime
 from pathlib import Path
@@ -185,6 +186,22 @@ class PlannerRivalMcp4(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return data
+
+
+class PlannerAbstractDoubleMcp4(FeatureGroup):
+    """Abstract group matching the same names as PlannerDoubleMcp4."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name).endswith(DOUBLE_SUFFIX)
+
+    @abstractmethod
+    def hook(self) -> None: ...
 
 
 class PlannerRivalMissingMcp4(PlannerRivalMcp4):
@@ -1224,12 +1241,19 @@ class TestPolicy:
         assert denied_calls == []
         _assert_no_paths(result, tmp_path, "sales.csv")
 
-    @pytest.mark.parametrize("rival", [False, True], ids=["no_rival", "rival"])
+    @pytest.mark.parametrize(
+        ("rival", "hops", "abstract"),
+        [(False, 1, False), (True, 1, False), (True, 2, False), (False, 1, True), (True, 1, True)],
+        ids=["no_rival", "rival", "rival_two_hops", "abstract_only", "abstract_and_rival"],
+    )
     def test_derived_name_over_a_denied_group_does_not_name_its_input(
-        self, tmp_path: Path, denied_calls: list[str], rival: bool
+        self, tmp_path: Path, denied_calls: list[str], rival: bool, hops: int, abstract: bool
     ) -> None:
-        base = _base(PlannerRivalMissingMcp4) if rival else None
-        name = "mcp4_salary" + DOUBLE_SUFFIX
+        extra: list[type[FeatureGroup]] = [PlannerRivalMissingMcp4] if rival else []
+        if abstract:
+            extra.append(PlannerAbstractDoubleMcp4)
+        base = _base(*extra) if extra else None
+        name = "mcp4_salary" + DOUBLE_SUFFIX * hops
         result = _explain(tmp_path, {"features": [name]}, base=base)
 
         error = _error(result, "policy_denied")

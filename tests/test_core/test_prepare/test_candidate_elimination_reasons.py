@@ -45,7 +45,7 @@ from mloda.core.prepare.identify_feature_group import (
     FeatureResolutionError,
     IdentifyFeatureGroupClass,
 )
-from mloda.core.prepare.input_chain import input_variant_block
+from mloda.core.prepare.input_chain import eliminated_input_names, input_variant_block
 from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
 from mloda.core.prepare.resolution_types import Elimination, EvaluationResult
 from mloda.provider import NAME_STAGE, FeatureSet, record_match_rejection
@@ -969,9 +969,7 @@ class TestEliminationStages:
         assert input_variant_block(multiple) == ((), ())
         assert input_variant_block(abstract_only) == ((), ())
 
-    def test_eliminated_input_names_are_reported_only_when_every_candidate_failed(self) -> None:
-        from mloda.core.prepare.input_chain import eliminated_input_names
-
+    def test_eliminated_input_names_are_reported_only_when_no_candidate_survived(self) -> None:
         def failed(*names: str) -> Elimination:
             return Elimination(stage="inputs", reason="r", inputs=names)
 
@@ -982,11 +980,13 @@ class TestEliminationStages:
             identified={ElimSortAFG011: set(), ElimSortBFG011: set()},
             eliminations={ElimSuccessFG011: failed("x")},
         )
-        abstract_only = EvaluationResult(identified={}, abstract_matched={ElimSortAFG011})
+        abstract_only = EvaluationResult(
+            identified={}, abstract_matched={ElimSortAFG011}, eliminations={ElimSortBFG011: failed("x", "q")}
+        )
 
         assert eliminated_input_names(none) == ("x", "y", "z")
         assert eliminated_input_names(multiple) == ()
-        assert eliminated_input_names(abstract_only) == ()
+        assert eliminated_input_names(abstract_only) == ("q", "x")
 
     def test_links_stage(self) -> None:
         feature = Feature(LINKS_FEATURE)

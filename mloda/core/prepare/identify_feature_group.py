@@ -74,6 +74,7 @@ from mloda.core.prepare.input_chain import (
     InputChainOutcome,
     cached_input_fact,
     declared_inputs,
+    eliminated_input_names,
     input_chain_state,
     input_features_collection,
     input_variant_block,
@@ -1426,6 +1427,7 @@ class IdentifyFeatureGroupClass:
                         refusals,
                         variants=variants,
                         allow_variants=allow_variants,
+                        inputs=eliminated_input_names(result),
                     )
             else:
                 result = self._input_resolver(feature, links, self._input_depth + 1)
@@ -1442,7 +1444,12 @@ class IdentifyFeatureGroupClass:
             return child._input_chain(winner, feature)
         except FeatureResolutionError as exc:
             variants, allow_variants = ((), ()) if exc.refusals else input_variant_block(exc.result)
-            return replace(self._input_failure(exc), variants=variants, allow_variants=allow_variants)
+            return replace(
+                self._input_failure(exc),
+                variants=variants,
+                allow_variants=allow_variants,
+                inputs=eliminated_input_names(exc.result),
+            )
 
     def _declaration_requirement(
         self, feature_group: type[FeatureGroup], feature: Feature

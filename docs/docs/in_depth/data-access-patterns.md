@@ -137,7 +137,8 @@ The recorded decline renders as a near-miss line of the resolution failure:
 
 Rules for source group authors:
 
-- Record only when ownership is established but the content fails: right suffix but a missing column, valid credentials but a declined feature. Plain non-matches (wrong suffix, invalid credentials) stay silent.
+- Record only when ownership is established but the content fails: right suffix but a missing column, valid credentials but a declined feature. Plain non-matches (wrong suffix, invalid credentials, a name the group does not declare) stay silent.
+- A request that points at no source group, for a name a `NamePolicy.DECLARED` route declares, records `<Group> found no source serving '<name>'` (`source_not_found`) when no source is found, unless the group recorded a reason first; record in `find_sources` only for a more specific reason.
 - Never raise to decline: a hook that raises anything but `OSError`, `ValueError` or `ImportError` from `column_names` (or an unmarked `NotImplementedError` where a base documents it) ends matching for that candidate. A raise marked with `escalate_match_abort` propagates. Record, then return a falsy value.
 - Recording outside an engine-opened window is a no-op, so groups stay usable standalone. In tests, use `collect_match_rejections` (see [Feature Group Matching](feature-group-matching.md)).
 - Recorded reasons are discarded at the enclosing candidate level: when the group ultimately matches, or when the feature group matches by another rule. Only a decline surfaces them.
@@ -145,7 +146,7 @@ Rules for source group authors:
 - A `ReadFileFG` subclass whose `column_names` raises `NotImplementedError` is eliminated for every feature name. One that raises `ImportError` declines any name, with a recorded reason. A file pinned with `column_to_file` aborts with a missing-column message ("column ... is in none of the sources", or "could not list the columns of any of its sources" when none can list). A `ReadDocumentFG` subclass declines any name other than its three declared names.
 - In `ReadFileFG` matching, an unpinned file whose columns cannot be read (`OSError`, `ValueError`) is declined with a recorded reason, so a shipped file group needs the file to be readable when features resolve. A pinned or pointed file that cannot be read aborts with the missing-column error instead of falling back to another file.
 
-`ReadFileFG` column validation and the `ReadDBFG` catalog check already record automatically; a custom group only needs this for its own decline points.
+`ReadFileFG` column validation and the `ReadDBFG` catalog check already record automatically, and unpointed declared names get the default above; a custom group only needs this for its own decline points.
 
 A `feature_group=` scope is final: only the scoped group and its subclasses are candidates. A class-name pointer is final against other source groups and the DataAccessCollection. A pointed group can end its match in two ways:
 

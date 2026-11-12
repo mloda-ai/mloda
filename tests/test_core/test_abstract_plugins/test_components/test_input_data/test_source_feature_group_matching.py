@@ -989,6 +989,16 @@ class TestScopePointingRefinement:
         assert result.eliminations[ToyDeclaredFG].code is CoreDeclineCode.NAME_NOT_DECLARED
         assert _FamilyDeclaredSubFG not in result.eliminations
 
+    @pytest.mark.parametrize("scope", [ToyDeclaredFG, "ToyDeclaredFG"])
+    def test_a_family_only_declared_sibling_with_a_declared_name_and_no_source_records_nothing(
+        self, scope: object
+    ) -> None:
+        feature = Feature("toyfmt_declared_col", feature_group=scope)  # type: ignore[arg-type]
+        result = _identify(feature, None, ToyDeclaredFG, _FamilyDeclaredSubFG)
+
+        assert result.eliminations[ToyDeclaredFG].code is CoreDeclineCode.SOURCE_NOT_FOUND
+        assert _FamilyDeclaredSubFG not in result.eliminations
+
     def test_a_sibling_under_a_family_scope_with_an_ancestor_key_still_records_source_not_found(self) -> None:
         feature = Feature(COL, Options({"ToySourceFG": {COL: [1]}}), feature_group=ToySourceFG)
         result = _identify(feature, None, _NoSourceSubFG)
@@ -1376,6 +1386,108 @@ class TestPointedRoutesDeclineWithReason:
         assert elimination.stage == "input_data"
         assert "was pointed at but found no source" in elimination.reason
         assert elimination.code is CoreDeclineCode.SOURCE_NOT_FOUND
+
+
+class _ComputesDeclaredColFG(FeatureGroup):
+    """Non-source group computing a name that ToyDeclaredFG declares."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: FeatureName | str, options: Options, data_access_collection: Any = None
+    ) -> bool:
+        return str(feature_name) == "toyfmt_declared_col"
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(COL)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+
+class _SearchedAndEmptyOptionRouteFG(ToyDeclaredFG):
+    """Searched declared route plus an option-gated declared route that finds nothing."""
+
+    PROPERTY_MAPPING: ClassVar[dict[str, Any]] = {"toyfmt_required": PropertySpec(explanation="gate")}
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
+        ClaimRoute("toy", NamePolicy.DECLARED, True),
+        ClaimRoute("toy_opt", NamePolicy.DECLARED, False, required_options=("toyfmt_required",)),
+    )
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        if route.source_kind == "toy_opt":
+            return []
+        return super().find_sources(route, feature_name, options, data_access_collection)
+
+
+class TestUnpointedDeclaredNamesDeclineWithReason:
+    @pytest.mark.parametrize("name", TestDeclaredNames.CLAIMED)
+    @pytest.mark.parametrize("dac", [None, foreign_dac()], ids=["no_collection", "foreign_collection"])
+    def test_unpointed_declared_name_without_a_source_records_source_not_found(
+        self, name: str, dac: DataAccessCollection | None
+    ) -> None:
+        result = _identify(Feature(name), dac, ToyDeclaredFG)
+
+        assert ToyDeclaredFG not in result.identified
+        elimination = result.eliminations[ToyDeclaredFG]
+        assert elimination.stage == "input_data"
+        assert elimination.code is CoreDeclineCode.SOURCE_NOT_FOUND
+        assert f"ToyDeclaredFG found no source serving '{name}'" in elimination.reason
+
+    @pytest.mark.parametrize("dac", [None, toy_dac()], ids=["no_collection", "empty_toy_collection"])
+    def test_a_reason_recorded_by_find_sources_wins(self, dac: DataAccessCollection | None) -> None:
+        calls: list[str] = []
+        group = _spy_declared_group(calls, record=True)
+        result = _identify(Feature("toyfmt_declared_col"), dac, group)
+
+        assert calls == ["toyfmt_declared_col"]
+        assert group not in result.identified
+        assert result.eliminations[group].reason == "credential check failed"
+        del group, result
+
+    def test_source_group_stays_silent_when_a_non_source_candidate_computes_the_name(self) -> None:
+        dac = toy_dac(h1={COL: [1]})
+        alone = evaluate_or_raise(Feature("toyfmt_declared_col"), _plugins(ToyDeclaredFG), None, dac)
+        assert set(alone.identified) == {ToyDeclaredFG}
+
+        plugins = _plugins(ToyDeclaredFG, ToySourceFG, _ComputesDeclaredColFG)
+        result = evaluate_or_raise(Feature("toyfmt_declared_col"), plugins, None, dac)
+
+        assert set(result.identified) == {_ComputesDeclaredColFG}
+        assert ToyDeclaredFG not in result.eliminations
+
+    def test_steps_aside_silently_when_only_an_option_gated_route_found_nothing(self) -> None:
+        dac = toy_dac(h1={COL: [1]})
+        feature = Feature("toyfmt_declared_col", Options({"toyfmt_required": True}))
+        alone = evaluate_or_raise(feature, _plugins(_SearchedAndEmptyOptionRouteFG), None, dac)
+        assert set(alone.identified) == {_SearchedAndEmptyOptionRouteFG}
+
+        plugins = _plugins(_SearchedAndEmptyOptionRouteFG, ToySourceFG, _ComputesDeclaredColFG)
+        result = evaluate_or_raise(feature, plugins, None, dac)
+
+        assert set(result.identified) == {_ComputesDeclaredColFG}
+        assert _SearchedAndEmptyOptionRouteFG not in result.eliminations
+
+    def test_lone_derived_consumer_names_the_unserved_declared_input(self) -> None:
+        feature = Feature("toyfmt_declared_col__sum_aggr")
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            mloda.run_all(
+                [feature],
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups({ToyDeclaredFG, AggregatedFeatureGroup}),
+            )
+
+        assert (
+            "ToyDeclaredFG (input data): ToyDeclaredFG found no source serving 'toyfmt_declared_col'"
+            " [code: source_not_found]"
+        ) in str(exc_info.value)
 
 
 class _AbstractRouted(SourceFeatureGroup):

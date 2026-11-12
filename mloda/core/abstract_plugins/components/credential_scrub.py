@@ -159,7 +159,9 @@ _CONTINUATION_LINE = re.compile(
 _ATOM = rf"(?:{_STRING_LITERAL}|[-+]?\.?\d[\w.+-]*|(?:true|false|null|True|False|None|NaN|-?Infinity)\b)"
 _PAIR_OR_ATOM = rf"(?:{_STRING_LITERAL}[ \t]*:[ \t]*{_ATOM}|{_ATOM})"
 _INLINE_CONTAINER = rf"[\[{{(][ \t]*(?:{_PAIR_OR_ATOM}(?:[ \t]*,[ \t]*{_PAIR_OR_ATOM})*[ \t,]*)?[\]}})]"
-_ITEM = rf"(?:{_ATOM}|{_INLINE_CONTAINER})"
+_MEMBER = rf"(?:{_PAIR_OR_ATOM}|{_INLINE_CONTAINER})"
+_INLINE_CONTAINER2 = rf"[\[{{(][ \t]*(?:{_MEMBER}(?:[ \t]*,[ \t]*{_MEMBER})*[ \t,]*)?[\]}})]"
+_ITEM = rf"(?:{_ATOM}|{_INLINE_CONTAINER2})"
 # A whole bare-item line of a list body; text may follow once a closer was seen.
 _ITEM_LINE = re.compile(rf"[ \t]*,?[ \t]*{_ITEM}(?:[ \t]*,[ \t]*{_ITEM})*[ \t,]*(?:[\])}}].*|(?=\r?\n|\Z))")
 _PAIR = rf"{_STRING_LITERAL}[ \t]*:[ \t]*{_ITEM}"
@@ -184,40 +186,63 @@ def _indent_end(text: str, start: int) -> int:
     return start
 
 
-def _string_end(text: str, start: int) -> tuple[int, bool]:
-    """End of the string opened at start, and whether it closed (else line end).
-    Opened by backslash run r0, it closes at the next same quote whose run r has r % (2 * (r0 + 1)) == r0."""
+def _consistent_close(text: str, position: int) -> bool:
+    """Whether a delimiter, quote, backslash or line/text end follows the close."""
+    after = _indent_end(text, position)
+    return after >= len(text) or text[after] in ",:;]})\\'\"\r\n"
+
+
+def _string_end(text: str, start: int, extra: int = 0, strict: bool = False) -> tuple[int, bool, bool]:
+    """(end, closed, consistent) of the string opened at start; it closes at the next same quote whose
+    backslash run r has r % 2**(bit_length(r0) + 1 + extra) == r0. Strict stops at the first inconsistent close."""
     size = len(text)
     body = start
     while body < size and text[body] == "\\":
         body += 1
     if body >= size:
-        return size, False
+        return size, False, True
     quote, opening = text[body], body - start
-    period = 2 * (opening + 1)
+    period = 2 ** (opening.bit_length() + 1 + extra)
     run = 0
     for i in range(body + 1, size):
         char = text[i]
         if char == "\\":
             run += 1
         elif char == "\n":
-            return i, False
+            return i, False, True
         else:
             if char == quote and run % period == opening:
-                return i + 1, True
+                if strict and not _consistent_close(text, i + 1):
+                    return i + 1, False, False
+                return i + 1, True, True
             run = 0
-    return size, False
+    return size, False, True
 
 
-def _container_end(text: str, opener: int, key_indent: int) -> int:
-    """End of a multi-line container value: its closer, else the line before the first shallow line.
+def _chosen_end(text: str, start: int, floor: int = 0) -> tuple[int, bool, int]:
+    """(end, closed, extra): the first escape-level reading with a consistent close, never ending short of any scan."""
+    reached = start
+    for extra in (floor,) + tuple(e for e in (0, 1, 2) if e != floor):
+        end, closed, consistent = _string_end(text, start, extra, True)
+        reached = max(reached, end)
+        if consistent:
+            return reached, closed, extra
+    end, closed, _ = _string_end(text, start)
+    return max(reached, end), closed, 0
+
+
+def _container_end(text: str, opener: int, key_indent: int) -> tuple[int, bool]:
+    """(end, deeper) of a multi-line container value: its closer, else the line before the first shallow line.
     A flat body (not indented past its key) may pass value-like shallow lines.
-    Item mode also passes shallow item, pair (in a dict), closer (nested) and open-head lines."""
+    Item mode also passes shallow item, pair (in a dict), closer (nested) and open-head lines.
+    deeper: a string was read at a deeper escape level, so the pattern's own quote reading is unreliable."""
     size = len(text)
     stack: list[str] = []
     flat: bool | None = None
     items = False
     seen_newline = False
+    deeper = False
+    level = 0
     i = opener
     while i < size:
         char = text[i]
@@ -225,10 +250,17 @@ def _container_end(text: str, opener: int, key_indent: int) -> int:
             j = i
             while j < size and text[j] == "\\":
                 j += 1
-            i = _string_end(text, i)[0] if j < size and text[j] in "'\"" else j
+            if j < size and text[j] in "'\"":
+                i, _, extra = _chosen_end(text, i, level)
+                deeper = deeper or extra > 0
+                level = max(level, extra)
+            else:
+                i = j
             continue
         if char in "'\"":
-            i = _string_end(text, i)[0]
+            i, _, extra = _chosen_end(text, i, level)
+            deeper = deeper or extra > 0
+            level = max(level, extra)
             continue
         if char in "[{(":
             stack.append(char)
@@ -236,7 +268,7 @@ def _container_end(text: str, opener: int, key_indent: int) -> int:
             if stack:
                 stack.pop()
             if not stack:
-                return i + 1
+                return i + 1, deeper
         elif char == "\n":
             if not seen_newline:
                 seen_newline = True
@@ -252,23 +284,23 @@ def _container_end(text: str, opener: int, key_indent: int) -> int:
                     continue
                 if text[first] in "]})":
                     if len(stack) == 1:
-                        return first + 1
+                        return first + 1, deeper
                     i += 1
                     continue
                 if (
-                    (flat and _FLAT_BODY_LINE.match(text, first))
+                    (flat and (_FLAT_BODY_LINE.match(text, first) or _ITEM_LINE.match(text, first)))
                     or (items and _ITEM_LINE.match(text, first))
                     or (items and _OPEN_HEAD_LINE.match(text, first))
-                    or (items and len(stack) > 1 and stack[-1] == "{" and _PAIR_LINE.match(text, first))
+                    or (items and stack[-1] == "{" and _PAIR_LINE.match(text, first))
                 ):
                     i += 1
                     continue
                 stop = i - 1 if text[i - 1] == "\r" else i
                 while not flat and stop > opener and text[stop - 1] in " \t,":
                     stop -= 1
-                return stop
+                return stop, deeper
         i += 1
-    return size
+    return size, deeper
 
 
 def _string_continuation_end(text: str, end: int, key_indent: int) -> int:
@@ -293,15 +325,18 @@ def _string_continuation_end(text: str, end: int, key_indent: int) -> int:
     return end
 
 
-def _escaped_chunk(text: str, position: int) -> tuple[int, int, bool] | None:
-    """(string end, chunk end, ends the value) of the escaped-newline chunk at position."""
+def _escaped_chunk(text: str, position: int, extra: int | None = None) -> tuple[int, int, bool] | None:
+    """(string end, chunk end, ends the value) of the escaped-newline chunk at position; extra None picks a level."""
     head = _ESCAPED_CHUNK_HEAD.match(text, position)
     if head is None:
         return None
     start = head.end()
     quote = start + 1 if text[start] == "b" and text[start + 1] == "\\" else start
     if text[quote] == "\\":
-        literal_end, closed = _string_end(text, quote)
+        if extra is None:
+            literal_end, closed, _ = _chosen_end(text, quote)
+        else:
+            literal_end, closed, _ = _string_end(text, quote, extra)
     else:
         literal = _STRING_ONLY.match(text, start)
         literal_end, closed = (literal.end(), True) if literal is not None else (start, False)
@@ -311,10 +346,10 @@ def _escaped_chunk(text: str, position: int) -> tuple[int, int, bool] | None:
     return literal_end, tail.end(), bool(tail["closer"])
 
 
-def _escaped_continuation_end(text: str, end: int) -> int:
+def _escaped_continuation_end(text: str, end: int, extra: int | None = None) -> int:
     """Extend a closed string value over following repr-escaped lines made of one string literal each."""
     position = end
-    while (chunk := _escaped_chunk(text, position)) is not None:
+    while (chunk := _escaped_chunk(text, position, extra)) is not None:
         end, position = chunk[0], chunk[1]
         if chunk[2]:
             break
@@ -332,9 +367,9 @@ def _quoted_key_spans(text: str) -> Iterator[tuple[int, int, re.Match[str]]]:
         value = match.span("value")[0]
         container = _CONTAINER_HEAD.match(text, value)
         if match["vq"]:
-            end, closed = _string_end(text, value + (text[value] == "b"))
+            end, closed, extra = _chosen_end(text, value + (text[value] == "b"))
             if closed:
-                end = _escaped_continuation_end(text, end)
+                end = _escaped_continuation_end(text, end, extra)
             yield start, end, match
             pos = end
             continue
@@ -353,8 +388,8 @@ def _quoted_key_spans(text: str) -> Iterator[tuple[int, int, re.Match[str]]]:
             scanned = quote
             key_indent = _indent_end(text, line) - line
             if container is not None:
-                scan_end = _container_end(text, container.end() - 1, key_indent)
-                if len(match["quote"]) > 1:
+                scan_end, deeper = _container_end(text, container.end() - 1, key_indent)
+                if len(match["quote"]) > 1 or deeper:
                     end = scan_end
                 elif scan_end < end and not text[scan_end:end].strip(" \t,\r"):
                     end = scan_end

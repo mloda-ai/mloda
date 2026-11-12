@@ -904,10 +904,10 @@ def _refused_run(session: Any, recorder: _RunRecorder, entry: str = "run", **kwa
     return str(exc.value)
 
 
-_ARGUMENTS: dict[str, Callable[[str], dict[str, Any]]] = {
-    "api_data": lambda key: {"api_data": {key: {"c": [1]}}},
-    "parameters": lambda key: {"parameters": {key: 1}},
-    "artifacts": lambda key: {"artifacts": {key: 1}},
+_ARGUMENTS: dict[str, tuple[Callable[[str], dict[str, Any]], str]] = {
+    "api_data": (lambda key: {"api_data": {key: {"c": [1]}}}, "differ from the prepared sets"),
+    "parameters": (lambda key: {"parameters": {key: 1}}, "is not a runtime parameter"),
+    "artifacts": (lambda key: {"artifacts": {key: 1}}, "are not artifact inputs"),
 }
 
 
@@ -919,23 +919,27 @@ class TestRunStartRefusals:
         recorder = _RunRecorder()
         session = _vault_session(recorder)
         literal = SECRET if source == "prepared" else _FRESH["key"]
-        kwargs = _ARGUMENTS[argument](literal)
+        build, fragment = _ARGUMENTS[argument]
+        kwargs = build(literal)
         if source == "per-run":
             kwargs["credentials"] = {"vault-a": _FRESH}
 
         message = _refused_run(session, recorder, entry, **kwargs)
 
+        assert fragment in message
         assert literal not in message
         assert "***" in message
 
     @pytest.mark.parametrize("entry", ["run", "stream_run"])
-    @pytest.mark.parametrize("argument", ["api_data", "parameters"])
+    @pytest.mark.parametrize("argument", ["api_data", "parameters", "artifacts"])
     def test_an_argument_check_error_keeps_an_unregistered_key(self, entry: str, argument: str) -> None:
         recorder = _RunRecorder()
         session = _vault_session(recorder)
 
-        message = _refused_run(session, recorder, entry, **_ARGUMENTS[argument]("chs_plain_unknown_key"))
+        build, fragment = _ARGUMENTS[argument]
+        message = _refused_run(session, recorder, entry, **build("chs_plain_unknown_key"))
 
+        assert fragment in message
         assert "chs_plain_unknown_key" in message
 
     def test_stream_run_leaves_no_secret_registered_after_it_returns(self) -> None:

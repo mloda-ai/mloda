@@ -416,6 +416,11 @@ class SourceFeatureGroup(FeatureGroup):
         return match.source
 
     @classmethod
+    def _declared_feature_name(cls, name: str) -> bool:
+        """Whether a DECLARED route serves the requested name; base-stripped by default."""
+        return cls._declared_name(cls.get_column_base_feature(name))
+
+    @classmethod
     def _declared_name(cls, base_name: str) -> bool:
         return (
             base_name in cls.declared_names()
@@ -547,11 +552,7 @@ class SourceFeatureGroup(FeatureGroup):
                 for route in cls.CLAIM_ROUTES
                 if all(key in options for key in route.required_options)
                 and (route.searched or pointed or bool(route.required_options))
-                and not (
-                    name
-                    and route.names is NamePolicy.DECLARED
-                    and not cls._declared_name(cls.get_column_base_feature(name))
-                )
+                and not (name and route.names is NamePolicy.DECLARED and not cls._declared_feature_name(name))
             ]
             if not routes:
                 return False
@@ -601,9 +602,9 @@ class SourceFeatureGroup(FeatureGroup):
         for route in cls.CLAIM_ROUTES:
             if route.names is NamePolicy.DECLARED:
                 if declared is None:
-                    declared = cls._declared_name(base_name)
+                    declared = cls._declared_feature_name(name)
                 if not declared:
-                    undeclared = explicitly_pointed
+                    undeclared = explicitly_pointed or (foreign is None and cls._declared_name(base_name))
                     continue
             if not all(key in options for key in route.required_options):
                 if foreign is None:
@@ -767,7 +768,7 @@ class SourceFeatureGroup(FeatureGroup):
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.POINTED_ELSEWHERE
             )
         elif undeclared and not selected:
-            reason = f"'{base_name}' is not a name {cls.get_class_name()} declares"
+            reason = f"'{name}' is not a name {cls.get_class_name()} declares"
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.NAME_NOT_DECLARED
             )

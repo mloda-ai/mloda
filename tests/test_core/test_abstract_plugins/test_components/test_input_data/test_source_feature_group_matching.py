@@ -250,7 +250,9 @@ class TestDeclaredNamesProbeOnlyDeclaredNames:
         assert group in result.identified
         del group, result
 
-    @pytest.mark.parametrize("name", ["toyfmt_undeclared", "toyfmt_pre_x__sum_aggr", "toyfmt_pre_"])
+    @pytest.mark.parametrize(
+        "name", ["toyfmt_undeclared", "toyfmt_undeclared~1", "toyfmt_pre_x__sum_aggr", "toyfmt_pre_"]
+    )
     def test_a_pointed_undeclared_name_is_not_probed_and_records_the_undeclared_reason(self, name: str) -> None:
         calls: list[str] = []
         group = _spy_declared_group(calls, record=False)
@@ -259,7 +261,7 @@ class TestDeclaredNamesProbeOnlyDeclaredNames:
 
         assert calls == []
         assert group not in result.identified
-        assert "is not a name ToyfmtSpyDeclaredFG declares" in result.eliminations[group].reason
+        assert f"'{name}' is not a name ToyfmtSpyDeclaredFG declares" in result.eliminations[group].reason
         assert result.eliminations[group].code is CoreDeclineCode.NAME_NOT_DECLARED
         del group, result, feature
 

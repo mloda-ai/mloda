@@ -63,6 +63,10 @@ class ReadDocumentFG(_FileSourceFG):
         return base_name in cls.declared_names()
 
     @classmethod
+    def _declared_feature_name(cls, name: str) -> bool:
+        return cls._declared_name(name)
+
+    @classmethod
     def find_sources(
         cls,
         route: ClaimRoute,

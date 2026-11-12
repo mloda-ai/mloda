@@ -137,8 +137,8 @@ _NEST_DEPTH = 3
 # `:` is not a delimiter, or a value could close at the next key's quote and leave that key's secret unmatched.
 _BARE_DELIMITER = r"""[\s,;}\])\\'"]|\Z"""
 _BARE_STRING = (
-    rf"b?'(?:[^'\\\n]|\\+['\"]|\\.|'(?!{_BARE_DELIMITER}))*+(?:'(?={_BARE_DELIMITER})|(?=\r?\n|\Z))"
-    rf"|b?\"(?:[^\"\\\n]|\\+['\"]|\\.|\"(?!{_BARE_DELIMITER}))*+(?:\"(?={_BARE_DELIMITER})|(?=\r?\n|\Z))"
+    rf"b?'(?:[^'\\\n]|\\++['\"]?+|'(?!{_BARE_DELIMITER}))*+(?:'(?={_BARE_DELIMITER})|(?=\r?\n|\Z))"
+    rf"|b?\"(?:[^\"\\\n]|\\++['\"]?+|\"(?!{_BARE_DELIMITER}))*+(?:\"(?={_BARE_DELIMITER})|(?=\r?\n|\Z))"
 )
 _QUOTED_KEY_PATTERN = re.compile(
     r"(?P<lead>[{,](?:\s|\\+[nrt])*)(?P<quote>(?P<esc>\\+)?['\"])(?P<keyword>[\w.-]*"

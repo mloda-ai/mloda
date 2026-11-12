@@ -563,6 +563,8 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
         ['{"dsn": "host=h password=***", "token": "***"}'],
     ),
     ("quote_dsn_call_arg", "f('host=h password=abc')", ["abc"], ["f('host=h password=***')"]),
+    ("quoted_value_odd_backslash_run_before_newline", '{"password": "S3CR3Tq9\\\\\\\n"}', ["S3CR3Tq9"], []),
+    ("quoted_value_even_backslash_run_before_newline", '{"password": "S3CR3Tq9\\\\\n"}', ["S3CR3Tq9"], []),
 ]
 
 
@@ -1692,6 +1694,10 @@ def test_slash_password_host_repeat_scrubs_fast() -> None:
         (lambda k: "pwd=" + "'" * k + "x", 20_000, "a keyword value with a long opening quote run"),
         (lambda k: "password='" + "''" * k, 20_000, "a keyword quoted value with a doubled quote run"),
         (lambda k: "JDBC:MYSQL://h/db?password = v " * k, 20_000, "repeated upper-case jdbc spaced passwords"),
+        (lambda k: '{"password": "' + "\\" * k + 'x"}', 20_000, "a closed quoted value with a long backslash run"),
+        (lambda k: '{"password": "' + "\\" * k + "x", 20_000, "an unclosed quoted value with a long backslash run"),
+        (lambda k: "{'password': '" + "\\" * k + "x'}", 20_000, "a single-quoted value with a long backslash run"),
+        (lambda k: '{"password": "' + "\\" * k + "\nnext line", 20_000, "a long backslash run before a newline"),
     ],
     ids=[
         "dotted_prefix",
@@ -1722,6 +1728,10 @@ def test_slash_password_host_repeat_scrubs_fast() -> None:
         "keyword_opening_quote_run",
         "keyword_quoted_doubled_quote_run",
         "upper_jdbc_spaced_password_run",
+        "quoted_backslash_run_closed",
+        "quoted_backslash_run_unclosed",
+        "quoted_backslash_run_single_quote",
+        "quoted_backslash_run_before_newline",
     ],
 )
 def test_dotted_and_multiline_inputs_scrub_fast(build: Callable[[int], str], n: int, what: str) -> None:

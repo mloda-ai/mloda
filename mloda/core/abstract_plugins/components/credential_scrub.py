@@ -137,8 +137,8 @@ _NEST_DEPTH = 3
 # `:` is not a delimiter, or a value could close at the next key's quote and leave that key's secret unmatched.
 _BARE_DELIMITER = r"""[\s,;}\])\\'"]|\Z"""
 _BARE_STRING = (
-    rf"b?'(?:[^'\\\n]|\\+['\"]|\\.|'(?!{_BARE_DELIMITER}))*+(?:'(?={_BARE_DELIMITER})|(?=\r?\n|\Z))"
-    rf"|b?\"(?:[^\"\\\n]|\\+['\"]|\\.|\"(?!{_BARE_DELIMITER}))*+(?:\"(?={_BARE_DELIMITER})|(?=\r?\n|\Z))"
+    rf"b?'(?:[^'\\\n]|\\++['\"]?+|'(?!{_BARE_DELIMITER}))*+(?:'(?={_BARE_DELIMITER})|(?=\r?\n|\Z))"
+    rf"|b?\"(?:[^\"\\\n]|\\++['\"]?+|\"(?!{_BARE_DELIMITER}))*+(?:\"(?={_BARE_DELIMITER})|(?=\r?\n|\Z))"
 )
 _QUOTED_KEY_PATTERN = re.compile(
     r"(?P<lead>[{,](?:\s|\\+[nrt])*)(?P<quote>(?P<esc>\\+)?['\"])(?P<keyword>[\w.-]*"
@@ -1148,21 +1148,122 @@ _PASSES: list[tuple[re.Pattern[str], Any]] = [
 ]
 
 
+_TRAILING = " \t\r"
+_UNESCAPED = {"\\": "\\", "'": "'", '"': '"', "n": "\n", "t": "\t", "r": "\r"}
+
+
+def _tail_literal(text: str, begin: int, end: int) -> re.Match[str] | None:
+    """The literal ending the line text[begin:end], found backward so an earlier stray quote cannot shift it."""
+    while end > begin and text[end - 1] in _TRAILING:
+        end -= 1
+    if end - begin < 2 or text[end - 1] not in "'\"":
+        return None
+    quote, i = text[end - 1], end - 2
+    while i >= begin:
+        if text[i] != quote:
+            i -= 1
+            continue
+        j = i
+        while j > begin and text[j - 1] == "\\":
+            j -= 1
+        if (i - j) % 2 == 0:
+            head = i - 1 if i > begin and text[i - 1] == "b" else i
+            return _STRING_ONLY.fullmatch(text, head, end) or _STRING_ONLY.fullmatch(text, i, end)
+        i = j - 1
+    return None
+
+
+def _literal_runs(text: str) -> Iterator[list[re.Match[str]]]:
+    """Runs of two or more string literals on consecutive lines; each line is scanned once."""
+    run: list[re.Match[str]] = []
+    begin = 0
+    for line in text.split("\n"):
+        end = begin + len(line)
+        first = begin
+        while first < end and text[first] in " \t":
+            first += 1
+        chunk = _STRING_ONLY.match(text, first, end) if run else None
+        if chunk is not None:
+            run.append(chunk)
+            if not text[chunk.span()[1] : end].strip(_TRAILING):
+                begin = end + 1
+                continue
+        if len(run) > 1:
+            yield run
+        tail = _tail_literal(text, begin, end)
+        run = [tail] if tail else []
+        begin = end + 1
+    if len(run) > 1:
+        yield run
+
+
+def _wrapped_spans(text: str) -> list[tuple[int, int]]:
+    """Source spans of the secrets in each run of adjacent string literals, found on the run's joined value."""
+    spans: list[tuple[int, int]] = []
+    for run in _literal_runs(text):
+        value = io.StringIO()
+        where: list[tuple[int, int, int]] = []
+        for chunk, literal in enumerate(run):
+            first, last_end = literal.span()
+            i, stop = first + (text[first] == "b") + 1, last_end - 1
+            while i < stop:
+                width = 2 if text[i] == "\\" and text[i + 1] in _UNESCAPED else 1
+                value.write(_UNESCAPED[text[i + 1]] if width == 2 else text[i])
+                where.append((i, i + width, chunk))
+                i += width
+        joined = value.getvalue()
+        # The joined value is scrubbed without this pass, so the recursion through _cut_hidden_percent ends.
+        origin = _run_passes(joined, list(range(len(joined))))[1]
+        masked = [True] * len(joined)
+        for source in origin:
+            if source >= 0:
+                masked[source] = False
+        for start, end in _literal_spans(joined, _REGISTERED_ESCAPED.get()):
+            masked[start:end] = [True] * (end - start)
+        last: tuple[int, int, int] | None = None
+        for index, flag in enumerate(masked):
+            if not flag:
+                last = None
+            elif last is not None and last[2] == where[index][2]:
+                last = (last[0], where[index][1], last[2])
+                spans[-1] = last[:2]
+            else:
+                last = where[index]
+                spans.append(last[:2])
+    return spans
+
+
+def _mask_wrapped(text: str) -> tuple[str, list[int]]:
+    out = io.StringIO()
+    origin: list[int] = []
+    cursor = 0
+    for start, end in _wrapped_spans(text):
+        out.write(text[cursor:start] + "***")
+        origin.extend(range(cursor, start))
+        origin.extend((-1, -1, -1))
+        cursor = end
+    out.write(text[cursor:])
+    origin.extend(range(cursor, len(text)))
+    return out.getvalue(), origin
+
+
 def _scrub_passes(text: str) -> str:
-    text = _MARKER_PATTERN.sub("\ufffd", text)
+    text = _mask_wrapped(_MARKER_PATTERN.sub("\ufffd", text))[0]
     for pattern, repl in _PASSES:
         text = _sub_quoted_keys(text) if pattern is _QUOTED_KEY_PATTERN else pattern.sub(repl, text)
     return text
 
 
-def _scrub_tracked(text: str) -> tuple[str, list[int]]:
-    text = _MARKER_PATTERN.sub("\ufffd", text)
-    origin = list(range(len(text)))
+def _run_passes(text: str, origin: list[int]) -> tuple[str, list[int]]:
     for pattern, repl in _PASSES:
         text, origin = _sub_tracked(
             pattern, repl, text, origin, _uri_origins if pattern is _FREE_TEXT_URI_PATTERN else None
         )
     return text, origin
+
+
+def _scrub_tracked(text: str) -> tuple[str, list[int]]:
+    return _run_passes(*_mask_wrapped(_MARKER_PATTERN.sub("\ufffd", text)))
 
 
 # Bounds recursion so a deeply nested attribute cannot hit RecursionError on the failure path.

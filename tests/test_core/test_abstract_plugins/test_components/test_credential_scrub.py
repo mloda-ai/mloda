@@ -565,6 +565,67 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
     ("quote_dsn_call_arg", "f('host=h password=abc')", ["abc"], ["f('host=h password=***')"]),
     ("quoted_value_odd_backslash_run_before_newline", '{"password": "S3CR3Tq9\\\\\\\n"}', ["S3CR3Tq9"], []),
     ("quoted_value_even_backslash_run_before_newline", '{"password": "S3CR3Tq9\\\\\n"}', ["S3CR3Tq9"], []),
+    (
+        "pprint_wrapped_repr_dump",
+        pprint.pformat({"msg": repr({"user": "bob", "password": "S3CR3Tq9", "token": "Z7xW4kq2"})}, width=40),
+        ["S3CR3Tq9", "Z7xW4kq2"],
+        ["'user': 'bob'"],
+    ),
+    (
+        "pprint_wrapped_repr_dump_quote_in_value",
+        pprint.pformat(
+            {"msg": repr({"password": 'say "hi" ' + "word " * 12 + "S3CR3Tq9", "token": "Z7xW4kq2"})}, width=40
+        ),
+        ["S3CR3Tq9", "Z7xW4kq2"],
+        ["{'msg':"],
+    ),
+    (
+        "pprint_wrapped_json_dump",
+        pprint.pformat({"msg": json.dumps({"user": "bob", "password": "S3CR3Tq9", "token": "Z7xW4kq2"})}, width=40),
+        ["S3CR3Tq9", "Z7xW4kq2"],
+        ['"user": "bob"'],
+    ),
+    (
+        "pprint_wrapped_bytes_repr_dump",
+        pprint.pformat({"msg": repr({"user": "bob", "password": "S3CR3Tq9", "token": "Z7xW4kq2"}).encode()}, width=40),
+        ["S3CR3Tq9", "Z7xW4kq2"],
+        ["'user': 'bob'"],
+    ),
+    (
+        "pprint_wrapped_secret_value_with_quotes",
+        pprint.pformat({"msg": repr({"password": "it's ab\"cd " + "word " * 10 + "S3CR3Tq9"})}, width=40),
+        ["S3CR3Tq9"],
+        ["{'msg':"],
+    ),
+    (
+        "pprint_wrapped_prose_apostrophe_prefix_repr_dump",
+        "can't load config: "
+        + pprint.pformat({"msg": repr({"user": "bob", "password": "S3CR3Tq9", "token": "Z7xW4kq2"})}, width=40),
+        ["S3CR3Tq9", "Z7xW4kq2"],
+        ["'user': 'bob'"],
+    ),
+    (
+        "pprint_wrapped_prose_apostrophe_prefix_json_dump",
+        "ValueError: user's config "
+        + pprint.pformat({"msg": json.dumps({"user": "bob", "password": "S3CR3Tq9", "token": "Z7xW4kq2"})}, width=40),
+        ["S3CR3Tq9", "Z7xW4kq2"],
+        ['"user": "bob"'],
+    ),
+    (
+        "pprint_wrapped_stray_double_quote_prefix_repr_dump",
+        'say "x: '
+        + pprint.pformat({"msg": repr({"user": "bob", "password": "S3CR3Tq9", "token": "Z7xW4kq2"})}, width=40),
+        ["S3CR3Tq9", "Z7xW4kq2"],
+        ["'user': 'bob'"],
+    ),
+    (
+        "pprint_wrapped_crlf_repr_dump_pin",
+        pprint.pformat({"msg": repr({"user": "bob", "password": "S3CR3Tq9", "token": "Z7xW4kq2"})}, width=40).replace(
+            "\n", "\r\n"
+        ),
+        ["S3CR3Tq9", "Z7xW4kq2"],
+        ["'user': 'bob'"],
+    ),
 ]
 
 
@@ -580,6 +641,28 @@ def test_scrub_credentials_drops_secrets_and_keeps_context(
 
 
 DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
+    (
+        "pprint_wrapped_json_indent2_dump",
+        pprint.pformat(
+            {"msg": json.dumps({"user": "bob", "password": "S3CR3Tq9", "token": "Z7xW4kq2"}, indent=2)}, width=40
+        ),
+        "{'msg': '{\\n'\n"
+        '        \'  "user": "bob",\\n\'\n'
+        '        \'  "password": "***",\\n\'\n'
+        '        \'  "token": "***"\\n\'\n'
+        "        '}'}",
+    ),
+    (
+        "pprint_wrapped_harmless_string_pin",
+        pprint.pformat({"msg": "word " * 20}, width=40),
+        pprint.pformat({"msg": "word " * 20}, width=40),
+    ),
+    (
+        "pprint_list_one_item_per_line_pin",
+        pprint.pformat(["a" * 30, "b" * 30], width=40),
+        pprint.pformat(["a" * 30, "b" * 30], width=40),
+    ),
+    ("adjacent_literals_one_line_pin", "'a' 'b'", "'a' 'b'"),
     (
         "ml_backslash_ending_value_pformat",
         pprint.pformat({"password": "S3CR3T\\", "token": "Z7xW", "user": "bob"}, width=20),
@@ -1698,6 +1781,7 @@ def test_slash_password_host_repeat_scrubs_fast() -> None:
         (lambda k: '{"password": "' + "\\" * k + "x", 20_000, "an unclosed quoted value with a long backslash run"),
         (lambda k: "{'password': '" + "\\" * k + "x'}", 20_000, "a single-quoted value with a long backslash run"),
         (lambda k: '{"password": "' + "\\" * k + "\nnext line", 20_000, "a long backslash run before a newline"),
+        (lambda k: "'abc def' \n  " * k + "'x'", 10_000, "many adjacent literal lines"),
     ],
     ids=[
         "dotted_prefix",
@@ -1732,6 +1816,7 @@ def test_slash_password_host_repeat_scrubs_fast() -> None:
         "quoted_backslash_run_unclosed",
         "quoted_backslash_run_single_quote",
         "quoted_backslash_run_before_newline",
+        "adjacent_literal_lines_run",
     ],
 )
 def test_dotted_and_multiline_inputs_scrub_fast(build: Callable[[int], str], n: int, what: str) -> None:
@@ -3419,6 +3504,24 @@ class TestRegisteredSecretsScope:
             pytest.param("SE::cretval", "zip://d;%74oken=SE::cretval::x", "cretval", id="literal-with-value-colon-cut"),
             pytest.param("abc;def", "s3://b!yabc;def", "abc", id="literal-in-host-stop-kept-head"),
             pytest.param("h2/dbSEC?", "mongodb://h1,h2/dbSEC?ret=1", "dbSEC", id="literal-in-multi-host-kept-head"),
+            pytest.param(
+                "S3CR3Tq9longsecret",
+                "'prefix S3CR3Tq9'\n        'longsecret suffix'",
+                "S3CR3Tq9",
+                id="literal-split-across-wrapped-chunks-head",
+            ),
+            pytest.param(
+                "S3CR3Tq9longsecret",
+                "'prefix S3CR3Tq9'\n        'longsecret suffix'",
+                "longsecret",
+                id="literal-split-across-wrapped-chunks-tail",
+            ),
+            pytest.param(
+                "S3CR3Tq9 it's longsecret",
+                pprint.pformat({"msg": repr("note S3CR3Tq9 it's longsecret end")}, width=20),
+                "longsecret",
+                id="literal-split-across-wrapped-chunks-with-escape-pin",
+            ),
         ],
     )
     def test_secret_is_masked_when_the_literal_overlaps_a_pattern(self, literal: str, text: str, secret: str) -> None:

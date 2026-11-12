@@ -749,35 +749,42 @@ class SourceFeatureGroup(FeatureGroup):
                     deferrable=True,
                 )
             replace_probe_match_rejection(cls.get_class_name(), reason, known_owners, stage=INPUT_DATA_STAGE, code=code)
-        elif (
-            missing
-            and not selected
-            and (explicitly_pointed or (cls._declared_name(base_name) if declared is None else declared))
-        ):
-            plural = "s" if len(missing) > 1 else ""
-            keys = ", ".join(repr(key) for key in sorted(missing))
-            reason = f"{cls.get_class_name()} needs the option{plural} {keys} for '{name}'"
-            record_match_rejection(
-                cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.REQUIRED_OPTION_ABSENT
-            )
-        elif skipped:
-            reason = f"options point at {foreign}, so {cls.get_class_name()} does not search the collection"
-            record_match_rejection(
-                cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.POINTED_ELSEWHERE
-            )
-        elif undeclared and not selected:
-            reason = f"'{base_name}' is not a name {cls.get_class_name()} declares"
-            record_match_rejection(
-                cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.NAME_NOT_DECLARED
-            )
-        elif explicitly_pointed:
-            reason = f"{cls.get_class_name()} was pointed at but found no source for '{name}'"
-            record_match_rejection(
-                cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND
-            )
-        elif not pointed and not stepped_aside and any(route.names is NamePolicy.DECLARED for route in selected):
-            reason = scrub_credentials(f"{cls.get_class_name()} found no source serving '{name}'")
-            record_match_rejection(
-                cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND
-            )
+        else:
+            if missing:
+                plural = "s" if len(missing) > 1 else ""
+                keys = ", ".join(repr(key) for key in sorted(missing))
+                needs_suffix = f"; sources needing the option{plural} {keys} were not searched"
+            else:
+                plural = ""
+                keys = ""
+                needs_suffix = ""
+            if (
+                missing
+                and not selected
+                and (explicitly_pointed or (cls._declared_name(base_name) if declared is None else declared))
+            ):
+                reason = f"{cls.get_class_name()} needs the option{plural} {keys} for '{name}'"
+                record_match_rejection(
+                    cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.REQUIRED_OPTION_ABSENT
+                )
+            elif skipped:
+                reason = f"options point at {foreign}, so {cls.get_class_name()} does not search the collection"
+                record_match_rejection(
+                    cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.POINTED_ELSEWHERE
+                )
+            elif undeclared and not selected:
+                reason = f"'{base_name}' is not a name {cls.get_class_name()} declares"
+                record_match_rejection(
+                    cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.NAME_NOT_DECLARED
+                )
+            elif explicitly_pointed:
+                reason = f"{cls.get_class_name()} was pointed at but found no source for '{name}'{needs_suffix}"
+                record_match_rejection(
+                    cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND
+                )
+            elif not pointed and not stepped_aside and any(route.names is NamePolicy.DECLARED for route in selected):
+                reason = scrub_credentials(f"{cls.get_class_name()} found no source serving '{name}'{needs_suffix}")
+                record_match_rejection(
+                    cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.SOURCE_NOT_FOUND
+                )
         return False

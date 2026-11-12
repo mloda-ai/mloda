@@ -47,6 +47,9 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_s
     ToyOpenFG,
     ToyOtherSourceFG,
     ToyRequiredOptionFG,
+    ToyTwoRequiredOptionsDeclaredFG,
+    ToyTwoRequiredOptionsFG,
+    ToyTwoRequiredOptionsNoSourceFG,
     column_values,
     foreign_dac,
     toy_dac,
@@ -332,6 +335,25 @@ class TestRequiredOptionRoute:
     def test_required_option_presence_points_the_route(self) -> None:
         feature = Feature(COL, Options({"toyfmt_required": "yes"}))
         assert _claims(feature, toy_dac(h1={COL: [1]}), ToyRequiredOptionFG)
+
+    @pytest.mark.parametrize(
+        ("feature", "group", "dac"),
+        [
+            (Feature("toyfmt_declared_col"), ToyTwoRequiredOptionsDeclaredFG, toy_dac(h1={"toyfmt_declared_col": [1]})),
+            (Feature(COL, feature_group=ToyTwoRequiredOptionsFG), ToyTwoRequiredOptionsFG, toy_dac(h1={COL: [1]})),
+        ],
+        ids=["declared_name", "pointed"],
+    )
+    def test_missing_two_required_options_records_plural_input_data_rejection(
+        self, feature: Feature, group: type, dac: DataAccessCollection
+    ) -> None:
+        result = _identify(feature, dac, group)
+
+        assert result.identified == {}
+        elimination = result.eliminations[group]
+        assert elimination.stage == "input_data"
+        assert "needs the options 'toyfmt_req_a', 'toyfmt_req_b'" in elimination.reason
+        assert elimination.code is CoreDeclineCode.REQUIRED_OPTION_ABSENT
 
 
 class _ToyAliasFG(ToySourceFG):
@@ -1387,6 +1409,20 @@ class TestPointedRoutesDeclineWithReason:
         assert "was pointed at but found no source" in elimination.reason
         assert elimination.code is CoreDeclineCode.SOURCE_NOT_FOUND
 
+    def test_pointed_no_source_reason_includes_missing_required_options_suffix(self) -> None:
+        group = ToyTwoRequiredOptionsNoSourceFG
+        feature = Feature("toyfmt_declared_col", feature_group=group)
+        result = _identify(feature, None, group)
+
+        assert result.identified == {}
+        elimination = result.eliminations[group]
+        assert elimination.stage == "input_data"
+        assert elimination.code is CoreDeclineCode.SOURCE_NOT_FOUND
+        assert (
+            "ToyTwoRequiredOptionsNoSourceFG was pointed at but found no source for 'toyfmt_declared_col'; "
+            "sources needing the options 'toyfmt_req_a', 'toyfmt_req_b' were not searched"
+        ) in elimination.reason
+
 
 class _ComputesDeclaredColFG(FeatureGroup):
     """Non-source group computing a name that ToyDeclaredFG declares."""
@@ -1440,6 +1476,18 @@ class TestUnpointedDeclaredNamesDeclineWithReason:
         assert elimination.stage == "input_data"
         assert elimination.code is CoreDeclineCode.SOURCE_NOT_FOUND
         assert f"ToyDeclaredFG found no source serving '{name}'" in elimination.reason
+
+    def test_unpointed_no_source_reason_includes_missing_required_options_suffix(self) -> None:
+        result = _identify(Feature("toyfmt_declared_col"), None, ToyTwoRequiredOptionsNoSourceFG)
+
+        assert ToyTwoRequiredOptionsNoSourceFG not in result.identified
+        elimination = result.eliminations[ToyTwoRequiredOptionsNoSourceFG]
+        assert elimination.stage == "input_data"
+        assert elimination.code is CoreDeclineCode.SOURCE_NOT_FOUND
+        assert (
+            "ToyTwoRequiredOptionsNoSourceFG found no source serving 'toyfmt_declared_col'; "
+            "sources needing the options 'toyfmt_req_a', 'toyfmt_req_b' were not searched"
+        ) in elimination.reason
 
     @pytest.mark.parametrize("dac", [None, toy_dac()], ids=["no_collection", "empty_toy_collection"])
     def test_a_reason_recorded_by_find_sources_wins(self, dac: DataAccessCollection | None) -> None:

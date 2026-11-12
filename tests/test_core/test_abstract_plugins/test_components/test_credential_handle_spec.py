@@ -15,6 +15,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
+from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
 from mloda.core.abstract_plugins.components.credential_access import ResolvedCredential, credentials_scope
 from mloda.core.abstract_plugins.components.credential_handle import refuse_credential_option_values
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
@@ -896,19 +897,64 @@ def _vault_session(recorder: _RunRecorder | None = None, dac: DataAccessCollecti
     )
 
 
-def _refused_run(session: Any, credentials: Any, recorder: _RunRecorder) -> str:
+def _refused_run(session: Any, recorder: _RunRecorder, entry: str = "run", **kwargs: Any) -> str:
     with pytest.raises(ValueError) as exc:
-        session.run(credentials=credentials)
+        getattr(session, entry)(**kwargs)
     assert recorder.events == []
     return str(exc.value)
 
 
+_ARGUMENTS: dict[str, tuple[Callable[[str], dict[str, Any]], str]] = {
+    "api_data": (lambda key: {"api_data": {key: {"c": [1]}}}, "differ from the prepared sets"),
+    "parameters": (lambda key: {"parameters": {key: 1}}, "is not a runtime parameter"),
+    "artifacts": (lambda key: {"artifacts": {key: 1}}, "are not artifact inputs"),
+}
+
+
 class TestRunStartRefusals:
+    @pytest.mark.parametrize("entry", ["run", "stream_run"])
+    @pytest.mark.parametrize("argument", ["api_data", "parameters", "artifacts"])
+    @pytest.mark.parametrize("source", ["prepared", "per-run"])
+    def test_an_argument_check_error_masks_a_registered_key(self, entry: str, argument: str, source: str) -> None:
+        recorder = _RunRecorder()
+        session = _vault_session(recorder)
+        literal = SECRET if source == "prepared" else _FRESH["key"]
+        build, fragment = _ARGUMENTS[argument]
+        kwargs = build(literal)
+        if source == "per-run":
+            kwargs["credentials"] = {"vault-a": _FRESH}
+
+        message = _refused_run(session, recorder, entry, **kwargs)
+
+        assert fragment in message
+        assert literal not in message
+        assert "***" in message
+
+    @pytest.mark.parametrize("entry", ["run", "stream_run"])
+    @pytest.mark.parametrize("argument", ["api_data", "parameters", "artifacts"])
+    def test_an_argument_check_error_keeps_an_unregistered_key(self, entry: str, argument: str) -> None:
+        recorder = _RunRecorder()
+        session = _vault_session(recorder)
+
+        build, fragment = _ARGUMENTS[argument]
+        message = _refused_run(session, recorder, entry, **build("chs_plain_unknown_key"))
+
+        assert fragment in message
+        assert "chs_plain_unknown_key" in message
+
+    def test_stream_run_leaves_no_secret_registered_after_it_returns(self) -> None:
+        session = _vault_session()
+
+        stream = session.stream_run()
+
+        assert current_registered_secrets() == frozenset()
+        list(stream)
+
     def test_an_undeclared_handle_names_it_and_the_declared_ones(self) -> None:
         recorder = _RunRecorder()
         session = _vault_session(recorder)
 
-        message = _refused_run(session, {"vault-b": _FRESH}, recorder)
+        message = _refused_run(session, recorder, credentials={"vault-b": _FRESH})
 
         assert "vault-b" in message
         assert "vault-a" in message
@@ -923,7 +969,7 @@ class TestRunStartRefusals:
             function_extender={recorder},
         )
 
-        message = _refused_run(session, {"vault-a": _FRESH}, recorder)
+        message = _refused_run(session, recorder, credentials={"vault-a": _FRESH})
 
         assert "vault-a" in message
         assert _FRESH["key"] not in message
@@ -980,7 +1026,7 @@ class TestRunStartRefusals:
         else:
             session = _vault_session(recorder)
 
-        message = _refused_run(session, credentials, recorder)
+        message = _refused_run(session, recorder, credentials=credentials)
 
         for part in expected:
             assert part in message
@@ -1000,7 +1046,7 @@ class TestRunStartRefusals:
             function_extender={recorder},
         )
 
-        message = _refused_run(session, {"db-main": {"sqlite": "chs-other.db"}}, recorder)
+        message = _refused_run(session, recorder, credentials={"db-main": {"sqlite": "chs-other.db"}})
 
         assert "db-main" in message
         assert "prepare" in message

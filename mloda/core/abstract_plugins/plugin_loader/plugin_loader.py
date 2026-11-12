@@ -68,6 +68,7 @@ OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP: str = "mloda.optional_dependencies"
 CORE_PLUGIN_MODULES: tuple[str, ...] = (
     "mloda.core.abstract_plugins.components.input_data.api_data_fg",
     "mloda.core.abstract_plugins.operation_feature_group",
+    "mloda.interfaces.service.deny_gate",
 )
 
 

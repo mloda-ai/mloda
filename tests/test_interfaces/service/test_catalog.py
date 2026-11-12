@@ -14,7 +14,10 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda.interfaces.service.catalog import (
     MAX_DESCRIPTION_LENGTH,
     MAX_SEARCH_LIMIT,
@@ -173,6 +176,47 @@ class CatalogDeniedMcp3(StubFeatureGroup):
     ) -> bool:
         cls._record("match_feature_group_criteria")
         return str(feature_name) in cls.MATCHED_NAMES
+
+
+DOUBLE_MCP3 = "__mcp3_double"
+
+
+class CatalogDoubleMcp3(FeatureGroup):
+    """Derives a doubled column named by the prefix before the suffix."""
+
+    INPUT: ClassVar[str | None] = None
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name).endswith(DOUBLE_MCP3)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(type(self).INPUT or str(feature_name)[: -len(DOUBLE_MCP3)])}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+
+class CatalogRivalMissingMcp3(CatalogDoubleMcp3):
+    """Rival over a column no source has."""
+
+    INPUT = "mcp3_nowhere_column"
+
+
+class CatalogRivalIncomeMcp3(CatalogDoubleMcp3):
+    """Rival over a resolving column."""
+
+    INPUT = "income"
 
 
 ALLOWED: list[type[FeatureGroup]] = [
@@ -626,6 +670,34 @@ class TestDescribe:
         assert _error_code(result) == "policy_denied"
         assert result["error"]["alternatives"] == ["mcp3_alpha_total"]
         assert "deny_feature_groups" not in json.dumps(result)
+
+    @pytest.mark.parametrize(
+        ("name", "rivals"),
+        [
+            ("mcp3_salary", ()),
+            ("mcp3_salary" + DOUBLE_MCP3, ()),
+            ("mcp3_salary" + DOUBLE_MCP3, (CatalogRivalMissingMcp3,)),
+            ("mcp3_salary" + DOUBLE_MCP3, (CatalogRivalIncomeMcp3,)),
+            ("mcp3_salarx", ()),
+        ],
+        ids=["name", "derived", "derived_missing_rival", "derived_resolving_rival", "near_miss"],
+    )
+    def test_denied_name_describes_alike_with_or_without_the_column(
+        self, tmp_path: Path, name: str, rivals: tuple[type[FeatureGroup], ...]
+    ) -> None:
+        base = PluginCollector.enabled_feature_groups({*rivals, CsvFG, CatalogDeniedMcp3, CatalogDoubleMcp3})
+        answers = []
+        for column in ("segment", "mcp3_salary"):
+            path = tmp_path / "sales.csv"
+            path.write_text(f"income,{column}\n1,2\n")
+            catalog = Catalog.build(_settings(tmp_path), base)
+            result = catalog.describe(name)
+            if is_error(result):
+                result["error"].pop("audit_id")
+            answers.append(result)
+        assert answers[0] == answers[1]
+        if is_error(answers[0]):
+            assert "mcp3_salary" not in json.dumps(answers[0]).replace(name, "")
 
     @pytest.mark.parametrize("key", ["CsvFG", "JsonFG", RESERVED_READER_OPTION_KEY])
     def test_data_access_option_is_policy_denied(self, catalog: Catalog, key: str) -> None:

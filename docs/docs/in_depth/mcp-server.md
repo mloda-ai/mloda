@@ -160,7 +160,8 @@ Credentials a group reads at run time with `read_credential` stay here too (see 
   the alternatives you configured. Requested names, `index` columns, `in_features` source names and filter columns are
   checked before planning. Any planned feature name the deny list matches, such as a chained name over a denied
   column, is refused after planning; a request whose planning stops on a denied name, or after resolving one, is
-  refused the same way.
+  refused the same way. Configured sources never serve a denied name, so planning, running and describe answer the
+  same whether or not a source has the column.
 - `run` re-plans the request: validation, policy, filters and row limits are checked again, and a plan that resolves
   differently is refused as `plan_stale`.
 - With `max_rows` set, a request is refused as `limit_exceeded` when a configured source has more rows or cannot be

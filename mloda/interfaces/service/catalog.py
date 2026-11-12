@@ -26,6 +26,7 @@ from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.api.plugin_docs import get_feature_group_docs, resolve_feature
 from mloda.core.api.plugin_info import FeatureGroupInfo, ResolvedFeature
 from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig
+from mloda.interfaces.service.deny_gate import DeniedNameGate
 from mloda.interfaces.service.errors import (
     error_result,
     failure_result,
@@ -43,7 +44,7 @@ from mloda.interfaces.service.request import (
     unlisted_group_option_violations,
 )
 from mloda.interfaces.service.sources import ServiceCredentials, source_columns
-from mloda.steward import verified_context
+from mloda.steward import ReaderProbeScope, reader_probe_scope, verified_context
 
 MAX_DESCRIPTION_LENGTH = 300
 MAX_SEARCH_LIMIT = 50
@@ -292,14 +293,15 @@ class Catalog:
                 return error_result("policy_denied", message, problems_to_details(unlisted))
         with verified_context(principal=self._principal), MLODA_LOCK:
             collection, missing = self._credentials.collection(self._settings.sources)
-            resolved = resolve_feature(
-                name,
-                options=Options(
-                    group={**self._settings.options, **group}, context=dict(self._settings.context_options)
-                ),
-                plugin_collector=self._collector,
-                data_access_collection=collection,
-            )
+            with reader_probe_scope(ReaderProbeScope(DeniedNameGate(self.is_denied), None, None, None, None)):
+                resolved = resolve_feature(
+                    name,
+                    options=Options(
+                        group={**self._settings.options, **group}, context=dict(self._settings.context_options)
+                    ),
+                    plugin_collector=self._collector,
+                    data_access_collection=collection,
+                )
         if missing and resolved.feature_group is None:
             return failure_result("Describe", ConfigError(next(iter(missing.values()))))
         if resolved.credential_refusal and not self.is_denied(name):
@@ -322,7 +324,9 @@ class Catalog:
             extra: dict[str, Any] = {"alternatives": list(alternatives)} if alternatives else {}
             return error_result("policy_denied", "This feature is not available under the service policy.", **extra)
         known = dict.fromkeys([*self._known_names, *source_columns(self._settings.sources)])
-        close = difflib.get_close_matches(name, list(known), n=1)
+        close = difflib.get_close_matches(
+            name, [known_name for known_name in known if not self.is_denied(known_name)], n=1
+        )
         problem = Problem(
             path="/name",
             problem="unknown_feature",

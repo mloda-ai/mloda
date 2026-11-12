@@ -28,6 +28,7 @@ from mloda.core.abstract_plugins.implementation_pin_error import VariantBlockedP
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.interfaces.service.catalog import MAX_DESCRIPTION_LENGTH, Catalog, plugin_collector_for, sanitize_text
 from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig
+from mloda.interfaces.service.deny_gate import DeniedNameGate
 from mloda.interfaces.service.errors import error_result, failure_result, problems_to_details
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.request import (
@@ -437,6 +438,7 @@ class Planner:
             "api_data": dict(parsed.inline_data) or None,
             "plugin_collector": plugin_collector_for(self._settings, self._base),
             "parallelization_modes": {ParallelizationMode.SYNC},
+            "function_extender": {DeniedNameGate(self._catalog.is_denied)},
         }
 
     def _inline_refusal(self, request: Any) -> dict[str, Any] | None:

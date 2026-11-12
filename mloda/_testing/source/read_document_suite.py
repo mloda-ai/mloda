@@ -23,6 +23,7 @@ from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
+from mloda._testing.source import reclaim
 from mloda._testing.source.source_suite import (
     SourceFeatureGroupTestMixin,
     LoadCapture,
@@ -340,6 +341,7 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
             f"{name}{CHAIN_SEPARATOR}sum_aggr",
             f"{name}~other",
             f"{name}~0",
+            f"{name}~0~1",
             f"{name}{SOURCE}~0",
             f"{name}{FILE_TYPE}~1",
             f"{name}{SOURCE}~file_type",
@@ -375,6 +377,18 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
             assert not self._matches(name, options, self.own_dac()), name
             assert self._group_name() not in rejection_window, (name, rejection_window.get(self._group_name()))
         del sub, options
+
+    def test_doc_a_numbered_declared_name_under_a_family_scope_leaves_a_sibling_silent(self) -> None:
+        sibling = reclaim.track(type(f"{self._group_name()}FamilySibling", (self.feature_group_class,), {}))
+        mapping: FeatureGroupEnvironmentMapping = {
+            self.feature_group_class: {PythonDictFramework},
+            cast(type[SourceFeatureGroup], sibling): {PythonDictFramework},
+        }
+        for name in (f"{self._group_name()}~0", f"{self._group_name()}{SOURCE}~0"):
+            feature = Feature(name, self._options(), feature_group=self.feature_group_class)
+            result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, self.own_dac())
+            assert sibling not in result.eliminations, (name, result.eliminations.get(sibling))
+        del sibling, mapping, result, feature
 
     def test_doc_declines_every_undeclared_name_when_pointed_and_records_why(
         self, rejection_window: dict[str, MatchRejection]

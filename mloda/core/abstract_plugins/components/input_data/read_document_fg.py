@@ -64,7 +64,7 @@ class ReadDocumentFG(_FileSourceFG):
 
     @classmethod
     def _declared_feature_name(cls, name: str) -> bool:
-        return cls._declared_name(name)
+        return name in cls.declared_names()
 
     @classmethod
     def find_sources(

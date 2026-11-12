@@ -604,7 +604,9 @@ class SourceFeatureGroup(FeatureGroup):
                 if declared is None:
                     declared = cls._declared_feature_name(name)
                 if not declared:
-                    undeclared = explicitly_pointed or (foreign is None and cls._declared_name(base_name))
+                    undeclared = explicitly_pointed or (
+                        not pointed and foreign is None and cls._declared_name(base_name)
+                    )
                     continue
             if not all(key in options for key in route.required_options):
                 if foreign is None:

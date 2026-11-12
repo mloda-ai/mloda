@@ -427,8 +427,7 @@ class TestDiagnoseEmptyRequest:
 # diagnose() scrubs its published message at one exit
 # ---------------------------------------------------------------------------
 
-# The five monkeypatched cases test the exit directly (their real raise sites already run inside the
-# session's redaction); only `setup` is a real pre-fix leak.
+# These cases test the exit directly; their real raise sites already run inside a redaction scope.
 DIAGNOSE_SECRET_812 = "diagnose_secret_812_value"  # nosec B105
 
 

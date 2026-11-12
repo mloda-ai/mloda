@@ -259,51 +259,53 @@ class mlodaAPI:
         output_framework: str | type[ComputeFramework] | None,
     ) -> None:
         # Setup boundary: any invalid request argument surfaces as the typed error before planning.
-        try:
-            if column_ordering is not None and column_ordering not in ("alphabetical", "request_order"):
-                raise SetupConfigurationError(
-                    f"column_ordering must be None, 'alphabetical', or 'request_order', got '{column_ordering}'"
+        literals = frozenset() if data_access_collection is None else data_access_collection.secret_literals()
+        with _CredentialRedaction(literals, frozenset()):
+            try:
+                if column_ordering is not None and column_ordering not in ("alphabetical", "request_order"):
+                    raise SetupConfigurationError(
+                        f"column_ordering must be None, 'alphabetical', or 'request_order', got '{column_ordering}'"
+                    )
+                self.column_ordering = column_ordering
+                # The features object is potentially changed during the run, so we need to deepcopy it by default, so that follow up runs with the same object are not affected.
+                # Set copy_features=False to disable deep copying for use cases where features contain non-copyable objects.
+                # Feature objects are then shallow-copied, so the plan never writes into the caller's Features.
+                _requested_features = (
+                    deepcopy(requested_features) if copy_features else self._shallow_copy_features(requested_features)
                 )
-            self.column_ordering = column_ordering
-            # The features object is potentially changed during the run, so we need to deepcopy it by default, so that follow up runs with the same object are not affected.
-            # Set copy_features=False to disable deep copying for use cases where features contain non-copyable objects.
-            # Feature objects are then shallow-copied, so the plan never writes into the caller's Features.
-            _requested_features = (
-                deepcopy(requested_features) if copy_features else self._shallow_copy_features(requested_features)
-            )
 
-            data_access_collection, self._connection_handles = self._bind_feature_connections(
-                _requested_features, data_access_collection
-            )
+                data_access_collection, self._connection_handles = self._bind_feature_connections(
+                    _requested_features, data_access_collection
+                )
 
-            self._api_data_columns = self._api_data_spec(api_data)
-            self._api_data_types = self._api_data_type_spec(api_data)
-            if self._api_data_columns:
-                data_access_collection = (
-                    DataAccessCollection() if data_access_collection is None else data_access_collection
-                ).with_api_data_columns(self._api_data_columns, self._api_data_types)
+                self._api_data_columns = self._api_data_spec(api_data)
+                self._api_data_types = self._api_data_type_spec(api_data)
+                if self._api_data_columns:
+                    data_access_collection = (
+                        DataAccessCollection() if data_access_collection is None else data_access_collection
+                    ).with_api_data_columns(self._api_data_columns, self._api_data_types)
 
-            self.strict_type_enforcement = strict_type_enforcement
-            self.features = self._process_features(_requested_features)
-            setup_compute_framework = SetupComputeFramework(
-                compute_frameworks,
-                self.features,
-                parallelization_modes=parallelization_modes,
-                output_framework=output_framework,
-            )
-            self.compute_framework = setup_compute_framework.compute_frameworks
-            self.framework_preference = setup_compute_framework.framework_preference
-            self.links = links
-            self.data_access_collection = (
-                None if data_access_collection is None else data_access_collection.with_copied_credentials()
-            )
-            self.global_filter = global_filter
-            self.api_data = api_data
-            self.output_framework = setup_compute_framework.output_framework
-        except SetupConfigurationError:
-            raise
-        except ValueError as error:
-            raise SetupConfigurationError(str(error)) from error
+                self.strict_type_enforcement = strict_type_enforcement
+                self.features = self._process_features(_requested_features)
+                setup_compute_framework = SetupComputeFramework(
+                    compute_frameworks,
+                    self.features,
+                    parallelization_modes=parallelization_modes,
+                    output_framework=output_framework,
+                )
+                self.compute_framework = setup_compute_framework.compute_frameworks
+                self.framework_preference = setup_compute_framework.framework_preference
+                self.links = links
+                self.data_access_collection = (
+                    None if data_access_collection is None else data_access_collection.with_copied_credentials()
+                )
+                self.global_filter = global_filter
+                self.api_data = api_data
+                self.output_framework = setup_compute_framework.output_framework
+            except SetupConfigurationError:
+                raise
+            except ValueError as error:
+                raise SetupConfigurationError(str(error)) from error
 
         with self._credential_redaction():
             self.engine = self._create_engine()

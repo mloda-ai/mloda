@@ -192,3 +192,44 @@ class ToyDeclaredFG(ToySourceBase):
     @classmethod
     def declared_name_prefixes(cls) -> tuple[str, ...]:
         return ("toyfmt_pre_", "toyfmt_conn__")
+
+
+class ToyTwoRequiredOptionsFG(ToySourceBase):
+    """Checked names; the route applies only when both required options are present."""
+
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
+        ClaimRoute("toy", NamePolicy.CHECKED, False, required_options=("toyfmt_req_a", "toyfmt_req_b")),
+    )
+
+
+class ToyTwoRequiredOptionsNoSourceFG(ToySourceBase):
+    """Searched declared route plus a route needing two options, for no-source suffix tests."""
+
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
+        ClaimRoute("toy", NamePolicy.DECLARED, True),
+        ClaimRoute("toy", NamePolicy.CHECKED, False, required_options=("toyfmt_req_a", "toyfmt_req_b")),
+    )
+
+    @classmethod
+    def declared_names(cls) -> frozenset[str]:
+        return frozenset({"toyfmt_declared_col"})
+
+    @classmethod
+    def declared_name_prefixes(cls) -> tuple[str, ...]:
+        return ("toyfmt_pre_", "toyfmt_conn__")
+
+
+class ToyTwoRequiredOptionsDeclaredFG(ToySourceBase):
+    """Declared searched route needing two options, for plural required-option absence."""
+
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
+        ClaimRoute("toy", NamePolicy.DECLARED, True, required_options=("toyfmt_req_a", "toyfmt_req_b")),
+    )
+
+    @classmethod
+    def declared_names(cls) -> frozenset[str]:
+        return frozenset({"toyfmt_declared_col"})
+
+    @classmethod
+    def declared_name_prefixes(cls) -> tuple[str, ...]:
+        return ("toyfmt_pre_", "toyfmt_conn__")

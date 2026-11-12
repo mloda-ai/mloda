@@ -1068,11 +1068,11 @@ class mlodaAPI:
         with run_boundary():
             with self._credential_redaction():
                 run_dac, names = self._run_collection(credentials)
-            run_parameters = self._run_parameters(parameters)
-            run_inputs = self._run_inputs(api_data, artifacts, run_parameters, names)
-            run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
-            plan = list(self._plan_snapshot())
             with self._credential_redaction(self._secret_literals(run_dac), self._identity_literals(run_dac)):
+                run_parameters = self._run_parameters(parameters)
+                run_inputs = self._run_inputs(api_data, artifacts, run_parameters, names)
+                run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
+                plan = list(self._plan_snapshot())
                 runner = self._batch_run(
                     parallelization_modes,
                     flight_server,
@@ -1115,10 +1115,11 @@ class mlodaAPI:
         with run_boundary():
             with self._credential_redaction():
                 run_dac, names = self._run_collection(credentials)
-            run_parameters = self._run_parameters(parameters)
-            run_inputs = self._run_inputs(api_data, artifacts, run_parameters, names)
-            run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
-            plan = list(self._plan_snapshot())
+            with self._credential_redaction(self._secret_literals(run_dac), self._identity_literals(run_dac)):
+                run_parameters = self._run_parameters(parameters)
+                run_inputs = self._run_inputs(api_data, artifacts, run_parameters, names)
+                run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
+                plan = list(self._plan_snapshot())
             stream_outcome = _StreamOutcome()
             stream = self._start_stream(
                 api_data,
@@ -1145,8 +1146,9 @@ class mlodaAPI:
     ) -> Generator[Any, None, None]:
         """Callers build ``run_context`` at call time; no yield here, so a refusal at run start raises at the call."""
         _api_data = api_data if api_data is not None else self.api_data
-        self._validate_run_api_data(_api_data)
-        artifact_bindings = self._artifact_bindings(artifacts)
+        with self._credential_redaction(self._secret_literals(run_dac), self._identity_literals(run_dac)):
+            self._validate_run_api_data(_api_data)
+            artifact_bindings = self._artifact_bindings(artifacts)
         stream = self._stream_run_results(
             flight_server,
             parallelization_modes,

@@ -31,12 +31,9 @@ from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTIO
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.function_extender import ExtenderHook
-from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.prepare.resolution_types import Elimination, EvaluationResult, ResolutionRecord
 from mloda.interfaces.service.catalog import Catalog
-from mloda.interfaces.service.deny_gate import DeniedNameGate
 from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig, load_settings
 from mloda.interfaces.service.errors import ERROR_CODES, is_error
 from mloda.interfaces.service.lock import MLODA_LOCK
@@ -1342,7 +1339,7 @@ class TestPolicy:
         with caplog.at_level(logging.DEBUG):
             _explain(tmp_path, {"features": [name]}, base=_base(PlannerRivalMissingMcp4), sources=sources)
         messages = "\n".join(r.getMessage() for r in caplog.records)
-        assert "denied by the service policy" in messages
+        assert "denied by policy" in messages
         assert "DeniedNameGate" in messages
         assert "mcp4_salary" not in messages.replace(name, "")
 
@@ -1430,40 +1427,6 @@ class TestPolicy:
     def test_allowed_request_never_calls_into_denied(self, tmp_path: Path, denied_calls: list[str]) -> None:
         _success(_explain(tmp_path, {"features": ["customer_id", DERIVED]}))
         assert denied_calls == []
-
-
-class TestDeniedNameGate:
-    @staticmethod
-    def _context(*names: str) -> HookContext:
-        return HookContext(
-            hook=ExtenderHook.INPUT_DATA_MATCH,
-            feature_group_class="x.Group",
-            feature_group_version=None,
-            feature_names=names,
-            compute_framework_name=None,
-        )
-
-    def test_wraps_the_input_data_match_hook(self) -> None:
-        assert DeniedNameGate(lambda name: False).wraps() == {ExtenderHook.INPUT_DATA_MATCH}
-
-    def test_refuses_without_an_active_context(self) -> None:
-        with pytest.raises(PermissionError):
-            DeniedNameGate(lambda name: False)(lambda: "ran")
-
-    def test_calls_through_for_an_allowed_name_and_refuses_a_denied_one(self) -> None:
-        gate = DeniedNameGate(lambda name: name == "bad")
-        with self._context("good").activate():
-            assert gate(lambda: "ran") == "ran"
-        with self._context("good", "bad").activate():
-            with pytest.raises(PermissionError, match="denied by the service policy"):
-                gate(lambda: "ran")
-
-    def test_without_an_argument_it_refuses_every_name(self) -> None:
-        gate = DeniedNameGate()
-        assert gate.wraps() == {ExtenderHook.INPUT_DATA_MATCH}
-        with self._context("anything").activate():
-            with pytest.raises(PermissionError):
-                gate(lambda: "ran")
 
 
 class TestFilters:

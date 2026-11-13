@@ -331,6 +331,11 @@ def test_import_steward_governance() -> None:
     assert ReaderProbeScope is core_reader_probe.ReaderProbeScope
     assert "reader_probe_scope" in steward_module.__all__
     assert "ReaderProbeScope" in steward_module.__all__
+    # Denied-name gate extender
+    from mloda.steward import DeniedNameGate
+
+    assert "DeniedNameGate" in steward_module.__all__
+    assert DeniedNameGate.__name__ == "DeniedNameGate"
     # Failed-rows collector for plugin tests
     from mloda.core.abstract_plugins.components import failed_rows as core_failed_rows
     from mloda.steward import collect_failed_rows

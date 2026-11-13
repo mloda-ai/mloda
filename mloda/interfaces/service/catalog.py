@@ -26,7 +26,6 @@ from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.api.plugin_docs import get_feature_group_docs, resolve_feature
 from mloda.core.api.plugin_info import FeatureGroupInfo, ResolvedFeature
 from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig
-from mloda.interfaces.service.deny_gate import DeniedNameGate
 from mloda.interfaces.service.errors import (
     error_result,
     failure_result,
@@ -44,7 +43,7 @@ from mloda.interfaces.service.request import (
     unlisted_group_option_violations,
 )
 from mloda.interfaces.service.sources import ServiceCredentials, source_columns
-from mloda.steward import ReaderProbeScope, reader_probe_scope, verified_context
+from mloda.steward import DeniedNameGate, ReaderProbeScope, reader_probe_scope, verified_context
 
 MAX_DESCRIPTION_LENGTH = 300
 MAX_SEARCH_LIMIT = 50

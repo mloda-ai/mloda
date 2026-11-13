@@ -35,6 +35,7 @@ from mloda.core.abstract_plugins.function_extender import (
     GateBypassError,
     LifecycleOutcome,
 )
+from mloda.core.abstract_plugins.denied_name_gate import DeniedNameGate
 from mloda.core.abstract_plugins.plan_context import PlanContext
 from mloda.core.abstract_plugins.run_context import RunContext, RunInputs
 from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema
@@ -111,6 +112,7 @@ __all__ = [
     "collect_failed_rows",
     "OutputSchema",
     "CompositeExtender",
+    "DeniedNameGate",
     "GateBypassError",
     "LifecycleOutcome",
     "PlanContext",

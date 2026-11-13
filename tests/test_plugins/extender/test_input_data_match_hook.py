@@ -6,6 +6,7 @@ in other tests.
 
 import inspect
 import logging
+import pickle  # nosec B403
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Any, ClassVar, NamedTuple
@@ -25,7 +26,7 @@ from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.provider import ClaimRoute, FeatureGroup, FeatureSet, SourceFeatureGroup, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.reader_probe import probe_source_group
-from mloda.steward import ReaderProbeScope, reader_probe_scope
+from mloda.steward import DeniedNameGate, ReaderProbeScope, reader_probe_scope
 from mloda.user import (
     Feature,
     FeatureName,
@@ -493,25 +494,6 @@ class _ImdPostProbeRefusingExtender(_ImdRefusingExtender):
         return result
 
 
-class _ImdColumnGate(Extender):
-    """Gate raising only when the probed feature names include the filter column."""
-
-    never_fall_back = True
-
-    def __init__(self) -> None:
-        self.priority = 100
-        self.name = "imdmatch_column_gate"
-
-    def wraps(self) -> set[ExtenderHook]:
-        return {ExtenderHook.INPUT_DATA_MATCH}
-
-    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        context = HookContext.current()
-        if context is not None and _COL_F in context.feature_names:
-            raise PermissionError("no clearance")
-        return func(*args, **kwargs)
-
-
 def _gate(target: type) -> _ImdRefusingExtender:
     return _ImdRefusingExtender(target, never_fall_back=True)
 
@@ -757,7 +739,9 @@ class TestScopeAndFilter:
         global_filter.add_filter(_COL_F, "min", {"value": 0})
 
         with caplog.at_level(logging.WARNING):
-            session = _plan("global", _COL_G, kind.gate, _ImdColumnGate(), global_filter=global_filter)
+            session = _plan(
+                "global", _COL_G, kind.gate, DeniedNameGate(lambda name: name == _COL_F), global_filter=global_filter
+            )
 
         assert session is not None
         assert any(f"Filter feature '{_COL_F}' matched no feature group" in r.getMessage() for r in caplog.records)
@@ -772,7 +756,7 @@ class TestScopeAndFilter:
                 plugin_collector=_ENABLED_FMT,
                 parallelization_modes={ParallelizationMode.SYNC},
                 data_access_collection=_global_access(),
-                function_extender={_ImdColumnGate()},
+                function_extender={DeniedNameGate(lambda name: name == _COL_F)},
             )
             assert _COL_F not in result[0].column_names
 
@@ -797,7 +781,7 @@ class TestScopeAndFilter:
                 }
             )
         recorder = _ImdRecordingExtender()
-        extender = recorder if observer else _ImdColumnGate()
+        extender = recorder if observer else DeniedNameGate(lambda name: name == _COL_F)
 
         def plan() -> Any:
             return mloda.prepare(
@@ -833,6 +817,77 @@ class TestScopeAndFilter:
             _plan("pinned", _COL_A, kind.gate, extender)
 
         assert extender.for_reader(kind.gate)
+
+
+def _denies_col_f(name: str) -> bool:
+    return name == _COL_F
+
+
+class TestDeniedNameGate:
+    @staticmethod
+    def _context(*names: str) -> HookContext:
+        return HookContext(
+            hook=ExtenderHook.INPUT_DATA_MATCH,
+            feature_group_class="x.Group",
+            feature_group_version=None,
+            feature_names=names,
+            compute_framework_name=None,
+        )
+
+    def test_refuses_without_an_active_context(self) -> None:
+        with pytest.raises(PermissionError):
+            DeniedNameGate(lambda name: False)(lambda: "ran")
+
+    def test_calls_through_for_an_allowed_name_and_refuses_a_denied_one(self) -> None:
+        gate = DeniedNameGate(lambda name: name == "bad")
+        with self._context("good").activate():
+            assert gate(lambda: "ran") == "ran"
+        with self._context("good", "bad").activate():
+            with pytest.raises(PermissionError, match="denied by policy"):
+                gate(lambda: "ran")
+
+    def test_without_an_argument_it_refuses_every_name(self) -> None:
+        gate = DeniedNameGate()
+        assert gate.wraps() == {ExtenderHook.INPUT_DATA_MATCH}
+        assert gate.never_fall_back is True
+        with self._context("anything").activate():
+            with pytest.raises(PermissionError):
+                gate(lambda: "ran")
+
+    def test_default_gate_is_picklable(self) -> None:
+        restored = pickle.loads(pickle.dumps(DeniedNameGate()))  # nosec B301
+        with self._context("anything").activate():
+            with pytest.raises(PermissionError):
+                restored(lambda: "ran")
+
+    def test_gate_with_a_module_level_predicate_is_picklable(self) -> None:
+        restored = pickle.loads(pickle.dumps(DeniedNameGate(_denies_col_f)))  # nosec B301
+        with self._context("good").activate():
+            assert restored(lambda: "ran") == "ran"
+        with self._context(_COL_F).activate():
+            with pytest.raises(PermissionError, match="denied by policy"):
+                restored(lambda: "ran")
+
+    @pytest.mark.parametrize("scope", ["global", "pointed"])
+    def test_denied_name_fails_alike_whether_or_not_a_source_has_the_column(self, scope: str) -> None:
+        gate = DeniedNameGate(lambda name: name == _COL_F)
+        messages = []
+        for with_column in (True, False):
+            columns = {k: v for k, v in _FMT_COLUMNS.items() if with_column or k != _COL_F}
+            if scope == "pointed":
+                feature = Feature(_COL_F, options={ImdMatchGateSource.__name__: columns})
+                access = None
+            else:
+                feature = Feature(_COL_F)
+                access = DataAccessCollection(credentials={"imdmatch_handle": {TOY_KEY: columns, _CRED_KEY: 1}})
+            with pytest.raises(FeatureResolutionError) as raised:
+                _prepare(feature, _ENABLED_FMT, access, gate)
+            lines = [ln for ln in str(raised.value).splitlines() if "plan id" not in ln.lower()]
+            messages.append("\n".join(lines))
+            assert raised.value.refusals
+            assert "denied by policy" in str(raised.value.refusals[0])
+            assert all(fmt.probes == 0 and fmt.column_reads == 0 for fmt in _ALL_FORMATS)
+        assert messages[0] == messages[1]
 
 
 class TestProbeRaise:

@@ -44,7 +44,7 @@ from mloda.interfaces.service.request import (
 )
 from mloda.interfaces.service.sources import READER_ERRORS, ServiceCredentials, source_columns
 from mloda.provider import ApiDataFG, ReadFileFG, SourceMatch
-from mloda.steward import verified_context
+from mloda.steward import DeniedNameGate, verified_context
 from mloda.user import (
     Feature,
     ParallelizationMode,
@@ -437,6 +437,7 @@ class Planner:
             "api_data": dict(parsed.inline_data) or None,
             "plugin_collector": plugin_collector_for(self._settings, self._base),
             "parallelization_modes": {ParallelizationMode.SYNC},
+            "function_extender": {DeniedNameGate(self._catalog.is_denied)},
         }
 
     def _inline_refusal(self, request: Any) -> dict[str, Any] | None:

@@ -28,6 +28,7 @@ from mloda.provider import FeatureChainParserMixin, property_spec
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import VALID_STRICT_MODES
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from tests.helpers.docs_scope import small_feature_group_registry
 from tests.helpers.plugin_stubs import StubFeatureGroup
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
@@ -626,6 +627,22 @@ class TestDescribe:
         assert _error_code(result) == "policy_denied"
         assert result["error"]["alternatives"] == ["mcp3_alpha_total"]
         assert "deny_feature_groups" not in json.dumps(result)
+
+    @pytest.mark.parametrize("name", ["mcp3_salary", "mcp3_salarx"], ids=["name", "near_miss"])
+    def test_denied_name_describes_alike_with_or_without_the_column(self, tmp_path: Path, name: str) -> None:
+        base = PluginCollector.enabled_feature_groups({CsvFG, CatalogDeniedMcp3})
+        answers = []
+        for column in ("segment", "mcp3_salary"):
+            path = tmp_path / "sales.csv"
+            path.write_text(f"income,{column}\n1,2\n")
+            catalog = Catalog.build(_settings(tmp_path), base)
+            result = catalog.describe(name)
+            if is_error(result):
+                result["error"].pop("audit_id")
+            answers.append(result)
+        assert answers[0] == answers[1]
+        if is_error(answers[0]):
+            assert "mcp3_salary" not in json.dumps(answers[0]).replace(name, "")
 
     @pytest.mark.parametrize("key", ["CsvFG", "JsonFG", RESERVED_READER_OPTION_KEY])
     def test_data_access_option_is_policy_denied(self, catalog: Catalog, key: str) -> None:

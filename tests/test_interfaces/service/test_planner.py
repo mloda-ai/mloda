@@ -7,6 +7,7 @@ import json
 import logging
 import sqlite3
 import threading
+from abc import abstractmethod
 from collections.abc import Iterator, Mapping
 from datetime import datetime
 from pathlib import Path
@@ -158,6 +159,65 @@ class PlannerDoubleMcp4(FeatureGroup):
         name = str(features.get_name_of_one_feature())
         source = name[: -len(DOUBLE_SUFFIX)]
         return {name: [value * 2 for value in data[source]]}
+
+
+class PlannerRivalMcp4(FeatureGroup):
+    """Not a PlannerDoubleMcp4 subclass; matches the same names and reads INPUT."""
+
+    INPUT: ClassVar[str] = "mcp4_nowhere_column"
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        name = str(feature_name)
+        return name.endswith(DOUBLE_SUFFIX) and len(name) > len(DOUBLE_SUFFIX)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(type(self).INPUT)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {str(features.get_name_of_one_feature()): [value * 2 for value in data[cls.INPUT]]}
+
+
+class PlannerAbstractDoubleMcp4(FeatureGroup):
+    """Abstract group matching the same names as PlannerDoubleMcp4."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name).endswith(DOUBLE_SUFFIX)
+
+    @abstractmethod
+    def hook(self) -> None: ...
+
+
+class PlannerRivalMissingMcp4(PlannerRivalMcp4):
+    """Rival reading a column no source has."""
+
+
+class PlannerRivalIncomeMcp4(PlannerRivalMcp4):
+    """Rival reading a resolving column."""
+
+    INPUT = "income"
+
+
+class PlannerRivalCustomerMcp4(PlannerRivalMcp4):
+    """Rival reading another resolving column."""
+
+    INPUT = "customer_id"
 
 
 class PlannerDeniedMcp4(StubFeatureGroup):
@@ -326,9 +386,10 @@ class PlannerMissingInputMcp9(FeatureGroup):
         return data
 
 
-def _base() -> PluginCollector:
+def _base(*extra: type[FeatureGroup]) -> PluginCollector:
     return PluginCollector.enabled_feature_groups(
         {
+            *extra,
             *FILE_SOURCE_GROUPS,
             PlannerNameBoundMcp4,
             PlannerDoubleMcp4,
@@ -401,8 +462,8 @@ def _planner(settings: Settings, *, base: PluginCollector | None = None) -> Plan
     )
 
 
-def _explain(tmp_path: Path, request: Any, **kwargs: Any) -> dict[str, Any]:
-    result: dict[str, Any] = _planner(_settings(tmp_path, **kwargs)).explain(request)
+def _explain(tmp_path: Path, request: Any, base: PluginCollector | None = None, **kwargs: Any) -> dict[str, Any]:
+    result: dict[str, Any] = _planner(_settings(tmp_path, **kwargs), base=base).explain(request)
     return result
 
 
@@ -416,6 +477,10 @@ def _error(result: dict[str, Any], code: str) -> dict[str, Any]:
 def _success(result: dict[str, Any]) -> dict[str, Any]:
     assert not is_error(result), result
     return result
+
+
+def _without_audit(error: Mapping[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in error.items() if k != "audit_id"}
 
 
 def _has_detail(error: Mapping[str, Any], **expected: Any) -> bool:
@@ -1180,24 +1245,103 @@ class TestPolicy:
         assert denied_calls == []
         _assert_no_paths(result, tmp_path, "sales.csv")
 
-    def test_derived_name_over_a_denied_group_does_not_name_its_input(
+    @pytest.mark.parametrize(
+        ("rivals", "hops", "abstract", "suffix"),
+        [
+            ((), 1, False, ""),
+            ((PlannerRivalMissingMcp4,), 1, False, ""),
+            ((PlannerRivalMissingMcp4,), 2, False, ""),
+            ((), 1, True, ""),
+            ((PlannerRivalMissingMcp4,), 1, True, ""),
+            ((PlannerRivalIncomeMcp4,), 1, False, ""),
+            ((PlannerRivalIncomeMcp4, PlannerRivalCustomerMcp4), 1, False, ""),
+            ((), 1, False, "~0"),
+        ],
+        ids=[
+            "no_rival",
+            "rival",
+            "rival_two_hops",
+            "abstract_only",
+            "abstract_and_rival",
+            "one_resolving_rival",
+            "two_resolving_rivals",
+            "suffix",
+        ],
+    )
+    def test_derived_name_over_a_denied_name_answers_alike_with_or_without_the_column(
+        self,
+        tmp_path: Path,
+        denied_calls: list[str],
+        rivals: tuple[type[FeatureGroup], ...],
+        hops: int,
+        abstract: bool,
+        suffix: str,
+    ) -> None:
+        extra: list[type[FeatureGroup]] = [*rivals, *([PlannerAbstractDoubleMcp4] if abstract else [])]
+        base = _base(*extra) if extra else None
+        name = "mcp4_salary" + suffix + DOUBLE_SUFFIX * hops
+        answers = []
+        for with_denied_column in (False, True):
+            sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=with_denied_column))}
+            result = _explain(tmp_path, {"features": [name]}, base=base, sources=sources)
+            dumped = json.dumps(result).replace(name, "")
+            assert "mcp4_salary" not in dumped
+            assert "mcp4_nowhere_column" not in dumped
+            if is_error(result):
+                answers.append(_without_audit(result["error"]))
+            else:
+                answers.append({k: result[k] for k in ("steps", "lineage", "egress")})
+            assert denied_calls == []
+        assert answers[0] == answers[1]
+        if not rivals and not abstract and not suffix:
+            assert answers[0]["code"] == "policy_denied"
+            assert any(
+                d.get("path") == "/features" and d.get("problem") == "policy_denied" for d in answers[0]["details"]
+            )
+            assert all("suggestion" not in detail for detail in answers[0]["details"])
+
+    def test_derived_name_over_a_denied_inline_name_answers_alike_with_or_without_the_column(
         self, tmp_path: Path, denied_calls: list[str]
     ) -> None:
-        result = _explain(tmp_path, {"features": ["mcp4_salary" + DOUBLE_SUFFIX]})
+        name = "mcp4_salary" + DOUBLE_SUFFIX
+        answers = []
+        for column in ("segment", "mcp4_salary"):
+            request = {"features": [name], "data": {"Tbl": {column: [1, 2], "income": [10, 20]}}}
+            result = _explain(tmp_path, request, base=_base(PlannerRivalIncomeMcp4), inline_data=True)
+            assert "mcp4_salary" not in json.dumps(result).replace(name, "")
+            if is_error(result):
+                answers.append(_without_audit(result["error"]))
+            else:
+                answers.append({k: result[k] for k in ("steps", "lineage", "egress")})
+            assert denied_calls == []
+        assert answers[0] == answers[1]
 
-        error = _error(result, "policy_denied")
-        assert _has_detail(error, path="/features", problem="policy_denied")
-        assert all("suggestion" not in detail for detail in error["details"])
-        assert "mcp4_salary" not in json.dumps(result).replace("mcp4_salary" + DOUBLE_SUFFIX, "")
-        assert denied_calls == []
+    def test_run_over_a_denied_name_with_one_resolving_rival_answers_alike(self, tmp_path: Path) -> None:
+        base = _base(PlannerRivalIncomeMcp4)
+        name = "mcp4_salary" + DOUBLE_SUFFIX
+        answers = []
+        for with_denied_column in (False, True):
+            sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=with_denied_column))}
+            planner = _planner(_settings(tmp_path, sources=sources, mode="execute"), base=base)
+            explained = _success(planner.explain({"features": [name]}))
+            outcome = _success(Runner(planner, clock=lambda: CLOCK_START).run(explained["plan_id"]))
+            assert outcome["status"] == "completed"
+            answers.append([[c["name"] for c in table["columns"]] for table in outcome["tables"]])
+        assert answers[0] and answers[0] == answers[1]
+
+    def test_strict_mode_keeps_the_gate_registered(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MLODA_PLUGIN_REGISTRY_STRICT", "strict")
+        _success(_explain(tmp_path, {"features": ["income"]}))
+
+    def test_gated_planning_logs_no_denied_name(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        name = "mcp4_salary" + DOUBLE_SUFFIX
         sources = {"sales": _source("sales", _write_sales(tmp_path, with_denied_column=True))}
-        with_column = _error(
-            _explain(tmp_path, {"features": ["mcp4_salary" + DOUBLE_SUFFIX]}, sources=sources), "policy_denied"
-        )
-        assert {k: v for k, v in error.items() if k != "audit_id"} == {
-            k: v for k, v in with_column.items() if k != "audit_id"
-        }
-        assert denied_calls == []
+        with caplog.at_level(logging.DEBUG):
+            _explain(tmp_path, {"features": [name]}, base=_base(PlannerRivalMissingMcp4), sources=sources)
+        messages = "\n".join(r.getMessage() for r in caplog.records)
+        assert "denied by policy" in messages
+        assert "DeniedNameGate" in messages
+        assert "mcp4_salary" not in messages.replace(name, "")
 
     def test_variant_pin_beside_a_denied_input_is_policy_denied_either_way(self, tmp_path: Path) -> None:
         toy = importlib.import_module(
@@ -1229,7 +1373,7 @@ class TestPolicy:
             dumped = json.dumps(result)
             assert "mcp4_salary" not in dumped
             assert toy.OPTOY_VARIANT_OPEN_CONSUMER not in dumped
-            errors.append({k: v for k, v in error.items() if k != "audit_id"})
+            errors.append(_without_audit(error))
         assert errors[0] == errors[1]
 
     @pytest.mark.parametrize("with_denied_column", [True, False])

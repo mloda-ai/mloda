@@ -202,8 +202,9 @@ exclude-newer-package = { decorator = "2099-01-01T00:00:00Z" }
 # - idna   >= 3.15:   idna.encode() bypass of CVE-2024-3651 fix
 # - mistune >= 3.3.3: RecursionError DoS via excessive emphasis markers. Also covers the earlier
 #   quadratic-time parsing DoS in parse_link_text and heading ID injection XSS (CVE-2026-33079).
-# - soupsieve >= 2.9.0: memory exhaustion via large comma-separated selector lists; ReDoS in the selector
-#   parser, including the IDENTIFIER/VALUE sub-patterns and the RE_WS_END whitespace/comment trimming regex
+# - soupsieve >= 2.10: memory exhaustion via large comma-separated selector lists; ReDoS in the selector
+#   parser, including the IDENTIFIER/VALUE sub-patterns and the RE_WS_END whitespace/comment trimming regex;
+#   quadratic-time matching of a general sibling combinator inside :has()
 # - nbconvert >= 7.17.1: arbitrary file read/write via path traversal; uncontrolled search path on Windows
 # - anyio >= 4.14.2: TLSStream IDNA 2003 host name encoding allows TLS certificate spoofing; process-pool
 #   workers can block indefinitely on undrained stderr
@@ -213,7 +214,7 @@ constraint-dependencies = [
     "urllib3>=2.7.0",
     "idna>=3.15",
     "mistune>=3.3.3",
-    "soupsieve>=2.9.0",
+    "soupsieve>=2.10",
     "nbconvert>=7.17.1",
     "anyio>=4.14.2",
     "fsspec>=2026.6.0",

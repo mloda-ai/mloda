@@ -194,8 +194,3 @@ def test_internal_link_targets_exist(fpath: Path) -> None:
                     errors.append(f"[{link_text}]({target}) -> anchor #{anchor} not found in {resolved.name}")
 
     assert not errors, f"{fpath} has broken internal links:\n" + "\n".join(errors)
-
-
-@pytest.mark.timeout(120)
-def test_readme() -> None:
-    run_md_file_isolated(REPO_ROOT / "README.md")

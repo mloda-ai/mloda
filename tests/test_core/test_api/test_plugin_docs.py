@@ -972,7 +972,7 @@ class TestGetExtenderDocs:
             assert all(wrap_type in ext.wraps for ext in filtered)
 
     def test_get_extender_docs_lists_denied_name_gate(self) -> None:
-        from mloda.steward import DeniedNameGate  # noqa: F401  (import registers the subclass)
+        from mloda.steward import DeniedNameGate  # noqa: F401  (import makes the subclass visible)
 
         by_name = {ext.name: ext for ext in get_extender_docs()}
         assert "input_data_match" in by_name["DeniedNameGate"].wraps

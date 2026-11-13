@@ -819,6 +819,10 @@ class TestScopeAndFilter:
         assert extender.for_reader(kind.gate)
 
 
+def _denies_col_f(name: str) -> bool:
+    return name == _COL_F
+
+
 class TestDeniedNameGate:
     @staticmethod
     def _context(*names: str) -> HookContext:
@@ -829,9 +833,6 @@ class TestDeniedNameGate:
             feature_names=names,
             compute_framework_name=None,
         )
-
-    def test_wraps_the_input_data_match_hook(self) -> None:
-        assert DeniedNameGate(lambda name: False).wraps() == {ExtenderHook.INPUT_DATA_MATCH}
 
     def test_refuses_without_an_active_context(self) -> None:
         with pytest.raises(PermissionError):
@@ -848,6 +849,7 @@ class TestDeniedNameGate:
     def test_without_an_argument_it_refuses_every_name(self) -> None:
         gate = DeniedNameGate()
         assert gate.wraps() == {ExtenderHook.INPUT_DATA_MATCH}
+        assert gate.never_fall_back is True
         with self._context("anything").activate():
             with pytest.raises(PermissionError):
                 gate(lambda: "ran")
@@ -858,16 +860,32 @@ class TestDeniedNameGate:
             with pytest.raises(PermissionError):
                 restored(lambda: "ran")
 
-    def test_denied_name_fails_alike_whether_or_not_a_source_has_the_column(self) -> None:
+    def test_gate_with_a_module_level_predicate_is_picklable(self) -> None:
+        restored = pickle.loads(pickle.dumps(DeniedNameGate(_denies_col_f)))  # nosec B301
+        with self._context("good").activate():
+            assert restored(lambda: "ran") == "ran"
+        with self._context(_COL_F).activate():
+            with pytest.raises(PermissionError, match="denied by policy"):
+                restored(lambda: "ran")
+
+    @pytest.mark.parametrize("scope", ["global", "pointed"])
+    def test_denied_name_fails_alike_whether_or_not_a_source_has_the_column(self, scope: str) -> None:
         gate = DeniedNameGate(lambda name: name == _COL_F)
         messages = []
         for with_column in (True, False):
             columns = {k: v for k, v in _FMT_COLUMNS.items() if with_column or k != _COL_F}
-            access = DataAccessCollection(credentials={"imdmatch_handle": {TOY_KEY: columns, _CRED_KEY: 1}})
-            with pytest.raises(Exception) as raised:
-                _prepare(Feature(_COL_F), _ENABLED_FMT, access, gate)
+            if scope == "pointed":
+                feature = Feature(_COL_F, options={ImdMatchGateSource.__name__: columns})
+                access = None
+            else:
+                feature = Feature(_COL_F)
+                access = DataAccessCollection(credentials={"imdmatch_handle": {TOY_KEY: columns, _CRED_KEY: 1}})
+            with pytest.raises(FeatureResolutionError) as raised:
+                _prepare(feature, _ENABLED_FMT, access, gate)
             lines = [ln for ln in str(raised.value).splitlines() if "plan id" not in ln.lower()]
             messages.append("\n".join(lines))
+            assert raised.value.refusals
+            assert "denied by policy" in str(raised.value.refusals[0])
             assert all(fmt.probes == 0 and fmt.column_reads == 0 for fmt in _ALL_FORMATS)
         assert messages[0] == messages[1]
 

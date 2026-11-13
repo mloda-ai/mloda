@@ -12,7 +12,10 @@ def _deny_every_name(name: str) -> bool:
 
 
 class DeniedNameGate(Extender):
-    """Refuses source matching for a denied name; its message names nothing."""
+    """Gate on INPUT_DATA_MATCH: refuses a source group's match for any name is_denied accepts.
+
+    Default refuses every name, and always when no hook context is active; the message does not name the feature.
+    """
 
     never_fall_back = True
 

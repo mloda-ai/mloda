@@ -11,6 +11,7 @@ Simplified mloda:
     )
 """
 
+from collections.abc import Callable
 from typing import Any, ClassVar
 
 import numpy as np
@@ -35,6 +36,7 @@ from mloda.user import ParallelizationMode
 from mloda.core.abstract_plugins.feature_group import format_feature_group_class
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG  # noqa: F401
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.api.request import SetupConfigurationError
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.python_dict import (  # noqa: F401
     PythonDictMissingValueImputation,
@@ -780,6 +782,19 @@ class TestApiDataNeutralType:
         assert api_data == original
 
 
+SETUP_SECRET = "setup_secret_value_q4x9"  # nosec B105
+
+SETUP_CHECK_CASES: dict[str, tuple[Callable[[str], dict[str, Any]], str, bool]] = {
+    "non_mapping_set": (lambda key: {"api_data": {key: 5}}, "must be a mapping", True),
+    "duplicate_column": (
+        lambda key: {"api_data": {"A": {key: [1]}, "B": {key: [2]}}},
+        "appears in api_data sets",
+        True,
+    ),
+    "column_ordering": (lambda key: {"column_ordering": key}, "column_ordering must be", False),
+}
+
+
 class TestApiDataScopeAndShapes:
     """Scope binding, subclass transport, THREADING, non-mapping values and foreign-pointer claims."""
 
@@ -839,6 +854,36 @@ class TestApiDataScopeAndShapes:
 
         assert secret not in str(raised.value)
         assert "str" in str(raised.value)
+
+    @pytest.mark.parametrize("registered", [True, False], ids=["registered", "control"])
+    @pytest.mark.parametrize("case", list(SETUP_CHECK_CASES))
+    @pytest.mark.parametrize("entry", ["prepare", "run_all", "stream_all"])
+    def test_setup_argument_checks_mask_registered_values(self, entry: str, case: str, registered: bool) -> None:
+        build, fragment, has_cause = SETUP_CHECK_CASES[case]
+        key = SETUP_SECRET if registered else "setup_plain_unknown_key"
+        dac = DataAccessCollection(credentials={"vault": {"token": SETUP_SECRET}})
+
+        with pytest.raises(SetupConfigurationError) as raised:
+            getattr(mloda, entry)(
+                ["simplified_api_setup_col"],
+                compute_frameworks=[PythonDictFramework],
+                plugin_collector=PluginCollector.enabled_feature_groups({ApiDataFG}),
+                data_access_collection=dac,
+                **build(key),
+            )
+
+        text = str(raised.value)
+        assert fragment in text
+        if registered:
+            assert SETUP_SECRET not in text
+            assert "***" in text
+            if has_cause:
+                assert raised.value.__cause__ is not None
+                assert SETUP_SECRET not in str(raised.value.__cause__)
+            else:
+                assert raised.value.__cause__ is None
+        else:
+            assert key in text
 
     def test_column_names_in_messages_are_sorted_as_strings(self) -> None:
         with pytest.raises(ValueError, match=r"(?s)PrepareKey.*differs"):

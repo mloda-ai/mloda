@@ -23,6 +23,7 @@ from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
+from mloda._testing.source import reclaim
 from mloda._testing.source.source_suite import (
     SourceFeatureGroupTestMixin,
     LoadCapture,
@@ -340,6 +341,9 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
             f"{name}{CHAIN_SEPARATOR}sum_aggr",
             f"{name}~other",
             f"{name}~0",
+            f"{name}~0~1",
+            f"{name}{SOURCE}~0",
+            f"{name}{FILE_TYPE}~1",
             f"{name}{SOURCE}~file_type",
             f"{name}{SOURCE}_x",
             f"prefix_{name}",
@@ -349,10 +353,42 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
             self.missing_column,
         ]
 
-    def test_doc_declines_every_undeclared_name_with_the_own_file_present(self) -> None:
+    def test_doc_declines_every_undeclared_name_with_the_own_file_present(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        group = self._group_name()
+        declared = set(self._declared())
         for name in self._undeclared_names():
             assert not self._claims(self._feature(name), self.own_dac()), name
             assert not self._claims(self._feature(name), DataAccessCollection(folders={"d": str(self.tmp_path)})), name
+            if self.feature_group_class.get_column_base_feature(name) in declared and name not in declared:
+                rejection_window.clear()
+                assert not self._matches(name, self._options(), self.own_dac()), name
+                assert name in rejection_window[group].reason, name
+                assert rejection_window[group].code is CoreDeclineCode.NAME_NOT_DECLARED, name
+
+    def test_doc_a_numbered_declared_name_under_a_foreign_pointer_records_nothing(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        sub = self._gated_subclass()
+        options = self._options({sub.__name__: str(self.own_path)})
+        for name in (f"{self._group_name()}~0", f"{self._group_name()}{SOURCE}~0"):
+            rejection_window.clear()
+            assert not self._matches(name, options, self.own_dac()), name
+            assert self._group_name() not in rejection_window, (name, rejection_window.get(self._group_name()))
+        del sub, options
+
+    def test_doc_a_numbered_declared_name_under_a_family_scope_leaves_a_sibling_silent(self) -> None:
+        sibling = reclaim.track(type(f"{self._group_name()}FamilySibling", (self.feature_group_class,), {}))
+        mapping: FeatureGroupEnvironmentMapping = {
+            self.feature_group_class: {PythonDictFramework},
+            cast(type[SourceFeatureGroup], sibling): {PythonDictFramework},
+        }
+        for name in (f"{self._group_name()}~0", f"{self._group_name()}{SOURCE}~0"):
+            feature = Feature(name, self._options(), feature_group=self.feature_group_class)
+            result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, self.own_dac())
+            assert sibling not in result.eliminations, (name, result.eliminations.get(sibling))
+        del sibling, mapping, result, feature
 
     def test_doc_declines_every_undeclared_name_when_pointed_and_records_why(
         self, rejection_window: dict[str, MatchRejection]
@@ -362,9 +398,7 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
             rejection_window.clear()
             assert not self._matches(name, options, None), name
             assert name in rejection_window[self._group_name()].reason
-            is_declared = name == f"{self._group_name()}~0"
-            expected = CoreDeclineCode.SOURCE_NOT_FOUND if is_declared else CoreDeclineCode.NAME_NOT_DECLARED
-            assert rejection_window[self._group_name()].code is expected, name
+            assert rejection_window[self._group_name()].code is CoreDeclineCode.NAME_NOT_DECLARED, name
 
     def test_doc_declared_names_unpointed_without_a_source_record_why(
         self, rejection_window: dict[str, MatchRejection]

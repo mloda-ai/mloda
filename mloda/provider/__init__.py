@@ -22,6 +22,9 @@
 #
 from mloda.core.abstract_plugins.feature_group import FeatureGroup as FeatureGroup
 from mloda.core.abstract_plugins.components.credential_handle import credential_handle_spec as credential_handle_spec
+from mloda.core.abstract_plugins.components.credential_handle import (
+    is_credential_handle_spec as is_credential_handle_spec,
+)
 
 # Versioning
 from mloda.core.abstract_plugins.components.base_feature_group_version import (
@@ -238,6 +241,7 @@ __all__ = [
     "is_positive_int",
     "property_spec",
     "credential_handle_spec",
+    "is_credential_handle_spec",
     "read_credential",
     "credentials_scope",
     "ResolvedCredential",

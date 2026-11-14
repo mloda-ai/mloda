@@ -271,6 +271,13 @@ def _check_secrets(cls: type[FeatureGroup]) -> tuple[list[str], list[str]]:
             )
         if key.lower().endswith("_env") and _ENV_VAR_TEXT.search(spec.explanation):
             stem = key[: -len("_env")]
+            if is_nominal_subclass(cls, SourceFeatureGroup):
+                failures.append(
+                    f"secrets: option '{key}' names an environment variable; read the environment in the caller, "
+                    "register a Credential in the DataAccessCollection and bind it at match time in find_sources "
+                    "(selected through the data_access_handle option)"
+                )
+                continue
             failures.append(
                 f"secrets: option '{key}' names an environment variable; read the environment in the caller, "
                 f"register a Credential and declare '{stem}_handle' with credential_handle_spec"

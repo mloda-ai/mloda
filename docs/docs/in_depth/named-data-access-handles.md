@@ -258,7 +258,7 @@ is unset; `default=None` declares nothing when unset. To read it at run time see
 `check_feature_group_shape` in `mloda._testing` fails an option with a credential-shaped name not declared with `credential_handle_spec`, a default the scrubber masks, and a `*_env` option naming an environment variable. It checks declarations, not call sites, so a secret passed under a benign undeclared key stays undetected. A false positive is silenced per option in `NOT_SECRET_OPTIONS` (option key to reason).
 
 Declared credential keys widen or narrow the unmasked set. A provider lists keys in `PUBLIC_CREDENTIAL_KEYS` on the
-feature group and in `public_fields` of a handle spec, unioned over the loaded plugins. A data user passes `public_credential_keys` and
+feature group and in `public_fields` of a handle spec, unioned over the loaded plugins, unioned over the loaded plugins, so one group's declaration unmasks that key name for every registered credential in the process. A data user passes `public_credential_keys` and
 `secret_credential_keys` to `DataAccessCollection`. A credential-shaped key is always masked, then a collection secret
 key, then everything public. Keys are compared lowercased with `_` and `-` removed. To mask a key a plugin declares
 public, list it in `secret_credential_keys`. Credential-shaped keys and the connection-string keys `dsn`, `url`, `uri`, `conn`, `connection_string` and `engine` can never be declared public, nor can credential-shaped names in raw or normalized form (`pass_word`,
@@ -367,6 +367,8 @@ from mloda.provider import credentials_scope
 with credentials_scope({"pii-hmac-key": {"key": "test-hmac-key"}}):
     SignedIdFG.calculate_feature(None, features)
 ```
+
+The scope grants the handles it is given without checking that the group declares them; `prepare` and `run_all` check the `credential_handle_spec` declaration, so a test through either catches a missing one.
 
 Limits:
 

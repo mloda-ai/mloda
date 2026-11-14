@@ -222,6 +222,15 @@ def test_import_provider_base_classes() -> None:
     assert provider_module.credential_handle_spec is core_credential_handle_spec
     assert "credential_handle_spec" in provider_module.__all__
     assert "CredentialHandleSpec" not in provider_module.__all__
+    from mloda.core.abstract_plugins.components.credential_handle import (
+        is_credential_handle_spec as core_is_credential_handle_spec,
+    )
+
+    assert getattr(provider_module, "is_credential_handle_spec", None) is core_is_credential_handle_spec
+    assert "is_credential_handle_spec" in provider_module.__all__
+    assert core_is_credential_handle_spec(provider_module.credential_handle_spec("x")) is True
+    assert core_is_credential_handle_spec(provider_module.property_spec("x")) is False
+    assert core_is_credential_handle_spec(object()) is False
     for access_name in (
         "read_credential",
         "credentials_scope",

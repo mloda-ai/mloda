@@ -160,7 +160,7 @@ class _FileSourceFG(SourceFeatureGroup):
                 if is_file_route and handle not in dac.handles():
                     record_match_rejection(
                         cls.get_class_name(),
-                        f"Option 'data_access_handle' of {cls.get_class_name()} names a handle that is not "
+                        f"Option '{HANDLE_OPTION}' of {cls.get_class_name()} names a handle that is not "
                         "registered (the value is not shown in case it is a secret). Available file handles: "
                         f"{named_handles_text(dac.files, dac.auto_handles)}, "
                         f"folder handles: {named_handles_text(dac.folders, dac.auto_handles)}.",

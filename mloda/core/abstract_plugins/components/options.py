@@ -118,9 +118,13 @@ def _str_option_dict(d: dict[str, Any]) -> dict[str, Any]:
 
 
 def _display_option_value(
-    key: Any, value: Any, source_group_names: Collection[str], handles: Collection[tuple[str, str]] = frozenset()
+    key: Any,
+    value: Any,
+    source_group_names: Collection[str],
+    handles: Collection[tuple[str, str]] = frozenset(),
+    handle_keys: Collection[str] = frozenset(),
 ) -> Any:
-    if any(key == handle_key for handle_key, _ in handles):
+    if key in handle_keys or any(key == handle_key for handle_key, _ in handles):
         return value if isinstance(value, str) and (key, value) in handles else "***"
     if key in source_group_names:
         return redact_option_value(value)
@@ -130,10 +134,13 @@ def _display_option_value(
 
 
 def _display_option_dict(
-    d: dict[str, Any], source_group_names: Collection[str], handles: Collection[tuple[str, str]] = frozenset()
+    d: dict[str, Any],
+    source_group_names: Collection[str],
+    handles: Collection[tuple[str, str]] = frozenset(),
+    handle_keys: Collection[str] = frozenset(),
 ) -> dict[str, Any]:
     """Display-only: redact source group pointers, credential-shaped keys and nested credential keys."""
-    return {k: _display_option_value(k, v, source_group_names, handles) for k, v in d.items()}
+    return {k: _display_option_value(k, v, source_group_names, handles, handle_keys) for k, v in d.items()}
 
 
 def validate_forwarding_directives(
@@ -234,7 +241,7 @@ class Options:
         self._own_group_keys: frozenset[str] = frozenset(self.group.keys())
         self._own_context_keys: frozenset[str] = frozenset(self.context.keys())
         self._own_keys_locked: bool = False
-        self.credential_handles: frozenset[tuple[str, str]] = frozenset()
+        self.validated_credential_handles: frozenset[tuple[str, str]] = frozenset()
         OptionsValidator.validate_no_duplicate_keys(self.group, self.context)
         OptionsValidator.validate_propagate_keys_in_context(self.propagate_context_keys, self.context)
         OptionsValidator.validate_propagate_keys_in_context(
@@ -463,7 +470,7 @@ class Options:
         copied._own_group_keys = self._own_group_keys
         copied._own_context_keys = self._own_context_keys
         copied._own_keys_locked = self._own_keys_locked
-        copied.credential_handles = self.credential_handles
+        copied.validated_credential_handles = self.validated_credential_handles
         return copied
 
     def __getstate__(self) -> dict[str, Any]:
@@ -518,10 +525,13 @@ class Options:
     def __str__(self) -> str:
         from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
 
+        from mloda.core.abstract_plugins.components.credential_handle import declared_handle_option_keys
+
         names = concrete_source_groups().keys()
+        handle_keys = declared_handle_option_keys()
         parts = (
-            f"Options(group={_display_option_dict(self.group, names, self.credential_handles)}, "
-            f"context={_display_option_dict(self.context, names)}"
+            f"Options(group={_display_option_dict(self.group, names, self.validated_credential_handles, handle_keys)}, "
+            f"context={_display_option_dict(self.context, names, frozenset(), handle_keys)}"
         )
         if self.propagate_context_keys:
             parts += f", propagate_context_keys={self.propagate_context_keys}"

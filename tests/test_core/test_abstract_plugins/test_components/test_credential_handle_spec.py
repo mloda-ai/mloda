@@ -93,6 +93,14 @@ class ChsTwoHandleFG(ChsSource):
         return {"chs_two_a"}
 
 
+class ChsPlainRefFG(ChsSource):
+    PROPERTY_MAPPING = {"chs_plain_handle_ref": credential_handle_spec("Handle under a non credential-shaped key.")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_plain_ref_a"}
+
+
 class ChsFieldsFG(ChsSource):
     PROPERTY_MAPPING = {
         "chs_fields_handle": credential_handle_spec("Needs fields.", required_fields=("chs_user", "chs_pass"))
@@ -1857,6 +1865,13 @@ class TestDisplay:
         assert "vault-main" in str(options)
         assert SECRET not in str(options)
 
+    @pytest.mark.parametrize("scope", ["group", "context"])
+    def test_str_masks_a_declared_handle_key_before_intake(self, scope: str) -> None:
+        entry = {"chs_plain_handle_ref": SECRET}
+        options = Options(group=entry) if scope == "group" else Options(context=entry)
+
+        assert SECRET not in str(options)
+
     def test_the_snapshot_shows_the_handle_and_no_credential_value(self) -> None:
         plan = mloda.explain(
             [_vault("vault-main")],
@@ -1930,13 +1945,13 @@ class TestDisplay:
 
     def test_a_mark_copied_from_another_group_does_not_survive_intake(self) -> None:
         options = Options(group={HANDLE_KEY: SECRET})
-        options.credential_handles = frozenset({(HANDLE_KEY, SECRET)})
+        options.validated_credential_handles = frozenset({(HANDLE_KEY, SECRET)})
 
         session = _prepare([Feature("chs_raw_a", options=options)], None, _plugins(ChsRawSecretFG))
 
         stored = next(iter(session.engine.feature_group_collection[ChsRawSecretFG])).options
         assert SECRET not in str(stored)
-        assert stored.credential_handles == frozenset()
+        assert stored.validated_credential_handles == frozenset()
 
 
 class ChsConsumerFG(FeatureGroup):

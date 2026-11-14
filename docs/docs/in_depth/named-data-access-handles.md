@@ -270,8 +270,8 @@ such sources apart. Plugin-declared public keys do not change the identity.
 
 The handle name is not masked in `explain()`, `str(Options)` or the plan content hash, even under a credential-shaped
 key; other values under such a key stay masked. A handle is shown only once validated as a registered credential
-handle for that feature group; before that it prints like any other option. Name a handle by role (`pii-hmac-key`),
-never by environment or content. Renaming a handle changes the content hash and may split a step.
+handle for that feature group; before that, a key any loaded feature group declares as a credential handle prints
+`***`. Name a handle by role (`pii-hmac-key`), never by environment or content. Renaming a handle changes the content hash and may split a step.
 
 In CI, `explain()` validates like `prepare()`, so a plan-lock check registers a placeholder credential under each
 declared handle with the required fields, for example `Credential(key="ci-placeholder")` under `pii-hmac-key`.

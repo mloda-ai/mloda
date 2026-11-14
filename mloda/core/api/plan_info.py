@@ -398,7 +398,7 @@ def build_plan_steps(
                 else Options(group=snapshot_group(options.group, frozenset(credential_handle_keys(step.feature_group))))
             )
             if snapshot is not None and options is not None:
-                snapshot.credential_handles = options.credential_handles
+                snapshot.validated_credential_handles = options.validated_credential_handles
             hash_options = snapshot
             if snapshot is not None and snapshot.group.get("connection_handle") in auto_handles:
                 hash_options = Options(group={**snapshot.group, "connection_handle": "<unnamed>"})

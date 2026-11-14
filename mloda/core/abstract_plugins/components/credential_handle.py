@@ -128,6 +128,14 @@ def public_credential_keys() -> frozenset[str]:
     return frozenset(keys)
 
 
+def declared_handle_option_keys() -> frozenset[str]:
+    """Option keys any loaded feature group declares with CredentialHandleSpec."""
+    # Function-local: avoids an import cycle through the feature group module.
+    from mloda.core.abstract_plugins.feature_group import feature_group_subclasses
+
+    return frozenset(key for group in feature_group_subclasses() for key in credential_handle_keys(group))
+
+
 def _declared(feature_group: type[FeatureGroup], options: Options) -> dict[str, Any]:
     keys = credential_handle_keys(feature_group)
     if not keys:

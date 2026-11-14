@@ -429,6 +429,26 @@ class TestSharedManagerWithARealServer:
         register_b.set_location("grpc://b")
         assert register_b.get_location() == "grpc://b"
 
+    @pytest.mark.timeout(30)
+    def test_drop_proxy_connection_reconnects_on_the_next_call_and_is_idempotent(self) -> None:
+        manager: Any = cfw_module.shared_manager()
+        register = manager.CfwManager({ParallelizationMode.MULTIPROCESSING})
+        register.set_location("grpc://a")
+        assert register.get_location() == "grpc://a"
+
+        cfw_manager_module.drop_proxy_connection(register)
+        cfw_manager_module.drop_proxy_connection(register)
+
+        assert register.get_location() == "grpc://a"
+        register.release()
+
+    def test_drop_proxy_connection_is_a_no_op_on_a_plain_instance(self) -> None:
+        register = CfwManager({ParallelizationMode.MULTIPROCESSING})
+
+        cfw_manager_module.drop_proxy_connection(register)
+
+        assert register.get_location() is None
+
     @pytest.mark.parametrize("breakage", ["shutdown", "socket_file_removed"])
     @pytest.mark.timeout(30)
     def test_an_unusable_cached_server_is_replaced_by_a_working_one(self, breakage: str) -> None:

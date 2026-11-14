@@ -908,8 +908,9 @@ class TestEnterPrestartsStandbyWorkers:
             ("register_release", RuntimeError("release failed"), False),
             ("register_release", KeyboardInterrupt(), True),
             ("terminate_alive_processes", RuntimeError("terminate failed"), True),
+            ("drop_connection", OSError("bad fd"), False),
         ],
-        ids=["exception_swallowed", "keyboard_interrupt_propagates", "terminate_error_propagates"],
+        ids=["exception_swallowed", "keyboard_interrupt_propagates", "terminate_error_propagates", "drop_swallowed"],
     )
     def test_exit_release_failure_is_best_effort_except_for_base_exceptions(
         self, failing_step: str, error: BaseException, propagates: bool, caplog: pytest.LogCaptureFixture
@@ -921,10 +922,15 @@ class TestEnterPrestartsStandbyWorkers:
         orchestrator.cfw_register = Mock()
         if failing_step == "register_release":
             orchestrator.cfw_register.release.side_effect = error
-        else:
+        elif failing_step == "terminate_alive_processes":
             worker_manager.terminate_alive_processes.side_effect = error
 
-        with patch("mloda.core.runtime.run.release_shared_manager") as release_manager:
+        drop_patch = (
+            patch("mloda.core.runtime.run.drop_proxy_connection", side_effect=error)
+            if failing_step == "drop_connection"
+            else patch("mloda.core.runtime.run.drop_proxy_connection")
+        )
+        with patch("mloda.core.runtime.run.release_shared_manager") as release_manager, drop_patch:
             if propagates:
                 with pytest.raises(type(error)):
                     orchestrator.__exit__(None, None, None)
@@ -936,7 +942,7 @@ class TestEnterPrestartsStandbyWorkers:
         manager.shutdown.assert_not_called()
         release_manager.assert_called_once_with(manager)
         assert orchestrator.manager is None
-        if failing_step == "register_release":
+        if failing_step in ("register_release", "drop_connection"):
             orchestrator.cfw_register.release.assert_called_once_with()
 
     def test_exit_without_a_manager_does_not_release_the_register(self) -> None:
@@ -1300,10 +1306,14 @@ class TestDropAllUploadedFlightTablesScrubsCredentials:
 
 
 class TestFinalizeTouchesSharedStateOnlyInTheOwningProcess:
-    @pytest.mark.parametrize("cancelled", [False, True], ids=["completed", "cancelled"])
+    @pytest.mark.parametrize(
+        "cancelled, unwinding",
+        [(False, False), (False, True), (True, True)],
+        ids=["completed", "failed_unwinding", "cancelled_unwinding"],
+    )
     @pytest.mark.parametrize("pid_offset, owns", [(0, True), (1, False)], ids=["owner", "other_process"])
     def test_finalize_drops_tables_and_reads_artifacts_only_in_the_owning_process(
-        self, pid_offset: int, owns: bool, cancelled: bool
+        self, pid_offset: int, owns: bool, cancelled: bool, unwinding: bool
     ) -> None:
         orchestrator = ExecutionOrchestrator(Mock(spec=ExecutionPlan))
         orchestrator._owner_pid = os.getpid() + pid_offset
@@ -1328,12 +1338,12 @@ class TestFinalizeTouchesSharedStateOnlyInTheOwningProcess:
                 "mloda.core.runtime.run.drop_proxy_connection", side_effect=lambda register: order.append("drop")
             ) as drop_connection,
         ):
-            orchestrator._finalize(cancelled)
+            orchestrator._finalize(cancelled, unwinding)
 
         orchestrator.join.assert_called_once()
         assert drop_tables.call_count == int(owns)
         assert orchestrator.cfw_register.get_run_outcome.call_count == int(owns)
-        if owns and cancelled:
+        if owns and unwinding:
             drop_connection.assert_called_once_with(orchestrator.cfw_register)
             assert order == ["drop", "outcome"]
         else:
@@ -1342,6 +1352,34 @@ class TestFinalizeTouchesSharedStateOnlyInTheOwningProcess:
             assert orchestrator.outcome is orchestrator.cfw_register.get_run_outcome.return_value
         else:
             assert orchestrator.outcome == RunOutcome()
+
+    @pytest.mark.parametrize("unwinding", [True, False], ids=["unwinding_contained", "plain_propagates"])
+    def test_get_run_outcome_failure_is_contained_only_while_unwinding(
+        self, unwinding: bool, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        orchestrator = ExecutionOrchestrator(Mock(spec=ExecutionPlan))
+        orchestrator._owner_pid = os.getpid()
+        orchestrator.location = "flight-location"
+        orchestrator.cfw_register = Mock()
+        orchestrator.cfw_register.get_run_outcome.side_effect = ConnectionRefusedError("manager gone")
+        orchestrator.join = Mock()  # type: ignore[method-assign]
+        orchestrator.executor = Mock()
+        orchestrator.executor.cfw_collection = {}
+
+        with (
+            patch("mloda.core.runtime.run.FlightServer.drop_tables"),
+            patch("mloda.core.runtime.run.drop_proxy_connection"),
+        ):
+            if unwinding:
+                with caplog.at_level(logging.WARNING):
+                    orchestrator._finalize(True, True)
+                assert orchestrator.outcome == RunOutcome()
+                assert [r for r in caplog.records if r.levelno == logging.WARNING]
+            else:
+                with pytest.raises(ConnectionRefusedError):
+                    orchestrator._finalize(False, False)
+
+        orchestrator.join.assert_called_once()
 
 
 class TestExitOfANeverEnteredOrchestrator:

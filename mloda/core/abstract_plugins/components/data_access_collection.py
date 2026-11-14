@@ -499,7 +499,7 @@ class DataAccessCollection:
                 (item.shaped or item.declared)
                 and isinstance(text, str)
                 and text.strip()
-                and len(text) < MIN_REDACT_LENGTH
+                and len(text.strip()) < MIN_REDACT_LENGTH
             ):
                 logger.warning(
                     "Credential '%s' value at '%s' is shorter than %d characters, so it is not masked by exact "

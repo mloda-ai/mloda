@@ -1145,16 +1145,19 @@ class TestShortSecretWarning:
 
     _LOGGER = "mloda.core.abstract_plugins.components.data_access_collection"
 
+    @pytest.mark.parametrize(
+        "value", ["hunter", "abc1234\n", "hunter\n\n"], ids=["plain", "padded_8_raw", "padded_8_raw_2"]
+    )
     def test_short_password_warns_naming_handle_and_key_without_the_value(
-        self, caplog: pytest.LogCaptureFixture
+        self, caplog: pytest.LogCaptureFixture, value: str
     ) -> None:
         with caplog.at_level(logging.WARNING, logger=self._LOGGER):
-            dac = DataAccessCollection(credentials={"pg": {"auth": {"password": "hunter"}}})  # nosec B105
+            dac = DataAccessCollection(credentials={"pg": {"auth": {"password": value}}})
 
         assert "pg" in caplog.text
         assert "auth.password" in caplog.text
-        assert "hunter" not in caplog.text
-        assert "hunter" not in dac.secret_literals()
+        assert value.strip() not in caplog.text
+        assert value.strip() not in dac.secret_literals()
 
     def test_long_value_does_not_warn(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.WARNING, logger=self._LOGGER):

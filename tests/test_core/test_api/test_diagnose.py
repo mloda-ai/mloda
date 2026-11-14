@@ -427,7 +427,7 @@ class TestDiagnoseEmptyRequest:
 # diagnose() scrubs its published message at one exit
 # ---------------------------------------------------------------------------
 
-# The monkeypatched cases test the exit directly; every real raise site already runs inside a redaction scope.
+# The monkeypatched cases test the exits directly.
 DIAGNOSE_SECRET_812 = "diagnose_secret_812_value"  # nosec B105
 
 
@@ -473,7 +473,7 @@ _BRANCHES_812 = ["setup", "resolution", *_PLAN_ERRORS_812]
 
 
 class TestDiagnoseScrubsMessage:
-    """Every diagnose branch masks registered secrets in the message; without registration it stays verbatim."""
+    """Every diagnose branch and escaping exception masks registered secrets; unregistered text stays verbatim."""
 
     @pytest.mark.parametrize("branch", _BRANCHES_812)
     def test_registered_secret_is_masked(self, branch: str, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -493,6 +493,27 @@ class TestDiagnoseScrubsMessage:
             assert diagnosis.message == str(_PLAN_ERRORS_812[branch]())
         else:
             assert DIAGNOSE_SECRET_812 in diagnosis.message
+
+    @pytest.mark.parametrize("registered", [True, False])
+    def test_escaping_exception_is_masked_only_with_collection(
+        self, monkeypatch: pytest.MonkeyPatch, registered: bool
+    ) -> None:
+        monkeypatch.setattr(mlodaAPI, "_plan", _raising_plan(RuntimeError(f"boom {DIAGNOSE_SECRET_812}")))
+        dac = _secret_collection() if registered else None
+
+        with pytest.raises(RuntimeError) as excinfo:
+            mloda.diagnose(
+                _success_features(),
+                compute_frameworks=[PandasDataFrame],
+                plugin_collector=_DIAGNOSE_PLUGINS,
+                data_access_collection=dac,
+            )
+
+        if registered:
+            assert DIAGNOSE_SECRET_812 not in str(excinfo.value)
+            assert "boom ***" in str(excinfo.value)
+        else:
+            assert str(excinfo.value) == f"boom {DIAGNOSE_SECRET_812}"
 
     def test_credential_shaped_text_is_masked_without_collection(self, monkeypatch: pytest.MonkeyPatch) -> None:
         exc = SetupConfigurationError("bad url postgres://alice:hunter2pass@db.example/x")

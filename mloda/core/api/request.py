@@ -12,6 +12,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
     _mask_secret_keys,
     _reraise_forms,
     _with_escaped,
+    redact_escaping_exception,
     registered_secrets_scope,
     scrub_credentials,
 )
@@ -802,11 +803,11 @@ class mlodaAPI:
         the diagnosis instead of raising (an environment failure found after planning, a missing connection, also
         carries the resolved records); any other error propagates, including an exception a breaking extender
         raises unless it is one of the types above. Every parameter after features is keyword-only.
-        The message is credential-scrubbed.
+        The message is credential-scrubbed; an escaping exception has collection secrets masked.
         """
         literals = frozenset() if data_access_collection is None else data_access_collection.secret_literals()
         # identity stays empty so plan identities and hashes match prepare() (session redaction registers identity)
-        with registered_secrets_scope(literals, frozenset()):
+        with registered_secrets_scope(literals, frozenset()), redact_escaping_exception():
             diagnosis = cls._diagnose(
                 features,
                 compute_frameworks=compute_frameworks,

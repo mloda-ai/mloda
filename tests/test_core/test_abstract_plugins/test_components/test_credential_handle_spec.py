@@ -643,6 +643,8 @@ class TestPlanTimeRefusals:
 
         assert "vault-typo" not in message
         assert HANDLE_KEY in message
+        assert "ChsVaultFG" in message
+        assert "not a registered credential" in message
 
     @pytest.mark.parametrize("entry", ENTRY_POINTS)
     def test_a_typo_ends_planning_even_when_another_group_matches_the_name(self, entry: Entry) -> None:
@@ -652,6 +654,8 @@ class TestPlanTimeRefusals:
 
         assert "vault-typo" not in message
         assert HANDLE_KEY in message
+        assert "ChsVaultFG" in message
+        assert "not a registered credential" in message
 
     def test_a_handle_registered_under_another_kind_names_both_kinds(self) -> None:
         dac = DataAccessCollection(files={"vault-main": "chs-file.csv"})

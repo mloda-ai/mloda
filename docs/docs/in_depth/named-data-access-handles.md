@@ -291,13 +291,14 @@ A bare `str` secret under an ordinary key cannot be detected, so do not do it.
 
 ## Runtime access versus match-time binding
 
-A source group usually binds a credential at match time. Any group reads a declared handle at run time with
+A source group that needs a login binds it at match time. Any group reads a declared handle at run time with
 `read_credential(handle)` from `mloda.provider`. The value never enters options, hashing, the plan or `explain()`.
 A source may also declare a handle option and read it in `load_neutral` or its `Implementation` (not in a returned
-lazy result or descriptor, see the lazy-result limit below). This suits a credential that rotates or expires: each
-`run` and `stream_run` reads the current value. The dataset identity and plan are still fixed at `prepare`, and the
-plan records the handle as declared, not bound (it is listed in `run_surface.credentials`). A source reads only a
-handle it declares, never the one its match binds; one bound login plus a separate rotating token is fine.
+lazy result, see the lazy-result limit below). This suits a credential that rotates or expires: each
+`run` and `stream_run` reads the value passed in its `credentials=`, else the prepared one. The dataset identity and plan are still fixed at `prepare`, and the
+plan records the handle as declared, not bound (it is listed in `run_surface.credentials`). `read_credential` grants
+only the handles a source declares; declare a separate handle for the rotating token, not the one the match binds
+(one bound login plus a separate rotating token is fine).
 The MCP server and the `mloda` command register credentials from a config table: see
 [Configure](mcp-server.md#configure). A plan-time handle failure of `explain` and `run` appears in the `mloda`
 command's message (`describe` still reports the feature as unknown); the MCP server only logs it.
@@ -356,10 +357,10 @@ mapping with item access, `get`, iteration and `**` unpacking, a fresh copy per 
 mapping is a plain dict, so a missing nested key reports as a missing column. A read outside the window, or of a
 handle the step did not declare, raises `CredentialReadRefused` (not a `LookupError`).
 
-A handle a source step binds at match time is reported in the plan, the lock and the hooks but grants no `read_credential`. A source that binds a credential at match time overrides `match_credentials` so core knows the bound handle and refuses a per-run value for it. Without the override, a per-run value for that handle is refused only as "not declared by any step"; if another step declares it, that step gets the new value while the source keeps the prepare-time one. A credential not registered in the collection renders `<pointer>`.
+A handle a source step binds at match time is reported in the plan, the lock and the hooks but grants no `read_credential`. A source that binds a credential at match time overrides `match_credentials`, so core refuses a per-run value for that handle. Without the override the refusal is only "not declared by any step", and if a step (another one, or the source itself) declares the handle, that step gets the new value while the match keeps the prepare-time one. A credential not registered in the collection renders `<pointer>`.
 
 The window is open only inside `calculate_feature` (and what it awaits) and inside an artifact saver; a step's grant closes any window still open from another grant. It is closed in
-validate hooks, in extenders, between the two, and after the step. A mloda run started inside a step starts with the
+validate hooks, in extenders (the load an `INPUT_DATA_LOAD` extender wraps still reads), between the two, and after the step. A mloda run started inside a step starts with the
 window closed, and its reads count on its own steps only. The stewards see the handle name in `explain()` and the plan
 lock, never a value; a refused read shows as the error of the step in any extender that wraps it.
 Extenders see which declared handles a step read in `HookContext.credentials_read` (see [Extender](../chapter1/extender.md)).

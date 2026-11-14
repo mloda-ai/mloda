@@ -943,12 +943,18 @@ _NATIVE_FIELDS = ("strerror", "filename", "filename2", "msg", "name", "path", "t
 class _FileRecordingExtender(Extender):
     """Appends the text of every exception the wrapped call raises to a file, so a spawned worker's view is readable."""
 
-    def __init__(self, path: str, record_success: bool = False) -> None:
+    def __init__(
+        self,
+        path: str,
+        record_success: bool = False,
+        hook: ExtenderHook = ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+    ) -> None:
         self.path = path
         self.record_success = record_success
+        self.hook = hook
 
     def wraps(self) -> set[ExtenderHook]:
-        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+        return {self.hook}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         try:
@@ -2736,40 +2742,32 @@ class ChsRcReadingSourceFG(ToySourceFG):
         return pa.table({name: [row] for name in features.get_all_names()})
 
 
-class _PassLoadExtender(Extender):
-    def wraps(self) -> set[ExtenderHook]:
-        return {ExtenderHook.INPUT_DATA_LOAD}
-
-    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        return func(*args, **kwargs)
-
-
 _SOURCE_NAME = "toyfmt_rc_src"
-_SOURCE_CASE = (
-    ChsRcReadingSourceFG,
-    _SOURCE_NAME,
-    {_E2E_HANDLE: _vault_values(), "toyfmt_src": {TOY_KEY: {_SOURCE_NAME: [0]}}},
-    {_PassLoadExtender()},
-)
+
+
+def _chs_rc_case(case_id: str, tmp_path: Any) -> tuple[Any, str, Any, set[Extender] | None, Any]:
+    if case_id == "calculate_feature":
+        return ChsRcReadingFG, "chs_rc_a", None, None, None
+    credentials = {_E2E_HANDLE: _vault_values(), "toyfmt_src": {TOY_KEY: {_SOURCE_NAME: [0]}}}
+    if case_id == "source_load_neutral":
+        return ChsRcReadingSourceFG, _SOURCE_NAME, credentials, None, None
+    seen = tmp_path / "load.txt"
+    extender = _FileRecordingExtender(str(seen), record_success=True, hook=ExtenderHook.INPUT_DATA_LOAD)
+    return ChsRcReadingSourceFG, _SOURCE_NAME, credentials, {extender}, seen
 
 
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("mode", _GRANT_MODES)
 @pytest.mark.parametrize("rows_of", [_run_rows, _stream_run_rows], ids=["run", "stream_run"])
-@pytest.mark.parametrize(
-    "group, name, credentials, extenders",
-    [(ChsRcReadingFG, "chs_rc_a", None, None), _SOURCE_CASE],
-    ids=["calculate_feature", "source_load_neutral"],
-)
+@pytest.mark.parametrize("case_id", ["calculate_feature", "source_load_neutral", "source_load_neutral_extender"])
 def test_each_run_on_a_prepared_session_reads_its_own_fresh_credential(
-    group: Any,
-    name: str,
-    credentials: dict[str, dict[str, Any]] | None,
-    extenders: set[Extender] | None,
+    case_id: str,
     rows_of: Any,
     mode: ParallelizationMode,
     flight_server: Any,
+    tmp_path: Any,
 ) -> None:
+    group, name, credentials, extenders, seen = _chs_rc_case(case_id, tmp_path)
     dac = None if credentials is None else _vault_dac(credentials)
     session = _prepare_vault(group, name, mode, extenders=extenders, dac=dac)
     kwargs: dict[str, Any] = {"parallelization_modes": {mode}, "flight_server": flight_server}
@@ -2782,6 +2780,11 @@ def test_each_run_on_a_prepared_session_reads_its_own_fresh_credential(
     assert first == [_row(_FRESH_1)]
     assert second == [_row(_FRESH_2)]
     assert third == [f"{_E2E_HOST}|{len(_E2E_HMAC)}"]
+    if seen is not None:
+        assert len(seen.read_text().splitlines()) == 3
+    if credentials is not None:
+        with pytest.raises(ValueError, match="not declared by any step"):
+            rows_of(session, name, credentials={"toyfmt_src": {TOY_KEY: {_SOURCE_NAME: [1]}}}, **kwargs)
 
 
 @pytest.mark.timeout(15)

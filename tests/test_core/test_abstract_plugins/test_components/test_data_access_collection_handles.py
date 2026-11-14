@@ -3,6 +3,7 @@
 See ``docs/docs/in_depth/named-data-access-handles.md`` for the user-facing guide.
 """
 
+import json
 import logging
 import sqlite3
 import threading
@@ -865,6 +866,13 @@ class TestRedact:
         assert "defghijk" not in keyword_form
         assert "defghijk" not in prose
 
+    def test_padded_value_is_masked_in_its_stripped_and_escaped_forms(self) -> None:
+        stripped = 'pa"ss\\word99'  # nosec B105
+        dac = DataAccessCollection(credentials={"pg": {"password": stripped + "\n"}})
+        redacted = dac.redact(f"raw {stripped} json {json.dumps(stripped)[1:-1]} here")
+        assert stripped not in redacted
+        assert json.dumps(stripped)[1:-1] not in redacted
+
     def test_mid_string_overlapping_values_leave_no_fragment(self) -> None:
         first = "abcdefgh12"  # nosec B105
         second = "gh12345678"  # nosec B105
@@ -1247,6 +1255,7 @@ _PER_CREDENTIAL_CASES: list[dict[str, Any]] = [
     {"c": Credential({"token": "wrapped-token-abcdef"}), "d": {"password": {"host": "shaped-host-12345"}}},  # nosec B105
     {"a": {"token": "short", "password": 123456789012, "secret": "   "}},  # nosec B105
     {"same": {"key": "dup-value-123456"}, "also": {"key": "dup-value-123456"}},
+    {"pad": {"token": "padded-secret-1234\n"}},  # nosec B105
     {},
 ]
 
@@ -1284,6 +1293,21 @@ class TestCredentialSecretLiteralsPerCredential:
                 {"host": "db.internal.example", "password": "pw-value-123456"},  # nosec B105
                 frozenset({"pw-value-123456"}),
                 id="safe_key_leaf_is_not_a_secret",
+            ),
+            pytest.param(
+                {"token": "secret-value-1\n"},
+                frozenset({"secret-value-1\n", "secret-value-1"}),
+                id="trailing_newline_adds_stripped_form",
+            ),
+            pytest.param(
+                {"token": "  secret-value-1\n"},
+                frozenset({"  secret-value-1\n", "secret-value-1"}),
+                id="leading_and_trailing_padding_adds_stripped_form",
+            ),
+            pytest.param(
+                {"token": "  short1\n"},
+                frozenset({"  short1\n"}),
+                id="stripped_form_under_the_floor_is_not_added",
             ),
         ],
     )

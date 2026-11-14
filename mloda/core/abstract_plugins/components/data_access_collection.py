@@ -8,6 +8,7 @@ from mloda.core.abstract_plugins.components.credential_access import ResolvedCre
 from mloda.core.abstract_plugins.components.credential_leaves import (
     MIN_REDACT_LENGTH,
     CredentialKeyPolicy,
+    all_credential_literals,
     credential_identity_literals,
     credential_key_names,
     normalize_credential_key,
@@ -475,7 +476,9 @@ class DataAccessCollection:
 
     def redact(self, text: str) -> str:
         """Exact-match every registered credential string value of 8+ chars, then ``scrub_credentials``."""
-        with registered_secrets_scope(frozenset(self._credential_str_leaves())):
+        with registered_secrets_scope(
+            frozenset().union(*(all_credential_literals(v) for v in self.credentials.values()))
+        ):
             return scrub_credentials(text)
 
     def secret_literals(self) -> frozenset[str]:
@@ -506,30 +509,6 @@ class DataAccessCollection:
                     MIN_REDACT_LENGTH,
                     MIN_REDACT_LENGTH,
                 )
-
-    def _credential_str_leaves(self) -> set[str]:
-        leaves: set[str] = set()
-        visited: set[int] = set()
-        for value in self.credentials.values():
-            self._collect_str_leaves(value, leaves, visited)
-        return leaves
-
-    @classmethod
-    def _collect_str_leaves(cls, value: Any, leaves: set[str], visited: set[int]) -> None:
-        if isinstance(value, Credential):
-            value = value.data
-        if isinstance(value, str):
-            if len(value) >= MIN_REDACT_LENGTH and value.strip():
-                leaves.add(value)
-            return
-        if isinstance(value, (Mapping, list, tuple, set, frozenset)):
-            container_id = id(value)
-            if container_id in visited:
-                return
-            visited.add(container_id)
-            iterable: Iterable[Any] = value.values() if isinstance(value, Mapping) else value
-            for nested in iterable:
-                cls._collect_str_leaves(nested, leaves, visited)
 
 
 def credential_handle_of(dac: DataAccessCollection | None, credentials: Any) -> str | None:

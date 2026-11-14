@@ -175,7 +175,29 @@ def test_shape_b_group_without_probe_fails_only_declines() -> None:
     result = check_operation_group_shape(group)
     assert not result.passed
     assert all(f.startswith("declines:") for f in result.failures), result.failures
-    assert any("cannot probe" in f for f in result.failures), result.failures
+    assert any("pass probe=" in f for f in result.failures), result.failures
+    assert any("resolves subtypes without an option key" in f for f in result.failures), result.failures
+
+
+def make_unserved_listed() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
+    group = _make_group_a()
+    setattr(group, "compute_framework_rule", classmethod(lambda cls: set()))
+    impl = _make_impl(group)
+    return group, {"impl": impl, "implementations": (impl,)}
+
+
+def make_reasonless_not_implemented_impl() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
+    group = _make_group_a()
+    record = Divergence(kind=DivergenceKind.VALUE, cause=Cause.NOT_IMPLEMENTED, subtypes=frozenset({"sum"}))
+    return group, {"impl": _make_impl(group, divergences=(record,))}
+
+
+def make_reasonless_not_implemented_group() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
+    group = _make_group_a()
+    impl = _make_impl(group)
+    record = Divergence(kind=DivergenceKind.VALUE, cause=Cause.NOT_IMPLEMENTED, subtypes=frozenset({"sum"}))
+    setattr(group, "DIVERGENCES", (record,))
+    return group, {"impl": impl}
 
 
 @pytest.mark.parametrize(
@@ -192,6 +214,9 @@ def test_shape_b_group_without_probe_fails_only_declines() -> None:
         (make_probe_never_accepted, "declines:", "probe not accepted"),
         (make_no_implementation, "implementations:", "no loaded Implementation"),
         (make_no_contract_version, "contract_version:", "declares no CONTRACT_VERSION"),
+        (make_unserved_listed, "implementations:", "serves no compute framework"),
+        (make_reasonless_not_implemented_impl, "divergences:", "gives no reason"),
+        (make_reasonless_not_implemented_group, "divergences:", "gives no reason"),
     ],
 )
 def test_broken_group_fails_only_its_check(make: Factory, prefix: str, message: str) -> None:
@@ -223,7 +248,51 @@ def test_alias_with_a_gap_record_on_one_side_passes() -> None:
     group = _make_group_a()
     gap = Divergence(kind=DivergenceKind.GAP, cause=Cause.NOT_IMPLEMENTED, subtypes=frozenset({"sum"}))
     _keep = _make_impl(group, divergences=(gap,))
-    assert check_operation_group_shape(group, alias_pairs=(("sum", "mean"),)).failures == ()
+    result = check_operation_group_shape(group, alias_pairs=(("sum", "mean"),))
+    assert not any(f.startswith("aliases:") for f in result.failures), result.failures
+    assert any("gives no reason" in f for f in result.failures), result.failures
+
+
+@pytest.mark.parametrize(
+    "make", [make_reasonless_not_implemented_impl, make_reasonless_not_implemented_group, make_empty_reason]
+)
+def test_reasonless_record_is_reported_once(make: Factory) -> None:
+    group, _parts = make()
+    result = check_operation_group_shape(group)
+    assert len([f for f in result.failures if "gives no reason" in f]) == 1, result.failures
+
+
+def test_listed_unserved_implementation_still_runs_declaration_checks() -> None:
+    group = _make_group_a()
+    setattr(group, "compute_framework_rule", classmethod(lambda cls: set()))
+    impl = _make_impl(group, supported=frozenset({"sum", "bogus"}))
+    result = check_operation_group_shape(group, implementations=(impl,))
+    assert any(
+        f.startswith("implementations:") and "serves no compute framework of OpShapeA" in f and impl.__name__ in f
+        for f in result.failures
+    ), result.failures
+    assert any(f.startswith("supported:") and "outside the subtype universe" in f for f in result.failures), (
+        result.failures
+    )
+
+
+def test_unlisted_serving_implementation_is_not_checked() -> None:
+    pytest.importorskip("pandas")
+    from mloda.user.pandas import PandasDataFrame
+
+    group = _make_group_a()
+    conforming = _make_impl(group, supported=frozenset({"sum", "median", "rolling"}))
+    _other = _make_impl(group, compute_framework=PandasDataFrame, supported=frozenset({"sum", "bogus"}))
+    assert check_operation_group_shape(group, implementations=(conforming,)).failures == ()
+    unrestricted = check_operation_group_shape(group)
+    assert any(f.startswith("supported:") for f in unrestricted.failures), unrestricted.failures
+
+
+def test_assert_forwards_implementations_for_unserved_case() -> None:
+    group, parts = make_unserved_listed()
+    with pytest.raises(pytest.fail.Exception) as excinfo:
+        assert_operation_group_shape(group, implementations=parts["implementations"])
+    assert "serves no compute framework" in str(excinfo.value)
 
 
 def test_assert_passes_silently_for_conforming_group() -> None:

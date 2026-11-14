@@ -958,6 +958,27 @@ class TestResolveFeatureIsNonThrowing:
         assert result.raised is None
         assert result.feature_group is not None
 
+    @pytest.mark.parametrize("registered", [True, False])
+    def test_escaping_exception_is_masked_only_with_collection(
+        self, monkeypatch: pytest.MonkeyPatch, registered: bool
+    ) -> None:
+        raw = f"boom {ABORT_ECHO_SECRET}"
+
+        def _raise(*args: Any, **kwargs: Any) -> Any:
+            raise RuntimeError(raw)
+
+        monkeypatch.setattr(plugin_docs, "compute_framework_subclasses", _raise)
+        dac = DataAccessCollection(credentials={"vault": {"token": ABORT_ECHO_SECRET}}) if registered else None
+
+        with pytest.raises(RuntimeError) as excinfo:
+            resolve_feature(SPLIT_CAP_FEATURE, data_access_collection=dac)
+
+        if registered:
+            assert ABORT_ECHO_SECRET not in str(excinfo.value)
+            assert "boom ***" in str(excinfo.value)
+        else:
+            assert str(excinfo.value) == raw
+
     def test_unknown_compute_framework_option_does_not_raise(self) -> None:
         """A bad compute_framework option makes the internal Feature() raise ValueError; it must not escape.
 

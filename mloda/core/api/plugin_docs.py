@@ -19,7 +19,11 @@ from typing import Any
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import SOURCE_INTROSPECTION_ERRORS
 from mloda.core.api.run_boundary import run_boundary
-from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope, scrub_credentials
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    redact_escaping_exception,
+    registered_secrets_scope,
+    scrub_credentials,
+)
 from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
@@ -409,7 +413,7 @@ def resolve_feature(
 
     Never raises for matching errors: those are reported in the returned ResolvedFeature.error.
     Signature misuse (options/feature_group alongside a Feature) is a programmer error and raises TypeError.
-    The error text is credential-scrubbed.
+    The error text is credential-scrubbed; an escaping exception has collection secrets masked.
 
     Design note: resolve_feature is a thin adapter. It only normalizes the standalone request, builds the
     canonical accessible-plugins environment once, delegates one evaluation to evaluate_and_render, and
@@ -441,7 +445,7 @@ def resolve_feature(
     """
     with run_boundary():
         literals = frozenset() if data_access_collection is None else data_access_collection.secret_literals()
-        with registered_secrets_scope(literals):
+        with registered_secrets_scope(literals), redact_escaping_exception():
             resolved = _resolve_feature(
                 feature,
                 options=options,

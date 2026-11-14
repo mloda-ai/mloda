@@ -471,17 +471,9 @@ def _diagnose_branch_812(branch: str, monkeypatch: pytest.MonkeyPatch, dac: Data
 
 _BRANCHES_812 = ["setup", "resolution", *_PLAN_ERRORS_812]
 
-_ENTRY_POINTS: dict[str, Callable[..., Any]] = {
-    "diagnose": mloda.diagnose,
-    "prepare": mloda.prepare,
-    "explain": mloda.explain,
-    "run_all": mloda.run_all,
-    "stream_all": mloda.stream_all,
-}
-
 
 class TestDiagnoseScrubsMessage:
-    """Every diagnose branch and exception escaping any planning entry point masks registered secrets."""
+    """Every diagnose branch and escaping exception masks registered secrets; unregistered text stays verbatim."""
 
     @pytest.mark.parametrize("branch", _BRANCHES_812)
     def test_registered_secret_is_masked(self, branch: str, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -502,29 +494,6 @@ class TestDiagnoseScrubsMessage:
         else:
             assert DIAGNOSE_SECRET_812 in diagnosis.message
 
-    @pytest.mark.parametrize("registered", [True, False])
-    @pytest.mark.parametrize("site", ["_plan", "_resolve_plan_steps"])
-    @pytest.mark.parametrize("entry", list(_ENTRY_POINTS))
-    def test_escaping_exception_is_masked_only_with_collection(
-        self, monkeypatch: pytest.MonkeyPatch, registered: bool, site: str, entry: str
-    ) -> None:
-        monkeypatch.setattr(mlodaAPI, site, _raising_plan(RuntimeError(f"boom {DIAGNOSE_SECRET_812}")))
-        dac = _secret_collection() if registered else None
-
-        with pytest.raises(RuntimeError) as excinfo:
-            _ENTRY_POINTS[entry](
-                _success_features(),
-                compute_frameworks=[PandasDataFrame],
-                plugin_collector=_DIAGNOSE_PLUGINS,
-                data_access_collection=dac,
-            )
-
-        if registered:
-            assert DIAGNOSE_SECRET_812 not in str(excinfo.value)
-            assert "boom ***" in str(excinfo.value)
-        else:
-            assert str(excinfo.value) == f"boom {DIAGNOSE_SECRET_812}"
-
     def test_credential_shaped_text_is_masked_without_collection(self, monkeypatch: pytest.MonkeyPatch) -> None:
         exc = SetupConfigurationError("bad url postgres://alice:hunter2pass@db.example/x")
         monkeypatch.setattr(mlodaAPI, "_plan", _raising_plan(exc))
@@ -538,3 +507,114 @@ class TestDiagnoseScrubsMessage:
 
         assert diagnosis.message is not None
         assert "hunter2pass" not in diagnosis.message
+
+
+def _classmethod_row(name: str) -> Callable[[DataAccessCollection | None], Any]:
+    def invoke(dac: DataAccessCollection | None) -> Any:
+        return getattr(mloda, name)(
+            _success_features(),
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_DIAGNOSE_PLUGINS,
+            data_access_collection=dac,
+        )
+
+    return invoke
+
+
+def _session(dac: DataAccessCollection | None) -> mlodaAPI:
+    return mloda.prepare(
+        _success_features(),
+        compute_frameworks=[PandasDataFrame],
+        plugin_collector=_DIAGNOSE_PLUGINS,
+        data_access_collection=dac,
+    )
+
+
+def _session_row(call: Callable[[mlodaAPI], Any]) -> Callable[..., Any]:
+    def invoke(dac: DataAccessCollection | None, patch: Callable[[], None] | None = None) -> Any:
+        session = _session(dac)
+        if patch is not None:
+            patch()
+        return call(session)
+
+    return invoke
+
+
+def _step_row(member: str) -> Callable[..., Any]:
+    def invoke(dac: DataAccessCollection | None, patch: Callable[[], None] | None = None) -> Any:
+        session = _session(dac)
+        step = session.resolved_plan()[0]
+        if patch is not None:
+            patch()
+        return getattr(session, member)(step)
+
+    return invoke
+
+
+# id -> (member, seam, invoke); session rows take a patch callable applied after prepare.
+_ENTRY_ROWS: dict[str, tuple[str, str, Callable[..., Any]]] = {}
+for _member in ("diagnose", "prepare", "explain", "run_all", "stream_all"):
+    for _seam in ("_plan", "_resolve_plan_steps"):
+        _ENTRY_ROWS[f"{_member}-{_seam}"] = (_member, _seam, _classmethod_row(_member))
+for _member in ("run_all", "stream_all"):
+    _ENTRY_ROWS[f"{_member}-_plan_snapshot"] = (_member, "_plan_snapshot", _classmethod_row(_member))
+_ENTRY_ROWS["run-_plan_snapshot"] = ("run", "_plan_snapshot", _session_row(lambda s: s.run()))
+_ENTRY_ROWS["stream_run-_plan_snapshot"] = (
+    "stream_run",
+    "_plan_snapshot",
+    _session_row(lambda s: list(s.stream_run())),
+)
+_ENTRY_ROWS["describe_columns-_execution_plan"] = (
+    "describe_columns",
+    "_execution_plan",
+    _step_row("describe_columns"),
+)
+_ENTRY_ROWS["count_rows-_execution_plan"] = ("count_rows", "_execution_plan", _step_row("count_rows"))
+_ENTRY_ROWS["run_surface-_credential_handle_scope"] = (
+    "run_surface",
+    "_credential_handle_scope",
+    _session_row(lambda s: s.run_surface),
+)
+_SESSION_ROWS = {
+    "run-_plan_snapshot",
+    "stream_run-_plan_snapshot",
+    "describe_columns-_execution_plan",
+    "count_rows-_execution_plan",
+    "run_surface-_credential_handle_scope",
+}
+# They return stored plan data. resolve_feature is a module function pinned in test_resolve_feature.py.
+_EXEMPT = frozenset({"resolved_plan", "resolution_report", "artifact_inputs"})
+
+
+class TestEntryPointsMaskEscapingSecrets:
+    """Every public mlodaAPI entry point masks registered secrets in exceptions escaping its scope."""
+
+    @pytest.mark.parametrize("registered", [True, False])
+    @pytest.mark.parametrize("row", list(_ENTRY_ROWS))
+    def test_escaping_exception_is_masked_only_with_collection(
+        self, monkeypatch: pytest.MonkeyPatch, registered: bool, row: str
+    ) -> None:
+        _, seam, invoke = _ENTRY_ROWS[row]
+        dac = _secret_collection() if registered else None
+        raiser = _raising_plan(RuntimeError(f"boom {DIAGNOSE_SECRET_812}"))
+
+        def patch() -> None:
+            monkeypatch.setattr(mlodaAPI, seam, raiser)
+
+        with pytest.raises(RuntimeError) as excinfo:
+            if row in _SESSION_ROWS:
+                invoke(dac, patch)
+            else:
+                patch()
+                invoke(dac)
+
+        if registered:
+            assert DIAGNOSE_SECRET_812 not in str(excinfo.value)
+            assert "boom ***" in str(excinfo.value)
+        else:
+            assert str(excinfo.value) == f"boom {DIAGNOSE_SECRET_812}"
+
+    def test_every_public_member_is_classified(self) -> None:
+        public = {n for n in dir(mlodaAPI) if not n.startswith("_")}
+
+        assert public == {member for member, _, _ in _ENTRY_ROWS.values()} | _EXEMPT

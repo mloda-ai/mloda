@@ -952,7 +952,7 @@ class mlodaAPI:
     @property
     def run_surface(self) -> RunSurface:
         """What ``run()`` accepts: api_data columns, artifact inputs, runtime parameters and credential handles."""
-        with run_boundary():
+        with self._credential_redaction():
             _, declared, bound = self._credential_handle_scope()
             groups = {
                 key: {group.__name__ for group, _ in entries}

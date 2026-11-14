@@ -123,7 +123,7 @@ artifacts are not readable. The prepared plan is shared by every run and frozen:
 `run_all()` is equivalent to `prepare()` followed by a single `run()`.
 `stream_all()` is equivalent to `prepare()` followed by a single `stream_run()`.
 
-An exception escaping `prepare()`, `explain()`, `run_all()` or `stream_all()` has the secrets of the `DataAccessCollection` you passed masked.
+An exception escaping any `mlodaAPI` entry point, whether a planning call such as `prepare()`, `explain()`, `run_all()` or `stream_all()` or a session method such as `run()`, `stream_run()`, `run_surface`, `describe_columns()` or `count_rows()`, has the secrets of the `DataAccessCollection` you passed masked.
 
 For per-group streaming with plan reuse, call `session.stream_run()` instead of `session.run()` -- it yields each feature group's result as it completes. See [Streaming](streaming.md) for details.
 

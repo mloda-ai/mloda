@@ -20,7 +20,7 @@ Probe = Callable[[str], tuple[str, Options]]
 def _implementations(group: type[OperationFeatureGroup]) -> dict[type[Implementation[Any]], type[ComputeFramework]]:
     current = list(current_implementations())
     found: dict[type[Implementation[Any]], type[ComputeFramework]] = {}
-    for framework in group.compute_framework_definition():
+    for framework in sorted(group.compute_framework_definition(), key=lambda f: f.get_class_name()):
         impl = serving_implementation(group, framework, current)
         if impl is not None and impl not in found:
             found[impl] = framework
@@ -68,7 +68,7 @@ def _reasonless_failures(owner: str, records: object) -> list[str]:
     return [
         f"divergences: {owner} divergences record gives no reason"
         for r in records
-        if isinstance(r, Divergence) and r.cause is Cause.NOT_IMPLEMENTED and not r.reason
+        if isinstance(r, Divergence) and r.cause is Cause.NOT_IMPLEMENTED and r.reason == ""
     ]
 
 
@@ -137,10 +137,11 @@ def check_operation_group_shape(
     record needs a reason. A resolver-based group whose Implementation restricts `supported` needs `probe=`."""
     universe = group.subtype_universe()
     served = _implementations(group)
-    checked = tuple(served) if implementations is None else tuple(implementations)
+    checked = tuple(dict.fromkeys(served if implementations is None else implementations))
     failures: list[str] = []
     if not checked:
-        failures.append(f"implementations: no loaded Implementation serves {group.__name__}")
+        what = "no loaded Implementation serves" if implementations is None else "none listed for"
+        failures.append(f"implementations: {what} {group.__name__}")
     if group.CONTRACT_VERSION is None:
         failures.append(f"contract_version: {group.__name__} declares no CONTRACT_VERSION")
     failures.extend(_alias_failures(checked, universe, alias_pairs))
@@ -154,7 +155,11 @@ def check_operation_group_shape(
     for impl in checked:
         framework = served.get(impl)
         if framework is None:
-            failures.append(f"implementations: {impl.__name__} serves no compute framework of {group.__name__}")
+            message = f"implementations: {impl.__name__} serves no compute framework of {group.__name__}"
+            winner = serving_implementation(group, impl.compute_framework, list(current_implementations()))
+            if winner is not None and winner is not impl:
+                message += f"; {winner.__name__} serves {impl.compute_framework.__name__}"
+            failures.append(message)
         failures.extend(_declaration_failures(impl, universe, group.OUTPUT_PARTS, group.VARIANTS))
         failures.extend(_reasonless_failures(impl.__name__, impl.divergences))
         if framework is not None:

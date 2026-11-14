@@ -33,14 +33,16 @@ def _make_group_a() -> type[OperationFeatureGroup]:
     return OpShapeA
 
 
-def _make_impl(group: type[OperationFeatureGroup], **attrs: Any) -> type[Implementation[Any]]:
+def _make_impl(
+    group: type[OperationFeatureGroup], name: str = "OpShapeImpl", **attrs: Any
+) -> type[Implementation[Any]]:
     body: dict[str, Any] = {
         "feature_group": group,
         "compute_framework": PythonDictFramework,
         "calculate": classmethod(lambda cls, group, data, features, framework: data),
         **attrs,
     }
-    return type("OpShapeImpl", (Implementation,), body)
+    return type(name, (Implementation,), body)
 
 
 def make_conforming() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
@@ -130,6 +132,50 @@ def make_no_implementation() -> tuple[type[OperationFeatureGroup], dict[str, Any
     return _make_group_a(), {}
 
 
+def make_unserved_listed(
+    supported: frozenset[str] | None = None,
+) -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
+    group = _make_group_a()
+    setattr(group, "compute_framework_rule", classmethod(lambda cls: set()))
+    impl = _make_impl(group, supported=supported)
+    return group, {"impl": impl, "implementations": (impl,)}
+
+
+def make_reasonless_not_implemented_impl() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
+    group = _make_group_a()
+    record = Divergence(kind=DivergenceKind.VALUE, cause=Cause.NOT_IMPLEMENTED, subtypes=frozenset({"sum"}))
+    return group, {"impl": _make_impl(group, divergences=(record,))}
+
+
+def make_reasonless_not_implemented_group() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
+    group = _make_group_a()
+    impl = _make_impl(group)
+    record = Divergence(kind=DivergenceKind.VALUE, cause=Cause.NOT_IMPLEMENTED, subtypes=frozenset({"sum"}))
+    setattr(group, "DIVERGENCES", (record,))
+    return group, {"impl": impl}
+
+
+def make_none_reason_not_implemented_impl() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
+    group = _make_group_a()
+    record = Divergence(kind=DivergenceKind.VALUE, cause=Cause.NOT_IMPLEMENTED, subtypes=frozenset({"sum"}), reason="x")
+    object.__setattr__(record, "reason", None)
+    impl = _make_impl(group)
+    setattr(impl, "divergences", (record,))
+    return group, {"impl": impl}
+
+
+def make_empty_listing() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
+    group, parts = make_conforming()
+    return group, {**parts, "implementations": ()}
+
+
+def make_shadowed_listed() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
+    group = _make_group_a()
+    base = _make_impl(group, name="OpShapeBase")
+    sub = type("OpShapeSub", (base,), {})
+    return group, {"impl": sub, "base": base, "implementations": (base,)}
+
+
 def make_shape_b(
     supported: frozenset[str] | None = frozenset({"up"}),
 ) -> tuple[type[OperationFeatureGroup], Callable[[str], tuple[str, Options]], type[Any]]:
@@ -179,29 +225,6 @@ def test_shape_b_group_without_probe_fails_only_declines() -> None:
     assert any("resolves subtypes without an option key" in f for f in result.failures), result.failures
 
 
-def make_unserved_listed(
-    supported: frozenset[str] | None = None,
-) -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
-    group = _make_group_a()
-    setattr(group, "compute_framework_rule", classmethod(lambda cls: set()))
-    impl = _make_impl(group, supported=supported)
-    return group, {"impl": impl, "implementations": (impl,)}
-
-
-def make_reasonless_not_implemented_impl() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
-    group = _make_group_a()
-    record = Divergence(kind=DivergenceKind.VALUE, cause=Cause.NOT_IMPLEMENTED, subtypes=frozenset({"sum"}))
-    return group, {"impl": _make_impl(group, divergences=(record,))}
-
-
-def make_reasonless_not_implemented_group() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
-    group = _make_group_a()
-    impl = _make_impl(group)
-    record = Divergence(kind=DivergenceKind.VALUE, cause=Cause.NOT_IMPLEMENTED, subtypes=frozenset({"sum"}))
-    setattr(group, "DIVERGENCES", (record,))
-    return group, {"impl": impl}
-
-
 @pytest.mark.parametrize(
     ("make", "prefix", "message"),
     [
@@ -219,6 +242,8 @@ def make_reasonless_not_implemented_group() -> tuple[type[OperationFeatureGroup]
         (make_unserved_listed, "implementations:", "serves no compute framework"),
         (make_reasonless_not_implemented_impl, "divergences:", "gives no reason"),
         (make_reasonless_not_implemented_group, "divergences:", "gives no reason"),
+        (make_none_reason_not_implemented_impl, "divergences:", "gives no reason"),
+        (make_empty_listing, "implementations:", "none listed for OpShapeA"),
     ],
 )
 def test_broken_group_fails_only_its_check(make: Factory, prefix: str, message: str) -> None:
@@ -246,17 +271,27 @@ def test_alias_with_records_of_different_kinds_reports_instead_of_raising() -> N
     ), result.failures
 
 
-def test_alias_with_a_reasonless_gap_record_on_one_side_reports_no_alias_failure() -> None:
+def test_alias_with_a_gap_record_on_one_side_passes() -> None:
     group = _make_group_a()
-    gap = Divergence(kind=DivergenceKind.GAP, cause=Cause.NOT_IMPLEMENTED, subtypes=frozenset({"sum"}))
+    gap = Divergence(
+        kind=DivergenceKind.GAP,
+        cause=Cause.NOT_IMPLEMENTED,
+        subtypes=frozenset({"sum"}),
+        reason="no NaN handling",
+    )
     _keep = _make_impl(group, divergences=(gap,))
     result = check_operation_group_shape(group, alias_pairs=(("sum", "mean"),))
-    assert not any(f.startswith("aliases:") for f in result.failures), result.failures
-    assert any("gives no reason" in f for f in result.failures), result.failures
+    assert result.failures == ()
 
 
 @pytest.mark.parametrize(
-    "make", [make_reasonless_not_implemented_impl, make_reasonless_not_implemented_group, make_empty_reason]
+    "make",
+    [
+        make_reasonless_not_implemented_impl,
+        make_reasonless_not_implemented_group,
+        make_empty_reason,
+        make_none_reason_not_implemented_impl,
+    ],
 )
 def test_reasonless_record_is_reported_once(make: Factory) -> None:
     group, _parts = make()
@@ -275,6 +310,36 @@ def test_listed_unserved_implementation_still_runs_declaration_checks() -> None:
     assert any(f.startswith("supported:") and "outside the subtype universe" in f for f in result.failures), (
         result.failures
     )
+
+
+def test_duplicate_listed_one_shot_implementation_reports_each_failure_once() -> None:
+    group = _make_group_a()
+    impl = _make_impl(group, supported=frozenset({"sum", "bogus"}))
+    result = check_operation_group_shape(group, implementations=(i for i in (impl, impl)))
+    assert len([f for f in result.failures if f.startswith("supported:")]) == 1, result.failures
+
+
+def test_empty_listing_does_not_report_no_loaded_implementation() -> None:
+    group, parts = make_empty_listing()
+    result = check_operation_group_shape(group, implementations=parts["implementations"])
+    assert not any("no loaded Implementation serves" in f for f in result.failures), result.failures
+
+
+def test_listing_a_shadowed_implementation_names_the_winner() -> None:
+    group, parts = make_shadowed_listed()
+    result = check_operation_group_shape(group, implementations=(parts["base"],))
+    assert any(
+        f.startswith("implementations:")
+        and "serves no compute framework of OpShapeA" in f
+        and "OpShapeSub serves PythonDictFramework" in f
+        for f in result.failures
+    ), result.failures
+
+
+def test_listing_the_winning_subclass_reports_no_implementations_failure() -> None:
+    group, parts = make_shadowed_listed()
+    result = check_operation_group_shape(group, implementations=(parts["impl"],))
+    assert not any(f.startswith("implementations:") for f in result.failures), result.failures
 
 
 def test_unlisted_serving_implementation_is_not_checked() -> None:

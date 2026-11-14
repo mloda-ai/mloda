@@ -33,7 +33,7 @@ This means, depending on your needs, you can run them all at once (**batch run**
 
 #### Runner & Execution Configuration
 
--   parallelization_modes (optional): Choose between sync, threading, or multiprocessing modes. (Default: sync)
+-   parallelization_modes (optional): Choose between sync, threading, or multiprocessing modes. (Default: sync; a prepared session's run()/stream_run() default to the modes given to prepare())
     -   Multiprocessing uses `spawn` by default. `MLODA_MP_START_METHOD=forkserver` opts into forkserver (falls back
         to spawn where unavailable; `fork` is rejected because forked children of a threaded parent can deadlock).
     -   `MLODA_MP_PRELOAD` lists modules the forkserver imports once. It replaces the current forkserver preload

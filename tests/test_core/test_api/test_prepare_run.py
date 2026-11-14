@@ -410,7 +410,7 @@ class TestConcurrentRunsOnOneSession:
         return state
 
     @staticmethod
-    def _prepare(plan: str, modes: set[ParallelizationMode]) -> Any:
+    def _prepare(plan: str, modes: set[ParallelizationMode] | None) -> Any:
         joined = plan != "single_framework"
         session = mloda.prepare(
             [Feature(name="PrepareRunJoinedFeature" if joined else "PrepareRunApiFeature")],
@@ -512,6 +512,57 @@ class TestConcurrentRunsOnOneSession:
             assert len(rebuilds) == 1
         assert all(pair in session.engine.transformer.transformer_map for pair in dropped)
         self._assert_unchanged(session, snapshot)
+
+    @staticmethod
+    def _spy_modes(monkeypatch: pytest.MonkeyPatch) -> list[set[ParallelizationMode]]:
+        seen: list[set[ParallelizationMode]] = []
+        original = mlodaAPI._enter_runner_context
+
+        def spy(self: Any, runner: Any, modes: Any, *args: Any, **kwargs: Any) -> Any:
+            seen.append(set(modes))
+            return original(self, runner, modes, *args, **kwargs)
+
+        monkeypatch.setattr(mlodaAPI, "_enter_runner_context", spy)
+        return seen
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    @pytest.mark.parametrize(
+        "prepared, passed, expected",
+        [
+            ({ParallelizationMode.THREADING}, None, {ParallelizationMode.THREADING}),
+            ({ParallelizationMode.THREADING}, {ParallelizationMode.SYNC}, {ParallelizationMode.SYNC}),
+            (None, None, {ParallelizationMode.SYNC}),
+        ],
+        ids=["prepared_used", "passed_wins", "default_sync"],
+    )
+    def test_run_mode_comes_from_prepare_unless_passed(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        path: str,
+        prepared: set[ParallelizationMode] | None,
+        passed: set[ParallelizationMode] | None,
+        expected: set[ParallelizationMode],
+    ) -> None:
+        session = self._prepare("single_framework", prepared)
+        seen = self._spy_modes(monkeypatch)
+
+        frames = _rerun(session, path, self._data(3), passed)
+
+        assert seen == [expected]
+        assert [f["PrepareRunApiFeature"].tolist() for f in frames] == [["3_v3", "103_w3"]]
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_session_keeps_frozen_copy_of_prepared_modes(self, monkeypatch: pytest.MonkeyPatch, path: str) -> None:
+        modes = {ParallelizationMode.THREADING}
+        session = self._prepare("single_framework", modes)
+        modes.discard(ParallelizationMode.THREADING)
+        modes.add(ParallelizationMode.SYNC)
+        seen = self._spy_modes(monkeypatch)
+
+        frames = _rerun(session, path, self._data(3))
+
+        assert seen == [{ParallelizationMode.THREADING}]
+        assert [f["PrepareRunApiFeature"].tolist() for f in frames] == [["3_v3", "103_w3"]]
 
     @pytest.mark.timeout(30)
     def test_repeated_multiprocessing_runs_get_their_own_results_and_session_is_unchanged(

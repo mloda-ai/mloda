@@ -183,6 +183,9 @@ class mlodaAPI:
     ) -> None:
         with run_boundary():
             self.engine: None | Engine = None
+            self._prepared_modes: frozenset[ParallelizationMode] | None = (
+                None if parallelization_modes is None else frozenset(parallelization_modes)
+            )
             self.function_extender = function_extender
             self.plugin_collector = plugin_collector
             filtered = filter_extenders_by_strict_mode(function_extender, plugin_collector)
@@ -707,7 +710,8 @@ class mlodaAPI:
         """Build an execution plan without running it.
 
         Returns a configured mlodaAPI session. Call ``session.run()`` to execute,
-        optionally passing fresh ``api_data`` each time.
+        optionally passing fresh ``api_data`` each time. ``parallelization_modes`` are also the
+        default for ``run()``/``stream_run()``.
         """
         return cls(
             features,
@@ -1037,10 +1041,17 @@ class mlodaAPI:
             structure_hash=self.plan_context.structure_hash,
         )
 
+    def _run_modes(self, modes: set[ParallelizationMode] | None) -> set[ParallelizationMode]:
+        if modes is not None:
+            return modes
+        if self._prepared_modes is not None:
+            return set(self._prepared_modes)
+        return {ParallelizationMode.SYNC}
+
     def run(
         self,
         api_data: dict[str, dict[str, Any]] | None = None,
-        parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
+        parallelization_modes: set[ParallelizationMode] | None = None,
         flight_server: Any | None = None,
         artifacts: dict[str, Any] | None = None,
         carrier: dict[str, str] | None = None,
@@ -1056,6 +1067,8 @@ class mlodaAPI:
 
         Args:
             api_data: Fresh runtime data, replacing any data from prepare().
+            parallelization_modes: Defaults to the modes given to prepare(), else SYNC; a passed set overrides them for this run.
+            flight_server: Flight server for MULTIPROCESSING data transfer; ignored otherwise.
             artifacts: A previous run's ``RunResult.artifacts``; keys must be artifact inputs of this
                 plan (see ``artifact_inputs``). When provided, feature groups with matching artifact names
                 switch to load mode for this run, enabling train-then-predict
@@ -1068,6 +1081,7 @@ class mlodaAPI:
             credentials: ``{handle: Credential | dict}`` replacing declared handles' values for this run only.
             parameters: ``{key: value}`` replacing declared runtime parameters for this run only.
         """
+        modes = self._run_modes(parallelization_modes)
         with run_boundary():
             with self._credential_redaction():
                 run_dac, names = self._run_collection(credentials)
@@ -1077,7 +1091,7 @@ class mlodaAPI:
                 run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
                 plan = list(self._plan_snapshot())
                 runner = self._batch_run(
-                    parallelization_modes,
+                    modes,
                     flight_server,
                     api_data=api_data,
                     artifacts=artifacts,
@@ -1099,7 +1113,7 @@ class mlodaAPI:
     def stream_run(
         self,
         api_data: dict[str, dict[str, Any]] | None = None,
-        parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
+        parallelization_modes: set[ParallelizationMode] | None = None,
         flight_server: Any | None = None,
         artifacts: dict[str, Any] | None = None,
         carrier: dict[str, str] | None = None,
@@ -1113,8 +1127,10 @@ class mlodaAPI:
         Returns a ``ResultStream`` carrying the run's ``run_id``/``plan_id``. carrier/child_bootstrap and the
         active verified_context() scope are read here, at call time, not at first iteration: a function whose
         body itself contains ``yield`` only starts executing on first iteration, which would defer that read
-        past the caller's intended scope. ``credentials`` and ``parameters`` are as in ``run()`` and are refused at the call.
+        past the caller's intended scope. ``parallelization_modes``, ``flight_server``, ``credentials`` and ``parameters`` are as in ``run()``;
+        credentials and parameters are refused at the call.
         """
+        modes = self._run_modes(parallelization_modes)
         with run_boundary():
             with self._credential_redaction():
                 run_dac, names = self._run_collection(credentials)
@@ -1126,7 +1142,7 @@ class mlodaAPI:
             stream_outcome = _StreamOutcome()
             stream = self._start_stream(
                 api_data,
-                parallelization_modes,
+                modes,
                 flight_server,
                 artifacts,
                 run_context,

@@ -2,6 +2,7 @@
 
 import dataclasses
 import logging
+import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -437,16 +438,27 @@ class TestContainedHooksLogAndContinue:
         arg_values = args.values() if isinstance(args, Mapping) else (args or ())
         assert not [a for a in arg_values if isinstance(a, BaseException)]
 
-    @pytest.mark.parametrize("hook", ["plan_start", "plan_complete"])
-    def test_a_collection_secret_in_a_contained_planning_hook_failure_is_masked_in_the_log(
-        self, hook: str, caplog: pytest.LogCaptureFixture
+    @pytest.mark.parametrize(
+        ("hook", "drive"),
+        [
+            ("plan_start", None),
+            ("plan_complete", None),
+            ("run_complete", lambda s: s.run(parallelization_modes=_SYNC)),
+            ("run_complete", lambda s: list(s.stream_run(parallelization_modes=_SYNC))),
+        ],
+        ids=["plan_start", "plan_complete", "run_complete_batch", "run_complete_stream"],
+    )
+    def test_a_collection_secret_in_a_contained_hook_failure_is_masked_in_the_log(
+        self, hook: str, drive: Callable[[Any], Any] | None, caplog: pytest.LogCaptureFixture
     ) -> None:
         secret = "hook_vault_secret_value"  # nosec B105
         dac = DataAccessCollection(credentials={"vault": {"token": secret}})
         raiser = _Recorder("raiser", [], raises_in=hook, message=f"{hook} leaked {secret}")
 
         with caplog.at_level(logging.ERROR):
-            _prepare({raiser}, dac)
+            session = _prepare({raiser}, dac)
+            if drive is not None:
+                drive(session)
 
         messages = [
             r.getMessage() for r in caplog.records if r.levelno == logging.ERROR and f"{hook} leaked" in r.getMessage()
@@ -454,6 +466,35 @@ class TestContainedHooksLogAndContinue:
         assert len(messages) == 1
         assert secret not in messages[0]
         assert "***" in messages[0]
+
+    def test_a_collection_secret_in_a_prepare_failure_is_masked_for_plan_complete_hooks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from mloda.core.api.request import mlodaAPI
+
+        secret = "hook_vault_secret_value"  # nosec B105
+        dac = DataAccessCollection(credentials={"vault": {"token": secret}})
+        seen: dict[str, str] = {}
+
+        class _Spy(_Minimal):
+            def on_plan_complete(self, plan: Any, outcome: Any) -> None:
+                seen["exc"] = str(sys.exception())
+                seen["outcome"] = repr(outcome)
+                seen["error_type"] = outcome.error_type
+
+        def boom(self: Any) -> None:
+            raise RuntimeError(f"boom {secret}")
+
+        monkeypatch.setattr(mlodaAPI, "_stamp_structure_hash", boom)
+
+        with pytest.raises(RuntimeError) as excinfo:
+            _prepare({_Spy()}, dac)
+
+        assert "***" in str(excinfo.value)
+        assert secret not in str(excinfo.value)
+        assert seen["exc"] and secret not in seen["exc"]
+        assert secret not in seen["outcome"]
+        assert seen["error_type"] == "builtins.RuntimeError"
 
 
 class _BreakingRefuser(_Recorder):

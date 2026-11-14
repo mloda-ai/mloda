@@ -207,28 +207,29 @@ class mlodaAPI:
                 call_contained_hook(self._extenders, "on_plan_start", self.plan_context)
                 plan_outcome = LifecycleOutcome("succeeded")
                 try:
-                    self._plan(
-                        requested_features,
-                        compute_frameworks,
-                        links,
-                        data_access_collection,
-                        global_filter,
-                        api_data,
-                        copy_features,
-                        strict_type_enforcement,
-                        column_ordering,
-                        parallelization_modes,
-                        output_framework,
-                    )
-                    self._plan_steps = tuple(self._resolve_plan_steps())
-                    # A prepared FeatureSet skips the compute-boundary defaults fill, so no materialized stamp is needed.
-                    self._artifact_steps = tuple(
-                        (step.uuid, step.features)
-                        for step in self._execution_plan()
-                        if isinstance(step, FeatureGroupStep) and step.feature_group.artifact() is not None
-                    )
-                    if self._extenders:
-                        self._stamp_structure_hash()
+                    with redact_escaping_exception():
+                        self._plan(
+                            requested_features,
+                            compute_frameworks,
+                            links,
+                            data_access_collection,
+                            global_filter,
+                            api_data,
+                            copy_features,
+                            strict_type_enforcement,
+                            column_ordering,
+                            parallelization_modes,
+                            output_framework,
+                        )
+                        self._plan_steps = tuple(self._resolve_plan_steps())
+                        # A prepared FeatureSet skips the compute-boundary defaults fill, so no materialized stamp is needed.
+                        self._artifact_steps = tuple(
+                            (step.uuid, step.features)
+                            for step in self._execution_plan()
+                            if isinstance(step, FeatureGroupStep) and step.feature_group.artifact() is not None
+                        )
+                        if self._extenders:
+                            self._stamp_structure_hash()
                 except BaseException as error:
                     plan_outcome = error_outcome(error)
                     if self._extenders:
@@ -1246,7 +1247,7 @@ class mlodaAPI:
                 note_mloda_id(error, "run_id", run_context.run_id)
             raise
         finally:
-            with run_boundary():
+            with self._credential_redaction(literals, identity):
                 self._complete_run(run_context, outcome)
 
     def _batch_run(

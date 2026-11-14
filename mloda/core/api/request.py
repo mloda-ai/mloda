@@ -1067,7 +1067,8 @@ class mlodaAPI:
 
         Args:
             api_data: Fresh runtime data, replacing any data from prepare().
-            parallelization_modes: Defaults to the modes given to prepare(), else SYNC; a passed set overrides them for this run.
+            parallelization_modes: Defaults to the modes given to prepare(), else SYNC; a passed set overrides
+                them for this run.
             flight_server: Flight server for MULTIPROCESSING data transfer; ignored otherwise.
             artifacts: A previous run's ``RunResult.artifacts``; keys must be artifact inputs of this
                 plan (see ``artifact_inputs``). When provided, feature groups with matching artifact names
@@ -1127,8 +1128,8 @@ class mlodaAPI:
         Returns a ``ResultStream`` carrying the run's ``run_id``/``plan_id``. carrier/child_bootstrap and the
         active verified_context() scope are read here, at call time, not at first iteration: a function whose
         body itself contains ``yield`` only starts executing on first iteration, which would defer that read
-        past the caller's intended scope. ``parallelization_modes``, ``flight_server``, ``credentials`` and ``parameters`` are as in ``run()``;
-        credentials and parameters are refused at the call.
+        past the caller's intended scope. ``parallelization_modes``, ``flight_server``, ``credentials`` and
+        ``parameters`` are as in ``run()``; credentials and parameters are refused at the call.
         """
         modes = self._run_modes(parallelization_modes)
         with run_boundary():

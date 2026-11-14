@@ -1069,7 +1069,7 @@ class mlodaAPI:
             api_data: Fresh runtime data, replacing any data from prepare().
             parallelization_modes: Defaults to the modes given to prepare(), else SYNC; a passed set overrides
                 them for this run.
-            flight_server: Flight server for MULTIPROCESSING data transfer; ignored otherwise.
+            flight_server: Flight server for MULTIPROCESSING data transfer, required for that mode; ignored otherwise.
             artifacts: A previous run's ``RunResult.artifacts``; keys must be artifact inputs of this
                 plan (see ``artifact_inputs``). When provided, feature groups with matching artifact names
                 switch to load mode for this run, enabling train-then-predict

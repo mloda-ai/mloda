@@ -33,7 +33,7 @@ This means, depending on your needs, you can run them all at once (**batch run**
 
 #### Runner & Execution Configuration
 
--   parallelization_modes (optional): Choose between sync, threading, or multiprocessing modes. (Default: sync; a prepared session's run()/stream_run() default to the modes given to prepare())
+-   parallelization_modes (optional): Choose between sync, threading, or multiprocessing modes. (Default: sync)
     -   Multiprocessing uses `spawn` by default. `MLODA_MP_START_METHOD=forkserver` opts into forkserver (falls back
         to spawn where unavailable; `fork` is rejected because forked children of a threaded parent can deadlock).
     -   `MLODA_MP_PRELOAD` lists modules the forkserver imports once. It replaces the current forkserver preload
@@ -100,6 +100,9 @@ session = mloda.prepare(
 result_1 = session.run(api_data={"MyKey": {"col": [1.0, 2.0]}})
 result_2 = session.run(api_data={"MyKey": {"col": [3.0, 4.0]}})
 ```
+
+`run()` and `stream_run()` default to the `parallelization_modes` given to `prepare()` (SYNC if none were given); passing
+`parallelization_modes` overrides them for that run. MULTIPROCESSING also needs `flight_server`.
 
 `run()` and `stream_run()` also accept `credentials={handle: Credential | dict}`, a fresh value for a credential handle a
 step declares, used for that run only (not accepted by `run_all()`/`stream_all()`). See

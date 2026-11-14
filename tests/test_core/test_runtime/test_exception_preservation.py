@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.validators.missing_input_validator import MissingInputFeatureError
@@ -55,6 +56,7 @@ from mloda.user import Credential, Feature, ParallelizationMode, PluginCollector
 
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsSource, ChsTwoHandleFG
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+    TOY_KEY,
     TOY_TOKEN,
     ToySourceFG,
     toy_dac,
@@ -2725,19 +2727,58 @@ def _stream_run_rows(session: Any, column: str, **kwargs: Any) -> list[str]:
     return _stream_rows(session.stream_run(**kwargs), column)
 
 
+class ChsRcReadingSourceFG(ToySourceFG):
+    PROPERTY_MAPPING = {**ToySourceFG.PROPERTY_MAPPING, HANDLE_KEY: credential_handle_spec("Vault credential handle.")}
+
+    @classmethod
+    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+        row = _row(read_credential(features.get_options_key(HANDLE_KEY)))
+        return pa.table({name: [row] for name in features.get_all_names()})
+
+
+class _PassLoadExtender(Extender):
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_LOAD}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
+_SOURCE_NAME = "toyfmt_rc_src"
+_SOURCE_CASE = (
+    ChsRcReadingSourceFG,
+    _SOURCE_NAME,
+    {_E2E_HANDLE: _vault_values(), "toyfmt_src": {TOY_KEY: {_SOURCE_NAME: [0]}}},
+    {_PassLoadExtender()},
+)
+
+
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("mode", _GRANT_MODES)
 @pytest.mark.parametrize("rows_of", [_run_rows, _stream_run_rows], ids=["run", "stream_run"])
+@pytest.mark.parametrize(
+    "group, name, credentials, extenders",
+    [(ChsRcReadingFG, "chs_rc_a", None, None), _SOURCE_CASE],
+    ids=["calculate_feature", "source_load_neutral"],
+)
 def test_each_run_on_a_prepared_session_reads_its_own_fresh_credential(
-    rows_of: Any, mode: ParallelizationMode, flight_server: Any
+    group: Any,
+    name: str,
+    credentials: dict[str, dict[str, Any]] | None,
+    extenders: set[Extender] | None,
+    rows_of: Any,
+    mode: ParallelizationMode,
+    flight_server: Any,
 ) -> None:
-    session = _prepare_vault(ChsRcReadingFG, "chs_rc_a", mode)
+    dac = None if credentials is None else _vault_dac(credentials)
+    session = _prepare_vault(group, name, mode, extenders=extenders, dac=dac)
     kwargs: dict[str, Any] = {"parallelization_modes": {mode}, "flight_server": flight_server}
 
-    first = rows_of(session, "chs_rc_a", credentials={_E2E_HANDLE: _FRESH_1}, **kwargs)
-    second = rows_of(session, "chs_rc_a", credentials={_E2E_HANDLE: _FRESH_2}, **kwargs)
-    third = rows_of(session, "chs_rc_a", **kwargs)
+    first = rows_of(session, name, credentials={_E2E_HANDLE: _FRESH_1}, **kwargs)
+    second = rows_of(session, name, credentials={_E2E_HANDLE: _FRESH_2}, **kwargs)
+    third = rows_of(session, name, **kwargs)
 
+    assert session.run_surface.credentials == (_E2E_HANDLE,)
     assert first == [_row(_FRESH_1)]
     assert second == [_row(_FRESH_2)]
     assert third == [f"{_E2E_HOST}|{len(_E2E_HMAC)}"]

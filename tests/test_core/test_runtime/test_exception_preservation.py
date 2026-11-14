@@ -846,9 +846,9 @@ def test_stream_start_enters_the_redaction_scope_once(monkeypatch: pytest.Monkey
         depth -= 1
         original_exit(self, *exc_info)
 
+    session = mloda.prepare([Feature(name=_TOKEN_COLUMN)], **toy_token_request(ToySourceFG, _TOKEN_COLUMN))
     monkeypatch.setattr(request_module._CredentialRedaction, "__enter__", counting_enter)
     monkeypatch.setattr(request_module._CredentialRedaction, "__exit__", counting_exit)
-    session = mloda.prepare([Feature(name=_TOKEN_COLUMN)], **toy_token_request(ToySourceFG, _TOKEN_COLUMN))
 
     stream = session.stream_run()
     stream.close()

@@ -471,9 +471,17 @@ def _diagnose_branch_812(branch: str, monkeypatch: pytest.MonkeyPatch, dac: Data
 
 _BRANCHES_812 = ["setup", "resolution", *_PLAN_ERRORS_812]
 
+_ENTRY_POINTS: dict[str, Callable[..., Any]] = {
+    "diagnose": mloda.diagnose,
+    "prepare": mloda.prepare,
+    "explain": mloda.explain,
+    "run_all": mloda.run_all,
+    "stream_all": mloda.stream_all,
+}
+
 
 class TestDiagnoseScrubsMessage:
-    """Every diagnose branch and escaping exception masks registered secrets; unregistered text stays verbatim."""
+    """Every diagnose branch and exception escaping any planning entry point masks registered secrets."""
 
     @pytest.mark.parametrize("branch", _BRANCHES_812)
     def test_registered_secret_is_masked(self, branch: str, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -495,14 +503,16 @@ class TestDiagnoseScrubsMessage:
             assert DIAGNOSE_SECRET_812 in diagnosis.message
 
     @pytest.mark.parametrize("registered", [True, False])
+    @pytest.mark.parametrize("site", ["_plan", "_resolve_plan_steps"])
+    @pytest.mark.parametrize("entry", list(_ENTRY_POINTS))
     def test_escaping_exception_is_masked_only_with_collection(
-        self, monkeypatch: pytest.MonkeyPatch, registered: bool
+        self, monkeypatch: pytest.MonkeyPatch, registered: bool, site: str, entry: str
     ) -> None:
-        monkeypatch.setattr(mlodaAPI, "_plan", _raising_plan(RuntimeError(f"boom {DIAGNOSE_SECRET_812}")))
+        monkeypatch.setattr(mlodaAPI, site, _raising_plan(RuntimeError(f"boom {DIAGNOSE_SECRET_812}")))
         dac = _secret_collection() if registered else None
 
         with pytest.raises(RuntimeError) as excinfo:
-            mloda.diagnose(
+            _ENTRY_POINTS[entry](
                 _success_features(),
                 compute_frameworks=[PandasDataFrame],
                 plugin_collector=_DIAGNOSE_PLUGINS,

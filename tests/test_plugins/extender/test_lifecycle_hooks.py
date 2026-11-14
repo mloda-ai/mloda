@@ -41,24 +41,31 @@ _ENABLED = PluginCollector.enabled_feature_groups({_LifecycleFeatureGroup})
 _SYNC = {ParallelizationMode.SYNC}
 
 
-def _prepare(extenders: set[Extender]) -> Any:
+def _prepare(extenders: set[Extender], dac: DataAccessCollection | None = None) -> Any:
     return mloda.prepare(
         [Feature(name=_COLUMN)],
         compute_frameworks=["PythonDictFramework"],
         plugin_collector=_ENABLED,
         parallelization_modes=_SYNC,
         function_extender=extenders,
+        data_access_collection=dac,
     )
 
 
 class _Recorder(Extender):
     def __init__(
-        self, label: str, log: list[tuple[Any, ...]], priority: int = 100, raises_in: str | None = None
+        self,
+        label: str,
+        log: list[tuple[Any, ...]],
+        priority: int = 100,
+        raises_in: str | None = None,
+        message: str | None = None,
     ) -> None:
         self.label = label
         self.log = log
         self.priority = priority
         self.raises_in = raises_in
+        self.message = message
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_MATCHED}
@@ -70,7 +77,7 @@ class _Recorder(Extender):
     def _record(self, hook: str, *payload: Any) -> None:
         self.log.append((self.label, hook, *payload))
         if self.raises_in == hook:
-            raise RuntimeError(f"{hook}-boom")
+            raise RuntimeError(self.message or f"{hook}-boom")
 
     def on_plan_start(self, plan: Any) -> None:
         self._record("plan_start", plan)
@@ -429,6 +436,24 @@ class TestContainedHooksLogAndContinue:
         args = records[0].args
         arg_values = args.values() if isinstance(args, Mapping) else (args or ())
         assert not [a for a in arg_values if isinstance(a, BaseException)]
+
+    @pytest.mark.parametrize("hook", ["plan_start", "plan_complete"])
+    def test_a_collection_secret_in_a_contained_planning_hook_failure_is_masked_in_the_log(
+        self, hook: str, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        secret = "hook_vault_secret_value"  # nosec B105
+        dac = DataAccessCollection(credentials={"vault": {"token": secret}})
+        raiser = _Recorder("raiser", [], raises_in=hook, message=f"{hook} leaked {secret}")
+
+        with caplog.at_level(logging.ERROR):
+            _prepare({raiser}, dac)
+
+        messages = [
+            r.getMessage() for r in caplog.records if r.levelno == logging.ERROR and f"{hook} leaked" in r.getMessage()
+        ]
+        assert len(messages) == 1
+        assert secret not in messages[0]
+        assert "***" in messages[0]
 
 
 class _BreakingRefuser(_Recorder):

@@ -179,10 +179,12 @@ def test_shape_b_group_without_probe_fails_only_declines() -> None:
     assert any("resolves subtypes without an option key" in f for f in result.failures), result.failures
 
 
-def make_unserved_listed() -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
+def make_unserved_listed(
+    supported: frozenset[str] | None = None,
+) -> tuple[type[OperationFeatureGroup], dict[str, Any]]:
     group = _make_group_a()
     setattr(group, "compute_framework_rule", classmethod(lambda cls: set()))
-    impl = _make_impl(group)
+    impl = _make_impl(group, supported=supported)
     return group, {"impl": impl, "implementations": (impl,)}
 
 
@@ -244,7 +246,7 @@ def test_alias_with_records_of_different_kinds_reports_instead_of_raising() -> N
     ), result.failures
 
 
-def test_alias_with_a_gap_record_on_one_side_passes() -> None:
+def test_alias_with_a_reasonless_gap_record_on_one_side_reports_no_alias_failure() -> None:
     group = _make_group_a()
     gap = Divergence(kind=DivergenceKind.GAP, cause=Cause.NOT_IMPLEMENTED, subtypes=frozenset({"sum"}))
     _keep = _make_impl(group, divergences=(gap,))
@@ -263,10 +265,9 @@ def test_reasonless_record_is_reported_once(make: Factory) -> None:
 
 
 def test_listed_unserved_implementation_still_runs_declaration_checks() -> None:
-    group = _make_group_a()
-    setattr(group, "compute_framework_rule", classmethod(lambda cls: set()))
-    impl = _make_impl(group, supported=frozenset({"sum", "bogus"}))
-    result = check_operation_group_shape(group, implementations=(impl,))
+    group, parts = make_unserved_listed(supported=frozenset({"sum", "bogus"}))
+    impl = parts["impl"]
+    result = check_operation_group_shape(group, implementations=parts["implementations"])
     assert any(
         f.startswith("implementations:") and "serves no compute framework of OpShapeA" in f and impl.__name__ in f
         for f in result.failures
@@ -288,13 +289,6 @@ def test_unlisted_serving_implementation_is_not_checked() -> None:
     assert any(f.startswith("supported:") for f in unrestricted.failures), unrestricted.failures
 
 
-def test_assert_forwards_implementations_for_unserved_case() -> None:
-    group, parts = make_unserved_listed()
-    with pytest.raises(pytest.fail.Exception) as excinfo:
-        assert_operation_group_shape(group, implementations=parts["implementations"])
-    assert "serves no compute framework" in str(excinfo.value)
-
-
 def test_assert_passes_silently_for_conforming_group() -> None:
     group, _keep = make_conforming()
     assert_operation_group_shape(group)
@@ -305,6 +299,13 @@ def test_assert_raises_pytest_failure_for_broken_group() -> None:
     with pytest.raises(pytest.fail.Exception) as excinfo:
         assert_operation_group_shape(group)
     assert "implementations:" in str(excinfo.value)
+
+
+def test_assert_forwards_implementations_for_unserved_case() -> None:
+    group, parts = make_unserved_listed()
+    with pytest.raises(pytest.fail.Exception) as excinfo:
+        assert_operation_group_shape(group, implementations=parts["implementations"])
+    assert "serves no compute framework" in str(excinfo.value)
 
 
 def test_plain_operation_group_without_subtypes_passes() -> None:

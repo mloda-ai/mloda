@@ -133,9 +133,8 @@ def check_operation_group_shape(
 ) -> CheckResult:
     """Check a CONTRACT_VERSION, valid Implementation subtypes and divergences, and that the rest are declined.
 
-    `implementations=` checks exactly the listed Implementations (the caller imports them) and reports one serving
-    no framework; every record needs a reason; a resolver-based group whose Implementation restricts `supported`
-    needs `probe=`, since core cannot invert a resolver."""
+    `implementations=` checks only the listed Implementations and reports one serving no framework. Every divergence
+    record needs a reason. A resolver-based group whose Implementation restricts `supported` needs `probe=`."""
     universe = group.subtype_universe()
     served = _implementations(group)
     checked = tuple(served) if implementations is None else tuple(implementations)

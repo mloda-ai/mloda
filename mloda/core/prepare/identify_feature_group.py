@@ -898,7 +898,12 @@ class IdentifyFeatureGroupClass:
             and options.is_own(k)
             for k in [*options.group, *options.context]
         )
-        return supplied and FeatureChainParser._first_rejecting_guard(options, mapping, _NEAR_MISS_LOG) is None
+        if not supplied:
+            return False
+        try:
+            return FeatureChainParser._first_rejecting_guard(options, mapping, _NEAR_MISS_LOG) is None
+        except Exception:  # noqa: BLE001  (a guard that raises, even a marked abort, declines the group)
+            return False
 
     def _collect_candidates(
         self,

@@ -37,6 +37,7 @@ from mloda.provider import (
     ComputeFramework,
     CoreDeclineCode,
     CredentialReadRefused,
+    DefaultOptionKeys,
     DataCreatorFeatureGroup,
     SourceMatch,
     read_credential,
@@ -391,6 +392,58 @@ class ChsCfgExtraFG(ChsCfgFG):
         "chs_cfgx_extra": property_spec("Required plain key.", allowed_values={"on"}),
         "chs_cfgx_handle": credential_handle_spec("Cfg handle."),
     }
+
+
+class ChsCfgGenericFG(FeatureChainParserMixin, ChsSource):
+    RECOGNITION_ONLY_PATTERN = True
+    PREFIX_PATTERN = r".*__chscfggenericnever$"
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {
+        DefaultOptionKeys.order_by: property_spec("Optional generic key.", default=None),
+        "chs_cfgg_handle": credential_handle_spec("Cfg handle."),
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class ChsCfgGuardFG(FeatureChainParserMixin, ChsSource):
+    RECOGNITION_ONLY_PATTERN = True
+    PREFIX_PATTERN = r".*__chscfgguardnever$"
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {
+        "chs_cfgd_kind": property_spec("Ownership key.", match_guard=lambda v: v == "mine"),
+        "chs_cfgd_handle": credential_handle_spec("Cfg handle."),
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class ChsCfgInFeaturesFG(FeatureChainParserMixin, ChsSource):
+    RECOGNITION_ONLY_PATTERN = True
+    PREFIX_PATTERN = r".*__chscfginnever$"
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {
+        DefaultOptionKeys.in_features: property_spec("Inputs."),
+        "chs_cfgi_handle": credential_handle_spec("Cfg handle."),
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class ChsCfgOptFG(FeatureChainParserMixin, ChsSource):
+    RECOGNITION_ONLY_PATTERN = True
+    PREFIX_PATTERN = r".*__chscfgoptnever$"
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {
+        "chs_cfgo_opt": property_spec("Optional plain key.", default="x"),
+        "chs_cfgo_handle": credential_handle_spec("Cfg handle."),
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
 
 
 class ChsCfgSiblingFG(ChsCfgFG):
@@ -1389,8 +1442,13 @@ class TestMissingHandleKeyAborts:
 
         assert _steps(session, ChsCfgFG)
 
-    def test_a_config_path_key_below_the_cutoff_keeps_the_fallback(self) -> None:
-        feature = Feature("chs_cfg_col", options={"chs_cfg_op": "sum", "chs_unrelated": "vault-main"})
+    @pytest.mark.parametrize(
+        "options",
+        [{"chs_cfg_op": "sum", "chs_unrelated": "vault-main"}, {"chs_cfg_op": "sum"}],
+        ids=["unrelated-key", "no-handle-key"],
+    )
+    def test_a_config_path_key_below_the_cutoff_keeps_the_fallback(self, options: dict[str, str]) -> None:
+        feature = Feature("chs_cfg_col", options=options)
 
         session = _prepare([feature], _dac(**{"vault-main": {"key": SECRET}}), _plugins(ChsCfgFG, ChsCfgFallbackFG))
 
@@ -1406,13 +1464,34 @@ class TestMissingHandleKeyAborts:
         assert "chs_cfg_handle" in str(exc.value)
         assert exc.value.result.eliminations[ChsCfgFG].code == CoreDeclineCode.REQUIRED_OPTION_ABSENT
 
-    def test_a_config_path_near_miss_needs_one_of_the_groups_own_plain_keys(self) -> None:
-        feature = Feature("chs_cfg_col", options={"chs_unrelated": "vault-main"})
+    @pytest.mark.parametrize(
+        "group, options, listed",
+        [
+            (ChsCfgFG, {"chs_unrelated": "vault-main"}, False),
+            (ChsCfgGenericFG, {"order_by": "ts"}, False),
+            (ChsCfgGuardFG, {"chs_cfgd_kind": "other"}, False),
+            (ChsCfgOptFG, {"chs_cfgo_opt": "y"}, False),
+            (ChsCfgInFeaturesFG, {"in_features": "chs_src"}, False),
+            (ChsCfgExtraFG, {"chs_cfgx_op": "sum"}, False),
+        ],
+        ids=[
+            "unrelated-key",
+            "optional-generic-key",
+            "guard-would-decline",
+            "optional-own-key",
+            "in-features-only",
+            "plain-key-also-missing",
+        ],
+    )
+    def test_a_config_path_near_miss_needs_one_of_the_groups_own_plain_keys(
+        self, group: type[FeatureGroup], options: dict[str, str], listed: bool
+    ) -> None:
+        feature = Feature("chs_cfg_col", options=options)
 
         with pytest.raises(FeatureResolutionError) as exc:
-            _prepare([feature], _dac(**{"vault-main": {"key": SECRET}}), _plugins(ChsCfgFG))
+            _prepare([feature], _dac(**{"vault-main": {"key": SECRET}}), _plugins(group))
 
-        assert ChsCfgFG not in exc.value.result.eliminations
+        assert (group in exc.value.result.eliminations) is listed
 
     def test_a_config_path_group_also_missing_another_required_key_keeps_the_fallback(self) -> None:
         feature = Feature("chs_cfg_col", options={"chs_cfgx_op": "sum", "chs_cfgx_handel": "vault-main"})

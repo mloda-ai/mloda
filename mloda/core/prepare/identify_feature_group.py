@@ -39,6 +39,7 @@ from mloda.core.abstract_plugins.components.credential_handle import (
     validate_credential_handles,
 )
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -121,6 +122,8 @@ from mloda.core.abstract_plugins.implementation import (
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 
 import logging
+
+_NEAR_MISS_LOG = logging.Logger("mloda.near_miss_probe", level=logging.CRITICAL + 1)
 
 
 def _operation_implementation_reason(feature_group: type[FeatureGroup]) -> str | None:
@@ -881,11 +884,21 @@ class IdentifyFeatureGroupClass:
         )
 
     @staticmethod
-    def _supplies_other_mapped_key(feature_group: type[FeatureGroup], options: Options) -> bool:
+    def _selects_by_required_own_key(feature_group: type[FeatureGroup], options: Options) -> bool:
+        """True when a required own non-handle key is set and no match_guard declines the options."""
         mapping = feature_group.PROPERTY_MAPPING or {}
         handles = credential_handle_keys(feature_group)
         reserved = {k.value for k in DefaultOptionKeys}
-        return any(k in mapping and k not in handles and k not in reserved for k in [*options.group, *options.context])
+        supplied = any(
+            k in mapping
+            and k not in handles
+            and k not in reserved
+            and not FeatureChainParser._can_skip_required_check(mapping[k])
+            and not mapping[k].deferred_binding
+            and options.is_own(k)
+            for k in [*options.group, *options.context]
+        )
+        return supplied and FeatureChainParser._first_rejecting_guard(options, mapping, _NEAR_MISS_LOG) is None
 
     def _collect_candidates(
         self,
@@ -958,7 +971,7 @@ class IdentifyFeatureGroupClass:
                                 missing_credential_handle_abort(feature_group, typo_options, typo_absent),
                                 close_handle_option_keys(feature_group, typo_absent, typo_options),
                             )
-                        elif self._supplies_other_mapped_key(feature_group, typo_options):
+                        elif self._selects_by_required_own_key(feature_group, typo_options):
                             self._record_elimination(
                                 feature_group,
                                 "value_rejection",

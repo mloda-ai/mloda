@@ -327,9 +327,8 @@ class ReadDBFG(SourceFeatureGroup):
         if handle not in dac.handles():
             record_match_rejection(
                 cls.get_class_name(),
-                "Option 'data_access_handle' of "
-                f"{cls.get_class_name()} names a handle that is not registered (the value is not shown in case it "
-                f"is a secret). Available credential handles: "
+                f"Option 'data_access_handle' of {cls.get_class_name()} names a handle that is not registered "
+                "(the value is not shown in case it is a secret). Available credential handles: "
                 f"{named_handles_text(dac.credentials, dac.auto_handles)}.",
                 stage=INPUT_DATA_STAGE,
                 code=CoreDeclineCode.HANDLE_UNKNOWN,

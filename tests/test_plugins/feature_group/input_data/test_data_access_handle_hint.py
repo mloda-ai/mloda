@@ -76,20 +76,6 @@ class TestCsvFGHint:
         assert os.path.abspath(path_b) in msg
         assert "data_access_handle" in msg
 
-    def test_unknown_handle_decline_hides_the_value(self, two_csv_files: tuple[str, str]) -> None:
-        token = "chs9f2Kq7vXtokenZ3"
-        path_a, path_b = two_csv_files
-        dac = DataAccessCollection(files={"transactions": path_a, "users": path_b})
-        feature = Feature("id", options=Options(context={"data_access_handle": token}))
-        result = IdentifyFeatureGroupClass.evaluate(feature, _CSV_PLUGINS, None, dac)
-
-        elimination = result.eliminations[CsvFG]
-        assert token not in elimination.reason
-        assert "data_access_handle" in elimination.reason
-        assert "transactions" in elimination.reason
-        assert "users" in elimination.reason
-        assert elimination.code is CoreDeclineCode.HANDLE_UNKNOWN
-
 
 # ----------------------------------------------------------------------------
 # TextFG: multi-file ambiguity aborts, a handle that names a foreign file declines

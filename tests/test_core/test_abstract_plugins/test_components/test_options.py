@@ -669,10 +669,17 @@ class TestOptionsWithCredentialValues:
         assert handle not in str(unmarked)
         assert handle in str(marked)
 
-    def test_str_masks_a_value_that_differs_from_the_validated_handle(self) -> None:
+    @pytest.mark.parametrize("scenario", ["hand_set", "rebuild"])
+    def test_str_masks_a_value_that_differs_from_the_validated_handle(self, scenario: str) -> None:
         token = "chs9f2Kq7vXtokenZ3"
-        options = Options(group={"chs_vault_token": token})
-        options.credential_handles = frozenset({("chs_vault_token", "chs-vault-main")})
+        validated = frozenset({("chs_vault_token", "chs-vault-main")})
+        if scenario == "hand_set":
+            options = Options(group={"chs_vault_token": token})
+            options.credential_handles = validated
+        else:
+            marked = Options(group={"chs_vault_token": "chs-vault-main"})
+            marked.credential_handles = validated
+            options = marked.rebuild({"chs_vault_token": token}, {})
 
         assert token not in str(options)
 
@@ -691,13 +698,6 @@ class TestOptionsWithCredentialValues:
         assert hash(marked) == hash(plain)
         assert Options().credential_handles == frozenset()
         assert "chs-vault-main" in str(marked.rebuild({"chs_vault_token": "chs-vault-main"}, {}))
-
-    def test_rebuild_onto_a_changed_value_prints_no_token(self) -> None:
-        token = "chs9f2Kq7vXtokenZ3"
-        marked = Options(group={"chs_vault_token": "chs-vault-main"})
-        marked.credential_handles = frozenset({("chs_vault_token", "chs-vault-main")})
-
-        assert token not in str(marked.rebuild({"chs_vault_token": token}, {}))
 
     def test_the_handle_key_mark_survives_a_pickle_round_trip(self) -> None:
         marked = Options(group={"chs_vault_token": "chs-vault-main"})

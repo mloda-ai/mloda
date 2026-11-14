@@ -473,7 +473,7 @@ _BRANCHES_812 = ["setup", "resolution", *_PLAN_ERRORS_812]
 
 
 class TestDiagnoseScrubsMessage:
-    """Every diagnose branch and escaping exception masks registered secrets; unregistered text stays verbatim."""
+    """Every diagnose branch masks registered secrets in its message; unregistered text stays verbatim."""
 
     @pytest.mark.parametrize("branch", _BRANCHES_812)
     def test_registered_secret_is_masked(self, branch: str, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -509,9 +509,13 @@ class TestDiagnoseScrubsMessage:
         assert "hunter2pass" not in diagnosis.message
 
 
-def _classmethod_row(name: str) -> Callable[[DataAccessCollection | None], Any]:
-    def invoke(dac: DataAccessCollection | None) -> Any:
-        return getattr(mloda, name)(
+_Invoke = Callable[[DataAccessCollection | None, Callable[[], None]], Any]
+
+
+def _classmethod_row(member: str) -> _Invoke:
+    def invoke(dac: DataAccessCollection | None, patch: Callable[[], None]) -> Any:
+        patch()
+        return getattr(mloda, member)(
             _success_features(),
             compute_frameworks=[PandasDataFrame],
             plugin_collector=_DIAGNOSE_PLUGINS,
@@ -530,58 +534,47 @@ def _session(dac: DataAccessCollection | None) -> mlodaAPI:
     )
 
 
-def _session_row(call: Callable[[mlodaAPI], Any]) -> Callable[..., Any]:
-    def invoke(dac: DataAccessCollection | None, patch: Callable[[], None] | None = None) -> Any:
+def _session_row(member: str, adapt: Callable[[Any, Any], Any], *, step: bool = False) -> _Invoke:
+    """Prepare unpatched, patch, then use getattr(session, member) through the adapter."""
+
+    def invoke(dac: DataAccessCollection | None, patch: Callable[[], None]) -> Any:
         session = _session(dac)
-        if patch is not None:
-            patch()
-        return call(session)
+        arg = session.resolved_plan()[0] if step else None
+        patch()
+        return adapt(getattr(session, member), arg)
 
     return invoke
 
 
-def _step_row(member: str) -> Callable[..., Any]:
-    def invoke(dac: DataAccessCollection | None, patch: Callable[[], None] | None = None) -> Any:
-        session = _session(dac)
-        step = session.resolved_plan()[0]
-        if patch is not None:
-            patch()
-        return getattr(session, member)(step)
+def _entry_rows() -> dict[str, tuple[str, str, _Invoke]]:
+    rows: dict[str, tuple[str, str, _Invoke]] = {}
+    for member in ("diagnose", "prepare", "explain", "run_all", "stream_all"):
+        for seam in ("_plan", "_resolve_plan_steps"):
+            rows[f"{member}-{seam}"] = (member, seam, _classmethod_row(member))
+    for member in ("run_all", "stream_all"):
+        rows[f"{member}-_plan_snapshot"] = (member, "_plan_snapshot", _classmethod_row(member))
+    rows["run-_plan_snapshot"] = ("run", "_plan_snapshot", _session_row("run", lambda attr, _: attr()))
+    rows["stream_run-_plan_snapshot"] = (
+        "stream_run",
+        "_plan_snapshot",
+        _session_row("stream_run", lambda attr, _: list(attr())),
+    )
+    for member in ("describe_columns", "count_rows"):
+        rows[f"{member}-_execution_plan"] = (
+            member,
+            "_execution_plan",
+            _session_row(member, lambda attr, step: attr(step), step=True),
+        )
+    rows["run_surface-_credential_handle_scope"] = (
+        "run_surface",
+        "_credential_handle_scope",
+        _session_row("run_surface", lambda attr, _: attr),
+    )
+    return rows
 
-    return invoke
 
-
-# id -> (member, seam, invoke); session rows take a patch callable applied after prepare.
-_ENTRY_ROWS: dict[str, tuple[str, str, Callable[..., Any]]] = {}
-for _member in ("diagnose", "prepare", "explain", "run_all", "stream_all"):
-    for _seam in ("_plan", "_resolve_plan_steps"):
-        _ENTRY_ROWS[f"{_member}-{_seam}"] = (_member, _seam, _classmethod_row(_member))
-for _member in ("run_all", "stream_all"):
-    _ENTRY_ROWS[f"{_member}-_plan_snapshot"] = (_member, "_plan_snapshot", _classmethod_row(_member))
-_ENTRY_ROWS["run-_plan_snapshot"] = ("run", "_plan_snapshot", _session_row(lambda s: s.run()))
-_ENTRY_ROWS["stream_run-_plan_snapshot"] = (
-    "stream_run",
-    "_plan_snapshot",
-    _session_row(lambda s: list(s.stream_run())),
-)
-_ENTRY_ROWS["describe_columns-_execution_plan"] = (
-    "describe_columns",
-    "_execution_plan",
-    _step_row("describe_columns"),
-)
-_ENTRY_ROWS["count_rows-_execution_plan"] = ("count_rows", "_execution_plan", _step_row("count_rows"))
-_ENTRY_ROWS["run_surface-_credential_handle_scope"] = (
-    "run_surface",
-    "_credential_handle_scope",
-    _session_row(lambda s: s.run_surface),
-)
-_SESSION_ROWS = {
-    "run-_plan_snapshot",
-    "stream_run-_plan_snapshot",
-    "describe_columns-_execution_plan",
-    "count_rows-_execution_plan",
-    "run_surface-_credential_handle_scope",
-}
+# id -> (member, seam, invoke(dac, patch)); the invoke decides when to apply the patch.
+_ENTRY_ROWS = _entry_rows()
 # They return stored plan data. resolve_feature is a module function pinned in test_resolve_feature.py.
 _EXEMPT = frozenset({"resolved_plan", "resolution_report", "artifact_inputs"})
 
@@ -602,11 +595,7 @@ class TestEntryPointsMaskEscapingSecrets:
             monkeypatch.setattr(mlodaAPI, seam, raiser)
 
         with pytest.raises(RuntimeError) as excinfo:
-            if row in _SESSION_ROWS:
-                invoke(dac, patch)
-            else:
-                patch()
-                invoke(dac)
+            invoke(dac, patch)
 
         if registered:
             assert DIAGNOSE_SECRET_812 not in str(excinfo.value)

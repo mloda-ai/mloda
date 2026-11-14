@@ -29,6 +29,7 @@ class TestAuthoringSurfaceIsExported:
             "DivergenceKind",
             "DivergenceSource",
             "Cause",
+            "divergence_dicts",
         ],
     )
     def test_name_is_public(self, name: str) -> None:

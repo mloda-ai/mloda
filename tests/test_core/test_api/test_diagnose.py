@@ -473,7 +473,7 @@ _BRANCHES_812 = ["setup", "resolution", *_PLAN_ERRORS_812]
 
 
 class TestDiagnoseScrubsMessage:
-    """Every diagnose branch masks registered secrets in the message; without registration it stays verbatim."""
+    """Every diagnose branch and escaping exception masks registered secrets; unregistered text stays verbatim."""
 
     @pytest.mark.parametrize("branch", _BRANCHES_812)
     def test_registered_secret_is_masked(self, branch: str, monkeypatch: pytest.MonkeyPatch) -> None:

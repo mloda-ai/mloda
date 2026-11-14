@@ -103,8 +103,8 @@ _SYNC_ONLY_REASON = "The live connection is reused without thread isolation and 
 class FrameworkAdapter(ABC):
     """Builds frames for one compute framework from typed data and reads them back.
 
-    from_typed, duplicate_column_frame and zero_column_frame build via pyarrow by default; an adapter that
-    must run without it overrides them (and from_arrow may just raise).
+    from_typed, duplicate_column_frame and zero_column_frame go through pyarrow by default; an adapter that
+    must run without it overrides them (its abstract from_arrow may just raise).
     """
 
     capabilities: ClassVar[AdapterCapabilities]
@@ -125,7 +125,6 @@ class FrameworkAdapter(ABC):
     def from_arrow(self, table: pa.Table) -> Any: ...
 
     def from_typed(self, data: TypedTestData, arrow_types: Mapping[str, pa.DataType] | None = None) -> Any:
-        """Build the frame through pyarrow; a custom adapter can override this to avoid it."""
         require(
             "pyarrow", f"{type(self).__name__}.from_typed (a custom adapter can override from_typed to avoid pyarrow)"
         )

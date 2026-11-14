@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from typing import Any
 
 from mloda._testing.result import CheckResult
 from mloda._testing.suite import assert_passed
-from mloda.core.abstract_plugins.components.divergence import DivergenceKind, divergence_problems
+from mloda.core.abstract_plugins.components.divergence import Cause, Divergence, DivergenceKind, divergence_problems
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import Implementation, current_implementations, serving_implementation
@@ -20,7 +20,7 @@ Probe = Callable[[str], tuple[str, Options]]
 def _implementations(group: type[OperationFeatureGroup]) -> dict[type[Implementation[Any]], type[ComputeFramework]]:
     current = list(current_implementations())
     found: dict[type[Implementation[Any]], type[ComputeFramework]] = {}
-    for framework in group.compute_framework_definition():
+    for framework in sorted(group.compute_framework_definition(), key=lambda f: f.get_class_name()):
         impl = serving_implementation(group, framework, current)
         if impl is not None and impl not in found:
             found[impl] = framework
@@ -62,6 +62,16 @@ def _declaration_failures(
     return failures
 
 
+def _reasonless_failures(owner: str, records: object) -> list[str]:
+    if not isinstance(records, tuple):
+        return []
+    return [
+        f"divergences: {owner} divergences record gives no reason"
+        for r in records
+        if isinstance(r, Divergence) and r.cause is Cause.NOT_IMPLEMENTED and r.reason == ""
+    ]
+
+
 def _shape_a_probe(group: type[OperationFeatureGroup]) -> Probe | None:
     declaration = group.SUBTYPES
     key = None if declaration is None else declaration.key
@@ -81,7 +91,14 @@ def _decline_failures(
         return []
     probe = probe or _shape_a_probe(group)
     if probe is None:
-        return [] if impl.supported is None else [f"declines: cannot probe {impl.__name__}; pass probe="]
+        return (
+            []
+            if impl.supported is None
+            else [
+                f"declines: {impl.__name__} restricts supported but {group.__name__} resolves subtypes without an "
+                "option key; pass probe= mapping a subtype to a (feature name, Options) request"
+            ]
+        )
     supported = universe if impl.supported is None else universe & impl.supported
     failures: list[str] = []
 
@@ -111,27 +128,42 @@ def check_operation_group_shape(
     group: type[OperationFeatureGroup],
     alias_pairs: Sequence[tuple[str, str]] = (),
     probe: Probe | None = None,
+    *,
+    implementations: Iterable[type[Implementation[Any]]] | None = None,
 ) -> CheckResult:
     """Check a CONTRACT_VERSION, valid Implementation subtypes and divergences, and that the rest are declined.
 
-    The acceptance control uses one supported subtype."""
+    `implementations=` checks only the listed Implementations and reports one serving no framework. Every divergence
+    record needs a reason. A resolver-based group whose Implementation restricts `supported` needs `probe=`."""
     universe = group.subtype_universe()
-    impls = _implementations(group)
+    served = _implementations(group)
+    checked = tuple(dict.fromkeys(served if implementations is None else implementations))
     failures: list[str] = []
-    if not impls:
-        failures.append(f"implementations: no loaded Implementation serves {group.__name__}")
+    if not checked:
+        what = "no loaded Implementation serves" if implementations is None else "none listed for"
+        failures.append(f"implementations: {what} {group.__name__}")
     if group.CONTRACT_VERSION is None:
         failures.append(f"contract_version: {group.__name__} declares no CONTRACT_VERSION")
-    failures.extend(_alias_failures(list(impls), universe, alias_pairs))
+    failures.extend(_alias_failures(checked, universe, alias_pairs))
     failures.extend(
         f"divergences: {p}"
         for p in divergence_problems(
             group.__name__, group.DIVERGENCES, universe, group.OUTPUT_PARTS, variants=group.VARIANTS
         )
     )
-    for impl, framework in impls.items():
+    failures.extend(_reasonless_failures(group.__name__, group.DIVERGENCES))
+    for impl in checked:
+        framework = served.get(impl)
+        if framework is None:
+            message = f"implementations: {impl.__name__} serves no compute framework of {group.__name__}"
+            winner = serving_implementation(group, impl.compute_framework, list(current_implementations()))
+            if winner is not None and winner is not impl:
+                message += f"; {winner.__name__} serves {impl.compute_framework.__name__}"
+            failures.append(message)
         failures.extend(_declaration_failures(impl, universe, group.OUTPUT_PARTS, group.VARIANTS))
-        failures.extend(_decline_failures(group, impl, framework, universe, probe))
+        failures.extend(_reasonless_failures(impl.__name__, impl.divergences))
+        if framework is not None:
+            failures.extend(_decline_failures(group, impl, framework, universe, probe))
     return CheckResult(check="operation_group_shape", subject=group.__name__, failures=tuple(failures))
 
 
@@ -139,6 +171,8 @@ def assert_operation_group_shape(
     group: type[OperationFeatureGroup],
     alias_pairs: Sequence[tuple[str, str]] = (),
     probe: Probe | None = None,
+    *,
+    implementations: Iterable[type[Implementation[Any]]] | None = None,
 ) -> None:
     """Fail the running pytest test if the operation group shape check reports failures."""
-    assert_passed(check_operation_group_shape(group, alias_pairs, probe))
+    assert_passed(check_operation_group_shape(group, alias_pairs, probe, implementations=implementations))

@@ -160,11 +160,21 @@ def iter_credential_leaves(value: Any, policy: CredentialKeyPolicy | None = None
 def _literals_where(
     value: Any, predicate: Callable[[CredentialLeaf], bool], policy: CredentialKeyPolicy | None = None
 ) -> frozenset[str]:
-    return frozenset(
-        item.leaf
-        for item in iter_credential_leaves(value, policy)
-        if predicate(item) and isinstance(item.leaf, str) and len(item.leaf) >= MIN_REDACT_LENGTH and item.leaf.strip()
-    )
+    found: set[str] = set()
+    for item in iter_credential_leaves(value, policy):
+        if not predicate(item) or not isinstance(item.leaf, str):
+            continue
+        stripped = item.leaf.strip()
+        if stripped and len(item.leaf) >= MIN_REDACT_LENGTH:
+            found.add(item.leaf)
+        if len(stripped) >= MIN_REDACT_LENGTH:
+            found.add(stripped)
+    return frozenset(found)
+
+
+def all_credential_literals(value: Any) -> frozenset[str]:
+    """Every str leaf of one credential value, plus its stripped form, that is long enough and not blank."""
+    return _literals_where(value, lambda _: True)
 
 
 def credential_secret_literals(value: Any, policy: CredentialKeyPolicy | None = None) -> frozenset[str]:

@@ -1032,7 +1032,7 @@ ECHO_KIND_KEY = "chs_echo_kind"
 _ECHO_FACTORIES: dict[str, Callable[[Mapping[str, Any]], BaseException]] = {
     "permission": lambda value: PermissionError("prod_db may not be used in this run"),
     "file_not_found": lambda value: FileNotFoundError(2, "No such file", "/data/x"),
-    "import_msg": lambda value: ImportError(f"cannot import {value['hmac']}"),
+    "import_msg": lambda value: ImportError(f"cannot import {value['hmac'].strip()}"),
     "syntax_msg": lambda value: SyntaxError(f"bad {value['hmac']}"),
     "syntax_text": lambda value: SyntaxError("bad", ("f.py", 1, 1, f"x = {value['hmac']}")),
     "decode_reason": lambda value: UnicodeDecodeError("utf-8", b"\xff", 0, 1, f"bad {value['hmac']}"),
@@ -1116,12 +1116,13 @@ def test_an_error_echoing_no_secret_keeps_its_exact_text_in_every_mode(
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("mode", _GRANT_MODES)
 @pytest.mark.parametrize(
-    "kind, error_type, field",
+    "kind, error_type, field, pad",
     [
-        pytest.param("import_msg", ImportError, "msg", id="import_msg"),
-        pytest.param("syntax_msg", SyntaxError, "msg", id="syntax_msg"),
-        pytest.param("syntax_text", SyntaxError, "text", id="syntax_text"),
-        pytest.param("decode_reason", UnicodeDecodeError, "reason", id="decode_reason"),
+        pytest.param("import_msg", ImportError, "msg", "", id="import_msg"),
+        pytest.param("import_msg", ImportError, "msg", "\n", id="import_msg_padded"),
+        pytest.param("syntax_msg", SyntaxError, "msg", "", id="syntax_msg"),
+        pytest.param("syntax_text", SyntaxError, "text", "", id="syntax_text"),
+        pytest.param("decode_reason", UnicodeDecodeError, "reason", "", id="decode_reason"),
     ],
 )
 def test_a_native_field_echoing_a_secret_is_masked_in_every_mode(
@@ -1129,14 +1130,16 @@ def test_a_native_field_echoing_a_secret_is_masked_in_every_mode(
     kind: str,
     error_type: type[Exception],
     field: str,
+    pad: str,
     flight_server: Any,
     caplog: pytest.LogCaptureFixture,
     tmp_path: Any,
 ) -> None:
     seen = tmp_path / "seen.txt"
+    dac = _vault_dac({_E2E_HANDLE: {**_vault_values(), "hmac": _E2E_HMAC + pad}})
     with caplog.at_level(logging.DEBUG):
         with pytest.raises(error_type) as excinfo:
-            _echo_run(kind, mode, flight_server, {_FileRecordingExtender(str(seen))})
+            _echo_run(kind, mode, flight_server, {_FileRecordingExtender(str(seen))}, dac=dac)
 
     exc = excinfo.value
     assert _E2E_HMAC not in getattr(exc, field)
@@ -2573,7 +2576,7 @@ class ChsLoggingFG(ChsSource):
         value = read_credential(features.get_options_key(HANDLE_KEY))
 
         def emit(plugin_logger: logging.Logger) -> None:
-            plugin_logger.info("connect %s", value["hmac"])
+            plugin_logger.info("connect %s", value["hmac"].strip())
             plugin_logger.info(f"key is {value['key']}")
             plugin_logger.info("host %s", value["host"])
 
@@ -2631,10 +2634,12 @@ class ChsThreadLoggingFG(ChsSource):
 
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("mode", _GRANT_MODES)
+@pytest.mark.parametrize("pad", ["", "\n"], ids=["unpadded", "padded"])
 def test_plugin_log_lines_are_masked_in_every_mode_but_the_host_stays(
-    mode: ParallelizationMode, flight_server: Any
+    mode: ParallelizationMode, pad: str, flight_server: Any
 ) -> None:
-    result = _grant_run(ChsLoggingFG, "chs_log_a", mode, flight_server)
+    dac = _vault_dac({_E2E_HANDLE: {**_vault_values(), "hmac": _E2E_HMAC + pad}})
+    result = _grant_run(ChsLoggingFG, "chs_log_a", mode, flight_server, dac=dac)
 
     assert list(result[0]["chs_log_a"]) == [f"connect ***|key is ***|host {_E2E_HOST}"]
 

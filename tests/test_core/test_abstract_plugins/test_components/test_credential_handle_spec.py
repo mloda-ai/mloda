@@ -35,6 +35,7 @@ from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsRawSecretFG, Ch
 from tests.test_core.test_tooling.runner_recorder import record_runners
 from mloda.provider import (
     ComputeFramework,
+    CoreDeclineCode,
     CredentialReadRefused,
     DataCreatorFeatureGroup,
     SourceMatch,
@@ -622,12 +623,14 @@ class TestBoundHandleIsNotGranted:
 
 class TestPlanTimeRefusals:
     @pytest.mark.parametrize("entry", ENTRY_POINTS)
-    def test_unknown_handle_names_the_handle_and_the_available_ones(self, entry: Entry) -> None:
+    @pytest.mark.parametrize("handle", ["vault-typo", "ab" * 32])
+    def test_unknown_handle_value_is_withheld_but_the_available_ones_are_named(self, entry: Entry, handle: str) -> None:
         dac = _dac(**{"vault-main": {"key": SECRET}, "vault-extra": {"key": OTHER_SECRET}})
 
-        message = _abort_refusal(entry, [_vault("vault-typo")], dac, ChsVaultFG)
+        message = _abort_refusal(entry, [_vault(handle)], dac, ChsVaultFG)
 
-        assert "vault-typo" in message
+        assert handle not in message
+        assert "ChsVaultFG" in message
         assert "vault-main" in message
         assert "vault-extra" in message
         assert HANDLE_KEY in message
@@ -635,10 +638,11 @@ class TestPlanTimeRefusals:
         assert OTHER_SECRET not in message
 
     @pytest.mark.parametrize("entry", ENTRY_POINTS)
-    def test_unknown_handle_without_a_collection_names_the_handle(self, entry: Entry) -> None:
+    def test_unknown_handle_without_a_collection_withholds_the_value(self, entry: Entry) -> None:
         message = _abort_refusal(entry, [_vault("vault-typo")], None, ChsVaultFG)
 
-        assert "vault-typo" in message
+        assert "vault-typo" not in message
+        assert HANDLE_KEY in message
 
     @pytest.mark.parametrize("entry", ENTRY_POINTS)
     def test_a_typo_ends_planning_even_when_another_group_matches_the_name(self, entry: Entry) -> None:
@@ -646,7 +650,8 @@ class TestPlanTimeRefusals:
             entry, [_vault("vault-typo")], _dac(**{"vault-main": {"key": SECRET}}), ChsVaultFG, ChsFallbackFG
         )
 
-        assert "vault-typo" in message
+        assert "vault-typo" not in message
+        assert HANDLE_KEY in message
 
     def test_a_handle_registered_under_another_kind_names_both_kinds(self) -> None:
         dac = DataAccessCollection(files={"vault-main": "chs-file.csv"})
@@ -808,7 +813,9 @@ class TestPlanTimeRefusals:
 
         message = _abort_refusal(_prepare, [feature], _dac(**{"vault-main": {"key": SECRET}}), ChsCustomMatchFG)
 
-        assert "vault-typo" in message
+        assert "chs_custom_handle" in message
+        assert "ChsCustomMatchFG" in message
+        assert "not a registered credential" in message
 
     def test_an_abstract_candidate_is_not_validated(self) -> None:
         feature = Feature("chs_abstract_a", options={"chs_abstract_handle": "vault-typo"})
@@ -829,7 +836,9 @@ class TestPlanTimeRefusals:
 
         message = _abort_refusal(_prepare, [feature], None, ChsFrameworkLoserFG, ChsLoserWinnerFG)
 
-        assert "vault-typo" in message
+        assert "chs_loser_handle" in message
+        assert "ChsFrameworkLoserFG" in message
+        assert "not a registered credential" in message
 
     def test_a_parent_required_field_does_not_abort_a_subclass_that_wins(self) -> None:
         feature = Feature("chs_fp_a", options={"chs_fp_handle": "vault-main"})
@@ -845,14 +854,18 @@ class TestPlanTimeRefusals:
 
         message = _abort(_prepare, [feature], None, ChsTypoParentFG, ChsTypoChildFG, ChsTypoWinnerFG)
 
-        assert "vault-typo" in message
+        assert "chs_typo_handle" in message
+        assert "ChsTypoChildFG" in message
+        assert "not a registered credential" in message
 
     def test_a_declining_matcher_beside_a_bad_handle_still_gets_the_handle_refusal(self) -> None:
         feature = Feature("chs_dec_a", options={"chs_dec_handle": "vault-typo"})
 
         message = _abort(_prepare, [feature], None, ChsDecliningFG, ChsDecBadHandleFG)
 
-        assert "vault-typo" in message
+        assert "chs_dec_handle" in message
+        assert "ChsDecBadHandleFG" in message
+        assert "not a registered credential" in message
 
     def test_a_refused_default_names_the_default_handle(self) -> None:
         message = _abort_refusal(
@@ -1379,6 +1392,24 @@ class TestMissingHandleKeyAborts:
 
         assert _steps(session, ChsCfgFallbackFG)
 
+    def test_a_config_path_missing_handle_key_records_a_near_miss(self) -> None:
+        feature = Feature("chs_cfg_col", options={"chs_cfg_op": "sum", "chs_unrelated": "vault-main"})
+
+        with pytest.raises(FeatureResolutionError) as exc:
+            _prepare([feature], _dac(**{"vault-main": {"key": SECRET}}), _plugins(ChsCfgFG))
+
+        assert "ChsCfgFG" in str(exc.value)
+        assert "chs_cfg_handle" in str(exc.value)
+        assert exc.value.result.eliminations[ChsCfgFG].code == CoreDeclineCode.REQUIRED_OPTION_ABSENT
+
+    def test_a_config_path_near_miss_needs_one_of_the_groups_own_plain_keys(self) -> None:
+        feature = Feature("chs_cfg_col", options={"chs_unrelated": "vault-main"})
+
+        with pytest.raises(FeatureResolutionError) as exc:
+            _prepare([feature], _dac(**{"vault-main": {"key": SECRET}}), _plugins(ChsCfgFG))
+
+        assert ChsCfgFG not in exc.value.result.eliminations
+
     def test_a_config_path_group_also_missing_another_required_key_keeps_the_fallback(self) -> None:
         feature = Feature("chs_cfg_col", options={"chs_cfgx_op": "sum", "chs_cfgx_handel": "vault-main"})
 
@@ -1740,11 +1771,12 @@ class TestGlobalFilterFeatures:
             global_filter=global_filter,
         )
 
-    def test_an_unknown_handle_is_refused_naming_the_handle(self) -> None:
+    def test_an_unknown_handle_is_refused_withholding_the_value(self) -> None:
         with pytest.raises(ValueError) as exc:
             self._prepare_with_filter(_vault("vault-typo", "chs_vault_b"))
 
-        assert "vault-typo" in str(exc.value)
+        assert "vault-typo" not in str(exc.value)
+        assert HANDLE_KEY in str(exc.value)
         assert SECRET not in str(exc.value)
 
     def test_a_non_str_handle_value_is_refused_without_printing_it(self) -> None:

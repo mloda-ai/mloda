@@ -777,7 +777,7 @@ class TestCredentialCatalog:
 
     @pytest.mark.parametrize(
         ("handle", "named"),
-        [(MISSPELLED, [MISSPELLED]), (None, [CRED_KEY, "is not set"])],
+        [(MISSPELLED, [CRED_KEY]), (None, [CRED_KEY, "is not set"])],
         ids=["misspelled", "unset"],
     )
     def test_a_trusted_caller_is_told_what_is_wrong(self, tmp_path: Path, handle: str | None, named: list[str]) -> None:
@@ -786,6 +786,8 @@ class TestCredentialCatalog:
         assert _error_code(result) == "internal"
         for needle in named:
             assert needle in result["error"]["message"]
+        if handle is not None:
+            assert handle not in result["error"]["message"]
         assert "No FeatureGroup provides" not in json.dumps(result)
         assert CRED_SECRET not in json.dumps(result)
 
@@ -834,7 +836,9 @@ class TestCredentialCatalog:
         assert len(records) == 1
         message = records[0].getMessage()
         assert audit_id in message
-        assert (MISSPELLED if handle is not None else CRED_KEY) in message
+        assert CRED_KEY in message
+        if handle is not None:
+            assert handle not in message
         assert CRED_SECRET not in message
 
     @pytest.mark.parametrize("trusted", [True, False])

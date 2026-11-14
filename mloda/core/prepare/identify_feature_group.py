@@ -32,11 +32,14 @@ from mloda.core.abstract_plugins.components.credential_handle import (
     missing_credential_handle_abort,
     close_handle_option_keys,
     misspelled_handle_key_abort_keys,
+    missing_handle_sentence,
+    only_missing_handle_keys,
     missing_credential_handle_keys,
     refuse_credential_option_values,
     validate_credential_handles,
 )
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.declared_attributes import DeclarationRequirement
@@ -877,6 +880,13 @@ class IdentifyFeatureGroupClass:
             feature_group, "NAME_ONLY_MATCH", False
         )
 
+    @staticmethod
+    def _supplies_other_mapped_key(feature_group: type[FeatureGroup], options: Options) -> bool:
+        mapping = feature_group.PROPERTY_MAPPING or {}
+        handles = credential_handle_keys(feature_group)
+        reserved = {k.value for k in DefaultOptionKeys}
+        return any(k in mapping and k not in handles and k not in reserved for k in [*options.group, *options.context])
+
     def _collect_candidates(
         self,
         feature: Feature,
@@ -947,6 +957,22 @@ class IdentifyFeatureGroupClass:
                             missing_credential_handle_abort(feature_group, typo_options, typo_absent),
                             close_handle_option_keys(feature_group, typo_absent, typo_options),
                         )
+                    else:
+                        near_miss = only_missing_handle_keys(feature_group, typo_options)
+                        if (
+                            near_miss
+                            and self._filter_feature_group_by_domain(feature_group, feature)
+                            and not inspect.isabstract(feature_group)
+                            and self._supplies_other_mapped_key(feature_group, typo_options)
+                        ):
+                            self._record_elimination(
+                                feature_group,
+                                "value_rejection",
+                                " ".join(
+                                    missing_handle_sentence(feature_group, key, typo_options) for key in near_miss
+                                ),
+                                CoreDeclineCode.REQUIRED_OPTION_ABSENT,
+                            )
                 if rejection is not None:
                     # The shared mapper owns the projection, so both seams spell the taxonomy the same way.
                     self._record_elimination(

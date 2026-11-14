@@ -157,7 +157,7 @@ Since group options forward to input features, a pointer on a derived feature bi
 
 ## Connections
 
-A group that is not a source reads a declared credential at run time with `read_credential` (see [Runtime access versus match-time binding](named-data-access-handles.md#runtime-access-versus-match-time-binding)).
+Any group, a source included, reads a declared credential at run time with `read_credential` (see [Runtime access versus match-time binding](named-data-access-handles.md#runtime-access-versus-match-time-binding)).
 
 Credential values are masked in errors and logs except under known connection fields (see [named data access handles](named-data-access-handles.md)).
 

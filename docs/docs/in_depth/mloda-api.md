@@ -120,10 +120,10 @@ One prepared session may be shared by threads. Each `run()` returns its own resu
 per-run state. Extender hooks of concurrent runs may run concurrently. Connection objects in the `DataAccessCollection` are shared by concurrent runs. A run that raises returns nothing, so its
 artifacts are not readable. The prepared plan is shared by every run and frozen: a write to its steps, FeatureSets, Features or Options from `calculate_feature` raises `FrozenPlanError`; per-run values go through `api_data` or `run(artifacts=...)`. The plan holds its own copies of the requested Features, so planning never writes into the caller's Feature objects.
 
-An exception that escapes `prepare()`, `explain()`, `run_all()` or `stream_all()` has the collection's secrets masked.
-
 `run_all()` is equivalent to `prepare()` followed by a single `run()`.
 `stream_all()` is equivalent to `prepare()` followed by a single `stream_run()`.
+
+An exception escaping `prepare()`, `explain()`, `run_all()` or `stream_all()` has the secrets of the `DataAccessCollection` you passed masked.
 
 For per-group streaming with plan reuse, call `session.stream_run()` instead of `session.run()` -- it yields each feature group's result as it completes. See [Streaming](streaming.md) for details.
 

@@ -5,6 +5,7 @@ import os
 from abc import abstractmethod
 from typing import Any, ClassVar, cast
 
+from mloda.core.abstract_plugins.components.credential_handle import named_handles_text
 from mloda.core.abstract_plugins.components.credential_scrub import (
     _cut_path_parameter_regions,
     mask_identity_credentials,
@@ -159,8 +160,11 @@ class _FileSourceFG(SourceFeatureGroup):
                 if is_file_route and handle not in dac.handles():
                     record_match_rejection(
                         cls.get_class_name(),
-                        f"data_access_handle '{handle}' is unknown; file handles: {sorted(dac.files)}, "
-                        f"folder handles: {sorted(dac.folders)}",
+                        "Option 'data_access_handle' of "
+                        f"{cls.get_class_name()} names a handle that is not registered (the value is not shown in "
+                        f"case it is a secret). Available file handles: "
+                        f"{named_handles_text(dac.files, dac.auto_handles)}, folder handles: "
+                        f"{named_handles_text(dac.folders, dac.auto_handles)}.",
                         stage=INPUT_DATA_STAGE,
                         code=CoreDeclineCode.HANDLE_UNKNOWN,
                     )

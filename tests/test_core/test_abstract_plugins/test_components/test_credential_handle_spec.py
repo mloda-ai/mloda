@@ -1930,13 +1930,13 @@ class TestDisplay:
 
     def test_a_mark_copied_from_another_group_does_not_survive_intake(self) -> None:
         options = Options(group={HANDLE_KEY: SECRET})
-        options.credential_handle_keys = frozenset({HANDLE_KEY})
+        options.credential_handles = frozenset({(HANDLE_KEY, SECRET)})
 
         session = _prepare([Feature("chs_raw_a", options=options)], None, _plugins(ChsRawSecretFG))
 
         stored = next(iter(session.engine.feature_group_collection[ChsRawSecretFG])).options
         assert SECRET not in str(stored)
-        assert stored.credential_handle_keys == frozenset()
+        assert stored.credential_handles == frozenset()
 
 
 class ChsConsumerFG(FeatureGroup):

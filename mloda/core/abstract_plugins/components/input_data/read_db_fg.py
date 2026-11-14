@@ -11,6 +11,7 @@ import secrets
 from hashlib import blake2b, sha256
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
+from mloda.core.abstract_plugins.components.credential_handle import named_handles_text
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection, credential_handle_of
@@ -326,7 +327,10 @@ class ReadDBFG(SourceFeatureGroup):
         if handle not in dac.handles():
             record_match_rejection(
                 cls.get_class_name(),
-                f"data_access_handle '{handle}' is unknown; credential handles: {sorted(dac.credentials)}",
+                "Option 'data_access_handle' of "
+                f"{cls.get_class_name()} names a handle that is not registered (the value is not shown in case it "
+                f"is a secret). Available credential handles: "
+                f"{named_handles_text(dac.credentials, dac.auto_handles)}.",
                 stage=INPUT_DATA_STAGE,
                 code=CoreDeclineCode.HANDLE_UNKNOWN,
             )

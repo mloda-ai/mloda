@@ -480,7 +480,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         assert not outcome.matched
         assert outcome.rejection is not None
         assert outcome.rejection.code is CoreDeclineCode.HANDLE_UNKNOWN
-        assert "unknown_handle_for_suite" in outcome.rejection.reason
+        assert "unknown_handle_for_suite" not in outcome.rejection.reason
         for handle in known:
             assert handle in outcome.rejection.reason
 

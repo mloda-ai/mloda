@@ -269,7 +269,9 @@ identity (`PlanStep.data_access_identity`, `HookContext.data_access_identity`), 
 such sources apart. Plugin-declared public keys do not change the identity.
 
 The handle name is not masked in `explain()`, `str(Options)` or the plan content hash, even under a credential-shaped
-key; other values under such a key stay masked. Name a handle by role (`pii-hmac-key`), never by environment or
+key; other values under such a key stay masked. `str(Options)` and `explain()` show the handle only once mloda has
+validated it as a registered credential handle for that feature group; before that, the option prints like any other
+option. Name a handle by role (`pii-hmac-key`), never by environment or
 content. Renaming a handle changes the content hash and may split a step.
 
 In CI, `explain()` validates like `prepare()`, so a plan-lock check registers a placeholder credential under each

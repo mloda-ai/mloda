@@ -118,10 +118,10 @@ def _str_option_dict(d: dict[str, Any]) -> dict[str, Any]:
 
 
 def _display_option_value(
-    key: Any, value: Any, source_group_names: Collection[str], handle_keys: Collection[str] = frozenset()
+    key: Any, value: Any, source_group_names: Collection[str], handles: Collection[tuple[str, str]] = frozenset()
 ) -> Any:
-    if key in handle_keys and isinstance(value, str):
-        return value
+    if any(key == handle_key for handle_key, _ in handles):
+        return value if isinstance(value, str) and (key, value) in handles else "***"
     if key in source_group_names:
         return redact_option_value(value)
     if isinstance(key, str) and _SECRET_KEY.fullmatch(key):
@@ -130,10 +130,10 @@ def _display_option_value(
 
 
 def _display_option_dict(
-    d: dict[str, Any], source_group_names: Collection[str], handle_keys: Collection[str] = frozenset()
+    d: dict[str, Any], source_group_names: Collection[str], handles: Collection[tuple[str, str]] = frozenset()
 ) -> dict[str, Any]:
     """Display-only: redact source group pointers, credential-shaped keys and nested credential keys."""
-    return {k: _display_option_value(k, v, source_group_names, handle_keys) for k, v in d.items()}
+    return {k: _display_option_value(k, v, source_group_names, handles) for k, v in d.items()}
 
 
 def validate_forwarding_directives(
@@ -234,7 +234,7 @@ class Options:
         self._own_group_keys: frozenset[str] = frozenset(self.group.keys())
         self._own_context_keys: frozenset[str] = frozenset(self.context.keys())
         self._own_keys_locked: bool = False
-        self.credential_handle_keys: frozenset[str] = frozenset()
+        self.credential_handles: frozenset[tuple[str, str]] = frozenset()
         OptionsValidator.validate_no_duplicate_keys(self.group, self.context)
         OptionsValidator.validate_propagate_keys_in_context(self.propagate_context_keys, self.context)
         OptionsValidator.validate_propagate_keys_in_context(
@@ -463,7 +463,7 @@ class Options:
         copied._own_group_keys = self._own_group_keys
         copied._own_context_keys = self._own_context_keys
         copied._own_keys_locked = self._own_keys_locked
-        copied.credential_handle_keys = self.credential_handle_keys
+        copied.credential_handles = self.credential_handles
         return copied
 
     def __getstate__(self) -> dict[str, Any]:
@@ -520,7 +520,7 @@ class Options:
 
         names = concrete_source_groups().keys()
         parts = (
-            f"Options(group={_display_option_dict(self.group, names, self.credential_handle_keys)}, "
+            f"Options(group={_display_option_dict(self.group, names, self.credential_handles)}, "
             f"context={_display_option_dict(self.context, names)}"
         )
         if self.propagate_context_keys:

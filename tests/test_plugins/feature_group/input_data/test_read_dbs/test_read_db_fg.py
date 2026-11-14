@@ -652,6 +652,21 @@ class TestTwoLoginsOnOneSource:
         assert "zq_orders_tbl" not in message
 
 
+class TestUnknownHandleDeclineHidesValue:
+    def test_the_decline_reason_names_the_option_and_handles_but_not_the_value(self) -> None:
+        token = "chs9f2Kq7vXtokenZ3"
+        feature = Feature("toyfmt_shared", options=Options(context={"data_access_handle": token}))
+        plugins: FeatureGroupEnvironmentMapping = {ToyRoleDB: {PythonDictFramework}}
+        result = IdentifyFeatureGroupClass.evaluate(feature, plugins, None, _two_logins())
+
+        elimination = result.eliminations[ToyRoleDB]
+        assert token not in elimination.reason
+        assert "data_access_handle" in elimination.reason
+        assert "admin_h" in elimination.reason
+        assert "analyst_h" in elimination.reason
+        assert elimination.code is CoreDeclineCode.HANDLE_UNKNOWN
+
+
 class ToyFlakyRoleDB(ToyRoleDB):
     """ToyRoleDB whose broken role cannot read the catalog."""
 

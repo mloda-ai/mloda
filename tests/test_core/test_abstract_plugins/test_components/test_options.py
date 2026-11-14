@@ -664,34 +664,48 @@ class TestOptionsWithCredentialValues:
         handle = "chs-vault-main"
         unmarked = Options(group={"chs_vault_token": handle})
         marked = Options(group={"chs_vault_token": handle})
-        marked.credential_handle_keys = frozenset({"chs_vault_token"})
+        marked.credential_handles = frozenset({("chs_vault_token", handle)})
 
         assert handle not in str(unmarked)
         assert handle in str(marked)
 
+    def test_str_masks_a_value_that_differs_from_the_validated_handle(self) -> None:
+        token = "chs9f2Kq7vXtokenZ3"
+        options = Options(group={"chs_vault_token": token})
+        options.credential_handles = frozenset({("chs_vault_token", "chs-vault-main")})
+
+        assert token not in str(options)
+
     def test_a_marked_key_masks_a_non_str_value(self) -> None:
         options = Options(group={"chs_vault_token": {"password": "chs-nested-secret-1"}})
-        options.credential_handle_keys = frozenset({"chs_vault_token"})
+        options.credential_handles = frozenset({("chs_vault_token", "chs-vault-main")})
 
         assert "chs-nested-secret-1" not in str(options)
 
     def test_the_handle_key_mark_survives_rebuild_and_stays_out_of_hash_and_equality(self) -> None:
         marked = Options(group={"chs_vault_token": "chs-vault-main"})
-        marked.credential_handle_keys = frozenset({"chs_vault_token"})
+        marked.credential_handles = frozenset({("chs_vault_token", "chs-vault-main")})
         plain = Options(group={"chs_vault_token": "chs-vault-main"})
 
         assert marked == plain
         assert hash(marked) == hash(plain)
-        assert Options().credential_handle_keys == frozenset()
+        assert Options().credential_handles == frozenset()
         assert "chs-vault-main" in str(marked.rebuild({"chs_vault_token": "chs-vault-main"}, {}))
+
+    def test_rebuild_onto_a_changed_value_prints_no_token(self) -> None:
+        token = "chs9f2Kq7vXtokenZ3"
+        marked = Options(group={"chs_vault_token": "chs-vault-main"})
+        marked.credential_handles = frozenset({("chs_vault_token", "chs-vault-main")})
+
+        assert token not in str(marked.rebuild({"chs_vault_token": token}, {}))
 
     def test_the_handle_key_mark_survives_a_pickle_round_trip(self) -> None:
         marked = Options(group={"chs_vault_token": "chs-vault-main"})
-        marked.credential_handle_keys = frozenset({"chs_vault_token"})
+        marked.credential_handles = frozenset({("chs_vault_token", "chs-vault-main")})
 
         restored = pickle.loads(pickle.dumps(marked))  # nosec B301
 
-        assert restored.credential_handle_keys == frozenset({"chs_vault_token"})
+        assert restored.credential_handles == frozenset({("chs_vault_token", "chs-vault-main")})
         assert "chs-vault-main" in str(restored)
 
     def test_str_redacts_a_reader_tuple_in_reserved_key_context(self) -> None:

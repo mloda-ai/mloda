@@ -103,7 +103,9 @@ class ToySourceBase(SourceFeatureGroup):
         if wanted is not None and wanted not in data_access_collection.handles():
             record_match_rejection(
                 cls.get_class_name(),
-                f"data_access_handle '{wanted}' is unknown; handles: {sorted(data_access_collection.handles())}",
+                "Option 'data_access_handle' names a handle that is not registered "
+                "(the value is not shown in case it is a secret). "
+                f"Available handles: {sorted(data_access_collection.handles())}",
                 stage=INPUT_DATA_STAGE,
                 code=CoreDeclineCode.HANDLE_UNKNOWN,
             )

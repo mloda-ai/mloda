@@ -22,7 +22,7 @@ from mloda.core.runtime.worker.multiprocessing_worker import standby_worker
 from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
 from mloda.core.abstract_plugins.components.feature_set import ArtifactBinding
-from mloda.core.core.cfw_manager import CfwManager, release_shared_manager, shared_manager
+from mloda.core.core.cfw_manager import CfwManager, drop_proxy_connection, release_shared_manager, shared_manager
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.runtime.flight.flight_server import FlightServer
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
@@ -319,6 +319,8 @@ class ExecutionOrchestrator:
         in_other_process = self._in_other_process()
         try:
             if not in_other_process:
+                if cancelled:
+                    drop_proxy_connection(self.cfw_register)
                 self.outcome = self.cfw_register.get_run_outcome()
         finally:
             self.join(abandon_threads=cancelled)
@@ -682,6 +684,7 @@ class ExecutionOrchestrator:
             # A worker outliving its run could reach a later run's register on the shared manager.
             self.worker_manager.terminate_alive_processes()
             if self.manager is not None and hasattr(self, "cfw_register") and not self._in_other_process():
+                drop_proxy_connection(self.cfw_register)
                 try:
                     self.cfw_register.release()
                 except Exception as e:

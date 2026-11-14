@@ -24,6 +24,8 @@ import subprocess  # nosec B404
 import sys
 import threading
 import time
+from multiprocessing.connection import Connection
+from multiprocessing.managers import BaseProxy
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -710,6 +712,70 @@ def _execution_failure(
     return scenario
 
 
+def _drop_main_thread_manager_connections() -> None:
+    for tls, _ in list(BaseProxy._address_to_local.values()):
+        connection = tls.__dict__.pop("connection", None)
+        if connection is not None:
+            connection.close()
+
+
+def _interrupted_mid_proxy_reply(call_site: str, after_header: bool) -> Any:
+    def scenario(
+        ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch, flight_server: Any = None
+    ) -> list[Any]:
+        if sys.platform == "win32":
+            pytest.skip("Connection._recv is POSIX only")
+        mode = ParallelizationMode.MULTIPROCESSING
+        main = threading.main_thread()
+        state = {"armed": False, "in_call": False}
+        original_callmethod = BaseProxy._callmethod
+        original_recv: Any = getattr(Connection, "_recv")
+        original_check = ExecutionOrchestrator._check_for_error
+
+        def callmethod(self: Any, *args: Any, **kwargs: Any) -> Any:
+            if threading.current_thread() is not main:
+                return original_callmethod(self, *args, **kwargs)
+            state["in_call"] = True
+            try:
+                return original_callmethod(self, *args, **kwargs)
+            finally:
+                state["in_call"] = False
+
+        def recv(self: Any, size: int, *args: Any, **kwargs: Any) -> Any:
+            if state["armed"] and state["in_call"] and size == 4 and threading.current_thread() is main:
+                state["armed"] = False
+                if after_header:
+                    original_recv(self, size, *args, **kwargs)
+                raise KeyboardInterrupt("interrupted mid proxy reply")
+            return original_recv(self, size, *args, **kwargs)
+
+        def check(self: Any, *args: Any, **kwargs: Any) -> Any:
+            state["armed"] = True
+            mp.setattr(ExecutionOrchestrator, "_check_for_error", original_check)
+            return original_check(self, *args, **kwargs)
+
+        mp.setattr(BaseProxy, "_callmethod", callmethod)
+        mp.setattr(Connection, "_recv", recv)
+        mp.setattr(ExecutionOrchestrator, "_check_for_error", check)
+        session = _matrix_session(ext, mode=mode)
+        try:
+            with pytest.raises(KeyboardInterrupt) as raised:
+                list(getattr(session, call_site)(parallelization_modes={mode}, flight_server=flight_server))
+            _assert_single_run_id_note(raised.value, ext)
+            state["armed"] = False
+            assert list(session.stream_run(parallelization_modes={mode}, flight_server=flight_server))
+        finally:
+            state["armed"] = False
+            _drop_main_thread_manager_connections()
+        return [
+            *_OK_PLAN,
+            *_ok_run("cancelled", calculated=False, error="builtins.KeyboardInterrupt"),
+            *_ok_run("succeeded", calculated=False),
+        ]
+
+    return scenario
+
+
 def _planning_interrupted_prepare(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
     def interrupted(self: Any, *args: Any, **kwargs: Any) -> None:
         raise KeyboardInterrupt()
@@ -877,6 +943,9 @@ _MATRIX: dict[str, Any] = {
     "interrupted_stream_run_system_exit_multiprocessing": _execution_failure(
         "stream_run", SystemExit, ParallelizationMode.MULTIPROCESSING
     ),
+    "interrupted_mid_proxy_reply_run_multiprocessing": _interrupted_mid_proxy_reply("run", True),
+    "interrupted_mid_proxy_reply_stream_run_multiprocessing": _interrupted_mid_proxy_reply("stream_run", True),
+    "interrupted_before_proxy_reply_run_multiprocessing": _interrupted_mid_proxy_reply("run", False),
     "planning_interrupted_prepare": _planning_interrupted_prepare,
     "finalizing_failure_batch": _finalizing_failure_batch,
     "finalizing_failure_stream_consumed": _finalizing_failure_stream_consumed,

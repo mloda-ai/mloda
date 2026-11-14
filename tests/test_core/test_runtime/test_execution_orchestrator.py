@@ -859,11 +859,14 @@ class TestEnterPrestartsStandbyWorkers:
         orchestrator.cfw_register = Mock()
         orchestrator.cfw_register.release.side_effect = lambda: calls.append("release")
 
-        with patch(
-            "mloda.core.runtime.run.release_shared_manager", side_effect=lambda m: calls.append("manager_release")
-        ) as release_manager:
+        with (
+            patch(
+                "mloda.core.runtime.run.release_shared_manager", side_effect=lambda m: calls.append("manager_release")
+            ) as release_manager,
+            patch("mloda.core.runtime.run.drop_proxy_connection", side_effect=lambda r: calls.append("drop")),
+        ):
             orchestrator.__exit__(None, None, None)
-            assert calls == ["standbys", "terminate", "release", "manager_release"]
+            assert calls == ["standbys", "terminate", "drop", "release", "manager_release"]
             release_manager.assert_called_once_with(manager)
             assert orchestrator.manager is None
 
@@ -1297,9 +1300,10 @@ class TestDropAllUploadedFlightTablesScrubsCredentials:
 
 
 class TestFinalizeTouchesSharedStateOnlyInTheOwningProcess:
+    @pytest.mark.parametrize("cancelled", [False, True], ids=["completed", "cancelled"])
     @pytest.mark.parametrize("pid_offset, owns", [(0, True), (1, False)], ids=["owner", "other_process"])
     def test_finalize_drops_tables_and_reads_artifacts_only_in_the_owning_process(
-        self, pid_offset: int, owns: bool
+        self, pid_offset: int, owns: bool, cancelled: bool
     ) -> None:
         orchestrator = ExecutionOrchestrator(Mock(spec=ExecutionPlan))
         orchestrator._owner_pid = os.getpid() + pid_offset
@@ -1309,12 +1313,31 @@ class TestFinalizeTouchesSharedStateOnlyInTheOwningProcess:
         orchestrator.executor = Mock()
         orchestrator.executor.cfw_collection = {uuid_mod.uuid4(): Mock(get_object_ids=Mock(return_value=[]))}
 
-        with patch("mloda.core.runtime.run.FlightServer.drop_tables") as drop_tables:
-            orchestrator._finalize()
+        order: list[str] = []
+        register: Any = orchestrator.cfw_register
+
+        def get_run_outcome() -> Any:
+            order.append("outcome")
+            return register.get_run_outcome.return_value
+
+        register.get_run_outcome.side_effect = get_run_outcome
+
+        with (
+            patch("mloda.core.runtime.run.FlightServer.drop_tables") as drop_tables,
+            patch(
+                "mloda.core.runtime.run.drop_proxy_connection", side_effect=lambda register: order.append("drop")
+            ) as drop_connection,
+        ):
+            orchestrator._finalize(cancelled)
 
         orchestrator.join.assert_called_once()
         assert drop_tables.call_count == int(owns)
         assert orchestrator.cfw_register.get_run_outcome.call_count == int(owns)
+        if owns and cancelled:
+            drop_connection.assert_called_once_with(orchestrator.cfw_register)
+            assert order == ["drop", "outcome"]
+        else:
+            drop_connection.assert_not_called()
         if owns:
             assert orchestrator.outcome is orchestrator.cfw_register.get_run_outcome.return_value
         else:

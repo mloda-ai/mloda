@@ -5,7 +5,7 @@ import sys
 import threading
 import weakref
 from collections.abc import Callable, Iterable, Mapping
-from multiprocessing.managers import BaseManager
+from multiprocessing.managers import BaseManager, BaseProxy
 from typing import Any
 from uuid import UUID
 
@@ -507,6 +507,18 @@ MyManager.register("CfwManager", CfwManager)
 
 _shared_manager_lock = threading.Lock()
 _shared_manager: tuple[MyManager, int, tuple[str, ...]] | None = None
+
+
+def drop_proxy_connection(register: Any) -> None:
+    """Close this thread's manager connection (shared by every proxy to it); an interrupt mid reply can desync it."""
+    if not isinstance(register, BaseProxy):
+        return
+    tls: Any = register._tls  # type: ignore[attr-defined]
+    connection = getattr(tls, "connection", None)
+    if connection is None:
+        return
+    del tls.connection
+    connection.close()
 
 
 def shared_manager() -> MyManager:

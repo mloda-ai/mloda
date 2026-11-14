@@ -9,6 +9,8 @@ from mloda._testing.framework_adapter import FrameworkAdapter
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 
+__all__ = ["OutputSchemaSuite"]
+
 
 class OutputSchemaSuite(ComputeFrameworkSuite, suite_base=True):
     """Contract tests of the host's _output_schema; every available framework is served."""

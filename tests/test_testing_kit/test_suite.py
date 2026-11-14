@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
+import pkgutil
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -505,6 +507,40 @@ def test_no_testing_module_imports_a_plugin_feature_group_or_the_tests_tree() ->
             ]
 
     assert offenders == []
+
+
+def _public_testing_modules() -> list[str]:
+    found = pkgutil.walk_packages(mloda._testing.__path__, "mloda._testing.")
+    return sorted(m.name for m in found if not m.ispkg and not m.name.rsplit(".", 1)[-1].startswith("_"))
+
+
+def _declared_all_and_public_names(tree: ast.Module) -> tuple[list[Any] | None, list[str]]:
+    declared: list[Any] | None = None
+    names: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            targets = [t for t in node.targets if isinstance(t, ast.Name)]
+            names.update(t.id for t in targets)
+            if len(node.targets) == 1 and targets and targets[0].id == "__all__":
+                declared = ast.literal_eval(node.value)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+    return declared, sorted(n for n in names if n != "__all__" and not n.startswith("_"))
+
+
+@pytest.mark.parametrize("module_name", _public_testing_modules())
+def test_every_public_testing_module_pins_all_to_its_sorted_public_names(module_name: str) -> None:
+    spec = importlib.util.find_spec(module_name)
+    assert spec is not None and spec.origin is not None, module_name
+
+    declared, expected = _declared_all_and_public_names(ast.parse(Path(spec.origin).read_text()))
+
+    assert declared is not None, f"{module_name} has no plain top-level `__all__ = [...]` assignment"
+    missing = sorted(set(expected) - set(declared))
+    extra = sorted(set(declared) - set(expected))
+    assert declared == expected, f"{module_name}: __all__ must be sorted public names; missing={missing} extra={extra}"
 
 
 def test_assert_passed_accepts_passing_result() -> None:

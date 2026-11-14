@@ -35,6 +35,8 @@ from mloda._testing.source.source_suite import (
 if TYPE_CHECKING:
     from mloda.provider import ReadDBFG
 
+__all__ = ["OWN_TABLE", "QUERY_OPTION", "ReadDBFGTestMixin", "SECRET"]
+
 SECRET = "toyfmt-secret-value"  # nosec B105
 OWN_TABLE = "own_table"
 QUERY_OPTION = "query_text"

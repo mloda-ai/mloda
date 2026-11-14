@@ -13,6 +13,8 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import Implementation, current_implementations, serving_implementation
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 
+__all__ = ["Probe", "assert_operation_group_shape", "check_operation_group_shape"]
+
 Probe = Callable[[str], tuple[str, Options]]
 """Maps a subtype to a (feature name, options) request that the Implementation accepts."""
 

@@ -18,6 +18,15 @@ from mloda.user import DataAccessCollection, Feature, GlobalFilter, Options, Plu
 if TYPE_CHECKING:
     from mloda.provider import ReadDBFG, ReadDocumentFG, ReadFileFG
 
+__all__ = [
+    "DatabaseLoadsIntoFrameworkTestMixin",
+    "DocumentLoadsIntoFrameworkTestMixin",
+    "FileLoaderNameTestMixin",
+    "FileLoadsIntoFrameworkTestMixin",
+    "LoadsIntoFrameworkTestMixin",
+    "loads_data_access",
+]
+
 
 def loads_data_access(adapter: FrameworkAdapter, **kwargs: Any) -> DataAccessCollection:
     """The run's DataAccessCollection, carrying the adapter's connection when it has one."""

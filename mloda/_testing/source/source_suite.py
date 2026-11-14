@@ -50,6 +50,14 @@ from mloda.steward import ReaderProbeScope, reader_probe_scope
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
+__all__ = [
+    "LoadCapture",
+    "MatchCapture",
+    "MatchRefuseAll",
+    "SourceFeatureGroupTestMixin",
+    "expected_implementation_version",
+]
+
 
 class LoadCapture(Extender):
     def __init__(self) -> None:

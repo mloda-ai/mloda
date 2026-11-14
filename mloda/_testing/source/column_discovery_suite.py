@@ -27,6 +27,8 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
     PythonDictFramework,
 )
 
+__all__ = ["ColumnDiscoveryContractTestMixin", "PHYSICAL_COLUMNS", "match_of"]
+
 PHYSICAL_COLUMNS = ["c1", "a1", "b1"]
 
 

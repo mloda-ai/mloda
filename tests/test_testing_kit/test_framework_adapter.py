@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import sys
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
@@ -713,6 +715,23 @@ def _toy_adapter(with_exact: bool, lost: bool = False) -> Any:
             return lost
 
     return _ToyAdapter()
+
+
+def test_base_from_typed_without_pyarrow_names_the_adapter_and_the_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter
+
+    class _BaseDefaultAdapter(PythonDictAdapter):
+        from_typed = FrameworkAdapter.from_typed
+
+    monkeypatch.setitem(sys.modules, "pyarrow", None)
+
+    with pytest.raises(
+        ImportError,
+        match=re.escape("_BaseDefaultAdapter.from_typed")
+        + ".*"
+        + re.escape("a custom adapter can override from_typed to avoid pyarrow"),
+    ):
+        _BaseDefaultAdapter().from_typed(TypedTestData({"c": (DataType.INT64, [1, 2])}))
 
 
 def test_base_has_type_uses_the_framework_exact_readback() -> None:

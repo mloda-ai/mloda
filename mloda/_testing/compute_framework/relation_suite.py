@@ -21,6 +21,8 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_window import 
     WindowFrame,
 )
 
+__all__ = ["RelationSuite", "SAMPLE_DATA", "SqlRelationWindowSuite"]
+
 SAMPLE_DATA = TypedTestData(
     {
         "id": (DataType.INT64, [1, 2, 3, 4, 5]),

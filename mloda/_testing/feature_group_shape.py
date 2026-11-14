@@ -51,6 +51,8 @@ from mloda.core.abstract_plugins.implementation import (
 )
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 
+__all__ = ["assert_feature_group_shape", "check_feature_group_secrets", "check_feature_group_shape"]
+
 _FOREIGN_NAME = "conformance_foreign_feature"
 _UNKNOWN_VALUE = "conformance_unknown_value"
 

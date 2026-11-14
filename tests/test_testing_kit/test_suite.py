@@ -538,9 +538,25 @@ def test_every_public_testing_module_pins_all_to_its_sorted_public_names(module_
     declared, expected = _declared_all_and_public_names(ast.parse(Path(spec.origin).read_text()))
 
     assert declared is not None, f"{module_name} has no plain top-level `__all__ = [...]` assignment"
+    assert isinstance(declared, list), f"{module_name}: __all__ must be a list, got {type(declared).__name__}"
     missing = sorted(set(expected) - set(declared))
     extra = sorted(set(declared) - set(expected))
     assert declared == expected, f"{module_name}: __all__ must be sorted public names; missing={missing} extra={extra}"
+
+
+def _testing_packages() -> list[str]:
+    found = pkgutil.walk_packages(mloda._testing.__path__, "mloda._testing.")
+    return sorted(["mloda._testing", *(m.name for m in found if m.ispkg)])
+
+
+@pytest.mark.parametrize("package_name", _testing_packages())
+def test_testing_package_init_defines_no_public_names(package_name: str) -> None:
+    spec = importlib.util.find_spec(package_name)
+    assert spec is not None and spec.origin is not None, package_name
+
+    declared, public = _declared_all_and_public_names(ast.parse(Path(spec.origin).read_text()))
+
+    assert (declared, public) == (None, []), f"{package_name} __init__ must define no public names or __all__"
 
 
 def test_assert_passed_accepts_passing_result() -> None:

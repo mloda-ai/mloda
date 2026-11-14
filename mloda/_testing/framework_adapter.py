@@ -125,9 +125,7 @@ class FrameworkAdapter(ABC):
     def from_arrow(self, table: pa.Table) -> Any: ...
 
     def from_typed(self, data: TypedTestData, arrow_types: Mapping[str, pa.DataType] | None = None) -> Any:
-        require(
-            "pyarrow", f"{type(self).__name__}.from_typed (a custom adapter can override from_typed to avoid pyarrow)"
-        )
+        self._pyarrow("from_typed")
         return self.from_arrow(to_arrow_table(data, arrow_types))
 
     @abstractmethod
@@ -141,6 +139,12 @@ class FrameworkAdapter(ABC):
     def column_values(self, result: Any, column: str) -> list[Any]:
         """The column as Python values with nulls as None."""
 
+    def _pyarrow(self, method: str) -> Any:
+        return require(
+            "pyarrow",
+            f"{type(self).__name__}.{method} (override it in a custom adapter to build frames without pyarrow)",
+        )
+
     def _cannot_hold(self, shape: str) -> NotImplementedError:
         return NotImplementedError(f"{self.compute_framework().__name__} cannot hold {shape}")
 
@@ -149,11 +153,12 @@ class FrameworkAdapter(ABC):
 
         A backend that cannot hold it raises NotImplementedError or returns its post-transform shape.
         """
+        self._pyarrow("duplicate_column_frame")
         return self.from_arrow(_duplicate_column_table(first_type, second_type).rename_columns(["a", "a"]))
 
     def zero_column_frame(self) -> Any:
         """A frame with no columns."""
-        pa = require("pyarrow", "building Arrow test tables")
+        pa = self._pyarrow("zero_column_frame")
         return self.from_arrow(pa.table({}))
 
     def rows(self, result: Any) -> list[dict[str, Any]]:

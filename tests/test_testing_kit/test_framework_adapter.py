@@ -717,21 +717,31 @@ def _toy_adapter(with_exact: bool, lost: bool = False) -> Any:
     return _ToyAdapter()
 
 
-def test_base_from_typed_without_pyarrow_names_the_adapter_and_the_override(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("method", ["from_typed", "duplicate_column_frame", "zero_column_frame"])
+def test_base_pyarrow_defaults_without_pyarrow_name_the_adapter_and_the_override(
+    monkeypatch: pytest.MonkeyPatch, method: str
+) -> None:
     from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter
 
     class _BaseDefaultAdapter(PythonDictAdapter):
         from_typed = FrameworkAdapter.from_typed
+        duplicate_column_frame = FrameworkAdapter.duplicate_column_frame
+        zero_column_frame = FrameworkAdapter.zero_column_frame
 
+    calls: dict[str, tuple[Any, ...]] = {
+        "from_typed": (TypedTestData({"c": (DataType.INT64, [1, 2])}),),
+        "duplicate_column_frame": (DataType.INT64, DataType.STRING),
+        "zero_column_frame": (),
+    }
     monkeypatch.setitem(sys.modules, "pyarrow", None)
 
     with pytest.raises(
         ImportError,
-        match=re.escape("_BaseDefaultAdapter.from_typed")
+        match=re.escape(f"_BaseDefaultAdapter.{method}")
         + ".*"
-        + re.escape("a custom adapter can override from_typed to avoid pyarrow"),
+        + re.escape("override it in a custom adapter to build frames without pyarrow"),
     ):
-        _BaseDefaultAdapter().from_typed(TypedTestData({"c": (DataType.INT64, [1, 2])}))
+        getattr(_BaseDefaultAdapter(), method)(*calls[method])
 
 
 def test_base_has_type_uses_the_framework_exact_readback() -> None:

@@ -886,6 +886,7 @@ class TestResolveFeatureIsNonThrowing:
         assert result.error is not None
         assert handle not in result.error
         assert HANDLE_KEY in result.error
+        assert "not a registered credential" in result.error
         assert ABORT_ECHO_SECRET not in result.error
         assert result.raised == "ValueError"
 

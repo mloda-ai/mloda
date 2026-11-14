@@ -777,7 +777,7 @@ class TestCredentialCatalog:
 
     @pytest.mark.parametrize(
         ("handle", "named"),
-        [(MISSPELLED, [CRED_KEY]), (None, [CRED_KEY, "is not set"])],
+        [(MISSPELLED, [CRED_KEY, "not a registered credential"]), (None, [CRED_KEY, "is not set"])],
         ids=["misspelled", "unset"],
     )
     def test_a_trusted_caller_is_told_what_is_wrong(self, tmp_path: Path, handle: str | None, named: list[str]) -> None:
@@ -839,6 +839,7 @@ class TestCredentialCatalog:
         assert CRED_KEY in message
         if handle is not None:
             assert handle not in message
+            assert "not a registered credential" in message
         assert CRED_SECRET not in message
 
     @pytest.mark.parametrize("trusted", [True, False])

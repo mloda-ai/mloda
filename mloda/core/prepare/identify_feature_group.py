@@ -947,24 +947,18 @@ class IdentifyFeatureGroupClass:
                 elif rejection is None and self._is_config_path_group(feature_group):
                     typo_options = self._matched_options.get(feature_group, feature.options)
                     typo_absent = misspelled_handle_key_abort_keys(feature_group, typo_options)
-                    if (
-                        typo_absent
-                        and self._filter_feature_group_by_domain(feature_group, feature)
+                    near_miss = () if typo_absent else only_missing_handle_keys(feature_group, typo_options)
+                    if (typo_absent or near_miss) and (
+                        self._filter_feature_group_by_domain(feature_group, feature)
                         and not inspect.isabstract(feature_group)
                     ):
-                        self._missing_handle_aborts[feature_group] = (
-                            typo_absent,
-                            missing_credential_handle_abort(feature_group, typo_options, typo_absent),
-                            close_handle_option_keys(feature_group, typo_absent, typo_options),
-                        )
-                    else:
-                        near_miss = only_missing_handle_keys(feature_group, typo_options)
-                        if (
-                            near_miss
-                            and self._filter_feature_group_by_domain(feature_group, feature)
-                            and not inspect.isabstract(feature_group)
-                            and self._supplies_other_mapped_key(feature_group, typo_options)
-                        ):
+                        if typo_absent:
+                            self._missing_handle_aborts[feature_group] = (
+                                typo_absent,
+                                missing_credential_handle_abort(feature_group, typo_options, typo_absent),
+                                close_handle_option_keys(feature_group, typo_absent, typo_options),
+                            )
+                        elif self._supplies_other_mapped_key(feature_group, typo_options):
                             self._record_elimination(
                                 feature_group,
                                 "value_rejection",

@@ -2881,7 +2881,9 @@ class TestCredentialHandleDiagnostics:
         return planner.explain({"features": [CRED_FEATURE]})
 
     @pytest.mark.parametrize(
-        ("handle", "named"), [("dbx", [CRED_KEY]), (None, [CRED_KEY, "is not set"])], ids=["misspelled", "unset"]
+        ("handle", "named"),
+        [("dbx", [CRED_KEY, "not a registered credential"]), (None, [CRED_KEY, "is not set"])],
+        ids=["misspelled", "unset"],
     )
     def test_a_trusted_caller_is_told_what_is_wrong(self, tmp_path: Path, handle: str | None, named: list[str]) -> None:
         error = _error(self._explain(tmp_path, handle, True), "internal")

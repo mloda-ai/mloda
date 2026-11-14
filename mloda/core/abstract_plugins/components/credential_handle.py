@@ -182,9 +182,14 @@ def _check_one(
         named = sorted(h for h in credentials if h not in auto)
         unnamed = len(credentials) - len(named)
         suffix = f" and {unnamed} unnamed" if unnamed else ""
+        if handle == spec.default:
+            raise _refuse(
+                f"Option '{key}' of {group_name} names handle '{handle}', which is not a registered credential. "
+                f"Available credential handles: {named}{suffix}."
+            )
         raise _refuse(
-            f"Option '{key}' of {group_name} names handle '{handle}', which is not a registered credential. "
-            f"Available credential handles: {named}{suffix}."
+            f"Option '{key}' of {group_name} names a handle that is not a registered credential "
+            f"(the value is not shown in case it is a secret). Available credential handles: {named}{suffix}."
         )
     entry = credentials[handle]
     if spec.required_fields:
@@ -326,7 +331,7 @@ def close_handle_option_keys(
     return tuple(name for name in close if name)
 
 
-def _missing_sentence(feature_group: type[FeatureGroup], key: str, options: Options) -> str:
+def missing_handle_sentence(feature_group: type[FeatureGroup], key: str, options: Options) -> str:
     close = _close_option_key(feature_group, key, options)
     hint = f" (did you mean '{close}'?)" if close else ""
     return f"{feature_group.__name__} requires credential handle option '{key}', which is not set{hint}."
@@ -345,8 +350,8 @@ def missing_credential_handle_keys(feature_group: type[FeatureGroup], options: O
     return tuple(key for key in absent if key in keys)
 
 
-def misspelled_handle_key_abort_keys(feature_group: type[FeatureGroup], options: Options) -> tuple[str, ...]:
-    """Absent handle keys with a close supplied key, when only handle keys are missing; else empty."""
+def only_missing_handle_keys(feature_group: type[FeatureGroup], options: Options) -> tuple[str, ...]:
+    """The absent required handle keys when every absent required key is a handle key; else empty."""
     # Function-local: avoids an import cycle through the feature chain parser.
     from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 
@@ -357,6 +362,12 @@ def misspelled_handle_key_abort_keys(feature_group: type[FeatureGroup], options:
     absent = FeatureChainParser._name_path_missing_required_keys(feature_group.options_with_defaults(options), mapping)
     if any(key not in missing for key in absent):
         return ()
+    return missing
+
+
+def misspelled_handle_key_abort_keys(feature_group: type[FeatureGroup], options: Options) -> tuple[str, ...]:
+    """Absent handle keys with a close supplied key, when only handle keys are missing; else empty."""
+    missing = only_missing_handle_keys(feature_group, options)
     if not any(_close_option_key(feature_group, key, options) for key in missing):
         return ()
     return missing
@@ -366,7 +377,7 @@ def missing_credential_handle_abort(
     feature_group: type[FeatureGroup], options: Options, missing: tuple[str, ...]
 ) -> ValueError:
     """The marked abort for absent required handle keys, naming a close undeclared option key."""
-    return _refuse(" ".join(_missing_sentence(feature_group, key, options) for key in missing))
+    return _refuse(" ".join(missing_handle_sentence(feature_group, key, options) for key in missing))
 
 
 def validate_credential_handles(
@@ -385,6 +396,6 @@ def validate_credential_handles(
     for key, handle in _declared(feature_group, options).items():
         if handle is None:
             if keys[key].default is NO_DEFAULT:
-                raise _refuse(_missing_sentence(feature_group, key, options))
+                raise _refuse(missing_handle_sentence(feature_group, key, options))
             continue
         _check_one(feature_group, key, keys[key], handle, dac)

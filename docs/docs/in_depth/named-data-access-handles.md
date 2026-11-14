@@ -237,14 +237,13 @@ PROPERTY_MAPPING = {
 }
 ```
 
-A handle value is a public name, never a secret: it appears in errors, the plan and the content hash.
+A handle value is a public name, never a secret: it appears in the plan and the content hash. Errors withhold an unregistered value; registered names and a `str` default stay readable.
 
 The option is a group option (never context), strictly validated, and never settable by an MCP caller. Planning
-fails, in `prepare()`, `explain()` and `run_all()` alike, with an error naming the option, group and handle (never a
-credential value) when:
+fails, in `prepare()`, `explain()` and `run_all()` alike, with an error naming the option and group (never a credential or unregistered handle value) when:
 
 - the key is set in `Options.context` instead of the group options;
-- a matched group whose required handle is absent (for example one with an overridden matcher), or a required handle key (no default) absent from the options of a group that owns the feature name, even when another group matches the feature; the message names a close option key when one exists. A matching group suppresses the refusal only when it is a strict subclass of the refusing group, declares the same missing key, or declares a handle key the request itself set (a forwarded key counts, a default does not). A config-path group refuses a misspelled handle key the same way, when the handle key is the only one missing and a close supplied key exists;
+- a matched group whose required handle is absent (for example one with an overridden matcher), or a required handle key (no default) absent from the options of a group that owns the feature name, even when another group matches the feature; the message names a close option key when one exists. A matching group suppresses the refusal only when it is a strict subclass of the refusing group, declares the same missing key, or declares a handle key the request itself set (a forwarded key counts, a default does not). A config-path group refuses a misspelled handle key the same way, when the handle key is the only one missing and a close supplied key exists. On the configuration path, a group missing only its handle key, with none close, while the request sets one of its own non-handle keys, is listed as a near-miss in the "No feature groups found" error;
 - the value is not a non-empty `str`;
 - the handle is not registered, or is registered under another kind (the message lists the named credential handles);
 - the handle is an unnamed credential (a declared handle must be named);

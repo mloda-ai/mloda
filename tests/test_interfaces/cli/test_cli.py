@@ -710,7 +710,9 @@ class TestCredentials:
 
     @pytest.mark.parametrize("command", ["explain", "run"])
     @pytest.mark.parametrize(
-        ("handle", "named"), [("dbx", ["dbx"]), (None, [CRED_KEY, "is not set"])], ids=["misspelled", "unset"]
+        ("handle", "named"),
+        [("dbx", [CRED_KEY, "not a registered credential"]), (None, [CRED_KEY, "is not set"])],
+        ids=["misspelled", "unset"],
     )
     def test_a_bad_handle_is_explained_in_the_message_and_on_stderr(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str, handle: str | None, named: list[str]
@@ -731,6 +733,9 @@ class TestCredentials:
         for needle in named:
             assert needle in error["message"]
             assert needle in outcome.err
+        if handle is not None:
+            assert handle not in error["message"]
+            assert handle not in outcome.err
         assert outcome.err.startswith("mloda: error:")
         assert CRED_TOKEN not in outcome.out + outcome.err
 

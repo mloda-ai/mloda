@@ -32,6 +32,7 @@ from mloda.core.abstract_plugins.components.credential_grant import (
     grant_scope,
     read_recorder,
 )
+from mloda.core.abstract_plugins.components.credential import Credential
 from mloda.core.abstract_plugins.components.failed_rows import _COLLECTOR, FailedRowsCollector
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import _API_DATA_LOOKUP, api_data_scope
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, _current_compute_framework
@@ -482,9 +483,24 @@ class TestReadCredential:
         assert wrapped.__self__ is _Reader  # type: ignore[attr-defined]
         assert wrapped.__name__ == "calculate_feature"
 
-    def test_credentials_scope_lets_a_unit_test_call_calculate_feature_directly(self) -> None:
-        with _scope():
+    @pytest.mark.parametrize("wrap", [dict, Credential, lambda c: ResolvedCredential("h", c)])
+    def test_credentials_scope_lets_a_unit_test_call_calculate_feature_directly(self, wrap: Any) -> None:
+        with credentials_scope({"h": wrap(_credential())}):
             assert _Reader.calculate_feature(None, None) == _HOST
+
+    @pytest.mark.parametrize(
+        ("argument", "shown"),
+        [({"h": _HMAC}, "'h'"), (Credential(key=_HMAC), "Credential")],
+        ids=["value", "whole_credential"],
+    )
+    def test_credentials_scope_refuses_a_non_mapping_value_without_echoing_it(self, argument: Any, shown: str) -> None:
+        with pytest.raises(ValueError) as info:
+            credentials_scope(argument)
+
+        message = str(info.value)
+        assert shown in message
+        assert "{handle: {field: value}}" in message
+        assert _HMAC not in message
 
     def test_an_error_echoing_a_secret_inside_the_scope_is_masked(self) -> None:
         with pytest.raises(ValueError) as info:

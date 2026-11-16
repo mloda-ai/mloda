@@ -261,22 +261,34 @@ def _check_secrets(cls: type[FeatureGroup]) -> tuple[list[str], list[str]]:
         if key in silenced:
             notes.append(f"secrets: '{key}' is not checked: {silenced[key]}")
             continue
+        source = is_nominal_subclass(cls, SourceFeatureGroup)
         if _SECRET_KEY.fullmatch(key) and not isinstance(spec, CredentialHandleSpec):
-            failures.append(
-                f"secrets: option '{key}' has a credential-shaped name; declare '{key}_handle' with "
-                "credential_handle_spec and read the credential with read_credential"
-            )
+            if source:
+                failures.append(
+                    f"secrets: option '{key}' has a credential-shaped name; register a Credential in the "
+                    "DataAccessCollection and bind it at match time in find_sources"
+                )
+            else:
+                failures.append(
+                    f"secrets: option '{key}' has a credential-shaped name; declare '{key}_handle' with "
+                    "credential_handle_spec and read the credential with read_credential"
+                )
         if not is_no_default(spec.default) and spec.default is not None and _masked_default(spec.default):
             failures.append(
                 f"secrets: option '{key}' has a default the credential scrubber masks; "
                 "register the secret and name its handle instead"
             )
         if key.lower().endswith("_env") and _ENV_VAR_TEXT.search(spec.explanation):
-            stem = key[: -len("_env")]
-            failures.append(
-                f"secrets: option '{key}' names an environment variable; read the environment in the caller, "
-                f"register a Credential and declare '{stem}_handle' with credential_handle_spec"
-            )
+            if source:
+                failures.append(
+                    f"secrets: option '{key}' names an environment variable; read the environment in the caller, "
+                    "register a Credential in the DataAccessCollection and bind it at match time in find_sources"
+                )
+            else:
+                failures.append(
+                    f"secrets: option '{key}' names an environment variable; read the environment in the caller, "
+                    f"register a Credential and declare '{key[: -len('_env')]}_handle' with credential_handle_spec"
+                )
     return failures, notes
 
 

@@ -107,6 +107,11 @@ def credential_handle_spec(
     )
 
 
+def is_credential_handle_spec(spec: object) -> bool:
+    """True when spec is a credential handle spec."""
+    return isinstance(spec, CredentialHandleSpec)
+
+
 def credential_handle_keys(feature_group: type[FeatureGroup]) -> dict[str, CredentialHandleSpec]:
     """The group's declared credential handle option keys."""
     mapping = getattr(feature_group, "PROPERTY_MAPPING", None) or {}

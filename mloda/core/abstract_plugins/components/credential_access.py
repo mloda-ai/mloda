@@ -6,6 +6,7 @@ from collections.abc import Callable, Iterator, Mapping, MutableMapping
 from contextvars import Token
 from typing import Any, NoReturn
 
+from mloda.core.abstract_plugins.components.credential import Credential
 from mloda.core.abstract_plugins.components.credential_grant import (
     record_credential_read,
     _GRANT_HOLDER,
@@ -140,7 +141,23 @@ class credentials_scope:  # noqa: N801
     """Unit-test helper: grant mapping and open the readable window for the block."""
 
     def __init__(self, mapping: Mapping[str, Any]) -> None:
-        self._mapping = copy.deepcopy(dict(mapping))
+        if not isinstance(mapping, Mapping):
+            raise ValueError(
+                f"credentials_scope needs a mapping, got {type(mapping).__name__}; "
+                "expected {handle: {field: value}}."
+            )
+        for handle, value in mapping.items():
+            if not isinstance(value, (Mapping, Credential)):
+                raise ValueError(
+                    f"credentials_scope handle '{handle}' must map to a mapping of fields, got "
+                    f"{type(value).__name__}; expected {{handle: {{field: value}}}}."
+                )
+        self._mapping = copy.deepcopy(
+            {
+                h: v.data if isinstance(v, Credential) else dict(v) if isinstance(v, ResolvedCredential) else v
+                for h, v in mapping.items()
+            }
+        )
 
     def __enter__(self) -> None:
         self._grant = grant_scope(StaticGrant(self._mapping))

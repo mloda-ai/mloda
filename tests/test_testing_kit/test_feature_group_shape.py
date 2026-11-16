@@ -23,6 +23,7 @@ from mloda._testing.feature_group_shape import _route_block, assert_feature_grou
 from mloda.core.abstract_plugins.components.credential_handle import credential_handle_spec
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
@@ -489,6 +490,27 @@ def make_plain_api_key() -> type[FeatureGroup]:
 def make_env_named_key() -> type[FeatureGroup]:
     explanation = "Name of the environment variable holding the key."
     return make_secret_group({"pii_key_env": PropertySpec(explanation, default="PII_KEY")})
+
+
+def make_source_group(option: str, spec: PropertySpec) -> type[FeatureGroup]:
+    class SourceEnvGroup(SourceFeatureGroup):
+        PROPERTY_MAPPING = {option: spec}
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {"se_a"}
+
+        @classmethod
+        def find_sources(
+            cls, route: Any, feature_name: str, options: Options, data_access_collection: Any
+        ) -> list[Any]:
+            return []
+
+        @classmethod
+        def load_neutral(cls, match: Any, features: Any) -> Any:
+            return None
+
+    return SourceEnvGroup
 
 
 def make_bearer_default() -> type[FeatureGroup]:
@@ -1770,3 +1792,25 @@ def test_name_path_request_contradicting_the_options_reports_the_abort(
     result = check_feature_group_shape(factory(), options, requests=[request_name])
     assert any(f.startswith("names:") and token in f for f in result.failures), result.failures
     assert not any("does not match it" in f for f in result.failures), result.failures
+
+
+@pytest.mark.parametrize(
+    ("option", "spec", "marker", "handle"),
+    [
+        (
+            "pii_key_env",
+            PropertySpec("Name of the environment variable holding the key.", default="PII_KEY"),
+            "environment variable",
+            "pii_key_handle",
+        ),
+        ("api_key", PropertySpec("API key.", default="placeholder"), "api_key", "api_key_handle"),
+    ],
+)
+def test_source_group_env_failure_names_match_time_binding(
+    option: str, spec: PropertySpec, marker: str, handle: str
+) -> None:
+    result = check_feature_group_shape(make_source_group(option, spec))
+    env = [f for f in result.failures if marker in f]
+    assert env, result.failures
+    assert all("match time" in f and "data_access_handle" not in f for f in env), env
+    assert not any(f"declare '{handle}' with credential_handle_spec" in f for f in env), env

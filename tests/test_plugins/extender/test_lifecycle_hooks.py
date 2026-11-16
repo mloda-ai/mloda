@@ -2,6 +2,7 @@
 
 import dataclasses
 import logging
+import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -41,24 +42,31 @@ _ENABLED = PluginCollector.enabled_feature_groups({_LifecycleFeatureGroup})
 _SYNC = {ParallelizationMode.SYNC}
 
 
-def _prepare(extenders: set[Extender]) -> Any:
+def _prepare(extenders: set[Extender], dac: DataAccessCollection | None = None) -> Any:
     return mloda.prepare(
         [Feature(name=_COLUMN)],
         compute_frameworks=["PythonDictFramework"],
         plugin_collector=_ENABLED,
         parallelization_modes=_SYNC,
         function_extender=extenders,
+        data_access_collection=dac,
     )
 
 
 class _Recorder(Extender):
     def __init__(
-        self, label: str, log: list[tuple[Any, ...]], priority: int = 100, raises_in: str | None = None
+        self,
+        label: str,
+        log: list[tuple[Any, ...]],
+        priority: int = 100,
+        raises_in: str | None = None,
+        message: str | None = None,
     ) -> None:
         self.label = label
         self.log = log
         self.priority = priority
         self.raises_in = raises_in
+        self.message = message
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_MATCHED}
@@ -70,7 +78,7 @@ class _Recorder(Extender):
     def _record(self, hook: str, *payload: Any) -> None:
         self.log.append((self.label, hook, *payload))
         if self.raises_in == hook:
-            raise RuntimeError(f"{hook}-boom")
+            raise RuntimeError(self.message or f"{hook}-boom")
 
     def on_plan_start(self, plan: Any) -> None:
         self._record("plan_start", plan)
@@ -429,6 +437,64 @@ class TestContainedHooksLogAndContinue:
         args = records[0].args
         arg_values = args.values() if isinstance(args, Mapping) else (args or ())
         assert not [a for a in arg_values if isinstance(a, BaseException)]
+
+    @pytest.mark.parametrize(
+        ("hook", "drive"),
+        [
+            ("plan_start", None),
+            ("plan_complete", None),
+            ("run_complete", lambda s: s.run(parallelization_modes=_SYNC)),
+            ("run_complete", lambda s: list(s.stream_run(parallelization_modes=_SYNC))),
+        ],
+        ids=["plan_start", "plan_complete", "run_complete_batch", "run_complete_stream"],
+    )
+    def test_a_collection_secret_in_a_contained_hook_failure_is_masked_in_the_log(
+        self, hook: str, drive: Callable[[Any], Any] | None, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        secret = "hook_vault_secret_value"  # nosec B105
+        dac = DataAccessCollection(credentials={"vault": {"token": secret}})
+        raiser = _Recorder("raiser", [], raises_in=hook, message=f"{hook} leaked {secret}")
+
+        with caplog.at_level(logging.ERROR):
+            session = _prepare({raiser}, dac)
+            if drive is not None:
+                drive(session)
+
+        messages = [
+            r.getMessage() for r in caplog.records if r.levelno == logging.ERROR and f"{hook} leaked" in r.getMessage()
+        ]
+        assert len(messages) == 1
+        assert secret not in messages[0]
+        assert "***" in messages[0]
+
+    def test_a_collection_secret_in_a_prepare_failure_is_masked_for_plan_complete_hooks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from mloda.core.api.request import mlodaAPI
+
+        secret = "hook_vault_secret_value"  # nosec B105
+        dac = DataAccessCollection(credentials={"vault": {"token": secret}})
+        seen: dict[str, str] = {}
+
+        class _Spy(_Minimal):
+            def on_plan_complete(self, plan: Any, outcome: Any) -> None:
+                seen["exc"] = str(sys.exception())
+                seen["outcome"] = repr(outcome)
+                seen["error_type"] = outcome.error_type
+
+        def boom(self: Any) -> None:
+            raise RuntimeError(f"boom {secret}")
+
+        monkeypatch.setattr(mlodaAPI, "_stamp_structure_hash", boom)
+
+        with pytest.raises(RuntimeError) as excinfo:
+            _prepare({_Spy()}, dac)
+
+        assert "***" in str(excinfo.value)
+        assert secret not in str(excinfo.value)
+        assert seen["exc"] and secret not in seen["exc"]
+        assert secret not in seen["outcome"]
+        assert seen["error_type"] == "builtins.RuntimeError"
 
 
 class _BreakingRefuser(_Recorder):

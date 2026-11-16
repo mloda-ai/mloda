@@ -124,7 +124,7 @@ class _Probe(NamedTuple):
 def _probe(cls: type[FeatureGroup], name: str, options: Options, dac: DataAccessCollection | None = None) -> _Probe:
     outcome, error = safe_field_with_error(lambda: probe_match_criteria(cls, name, options, dac), None)
     if outcome is None:
-        return _Probe(False, None, error)
+        return _Probe(False, None, error if dac is None or error is None else dac.redact(error))
     return _Probe(outcome.matched, outcome.rejection, None, outcome.written)
 
 
@@ -272,7 +272,7 @@ def _check_credentials(
             continue
         returned, error = safe_field_with_error(lambda: cls.match_credentials(match), None)
         if error is not None:
-            failures.append(f"credentials: match_credentials raised for '{name}': {error}")
+            failures.append(f"credentials: match_credentials raised for '{name}': {dac.redact(error)}")
         elif credential_handle_of(dac, returned) not in dependencies:
             shown = ", ".join(f"'{_shown(dac, h)}'" for h in dependencies)
             failures.append(
@@ -880,7 +880,7 @@ def check_feature_group_shape(
     A TYPE or GAP record covering a type failure turns it into a note. A TYPE record on the serving Implementation
     whose columns all match exactly on a typed framework fails as stale (scope a data-dependent one with subtypes
     or outputs); a group-level one is only a note, since it applies on every framework.
-    data_access_collection= is matched against by every probe and checks a source's match_credentials.
+    data_access_collection= is matched against by every match probe and checks a source's match_credentials.
     requests= probes those names instead of the class and declared names; a base_options value contradicting them is a failure with the abort text.
     """
     if not isinstance(cls, type) or not is_nominal_subclass(cls, FeatureGroup):

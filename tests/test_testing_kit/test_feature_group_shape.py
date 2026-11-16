@@ -1125,9 +1125,10 @@ def _credential_variant(kind: str) -> type[FeatureGroup]:
     """A ToySourceFG variant, built per call so it does not register globally."""
     from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
         TOY_KEY,
+        TOY_TOKEN,
         ToySourceFG,
     )
-    from mloda.provider import SourceMatch
+    from mloda.provider import CoreDeclineCode, SourceMatch
 
     if kind == "registered":
 
@@ -1157,6 +1158,30 @@ def _credential_variant(kind: str) -> type[FeatureGroup]:
 
         return ReturnsRegistered
 
+    if kind == "abort_secret":
+
+        class AbortsWithSecret(ToySourceFG):
+            @classmethod
+            def find_sources(
+                cls, route: Any, feature_name: str, options: Options, data_access_collection: Any
+            ) -> list[SourceMatch]:
+                if data_access_collection is None:
+                    return []
+                pw = data_access_collection.credentials["h1"]["token"]
+                cls._abort(ValueError(f"login failed for {pw}"), code=CoreDeclineCode.POINTER_INVALID)
+                return []
+
+        return AbortsWithSecret
+
+    if kind == "raises_secret":
+
+        class RaisesWithSecret(ToySourceFG):
+            @classmethod
+            def match_credentials(cls, match: SourceMatch) -> Any:
+                raise ValueError(f"bad {TOY_TOKEN}")
+
+        return RaisesWithSecret
+
     class ReturnsSubMapping(ToySourceFG):
         @classmethod
         def match_credentials(cls, match: SourceMatch) -> Any:
@@ -1170,27 +1195,33 @@ def _credential_failures(result: Any) -> list[str]:
 
 
 @pytest.mark.parametrize(
-    ("case", "flagged", "needles"),
+    ("case", "flagged", "needles", "names_aborted"),
     [
-        ("plain_named", True, ["h1", "match_credentials", "'toyfmt_col'"]),
-        ("plain_auto_handle", True, ["<unnamed>"]),
-        ("registered", False, []),
-        ("sub_mapping", True, []),
+        ("plain_named", True, ["h1", "match_credentials", "'toyfmt_col'"], False),
+        ("plain_auto_handle", True, ["<unnamed>"], False),
+        ("registered", False, [], False),
+        ("sub_mapping", True, ["h1", "match_credentials"], False),
+        ("abort_secret", False, [], True),
+        ("raises_secret", True, ["raised"], False),
     ],
 )
-def test_source_credential_binding_shape(case: str, flagged: bool, needles: list[str]) -> None:
+def test_source_credential_binding_shape(case: str, flagged: bool, needles: list[str], names_aborted: bool) -> None:
     pytest.importorskip("pyarrow")
     from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
     from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
         TOY_KEY,
         ToySourceFG,
+        TOY_TOKEN,
         toy_dac,
+        toy_token_dac,
     )
 
     cell = {"toyfmt_col": [_SECRET_CELL]}
     group: type[FeatureGroup] = ToySourceFG if case.startswith("plain") else _credential_variant(case)
     if case == "plain_auto_handle":
         dac = DataAccessCollection(credentials=[{TOY_KEY: cell}])
+    elif case.endswith("_secret"):
+        dac = toy_token_dac(h1=cell)
     else:
         dac = toy_dac(h1=cell)
     result = check_feature_group_shape(group, requests=["toyfmt_col"], data_access_collection=dac)
@@ -1198,8 +1229,13 @@ def test_source_credential_binding_shape(case: str, flagged: bool, needles: list
     assert len(failures) == (1 if flagged else 0), result.failures
     for needle in needles:
         assert needle in failures[0], failures
-    assert not any(f.startswith("names:") for f in result.failures), result.failures
+    names = [f for f in result.failures if f.startswith("names:")]
+    if names_aborted:
+        assert any("aborted" in f for f in names), result.failures
+    else:
+        assert not names, result.failures
     assert str(_SECRET_CELL) not in repr(result)
+    assert TOY_TOKEN not in repr(result)
 
 
 def test_pointer_only_claim_needs_no_match_credentials() -> None:

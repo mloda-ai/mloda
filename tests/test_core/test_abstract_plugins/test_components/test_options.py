@@ -669,6 +669,23 @@ class TestOptionsWithCredentialValues:
         assert handle not in str(unmarked)
         assert handle in str(marked)
 
+    @pytest.mark.parametrize(
+        ("key", "where"),
+        [("data_access_handle", "context"), ("connection_handle", "group"), ("connection_handle", "context")],
+    )
+    def test_str_masks_a_handle_option_unless_recorded(self, key: str, where: str) -> None:
+        value = "zq_pasted_secret_9x"
+
+        def build() -> Options:
+            return Options(group={key: value}) if where == "group" else Options(context={key: value})
+
+        recorded = build()
+        recorded.validated_credential_handles = frozenset({(key, value)})
+
+        assert value not in str(build())
+        assert "***" in str(build())
+        assert value in str(recorded)
+
     @pytest.mark.parametrize("key", ["chs_vault_token", "hmac_key_handle"])
     @pytest.mark.parametrize("scenario", ["hand_set", "rebuild"])
     def test_str_masks_a_value_that_differs_from_the_validated_handle(self, scenario: str, key: str) -> None:

@@ -405,13 +405,15 @@ class DataAccessCollection:
         kind: str,
         predicate: Callable[[Any], bool] | None = None,
         hint: str | None = None,
+        *,
+        option: str = "data_access_handle",
     ) -> Any:
         """Resolve a single resource of ``kind``, optionally narrowed by ``predicate``.
 
-        Hint semantics:
-          * missing handle: ValueError naming kind + handle + available handles of that kind
-          * wrong kind: ValueError naming actual vs requested kind
-          * predicate fails: ValueError naming predicate mismatch
+        Hint semantics (errors name ``option``, never the hint value):
+          * missing handle: ValueError naming option + kind + available handles of that kind
+          * wrong kind: ValueError naming option + actual vs requested kind
+          * predicate fails: ValueError naming option + predicate mismatch
           * otherwise: return the entry
 
         No-hint semantics: 0 matches -> None, 1 match -> the entry,
@@ -427,16 +429,21 @@ class DataAccessCollection:
                 actual_kind = self.handles().get(hint)
                 if actual_kind is not None:
                     raise ValueError(
-                        f"Handle '{hint}' is registered under kind '{actual_kind}', but kind '{kind}' was requested."
+                        f"Option '{option}' names a handle registered under kind '{actual_kind}', "
+                        f"but kind '{kind}' was requested."
                     )
+                from mloda.core.abstract_plugins.components.credential_handle import named_handles_text
+
                 raise ValueError(
-                    f"Handle '{hint}' not found for kind '{kind}'. "
-                    f"Available handles of kind '{kind}': {sorted(registry.keys())}"
+                    f"Option '{option}' names a handle that is not registered for kind '{kind}' "
+                    f"(the value is not shown in case it is a secret). "
+                    f"Available handles of kind '{kind}': {named_handles_text(registry, self._auto_handles)}."
                 )
             entry = registry[hint]
             if predicate is not None and not predicate(entry):
                 raise ValueError(
-                    f"Handle '{hint}' of kind '{kind}' did not satisfy the predicate (predicate mismatch)."
+                    f"Option '{option}' names a handle of kind '{kind}' that did not satisfy the predicate "
+                    f"(predicate mismatch)."
                 )
             return entry
 
@@ -522,14 +529,12 @@ def resolve_connection_handle(framework: Any, dac: Any, options: Any | None) -> 
     named = options.get(CONNECTION_HANDLE_OPTION) if options is not None else None
     if dac is None:
         if named is not None:
-            raise ValueError(
-                f"Option '{CONNECTION_HANDLE_OPTION}' names '{named}' but no DataAccessCollection is given."
-            )
+            raise ValueError(f"Option '{CONNECTION_HANDLE_OPTION}' is set but no DataAccessCollection is given.")
         return None, False, None
     connections: dict[str, Any] = dac.connections
     foreign: str | None = None
     if named is not None:
-        entry = dac.resolve("connection", hint=named)
+        entry = dac.resolve("connection", hint=named, option=CONNECTION_HANDLE_OPTION)
         if framework._connection_matches(entry):
             return named, True, None
         shown = "<unnamed>" if named in dac.auto_handles else named

@@ -684,6 +684,24 @@ class TestBoundHandleIsNotGranted:
         (step,) = _steps(session, SqliteFG)
         assert step.features.credential_handles == ("auditor",)
 
+    def test_str_of_resolved_options_shows_a_registered_data_access_handle_only(self, tmp_path: Path) -> None:
+        shared = Credential(sqlite=str(write_bound_sqlite(tmp_path)))
+        session = mloda.prepare(
+            [Feature("bound_col", options={"data_access_handle": "auditor"})],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=DataAccessCollection(credentials={"reader": shared, "auditor": shared}),
+            plugin_collector=_plugins(SqliteFG),
+        )
+        assert session.engine is not None
+        shown = next(iter(session.engine.feature_group_collection[SqliteFG])).options
+        assert "auditor" in str(shown)
+
+        raw = Options(group={"data_access_handle": "zq_pasted_secret_9x"})
+        stored = _prepare([Feature("chs_raw_a", options=raw)], None, _plugins(ChsRawSecretFG))
+        assert stored.engine is not None
+        stored_options = next(iter(stored.engine.feature_group_collection[ChsRawSecretFG])).options
+        assert "zq_pasted_secret_9x" not in str(stored_options)
+
 
 class TestPlanTimeRefusals:
     @pytest.mark.parametrize("entry", ENTRY_POINTS)

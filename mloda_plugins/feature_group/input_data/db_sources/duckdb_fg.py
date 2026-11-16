@@ -11,6 +11,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     CoreDeclineCode,
     record_match_rejection,
 )
+from mloda.core.abstract_plugins.components.credential_handle import named_handles_text
 from mloda.core.optional_dependency import require
 from mloda.provider import ComputeFramework, FeatureSet, Implementation, PropertySpec, SourceFeatureGroup
 from mloda.user import DataAccessCollection, Options
@@ -89,7 +90,12 @@ class DuckdbFG(SourceFeatureGroup):
         handle = cls.read_option("connection_handle", options)
         connections = {} if data_access_collection is None else data_access_collection.connections
         if not isinstance(handle, str) or handle not in connections:
-            reason = f"{HANDLE_KEY} {handle!r} is not a connection handle; known: {sorted(connections)}"
+            auto = data_access_collection.auto_handles if data_access_collection is not None else frozenset()
+            reason = (
+                f"Option '{HANDLE_KEY}' of {name} names a handle that is not a registered connection "
+                f"(the value is not shown in case it is a secret). "
+                f"Available connection handles: {named_handles_text(connections, auto)}."
+            )
             record_match_rejection(name, reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.HANDLE_UNKNOWN)
             return []
         connection = connections[handle]

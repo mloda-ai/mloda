@@ -1,6 +1,6 @@
 # Divergence Records and Rule Variants
 
-A divergence record says where a feature group or one of its Implementations differs from the group's reference contract. This page is the reader's side. How a provider declares records and `VARIANTS` is in [Operation Groups](compute-framework-integration.md#operation-groups-one-group-one-implementation-per-framework), and how records rank implementations is in [Choosing among implementations](compute-framework-integration.md#choosing-among-implementations).
+A divergence record says where a feature group or one of its Implementations differs from the group's reference contract. How a provider declares records and `VARIANTS` is in [Operation Groups](compute-framework-integration.md#operation-groups-one-group-one-implementation-per-framework), and how records rank implementations is in [Choosing among implementations](compute-framework-integration.md#choosing-among-implementations).
 
 ## What a record holds
 

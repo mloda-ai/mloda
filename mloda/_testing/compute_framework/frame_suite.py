@@ -15,6 +15,8 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.provider import DataCreatorFeatureGroup
 from mloda.user import DataType
 
+__all__ = ["AppendColumnsSuite", "EmptyResultSuite"]
+
 _ONE_ROW = TypedTestData(
     {"a": (DataType.INT64, (1,)), "flag": (DataType.BOOLEAN, (True,)), "name": (DataType.STRING, ("x",))}
 )

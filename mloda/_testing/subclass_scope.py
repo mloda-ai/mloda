@@ -39,6 +39,8 @@ from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
 from mloda.core.prepare.identify_feature_group import evaluate_and_render
 
+__all__ = ["assert_subclass_scope", "check_subclass_scope"]
+
 
 def _mapping(
     parent: type[FeatureGroup], subclass: type[FeatureGroup]

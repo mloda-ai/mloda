@@ -13,6 +13,14 @@ from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, sa
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.filter.filter_engine import BaseFilterEngine
 
+__all__ = [
+    "applicable_aspects",
+    "assert_compute_framework_shape",
+    "check_compute_framework_shape",
+    "serves_asof_merge",
+    "serves_connection",
+]
+
 _ABSENT = object()
 _ASPECT_ACCESSORS = (("filter", "filter_engine"), ("mask", "mask_engine"), ("merge", "merge_engine"))
 _Read = tuple[object, str | None]

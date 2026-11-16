@@ -8,6 +8,8 @@ from typing import Any
 from mloda._testing.value_fit import check_values_fit
 from mloda.core.abstract_plugins.components.data_types import DataType
 
+__all__ = ["TypedTestData"]
+
 
 class TypedTestData:
     """Columnar test data whose values are checked against the declared types."""

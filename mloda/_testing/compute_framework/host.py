@@ -20,6 +20,8 @@ from mloda.user import ParallelizationMode
 if TYPE_CHECKING:
     import pyarrow as pa
 
+__all__ = ["ComputeFrameworkSuite"]
+
 
 class ComputeFrameworkSuite(ConformanceSuite, suite_base=True):
     """Host sets adapter_class; a suite base sets aspect and may list required_hooks a host must override."""

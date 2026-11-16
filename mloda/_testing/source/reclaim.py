@@ -7,6 +7,8 @@ import weakref
 from collections.abc import Iterator
 from typing import Any, TypeVar
 
+__all__ = ["T", "mark", "reclaim_since", "reclaimed_scope", "track"]
+
 T = TypeVar("T", bound=type)
 
 _LOG: list[weakref.ref[Any]] = []

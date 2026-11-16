@@ -30,6 +30,8 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 if TYPE_CHECKING:
     from mloda.provider import ReadFileFG
 
+__all__ = ["FOREIGN_SUFFIX", "HANDLE_OPTION", "ReadFileFGTestMixin"]
+
 FOREIGN_SUFFIX = ".notmyformat"
 HANDLE_OPTION = "data_access_handle"
 

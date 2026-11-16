@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import sys
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
@@ -713,6 +715,33 @@ def _toy_adapter(with_exact: bool, lost: bool = False) -> Any:
             return lost
 
     return _ToyAdapter()
+
+
+@pytest.mark.parametrize("method", ["from_typed", "duplicate_column_frame", "zero_column_frame"])
+def test_base_pyarrow_defaults_without_pyarrow_name_the_adapter_and_the_override(
+    monkeypatch: pytest.MonkeyPatch, method: str
+) -> None:
+    from mloda._testing.framework_adapter import FrameworkAdapter, PythonDictAdapter
+
+    class _BaseDefaultAdapter(PythonDictAdapter):
+        from_typed = FrameworkAdapter.from_typed
+        duplicate_column_frame = FrameworkAdapter.duplicate_column_frame
+        zero_column_frame = FrameworkAdapter.zero_column_frame
+
+    calls: dict[str, tuple[Any, ...]] = {
+        "from_typed": (TypedTestData({"c": (DataType.INT64, [1, 2])}),),
+        "duplicate_column_frame": (DataType.INT64, DataType.STRING),
+        "zero_column_frame": (),
+    }
+    monkeypatch.setitem(sys.modules, "pyarrow", None)
+
+    with pytest.raises(
+        ImportError,
+        match=re.escape(f"_BaseDefaultAdapter.{method}")
+        + ".*"
+        + re.escape("override it in a custom adapter to build frames without pyarrow"),
+    ):
+        getattr(_BaseDefaultAdapter(), method)(*calls[method])
 
 
 def test_base_has_type_uses_the_framework_exact_readback() -> None:

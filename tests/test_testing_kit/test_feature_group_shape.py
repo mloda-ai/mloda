@@ -1169,35 +1169,37 @@ def _credential_failures(result: Any) -> list[str]:
     return [f for f in result.failures if f.startswith("credentials:")]
 
 
-def test_source_binding_a_credential_without_match_credentials_fails() -> None:
+@pytest.mark.parametrize(
+    ("case", "flagged", "needles"),
+    [
+        ("plain_named", True, ["h1", "match_credentials", "'toyfmt_col'"]),
+        ("plain_auto_handle", True, ["<unnamed>"]),
+        ("registered", False, []),
+        ("sub_mapping", True, []),
+    ],
+)
+def test_source_credential_binding_shape(case: str, flagged: bool, needles: list[str]) -> None:
     pytest.importorskip("pyarrow")
+    from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
     from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+        TOY_KEY,
         ToySourceFG,
         toy_dac,
     )
 
-    result = check_feature_group_shape(
-        ToySourceFG, requests=["toyfmt_col"], data_access_collection=toy_dac(h1={"toyfmt_col": [_SECRET_CELL]})
-    )
+    cell = {"toyfmt_col": [_SECRET_CELL]}
+    group: type[FeatureGroup] = ToySourceFG if case.startswith("plain") else _credential_variant(case)
+    if case == "plain_auto_handle":
+        dac = DataAccessCollection(credentials=[{TOY_KEY: cell}])
+    else:
+        dac = toy_dac(h1=cell)
+    result = check_feature_group_shape(group, requests=["toyfmt_col"], data_access_collection=dac)
     failures = _credential_failures(result)
-    assert len(failures) == 1, result.failures
-    assert "h1" in failures[0] and "match_credentials" in failures[0] and "'toyfmt_col'" in failures[0], failures
+    assert len(failures) == (1 if flagged else 0), result.failures
+    for needle in needles:
+        assert needle in failures[0], failures
     assert not any(f.startswith("names:") for f in result.failures), result.failures
     assert str(_SECRET_CELL) not in repr(result)
-
-
-@pytest.mark.parametrize(
-    ("kind", "flagged"), [("registered", False), ("sub_mapping", True)], ids=["registered", "sub_mapping"]
-)
-def test_match_credentials_must_return_the_registered_credential(kind: str, flagged: bool) -> None:
-    pytest.importorskip("pyarrow")
-    from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import toy_dac
-
-    result = check_feature_group_shape(
-        _credential_variant(kind), requests=["toyfmt_col"], data_access_collection=toy_dac(h1={"toyfmt_col": [1]})
-    )
-    assert bool(_credential_failures(result)) is flagged, result.failures
-    assert not any(f.startswith("names:") for f in result.failures), result.failures
 
 
 def test_pointer_only_claim_needs_no_match_credentials() -> None:
@@ -1215,22 +1217,6 @@ def test_pointer_only_claim_needs_no_match_credentials() -> None:
         data_access_collection=toy_dac(h1={"toyfmt_col": [1]}),
     )
     assert _credential_failures(result) == [], result.failures
-
-
-def test_auto_handle_renders_as_unnamed() -> None:
-    pytest.importorskip("pyarrow")
-    from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-    from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
-        TOY_KEY,
-        ToySourceFG,
-    )
-
-    dac = DataAccessCollection(credentials=[{TOY_KEY: {"toyfmt_col": [_SECRET_CELL]}}])
-    result = check_feature_group_shape(ToySourceFG, requests=["toyfmt_col"], data_access_collection=dac)
-    failures = _credential_failures(result)
-    assert len(failures) == 1, result.failures
-    assert "<unnamed>" in failures[0], failures
-    assert str(_SECRET_CELL) not in repr(result)
 
 
 def test_source_group_without_a_collection_notes_the_unchecked_binding() -> None:

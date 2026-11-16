@@ -900,6 +900,12 @@ class IdentifyFeatureGroupClass:
         )
         if not supplied:
             return False
+        return IdentifyFeatureGroupClass._no_guard_declines(feature_group, options)
+
+    @staticmethod
+    def _no_guard_declines(feature_group: type[FeatureGroup], options: Options) -> bool:
+        """True when no match_guard of the group declines the options; a raising guard declines."""
+        mapping = feature_group.PROPERTY_MAPPING or {}
         try:
             return FeatureChainParser._first_rejecting_guard(options, mapping, _NEAR_MISS_LOG) is None
         except Exception:  # noqa: BLE001  (a guard that raises, even a marked abort, declines the group)
@@ -971,11 +977,12 @@ class IdentifyFeatureGroupClass:
                         and not inspect.isabstract(feature_group)
                     ):
                         if typo_absent:
-                            self._missing_handle_aborts[feature_group] = (
-                                typo_absent,
-                                missing_credential_handle_abort(feature_group, typo_options, typo_absent),
-                                close_handle_option_keys(feature_group, typo_absent, typo_options),
-                            )
+                            if self._no_guard_declines(feature_group, typo_options):
+                                self._missing_handle_aborts[feature_group] = (
+                                    typo_absent,
+                                    missing_credential_handle_abort(feature_group, typo_options, typo_absent),
+                                    close_handle_option_keys(feature_group, typo_absent, typo_options),
+                                )
                         elif self._selects_by_required_own_key(feature_group, typo_options):
                             self._record_elimination(
                                 feature_group,

@@ -1434,15 +1434,29 @@ class TestMissingHandleKeyAborts:
         assert not reasons
 
     @pytest.mark.parametrize("with_fallback", [True, False])
-    def test_a_config_path_group_aborts_on_a_misspelled_handle_key(self, with_fallback: bool) -> None:
-        typo = "chs_cfg_handel"
-        feature = Feature("chs_cfg_col", options={"chs_cfg_op": "sum", typo: "vault-main"})
-        groups: tuple[type[FeatureGroup], ...] = (ChsCfgFG, ChsCfgFallbackFG) if with_fallback else (ChsCfgFG,)
+    @pytest.mark.parametrize(
+        "group, options, typo, handle_key",
+        [
+            (ChsCfgFG, {"chs_cfg_op": "sum", "chs_cfg_handel": "vault-main"}, "chs_cfg_handel", "chs_cfg_handle"),
+            (
+                ChsCfgGuardFG,
+                {"chs_cfgd_kind": "mine", "chs_cfgd_handel": "vault-main"},
+                "chs_cfgd_handel",
+                "chs_cfgd_handle",
+            ),
+        ],
+        ids=["plain-key", "guard-accepts"],
+    )
+    def test_a_config_path_group_aborts_on_a_misspelled_handle_key(
+        self, group: type[FeatureGroup], options: dict[str, str], typo: str, handle_key: str, with_fallback: bool
+    ) -> None:
+        feature = Feature("chs_cfg_col", options=options)
+        groups: tuple[type[FeatureGroup], ...] = (group, ChsCfgFallbackFG) if with_fallback else (group,)
 
         message = _abort(_prepare, [feature], _dac(**{"vault-main": {"key": SECRET}}), *groups)
 
-        assert "chs_cfg_handle" in message
-        assert "ChsCfgFG" in message
+        assert handle_key in message
+        assert group.__name__ in message
         assert f"did you mean '{typo}'" in message
         assert SECRET not in message
 
@@ -1460,8 +1474,19 @@ class TestMissingHandleKeyAborts:
             (ChsCfgFG, {"chs_cfg_op": "sum"}),
             (ChsCfgEscalatingGuardFG, {"chs_cfge_kind": "x"}),
             (ChsCfgDeferringGuardFG, {"chs_cfgf_kind": "x"}),
+            (ChsCfgGuardFG, {"chs_cfgd_kind": "other", "chs_cfgd_handel": "vault-main"}),
+            (ChsCfgEscalatingGuardFG, {"chs_cfge_kind": "x", "chs_cfge_handel": "vault-main"}),
+            (ChsCfgDeferringGuardFG, {"chs_cfgf_kind": "x", "chs_cfgf_handel": "vault-main"}),
         ],
-        ids=["unrelated-key", "no-handle-key", "escalating-guard", "deferring-guard"],
+        ids=[
+            "unrelated-key",
+            "no-handle-key",
+            "escalating-guard",
+            "deferring-guard",
+            "typo-guard-declines",
+            "typo-escalating-guard",
+            "typo-deferring-guard",
+        ],
     )
     def test_a_config_path_group_missing_its_handle_keeps_the_fallback(
         self, group: type[FeatureGroup], options: dict[str, str]
@@ -1501,6 +1526,7 @@ class TestMissingHandleKeyAborts:
             (ChsCfgOptFG, {"chs_cfgo_opt": "y"}),
             (ChsCfgInFeaturesFG, {"in_features": "chs_src"}),
             (ChsCfgExtraFG, {"chs_cfgx_op": "sum"}),
+            (ChsCfgGuardFG, {"chs_cfgd_kind": "other", "chs_cfgd_handel": "vault-main"}),
         ],
         ids=[
             "unrelated-key",
@@ -1509,6 +1535,7 @@ class TestMissingHandleKeyAborts:
             "optional-own-key",
             "in-features-only",
             "plain-key-also-missing",
+            "typo-guard-would-decline",
         ],
     )
     def test_a_config_path_near_miss_needs_one_of_the_groups_own_plain_keys(

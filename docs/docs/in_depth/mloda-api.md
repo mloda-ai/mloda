@@ -101,6 +101,9 @@ result_1 = session.run(api_data={"MyKey": {"col": [1.0, 2.0]}})
 result_2 = session.run(api_data={"MyKey": {"col": [3.0, 4.0]}})
 ```
 
+`run()` and `stream_run()` default to the `parallelization_modes` given to `prepare()` (SYNC if none were given); passing
+`parallelization_modes` overrides them for that run. MULTIPROCESSING also needs `flight_server`.
+
 `run()` and `stream_run()` also accept `credentials={handle: Credential | dict}`, a fresh value for a credential handle a
 step declares, used for that run only (not accepted by `run_all()`/`stream_all()`). See
 [Runtime access versus match-time binding](named-data-access-handles.md#runtime-access-versus-match-time-binding).

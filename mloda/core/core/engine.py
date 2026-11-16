@@ -1206,15 +1206,19 @@ class Engine:
                     )
             if handle_keys:
                 validate_credential_handles(feature_group_class, resolved, self.data_access_collection)
+            named_handles = {
+                key: value
+                for key in ("data_access_handle", "connection_handle")
+                if isinstance(value := resolved.get(key), str)
+            }
+            registered_handles = (
+                self.data_access_collection.handles()
+                if named_handles and self.data_access_collection is not None
+                else {}
+            )
             handles = frozenset(
                 (key, value) for key in handle_keys if isinstance(value := resolved.group.get(key), str)
-            ) | frozenset(
-                (key, value)
-                for key in ("data_access_handle", "connection_handle")
-                if isinstance(value := resolved.group.get(key, resolved.context.get(key)), str)
-                and self.data_access_collection is not None
-                and value in self.data_access_collection.handles()
-            )
+            ) | frozenset((key, value) for key, value in named_handles.items() if value in registered_handles)
             if resolved.validated_credential_handles != handles:
                 if resolved is declared_options:
                     resolved = declared_options.rebuild(dict(declared_options.group), dict(declared_options.context))

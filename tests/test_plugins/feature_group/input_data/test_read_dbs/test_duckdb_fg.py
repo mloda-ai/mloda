@@ -273,8 +273,7 @@ class TestDuckdbFGOptIn:
         assert "Option 'connection_handle'" in reason
         assert "not shown in case it is a secret" in reason
         assert str(sorted(["other_handle", HANDLE])) in reason
-        assert str(handle) not in reason if isinstance(handle, str) else f"'{handle}'" not in reason
-        assert repr(handle) not in reason
+        assert str(handle) not in reason
         assert result.eliminations[DuckdbFG].code is CoreDeclineCode.HANDLE_UNKNOWN
 
     def test_a_column_the_selected_table_lacks_declines_naming_the_column_and_source_only(

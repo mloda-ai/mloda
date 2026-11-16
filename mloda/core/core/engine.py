@@ -1206,10 +1206,13 @@ class Engine:
                     )
             if handle_keys:
                 validate_credential_handles(feature_group_class, resolved, self.data_access_collection)
-            if resolved.credential_handle_keys != handle_keys:
+            handles = frozenset(
+                (key, value) for key in handle_keys if isinstance(value := resolved.group.get(key), str)
+            )
+            if resolved.validated_credential_handles != handles:
                 if resolved is declared_options:
                     resolved = declared_options.rebuild(dict(declared_options.group), dict(declared_options.context))
-                resolved.credential_handle_keys = handle_keys
+                resolved.validated_credential_handles = handles
                 entry = (declared_options, resolved)
             self._intake_options_memo[memo_key] = entry
         feature.options = entry[1]

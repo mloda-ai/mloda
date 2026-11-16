@@ -95,7 +95,8 @@ def raise_on_missing_flight_server(
             raise ValueError(
                 f"ParallelizationMode.MULTIPROCESSING sends {_describe_step(step)} to a worker process, "
                 "which needs a flight server, but no flight_server was given. "
-                "Resolution: pass flight_server=ParallelRunnerFlightServer() to the run call, "
+                "Resolution: pass flight_server=ParallelRunnerFlightServer() "
+                "(from mloda.core.runtime.flight.runner_flight_server) to the run call, "
                 "or run without ParallelizationMode.MULTIPROCESSING."
             )
 

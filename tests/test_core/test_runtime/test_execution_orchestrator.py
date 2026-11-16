@@ -869,10 +869,7 @@ class TestEnterPrestartsStandbyWorkers:
         step.get_parallelization_mode.return_value = {ParallelizationMode.SYNC}
         orchestrator = self._entering(Mock(), plan=ReiterablePlan(step))
 
-        with (
-            patch("mloda.core.runtime.run.shared_manager"),
-            patch("mloda.core.runtime.run.planned_worker_count", return_value=0),
-        ):
+        with patch("mloda.core.runtime.run.shared_manager"):
             orchestrator.__enter__({ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING})
             orchestrator.__exit__(None, None, None)
 

@@ -207,7 +207,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
     other_pointer, and own_pointer (return NO_POINTER for a group that takes no pointer), plus
     foreign_handle_dac and known_handles_dac when it declares data_access_handle. expected_source is the source the own request claims (own_dac's for a searched group,
     the pointed one otherwise). Optional: pointed_source (None claims with own_pointer), load_framework,
-    context_options, run_all_kwargs. rejection_window and make_implementation are fixture methods so a host in
+    context_options, run_all_kwargs, undeclared_names. rejection_window and make_implementation are fixture methods so a host in
     any package gets them without this repo's conftest; the suite reclaims the subclasses it builds, and holding
     one beyond its test is unsupported.
     """
@@ -219,6 +219,10 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
     load_framework: type[ComputeFramework] = PyArrowTable
     context_options: ClassVar[dict[str, Any]] = {}
     pointed_source: ClassVar[str | None] = None
+
+    def undeclared_names(self) -> list[str]:
+        """Names a pointed declared-route group must decline, naming each in its rejection."""
+        return ["mixin_arbitrary_undeclared_name"]
 
     def run_all_kwargs(self) -> dict[str, Any]:
         """Extra mloda.run_all keyword arguments, e.g. api_data."""
@@ -376,6 +380,20 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         self._require(self._applicability().checked_route, "no checked route")
         assert not self._claims(Feature(self.missing_column), self.own_dac())
         assert not self._claims(Feature(self.feature_group_class.get_class_name()), self.own_dac())
+
+    def test_a_pointed_undeclared_name_declines_naming_it_on_declared_routes(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        self._require(self._applicability().declared_names_only, "not every route declares its names")
+        self._require(self._applicability().pointer, "the group takes no pointer")
+        group = self._group_name()
+        options = self._options({group: self.own_pointer()})
+        for name in self.undeclared_names():
+            rejection_window.clear()
+            assert not self._matches(name, options, None), name
+            assert group in rejection_window, f"no rejection recorded for {name!r}"
+            assert name in rejection_window[group].reason, name
+            assert rejection_window[group].code is CoreDeclineCode.NAME_NOT_DECLARED, name
 
     def test_an_arbitrary_name_does_not_claim_with_the_own_source_present(self) -> None:
         assert not self._claims(Feature("mixin_arbitrary_undeclared_name"), self.own_dac())

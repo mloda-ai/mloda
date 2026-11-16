@@ -335,7 +335,7 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
 
     # exact names
 
-    def _undeclared_names(self) -> list[str]:
+    def undeclared_names(self) -> list[str]:
         name = self._group_name()
         return [
             f"{name}_anything",
@@ -360,7 +360,7 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
     ) -> None:
         group = self._group_name()
         declared = set(self._declared())
-        for name in self._undeclared_names():
+        for name in self.undeclared_names():
             assert not self._claims(self._feature(name), self.own_dac()), name
             assert not self._claims(self._feature(name), DataAccessCollection(folders={"d": str(self.tmp_path)})), name
             if self.feature_group_class.get_column_base_feature(name) in declared and name not in declared:
@@ -391,16 +391,6 @@ class ReadDocumentFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
             result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, self.own_dac())
             assert sibling not in result.eliminations, (name, result.eliminations.get(sibling))
         del sibling, mapping, result, feature
-
-    def test_doc_declines_every_undeclared_name_when_pointed_and_records_why(
-        self, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        options = self._options({self._group_name(): str(self.own_path)})
-        for name in self._undeclared_names():
-            rejection_window.clear()
-            assert not self._matches(name, options, None), name
-            assert name in rejection_window[self._group_name()].reason
-            assert rejection_window[self._group_name()].code is CoreDeclineCode.NAME_NOT_DECLARED, name
 
     def test_doc_declared_names_unpointed_without_a_source_record_why(
         self, rejection_window: dict[str, MatchRejection]

@@ -47,7 +47,12 @@ def test_a_group_with_no_searched_route_has_no_data_access_handle() -> None:
 def test_a_plain_searched_group_with_a_pointer() -> None:
     result = source_applicability(_make_group(_searched(), mapping=_DECLARED), True)
     assert result == SourceApplicability(
-        pointer=True, data_access_handle=True, query_route=False, checked_route=False, searched_route=True
+        pointer=True,
+        data_access_handle=True,
+        query_route=False,
+        checked_route=False,
+        searched_route=True,
+        declared_names_only=True,
     )
 
 
@@ -88,3 +93,20 @@ def test_a_checked_route_sets_checked_route() -> None:
 def test_declared_and_open_routes_are_not_checked() -> None:
     result = source_applicability(_make_group(_searched(), _pointed_only()), True)
     assert result.checked_route is False
+
+
+def test_declared_only_routes_set_declared_names_only() -> None:
+    assert source_applicability(_make_group(_searched()), True).declared_names_only is True
+
+
+def test_declared_and_checked_routes_clear_declared_names_only() -> None:
+    route = ClaimRoute("probe", NamePolicy.CHECKED, True)
+    assert source_applicability(_make_group(_searched(), route), True).declared_names_only is False
+
+
+def test_declared_and_open_routes_clear_declared_names_only() -> None:
+    assert source_applicability(_make_group(_searched(), _pointed_only()), True).declared_names_only is False
+
+
+def test_a_group_with_no_routes_clears_declared_names_only() -> None:
+    assert source_applicability(_make_group(), True).declared_names_only is False

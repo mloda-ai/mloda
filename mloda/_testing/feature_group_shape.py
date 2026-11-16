@@ -25,6 +25,10 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
     scrub_credentials,
     strip_uri_userinfo,
 )
+from mloda.core.abstract_plugins.components.data_access_collection import (
+    DataAccessCollection,
+    credential_handle_of,
+)
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.divergence import Divergence, DivergenceKind
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -114,13 +118,14 @@ class _Probe(NamedTuple):
     matched: bool
     rejection: Any
     aborted: str | None
+    written: Any = None
 
 
-def _probe(cls: type[FeatureGroup], name: str, options: Options) -> _Probe:
-    outcome, error = safe_field_with_error(lambda: probe_match_criteria(cls, name, options), None)
+def _probe(cls: type[FeatureGroup], name: str, options: Options, dac: DataAccessCollection | None = None) -> _Probe:
+    outcome, error = safe_field_with_error(lambda: probe_match_criteria(cls, name, options, dac), None)
     if outcome is None:
         return _Probe(False, None, error)
-    return _Probe(outcome.matched, outcome.rejection, None)
+    return _Probe(outcome.matched, outcome.rejection, None, outcome.written)
 
 
 def _foreign_name(cls: type[FeatureGroup]) -> str:
@@ -131,11 +136,17 @@ def _foreign_name(cls: type[FeatureGroup]) -> str:
     return name
 
 
-def _check_names(cls: type[FeatureGroup], names: list[str], base: Options, requested: bool = False) -> list[str]:
+def _check_names(
+    cls: type[FeatureGroup],
+    names: list[str],
+    base: Options,
+    requested: bool = False,
+    dac: DataAccessCollection | None = None,
+) -> list[str]:
     failures = []
     verb = "requested" if requested else "declared"
     for name in names:
-        probe = _probe(cls, name, base)
+        probe = _probe(cls, name, base, dac)
         if probe.aborted is not None:
             failures.append(f"names: matching '{name}' aborted: {probe.aborted}")
         elif not probe.matched:
@@ -143,14 +154,14 @@ def _check_names(cls: type[FeatureGroup], names: list[str], base: Options, reque
     return failures
 
 
-def _check_foreign(cls: type[FeatureGroup], base: Options) -> list[str]:
+def _check_foreign(cls: type[FeatureGroup], base: Options, dac: DataAccessCollection | None = None) -> list[str]:
     name = _foreign_name(cls)
     undeclared = "conformance_undeclared_key"
     while undeclared in cls.declared_option_keys():
         undeclared = "x" + undeclared
     failures = []
     for label, options in (("base options", base), ("an undeclared option", Options(group={undeclared: "1"}))):
-        matched, rejection, aborted = _probe(cls, name, options)
+        matched, rejection, aborted, _ = _probe(cls, name, options, dac)
         if aborted is not None:
             failures.append(f"foreign: matching '{name}' with {label} aborted: {aborted}")
         elif matched:
@@ -185,14 +196,18 @@ def _check_inputs(cls: type[FeatureGroup], names: list[str], base: Options) -> l
 
 
 def _check_required(
-    cls: type[FeatureGroup], names: list[str], base: Options, bound_keys: Mapping[str, frozenset[str]]
+    cls: type[FeatureGroup],
+    names: list[str],
+    base: Options,
+    bound_keys: Mapping[str, frozenset[str]],
+    dac: DataAccessCollection | None = None,
 ) -> list[str]:
     """Dropping each required key must record REQUIRED_OPTION_ABSENT naming it."""
     failures = []
     for name, key in product(names, _required_keys(cls)):
         if key in bound_keys.get(name, frozenset()):
             continue
-        matched, rejection, aborted = _probe(cls, name, _without_key(base, key))
+        matched, rejection, aborted, _ = _probe(cls, name, _without_key(base, key), dac)
         if aborted is not None:
             failures.append(f"required: matching '{name}' without '{key}' aborted: {aborted}")
         elif matched:
@@ -208,17 +223,62 @@ def _check_required(
     return failures
 
 
-def _check_strict(cls: type[FeatureGroup], names: list[str], base: Options) -> list[str]:
+def _check_strict(
+    cls: type[FeatureGroup], names: list[str], base: Options, dac: DataAccessCollection | None = None
+) -> list[str]:
     failures = []
     strict = [(k, v) for k, v in _mapping(cls).items() if v.strict_validation and v.allowed_values]
     for name, (key, _) in product(names, strict):
-        matched, rejection, aborted = _probe(cls, name, _with_value(base, key, _UNKNOWN_VALUE))
+        matched, rejection, aborted, _ = _probe(cls, name, _with_value(base, key, _UNKNOWN_VALUE), dac)
         if aborted is not None:
             failures.append(f"strict: matching '{name}' with an unknown '{key}' value aborted: {aborted}")
         elif matched:
             failures.append(f"strict: matches an unknown value for strict option '{key}'")
         elif rejection is None or rejection.code != CoreDeclineCode.OPTION_VALUE_REJECTED:
             failures.append(f"strict: rejection of an unknown '{key}' value lacks code option_value_rejected")
+    return failures
+
+
+def _shown(dac: DataAccessCollection, handle: str) -> str:
+    return "<unnamed>" if handle in dac.auto_handles else handle
+
+
+def _credential_dependencies(
+    cls: type[SourceFeatureGroup], name: str, base: Options, dac: DataAccessCollection, match: Any
+) -> list[str]:
+    """The registered handles whose removal changes or loses the match of name."""
+    found = []
+    for handle in list(dac.credentials):
+        reduced = dac.copy()
+        del reduced.credentials[handle]
+        probe = _probe(cls, name, base, reduced)
+        if not probe.matched or probe.written is None or probe.written[1].source != match.source:
+            found.append(handle)
+    return found
+
+
+def _check_credentials(
+    cls: type[SourceFeatureGroup], names: list[str], base: Options, dac: DataAccessCollection
+) -> list[str]:
+    """A source whose match reads a registered credential must return it from match_credentials."""
+    failures = []
+    for name in names:
+        probe = _probe(cls, name, base, dac)
+        if not probe.matched or probe.written is None:
+            continue
+        match = probe.written[1]
+        dependencies = _credential_dependencies(cls, name, base, dac, match)
+        if not dependencies:
+            continue
+        returned, error = safe_field_with_error(lambda: cls.match_credentials(match), None)
+        if error is not None:
+            failures.append(f"credentials: match_credentials raised for '{name}': {error}")
+        elif credential_handle_of(dac, returned) not in dependencies:
+            shown = ", ".join(f"'{_shown(dac, h)}'" for h in dependencies)
+            failures.append(
+                f"credentials: '{name}' reads handle(s) {shown} at match time but match_credentials does not "
+                "return that credential; override match_credentials to return it"
+            )
     return failures
 
 
@@ -807,6 +867,7 @@ def check_feature_group_shape(
     adapter: FrameworkAdapter | None = None,
     require_run: bool = False,
     requests: Sequence[str] | None = None,
+    data_access_collection: DataAccessCollection | None = None,
 ) -> CheckResult:
     """Check a FeatureGroup's match contract and, given input_data, its run.
 
@@ -819,6 +880,7 @@ def check_feature_group_shape(
     A TYPE or GAP record covering a type failure turns it into a note. A TYPE record on the serving Implementation
     whose columns all match exactly on a typed framework fails as stale (scope a data-dependent one with subtypes
     or outputs); a group-level one is only a note, since it applies on every framework.
+    data_access_collection= is matched against by every probe and checks a source's match_credentials.
     requests= probes those names instead of the class and declared names; a base_options value contradicting them is a failure with the abort text.
     """
     if not isinstance(cls, type) or not is_nominal_subclass(cls, FeatureGroup):
@@ -870,13 +932,19 @@ def check_feature_group_shape(
         )
     declared = sorted(cls.feature_names_supported())
     names = requested if requested is not None else [cls.get_class_name(), *declared]
-    failures = _check_names(cls, names, base, requested is not None)
-    failures += _check_foreign(cls, base)
+    dac = data_access_collection
+    failures = _check_names(cls, names, base, requested is not None, dac)
+    failures += _check_foreign(cls, base, dac)
     failures += _check_inputs(cls, names, base)
-    failures += _check_required(cls, names, base, bound_keys)
-    failures += _check_strict(cls, names, base)
+    failures += _check_required(cls, names, base, bound_keys, dac)
+    failures += _check_strict(cls, names, base, dac)
     failures += secret_failures
     notes: list[str] = list(secret_notes)
+    if is_nominal_subclass(cls, SourceFeatureGroup):
+        if dac is None:
+            notes.append("credentials: match-time credential binding not checked (no data_access_collection)")
+        else:
+            failures += _check_credentials(cls, names, base, dac)
     if input_data is None:
         notes.append("run: not run (no input_data); pass input_data to check outputs, types and determinism")
     elif not rule_valid:
@@ -895,10 +963,17 @@ def assert_feature_group_shape(
     adapter: FrameworkAdapter | None = None,
     require_run: bool = True,
     requests: Sequence[str] | None = None,
+    data_access_collection: DataAccessCollection | None = None,
 ) -> None:
     """Fail the running pytest test if the shape check reports failures; require_run defaults to True here."""
     assert_passed(
         check_feature_group_shape(
-            cls, base_options, input_data=input_data, adapter=adapter, require_run=require_run, requests=requests
+            cls,
+            base_options,
+            input_data=input_data,
+            adapter=adapter,
+            require_run=require_run,
+            requests=requests,
+            data_access_collection=data_access_collection,
         )
     )

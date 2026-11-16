@@ -214,24 +214,18 @@ class TestResolveContract:
         assert result is analytics
 
     # Case 2: explicit hint, handle missing -> ValueError naming option + kind + available handles, never the value.
-    def test_case_2_hint_missing_raises_with_kind_and_available_handles(self) -> None:
+    @pytest.mark.parametrize("option", [None, "connection_handle"])
+    def test_case_2_hint_missing_raises_with_kind_and_available_handles(self, option: str | None) -> None:
         dac = DataAccessCollection(connections={"warehouse": object(), "analytics": object()})
         dac.add_connection(object())
+        kwargs: dict[str, Any] = {} if option is None else {"option": option}
         with pytest.raises(ValueError) as excinfo:
-            dac.resolve("connection", hint="zq_pasted_secret_9x")
+            dac.resolve("connection", hint="zq_pasted_secret_9x", **kwargs)
         msg = str(excinfo.value)
-        assert "Option 'data_access_handle'" in msg
+        assert f"Option '{option or 'data_access_handle'}'" in msg
         assert "kind 'connection'" in msg
         assert "not shown in case it is a secret" in msg
         assert "['analytics', 'warehouse'] and 1 unnamed" in msg
-        assert "zq_pasted_secret_9x" not in msg
-
-    def test_case_2_hint_missing_names_the_given_option(self) -> None:
-        dac = DataAccessCollection(connections={"warehouse": object()})
-        with pytest.raises(ValueError) as excinfo:
-            dac.resolve("connection", hint="zq_pasted_secret_9x", option="connection_handle")
-        msg = str(excinfo.value)
-        assert "Option 'connection_handle'" in msg
         assert "zq_pasted_secret_9x" not in msg
 
     # Case 3: explicit hint, handle exists but is the wrong kind -> ValueError.

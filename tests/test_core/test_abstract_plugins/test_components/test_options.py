@@ -660,31 +660,27 @@ class TestOptionsWithCredentialValues:
         options = Options(group={"credential_option_key": make_value()})
         assert "/secret/path/analytics.db" not in str(options)
 
-    def test_str_prints_a_marked_handle_key_as_given_and_masks_an_unmarked_one(self) -> None:
-        handle = "chs-vault-main"
-        unmarked = Options(group={"chs_vault_token": handle})
-        marked = Options(group={"chs_vault_token": handle})
-        marked.validated_credential_handles = frozenset({("chs_vault_token", handle)})
-
-        assert handle not in str(unmarked)
-        assert handle in str(marked)
-
     @pytest.mark.parametrize(
         ("key", "where"),
-        [("data_access_handle", "context"), ("connection_handle", "group"), ("connection_handle", "context")],
+        [
+            ("chs_vault_token", "group"),
+            ("data_access_handle", "context"),
+            ("connection_handle", "group"),
+            ("connection_handle", "context"),
+        ],
     )
-    def test_str_masks_a_handle_option_unless_recorded(self, key: str, where: str) -> None:
-        value = "zq_pasted_secret_9x"
+    def test_str_prints_a_marked_handle_key_as_given_and_masks_an_unmarked_one(self, key: str, where: str) -> None:
+        handle = "zq_pasted_secret_9x"
 
         def build() -> Options:
-            return Options(group={key: value}) if where == "group" else Options(context={key: value})
+            return Options(group={key: handle}) if where == "group" else Options(context={key: handle})
 
-        recorded = build()
-        recorded.validated_credential_handles = frozenset({(key, value)})
+        marked = build()
+        marked.validated_credential_handles = frozenset({(key, handle)})
 
-        assert value not in str(build())
+        assert handle not in str(build())
         assert "***" in str(build())
-        assert value in str(recorded)
+        assert handle in str(marked)
 
     @pytest.mark.parametrize("key", ["chs_vault_token", "hmac_key_handle"])
     @pytest.mark.parametrize("scenario", ["hand_set", "rebuild"])

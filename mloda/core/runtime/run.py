@@ -84,6 +84,22 @@ def _describe_step(step: Any) -> str:
     return f"{type(step).__name__} {getattr(step, 'uuid', None)}"
 
 
+def raise_on_missing_flight_server(
+    execution_plan: Any, register_modes: set[ParallelizationMode], flight_server: Any | None
+) -> None:
+    """Refuse a run that sends a step to a worker process without a flight server."""
+    if flight_server is not None:
+        return
+    for step in execution_plan:
+        if ParallelizationMode.MULTIPROCESSING in register_modes & step.get_parallelization_mode():
+            raise ValueError(
+                f"ParallelizationMode.MULTIPROCESSING sends {_describe_step(step)} to a worker process, "
+                "which needs a flight server, but no flight_server was given. "
+                "Resolution: pass flight_server=ParallelRunnerFlightServer() to the run call, "
+                "or run without ParallelizationMode.MULTIPROCESSING."
+            )
+
+
 def planned_worker_count(execution_plan: Any, register_modes: set[ParallelizationMode]) -> int:
     """Under-counting only cold-spawns later workers; over-counting leaves an idle standby that join reaps."""
     count = 0
@@ -643,6 +659,7 @@ class ExecutionOrchestrator:
             raise_on_unpicklable_step_credentials(self.execution_planner, self.data_access_collection)
             raise_on_unpicklable_child_bootstrap(run_context.child_bootstrap)
             raise_on_unpicklable_extender(function_extender)
+            raise_on_missing_flight_server(self.execution_planner, parallelization_modes, self.flight_server)
             # Snapshot right after the preflight, once, in this process: workers get this exact
             # (extenders, hook table) bytes payload, never a fetch through the register/proxy.
             self.worker_extender_payload = (

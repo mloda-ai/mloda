@@ -578,6 +578,23 @@ class TestConcurrentRunsOnOneSession:
 
         self._assert_unchanged(session, snapshot)
 
+    @pytest.mark.timeout(30)
+    @pytest.mark.parametrize("call_site", ["run", "stream_run", "run_all"])
+    def test_multiprocessing_without_flight_server_is_refused_naming_it(self, call_site: str) -> None:
+        modes = {ParallelizationMode.MULTIPROCESSING}
+        with pytest.raises(ValueError, match="flight_server"):
+            if call_site == "run_all":
+                mloda.run_all(
+                    [Feature(name="PrepareRunJoinedFeature")],
+                    compute_frameworks=[PandasDataFrame, PythonDictFramework],
+                    api_data=self._data(0),
+                    plugin_collector=_joined_enabled,
+                    parallelization_modes=modes,
+                )
+            else:
+                session = self._prepare("transform_join", modes)
+                list(getattr(session, call_site)(api_data=self._data(1), parallelization_modes=modes))
+
 
 class _StartCountingExtender(Extender):
     """Counts on_run_start calls and keeps the RunContexts it sees."""

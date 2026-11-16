@@ -848,6 +848,37 @@ class TestEnterPrestartsStandbyWorkers:
 
         worker_manager.prestart_workers.assert_not_called()
 
+    def test_multiprocessing_without_flight_server_is_refused_before_prestart(self) -> None:
+        worker_manager = Mock()
+        orchestrator = ExecutionOrchestrator(_chain_plan())
+        orchestrator.worker_manager = worker_manager
+        orchestrator.flight_server = None
+
+        with patch("mloda.core.runtime.run.shared_manager") as shared:
+            with pytest.raises(ValueError, match="flight_server") as raised:
+                orchestrator.__enter__({ParallelizationMode.MULTIPROCESSING})
+
+        assert "ParallelizationMode.MULTIPROCESSING" in str(raised.value)
+        assert "worker process" in str(raised.value)
+        worker_manager.prestart_workers.assert_not_called()
+        shared.assert_not_called()
+        assert orchestrator.manager is None
+
+    def test_sync_only_steps_in_a_multiprocessing_run_are_not_refused(self) -> None:
+        step = _single_step_mock()
+        step.connection_handle = None
+        step.get_parallelization_mode.return_value = {ParallelizationMode.SYNC}
+        orchestrator = ExecutionOrchestrator(ReiterablePlan(step))  # type: ignore[arg-type]
+        orchestrator.worker_manager = Mock()
+        orchestrator.flight_server = None
+
+        with (
+            patch("mloda.core.runtime.run.shared_manager"),
+            patch("mloda.core.runtime.run.planned_worker_count", return_value=0),
+        ):
+            orchestrator.__enter__({ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING})
+            orchestrator.__exit__(None, None, None)
+
     def test_exit_stops_unbound_standbys_before_releasing_the_register_and_keeps_the_manager_running(self) -> None:
         worker_manager = Mock()
         orchestrator = self._entering(worker_manager)

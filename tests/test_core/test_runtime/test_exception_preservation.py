@@ -813,9 +813,9 @@ def test_early_stream_close_finalizes_inside_the_redaction_scope(monkeypatch: py
     seen: list[frozenset[str]] = []
     original = ExecutionOrchestrator._finalize
 
-    def spy(self: Any, cancelled: bool = False) -> None:
+    def spy(self: Any, cancelled: bool = False, unwinding: bool = False) -> None:
         seen.append(current_registered_secrets())
-        original(self, cancelled)
+        original(self, cancelled, unwinding)
 
     monkeypatch.setattr(ExecutionOrchestrator, "_finalize", spy)
     session = mloda.prepare([Feature(name=_TOKEN_COLUMN)], **toy_token_request(ToySourceFG, _TOKEN_COLUMN))

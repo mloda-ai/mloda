@@ -24,6 +24,8 @@ import subprocess  # nosec B404
 import sys
 import threading
 import time
+from multiprocessing.connection import Connection
+from multiprocessing.managers import BaseProxy
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -40,7 +42,9 @@ from mloda.core.abstract_plugins.function_extender import (
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.steward import FeatureResolutionError
+from mloda.core.abstract_plugins.components.run_outcome import RunOutcome
 from mloda.core.runtime.run import ExecutionOrchestrator
+from mloda.core.runtime.run import logger as run_logger
 from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -710,6 +714,91 @@ def _execution_failure(
     return scenario
 
 
+def _drop_this_thread_manager_connections() -> None:
+    for tls, _ in list(BaseProxy._address_to_local.values()):
+        connection = tls.__dict__.pop("connection", None)
+        if connection is not None:
+            connection.close()
+
+
+def _interrupted_mid_proxy_reply(
+    call_site: str,
+    after_header: bool,
+    error: type[BaseException] = KeyboardInterrupt,
+    arm_on: str = "_check_for_error",
+) -> Any:
+    def scenario(
+        ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch, flight_server: Any = None
+    ) -> list[Any]:
+        if sys.platform == "win32":
+            pytest.skip("Connection._recv is POSIX only")
+        mode = ParallelizationMode.MULTIPROCESSING
+        main = threading.main_thread()
+        state = {"armed": False, "in_call": False}
+        original_callmethod = BaseProxy._callmethod
+        original_recv: Any = getattr(Connection, "_recv")
+        original_arm = getattr(ExecutionOrchestrator, arm_on)
+        released: list[str] = []
+        original_warning = run_logger.warning
+
+        def callmethod(self: Any, *args: Any, **kwargs: Any) -> Any:
+            if threading.current_thread() is not main:
+                return original_callmethod(self, *args, **kwargs)
+            state["in_call"] = True
+            try:
+                return original_callmethod(self, *args, **kwargs)
+            finally:
+                state["in_call"] = False
+
+        def recv(self: Any, size: int, *args: Any, **kwargs: Any) -> Any:
+            if state["armed"] and state["in_call"] and size == 4 and threading.current_thread() is main:
+                state["armed"] = False
+                if after_header:
+                    original_recv(self, size, *args, **kwargs)
+                raise error("interrupted mid proxy reply")
+            return original_recv(self, size, *args, **kwargs)
+
+        def arm(self: Any, *args: Any, **kwargs: Any) -> Any:
+            state["armed"] = True
+            mp.setattr(ExecutionOrchestrator, arm_on, original_arm)
+            return original_arm(self, *args, **kwargs)
+
+        def warning(msg: Any, *args: Any, **kwargs: Any) -> Any:
+            released.append(str(msg))
+            return original_warning(msg, *args, **kwargs)
+
+        mp.setattr(BaseProxy, "_callmethod", callmethod)
+        mp.setattr(Connection, "_recv", recv)
+        mp.setattr(ExecutionOrchestrator, arm_on, arm)
+        mp.setattr(run_logger, "warning", warning)
+        session = _matrix_session(ext, mode=mode)
+        status = "failed" if issubclass(error, Exception) else "cancelled"
+        error_type = f"{error.__module__}.{error.__qualname__}"
+        try:
+            with pytest.raises(error) as raised:
+                if call_site == "stream_run":
+                    stream = session.stream_run(parallelization_modes={mode}, flight_server=flight_server)
+                    list(stream)
+                else:
+                    list(session.run(parallelization_modes={mode}, flight_server=flight_server))
+            _assert_single_run_id_note(raised.value, ext)
+            if call_site == "stream_run" and arm_on == "_check_for_error":
+                assert isinstance(stream._run_outcome(), RunOutcome)
+            assert not [m for m in released if m.startswith("Failed to release the cfw register")]
+            state["armed"] = False
+            assert list(session.stream_run(parallelization_modes={mode}, flight_server=flight_server))
+        finally:
+            state["armed"] = False
+            _drop_this_thread_manager_connections()
+        return [
+            *_OK_PLAN,
+            *_ok_run(status, calculated=False, error=error_type),
+            *_ok_run("succeeded", calculated=False),
+        ]
+
+    return scenario
+
+
 def _planning_interrupted_prepare(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
     def interrupted(self: Any, *args: Any, **kwargs: Any) -> None:
         raise KeyboardInterrupt()
@@ -876,6 +965,16 @@ _MATRIX: dict[str, Any] = {
     ),
     "interrupted_stream_run_system_exit_multiprocessing": _execution_failure(
         "stream_run", SystemExit, ParallelizationMode.MULTIPROCESSING
+    ),
+    "interrupted_mid_proxy_reply_run_multiprocessing": _interrupted_mid_proxy_reply("run", True),
+    "interrupted_mid_proxy_reply_run_system_exit_multiprocessing": _interrupted_mid_proxy_reply(
+        "run", True, SystemExit
+    ),
+    "interrupted_mid_proxy_reply_stream_run_multiprocessing": _interrupted_mid_proxy_reply("stream_run", True),
+    "interrupted_before_proxy_reply_stream_run_multiprocessing": _interrupted_mid_proxy_reply("stream_run", False),
+    "timeout_error_mid_proxy_reply_run_multiprocessing": _interrupted_mid_proxy_reply("run", True, TimeoutError),
+    "interrupted_mid_proxy_reply_in_init_run_multiprocessing": _interrupted_mid_proxy_reply(
+        "run", True, KeyboardInterrupt, arm_on="_init_run"
     ),
     "planning_interrupted_prepare": _planning_interrupted_prepare,
     "finalizing_failure_batch": _finalizing_failure_batch,

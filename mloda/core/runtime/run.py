@@ -22,7 +22,7 @@ from mloda.core.runtime.worker.multiprocessing_worker import standby_worker
 from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
 from mloda.core.abstract_plugins.components.feature_set import ArtifactBinding
-from mloda.core.core.cfw_manager import CfwManager, release_shared_manager, shared_manager
+from mloda.core.core.cfw_manager import CfwManager, drop_proxy_connection, release_shared_manager, shared_manager
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.runtime.flight.flight_server import FlightServer
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
@@ -315,15 +315,26 @@ class ExecutionOrchestrator:
             "A step producing a required token is missing from the plan, e.g. a dropped join step.",
         )
 
-    def _finalize(self, cancelled: bool = False) -> None:
+    def _finalize(self, cancelled: bool = False, unwinding: bool = False) -> None:
         in_other_process = self._in_other_process()
         try:
             if not in_other_process:
-                self.outcome = self.cfw_register.get_run_outcome()
+                if unwinding:
+                    self._read_outcome_while_unwinding()
+                else:
+                    self.outcome = self.cfw_register.get_run_outcome()
         finally:
             self.join(abandon_threads=cancelled)
         if not in_other_process:
             self._drop_all_uploaded_flight_tables()
+
+    def _read_outcome_while_unwinding(self) -> None:
+        # The propagating error must win over a dead manager or a desynced connection.
+        try:
+            drop_proxy_connection(self.cfw_register)
+            self.outcome = self.cfw_register.get_run_outcome()
+        except Exception as e:
+            logger.warning("Failed to read the run outcome during an unwinding finalize: %s", contained_raise_reason(e))
 
     def _in_other_process(self) -> bool:
         """True in a forked child: the run's flight tables and register belong to the parent."""
@@ -393,6 +404,7 @@ class ExecutionOrchestrator:
         """
         finished_ids, to_finish_ids, currently_running_steps = self._init_run()
         cancelled = False
+        unwinding = False
         try:
             while to_finish_ids != finished_ids or len(finished_ids) == 0:
                 if self._check_for_error():
@@ -414,9 +426,10 @@ class ExecutionOrchestrator:
             self._drop_data_for_finished_cfws(finished_ids)
         except BaseException as error:
             cancelled = not isinstance(error, Exception)
+            unwinding = True
             raise
         finally:
-            self._finalize(cancelled)
+            self._finalize(cancelled, unwinding)
 
     def compute_stream(self) -> Generator[tuple[UUID, Any], None, None]:
         """Generator variant of ``compute()`` that yields results as they complete.
@@ -428,6 +441,7 @@ class ExecutionOrchestrator:
         """
         finished_ids, to_finish_ids, currently_running_steps = self._init_run()
         cancelled = False
+        unwinding = False
         try:
             while to_finish_ids != finished_ids or len(finished_ids) == 0:
                 if self._check_for_error():
@@ -449,9 +463,10 @@ class ExecutionOrchestrator:
             self._drop_data_for_finished_cfws(finished_ids)
         except BaseException as error:
             cancelled = not isinstance(error, Exception)
+            unwinding = True
             raise
         finally:
-            self._finalize(cancelled)
+            self._finalize(cancelled, unwinding)
 
     def _process_step_result(self, step: Any) -> Any | bool:
         """
@@ -683,7 +698,10 @@ class ExecutionOrchestrator:
             self.worker_manager.terminate_alive_processes()
             if self.manager is not None and hasattr(self, "cfw_register") and not self._in_other_process():
                 try:
-                    self.cfw_register.release()
+                    try:
+                        drop_proxy_connection(self.cfw_register)
+                    finally:
+                        self.cfw_register.release()
                 except Exception as e:
                     logger.warning("Failed to release the cfw register during exit: %s", contained_raise_reason(e))
         finally:

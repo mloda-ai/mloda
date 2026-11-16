@@ -779,9 +779,10 @@ class TestEnterPrestartsStandbyWorkers:
         return orchestrator
 
     @staticmethod
-    def _entering(worker_manager: Mock | WorkerManager) -> ExecutionOrchestrator:
-        plan = ExecutionPlan()
-        plan.execution_plan = []
+    def _entering(worker_manager: Mock | WorkerManager, plan: Any = None) -> ExecutionOrchestrator:
+        if plan is None:
+            plan = ExecutionPlan()
+            plan.execution_plan = []
         orchestrator = ExecutionOrchestrator(plan)
         orchestrator.worker_manager = worker_manager
         orchestrator.flight_server = None
@@ -850,9 +851,7 @@ class TestEnterPrestartsStandbyWorkers:
 
     def test_multiprocessing_without_flight_server_is_refused_before_prestart(self) -> None:
         worker_manager = Mock()
-        orchestrator = ExecutionOrchestrator(_chain_plan())
-        orchestrator.worker_manager = worker_manager
-        orchestrator.flight_server = None
+        orchestrator = self._entering(worker_manager, plan=_chain_plan())
 
         with patch("mloda.core.runtime.run.shared_manager") as shared:
             with pytest.raises(ValueError, match="flight_server") as raised:
@@ -868,9 +867,7 @@ class TestEnterPrestartsStandbyWorkers:
         step = _single_step_mock()
         step.connection_handle = None
         step.get_parallelization_mode.return_value = {ParallelizationMode.SYNC}
-        orchestrator = ExecutionOrchestrator(ReiterablePlan(step))  # type: ignore[arg-type]
-        orchestrator.worker_manager = Mock()
-        orchestrator.flight_server = None
+        orchestrator = self._entering(Mock(), plan=ReiterablePlan(step))
 
         with (
             patch("mloda.core.runtime.run.shared_manager"),

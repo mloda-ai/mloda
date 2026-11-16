@@ -87,7 +87,7 @@ def _describe_step(step: Any) -> str:
 def raise_on_missing_flight_server(
     execution_plan: Any, register_modes: set[ParallelizationMode], flight_server: Any | None
 ) -> None:
-    """Refuse a run that sends a step to a worker process without a flight server."""
+    """Refuse a worker-bound step when no flight server is given."""
     if flight_server is not None:
         return
     for step in execution_plan:

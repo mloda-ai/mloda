@@ -221,7 +221,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
     pointed_source: ClassVar[str | None] = None
 
     def undeclared_names(self) -> list[str]:
-        """Names a pointed declared-route group must decline, naming each in its rejection."""
+        """Names a pointed declared-route group must decline, naming each in its rejection; override when the group declares the default."""
         return ["mixin_arbitrary_undeclared_name"]
 
     def run_all_kwargs(self) -> dict[str, Any]:

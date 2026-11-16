@@ -24,7 +24,7 @@ class SourceApplicability:
     searched_route: bool
     query_route: bool
     checked_route: bool
-    declared_names_only: bool
+    declared_names_only: bool = False
 
 
 def source_applicability(group: type[SourceFeatureGroup], has_pointer: bool) -> SourceApplicability:

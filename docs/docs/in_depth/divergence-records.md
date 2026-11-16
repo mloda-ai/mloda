@@ -10,7 +10,7 @@ A divergence record says where a feature group or one of its Implementations dif
 | `framework` | The compute framework an Implementation record applies on, stamped by mloda; `None` for a group record. |
 | `kind` | `value`, `type`, `variant` (follows a named rule variant) or `gap` (a known shortfall that is shown but never ranks). |
 | `cause` | `not_implemented`, `backend`, `environment` or `other`. |
-| `reason` | One printable line; a reasonless `not_implemented` record reads `not implemented`. |
+| `reason` | One printable line; `describe()` returns `not implemented` for a reasonless `not_implemented` record, while the surfaces carry an empty reason. |
 | `subtypes` / `outputs` | The subtypes or output parts it covers; both empty means the whole plugin. |
 | `variant` | The rule variant name, on `variant` records only. |
 | `docs` | Further explanation, required for cause `other`. |
@@ -38,6 +38,8 @@ A group lists the rule variants its contract allows in `VARIANTS`. An Implementa
   - MyOperationFG (rule variant): MyOperationPandas on PandasDataFrame follows variant 'skip_nan', which this feature does not allow; to allow it add {"allow_variants": ("skip_nan",)} to the feature's options
 ```
 
-When the group does not list the variant, the line ends `which MyOperationFG.VARIANTS does not list, so it cannot be allowed` and offers no option. The stage is the `rule variant` row of [the eliminated candidates block](troubleshooting/feature-group-resolution-errors.md#the-eliminated-candidates-block); `Elimination.variants` and `Elimination.allow_variants` carry the names ([Feature Group Matching](feature-group-matching.md)). A pin on a chained step that a variant blocks raises an `ImplementationPinError`. The service reports a `variant_not_allowed` detail with a `fix` of `{"allow_variants": [...]}` when the caller may set the option ([Tools](mcp-server.md#tools)).
+When the group does not list the variant, the line ends `which MyOperationFG.VARIANTS does not list, so it cannot be allowed` and offers no option. The stage is the `rule variant` row of [the eliminated candidates block](troubleshooting/feature-group-resolution-errors.md#the-eliminated-candidates-block); `Elimination.variants` and `Elimination.allow_variants` carry the names ([Feature Group Matching](feature-group-matching.md)). What gets blocked, and when a pin raises, is in [Operation Groups](compute-framework-integration.md#operation-groups-one-group-one-implementation-per-framework). The service reports a `variant_not_allowed` detail with a `fix` of `{"allow_variants": [...]}` only when the group lists every blocking variant and the caller may set the option ([Tools](mcp-server.md#tools)).
+
+## Upgrading
 
 A plugin release that marks a backend behavior as a rule variant can turn a run that worked into this error; add `allow_variants` or use a framework without the variant.

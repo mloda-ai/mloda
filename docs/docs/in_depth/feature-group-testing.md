@@ -18,6 +18,7 @@ from mloda.testing.framework_adapter import PandasAdapter
 from mloda.testing.typed_data import TypedTestData
 from mloda.user import DataType
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation  # noqa: F401
 
 
 def test_aggregation_shape() -> None:
@@ -29,10 +30,12 @@ def test_aggregation_shape() -> None:
     )
 ```
 
-- **`requests=`** probes and runs these names instead of the class name and declared names; a name-path group needs it. Pass a list, not a string, and check names that bind different option keys in separate calls.
+An operation group's serving Implementation must be imported (or plugins loaded) before the check runs it.
+
+- **`requests=`** probes and runs these names instead of the class name and declared names; a name-path group needs it. Pass a sequence of names, not a string, and check names that bind different option keys in separate calls.
 - **Configuration path**: with `in_features` in `base_options`, a mixin group matches any name and a missing required key records no rejection, so `foreign:` and `required:` failures are expected there. Pass `requests=` with the real names instead.
-- **`secrets:`** is described in [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle).
-- **Type notes**: a `type` or `gap` [divergence record](divergence-records.md) of the group or its serving Implementation turns a type or zero-rows failure into a `type:` note naming the record. A `type` record on the serving Implementation whose columns all match exactly on a typed framework fails as stale; on the group it is a note.
+- **`secrets:`** is described in [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle); `check_feature_group_secrets` runs that sub-check alone.
+- **Type notes**: a `type` or `gap` [divergence record](divergence-records.md) of the group or its serving Implementation turns a type failure, or a column that changes type on zero rows, into a `type:` note naming the record. A `type` record on the serving Implementation whose columns all match exactly on a typed framework fails as stale; on the group it is a note.
 
 ### Other checks
 

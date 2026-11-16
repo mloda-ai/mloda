@@ -485,6 +485,8 @@ class TestMyFrameworkEmptyResult(EmptyResultRunAllSuite):
     adapter_class = MyFrameworkAdapter
 ```
 
+On a framework with typed columns, `column_type` must return the native type object and `lost_type` whether the column lost its declared type.
+
 `SparkAdapter` borrows the caller's active SparkSession and never starts or stops one. Create the session in a fixture and make the host's `adapter` fixture depend on it:
 
 ```py
@@ -492,7 +494,10 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-from pyspark.sql import SparkSession
+
+pytest.importorskip("pyspark")
+
+from pyspark.sql import SparkSession  # noqa: E402
 
 from mloda.testing.compute_framework.run_all_suite import EmptyResultRunAllSuite
 from mloda.testing.framework_adapter import FrameworkAdapter, SparkAdapter

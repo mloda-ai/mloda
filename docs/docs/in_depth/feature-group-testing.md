@@ -1,8 +1,45 @@
 # Feature Group Testing
 
-This guide outlines key aspects to test in feature groups and provides brief examples.
+Start with the conformance kit, which checks the contract every feature group shares, then add unit tests for what only your group does.
 
-## What to Test
+## The conformance kit
+
+The kit is `mloda.testing`, from the `mloda-testing` package. It needs pytest; adapters that build frames through Arrow need the `mloda-testing[pyarrow]` extra. Each `check_*` function returns a `CheckResult` (`failures`, `notes`, `passed`); its `assert_*` twin fails the running test instead.
+
+### Shape check
+
+`check_feature_group_shape(cls, base_options=None, *, input_data=None, adapter=None, require_run=False, requests=None)` from `mloda.testing.feature_group_shape` probes the match contract: the class name and declared names match, a foreign name and an undeclared option do not, declared inputs are a set of `Feature`, dropping a required option records a `required_option_absent` rejection naming it, a strict option rejects an unknown value, and `version()`, `compute_framework_rule()` and secret-shaped options are declared soundly. Given `input_data` (a `TypedTestData` from `mloda.testing.typed_data`), it also runs the names on the `adapter`'s compute framework (Python dict by default) and checks outputs, types, zero rows, error values and determinism. `assert_feature_group_shape` defaults to `require_run=True`, so a run that cannot happen fails instead of leaving a note.
+
+Each failure starts with its sub-check: `names:`, `foreign:`, `inputs:`, `required:`, `strict:`, `secrets:`, `declaration:`, `run:`, `outputs:`, `type:`, `zero_rows:`, `error_values:`, `determinism:`.
+
+```py
+from mloda.testing.feature_group_shape import assert_feature_group_shape
+from mloda.testing.framework_adapter import PandasAdapter
+from mloda.testing.typed_data import TypedTestData
+from mloda.user import DataType
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+
+
+def test_aggregation_shape() -> None:
+    assert_feature_group_shape(
+        AggregatedFeatureGroup,
+        requests=["x__sum_aggr", "x__count_aggr", "x__median_aggr"],
+        input_data=TypedTestData({"x": (DataType.DOUBLE, [1.0, 2.0, 3.0, 4.0])}),
+        adapter=PandasAdapter(),
+    )
+```
+
+- **`requests=`** probes and runs these names instead of the class name and declared names; a name-path group needs it. Pass a list, not a string, and check names that bind different option keys in separate calls.
+- **Configuration path**: with `in_features` in `base_options`, a mixin group matches any name and a missing required key records no rejection, so `foreign:` and `required:` failures are expected there. Pass `requests=` with the real names instead.
+- **`secrets:`** is described in [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle).
+- **Type notes**: a `type` or `gap` [divergence record](divergence-records.md) of the group or its serving Implementation turns a type or zero-rows failure into a `type:` note naming the record. A `type` record on the serving Implementation whose columns all match exactly on a typed framework fails as stale; on the group it is a note.
+
+### Other checks
+
+- Subclass scope (`mloda.testing.subclass_scope`), operation group shape (`mloda.testing.operation_group_shape`) and the source group suites (`mloda.testing.source`): see [A loaded subclass replaces its parent](troubleshooting/feature-group-resolution-errors.md#a-loaded-subclass-replaces-its-parent).
+- ComputeFramework suites and framework adapters: see [Testing](compute-framework-integration.md#testing).
+
+## Unit tests next to the kit
 
 ### 1. Feature Name Pattern Matching
 
@@ -45,6 +82,7 @@ Test that your feature group correctly transforms input data into output feature
 import pandas as pd
 from mloda.user import Feature
 from mloda.provider import FeatureSet
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 
 # Test calculation with sample data
@@ -62,6 +100,8 @@ Test that your feature group correctly parses features from configuration option
 **Example:**
 ```python
 from mloda.provider import collect_match_rejections
+from mloda.user import Options
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
 # Test that the options a request carries are enough for the feature group to match
 options = Options(context={
@@ -154,11 +194,3 @@ This pattern is useful when:
 - Testing derived features without running expensive upstream computations
 - Providing controlled test data for reproducible tests
 - Isolating the feature under test from its dependencies
-
-## Test Organization
-
-Organize tests into three categories:
-
-1. **Base Class Tests**: Test feature name parsing, input feature extraction, and configuration
-2. **Framework Implementation Tests**: Test calculation logic for specific compute frameworks
-3. **Integration Tests**: Test with the mloda API and other components

@@ -435,10 +435,81 @@ rolling = relation.window(
 
 ## Testing
 
-Use `assert_compute_framework_shape` (or `check_compute_framework_shape`) from `mloda._testing.compute_framework_shape` to verify a framework. The constructor must work with no arguments and accept a `uuid=` keyword, keeping it as `.uuid`. Accessors are skipped when `is_available()` is False, `applicable_aspects` lists which of filter, mask and merge it serves, and dtype is not covered.
+Use `assert_compute_framework_shape` (or `check_compute_framework_shape`) from `mloda.testing.compute_framework_shape` to verify a framework. The constructor must work with no arguments and accept a `uuid=` keyword, keeping it as `.uuid`. Accessors are skipped when `is_available()` is False, `applicable_aspects` lists which of filter, mask and merge it serves, and dtype is not covered.
 
 ### Pipeline result policies
 
-A pipeline result policy is a rule or FeatureGroup-level flag that changes how the pipeline treats a result. It ships a suite on `RunAllSuite` from `mloda._testing.compute_framework.run_all_suite`, covering every built-in framework in SYNC plus THREADING; a framework without THREADING declares `sync_only_reason` on its adapter. Each case is a `PolicySuccess` or a `PolicyRaises`. `EmptyResultRunAllSuite` is the worked example, and a host only sets `adapter_class`.
+A pipeline result policy is a rule or FeatureGroup-level flag that changes how the pipeline treats a result. It ships a suite on `RunAllSuite` from `mloda.testing.compute_framework.run_all_suite`, covering every built-in framework in SYNC plus THREADING; a framework without THREADING declares `sync_only_reason` on its adapter. Each case is a `PolicySuccess` or a `PolicyRaises`. `EmptyResultRunAllSuite` is the worked example, and a host only sets `adapter_class`.
 
 Drive the policy through `run_all` rather than testing one enforcement surface: the retired `allow_empty_result()` flag had three, and the one in `DataLifecycleManager.get_result_data` shipped broken while unit tests of the other two passed, and only the full `run_all` on every framework and mode caught it. A framework adapter's `rows` / `row_count` must read the frame its framework's `run_all` returns.
+
+### Writing a FrameworkAdapter
+
+The suites build and read frames through a `FrameworkAdapter` from `mloda.testing.framework_adapter`; the kit ships one per built-in framework. For your own framework, subclass it and implement `compute_framework`, `from_arrow`, `column_names`, `row_count`, `column_values`, `column_type` and `lost_type`. Set `capabilities` to an `AdapterCapabilities` (`typed_columns=False` when the framework keeps no native type per column, `sql_relation=True` to run the SQL relation suites), and `sync_only_reason` when the framework serves no THREADING; a missing reason fails the run-all suites, and a reason on a framework that serves THREADING is reported stale. A host subclasses a suite and sets `adapter_class`.
+
+```py
+from typing import Any
+
+from mloda.testing.compute_framework.run_all_suite import EmptyResultRunAllSuite
+from mloda.testing.framework_adapter import AdapterCapabilities, FrameworkAdapter
+from my_package.framework import MyFramework
+
+
+class MyFrameworkAdapter(FrameworkAdapter):
+    capabilities = AdapterCapabilities(typed_columns=False)
+    sync_only_reason = "The client is not thread-safe."
+
+    def compute_framework(self) -> type[MyFramework]:
+        return MyFramework
+
+    def from_arrow(self, table: Any) -> Any:
+        return MyFramework.from_arrow(table)
+
+    def column_names(self, result: Any) -> list[str]:
+        return list(result.columns)
+
+    def row_count(self, result: Any) -> int:
+        return len(result)
+
+    def column_values(self, result: Any, column: str) -> list[Any]:
+        return list(result[column])
+
+    def column_type(self, result: Any, column: str) -> Any:
+        return None
+
+    def lost_type(self, result: Any, column: str) -> bool:
+        return False
+
+
+class TestMyFrameworkEmptyResult(EmptyResultRunAllSuite):
+    adapter_class = MyFrameworkAdapter
+```
+
+`SparkAdapter` borrows the caller's active SparkSession and never starts or stops one. Create the session in a fixture and make the host's `adapter` fixture depend on it:
+
+```py
+from collections.abc import Iterator
+from typing import Any
+
+import pytest
+from pyspark.sql import SparkSession
+
+from mloda.testing.compute_framework.run_all_suite import EmptyResultRunAllSuite
+from mloda.testing.framework_adapter import FrameworkAdapter, SparkAdapter
+
+
+@pytest.fixture(scope="session")
+def spark_session() -> Iterator[Any]:
+    spark = SparkSession.builder.master("local[1]").getOrCreate()
+    yield spark
+    spark.stop()
+
+
+class TestSparkEmptyResult(EmptyResultRunAllSuite):
+    adapter_class = SparkAdapter
+
+    @pytest.fixture
+    def adapter(self, spark_session: Any) -> Iterator[FrameworkAdapter]:
+        with self.adapter_class() as adapter:
+            yield adapter
+```

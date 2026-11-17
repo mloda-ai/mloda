@@ -630,6 +630,23 @@ class ExecutionOrchestrator:
         """True if any uuid of the step is running, the same rule _can_run_step refuses on."""
         return not step_uuids.isdisjoint(currently_running_steps)
 
+    def preflight_multiprocessing(
+        self,
+        parallelization_modes: set[ParallelizationMode],
+        function_extender: set[Extender] | None,
+        run_context: RunContext,
+    ) -> None:
+        """Raises the MULTIPROCESSING refusals before any worker, manager or payload is created."""
+        if ParallelizationMode.MULTIPROCESSING not in parallelization_modes:
+            return
+        raise_on_multiprocessing_connection_conflict(self.execution_planner)
+        raise_on_unpicklable_join_link(self.execution_planner)
+        raise_on_unpicklable_step_feature_group(self.execution_planner)
+        raise_on_unpicklable_step_credentials(self.execution_planner, self.data_access_collection)
+        raise_on_unpicklable_child_bootstrap(run_context.child_bootstrap)
+        raise_on_unpicklable_extender(function_extender)
+        raise_on_missing_flight_server(self.execution_planner, parallelization_modes, self.flight_server)
+
     def __enter__(
         self,
         parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
@@ -654,13 +671,7 @@ class ExecutionOrchestrator:
             self.manager = None
             self.worker_extender_payload = None
         else:
-            raise_on_multiprocessing_connection_conflict(self.execution_planner)
-            raise_on_unpicklable_join_link(self.execution_planner)
-            raise_on_unpicklable_step_feature_group(self.execution_planner)
-            raise_on_unpicklable_step_credentials(self.execution_planner, self.data_access_collection)
-            raise_on_unpicklable_child_bootstrap(run_context.child_bootstrap)
-            raise_on_unpicklable_extender(function_extender)
-            raise_on_missing_flight_server(self.execution_planner, parallelization_modes, self.flight_server)
+            self.preflight_multiprocessing(parallelization_modes, function_extender, run_context)
             # Snapshot right after the preflight, once, in this process: workers get this exact
             # (extenders, hook table) bytes payload, never a fetch through the register/proxy.
             self.worker_extender_payload = (

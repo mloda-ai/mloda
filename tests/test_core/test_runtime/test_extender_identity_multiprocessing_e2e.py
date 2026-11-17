@@ -671,7 +671,7 @@ def _setup_failure(call_site: str) -> Any:
             **_matrix_kwargs({ext, _UnpicklableExtender()}),
         )
         with pytest.raises(ValueError, match="cannot be pickled"):
-            list(getattr(session, call_site)(parallelization_modes={mode}))
+            getattr(session, call_site)(parallelization_modes={mode})
         return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="builtins.ValueError")]
 
     return scenario

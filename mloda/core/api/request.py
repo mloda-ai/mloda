@@ -1131,7 +1131,7 @@ class mlodaAPI:
         active verified_context() scope are read here, at call time, not at first iteration: a function whose
         body itself contains ``yield`` only starts executing on first iteration, which would defer that read
         past the caller's intended scope. ``parallelization_modes``, ``flight_server``, ``credentials`` and
-        ``parameters`` are as in ``run()``; credentials and parameters are refused at the call.
+        ``parameters`` are as in ``run()``; credentials, parameters and MULTIPROCESSING preflight refusals are refused at the call.
         """
         modes = self._run_modes(parallelization_modes)
         with run_boundary():
@@ -1229,6 +1229,7 @@ class mlodaAPI:
             with self._credential_redaction(literals, identity):
                 self._start_run(run_context)
                 runner = self._setup_engine_runner(parallelization_modes, flight_server, run_dac)
+                runner.preflight_multiprocessing(parallelization_modes, self._prepared_extenders(), run_context)
             yield None
             try:
                 with self._credential_redaction(literals, identity):
@@ -1332,6 +1333,12 @@ class mlodaAPI:
         finally:
             self._exit_runner_context(runner)
 
+    def _prepared_extenders(self) -> set[Extender] | None:
+        """The engine's prepare-time extender set, or None when empty."""
+        if self.engine is None:
+            raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
+        return self.engine.function_extender or None
+
     def _enter_runner_context(
         self,
         runner: ExecutionOrchestrator,
@@ -1342,9 +1349,7 @@ class mlodaAPI:
         run_parameters: Mapping[str, Any] | None = None,
     ) -> None:
         """Passes the runner the engine's prepare-time extender set."""
-        if self.engine is None:
-            raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
-        function_extender = self.engine.function_extender or None
+        function_extender = self._prepared_extenders()
         if run_context is None:
             run_context = self._build_run_context(None, None)
         runner.__enter__(

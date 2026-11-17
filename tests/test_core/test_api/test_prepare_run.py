@@ -24,6 +24,7 @@ from mloda.core.api.plan_lock import _lock_text, plan_structure_hash
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.runtime.run import ExecutionOrchestrator
+from mloda.core.runtime.worker_manager import WorkerManager
 from mloda.user import mloda, mlodaAPI, Feature, JoinSpec, Link, ParallelizationMode, PluginCollector
 from mloda.provider import (
     ApiDataFG,
@@ -578,12 +579,16 @@ class TestConcurrentRunsOnOneSession:
 
         self._assert_unchanged(session, snapshot)
 
-    @pytest.mark.parametrize("call_site", ["run", "stream_run", "run_all"])
+    @pytest.mark.parametrize("call_site", ["run", "stream_run", "run_all", "stream_all"])
     def test_multiprocessing_without_flight_server_is_refused_naming_it(self, call_site: str) -> None:
         modes = {ParallelizationMode.MULTIPROCESSING}
-        with pytest.raises(ValueError, match="flight_server") as raised:
-            if call_site == "run_all":
-                mloda.run_all(
+        with (
+            patch("mloda.core.runtime.run.shared_manager") as shared,
+            patch.object(WorkerManager, "prestart_workers") as prestart,
+            pytest.raises(ValueError, match="flight_server") as raised,
+        ):
+            if call_site in ("run_all", "stream_all"):
+                getattr(mloda, call_site)(
                     [Feature(name="PrepareRunJoinedFeature")],
                     compute_frameworks=[PandasDataFrame, PythonDictFramework],
                     api_data=self._data(0),
@@ -592,8 +597,10 @@ class TestConcurrentRunsOnOneSession:
                 )
             else:
                 session = self._prepare("transform_join", modes)
-                list(getattr(session, call_site)(api_data=self._data(1), parallelization_modes=modes))
+                getattr(session, call_site)(api_data=self._data(1), parallelization_modes=modes)
         assert "worker process" in str(raised.value)
+        shared.assert_not_called()
+        prestart.assert_not_called()
 
 
 class _StartCountingExtender(Extender):

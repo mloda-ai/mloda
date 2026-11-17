@@ -863,6 +863,13 @@ class TestEnterPrestartsStandbyWorkers:
         shared.assert_not_called()
         assert orchestrator.manager is None
 
+    def test_preflight_multiprocessing_alone_refuses_missing_flight_server_and_skips_sync(self) -> None:
+        orchestrator = self._entering(Mock(), plan=_chain_plan())
+
+        orchestrator.preflight_multiprocessing({ParallelizationMode.SYNC}, None, RunContext())
+        with pytest.raises(ValueError, match="flight_server"):
+            orchestrator.preflight_multiprocessing({ParallelizationMode.MULTIPROCESSING}, None, RunContext())
+
     def test_sync_only_steps_in_a_multiprocessing_run_are_not_refused(self) -> None:
         step = _single_step_mock()
         step.connection_handle = None

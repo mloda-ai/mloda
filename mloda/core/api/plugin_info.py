@@ -76,3 +76,5 @@ class ResolvedFeature:
     credential_refusal: bool = False
     # Class name of an exception that escaped the evaluation; a contained matcher raise leaves it None.
     raised: str | None = None
+    # Decline code per candidate feature group, keyed by class name; empty when no candidate declined.
+    decline_codes: dict[str, str] = field(default_factory=dict)

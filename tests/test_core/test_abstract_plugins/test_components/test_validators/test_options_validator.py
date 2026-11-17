@@ -2,6 +2,9 @@ import pytest
 from typing import Any
 
 from mloda.provider import OptionsValidator
+from tests.helpers.credential_handle_stubs import HANDLE_KEY
+
+CREDENTIAL_HANDLE_KEYS = ["data_access_handle", "connection_handle", HANDLE_KEY]
 
 
 class TestValidateNoDuplicateKeys:
@@ -130,6 +133,19 @@ class TestValidateCanAddToGroup:
         assert key in message
         assert marker not in message
 
+    @pytest.mark.parametrize("key", CREDENTIAL_HANDLE_KEYS)
+    def test_different_value_conflict_masks_handle_key_value(self, key: str) -> None:
+        """A credential handle key's conflicting value is printed as ***."""
+        with pytest.raises(ValueError, match="different value") as exc_info:
+            OptionsValidator.validate_can_add_to_group(
+                key=key, value="plain_marker_new", group={key: "plain_marker_existing"}, context={}
+            )
+
+        message = str(exc_info.value)
+        assert key in message
+        assert "***" in message
+        assert "plain_marker_existing" not in message
+
 
 class TestValidateCanAddToContext:
     """Test the validate_can_add_to_context static method."""
@@ -214,3 +230,16 @@ class TestValidateCanAddToContext:
         message = str(exc_info.value)
         assert key in message
         assert marker not in message
+
+    @pytest.mark.parametrize("key", CREDENTIAL_HANDLE_KEYS)
+    def test_different_value_conflict_masks_handle_key_value(self, key: str) -> None:
+        """A credential handle key's conflicting value is printed as ***."""
+        with pytest.raises(ValueError, match="different value") as exc_info:
+            OptionsValidator.validate_can_add_to_context(
+                key=key, value="plain_marker_new", group={}, context={key: "plain_marker_existing"}
+            )
+
+        message = str(exc_info.value)
+        assert key in message
+        assert "***" in message
+        assert "plain_marker_existing" not in message

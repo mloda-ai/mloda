@@ -24,6 +24,7 @@ class SourceApplicability:
     searched_route: bool
     query_route: bool
     checked_route: bool
+    declared_names_only: bool = False
 
 
 def source_applicability(group: type[SourceFeatureGroup], has_pointer: bool) -> SourceApplicability:
@@ -38,4 +39,5 @@ def source_applicability(group: type[SourceFeatureGroup], has_pointer: bool) -> 
         searched_route=searched,
         query_route=group.serves_query_text(),
         checked_route=any(route.names is NamePolicy.CHECKED for route in routes),
+        declared_names_only=bool(routes) and all(route.names is NamePolicy.DECLARED for route in routes),
     )

@@ -316,9 +316,19 @@ class TestConnectionHandleResolver:
         return resolve_connection_handle(_StubFramework, dac, Options(group=group))
 
     def test_option_name_constant(self) -> None:
-        from mloda.core.abstract_plugins.components.data_access_collection import CONNECTION_HANDLE_OPTION
+        from mloda.core.abstract_plugins.components import data_access_collection
+        from mloda.core.abstract_plugins.components.input_data import source_feature_group
+        from mloda.core.abstract_plugins.components.handle_option_names import (
+            CONNECTION_HANDLE_OPTION,
+            DATA_ACCESS_HANDLE_OPTION,
+            HANDLE_OPTION_NAMES,
+        )
 
         assert CONNECTION_HANDLE_OPTION == "connection_handle"
+        assert DATA_ACCESS_HANDLE_OPTION == "data_access_handle"
+        assert source_feature_group.HANDLE_OPTION == DATA_ACCESS_HANDLE_OPTION
+        assert data_access_collection.CONNECTION_HANDLE_OPTION == CONNECTION_HANDLE_OPTION
+        assert HANDLE_OPTION_NAMES == frozenset({CONNECTION_HANDLE_OPTION, DATA_ACCESS_HANDLE_OPTION})
 
     def test_connection_handle_is_explicit_and_picks_the_named_one(self) -> None:
         dac = DataAccessCollection(connections={"a": _Conn(), "b": _Conn()})

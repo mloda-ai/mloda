@@ -48,6 +48,7 @@ assert SCAN_ROOT.exists(), f"scan root not found; check the parents index for th
 CORE_SCAN_ROOT = _REPO_ROOT / "mloda" / "core" / "abstract_plugins" / "components" / "input_data"
 assert CORE_SCAN_ROOT.exists(), f"core scan root not found: {CORE_SCAN_ROOT}"
 SCAN_ROOTS = (SCAN_ROOT, CORE_SCAN_ROOT)
+CONSTANT_ROOTS = (*SCAN_ROOTS, CORE_SCAN_ROOT.parent)
 
 # Accessor calls whose result is an Options-like object: cls.get_singular_option_from_options(...).get(...),
 # get_options(...).get(...) and cls.options_with_defaults(...).get(...). Anything else (arbitrary methods
@@ -198,17 +199,35 @@ def _module_name(path: Path, base: Path) -> str:
 
 
 def _collect_module_constants(constant_roots: Sequence[Path], base: Path) -> dict[str, dict[str, str]]:
-    """Map each module's dotted name to its top-level ``NAME = "literal"`` constants."""
+    """Map each module's dotted name to its top-level ``NAME = "literal"`` and ``NAME = OTHER`` constants."""
     out: dict[str, dict[str, str]] = {}
+    names: dict[str, dict[str, str]] = {}
+    imports: dict[str, list[tuple[str, str, str]]] = {}
     for root in constant_roots:
         for path in sorted(root.rglob("*.py")):
+            module = _module_name(path, base)
             consts: dict[str, str] = {}
+            refs: dict[str, str] = {}
+            froms: list[tuple[str, str, str]] = []
             for stmt in ast.parse(path.read_text(encoding="utf-8"), filename=str(path)).body:
                 if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
                     value = stmt.value
                     if isinstance(value, ast.Constant) and isinstance(value.value, str):
                         consts[stmt.targets[0].id] = value.value
-            out[_module_name(path, base)] = consts
+                    elif isinstance(value, ast.Name):
+                        refs[stmt.targets[0].id] = value.id
+                elif isinstance(stmt, ast.ImportFrom) and stmt.level == 0 and stmt.module is not None:
+                    froms.extend((stmt.module, a.name, a.asname or a.name) for a in stmt.names)
+            out[module] = consts
+            names[module] = refs
+            imports[module] = froms
+    literals = {module: dict(consts) for module, consts in out.items()}
+    for module, refs in names.items():
+        imported = {alias: literals.get(src, {}).get(name) for src, name, alias in imports[module]}
+        for ref_name, other in refs.items():
+            resolved = literals[module].get(other) or imported.get(other)
+            if resolved is not None:
+                out[module][ref_name] = resolved
     return out
 
 
@@ -429,7 +448,7 @@ def test_no_undeclared_static_option_reads() -> None:
     violations: list[str] = []
     for root in SCAN_ROOTS:
         assert root.exists(), root
-        count = _count_reads(root, base=_REPO_ROOT, constant_roots=SCAN_ROOTS)
+        count = _count_reads(root, base=_REPO_ROOT, constant_roots=CONSTANT_ROOTS)
         assert count >= floors[root], f"scan found too few reads under {root}; the root is likely misconfigured"
         violations += find_violations(
             root,
@@ -438,7 +457,7 @@ def test_no_undeclared_static_option_reads() -> None:
             ALLOWED_LITERAL_KEYS,
             ALLOWED_DYNAMIC_READS,
             base=_REPO_ROOT,
-            constant_roots=SCAN_ROOTS,
+            constant_roots=CONSTANT_ROOTS,
         )
     assert violations == [], (
         "Undeclared option reads (declare the key in the plugin's PROPERTY_MAPPING):\n" + "\n".join(violations)
@@ -479,7 +498,7 @@ def test_literal_allowlist_is_load_bearing(key: str) -> None:
             {},
             ALLOWED_DYNAMIC_READS,
             base=_REPO_ROOT,
-            constant_roots=SCAN_ROOTS,
+            constant_roots=CONSTANT_ROOTS,
         )
 
     assert any(f"'{key}'" in v for v in violations), violations
@@ -660,6 +679,15 @@ def test_scanner_scopes_literal_allowlist_to_owning_paths(
             "aliased_key",
             id="aliased",
         ),
+        pytest.param(
+            {
+                "consts.py": "KEY = 'name_key'\n",
+                "mid.py": "from consts import KEY as BASE\n\nHANDLE = BASE\nLOCAL = HANDLE\n",
+                "user.py": "from mid import HANDLE\n\n\ndef f(options):\n    return options.get(HANDLE)\n",
+            },
+            "name_key",
+            id="name-to-name",
+        ),
     ],
 )
 def test_scanner_resolves_a_module_constant(tmp_path: Path, files: dict[str, str], key: str) -> None:
@@ -713,5 +741,5 @@ def test_scanner_resolves_constants_across_constant_roots(tmp_path: Path) -> Non
 
 def test_core_source_constant_reads_resolve() -> None:
     """The core source bases' module-level constant reads resolve to their keys, not to dynamic reads."""
-    keys = _resolved_read_keys(CORE_SCAN_ROOT, base=_REPO_ROOT, constant_roots=SCAN_ROOTS)
+    keys = _resolved_read_keys(CORE_SCAN_ROOT, base=_REPO_ROOT, constant_roots=CONSTANT_ROOTS)
     assert {"data_access_handle", "query_text", "document_suffixes"} <= keys

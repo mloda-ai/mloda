@@ -23,7 +23,7 @@ from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
 from mloda.core.abstract_plugins.components.feature_set import ArtifactBinding
 from mloda.core.core.cfw_manager import CfwManager, drop_proxy_connection, release_shared_manager, shared_manager
-from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode, runs_in_worker
 from mloda.core.runtime.flight.flight_server import FlightServer
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -91,7 +91,7 @@ def raise_on_missing_flight_server(
     if flight_server is not None:
         return
     for step in execution_plan:
-        if ParallelizationMode.MULTIPROCESSING in register_modes & step.get_parallelization_mode():
+        if runs_in_worker(register_modes, step.get_parallelization_mode()):
             raise ValueError(
                 f"ParallelizationMode.MULTIPROCESSING sends {_describe_step(step)} to a worker process, "
                 "which needs a flight server, but no flight_server was given. "
@@ -106,7 +106,7 @@ def planned_worker_count(execution_plan: Any, register_modes: set[Parallelizatio
     count = 0
     chain_children: dict[Any, set[UUID]] = {}
     for step in execution_plan:
-        if ParallelizationMode.MULTIPROCESSING not in register_modes & step.get_parallelization_mode():
+        if not runs_in_worker(register_modes, step.get_parallelization_mode()):
             continue
         if isinstance(step, TransformFrameworkStep):
             count += 1
@@ -128,7 +128,7 @@ def planned_worker_modules(execution_plan: Any, register_modes: set[Parallelizat
     """Cfw modules a standby warms: every framework class the plan's multiprocessing steps ship to a worker."""
     classes: list[Any] = []
     for step in execution_plan:
-        if ParallelizationMode.MULTIPROCESSING not in register_modes & step.get_parallelization_mode():
+        if not runs_in_worker(register_modes, step.get_parallelization_mode()):
             continue
         if isinstance(step, FeatureGroupStep):
             classes.append(step.compute_framework)
@@ -745,7 +745,7 @@ class ExecutionOrchestrator:
 
         # A worker process owns one cfw and drains its command queue in order, so steps dispatched
         # to it are already serialized.
-        if ParallelizationMode.MULTIPROCESSING in self._register_modes & step.get_parallelization_mode():
+        if runs_in_worker(self._register_modes, step.get_parallelization_mode()):
             return None
 
         class_name = step.compute_framework.get_class_name()

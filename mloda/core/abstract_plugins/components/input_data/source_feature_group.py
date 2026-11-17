@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.handle_option_names import DATA_ACCESS_HANDLE_OPTION
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import CHAIN_SEPARATOR
 from mloda.core.abstract_plugins.components.input_data.input_data_load import dispatch_input_data_load
 from mloda.core.abstract_plugins.components.input_data.claim_route import (
@@ -58,7 +59,7 @@ FOLDER_ESCAPE_MARK = "links outside its folder"
 REASON_DETAIL = "\x1f"  # splits a reason lead from detail (reader error text) that only pointed users see
 
 QUERY_OPTION = "query_text"
-HANDLE_OPTION = "data_access_handle"
+HANDLE_OPTION = DATA_ACCESS_HANDLE_OPTION
 HANDLE_SPEC = PropertySpec(
     "Name of the DataAccessCollection handle to read from.",
     default=None,

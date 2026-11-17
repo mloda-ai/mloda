@@ -72,6 +72,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
+from mloda.core.abstract_plugins.components.handle_option_names import HANDLE_OPTION_NAMES
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import runtime_parameter_keys, unforwarded_keys
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
@@ -1206,11 +1207,7 @@ class Engine:
                     )
             if handle_keys:
                 validate_credential_handles(feature_group_class, resolved, self.data_access_collection)
-            named_handles = {
-                key: value
-                for key in ("data_access_handle", "connection_handle")
-                if isinstance(value := resolved.get(key), str)
-            }
+            named_handles = {key: value for key in HANDLE_OPTION_NAMES if isinstance(value := resolved.get(key), str)}
             registered_handles = (
                 self.data_access_collection.handles()
                 if named_handles and self.data_access_collection is not None
@@ -1219,10 +1216,10 @@ class Engine:
             handles = frozenset(
                 (key, value) for key in handle_keys if isinstance(value := resolved.group.get(key), str)
             ) | frozenset((key, value) for key, value in named_handles.items() if value in registered_handles)
-            if resolved.validated_credential_handles != handles:
+            if resolved.registered_handle_options != handles:
                 if resolved is declared_options:
                     resolved = declared_options.rebuild(dict(declared_options.group), dict(declared_options.context))
-                resolved.validated_credential_handles = handles
+                resolved.registered_handle_options = handles
                 entry = (declared_options, resolved)
             self._intake_options_memo[memo_key] = entry
         feature.options = entry[1]

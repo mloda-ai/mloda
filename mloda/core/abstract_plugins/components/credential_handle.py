@@ -23,6 +23,7 @@ from mloda.core.abstract_plugins.components.credential_leaves import (
     public_key_names,
 )
 from mloda.core.abstract_plugins.components.credential_scrub import _COUNT_NAME
+from mloda.core.abstract_plugins.components.handle_option_names import HANDLE_OPTION_NAMES
 from mloda.core.abstract_plugins.components.property_spec import NO_DEFAULT, PropertySpec
 from mloda.core.abstract_plugins.components.utils import (
     PREFIX_OPTION_KEY_FLAG,
@@ -143,11 +144,7 @@ def declared_handle_option_keys() -> frozenset[str]:
 
 def handle_option_keys() -> frozenset[str]:
     """Declared handle option keys plus the data access and connection handle options."""
-    # Function-local: avoids an import cycle through the source feature group module.
-    from mloda.core.abstract_plugins.components.data_access_collection import CONNECTION_HANDLE_OPTION
-    from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
-
-    return declared_handle_option_keys() | {HANDLE_OPTION, CONNECTION_HANDLE_OPTION}
+    return declared_handle_option_keys() | HANDLE_OPTION_NAMES
 
 
 def _declared(feature_group: type[FeatureGroup], options: Options) -> dict[str, Any]:

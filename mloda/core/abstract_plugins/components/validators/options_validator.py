@@ -3,13 +3,11 @@ from typing import Any
 from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 
 
-def redact_conflict_value(key: str, value: Any) -> Any:
+def redact_conflict_value(key: Any, value: Any) -> Any:
     """Return *** for handle keys, else the redacted value."""
-    from mloda.core.abstract_plugins.components.credential_handle import declared_handle_option_keys
-    from mloda.core.abstract_plugins.components.data_access_collection import CONNECTION_HANDLE_OPTION
-    from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
+    from mloda.core.abstract_plugins.components.credential_handle import handle_option_keys
 
-    if key in (HANDLE_OPTION, CONNECTION_HANDLE_OPTION) or key in declared_handle_option_keys():
+    if key in handle_option_keys():
         return "***"
     return redact_option_value(value)
 

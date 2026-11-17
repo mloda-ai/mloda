@@ -2,9 +2,7 @@ import pytest
 from typing import Any
 
 from mloda.provider import OptionsValidator
-from tests.helpers.credential_handle_stubs import HANDLE_KEY
-
-CREDENTIAL_HANDLE_KEYS = ["data_access_handle", "connection_handle", HANDLE_KEY]
+from tests.helpers.credential_handle_stubs import CREDENTIAL_HANDLE_KEYS
 
 
 class TestValidateNoDuplicateKeys:

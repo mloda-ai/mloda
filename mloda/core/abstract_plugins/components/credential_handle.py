@@ -141,6 +141,15 @@ def declared_handle_option_keys() -> frozenset[str]:
     return frozenset(key for group in feature_group_subclasses() for key in credential_handle_keys(group))
 
 
+def handle_option_keys() -> frozenset[str]:
+    """Declared handle option keys plus the data access and connection handle options."""
+    # Function-local: avoids an import cycle through the source feature group module.
+    from mloda.core.abstract_plugins.components.data_access_collection import CONNECTION_HANDLE_OPTION
+    from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
+
+    return declared_handle_option_keys() | {HANDLE_OPTION, CONNECTION_HANDLE_OPTION}
+
+
 def _declared(feature_group: type[FeatureGroup], options: Options) -> dict[str, Any]:
     keys = credential_handle_keys(feature_group)
     if not keys:

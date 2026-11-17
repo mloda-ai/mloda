@@ -9,7 +9,7 @@ from mloda.provider import DefaultOptionKeys
 from mloda.user import Feature
 from mloda.user import Features
 from mloda.user import Options
-from tests.helpers.credential_handle_stubs import HANDLE_KEY
+from tests.helpers.credential_handle_stubs import CREDENTIAL_HANDLE_KEYS
 
 
 _PUSH_ARGUMENTS = ["propagate_context_keys", "cascade_context_keys"]
@@ -2675,18 +2675,24 @@ class TestInheritFromConflictMessagesMaskMappingValues:
         assert child_marker not in message
 
 
-_HANDLE_KEYS = ["data_access_handle", "connection_handle", HANDLE_KEY]
 _HANDLE_PATHS = ["group_group", "group_context", "propagate", "cascade", "pull"]
+_HANDLE_MATCH = {
+    "group_group": "conflicts with the value already set",
+    "group_context": "child's context",
+    "propagate": "Context key .* conflict: consumer",
+    "cascade": "conflict from cascade_context_keys",
+    "pull": "already exists in context options with a different value",
+}
 _HANDLE_VALUES = [
     pytest.param("plain_marker_consumer", "plain_marker_child", id="plain_str"),
-    pytest.param({"sqlite": "/raw/consumer_marker.db"}, {"sqlite": "/raw/child_marker.db"}, id="dict"),
+    pytest.param(_CONSUMER_DICT_VALUE, _CHILD_DICT_VALUE, id="dict"),
 ]
 
 
 class TestInheritFromConflictMessagesMaskHandleKeys:
     """Conflicts on a credential handle key print *** instead of the value."""
 
-    @pytest.mark.parametrize("key", _HANDLE_KEYS)
+    @pytest.mark.parametrize("key", CREDENTIAL_HANDLE_KEYS)
     @pytest.mark.parametrize("path", _HANDLE_PATHS)
     @pytest.mark.parametrize("consumer_value,child_value", _HANDLE_VALUES)
     def test_handle_key_conflict_prints_stars(self, key: str, path: str, consumer_value: Any, child_value: Any) -> None:
@@ -2705,7 +2711,7 @@ class TestInheritFromConflictMessagesMaskHandleKeys:
             consumer, child = Options(context={key: consumer_value}), Options(context={key: child_value})
             pull = frozenset({key})
 
-        with pytest.raises(ValueError) as excinfo:
+        with pytest.raises(ValueError, match=_HANDLE_MATCH[path]) as excinfo:
             if pull is not None:
                 child.inherit_from(consumer, inherit_context_keys=pull)
             else:

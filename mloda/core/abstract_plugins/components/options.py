@@ -525,10 +525,10 @@ class Options:
     def __str__(self) -> str:
         from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
 
-        from mloda.core.abstract_plugins.components.credential_handle import declared_handle_option_keys
+        from mloda.core.abstract_plugins.components.credential_handle import handle_option_keys
 
         names = concrete_source_groups().keys()
-        handle_keys = declared_handle_option_keys() | {"data_access_handle", "connection_handle"}
+        handle_keys = handle_option_keys()
         parts = (
             f"Options(group={_display_option_dict(self.group, names, self.validated_credential_handles, handle_keys)}, "
             f"context={_display_option_dict(self.context, names, self.validated_credential_handles, handle_keys)}"

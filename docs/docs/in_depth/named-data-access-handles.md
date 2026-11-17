@@ -256,7 +256,7 @@ fails, in `prepare()`, `explain()` and `run_all()` alike, with an error naming t
 A `str` default is a handle declared when the option
 is unset; `default=None` declares nothing when unset. To read it at run time see [Runtime access versus match-time binding](#runtime-access-versus-match-time-binding).
 
-`check_feature_group_shape` in `mloda._testing` fails an option with a credential-shaped name not declared with `credential_handle_spec`, a default the scrubber masks, and a `*_env` option naming an environment variable. It checks declarations, not call sites, so a secret passed under a benign undeclared key stays undetected. A false positive is silenced per option in `NOT_SECRET_OPTIONS` (option key to reason).
+`check_feature_group_shape` in `mloda.testing` fails an option with a credential-shaped name not declared with `credential_handle_spec`, a default the scrubber masks, and a `*_env` option naming an environment variable. It checks declarations, not call sites, so a secret passed under a benign undeclared key stays undetected. A false positive is silenced per option in `NOT_SECRET_OPTIONS` (option key to reason).
 
 Declared credential keys widen or narrow the unmasked set. A provider lists keys in `PUBLIC_CREDENTIAL_KEYS` on the
 feature group and in `public_fields` of a handle spec, unioned over the loaded plugins, so one group's declaration unmasks that key name for every registered credential in the process. A data user passes `public_credential_keys` and

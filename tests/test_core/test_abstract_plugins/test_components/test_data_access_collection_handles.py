@@ -213,36 +213,43 @@ class TestResolveContract:
         result = dac.resolve("connection", predicate=lambda c: c is analytics, hint="analytics")
         assert result is analytics
 
-    # Case 2: explicit hint, handle missing -> ValueError naming kind + listing available handles.
-    def test_case_2_hint_missing_raises_with_kind_and_available_handles(self) -> None:
+    # Case 2: explicit hint, handle missing -> ValueError naming option + kind + available handles, never the value.
+    @pytest.mark.parametrize("option", [None, "connection_handle"])
+    def test_case_2_hint_missing_raises_with_kind_and_available_handles(self, option: str | None) -> None:
         dac = DataAccessCollection(connections={"warehouse": object(), "analytics": object()})
+        dac.add_connection(object())
+        kwargs: dict[str, Any] = {} if option is None else {"option": option}
         with pytest.raises(ValueError) as excinfo:
-            dac.resolve("connection", hint="nonexistent")
+            dac.resolve("connection", hint="zq_pasted_secret_9x", **kwargs)
         msg = str(excinfo.value)
-        assert "connection" in msg
-        assert "nonexistent" in msg
-        assert "warehouse" in msg
-        assert "analytics" in msg
+        assert f"Option '{option or 'data_access_handle'}'" in msg
+        assert "kind 'connection'" in msg
+        assert "not shown in case it is a secret" in msg
+        assert "['analytics', 'warehouse'] and 1 unnamed" in msg
+        assert "zq_pasted_secret_9x" not in msg
 
     # Case 3: explicit hint, handle exists but is the wrong kind -> ValueError.
     def test_case_3_hint_exists_but_wrong_kind_raises(self) -> None:
         dac = DataAccessCollection(
             connections={"warehouse": object()},
-            files={"tx": "/data/tx.parquet"},
+            files={"zq_file_handle_7k": "/data/tx.parquet"},
         )
         with pytest.raises(ValueError) as excinfo:
-            dac.resolve("connection", hint="tx")
+            dac.resolve("connection", hint="zq_file_handle_7k")
         msg = str(excinfo.value)
-        assert "tx" in msg
+        assert "Option 'data_access_handle' names a handle registered under kind 'file'" in msg
+        assert "but kind 'connection' was requested" in msg
+        assert "zq_file_handle_7k" not in msg
 
     # Case 4: explicit hint, handle correct kind, predicate fails -> ValueError with mismatch.
     def test_case_4_hint_found_correct_kind_predicate_fails_raises(self) -> None:
-        analytics = object()
-        dac = DataAccessCollection(connections={"analytics": analytics})
+        dac = DataAccessCollection(connections={"zq_conn_handle_3m": object()})
         with pytest.raises(ValueError) as excinfo:
-            dac.resolve("connection", predicate=lambda c: False, hint="analytics")
+            dac.resolve("connection", predicate=lambda c: False, hint="zq_conn_handle_3m", option="connection_handle")
         msg = str(excinfo.value)
-        assert "analytics" in msg
+        assert "Option 'connection_handle' names a handle of kind 'connection'" in msg
+        assert "predicate mismatch" in msg
+        assert "zq_conn_handle_3m" not in msg
 
     # Case 5: no hint, zero matches -> None.
     def test_case_5_no_hint_zero_matches_returns_none(self) -> None:
@@ -325,10 +332,12 @@ class TestConnectionHandleResolver:
         dac = DataAccessCollection(connections={"a": _Conn(), "b": _Conn()})
         assert self._resolve(dac, connection_handle="b", data_access_handle="a")[0] == "b"
 
-    def test_unknown_connection_handle_raises_naming_it(self) -> None:
+    def test_unknown_connection_handle_raises_naming_the_option_not_the_value(self) -> None:
         dac = DataAccessCollection(connections={"a": _Conn()})
-        with pytest.raises(ValueError, match="nope"):
-            self._resolve(dac, connection_handle="nope")
+        with pytest.raises(ValueError) as excinfo:
+            self._resolve(dac, connection_handle="zq_nope_5w")
+        assert "Option 'connection_handle'" in str(excinfo.value)
+        assert "zq_nope_5w" not in str(excinfo.value)
 
     def test_wrong_type_connection_handle_gives_no_handle_and_a_reason(self) -> None:
         dac = DataAccessCollection(connections={"a": _Conn(), "b": _Conn(), "other": _OtherConn()})
@@ -356,12 +365,14 @@ class TestConnectionHandleResolver:
         dac = DataAccessCollection(connections={"s": _OtherConn(), "d": _Conn()})
         assert self._resolve(dac, connection_handle="s") == ("d", False, None)
 
-    def test_connection_handle_without_a_data_access_collection_raises_naming_it(self) -> None:
+    def test_connection_handle_without_a_data_access_collection_raises_naming_the_option(self) -> None:
         from mloda.core.abstract_plugins.components.data_access_collection import resolve_connection_handle
         from mloda.user import Options
 
-        with pytest.raises(ValueError, match="orphan"):
-            resolve_connection_handle(_StubFramework, None, Options(group={"connection_handle": "orphan"}))
+        with pytest.raises(ValueError) as excinfo:
+            resolve_connection_handle(_StubFramework, None, Options(group={"connection_handle": "zq_orphan_2d"}))
+        assert "Option 'connection_handle' is set but no DataAccessCollection is given." in str(excinfo.value)
+        assert "zq_orphan_2d" not in str(excinfo.value)
 
     def test_ambiguous_reason_hides_auto_handles_counts_them_and_keeps_given_names(self) -> None:
         dac = DataAccessCollection()

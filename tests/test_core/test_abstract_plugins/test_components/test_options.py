@@ -660,13 +660,26 @@ class TestOptionsWithCredentialValues:
         options = Options(group={"credential_option_key": make_value()})
         assert "/secret/path/analytics.db" not in str(options)
 
-    def test_str_prints_a_marked_handle_key_as_given_and_masks_an_unmarked_one(self) -> None:
-        handle = "chs-vault-main"
-        unmarked = Options(group={"chs_vault_token": handle})
-        marked = Options(group={"chs_vault_token": handle})
-        marked.validated_credential_handles = frozenset({("chs_vault_token", handle)})
+    @pytest.mark.parametrize(
+        ("key", "where"),
+        [
+            ("chs_vault_token", "group"),
+            ("data_access_handle", "context"),
+            ("connection_handle", "group"),
+            ("connection_handle", "context"),
+        ],
+    )
+    def test_str_prints_a_marked_handle_key_as_given_and_masks_an_unmarked_one(self, key: str, where: str) -> None:
+        handle = "zq_pasted_secret_9x"
 
-        assert handle not in str(unmarked)
+        def build() -> Options:
+            return Options(group={key: handle}) if where == "group" else Options(context={key: handle})
+
+        marked = build()
+        marked.validated_credential_handles = frozenset({(key, handle)})
+
+        assert handle not in str(build())
+        assert "***" in str(build())
         assert handle in str(marked)
 
     @pytest.mark.parametrize("key", ["chs_vault_token", "hmac_key_handle"])

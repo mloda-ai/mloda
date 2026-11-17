@@ -528,10 +528,10 @@ class Options:
         from mloda.core.abstract_plugins.components.credential_handle import declared_handle_option_keys
 
         names = concrete_source_groups().keys()
-        handle_keys = declared_handle_option_keys()
+        handle_keys = declared_handle_option_keys() | {"data_access_handle", "connection_handle"}
         parts = (
             f"Options(group={_display_option_dict(self.group, names, self.validated_credential_handles, handle_keys)}, "
-            f"context={_display_option_dict(self.context, names, frozenset(), handle_keys)}"
+            f"context={_display_option_dict(self.context, names, self.validated_credential_handles, handle_keys)}"
         )
         if self.propagate_context_keys:
             parts += f", propagate_context_keys={self.propagate_context_keys}"

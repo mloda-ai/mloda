@@ -261,7 +261,7 @@ class TestDuckdbFGOptIn:
 
         assert DuckdbFG not in result.identified
 
-    @pytest.mark.parametrize("handle", ["no_such_handle", 5], ids=["unknown", "non_str"])
+    @pytest.mark.parametrize("handle", ["zq_pasted_secret_9x", 5], ids=["unknown", "non_str"])
     def test_an_unknown_handle_declines_with_a_rejection(self, opened: list[Any], handle: Any) -> None:
         connection = _database(opened, {"unknown_col": [1]})
         dac = DataAccessCollection(connections={HANDLE: connection, "other_handle": connection})
@@ -270,8 +270,10 @@ class TestDuckdbFGOptIn:
 
         assert DuckdbFG not in result.identified
         reason = result.eliminations[DuckdbFG].reason
-        assert repr(handle) in reason
+        assert "Option 'connection_handle'" in reason
+        assert "not shown in case it is a secret" in reason
         assert str(sorted(["other_handle", HANDLE])) in reason
+        assert str(handle) not in reason
         assert result.eliminations[DuckdbFG].code is CoreDeclineCode.HANDLE_UNKNOWN
 
     def test_a_column_the_selected_table_lacks_declines_naming_the_column_and_source_only(

@@ -2786,6 +2786,8 @@ def test_each_run_on_a_prepared_session_reads_its_own_fresh_credential(
     if credentials is not None:
         with pytest.raises(ValueError, match="is bound by a source step"):
             rows_of(session, name, credentials={"toyfmt_src": {TOY_KEY: {_SOURCE_NAME: [1]}}}, **kwargs)
+        with pytest.raises(ValueError, match="not declared by any step"):
+            rows_of(session, name, credentials={"toyfmt_unbound": {TOY_KEY: {_SOURCE_NAME: [1]}}}, **kwargs)
 
 
 @pytest.mark.timeout(15)

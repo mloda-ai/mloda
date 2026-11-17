@@ -4,6 +4,7 @@ Imports pytest at top on purpose (pyarrow only through a guarded plugin import):
 Not collected on its own (no Test prefix).
 """
 
+import contextlib
 import copy
 import gc
 import importlib
@@ -18,7 +19,7 @@ from mloda._testing.feature_group_shape import check_feature_group_secrets, chec
 from mloda._testing.suite import ConformanceSuite, assert_passed
 from mloda._testing.source_applicability import NO_POINTER, SourceApplicability, source_applicability
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch, feature_group_scope
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
 from mloda.core.abstract_plugins.components.match_hook import call_match_hook, probe_match_criteria
 from mloda.core.abstract_plugins.components.match_rejection import (
@@ -638,13 +639,14 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
 
     def test_match_credentials_returns_the_credential_its_match_binds(self) -> None:
         app = self._applicability()
-        self._require(app.searched_route or app.pointer, "the group claims only through feature_group= scope")
         feature = self._with_context(self._own_feature())
-        result = check_feature_group_shape(
-            self.feature_group_class,
-            feature.options,
-            requests=[str(feature.name)],
-            data_access_collection=self.own_dac(),
-        )
+        scope_only = not (app.searched_route or app.pointer)
+        with feature_group_scope(self.feature_group_class) if scope_only else contextlib.nullcontext():
+            result = check_feature_group_shape(
+                self.feature_group_class,
+                feature.options,
+                requests=[str(feature.name)],
+                data_access_collection=self.own_dac(),
+            )
         assert not [f for f in result.failures if f.startswith("credentials:")], result.failures
         assert not [f for f in result.failures if f.startswith("names:")], result.failures

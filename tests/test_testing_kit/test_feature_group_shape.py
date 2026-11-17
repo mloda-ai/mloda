@@ -763,8 +763,8 @@ def test_requests_keep_an_unbound_required_key_checked(monkeypatch: pytest.Monke
     seen: list[tuple[str, bool, bool]] = []
     real = fgs._probe
 
-    def spy(cls: type[FeatureGroup], name: str, options: Options) -> Any:
-        outcome = real(cls, name, options)
+    def spy(cls: type[FeatureGroup], name: str, options: Options, dac: Any = None) -> Any:
+        outcome = real(cls, name, options, dac)
         seen.append((name, "level" in {**options.group, **options.context}, outcome.matched))
         return outcome
 
@@ -778,11 +778,11 @@ def test_requests_leave_user_base_options_untouched(monkeypatch: pytest.MonkeyPa
     carried: list[Any] = []
     real = fgs._probe
 
-    def spy(cls: type[FeatureGroup], name: str, options: Options) -> Any:
+    def spy(cls: type[FeatureGroup], name: str, options: Options, dac: Any = None) -> Any:
         merged = {**options.group, **options.context}
         if "mode" in merged:
             carried.append(merged["mode"])
-        return real(cls, name, options)
+        return real(cls, name, options, dac)
 
     monkeypatch.setattr(fgs, "_probe", spy)
     check_feature_group_shape(make_name_path_group(), Options(group={"mode": "fast"}), requests=["x__tt_fast"])
@@ -797,9 +797,9 @@ def test_requests_replace_the_probed_names(monkeypatch: pytest.MonkeyPatch) -> N
     probed: set[str] = set()
     real = fgs._probe
 
-    def spy(cls: type[FeatureGroup], name: str, options: Options) -> Any:
+    def spy(cls: type[FeatureGroup], name: str, options: Options, dac: Any = None) -> Any:
         probed.add(name)
-        return real(cls, name, options)
+        return real(cls, name, options, dac)
 
     monkeypatch.setattr(fgs, "_probe", spy)
     assert check_feature_group_shape(group, base, requests=["toy_a"]).passed
@@ -1116,6 +1116,168 @@ def test_source_group_run_is_not_applicable(case: Callable[[], tuple[type[Featur
         assert result.passed, result.failures
     assert any(n.startswith("run:") and note in n for n in result.notes), result.notes
     assert not any(f.startswith("outputs:") for f in result.failures), result.failures
+
+
+_SECRET_CELL = 987654
+
+
+def _credential_variant(kind: str) -> type[FeatureGroup]:
+    """A ToySourceFG variant, built per call so it does not register globally."""
+    from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+        TOY_KEY,
+        TOY_TOKEN,
+        ToySourceFG,
+    )
+    from mloda.provider import CoreDeclineCode, SourceMatch
+
+    if kind == "registered":
+
+        class ReturnsRegistered(ToySourceFG):
+            @classmethod
+            def find_sources(
+                cls, route: Any, feature_name: str, options: Options, data_access_collection: Any
+            ) -> list[SourceMatch]:
+                if data_access_collection is None:
+                    return []
+                return [
+                    SourceMatch(source=f"{handle}:toy", access=(value, value[TOY_KEY]))
+                    for handle, value in sorted(data_access_collection.credentials.items())
+                ]
+
+            @classmethod
+            def columns(cls, match: SourceMatch) -> Any:
+                return list(match.access[1])
+
+            @classmethod
+            def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+                return dict(match.access[1])
+
+            @classmethod
+            def match_credentials(cls, match: SourceMatch) -> Any:
+                return match.access[0]
+
+        return ReturnsRegistered
+
+    if kind == "abort_secret":
+
+        class AbortsWithSecret(ToySourceFG):
+            @classmethod
+            def find_sources(
+                cls, route: Any, feature_name: str, options: Options, data_access_collection: Any
+            ) -> list[SourceMatch]:
+                if data_access_collection is None:
+                    return []
+                pw = data_access_collection.credentials["h1"]["token"]
+                cls._abort(ValueError(f"login failed for {pw}"), code=CoreDeclineCode.POINTER_INVALID)
+                return []
+
+        return AbortsWithSecret
+
+    if kind == "raises_secret":
+
+        class RaisesWithSecret(ToySourceFG):
+            @classmethod
+            def match_credentials(cls, match: SourceMatch) -> Any:
+                raise ValueError(f"bad {TOY_TOKEN}")
+
+        return RaisesWithSecret
+
+    class ReturnsSubMapping(ToySourceFG):
+        @classmethod
+        def match_credentials(cls, match: SourceMatch) -> Any:
+            return match.access
+
+    return ReturnsSubMapping
+
+
+def _credential_failures(result: Any) -> list[str]:
+    return [f for f in result.failures if f.startswith("credentials:")]
+
+
+@pytest.mark.parametrize(
+    ("case", "flagged", "needles", "names_aborted"),
+    [
+        ("plain_named", True, ["h1", "match_credentials", "'toyfmt_col'"], False),
+        ("plain_auto_handle", True, ["<unnamed>"], False),
+        ("registered", False, [], False),
+        ("sub_mapping", True, ["h1", "match_credentials"], False),
+        ("abort_secret", False, [], True),
+        ("raises_secret", True, ["raised"], False),
+    ],
+)
+def test_source_credential_binding_shape(case: str, flagged: bool, needles: list[str], names_aborted: bool) -> None:
+    pytest.importorskip("pyarrow")
+    from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+    from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+        TOY_KEY,
+        ToySourceFG,
+        TOY_TOKEN,
+        toy_dac,
+        toy_token_dac,
+    )
+
+    cell = {"toyfmt_col": [_SECRET_CELL]}
+    group: type[FeatureGroup] = ToySourceFG if case.startswith("plain") else _credential_variant(case)
+    if case == "plain_auto_handle":
+        dac = DataAccessCollection(credentials=[{TOY_KEY: cell}])
+    elif case.endswith("_secret"):
+        dac = toy_token_dac(h1=cell)
+    else:
+        dac = toy_dac(h1=cell)
+    result = check_feature_group_shape(group, requests=["toyfmt_col"], data_access_collection=dac)
+    failures = _credential_failures(result)
+    assert len(failures) == (1 if flagged else 0), result.failures
+    for needle in needles:
+        assert needle in failures[0], failures
+    names = [f for f in result.failures if f.startswith("names:")]
+    if names_aborted:
+        assert any("aborted" in f for f in names), result.failures
+    else:
+        assert not names, result.failures
+    assert str(_SECRET_CELL) not in repr(result)
+    assert TOY_TOKEN not in repr(result)
+
+
+def test_pointer_only_claim_needs_no_match_credentials() -> None:
+    pytest.importorskip("pyarrow")
+    from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+        ToyOpenFG,
+        toy_dac,
+    )
+
+    key = next(iter(ToyOpenFG.pointer_keys()))
+    result = check_feature_group_shape(
+        ToyOpenFG,
+        base_options=Options({key: {"toyfmt_col": [1]}}),
+        requests=["toyfmt_col"],
+        data_access_collection=toy_dac(h1={"toyfmt_col": [1]}),
+    )
+    assert _credential_failures(result) == [], result.failures
+
+
+def test_source_group_without_a_collection_notes_the_unchecked_binding() -> None:
+    pytest.importorskip("pyarrow")
+    from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
+
+    source = [n for n in check_feature_group_shape(ToySourceFG).notes if n.startswith("credentials:")]
+    assert len(source) == 1, source
+    assert "data_access_collection" in source[0], source
+    plain = check_feature_group_shape(make_toy_group())
+    assert not any(n.startswith("credentials:") for n in plain.notes), plain.notes
+
+
+def test_read_db_group_with_its_collection_passes_the_credential_check(tmp_path: Any) -> None:
+    pytest.importorskip("pyarrow")
+    from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+    from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
+    from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
+
+    path = tmp_path / "shape.db"
+    write_sqlite(path, {"shape_table": {"shape_sqlite_col": [1, 2]}})
+    dac = DataAccessCollection(credentials={"db_handle": {"sqlite": str(path)}})
+    result = check_feature_group_shape(SqliteFG, requests=["shape_sqlite_col"], data_access_collection=dac)
+    assert _credential_failures(result) == [], result.failures
+    assert not any(f.startswith("names:") for f in result.failures), result.failures
 
 
 def _serve_with(

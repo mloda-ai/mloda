@@ -682,7 +682,7 @@ def test_scanner_scopes_literal_allowlist_to_owning_paths(
         pytest.param(
             {
                 "consts.py": "KEY = 'name_key'\n",
-                "mid.py": "from consts import KEY as BASE\n\nHANDLE = BASE\nLOCAL = HANDLE\n",
+                "mid.py": "from consts import KEY as BASE\n\nHANDLE = BASE\n",
                 "user.py": "from mid import HANDLE\n\n\ndef f(options):\n    return options.get(HANDLE)\n",
             },
             "name_key",

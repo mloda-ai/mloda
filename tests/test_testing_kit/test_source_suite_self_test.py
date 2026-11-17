@@ -63,6 +63,7 @@ class TestBroken(SourceFeatureGroupTestMixin):
 SELECTED = (
     "test_declines_foreign_sources or test_leaves_collection_and_options_unchanged"
     " or test_declares_no_secret_shaped_option or test_claims_its_own_source"
+    " or test_match_credentials_returns_the_credential_its_match_binds"
 )
 
 
@@ -71,7 +72,7 @@ def test_a_broken_source_group_fails_the_suite_for_each_defect(pytester: pytest.
 
     result = pytester.runpytest_inprocess("-p", "no:cacheprovider", "-p", "no:randomly", "--tb=short", "-k", SELECTED)
 
-    result.assert_outcomes(passed=1, failed=3)
+    result.assert_outcomes(passed=1, failed=4)
     result.stdout.fnmatch_lines(
         [
             "*_ TestBroken.test_declines_foreign_sources _*",
@@ -80,6 +81,8 @@ def test_a_broken_source_group_fails_the_suite_for_each_defect(pytester: pytest.
             "*assert feature.options.group == group*",
             "*_ TestBroken.test_declares_no_secret_shaped_option _*",
             "*secrets: option 'password'*",
+            "*_ TestBroken.test_match_credentials_returns_the_credential_its_match_binds _*",
+            "*credentials: 'toyfmt_broken_col' reads handle(s) 'h1'*",
         ]
     )
 

@@ -14,7 +14,7 @@ from typing import Any, ClassVar, cast
 import pytest
 
 from mloda._testing.source import reclaim
-from mloda._testing.feature_group_shape import check_feature_group_secrets
+from mloda._testing.feature_group_shape import check_feature_group_secrets, check_feature_group_shape
 from mloda._testing.suite import ConformanceSuite, assert_passed
 from mloda._testing.source_applicability import NO_POINTER, SourceApplicability, source_applicability
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -635,3 +635,16 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
 
     def test_declares_no_secret_shaped_option(self) -> None:
         assert_passed(check_feature_group_secrets(self.feature_group_class))
+
+    def test_match_credentials_returns_the_credential_its_match_binds(self) -> None:
+        app = self._applicability()
+        self._require(app.searched_route or app.pointer, "the group claims only through feature_group= scope")
+        feature = self._with_context(self._own_feature())
+        result = check_feature_group_shape(
+            self.feature_group_class,
+            feature.options,
+            requests=[str(feature.name)],
+            data_access_collection=self.own_dac(),
+        )
+        assert not [f for f in result.failures if f.startswith("credentials:")], result.failures
+        assert not [f for f in result.failures if f.startswith("names:")], result.failures

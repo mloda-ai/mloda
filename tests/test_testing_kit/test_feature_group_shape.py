@@ -1182,6 +1182,17 @@ def _credential_variant(kind: str) -> type[FeatureGroup]:
 
         return RaisesWithSecret
 
+    if kind == "hidden":
+
+        class HidesBinding(ToySourceFG):
+            """Hides its credential binding by returning no credential."""
+
+            @classmethod
+            def match_credentials(cls, match: SourceMatch) -> Any:
+                return None
+
+        return HidesBinding
+
     class ReturnsSubMapping(ToySourceFG):
         @classmethod
         def match_credentials(cls, match: SourceMatch) -> Any:
@@ -1210,14 +1221,13 @@ def test_source_credential_binding_shape(case: str, flagged: bool, needles: list
     from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
     from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
         TOY_KEY,
-        ToySourceFG,
         TOY_TOKEN,
         toy_dac,
         toy_token_dac,
     )
 
     cell = {"toyfmt_col": [_SECRET_CELL]}
-    group: type[FeatureGroup] = ToySourceFG if case.startswith("plain") else _credential_variant(case)
+    group: type[FeatureGroup] = _credential_variant("hidden" if case.startswith("plain") else case)
     if case == "plain_auto_handle":
         dac = DataAccessCollection(credentials=[{TOY_KEY: cell}])
     elif case.endswith("_secret"):

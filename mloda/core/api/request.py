@@ -1131,7 +1131,8 @@ class mlodaAPI:
         active verified_context() scope are read here, at call time, not at first iteration: a function whose
         body itself contains ``yield`` only starts executing on first iteration, which would defer that read
         past the caller's intended scope. ``parallelization_modes``, ``flight_server``, ``credentials`` and
-        ``parameters`` are as in ``run()``; credentials, parameters and MULTIPROCESSING preflight refusals are refused at the call.
+        ``parameters`` are as in ``run()``; credentials and parameters are refused, and MULTIPROCESSING preflights
+        raise, at the call.
         """
         modes = self._run_modes(parallelization_modes)
         with run_boundary():

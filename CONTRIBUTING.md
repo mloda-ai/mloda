@@ -13,7 +13,7 @@ The simplest way to support mloda is to star the repository on GitHub. It costs 
 ### Prerequisites
 
 - Python 3.11 or higher (tested on 3.11, 3.12, 3.13, 3.14)
-- [uv](https://docs.astral.sh/uv/) for dependency management
+- [uv](https://docs.astral.sh/uv/) for dependency management (0.12.22 or newer, enforced by `[tool.uv] required-version`)
 - [tox](https://tox.wiki/) as the test runner (installed via uv)
 
 ### Local Development Setup

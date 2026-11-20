@@ -62,9 +62,9 @@ jobs:
     - name: Install tox
       run: |
         python -m pip install --upgrade pip
-        python -m pip install uv
+        python -m pip install uv==0.13.8
         # Same tox pin as release.yaml; see the note there before bumping.
-        uv tool install tox==4.64.1 --with tox-uv==1.36.0
+        uv tool install tox==4.64.1 --with tox-uv==1.36.0 --with uv==0.13.8
     - name: Use up to three pytest workers
       run: |
         nproc
@@ -99,9 +99,9 @@ jobs:
     - name: Install tox
       run: |
         python -m pip install --upgrade pip
-        python -m pip install uv
+        python -m pip install uv==0.13.8
         # Same tox pin as release.yaml; see the note there before bumping.
-        uv tool install tox==4.64.1 --with tox-uv==1.36.0
+        uv tool install tox==4.64.1 --with tox-uv==1.36.0 --with uv==0.13.8
     - name: Run lint
       run: tox -e lint
       timeout-minutes: 6
@@ -118,9 +118,9 @@ jobs:
     - name: Install tox
       run: |
         python -m pip install --upgrade pip
-        python -m pip install uv
+        python -m pip install uv==0.13.8
         # Same tox pin as release.yaml; see the note there before bumping.
-        uv tool install tox==4.64.1 --with tox-uv==1.36.0
+        uv tool install tox==4.64.1 --with tox-uv==1.36.0 --with uv==0.13.8
     - name: Run notebooks
       env:
         PYTEST_WORKERS: 2
@@ -138,9 +138,9 @@ jobs:
     - name: Install tox
       run: |
         python -m pip install --upgrade pip
-        python -m pip install uv
+        python -m pip install uv==0.13.8
         # Same tox pin as release.yaml; see the note there before bumping.
-        uv tool install tox==4.64.1 --with tox-uv==1.36.0
+        uv tool install tox==4.64.1 --with tox-uv==1.36.0 --with uv==0.13.8
     - name: Run mcp
       run: tox -e mcp
       timeout-minutes: 10
@@ -157,9 +157,9 @@ jobs:
     - name: Install tox
       run: |
         python -m pip install --upgrade pip
-        python -m pip install uv
+        python -m pip install uv==0.13.8
         # Same tox pin as release.yaml; see the note there before bumping.
-        uv tool install tox==4.64.1 --with tox-uv==1.36.0
+        uv tool install tox==4.64.1 --with tox-uv==1.36.0 --with uv==0.13.8
     - name: Run spark
       # The runner image ships Java 17.
       run: JAVA_HOME="$JAVA_HOME_17_X64" tox -e spark

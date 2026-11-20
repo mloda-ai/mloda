@@ -454,6 +454,7 @@ class ComputeFrameworkExecutor:
                 self._credential_grant(step),
                 self.worker_manager.result_uuids_collection.add,
                 in_input_data_load_gate_scope(),
+                self.worker_manager.thread_step_finished.set,
             ),
             daemon=True,  # an abandoned step thread must not block interpreter exit
         )

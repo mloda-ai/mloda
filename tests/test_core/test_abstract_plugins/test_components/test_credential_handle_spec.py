@@ -2071,13 +2071,13 @@ class TestDisplay:
 
     def test_a_mark_copied_from_another_group_does_not_survive_intake(self) -> None:
         options = Options(group={HANDLE_KEY: SECRET})
-        options.validated_credential_handles = frozenset({(HANDLE_KEY, SECRET)})
+        options.registered_handle_options = frozenset({(HANDLE_KEY, SECRET)})
 
         session = _prepare([Feature("chs_raw_a", options=options)], None, _plugins(ChsRawSecretFG))
 
         stored = next(iter(session.engine.feature_group_collection[ChsRawSecretFG])).options
         assert SECRET not in str(stored)
-        assert stored.validated_credential_handles == frozenset()
+        assert stored.registered_handle_options == frozenset()
 
     @pytest.mark.parametrize("scope", ["group", "context"])
     def test_str_of_resolved_options_shows_a_registered_data_access_handle_only(

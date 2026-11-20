@@ -504,6 +504,31 @@ class TestGetCfw:
 class TestGetExecutionFunction:
     """Tests for _get_execution_function method."""
 
+    @pytest.mark.parametrize(
+        ("register_modes", "step_modes", "expected"),
+        [
+            ({ParallelizationMode.MULTIPROCESSING}, {ParallelizationMode.MULTIPROCESSING}, True),
+            (
+                {ParallelizationMode.MULTIPROCESSING, ParallelizationMode.SYNC},
+                {ParallelizationMode.MULTIPROCESSING},
+                True,
+            ),
+            ({ParallelizationMode.MULTIPROCESSING}, {ParallelizationMode.SYNC}, False),
+            ({ParallelizationMode.SYNC}, {ParallelizationMode.MULTIPROCESSING}, False),
+            ({ParallelizationMode.SYNC}, {ParallelizationMode.SYNC}, False),
+            ({ParallelizationMode.THREADING}, {ParallelizationMode.THREADING}, False),
+            (set(), {ParallelizationMode.MULTIPROCESSING}, False),
+            ({ParallelizationMode.MULTIPROCESSING}, set(), False),
+            (set(), set(), False),
+        ],
+    )
+    def test_runs_in_worker_truth_table(
+        self, register_modes: set[ParallelizationMode], step_modes: set[ParallelizationMode], expected: bool
+    ) -> None:
+        from mloda.core.abstract_plugins.components.parallelization_modes import runs_in_worker
+
+        assert runs_in_worker(register_modes, step_modes) is expected
+
     def test_returns_multi_execute_step_for_multiprocessing(self) -> None:
         """Should return multi_execute_step when multiprocessing mode is in intersection."""
         cfw_register = Mock(spec=CfwManager)

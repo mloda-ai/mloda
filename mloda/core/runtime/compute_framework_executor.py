@@ -34,7 +34,7 @@ from mloda.core.abstract_plugins.components.input_data.api_data_scope import Api
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.utils import failure_report, is_nominal_subclass
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode, runs_in_worker
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -219,7 +219,7 @@ class ComputeFrameworkExecutor:
         """
         modes = mode_by_cfw_register.intersection(mode_by_step)
 
-        if ParallelizationMode.MULTIPROCESSING in modes:
+        if runs_in_worker(mode_by_cfw_register, mode_by_step):
             return self.multi_execute_step
         elif ParallelizationMode.THREADING in modes:
             return self.thread_execute_step

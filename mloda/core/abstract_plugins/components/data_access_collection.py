@@ -22,10 +22,13 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
     scrub_credentials,
 )
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
+from mloda.core.abstract_plugins.components.handle_option_names import (
+    CONNECTION_HANDLE_OPTION as CONNECTION_HANDLE_OPTION,
+    DATA_ACCESS_HANDLE_OPTION,
+)
 
 logger = logging.getLogger(__name__)
 
-CONNECTION_HANDLE_OPTION = "connection_handle"
 
 RESERVED_HANDLE_NAMES: dict[str, str] = {
     "<pointer>": "the plan record uses it for a credential outside the collection",
@@ -406,7 +409,7 @@ class DataAccessCollection:
         predicate: Callable[[Any], bool] | None = None,
         hint: str | None = None,
         *,
-        option: str = "data_access_handle",
+        option: str = DATA_ACCESS_HANDLE_OPTION,
     ) -> Any:
         """Resolve a single resource of ``kind``, optionally narrowed by ``predicate``.
 
@@ -467,12 +470,12 @@ class DataAccessCollection:
             raise ValueError(
                 f"Ambiguous resolve for kind '{kind}': {len(matches)} matches:\n"
                 f"{bullets}\n"
-                f"Name them and set Options(data_access_handle=...) to pick one, "
+                f"Name them and set Options({DATA_ACCESS_HANDLE_OPTION}=...) to pick one, "
                 f"or remove one from the collection."
             )
         raise ValueError(
             f"Ambiguous resolve for kind '{kind}': {len(matches)} candidates {candidate_handles}; "
-            f"set 'data_access_handle' in Options to disambiguate."
+            f"set '{DATA_ACCESS_HANDLE_OPTION}' in Options to disambiguate."
         )
 
     @staticmethod
@@ -539,7 +542,7 @@ def resolve_connection_handle(framework: Any, dac: Any, options: Any | None) -> 
             return named, True, None
         shown = "<unnamed>" if named in dac.auto_handles else named
         foreign = f"Connection handle '{shown}' holds a connection this framework does not accept."
-    hint = options.get("data_access_handle") if options is not None else None
+    hint = options.get(DATA_ACCESS_HANDLE_OPTION) if options is not None else None
     if foreign is None and hint in connections and framework._connection_matches(connections[hint]):
         return hint, True, None
     matches = [h for h, conn in connections.items() if framework._connection_matches(conn)]
@@ -559,6 +562,6 @@ def resolve_connection_handle(framework: Any, dac: Any, options: Any | None) -> 
             None,
             False,
             f"Ambiguous connections ({' and '.join(parts)}): name them in the DataAccessCollection "
-            f"and set '{CONNECTION_HANDLE_OPTION}' or 'data_access_handle' to pick one.",
+            f"and set '{CONNECTION_HANDLE_OPTION}' or '{DATA_ACCESS_HANDLE_OPTION}' to pick one.",
         )
     return None, False, None

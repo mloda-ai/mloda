@@ -241,7 +241,7 @@ class Options:
         self._own_group_keys: frozenset[str] = frozenset(self.group.keys())
         self._own_context_keys: frozenset[str] = frozenset(self.context.keys())
         self._own_keys_locked: bool = False
-        self.validated_credential_handles: frozenset[tuple[str, str]] = frozenset()
+        self.registered_handle_options: frozenset[tuple[str, str]] = frozenset()
         OptionsValidator.validate_no_duplicate_keys(self.group, self.context)
         OptionsValidator.validate_propagate_keys_in_context(self.propagate_context_keys, self.context)
         OptionsValidator.validate_propagate_keys_in_context(
@@ -470,7 +470,7 @@ class Options:
         copied._own_group_keys = self._own_group_keys
         copied._own_context_keys = self._own_context_keys
         copied._own_keys_locked = self._own_keys_locked
-        copied.validated_credential_handles = self.validated_credential_handles
+        copied.registered_handle_options = self.registered_handle_options
         return copied
 
     def __getstate__(self) -> dict[str, Any]:
@@ -530,8 +530,8 @@ class Options:
         names = concrete_source_groups().keys()
         handle_keys = handle_option_keys()
         parts = (
-            f"Options(group={_display_option_dict(self.group, names, self.validated_credential_handles, handle_keys)}, "
-            f"context={_display_option_dict(self.context, names, self.validated_credential_handles, handle_keys)}"
+            f"Options(group={_display_option_dict(self.group, names, self.registered_handle_options, handle_keys)}, "
+            f"context={_display_option_dict(self.context, names, self.registered_handle_options, handle_keys)}"
         )
         if self.propagate_context_keys:
             parts += f", propagate_context_keys={self.propagate_context_keys}"

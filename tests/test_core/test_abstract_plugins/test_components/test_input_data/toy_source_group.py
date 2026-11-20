@@ -72,6 +72,14 @@ def column_values(result: list[Any], column: str) -> list[Any]:
     return list(first[column].to_pylist() if hasattr(first[column], "to_pylist") else first[column])
 
 
+class ToyColumns(dict[str, list[Any]]):
+    """A dict of columns that also carries the registered credential value it was read from."""
+
+    def __init__(self, columns: dict[str, list[Any]], credentials: Any) -> None:
+        super().__init__(columns)
+        self.credentials = credentials
+
+
 class ToySourceBase(SourceFeatureGroup):
     """Implements the hooks over in-memory sources; declares no routes, so it never claims."""
 
@@ -114,8 +122,13 @@ class ToySourceBase(SourceFeatureGroup):
             if wanted is not None and handle != wanted:
                 continue
             if isinstance(value, dict) and TOY_KEY in value:
-                found.append(SourceMatch(source=f"{handle}:toy", access=value[TOY_KEY]))
+                found.append(SourceMatch(source=f"{handle}:toy", access=ToyColumns(value[TOY_KEY], value)))
         return found
+
+    @classmethod
+    def match_credentials(cls, match: SourceMatch) -> Any:
+        """The registered credential the match was read from, if any."""
+        return getattr(match.access, "credentials", None)
 
     @classmethod
     def columns(cls, match: SourceMatch) -> Collection[str] | None:

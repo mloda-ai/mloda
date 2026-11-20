@@ -1130,34 +1130,6 @@ def _credential_variant(kind: str) -> type[FeatureGroup]:
     )
     from mloda.provider import CoreDeclineCode, SourceMatch
 
-    if kind == "registered":
-
-        class ReturnsRegistered(ToySourceFG):
-            @classmethod
-            def find_sources(
-                cls, route: Any, feature_name: str, options: Options, data_access_collection: Any
-            ) -> list[SourceMatch]:
-                if data_access_collection is None:
-                    return []
-                return [
-                    SourceMatch(source=f"{handle}:toy", access=(value, value[TOY_KEY]))
-                    for handle, value in sorted(data_access_collection.credentials.items())
-                ]
-
-            @classmethod
-            def columns(cls, match: SourceMatch) -> Any:
-                return list(match.access[1])
-
-            @classmethod
-            def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
-                return dict(match.access[1])
-
-            @classmethod
-            def match_credentials(cls, match: SourceMatch) -> Any:
-                return match.access[0]
-
-        return ReturnsRegistered
-
     if kind == "abort_secret":
 
         class AbortsWithSecret(ToySourceFG):
@@ -1182,10 +1154,21 @@ def _credential_variant(kind: str) -> type[FeatureGroup]:
 
         return RaisesWithSecret
 
+    if kind == "hidden":
+
+        class HidesBinding(ToySourceFG):
+            """Hides its credential binding by returning no credential."""
+
+            @classmethod
+            def match_credentials(cls, match: SourceMatch) -> Any:
+                return None
+
+        return HidesBinding
+
     class ReturnsSubMapping(ToySourceFG):
         @classmethod
         def match_credentials(cls, match: SourceMatch) -> Any:
-            return match.access
+            return match.access.credentials[TOY_KEY]
 
     return ReturnsSubMapping
 
@@ -1197,8 +1180,8 @@ def _credential_failures(result: Any) -> list[str]:
 @pytest.mark.parametrize(
     ("case", "flagged", "needles", "names_aborted"),
     [
-        ("plain_named", True, ["h1", "match_credentials", "'toyfmt_col'"], False),
-        ("plain_auto_handle", True, ["<unnamed>"], False),
+        ("hidden_named", True, ["h1", "match_credentials", "'toyfmt_col'"], False),
+        ("hidden_auto_handle", True, ["<unnamed>"], False),
         ("registered", False, [], False),
         ("sub_mapping", True, ["h1", "match_credentials"], False),
         ("abort_secret", False, [], True),
@@ -1210,15 +1193,20 @@ def test_source_credential_binding_shape(case: str, flagged: bool, needles: list
     from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
     from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
         TOY_KEY,
-        ToySourceFG,
         TOY_TOKEN,
+        ToySourceFG,
         toy_dac,
         toy_token_dac,
     )
 
     cell = {"toyfmt_col": [_SECRET_CELL]}
-    group: type[FeatureGroup] = ToySourceFG if case.startswith("plain") else _credential_variant(case)
-    if case == "plain_auto_handle":
+    if case.startswith("hidden"):
+        group: type[FeatureGroup] = _credential_variant("hidden")
+    elif case == "registered":
+        group = ToySourceFG
+    else:
+        group = _credential_variant(case)
+    if case == "hidden_auto_handle":
         dac = DataAccessCollection(credentials=[{TOY_KEY: cell}])
     elif case.endswith("_secret"):
         dac = toy_token_dac(h1=cell)

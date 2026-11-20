@@ -381,6 +381,8 @@ class IdentifyFeatureGroupClass:
     _declared_frameworks: dict[type[FeatureGroup], frozenset[type[ComputeFramework]]]
     _supported_names: dict[type[FeatureGroup], frozenset[str]]
     _prefixes: dict[type[FeatureGroup], str]
+    _claim_prefixes: dict[type[FeatureGroup], tuple[str, ...]]
+    _declared_catalog: dict[type[FeatureGroup], tuple[str, ...]]
     _declarations: dict[type, tuple[dict[str, str | int | float | bool], str | None]]
     _replaced: set[type[FeatureGroup]]
     _matched_options: dict[type[FeatureGroup], Options]
@@ -410,6 +412,8 @@ class IdentifyFeatureGroupClass:
         self._declared_frameworks = {}
         self._supported_names = {}
         self._prefixes = {}
+        self._claim_prefixes = {}
+        self._declared_catalog = {}
         self._declarations = {}
         self._replaced = set()
         self._matched_options = {}
@@ -756,8 +760,32 @@ class IdentifyFeatureGroupClass:
             self._prefixes[feature_group] = _prefix_name(feature_group)
         return self._prefixes[feature_group]
 
+    def _declared_hook_values(self, feature_group: type[FeatureGroup], hook: str) -> tuple[str, ...]:
+        def read() -> tuple[str, ...]:
+            values = getattr(feature_group, hook)()
+            require_value_collection(values, f"{hook}()")
+            return tuple(dict.fromkeys(v for v in values if isinstance(v, str)))
+
+        return safe_field(read, (), field=f"{feature_group.__name__}.{hook}")
+
+    def _claim_prefixes_of(self, feature_group: type[FeatureGroup]) -> tuple[str, ...]:
+        """Memoized non-empty claim prefixes: declared ones for a source group, prefix() otherwise."""
+        if feature_group not in self._claim_prefixes:
+            if is_nominal_subclass(feature_group, SourceFeatureGroup):
+                found = tuple(p for p in self._declared_hook_values(feature_group, "declared_name_prefixes") if p)
+            else:
+                prefix = self._prefix_of(feature_group)
+                found = (prefix,) if prefix else ()
+            self._claim_prefixes[feature_group] = found
+        return self._claim_prefixes[feature_group]
+
     def _catalog_names_of(self, feature_group: type[FeatureGroup]) -> list[str]:
         """One candidate's whole contribution to the name catalog, in capture order."""
+        if is_nominal_subclass(feature_group, SourceFeatureGroup):
+            # A source group claims only its declared names and prefixes, never its class name.
+            if feature_group not in self._declared_catalog:
+                self._declared_catalog[feature_group] = self._declared_hook_values(feature_group, "declared_names")
+            return [*self._declared_catalog[feature_group], *self._claim_prefixes_of(feature_group)]
         # get_class_name(), because that is the name the default matcher accepts, so a renaming override stays
         # reachable. Guarded, and falling back to __name__: a placeholder would seed a name no candidate carries.
         names = [
@@ -768,9 +796,7 @@ class IdentifyFeatureGroupClass:
             ),
             *self._supported_names_of(feature_group),
         ]
-        prefix = self._prefix_of(feature_group)
-        if prefix:
-            names.append(prefix)
+        names.extend(self._claim_prefixes_of(feature_group))
         return names
 
     def _capture_known_names(self, accessible_plugins: FeatureGroupEnvironmentMapping) -> tuple[str, ...]:
@@ -858,8 +884,9 @@ class IdentifyFeatureGroupClass:
 
         A difference, not a per-candidate drop: one accessible group that is still alive keeps its name
         suggestible, whatever a dead sibling also declares. Prefixes because the default matcher owns names
-        by class-name prefix too, so a live group covers names it never declares. The matcher's data-access
-        branches stay out: deciding one needs the speculative second match the renderer's contract refuses.
+        by class-name prefix and a source group by its declared prefixes, so a live group covers names it never
+        declares. The matcher's data-access branches stay out: deciding one needs the speculative second match
+        the renderer's contract refuses.
         """
         dead: set[str] = set()
         live: set[str] = set()
@@ -871,10 +898,7 @@ class IdentifyFeatureGroupClass:
                 dead.update(self._catalog_names_of(feature_group))
                 continue
             live.update(self._catalog_names_of(feature_group))
-            # Non-empty only: _prefix_name degrades a raising prefix() to "", which every name starts with.
-            prefix = self._prefix_of(feature_group)
-            if prefix:
-                live_prefixes.add(prefix)
+            live_prefixes.update(self._claim_prefixes_of(feature_group))
         return frozenset(name for name in dead - live if not any(name.startswith(prefix) for prefix in live_prefixes))
 
     @staticmethod

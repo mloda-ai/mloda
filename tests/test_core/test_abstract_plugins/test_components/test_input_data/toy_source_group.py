@@ -196,7 +196,7 @@ class ToyRequiredOptionFG(ToySourceBase):
 
 
 class ToyDeclaredFG(ToySourceBase):
-    """Declared names: one fixed name and one prefix; the class name shortcut is a declared name too."""
+    """Declared names: one fixed name and two prefixes."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.DECLARED, True),)
 

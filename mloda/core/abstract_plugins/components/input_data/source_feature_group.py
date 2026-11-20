@@ -7,6 +7,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Collection, Iterable, Mapping
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from mloda.core.abstract_plugins.components.constants import ANY_OUTPUT_PART
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -593,6 +594,12 @@ class SourceFeatureGroup(FeatureGroup):
         if inspect.isabstract(cls):
             cls._reject_abstract(name, options, data_access_collection)
             return False
+        split = cls.split_output_part(name)
+        if split is not None:
+            declared_parts = cls.output_parts(split[0], options)
+            # Decline so core retries the base name and stamps the part.
+            if declared_parts is not None and (ANY_OUTPUT_PART in declared_parts or split[1] in declared_parts):
+                return False
         base_name = cls.get_column_base_feature(name)
         pointed = cls.is_pointed(name, options, data_access_collection)
         explicitly_pointed = pointed and not cls._pointed_by_family_scope_only(name, options, data_access_collection)

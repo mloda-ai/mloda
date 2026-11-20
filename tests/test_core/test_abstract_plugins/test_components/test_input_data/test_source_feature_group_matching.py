@@ -30,7 +30,15 @@ from mloda.core.abstract_plugins.components.match_rejection import (
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.provider import ApiDataFG, ClaimRoute, SourceFeatureGroup, NamePolicy, ReadFileFG, SourceMatch
+from mloda.provider import (
+    ANY_OUTPUT_PART,
+    ApiDataFG,
+    ClaimRoute,
+    SourceFeatureGroup,
+    NamePolicy,
+    ReadFileFG,
+    SourceMatch,
+)
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -2243,3 +2251,68 @@ class TestHasSource:
 
         assert RESERVED_READER_OPTION_KEY not in options.group
         assert RESERVED_READER_OPTION_KEY not in options.context
+
+
+_CONN = "toyfmt_conn__rows"
+_PART_COLUMNS: dict[str, list[Any]] = {f"{_CONN}~{p}": [1] for p in ("s", "o", "zzz")} | {_CONN: [1]}
+
+
+class _RecordingDeclaredFG(ToyDeclaredFG):
+    """Declared-prefix group recording the (name, requested_parts) each load sees."""
+
+    seen: ClassVar[list[tuple[str, frozenset[str]]]] = []
+
+    @classmethod
+    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+        cls.seen.extend((str(f.name), frozenset(f.requested_parts)) for f in features.features)
+        return super().load_neutral(match, features)
+
+
+class _AnyPartsDeclaredFG(_RecordingDeclaredFG):
+    OUTPUT_PARTS = (ANY_OUTPUT_PART,)
+
+
+class _NamedPartsDeclaredFG(_RecordingDeclaredFG):
+    OUTPUT_PARTS = ("s", "o")
+
+
+class _OnlySPartDeclaredFG(_RecordingDeclaredFG):
+    OUTPUT_PARTS = ("s",)
+
+
+def _load_seen(
+    group: type[_RecordingDeclaredFG], requests: list[str], pointed: bool
+) -> list[tuple[str, frozenset[str]]]:
+    group.seen = []
+    features = [Feature(r, feature_group=group) if pointed else Feature(r) for r in requests]
+    mloda.run_all(
+        features,
+        compute_frameworks=[PyArrowTable],
+        plugin_collector=PluginCollector.enabled_feature_groups({group}),
+        data_access_collection=toy_dac(h1=_PART_COLUMNS),
+    )
+    return group.seen
+
+
+class TestDeclaredPartsOnADeclaredRoute:
+    """A declared prefix plus OUTPUT_PARTS reads `<name>~part` as base plus part, not as a whole name."""
+
+    GROUPS = [_AnyPartsDeclaredFG, _NamedPartsDeclaredFG]
+
+    @pytest.mark.parametrize("pointed", [True, False], ids=["pointed", "searched"])
+    @pytest.mark.parametrize("group", GROUPS)
+    def test_a_part_request_loads_the_base_with_the_part(
+        self, group: type[_RecordingDeclaredFG], pointed: bool
+    ) -> None:
+        assert _load_seen(group, [f"{_CONN}~s"], pointed) == [(_CONN, frozenset({"s"}))]
+
+    @pytest.mark.parametrize("pointed", [True, False], ids=["pointed", "searched"])
+    @pytest.mark.parametrize("group", GROUPS)
+    def test_two_parts_load_one_merged_base(self, group: type[_RecordingDeclaredFG], pointed: bool) -> None:
+        assert _load_seen(group, [f"{_CONN}~s", f"{_CONN}~o"], pointed) == [(_CONN, frozenset({"s", "o"}))]
+
+    @pytest.mark.parametrize("pointed", [True, False], ids=["pointed", "searched"])
+    def test_an_undeclared_part_keeps_the_whole_name_claim(self, pointed: bool) -> None:
+        seen = _load_seen(_OnlySPartDeclaredFG, [f"{_CONN}~zzz"], pointed)
+
+        assert seen == [(f"{_CONN}~zzz", frozenset())]

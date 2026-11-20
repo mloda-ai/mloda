@@ -1241,6 +1241,13 @@ class TestDeclaredOutputParts:
         assert _columns(results) == {"measure~value", "measure~unit"}
         assert MeasureProducer.calls == 1
 
+    def test_parts_of_one_base_merge_across_a_direct_request_and_a_consumer(self) -> None:
+        _run(["measure_consumer_output", "measure~unit"], MeasureProducer, MeasureConsumer)
+
+        assert MeasureProducer.calls == 1
+        [feature] = MeasureProducer.captured
+        assert feature.requested_parts == frozenset({"value", "unit"})
+
     def test_whole_feature_and_part_co_requested_returns_all_parts(self) -> None:
         results = _run(["measure", "measure~value"], MeasureProducer)
 

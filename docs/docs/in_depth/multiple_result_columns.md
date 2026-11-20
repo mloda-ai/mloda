@@ -168,6 +168,7 @@ If the parts depend on the feature name or options, override the classmethod `ou
 
 - `measure` is computed once, even if several parts are requested with the same options and data type; only the requested part columns are returned.
 - An undeclared part (`measure~bogus`) fails at resolution and lists the declared parts. With `ANY_OUTPUT_PART`, a part that was not produced fails after the computation.
+- A source group whose route claims `measure~value` reads it as `measure` plus that part when it declares the part (or `ANY_OUTPUT_PART`); an undeclared part stays a whole-name claim.
 - A name any group matches as a whole (a literal `a~b` column or a config-based feature) is kept whole and wins over another group's part reading; a base name that itself contains `~` cannot have parts.
 - An artifact saved by a part request covers only the requested parts; a later whole-feature request cannot reuse it.
 - A declared part matches only in full: declare `0` and `0~lower` to resolve both `f~0` and `f~0~lower`, or override `output_parts` for variable-width nested parts. A request for `f~0` still returns its nested columns.

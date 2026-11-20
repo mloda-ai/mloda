@@ -920,7 +920,7 @@ class ComputeFramework(ABC):
         """Return the ComputeFramework active in the current activate() scope, else None."""
         return _current_compute_framework.get()
 
-    def activate(self) -> VarScope["ComputeFramework | None"]:
+    def activate(self) -> VarScope["ComputeFramework"]:
         """Make this instance the current() compute framework for the scope, restoring the previous one on exit."""
         return VarScope(_current_compute_framework, self)
 

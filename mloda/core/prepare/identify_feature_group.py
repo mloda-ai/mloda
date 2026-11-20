@@ -782,6 +782,7 @@ class IdentifyFeatureGroupClass:
     def _catalog_names_of(self, feature_group: type[FeatureGroup]) -> list[str]:
         """One candidate's whole contribution to the name catalog, in capture order."""
         if is_nominal_subclass(feature_group, SourceFeatureGroup):
+            # A source group claims only its declared names and prefixes, never its class name.
             if feature_group not in self._declared_catalog:
                 self._declared_catalog[feature_group] = self._declared_hook_values(feature_group, "declared_names")
             return [*self._declared_catalog[feature_group], *self._claim_prefixes_of(feature_group)]
@@ -883,8 +884,9 @@ class IdentifyFeatureGroupClass:
 
         A difference, not a per-candidate drop: one accessible group that is still alive keeps its name
         suggestible, whatever a dead sibling also declares. Prefixes because the default matcher owns names
-        by class-name prefix too, so a live group covers names it never declares. The matcher's data-access
-        branches stay out: deciding one needs the speculative second match the renderer's contract refuses.
+        by class-name prefix and a source group by its declared prefixes, so a live group covers names it never
+        declares. The matcher's data-access branches stay out: deciding one needs the speculative second match
+        the renderer's contract refuses.
         """
         dead: set[str] = set()
         live: set[str] = set()
@@ -896,7 +898,6 @@ class IdentifyFeatureGroupClass:
                 dead.update(self._catalog_names_of(feature_group))
                 continue
             live.update(self._catalog_names_of(feature_group))
-            # Non-empty only: _prefix_name degrades a raising prefix() to "", which every name starts with.
             live_prefixes.update(self._claim_prefixes_of(feature_group))
         return frozenset(name for name in dead - live if not any(name.startswith(prefix) for prefix in live_prefixes))
 

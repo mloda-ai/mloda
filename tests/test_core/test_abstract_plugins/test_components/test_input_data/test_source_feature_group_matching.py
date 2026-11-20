@@ -5,7 +5,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Collection
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -166,6 +166,10 @@ class TestDeclaredNames:
     )
     def test_undeclared_name_declines_even_with_a_source(self, name: str) -> None:
         assert not _claims(Feature(name), toy_dac(h1={name: [1]}), ToyDeclaredFG)
+
+    def test_feature_names_supported_does_not_claim(self) -> None:
+        name = "toyfmt_supported"
+        assert not _claims(Feature(name), toy_dac(h1={name: [1]}), _SupportedNamesFG)
 
     @pytest.mark.parametrize("name", ["toyfmt_conn__knows__sum_aggr", "ToyDeclaredFG_x__sum_aggr"])
     def test_pointed_group_does_not_claim_a_chain_shaped_name(self, name: str) -> None:
@@ -1362,6 +1366,18 @@ class _PrefixOnlyDeclaredFG(ToyDeclaredFG):
         return frozenset()
 
 
+class _NonStrDeclaredFG(ToyDeclaredFG):
+    @classmethod
+    def declared_names(cls) -> frozenset[str]:
+        return cast(frozenset[str], frozenset({"toyfmt_declared_col", 7}))
+
+
+class _SupportedNamesFG(ToyDeclaredFG):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"toyfmt_supported"}
+
+
 class _EmptyPrefixDeclaredFG(ToyDeclaredFG):
     @classmethod
     def declared_name_prefixes(cls) -> tuple[str, ...]:
@@ -1396,25 +1412,54 @@ class TestPointedRoutesDeclineWithReason:
         assert ("were not searched" in elimination.reason) is bool(suffix)
         assert elimination.code is CoreDeclineCode.SOURCE_NOT_FOUND
 
-    @pytest.mark.parametrize("name", ["toyfmt_undeclared", "ToyDeclaredFG", "ToyDeclaredFG_x"])
-    def test_pointed_declared_route_with_an_undeclared_name_records_a_rejection(self, name: str) -> None:
-        feature = Feature(name, feature_group=ToyDeclaredFG)
-        result = _identify(feature, toy_dac(h1={name: [1]}), ToyDeclaredFG)
+    @pytest.mark.parametrize(
+        ("group", "name", "suffix"),
+        [
+            (ToyDeclaredFG, "toyfmt_undeclared", DECLARES_SUFFIX),
+            (ToyDeclaredFG, "ToyDeclaredFG", DECLARES_SUFFIX),
+            (ToyDeclaredFG, "ToyDeclaredFG_x", DECLARES_SUFFIX),
+            (
+                _PrefixOnlyDeclaredFG,
+                "toyfmt_undeclared",
+                "; it declares names starting with 'toyfmt_conn__', 'toyfmt_pre_'",
+            ),
+            (
+                _NonStrDeclaredFG,
+                "toyfmt_undeclared",
+                "; it declares 'toyfmt_declared_col' and names starting with 'toyfmt_conn__', 'toyfmt_pre_'",
+            ),
+            (
+                _EmptyPrefixDeclaredFG,
+                "toyfmt__x",
+                "; it declares 'toyfmt_declared_col' and names starting with 'toyfmt_pre_'",
+            ),
+            (
+                _SupportedNamesFG,
+                "toyfmt_supported",
+                DECLARES_SUFFIX,
+            ),
+        ],
+        ids=[
+            "undeclared",
+            "class_name",
+            "class_name_prefix",
+            "prefix_only",
+            "non_str_entry",
+            "empty_prefix",
+            "supported",
+        ],
+    )
+    def test_pointed_declared_route_with_an_undeclared_name_records_a_rejection(
+        self, group: type[ToyDeclaredFG], name: str, suffix: str
+    ) -> None:
+        feature = Feature(name, feature_group=group)
+        result = _identify(feature, toy_dac(h1={name: [1]}), group)
 
         assert result.identified == {}
-        elimination = result.eliminations[ToyDeclaredFG]
+        elimination = result.eliminations[group]
         assert elimination.stage == "input_data"
-        assert elimination.reason == f"'{name}' is not a name ToyDeclaredFG declares{DECLARES_SUFFIX}"
+        assert elimination.reason == f"'{name}' is not a name {group.__name__} declares{suffix}"
         assert elimination.code is CoreDeclineCode.NAME_NOT_DECLARED
-
-    def test_pointed_prefix_only_group_lists_only_its_prefixes(self) -> None:
-        feature = Feature("toyfmt_undeclared", feature_group=_PrefixOnlyDeclaredFG)
-        result = _identify(feature, toy_dac(h1={"toyfmt_undeclared": [1]}), _PrefixOnlyDeclaredFG)
-
-        assert result.eliminations[_PrefixOnlyDeclaredFG].reason == (
-            "'toyfmt_undeclared' is not a name _PrefixOnlyDeclaredFG declares"
-            "; it declares names starting with 'toyfmt_conn__', 'toyfmt_pre_'"
-        )
 
     def test_pointed_declared_and_checked_routes_with_no_source_record_source_not_found(self) -> None:
         group = _DeclaredAndCheckedRouteFG

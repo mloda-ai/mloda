@@ -47,6 +47,6 @@ class CloseContext:
         """
         return _current_close_context.get()
 
-    def activate(self) -> VarScope["CloseContext | None"]:
+    def activate(self) -> VarScope["CloseContext"]:
         """Make this instance the current() context for the scope, restoring the previous one on exit."""
         return VarScope(_current_close_context, self)
